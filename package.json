@@ -1,0 +1,16 @@
+{
+  "name": "fainens",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Personal Finance Bookkeeping App (Fainens) monorepo",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "start": "pnpm --filter backend start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}
