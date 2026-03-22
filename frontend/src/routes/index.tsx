@@ -93,27 +93,34 @@ function DashboardPage() {
     (async () => {
       try {
         const periods = await api.periods.list();
-        const last = periods.length ? periods[periods.length - 1] : null;
-        const periodId = last ? last.id : undefined;
-        if (last) setPeriodLabel(last.name);
+        // Periods are returned in descending order by startDate (newest first)
+        const currentPeriod = periods.length ? periods[0] : null;
+        const periodId = currentPeriod ? currentPeriod.id : undefined;
+        if (currentPeriod) setPeriodLabel(currentPeriod.name);
 
-        const [accList, dash, txList, cats, budgets, periodTxs, , tagsList] = await Promise.all([
+        // Fetch transactions by date range to include those without period_id
+        const periodStartDate = currentPeriod ? new Date(currentPeriod.startDate).toISOString() : undefined;
+        const periodEndDate = currentPeriod ? new Date(currentPeriod.endDate).toISOString() : undefined;
+
+        const [accList, dash, recentTxList, cats, budgets, periodTxs, , tagsList] = await Promise.all([
           api.accounts.list(),
           api.analytics.dashboard(),
           api.transactions.list({ limit: '8' }),
           api.categories.list(),
           periodId ? api.budgets.list(String(periodId)) : Promise.resolve([]),
-          periodId
-            ? api.transactions.list({ periodId: String(periodId), limit: '500' })
+          // Fetch all transactions within the period date range (includes those without period_id)
+          periodStartDate && periodEndDate
+            ? api.transactions.list({ startDate: periodStartDate, endDate: periodEndDate, limit: '500' })
             : Promise.resolve([]),
           api.analytics.periodSummaries(),
           api.tags.list(),
         ]);
 
-        // Calculate period income and expense from actual transactions
+        // Calculate period income and expense from actual transactions within date range
         const periodTxsArray = periodTxs as Array<{
           categoryId: number | null;
           txType: string;
+          date: number;
           lines: Array<{ debit: number; credit: number }>;
         }>;
         
@@ -138,15 +145,15 @@ function DashboardPage() {
         const wallets = accList.filter((a) => a.type === 'asset' && !a.systemKey);
         setWalletTotal(wallets.reduce((s, a) => s + a.balance, 0));
         setAnalytics(dash);
-        setRecent(txList);
+        setRecent(recentTxList);
         setBudgetRows(budgets.slice(0, 5));
         setCategories(cats);
         setAccounts(accList);
         setTags(tagsList);
         setCurrentPeriodId(periodId ?? null);
 
-        // Use periodTxs if available, otherwise fall back to recent transactions
-        const txsToAnalyze = periodTxsArray.length > 0 ? periodTxsArray : txList;
+        // Use all transactions within the date range for the pie chart
+        const txsToAnalyze = periodTxsArray;
         
         const spendMap = new Map<number, number>();
         
@@ -156,8 +163,9 @@ function DashboardPage() {
           lines: Array<{ debit: number; credit: number }>;
         }>) {
           if (!tx.categoryId) continue;
-          // Only count expense transactions
-          if (!tx.txType?.includes('expense')) continue;
+          // Count as expense if txType includes 'expense' OR if it has a categoryId
+          const isExpense = tx.txType?.includes('expense') || tx.categoryId !== null;
+          if (!isExpense) continue;
           const amt =
             tx.lines.length > 0
               ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
