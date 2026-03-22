@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, blob } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, blob, real } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const categories: any = sqliteTable("category", {
@@ -47,6 +47,14 @@ export const transactions = sqliteTable("transaction", {
   interestRatePercent: integer("interest_rate_percent"), // Annual interest rate (e.g., 12 for 12%)
   adminFeeCents: integer("admin_fee_cents"), // One-time admin fee
   totalInstallments: integer("total_installments"), // Total number of installments
+  /** Transport location tracking (for GoRide, Grab, etc.) */
+  originLat: real("origin_lat"), // Origin latitude
+  originLng: real("origin_lng"), // Origin longitude
+  originName: text("origin_name"), // Origin place name (e.g., "Mall Kota Kasablanka")
+  destLat: real("dest_lat"), // Destination latitude
+  destLng: real("dest_lng"), // Destination longitude
+  destName: text("dest_name"), // Destination place name
+  distanceKm: real("distance_km"), // Distance in kilometers
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),

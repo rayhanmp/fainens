@@ -25,6 +25,14 @@ export type CreateJournalEntryInput = {
   linkedTxId?: number | null;
   categoryId?: number | null;
   lines: JournalLineInput[];
+  /** Transport location tracking (for GoRide, Grab, etc.) */
+  originLat?: number | null;
+  originLng?: number | null;
+  originName?: string | null;
+  destLat?: number | null;
+  destLng?: number | null;
+  destName?: string | null;
+  distanceKm?: number | null;
 };
 
 function assertIntegerCents(value: unknown, fieldName: string): asserts value is number {
@@ -128,6 +136,14 @@ export type CreateSimpleTransactionInput = {
   walletAccountId: number;
   /** For transfer: the other wallet */
   toWalletAccountId?: number;
+  /** Transport location tracking (for GoRide, Grab, etc.) */
+  originLat?: number | null;
+  originLng?: number | null;
+  originName?: string | null;
+  destLat?: number | null;
+  destLng?: number | null;
+  destName?: string | null;
+  distanceKm?: number | null;
 };
 
 /**
@@ -197,6 +213,14 @@ export async function createSimpleTransaction(
       periodId: input.periodId ?? null,
       categoryId: input.categoryId ?? null,
       lines,
+      // Transport location fields
+      originLat: input.originLat ?? null,
+      originLng: input.originLng ?? null,
+      originName: input.originName ?? null,
+      destLat: input.destLat ?? null,
+      destLng: input.destLng ?? null,
+      destName: input.destName ?? null,
+      distanceKm: input.distanceKm ?? null,
     },
     dbLike,
   );
@@ -434,6 +458,14 @@ export async function createJournalEntry(
       periodId: input.periodId ?? null,
       linkedTxId: input.linkedTxId ?? null,
       categoryId: input.categoryId ?? null,
+      // Transport location fields
+      originLat: input.originLat ?? null,
+      originLng: input.originLng ?? null,
+      originName: input.originName ?? null,
+      destLat: input.destLat ?? null,
+      destLng: input.destLng ?? null,
+      destName: input.destName ?? null,
+      distanceKm: input.distanceKm ?? null,
     })
     .returning({ id: transactions.id });
 

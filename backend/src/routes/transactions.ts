@@ -190,6 +190,14 @@ export default async function (fastify: FastifyInstance) {
           tagIds?: number[];
           walletAccountId: number;
           toWalletAccountId?: number;
+          // Transport location fields
+          originLat?: number | null;
+          originLng?: number | null;
+          originName?: string | null;
+          destLat?: number | null;
+          destLng?: number | null;
+          destName?: string | null;
+          distanceKm?: number | null;
         };
 
     try {
@@ -224,6 +232,14 @@ export default async function (fastify: FastifyInstance) {
               : `simple_${body.kind}`,
           walletAccountId: body.walletAccountId,
           toWalletAccountId: body.toWalletAccountId,
+          // Transport location fields
+          originLat: body.originLat ?? null,
+          originLng: body.originLng ?? null,
+          originName: body.originName ?? null,
+          destLat: body.destLat ?? null,
+          destLng: body.destLng ?? null,
+          destName: body.destName ?? null,
+          distanceKm: body.distanceKm ?? null,
         });
       } else {
         reply.code(400).send({ error: "Provide either journal lines or a simple transaction (kind, amountCents, ...)" });
@@ -278,6 +294,14 @@ export default async function (fastify: FastifyInstance) {
       date: string;
       tagIds: number[];
       categoryId: number | null;
+      // Transport location fields
+      originLat: number | null;
+      originLng: number | null;
+      originName: string | null;
+      destLat: number | null;
+      destLng: number | null;
+      destName: string | null;
+      distanceKm: number | null;
     }>;
 
     const [existing] = await db
@@ -298,6 +322,14 @@ export default async function (fastify: FastifyInstance) {
     if (body.place !== undefined) updates.place = body.place;
     if (body.date) updates.date = new Date(body.date);
     if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
+    // Location fields for transport
+    if (body.originLat !== undefined) updates.originLat = body.originLat;
+    if (body.originLng !== undefined) updates.originLng = body.originLng;
+    if (body.originName !== undefined) updates.originName = body.originName;
+    if (body.destLat !== undefined) updates.destLat = body.destLat;
+    if (body.destLng !== undefined) updates.destLng = body.destLng;
+    if (body.destName !== undefined) updates.destName = body.destName;
+    if (body.distanceKm !== undefined) updates.distanceKm = body.distanceKm;
 
     const [updated] = await db
       .update(transactions)
