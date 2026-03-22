@@ -22,6 +22,8 @@ import {
   CreditCard,
   ShoppingCart,
 } from 'lucide-react';
+import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
+import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
 
 export type WalletAccount = {
   id: number;
@@ -124,7 +126,17 @@ export function TransactionModal({
     notes: '',
     place: '',
     tagIds: [] as number[],
+    /** Transport location fields */
+    origin: null as MapLocation | null,
+    destination: null as MapLocation | null,
+    /** Transport service fields */
+    rideProvider: '' as 'gojek' | 'grab' | 'others' | '',
+    rideService: '',
   });
+
+  // Map picker modal state
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [mapPickerMode, setMapPickerMode] = useState<'origin' | 'destination'>('origin');
 
   /** Installment schedule preview for paylater */
   const [installmentPreview, setInstallmentPreview] = useState<Array<{
@@ -141,6 +153,25 @@ export function TransactionModal({
   const [paylaterObligationsState, setPaylaterObligationsState] = useState<Awaited<
     ReturnType<typeof api.paylater.obligations>
   > | null>(null);
+
+  /** Attachments for the transaction */
+  const [attachments, setAttachments] = useState<Array<{
+    id: number;
+    transactionId: number;
+    filename: string;
+    mimetype: string;
+    fileSize: number;
+  }>>([]);
+
+  /** Pending attachments (not yet uploaded) */
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{
+    id: string;
+    file: File;
+    filename: string;
+    mimetype: string;
+    fileSize: number;
+    preview?: string;
+  }>>([]);
 
   const [journalForm, setJournalForm] = useState({
     dateTime: toDatetimeLocal(),
@@ -197,6 +228,10 @@ export function TransactionModal({
           description: l.description || '',
         })),
       });
+      // Load attachments for editing transaction
+      api.attachments.list(editingTransaction.id.toString())
+        .then(setAttachments)
+        .catch(() => setAttachments([]));
     } else {
       setIsAccountingMode(false);
       setSimpleForm({
@@ -217,8 +252,14 @@ export function TransactionModal({
         notes: '',
         place: '',
         tagIds: [],
+        origin: null,
+        destination: null,
+        rideProvider: '',
+        rideService: '',
       });
       setInstallmentPreview(null);
+      setAttachments([]);
+      setPendingAttachments([]);
       setJournalForm({
         dateTime: toDatetimeLocal(),
         description: '',
@@ -249,6 +290,26 @@ export function TransactionModal({
       cancelled = true;
     };
   }, [isOpen, editingTransaction]);
+
+  // Auto-generate transaction name for transport expenses
+  useEffect(() => {
+    if (!simpleForm.description && simpleForm.origin && simpleForm.destination) {
+      const selectedCategory = categories.find(c => c.id.toString() === simpleForm.categoryId);
+      const isTransport = selectedCategory && /transport/i.test(selectedCategory.name);
+      
+      if (isTransport) {
+        // Extract short place names (first part before comma)
+        const originName = simpleForm.origin.name.split(',')[0].trim();
+        const destName = simpleForm.destination.name.split(',')[0].trim();
+        const rideService = simpleForm.rideService ? ` [${simpleForm.rideService}]` : '';
+        
+        setSimpleForm(prev => ({
+          ...prev,
+          description: `${originName} to ${destName}${rideService}`
+        }));
+      }
+    }
+  }, [simpleForm.origin, simpleForm.destination, simpleForm.rideService, simpleForm.categoryId, categories]);
 
   // Calculate installment preview for paylater
   const calculateInstallmentPreview = async (form: typeof simpleForm) => {
@@ -415,11 +476,29 @@ export function TransactionModal({
     setIsSubmitting(true);
     try {
       const dateIso = new Date(simpleForm.dateTime).toISOString();
-      await api.transactions.create({
+      
+      // Check if this is a transport expense and include location data
+      const selectedCategory = simpleForm.type === 'expense' && simpleForm.categoryId
+        ? categories.find(c => c.id.toString() === simpleForm.categoryId)
+        : null;
+      const isTransport = selectedCategory && /transport/i.test(selectedCategory.name);
+      
+      // Build notes with ride provider/service info for transport
+      let finalNotes = simpleForm.notes || null;
+      if (isTransport && (simpleForm.rideProvider || simpleForm.rideService)) {
+        const transportInfo = [
+          simpleForm.notes,
+          simpleForm.rideProvider && `Provider: ${simpleForm.rideProvider}`,
+          simpleForm.rideService && `Service: ${simpleForm.rideService}`
+        ].filter(Boolean).join('\n');
+        finalNotes = transportInfo || null;
+      }
+      
+      const newTransaction = await api.transactions.create({
         kind: simpleForm.type,
         amountCents: amount,
         description: simpleForm.description,
-        notes: simpleForm.notes || null,
+        notes: finalNotes,
         place: simpleForm.place || null,
         date: dateIso,
         periodId: periodId ?? null,
@@ -430,7 +509,32 @@ export function TransactionModal({
             : null,
         walletAccountId,
         toWalletAccountId,
+        // Transport location fields (only for transport expenses)
+        ...(isTransport && simpleForm.origin ? {
+          originLat: simpleForm.origin.lat,
+          originLng: simpleForm.origin.lng,
+          originName: simpleForm.origin.name,
+        } : {}),
+        ...(isTransport && simpleForm.destination ? {
+          destLat: simpleForm.destination.lat,
+          destLng: simpleForm.destination.lng,
+          destName: simpleForm.destination.name,
+        } : {}),
+        ...(isTransport && simpleForm.origin && simpleForm.destination ? {
+          distanceKm: calculateDistance(
+            simpleForm.origin.lat,
+            simpleForm.origin.lng,
+            simpleForm.destination.lat,
+            simpleForm.destination.lng
+          ),
+        } : {}),
       });
+      
+      // Upload pending attachments after transaction is created
+      if (pendingAttachments.length > 0) {
+        await uploadPendingAttachments(newTransaction.id, pendingAttachments);
+      }
+      
       onSaved();
       onClose();
     } catch (err) {
@@ -1113,6 +1217,105 @@ export function TransactionModal({
                   </div>
                 </div>
               )}
+              {/* Transport Location Picker */}
+              {simpleForm.type === 'expense' && simpleForm.categoryId && (() => {
+                const selectedCategory = categories.find(c => c.id.toString() === simpleForm.categoryId);
+                const isTransport = selectedCategory && /transport/i.test(selectedCategory.name);
+                return isTransport ? (
+                  <>
+                    <div className="md:col-span-2">
+                      <TransportRoute
+                        origin={simpleForm.origin}
+                        destination={simpleForm.destination}
+                        onEditOrigin={() => {
+                          setMapPickerMode('origin');
+                          setMapPickerOpen(true);
+                        }}
+                        onEditDestination={() => {
+                          setMapPickerMode('destination');
+                          setMapPickerOpen(true);
+                        }}
+                      />
+                    </div>
+                    {/* Ride Provider */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
+                        Ride Provider
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={simpleForm.rideProvider}
+                          onChange={(e) => setSimpleForm({ 
+                            ...simpleForm, 
+                            rideProvider: e.target.value as 'gojek' | 'grab' | 'others',
+                            rideService: '' // Reset service when provider changes
+                          })}
+                          className={cn('w-full appearance-none', stitchSelect)}
+                        >
+                          <option value="">Select provider…</option>
+                          <option value="gojek">GoJek</option>
+                          <option value="grab">Grab</option>
+                          <option value="others">Others</option>
+                        </select>
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
+                          ▾
+                        </span>
+                      </div>
+                    </div>
+                    {/* Ride Service */}
+                    {simpleForm.rideProvider && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
+                          Service Type
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={simpleForm.rideService}
+                            onChange={(e) => setSimpleForm({ ...simpleForm, rideService: e.target.value })}
+                            className={cn('w-full appearance-none', stitchSelect)}
+                          >
+                            <option value="">Select service…</option>
+                            {simpleForm.rideProvider === 'gojek' && (
+                              <>
+                                <option value="GoRide">GoRide</option>
+                                <option value="GoRide Hemat">GoRide Hemat</option>
+                                <option value="GoRide Comfort">GoRide Comfort</option>
+                                <option value="GoCar">GoCar</option>
+                                <option value="GoCar Prioritas">GoCar Prioritas</option>
+                                <option value="GoCar Hemat">GoCar Hemat</option>
+                                <option value="GoCar XL">GoCar XL</option>
+                              </>
+                            )}
+                            {simpleForm.rideProvider === 'grab' && (
+                              <>
+                                <option value="Bike Standard">Bike Standard</option>
+                                <option value="Bike Comfort">Bike Comfort</option>
+                                <option value="Car Standard">Car Standard</option>
+                                <option value="Car Plus (4 seat)">Car Plus (4 seat)</option>
+                                <option value="Car Plus (6 seat)">Car Plus (6 seat)</option>
+                                <option value="Car Premium">Car Premium</option>
+                                <option value="Car Priority">Car Priority</option>
+                              </>
+                            )}
+                            {simpleForm.rideProvider === 'others' && (
+                              <>
+                                <option value="Blue Bird">Blue Bird</option>
+                                <option value="Silver Bird">Silver Bird</option>
+                                <option value="Maxim">Maxim</option>
+                                <option value="InDriver">InDriver</option>
+                                <option value="Other">Other</option>
+                              </>
+                            )}
+                          </select>
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
+                            ▾
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null;
+              })()}
               {simpleForm.type === 'paylater_buy' && (
                 <>
                   <div className="md:col-span-2 space-y-2">
@@ -1408,17 +1611,16 @@ export function TransactionModal({
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] mb-2">
                   <ImagePlus className="w-4 h-4" />
-                  Attachment
+                  Attachments
                 </label>
-                <div
-                  className="border-2 border-dashed border-[var(--color-border-strong)]/50 rounded-xl p-4 flex flex-col items-center justify-center bg-[var(--ref-surface-container-lowest)] text-center"
-                  title="Save the transaction first, then attach from the transaction detail."
-                >
-                  <ImagePlus className="w-8 h-8 text-[var(--color-muted)] mb-1.5" />
-                  <span className="text-xs font-medium text-[var(--color-muted)]">
-                    Upload receipt or PDF after saving
-                  </span>
-                </div>
+                <AttachmentUploader
+                  transactionId={editingTransaction ? (editingTransaction as EditingTransaction).id : undefined}
+                  attachments={attachments}
+                  pendingAttachments={pendingAttachments}
+                  onAttachmentsChange={setAttachments}
+                  onPendingAttachmentsChange={setPendingAttachments}
+                  disabled={isSubmitting}
+                />
               </div>
             </div>
           </div>
@@ -1447,6 +1649,21 @@ export function TransactionModal({
           </div>
         </form>
       )}
+
+      {/* Map Picker Modal */}
+      <MapPicker
+        isOpen={mapPickerOpen}
+        onClose={() => setMapPickerOpen(false)}
+        title={mapPickerMode === 'origin' ? 'Select Origin' : 'Select Destination'}
+        initialLocation={mapPickerMode === 'origin' ? simpleForm.origin : simpleForm.destination}
+        onSelect={(location) => {
+          if (mapPickerMode === 'origin') {
+            setSimpleForm({ ...simpleForm, origin: location });
+          } else {
+            setSimpleForm({ ...simpleForm, destination: location });
+          }
+        }}
+      />
     </Modal>
   );
 }

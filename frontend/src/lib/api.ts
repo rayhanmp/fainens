@@ -184,8 +184,33 @@ export const api = {
             tagIds?: number[];
             walletAccountId: number;
             toWalletAccountId?: number;
+            // Transport location fields
+            originLat?: number | null;
+            originLng?: number | null;
+            originName?: string | null;
+            destLat?: number | null;
+            destLng?: number | null;
+            destName?: string | null;
+            distanceKm?: number | null;
           },
-    ) => fetchApi('/transactions', { method: 'POST', body: JSON.stringify(data) }),
+    ) => fetchApi<{
+      id: number;
+      date: number;
+      description: string;
+      reference: string | null;
+      notes: string | null;
+      place: string | null;
+      txType: string;
+      categoryId: number | null;
+      periodId: number | null;
+      lines: Array<{
+        id: number;
+        accountId: number;
+        debit: number;
+        credit: number;
+      }>;
+      balancesByAccountId: Record<number, number>;
+    }>('/transactions', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<{
       description: string;
       reference: string | null;
@@ -278,10 +303,18 @@ export const api = {
       filename: string;
       contentType: string;
       data: string;
-    }) => fetchApi('/attachments/upload', { method: 'POST', body: JSON.stringify(data) }),
+    }) => fetchApi<{
+      id: number;
+      transactionId: number;
+      filename: string;
+      mimetype: string;
+      fileSize: number;
+      downloadUrl: string;
+      expiresIn: number;
+    }>('/attachments/upload', { method: 'POST', body: JSON.stringify(data) }),
     getUrl: (id: number, expiresIn?: number) =>
       fetchApi<{ url: string; expiresIn: number }>(`/attachments/${id}/url${expiresIn ? `?expiresIn=${expiresIn}` : ''}`),
-    delete: (id: number) => fetchApi(`/attachments/${id}`, { method: 'DELETE' }),
+    delete: (id: number) => fetchApi<void>(`/attachments/${id}`, { method: 'DELETE' }),
   },
 
   // Analytics

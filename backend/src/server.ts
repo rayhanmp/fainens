@@ -35,6 +35,8 @@ import authPlugin from "./plugins/auth";
 
 const fastify = Fastify({
   logger: true,
+  // Allow larger body size for file uploads (10MB)
+  bodyLimit: 15 * 1024 * 1024, // 15MB to be safe with base64 encoding overhead
 });
 
 // Register CORS

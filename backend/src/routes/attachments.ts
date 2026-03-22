@@ -1,5 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { createReadStream } from "fs";
+import { promises as fs } from "fs";
 
 import { db } from "../db/client";
 import { attachments, transactions } from "../db/schema";
@@ -8,6 +10,7 @@ import {
   deleteFile,
   generatePresignedDownloadUrl,
   generateAttachmentKey,
+  getLocalFilePath,
 } from "../services/r2";
 
 export default async function (fastify: FastifyInstance) {
@@ -164,5 +167,40 @@ export default async function (fastify: FastifyInstance) {
     await db.delete(attachments).where(eq(attachments.id, parseInt(id)));
 
     reply.code(204).send();
+  });
+
+  // Serve local files (when R2 is not configured)
+  fastify.get("/api/attachments/local/*", async (request, reply) => {
+    const url = request.url;
+    const key = url.replace('/api/attachments/local/', '');
+    const decodedKey = decodeURIComponent(key);
+    const filePath = getLocalFilePath(decodedKey);
+
+    try {
+      // Check if file exists
+      const stats = await fs.stat(filePath);
+      if (!stats.isFile()) {
+        reply.code(404).send({ error: "File not found" });
+        return;
+      }
+
+      // Get the attachment record to determine content type
+      const [attachment] = await db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.r2Key, decodedKey))
+        .limit(1);
+
+      if (attachment) {
+        reply.header("Content-Type", attachment.mimetype);
+        reply.header("Content-Disposition", `inline; filename="${attachment.filename}"`);
+      }
+
+      // Stream the file
+      const stream = createReadStream(filePath);
+      reply.send(stream);
+    } catch {
+      reply.code(404).send({ error: "File not found" });
+    }
   });
 }
