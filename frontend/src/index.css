@@ -1,111 +1,317 @@
+@import "tailwindcss";
+
+/* Design tokens + Stitch reference (design-reference/stitch-localized-dashboard/localized-dashboard.html) */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --color-background: #faf8ff;
+  --color-surface: #ffffff;
+  /* App accent (nav, buttons) — Stitch primary blue */
+  --color-accent: #0056d2;
+  --color-accent-hover: #0040a1;
+  --color-text-primary: #191b23;
+  --color-text-secondary: #424654;
+  --color-border: #e1e2ec;
+  --color-border-strong: #c3c6d6;
+  --color-danger: #ba1a1a;
+  --color-warning: #d97706;
+  --color-success: #006b5e;
+  --color-muted: #737785;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Stitch reference palette (named in HTML export) */
+  --ref-primary: #0040a1;
+  --ref-primary-container: #0056d2;
+  --ref-on-primary-container: #ccd8ff;
+  --ref-on-surface: #191b23;
+  --ref-on-surface-variant: #424654;
+  --ref-outline: #737785;
+  --ref-outline-variant: #c3c6d6;
+  --ref-surface-container-low: #f2f3fe;
+  --ref-surface-container-lowest: #ffffff;
+  --ref-surface-container: #ededf8;
+  --ref-surface-container-highest: #e1e2ec;
+  --ref-secondary: #006b5e;
+  --ref-secondary-container: #9cefde;
+  --ref-on-secondary-container: #0b6f62;
+  --ref-tertiary: #2e2bc2;
+  --ref-tertiary-container: #4849da;
+  --ref-error: #ba1a1a;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --font-body:
+    "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Manrope", var(--font-body);
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+
+  --shadow-editorial: 0 20px 40px rgba(25, 27, 35, 0.04);
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+@theme {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 body {
-  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+.font-headline {
+  font-family: var(--font-heading);
+}
+
+.editorial-shadow {
+  box-shadow: var(--shadow-editorial);
+}
+
+/* Cards — soft elevation */
+.brutalist-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+}
+
+/* Buttons — in @layer components so Tailwind utilities (text-white, etc.) can override colors. */
+@layer components {
+  .brutalist-button {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.875rem;
+    background: linear-gradient(90deg, var(--ref-primary), var(--ref-primary-container));
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    padding: 0.625rem 1.25rem;
+    transition:
+      background-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .brutalist-button:hover {
+    filter: brightness(1.05);
+    box-shadow: var(--shadow-md);
+  }
+
+  .brutalist-button:active {
+    transform: scale(0.98);
+  }
+
+  .brutalist-button--danger {
+    background: var(--color-danger);
+    color: #ffffff;
+  }
+
+  .brutalist-button--danger:hover {
+    background-color: #b91c1c;
+  }
+
+  .brutalist-button--secondary {
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+  }
+
+  .brutalist-button--secondary:hover {
+    background-color: var(--color-background);
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+
+/* Inputs */
+.brutalist-input {
+  font-family: var(--font-body);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.875rem;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  min-width: 120px;
 }
-p {
+
+.brutalist-input--wide {
+  min-width: 200px;
+}
+
+.brutalist-input--currency {
+  min-width: 160px;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.brutalist-input:focus {
+  border-color: var(--ref-primary-container);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-primary-container) 22%, transparent);
+}
+
+/* Tables */
+.brutalist-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.brutalist-table th,
+.brutalist-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.brutalist-table th {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background-color: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
+.brutalist-table tr:last-child td {
+  border-bottom: none;
+}
+
+.brutalist-table tbody tr:nth-child(even) {
+  background-color: rgba(148, 163, 184, 0.06);
+}
+
+/* Sidebar */
+.sidebar {
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+
+.sidebar-item {
+  padding: 0.75rem 1rem 0.75rem 1.125rem;
   margin: 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
+.sidebar-item:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.sidebar-item--active {
+  background-color: color-mix(in srgb, var(--ref-primary-container) 16%, transparent);
+  color: var(--ref-primary);
+  font-weight: 600;
+}
+
+/* Footer: audit + settings — same row width as Sign out below */
+.sidebar-footer-icon {
   display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+.sidebar-footer-icon:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-text-primary);
+}
+
+.sidebar-footer-icon--active {
+  background-color: color-mix(in srgb, var(--ref-primary-container) 16%, transparent);
+  color: var(--ref-primary);
+}
+
+.sidebar-footer-icon--button {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.sidebar-footer-icon--button:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-text-primary);
+}
+
+.sidebar-footer-icon--button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.mono-numbers {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.25s ease-out;
+}
+
+/* Horizontal scroll tabs (reports) */
+.reports-tabs-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.reports-tabs-scroll::-webkit-scrollbar {
+  display: none;
 }

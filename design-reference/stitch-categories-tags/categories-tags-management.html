@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Vault - Category &amp; Tag Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary": "#2e2bc2",
+                        "surface-container": "#ededf8",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-fixed-dim": "#c1c1ff",
+                        "tertiary-container": "#4849da",
+                        "on-surface": "#191b23",
+                        "outline": "#737785",
+                        "on-background": "#191b23",
+                        "primary": "#0040a1",
+                        "on-primary-fixed-variant": "#0040a1",
+                        "secondary": "#006b5e",
+                        "primary-container": "#0056d2",
+                        "surface-container-highest": "#e1e2ec",
+                        "on-secondary-fixed-variant": "#005046",
+                        "on-error-container": "#93000a",
+                        "outline-variant": "#c3c6d6",
+                        "error": "#ba1a1a",
+                        "secondary-fixed-dim": "#83d5c5",
+                        "secondary-fixed": "#9ff2e1",
+                        "on-error": "#ffffff",
+                        "surface": "#faf8ff",
+                        "on-surface-variant": "#424654",
+                        "primary-fixed": "#dae2ff",
+                        "on-secondary-fixed": "#00201b",
+                        "surface-variant": "#e1e2ec",
+                        "surface-tint": "#0056d2",
+                        "on-primary-fixed": "#001847",
+                        "surface-container-low": "#f2f3fe",
+                        "inverse-surface": "#2e3038",
+                        "secondary-container": "#9cefde",
+                        "on-primary-container": "#ccd8ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "background": "#faf8ff",
+                        "on-secondary-container": "#0b6f62",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "on-tertiary-container": "#d6d5ff",
+                        "on-tertiary-fixed": "#07006c",
+                        "inverse-primary": "#b2c5ff",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#e1e0ff",
+                        "surface-container-high": "#e7e7f2",
+                        "surface-bright": "#faf8ff",
+                        "on-secondary": "#ffffff",
+                        "inverse-on-surface": "#f0f0fb",
+                        "surface-dim": "#d9d9e4"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopNavBar -->
+<nav class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl docked w-full top-0 sticky z-50">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-7xl mx-auto">
+<div class="font-manrope font-extrabold tracking-tight text-blue-800 dark:text-blue-300 text-2xl">
+                The Vault
+            </div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-blue-600 transition-colors" href="#">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-blue-600 transition-colors" href="#">Transactions</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-blue-600 transition-colors" href="#">Budgets</a>
+<a class="text-blue-700 dark:text-blue-400 font-semibold border-b-2 border-blue-600 transition-colors" href="#">Settings</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant p-2 hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant p-2 hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<div class="h-10 w-10 rounded-full overflow-hidden bg-surface-container-highest">
+<img alt="User profile avatar" data-alt="Stylized avatar of a male user with glasses" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCX2i_8ZvANlulVKi0wCQ2VZH3Ck5JhFoZYCi5BtFmoB45soALvTPpZYHAYxtMT6wlG7oK_ZayBzDErsw2OB4dW21YPKafB77Q30ba_rGK2JfCKXn0XndW0NL5MQPvbwJQUiQjjCzjShdUGr8VGDhwwRd5ktoCmHoTt73n4S6e34iFnYamqJ38ij5Q8GSIwfz0eLhg-fK3d1hsiINvqdwzSu4ZKeBuoOm-HsnjX2zaUPNxXW3UKjDAWsLian3i0bZ55yiZ-085M7Hen"/>
+</div>
+</div>
+</div>
+</nav>
+<!-- Sidebar (Web only) -->
+<aside class="hidden lg:flex h-screen w-64 fixed left-0 top-0 flex-col bg-slate-50 dark:bg-slate-950 p-4 gap-2 pt-24 shadow-sm z-40">
+<div class="mb-6 px-4">
+<h3 class="font-manrope font-bold text-blue-800 dark:text-blue-200">Personal Finance</h3>
+<p class="text-xs text-on-surface-variant font-medium">Premium Tier</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-inter medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-xl font-bold transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="category">category</span>
+<span class="font-inter medium">Categories</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="label">label</span>
+<span class="font-inter medium">Tags</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="insert_chart">insert_chart</span>
+<span class="font-inter medium">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-inter medium">Reports</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 border-t border-slate-200/50 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-inter medium">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-error hover:bg-error-container/20 rounded-xl" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-inter medium">Logout</span>
+</a>
+</div>
+</aside>
+<main class="lg:ml-64 min-h-screen pb-24 md:pb-12">
+<!-- Hero Header -->
+<header class="max-w-7xl mx-auto px-8 py-12">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<span class="text-tertiary font-bold tracking-widest text-[10px] uppercase block mb-2">Internal Organization</span>
+<h1 class="text-4xl md:text-5xl font-extrabold font-headline text-on-surface tracking-tight leading-none mb-4">
+                        Ledger Classification
+                    </h1>
+<p class="text-on-surface-variant max-w-xl text-lg font-body">
+                        Manage your ledger classification rules. Define how your wealth is categorized and tagged across every transaction.
+                    </p>
+</div>
+<div class="flex gap-4">
+<button class="bg-secondary-container text-on-secondary-container px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:shadow-sm transition-all">
+<span class="material-symbols-outlined">add</span>
+                        New Category
+                    </button>
+<button class="bg-primary-container text-on-primary-container px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:shadow-sm transition-all shadow-md">
+<span class="material-symbols-outlined">rule</span>
+                        Auto-Rules
+                    </button>
+</div>
+</div>
+</header>
+<section class="max-w-7xl mx-auto px-8 grid grid-cols-1 lg:grid-cols-12 gap-12">
+<!-- Categories Section (Left Column) -->
+<div class="lg:col-span-8">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-2xl font-bold font-headline">Structural Categories</h2>
+<span class="bg-surface-container-highest px-3 py-1 rounded-full text-xs font-bold text-on-surface-variant uppercase tracking-wider">14 ACTIVE</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Category Item -->
+<div class="bg-surface-container-lowest p-6 rounded-xl hover:shadow-[0px_20px_40px_rgba(25,27,35,0.06)] transition-shadow duration-300 flex flex-col gap-4 group">
+<div class="flex justify-between items-start">
+<div class="h-12 w-12 bg-primary-fixed rounded-xl flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">restaurant</span>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-surface-container-low rounded-lg">
+<span class="material-symbols-outlined text-outline">more_vert</span>
+</button>
+</div>
+<div>
+<h3 class="font-bold text-xl font-headline text-on-surface">Food &amp; Beverage</h3>
+<p class="text-on-surface-variant text-sm mt-1">124 transactions this month</p>
+</div>
+<div class="pt-4 mt-auto">
+<div class="flex justify-between items-end">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-surface-container-lowest bg-secondary-fixed text-[10px] flex items-center justify-center">G</div>
+<div class="w-6 h-6 rounded-full border-2 border-surface-container-lowest bg-tertiary-fixed text-[10px] flex items-center justify-center">S</div>
+</div>
+<span class="text-primary font-bold text-sm">Edit Hierarchy</span>
+</div>
+</div>
+</div>
+<!-- Category Item (Localized) -->
+<div class="bg-surface-container-lowest p-6 rounded-xl hover:shadow-[0px_20px_40px_rgba(25,27,35,0.06)] transition-shadow duration-300 flex flex-col gap-4 group">
+<div class="flex justify-between items-start">
+<div class="h-12 w-12 bg-secondary-fixed rounded-xl flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">electric_moped</span>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-surface-container-low rounded-lg">
+<span class="material-symbols-outlined text-outline">more_vert</span>
+</button>
+</div>
+<div>
+<h3 class="font-bold text-xl font-headline text-on-surface">Grab / Gojek</h3>
+<p class="text-on-surface-variant text-sm mt-1">42 transactions this month</p>
+</div>
+<div class="pt-4 mt-auto">
+<div class="flex justify-between items-end">
+<span class="text-secondary-fixed-dim bg-on-secondary-fixed px-2 py-0.5 rounded text-[10px] font-bold">LOCAL</span>
+<span class="text-primary font-bold text-sm">Edit Hierarchy</span>
+</div>
+</div>
+</div>
+<!-- Category Item (Localized) -->
+<div class="bg-surface-container-lowest p-6 rounded-xl hover:shadow-[0px_20px_40px_rgba(25,27,35,0.06)] transition-shadow duration-300 flex flex-col gap-4 group">
+<div class="flex justify-between items-start">
+<div class="h-12 w-12 bg-tertiary-fixed rounded-xl flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_balance</span>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-surface-container-low rounded-lg">
+<span class="material-symbols-outlined text-outline">more_vert</span>
+</button>
+</div>
+<div>
+<h3 class="font-bold text-xl font-headline text-on-surface">Pajak &amp; BPJS</h3>
+<p class="text-on-surface-variant text-sm mt-1">2 transactions this month</p>
+</div>
+<div class="pt-4 mt-auto">
+<div class="flex justify-between items-end">
+<span class="text-tertiary-fixed-dim bg-on-tertiary-fixed px-2 py-0.5 rounded text-[10px] font-bold">LOCAL</span>
+<span class="text-primary font-bold text-sm">Edit Hierarchy</span>
+</div>
+</div>
+</div>
+<!-- Category Item (Localized) -->
+<div class="bg-surface-container-lowest p-6 rounded-xl hover:shadow-[0px_20px_40px_rgba(25,27,35,0.06)] transition-shadow duration-300 flex flex-col gap-4 group">
+<div class="flex justify-between items-start">
+<div class="h-12 w-12 bg-surface-container-highest rounded-xl flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">signal_cellular_alt</span>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-surface-container-low rounded-lg">
+<span class="material-symbols-outlined text-outline">more_vert</span>
+</button>
+</div>
+<div>
+<h3 class="font-bold text-xl font-headline text-on-surface">Pulsa &amp; Data</h3>
+<p class="text-on-surface-variant text-sm mt-1">5 transactions this month</p>
+</div>
+<div class="pt-4 mt-auto">
+<div class="flex justify-between items-end">
+<span class="text-on-surface-variant bg-surface-container px-2 py-0.5 rounded text-[10px] font-bold">UTILITY</span>
+<span class="text-primary font-bold text-sm">Edit Hierarchy</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Smart Categorization Rules -->
+<div class="mt-16 bg-surface-container-low p-8 rounded-3xl">
+<div class="flex items-center gap-4 mb-8">
+<div class="h-10 w-10 bg-primary text-white rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">auto_fix_high</span>
+</div>
+<div>
+<h2 class="text-xl font-bold font-headline">Smart Classification Rules</h2>
+<p class="text-sm text-on-surface-variant">Automate your ledger organization based on vendor signatures.</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between border-l-4 border-primary">
+<div class="flex items-center gap-6">
+<span class="text-sm font-bold text-on-surface-variant">IF VENDOR CONTAINS</span>
+<span class="font-mono bg-surface-container px-3 py-1 rounded-lg text-primary text-sm">TOKOPEDIA*</span>
+<span class="material-symbols-outlined text-outline">arrow_forward</span>
+<span class="text-sm font-bold text-on-surface-variant">ASSIGN TO</span>
+<span class="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-xs font-bold">Shopping</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant">edit</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between border-l-4 border-tertiary">
+<div class="flex items-center gap-6">
+<span class="text-sm font-bold text-on-surface-variant">IF VENDOR CONTAINS</span>
+<span class="font-mono bg-surface-container px-3 py-1 rounded-lg text-primary text-sm">GRABFOOD</span>
+<span class="material-symbols-outlined text-outline">arrow_forward</span>
+<span class="text-sm font-bold text-on-surface-variant">ASSIGN TO</span>
+<span class="bg-primary-container text-on-primary-container px-3 py-1 rounded-full text-xs font-bold">Food &amp; Beverage</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant">edit</span>
+</div>
+</div>
+<button class="mt-8 text-primary font-bold text-sm flex items-center gap-2 hover:translate-x-1 transition-transform">
+                        Add New Logic Rule <span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Tags Section (Right Column) -->
+<div class="lg:col-span-4">
+<div class="sticky top-28 space-y-12">
+<div>
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-2xl font-bold font-headline">Global Tags</h2>
+<button class="text-primary hover:bg-primary-fixed rounded-full p-2 transition-colors">
+<span class="material-symbols-outlined">add_circle</span>
+</button>
+</div>
+<div class="flex flex-wrap gap-3">
+<div class="px-5 py-2.5 bg-surface-container-highest rounded-full flex items-center gap-2 group hover:bg-tertiary hover:text-white transition-all cursor-pointer">
+<span class="font-medium text-sm">#Vacation</span>
+<span class="text-[10px] font-bold opacity-50">12x</span>
+</div>
+<div class="px-5 py-2.5 bg-surface-container-highest rounded-full flex items-center gap-2 group hover:bg-primary hover:text-white transition-all cursor-pointer">
+<span class="font-medium text-sm">#Work</span>
+<span class="text-[10px] font-bold opacity-50">48x</span>
+</div>
+<div class="px-5 py-2.5 bg-surface-container-highest rounded-full flex items-center gap-2 group hover:bg-secondary hover:text-white transition-all cursor-pointer">
+<span class="font-medium text-sm">#Reimbursement</span>
+<span class="text-[10px] font-bold opacity-50">5x</span>
+</div>
+<div class="px-5 py-2.5 bg-surface-container-highest rounded-full flex items-center gap-2 group hover:bg-error hover:text-white transition-all cursor-pointer">
+<span class="font-medium text-sm">#Medical</span>
+<span class="text-[10px] font-bold opacity-50">2x</span>
+</div>
+<div class="px-5 py-2.5 bg-surface-container-highest rounded-full flex items-center gap-2 group hover:bg-slate-800 hover:text-white transition-all cursor-pointer">
+<span class="font-medium text-sm">#Personal</span>
+<span class="text-[10px] font-bold opacity-50">156x</span>
+</div>
+<div class="px-5 py-2.5 bg-surface-container-highest rounded-full flex items-center gap-2 group hover:bg-secondary-container hover:text-on-secondary-container transition-all cursor-pointer">
+<span class="font-medium text-sm">#Subscription</span>
+<span class="text-[10px] font-bold opacity-50">12x</span>
+</div>
+</div>
+</div>
+<!-- Usage Stats (Editorial Card) -->
+<div class="bg-surface-container-lowest p-8 rounded-3xl shadow-sm">
+<h3 class="font-headline font-bold text-lg mb-6">Classification Health</h3>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider mb-2">
+<span class="text-on-surface-variant">Categorized</span>
+<span class="text-secondary">94%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 94%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs font-bold uppercase tracking-wider mb-2">
+<span class="text-on-surface-variant">Tagged</span>
+<span class="text-tertiary">68%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 68%"></div>
+</div>
+</div>
+</div>
+<p class="mt-8 text-xs text-on-surface-variant leading-relaxed">
+                            A high classification rate ensures your <span class="text-on-surface font-bold">Personal Net Worth</span> reports remain accurate and actionable.
+                        </p>
+</div>
+<!-- Archival / Cleanup -->
+<div class="p-6 border border-outline-variant/10 rounded-2xl flex items-center gap-4 hover:bg-surface-container-low transition-colors group cursor-pointer">
+<span class="material-symbols-outlined text-outline">archive</span>
+<div>
+<h4 class="font-bold text-sm">Archive Cleanup</h4>
+<p class="text-xs text-on-surface-variant">12 unused tags detected</p>
+</div>
+<span class="material-symbols-outlined ml-auto text-outline group-hover:translate-x-1 transition-transform">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg flex justify-around items-center px-6 pb-6 pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] rounded-t-3xl border-t border-slate-100 dark:border-slate-800">
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-inter text-[10px] tracking-wide uppercase">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 rounded-2xl px-4 py-1 scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="grid_view" style="font-variation-settings: 'FILL' 1;">grid_view</span>
+<span class="font-inter text-[10px] tracking-wide uppercase">Categories</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="sell">sell</span>
+<span class="font-inter text-[10px] tracking-wide uppercase">Tags</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+<span class="font-inter text-[10px] tracking-wide uppercase">More</span>
+</a>
+</nav>
+</body></html>

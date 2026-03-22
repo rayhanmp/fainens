@@ -1,0 +1,1 @@
+ALTER TABLE `subscription` ADD `category_id` integer REFERENCES category(id);

@@ -1,0 +1,403 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Vault Finance | Editorial Vault</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-variant": "#e1e2ec",
+              "secondary-container": "#9cefde",
+              "on-primary-fixed-variant": "#0040a1",
+              "on-tertiary-fixed-variant": "#2e2bc2",
+              "on-secondary-fixed-variant": "#005046",
+              "on-secondary-fixed": "#00201b",
+              "error-container": "#ffdad6",
+              "on-error": "#ffffff",
+              "on-primary": "#ffffff",
+              "on-surface-variant": "#424654",
+              "inverse-on-surface": "#f0f0fb",
+              "tertiary-fixed-dim": "#c1c1ff",
+              "secondary-fixed": "#9ff2e1",
+              "surface": "#faf8ff",
+              "tertiary-container": "#4849da",
+              "surface-bright": "#faf8ff",
+              "on-primary-fixed": "#001847",
+              "on-primary-container": "#ccd8ff",
+              "error": "#ba1a1a",
+              "surface-container-low": "#f2f3fe",
+              "surface-container-highest": "#e1e2ec",
+              "on-secondary-container": "#0b6f62",
+              "secondary-fixed-dim": "#83d5c5",
+              "secondary": "#006b5e",
+              "on-secondary": "#ffffff",
+              "tertiary-fixed": "#e1e0ff",
+              "background": "#faf8ff",
+              "surface-container-lowest": "#ffffff",
+              "on-surface": "#191b23",
+              "surface-tint": "#0056d2",
+              "on-error-container": "#93000a",
+              "primary-fixed": "#dae2ff",
+              "on-tertiary-fixed": "#07006c",
+              "primary-fixed-dim": "#b2c5ff",
+              "primary-container": "#0056d2",
+              "surface-container-high": "#e7e7f2",
+              "outline-variant": "#c3c6d6",
+              "surface-container": "#ededf8",
+              "on-background": "#191b23",
+              "inverse-primary": "#b2c5ff",
+              "on-tertiary-container": "#d6d5ff",
+              "primary": "#0040a1",
+              "outline": "#737785",
+              "tertiary": "#2e2bc2",
+              "on-tertiary": "#ffffff",
+              "inverse-surface": "#2e3038",
+              "surface-dim": "#d9d9e4"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #faf8ff;
+            color: #191b23;
+        }
+        .editorial-shadow {
+            box-shadow: 0px 20px 40px rgba(25, 27, 35, 0.04);
+        }
+    </style>
+</head>
+<body class="bg-surface">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-slate-50 dark:bg-slate-950 flex flex-col py-8 px-4 z-50">
+<div class="mb-10 px-2">
+<h1 class="text-xl font-bold tracking-tight text-blue-900 dark:text-blue-100 font-headline" style="">Editorial Vault</h1>
+<p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mt-1" style="">Wealth Management (ID)</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 text-blue-700 dark:text-blue-400 font-bold border-r-2 border-blue-700 dark:border-blue-400 transition-all" href="#" style="">
+<span class="material-symbols-outlined" data-icon="dashboard" style="">dashboard</span>
+<span class="text-xs font-semibold" style="">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors" href="#" style="">
+<span class="material-symbols-outlined" data-icon="account_balance" style="">account_balance</span>
+<span class="text-xs font-semibold" style="">Banks &amp; E-Wallets</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors" href="#" style="">
+<span class="material-symbols-outlined" data-icon="receipt_long" style="">receipt_long</span>
+<span class="text-xs font-semibold" style="">Transactions</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors" href="#" style="">
+<span class="material-symbols-outlined" data-icon="savings" style="">savings</span>
+<span class="text-xs font-semibold" style="">Budgets</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors" href="#" style="">
+<span class="material-symbols-outlined" data-icon="analytics" style="">analytics</span>
+<span class="text-xs font-semibold" style="">Reports</span>
+</a>
+</nav>
+<div class="mt-auto space-y-1">
+<button class="w-full mb-6 bg-gradient-to-r from-primary to-primary-container text-white py-3 rounded-full text-xs font-bold editorial-shadow active:scale-95 transition-transform" style="">
+                Add Transaction
+            </button>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 transition-colors" href="#" style="">
+<span class="material-symbols-outlined" data-icon="settings" style="">settings</span>
+<span class="text-xs font-semibold" style="">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 transition-colors" href="#" style="">
+<span class="material-symbols-outlined" data-icon="help" style="">help</span>
+<span class="text-xs font-semibold" style="">Support</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl flex justify-between items-center h-16 px-8">
+<div class="flex items-center flex-1">
+<div class="relative w-64 group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm" data-icon="search" style="">search</span>
+<input class="w-full bg-surface-container-highest/50 border-none rounded-full py-2 pl-10 pr-4 text-xs font-body focus:ring-2 focus:ring-primary/20 placeholder:text-outline transition-all" placeholder="Search transactions..." type="text">
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors opacity-80" style="">
+<span class="material-symbols-outlined" data-icon="notifications" style="">notifications</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden bg-surface-container-high editorial-shadow">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0coHIUUSRye2VWxZfRNLD8K-hpdu8HZG023U-NzX3CLkpi8NC0hqrj9QCSi5RIivalPHo59vk-2v7X1p7_pF9tWd74-KZsG1fFyie-SViuUunLKz71ahfiAU3MHOJW9S1ItVJGnyvAitVgid0s7LnNIymKMQEsqj4K3UgJmw1EKPVUZLLWGwSesRR4eNwElePhrgI-m2o1OE-fYfb7zjikWU02Vc02RtkRVwZi6TzDjLJ-D-_QxJvv_qbSdNY9SIyktVtPprm12gW" style="">
+</div>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="ml-64 pt-24 px-8 pb-12 min-h-screen">
+<div class="max-w-7xl mx-auto space-y-8">
+<!-- Header Section -->
+<div class="flex justify-between items-end">
+<div>
+<h2 class="text-3xl font-extrabold font-headline tracking-tight text-on-surface" style="">Financial Overview</h2>
+<p class="text-on-surface-variant font-body mt-1" style="">Status as of October 24, 2023 • Jakarta Time (WIB)</p>
+</div>
+<div class="flex gap-3">
+<button class="px-5 py-2.5 bg-surface-container-lowest text-primary text-xs font-bold rounded-full editorial-shadow hover:bg-surface-container-low transition-colors" style="">
+                        Export Report
+                    </button>
+</div>
+</div>
+<!-- Bento Grid: Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Total Balance -->
+<div class="bg-primary-container p-8 rounded-full flex flex-col justify-between min-h-[180px] relative overflow-hidden group">
+<div class="relative z-10">
+<p class="text-on-primary-container text-xs font-bold uppercase tracking-widest mb-2 opacity-80" style="">Total Balance (BCA &amp; GoPay)</p>
+<h3 class="text-4xl font-extrabold font-headline text-white tracking-tighter" style="">Rp 2.850.240</h3>
+</div>
+<div class="relative z-10 mt-4 flex items-center gap-2 text-on-primary-container">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up" style="">trending_up</span>
+<span class="text-xs font-medium" style="">+2.4% from last month</span>
+</div>
+<div class="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:scale-125 transition-transform duration-500"></div>
+</div>
+<!-- Monthly Income -->
+<div class="bg-surface-container-lowest p-8 rounded-full flex flex-col justify-between min-h-[180px] editorial-shadow">
+<div>
+<p class="text-outline text-xs font-bold uppercase tracking-widest mb-2" style="">Monthly Income (Mandiri)</p>
+<h3 class="text-3xl font-bold font-headline text-on-surface tracking-tight" style="">Rp 12.400.000</h3>
+</div>
+<div class="mt-4 flex items-center gap-2 text-secondary">
+<span class="material-symbols-outlined text-sm" data-icon="arrow_upward" style="">arrow_upward</span>
+<span class="text-xs font-semibold" style="">On track with budget</span>
+</div>
+</div>
+<!-- Monthly Expenses -->
+<div class="bg-surface-container-lowest p-8 rounded-full flex flex-col justify-between min-h-[180px] editorial-shadow">
+<div>
+<p class="text-outline text-xs font-bold uppercase tracking-widest mb-2" style="">Monthly Expenses</p>
+<h3 class="text-3xl font-bold font-headline text-on-surface tracking-tight" style="">Rp 4.821.500</h3>
+</div>
+<div class="mt-4 flex items-center gap-2 text-error">
+<span class="material-symbols-outlined text-sm" data-icon="arrow_downward" style="">arrow_downward</span>
+<span class="text-xs font-semibold" style="">12% higher than last week</span>
+</div>
+</div>
+</div>
+<!-- Main Dashboard Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+<!-- Left Column -->
+<div class="lg:col-span-2 space-y-8">
+<!-- Spending Trends -->
+<div class="bg-surface-container-low p-8 rounded-xl">
+<div class="flex justify-between items-center mb-10">
+<div>
+<h4 class="font-headline font-bold text-lg" style="">Spending Trends (IDR)</h4>
+<p class="text-on-surface-variant text-xs font-body" style="">Historical performance over 6 months</p>
+</div>
+<div class="flex bg-surface-container-highest rounded-full p-1">
+<button class="px-4 py-1.5 bg-white rounded-full text-[10px] font-bold shadow-sm" style="">6M</button>
+<button class="px-4 py-1.5 text-outline text-[10px] font-bold" style="">1Y</button>
+<button class="px-4 py-1.5 text-outline text-[10px] font-bold" style="">ALL</button>
+</div>
+</div>
+<div class="h-64 flex items-end justify-between gap-2 px-4 relative">
+<div class="absolute inset-x-0 top-0 h-px bg-outline-variant/20"></div>
+<div class="absolute inset-x-0 top-1/3 h-px bg-outline-variant/20"></div>
+<div class="absolute inset-x-0 top-2/3 h-px bg-outline-variant/20"></div>
+<svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 800 200">
+<path d="M0 150 Q 150 160 250 80 T 500 120 T 800 40" fill="none" stroke="#0040a1" stroke-linecap="round" stroke-width="3"></path>
+<path d="M0 150 Q 150 160 250 80 T 500 120 T 800 40 L 800 200 L 0 200 Z" fill="url(#grad)" opacity="0.1"></path>
+<defs>
+<linearGradient id="grad" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#0040a1;stop-opacity:1"></stop>
+<stop offset="100%" style="stop-color:#0040a1;stop-opacity:0"></stop>
+</linearGradient>
+</defs>
+</svg>
+<div class="flex-1 flex flex-col items-center z-10"><div class="text-[10px] text-outline font-bold mt-4" style="">MAY</div></div>
+<div class="flex-1 flex flex-col items-center z-10"><div class="text-[10px] text-outline font-bold mt-4" style="">JUN</div></div>
+<div class="flex-1 flex flex-col items-center z-10"><div class="text-[10px] text-outline font-bold mt-4" style="">JUL</div></div>
+<div class="flex-1 flex flex-col items-center z-10"><div class="text-[10px] text-outline font-bold mt-4" style="">AUG</div></div>
+<div class="flex-1 flex flex-col items-center z-10"><div class="text-[10px] text-outline font-bold mt-4" style="">SEP</div></div>
+<div class="flex-1 flex flex-col items-center z-10"><div class="text-[10px] text-primary font-extrabold mt-4" style="">OCT</div></div>
+</div>
+</div>
+<!-- Recent Transactions -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden editorial-shadow">
+<div class="p-8 pb-4 flex justify-between items-center">
+<h4 class="font-headline font-bold text-lg" style="">Recent Transactions</h4>
+<button class="text-primary text-xs font-bold flex items-center gap-1" style="">
+                                View All <span class="material-symbols-outlined text-sm" data-icon="chevron_right" style="">chevron_right</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-surface-container-low">
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-outline" style="">Date</th>
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-outline" style="">Category</th>
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-outline" style="">Merchant / Bank</th>
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-outline text-right" style="">Amount</th>
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-outline" style="">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container">
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-8 py-5 text-sm font-body" style="">Oct 24, 2023</td>
+<td class="px-8 py-5" style="">
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full text-[10px] font-bold" style="">Daily Needs</span>
+</td>
+<td class="px-8 py-5 text-sm font-semibold" style="">Indomaret Point</td>
+<td class="px-8 py-5 text-sm font-bold text-right text-error" style="">-Rp 142.500</td>
+<td class="px-8 py-5" style="">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-outline" style="">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary"></div> Completed
+                                            </div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-8 py-5 text-sm font-body" style="">Oct 22, 2023</td>
+<td class="px-8 py-5" style="">
+<span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant rounded-full text-[10px] font-bold" style="">Transportation</span>
+</td>
+<td class="px-8 py-5 text-sm font-semibold" style="">Gojek - GoRide</td>
+<td class="px-8 py-5 text-sm font-bold text-right text-error" style="">-Rp 19.000</td>
+<td class="px-8 py-5" style="">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-outline" style="">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary"></div> Completed
+                                            </div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-8 py-5 text-sm font-body" style="">Oct 20, 2023</td>
+<td class="px-8 py-5" style="">
+<span class="px-3 py-1 bg-tertiary-fixed text-on-tertiary-fixed-variant rounded-full text-[10px] font-bold" style="">Salary</span>
+</td>
+<td class="px-8 py-5 text-sm font-semibold" style="">Transfer from BNI</td>
+<td class="px-8 py-5 text-sm font-bold text-right text-secondary" style="">+Rp 4.250.000</td>
+<td class="px-8 py-5" style="">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-outline" style="">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary-container"></div> Pending
+                                            </div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right Column -->
+<div class="space-y-8">
+<!-- Spending Breakdown -->
+<div class="bg-surface-container-lowest p-8 rounded-xl editorial-shadow">
+<h4 class="font-headline font-bold text-lg mb-6" style="">Spending Breakdown</h4>
+<div class="space-y-6">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="home" style="">home</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-xs font-bold text-on-surface" style="">Kos / Housing</span>
+<span class="text-xs font-bold text-on-surface" style="">32%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full">
+<div class="bg-primary h-full rounded-full" style="width: 32%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="restaurant" style="">restaurant</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-xs font-bold text-on-surface" style="">Food (Gofood)</span>
+<span class="text-xs font-bold text-on-surface" style="">24%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full">
+<div class="bg-secondary h-full rounded-full" style="width: 24%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-tertiary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="shopping_cart" style="">shopping_cart</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-xs font-bold text-on-surface" style="">Tokopedia / Shopee</span>
+<span class="text-xs font-bold text-on-surface" style="">18%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full">
+<div class="bg-tertiary h-full rounded-full" style="width: 18%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Budget Progress -->
+<div class="bg-surface-container p-8 rounded-xl">
+<h4 class="font-headline font-bold text-lg mb-6" style="">Budget Progress</h4>
+<div class="space-y-8">
+<div>
+<div class="flex justify-between items-end mb-2">
+<div>
+<p class="text-xs font-bold text-on-surface" style="">Monthly Groceries</p>
+<p class="text-[10px] text-outline font-medium" style="">Rp 640.000 of Rp 800.000</p>
+</div>
+<span class="text-xs font-bold text-primary" style="">80%</span>
+</div>
+<div class="w-full h-3 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-secondary-fixed-dim rounded-full" style="width: 80%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-2">
+<div>
+<p class="text-xs font-bold text-on-surface" style="">OVO/GoPay Wallet</p>
+<p class="text-[10px] text-outline font-medium" style="">Rp 420.000 of Rp 450.000</p>
+</div>
+<span class="text-xs font-bold text-error" style="">93%</span>
+</div>
+<div class="w-full h-3 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="h-full bg-error rounded-full" style="width: 93%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-2">
+<div>
+<p class="text-xs font-bold text-on-surface" style="">Personal Care</p>
+<p class="text-[10px] text-outline font-medium" style="">Rp 120.000 of Rp 300.000</p>
+</div>
+<span class="text-xs font-bold text-primary" style="">40%</span>
+</div>
+<div class="w-full h-3 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 40%"></div>
+</div>
+</div>
+</div>
+<button class="w-full mt-8 py-3 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-full hover:bg-white transition-colors" style="">
+                            Manage All Budgets
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

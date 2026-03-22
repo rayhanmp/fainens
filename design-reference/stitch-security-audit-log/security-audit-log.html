@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Security Audit Log — Reference</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: Inter, sans-serif; background: #faf8ff; color: #191b23; }
+    .font-headline { font-family: Manrope, sans-serif; }
+    .editorial-shadow { box-shadow: 0 20px 40px rgba(25, 27, 35, 0.04); }
+  </style>
+</head>
+<body class="min-h-screen p-6 md:p-10">
+  <div class="max-w-7xl mx-auto space-y-8">
+    <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-widest text-[#737785] mb-2">Security &amp; compliance</p>
+        <h1 class="font-headline text-3xl md:text-4xl font-extrabold tracking-tight text-[#191b23]">Security audit log</h1>
+        <p class="mt-2 text-sm text-[#424654] max-w-xl">Immutable trail of create, update, and delete events across your ledger and settings. Search and filter to investigate changes.</p>
+      </div>
+      <button type="button" class="inline-flex items-center gap-2 rounded-full border border-[#e1e2ec] bg-white px-5 py-2.5 text-xs font-bold text-[#0040a1] editorial-shadow hover:bg-[#f2f3fe]">Refresh</button>
+    </header>
+
+    <!-- Single card: Activity header + compact last session + toolbar + table -->
+    <div class="rounded-xl border border-[#e1e2ec] bg-[#ffffff] overflow-hidden editorial-shadow">
+      <div class="px-4 py-3 sm:px-6 sm:py-4 border-b border-[#e1e2ec] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 class="font-headline font-bold text-lg">Activity</h2>
+        <p class="text-xs text-[#424654] text-left sm:text-right sm:max-w-[55%]" title="Full session details on hover in app">
+          <span class="font-semibold text-[#191b23]">Last session</span> · Mar 21, 2026 · 2:15 PM · Chrome 122 · Jakarta
+        </p>
+      </div>
+      <div class="px-3 py-3 sm:px-5 border-b border-[#e1e2ec] bg-[#f2f3fe]/80">
+        <div class="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
+          <div class="relative flex-1 min-w-0 lg:min-w-[220px]">
+            <label for="audit-search-ref" class="sr-only">Search audit log</label>
+            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#737785]" aria-hidden="true">🔍</span>
+            <input id="audit-search-ref" type="search" placeholder="Search resource, ID, or action…" class="w-full rounded-full border border-[#e1e2ec] bg-white py-2 pl-10 pr-4 text-sm font-medium text-[#191b23] placeholder:text-[#737785]" />
+          </div>
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <select class="rounded-full border border-[#e1e2ec] bg-white px-4 py-2 text-xs font-semibold min-w-[168px]"><option>All resources</option></select>
+            <select class="rounded-full border border-[#e1e2ec] bg-white px-4 py-2 text-xs font-semibold min-w-[132px]"><option>All actions</option></select>
+          </div>
+          <p class="text-xs text-[#424654] lg:ml-auto"><span class="hidden sm:inline">Showing </span><span class="font-bold text-[#191b23]">1</span>–<span class="font-bold text-[#191b23]">25</span> of <span class="font-bold text-[#191b23]">128</span></p>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="bg-[#f2f3fe]">
+              <th class="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-[#737785]">Timestamp</th>
+              <th class="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-[#737785]">Event</th>
+              <th class="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-[#737785]">Resource</th>
+              <th class="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-[#737785]">Summary</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#ededf8]">
+            <tr class="hover:bg-[#faf8ff]">
+              <td class="px-6 py-4 font-mono text-xs text-[#424654]">Mar 21, 2026 · 2:04 PM</td>
+              <td class="px-6 py-4"><span class="rounded-full bg-[#006b5e]/15 px-2.5 py-1 text-[10px] font-bold text-[#006b5e]">CREATE</span></td>
+              <td class="px-6 py-4"><span class="font-medium">Transaction</span><span class="block text-[10px] text-[#737785]">#1042</span></td>
+              <td class="px-6 py-4 text-[#424654]">Coffee · expense</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

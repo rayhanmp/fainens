@@ -1,1 +1,62 @@
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.db-journal
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+.stylelintcache
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
+
+# Drizzle migrations (keep the files, ignore generated artifacts if any)
+drizzle/*.sql.json
+
+# Temporary files
+*.tmp
+*.temp

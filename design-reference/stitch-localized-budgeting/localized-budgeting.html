@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Localized Budgeting — Reference</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { headline: ["Manrope"], body: ["Inter"] },
+          colors: {
+            surface: "#faf8ff",
+            "on-surface": "#191b23",
+            outline: "#737785",
+            primary: "#0040a1",
+            "primary-container": "#0056d2",
+            "on-primary-container": "#ccd8ff",
+            secondary: "#006b5e",
+            "secondary-fixed-dim": "#83d5c5",
+            error: "#ba1a1a",
+            "surface-container": "#ededf8",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f2f3fe",
+            "surface-container-highest": "#e1e2ec",
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: Inter, sans-serif; background: #faf8ff; color: #191b23; }
+    .editorial-shadow { box-shadow: 0px 20px 40px rgba(25, 27, 35, 0.04); }
+    .font-headline { font-family: Manrope, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen p-8">
+  <div class="max-w-7xl mx-auto space-y-8">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+      <div>
+        <h1 class="text-3xl font-extrabold font-headline tracking-tight text-on-surface">Localized budgeting</h1>
+        <p class="text-sm mt-1 text-outline font-body">Plan by category for each salary period · January 2025</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <button type="button" class="px-5 py-2.5 bg-surface-container-lowest text-primary text-xs font-bold rounded-full editorial-shadow border border-surface-container-highest">Salary periods</button>
+        <button type="button" class="px-6 py-3 rounded-full text-xs font-bold text-white bg-gradient-to-r from-primary to-primary-container editorial-shadow">+ Add budget line</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="relative overflow-hidden bg-primary-container p-8 rounded-[2rem] min-h-[180px] text-white">
+        <p class="text-on-primary-container text-xs font-bold uppercase tracking-widest mb-2 opacity-90">Total budget</p>
+        <p class="text-3xl font-extrabold font-headline">Rp 4.500.000</p>
+        <div class="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
+      </div>
+      <div class="bg-surface-container-lowest p-8 rounded-[2rem] min-h-[180px] editorial-shadow border border-surface-container-highest">
+        <p class="text-outline text-xs font-bold uppercase tracking-widest mb-2">Spent</p>
+        <p class="text-3xl font-bold font-headline text-on-surface">Rp 2.100.000</p>
+      </div>
+      <div class="bg-surface-container-lowest p-8 rounded-[2rem] min-h-[180px] editorial-shadow border border-surface-container-highest">
+        <p class="text-outline text-xs font-bold uppercase tracking-widest mb-2">Remaining</p>
+        <p class="text-3xl font-bold font-headline text-on-surface">Rp 2.400.000</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      <div class="lg:col-span-2 bg-surface-container p-8 rounded-xl border border-surface-container-highest">
+        <h2 class="font-headline font-bold text-lg mb-6">Budget progress</h2>
+        <ul class="space-y-8">
+          <li>
+            <div class="flex justify-between items-end mb-2">
+              <div>
+                <p class="text-xs font-bold text-on-surface">Monthly groceries</p>
+                <p class="text-[10px] text-outline font-medium">Rp 640.000 of Rp 800.000</p>
+              </div>
+              <span class="text-xs font-bold text-primary">80%</span>
+            </div>
+            <div class="w-full h-3 bg-surface-container-lowest rounded-full overflow-hidden">
+              <div class="h-full rounded-full bg-gradient-to-r from-secondary to-secondary-fixed-dim" style="width:80%"></div>
+            </div>
+          </li>
+          <li>
+            <div class="flex justify-between items-end mb-2">
+              <div>
+                <p class="text-xs font-bold text-on-surface">Transport</p>
+                <p class="text-[10px] text-outline font-medium">Rp 420.000 of Rp 450.000</p>
+              </div>
+              <span class="text-xs font-bold text-error">93%</span>
+            </div>
+            <div class="w-full h-3 bg-surface-container-lowest rounded-full overflow-hidden">
+              <div class="h-full bg-error rounded-full" style="width:93%"></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <div class="bg-surface-container-lowest p-8 rounded-xl editorial-shadow border border-surface-container-highest">
+        <h2 class="font-headline font-bold text-lg mb-4">Budget mix</h2>
+        <p class="text-xs text-outline">Share of total planned budget by category (reference).</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
