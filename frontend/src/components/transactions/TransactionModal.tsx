@@ -21,6 +21,8 @@ import {
   StickyNote,
   CreditCard,
   ShoppingCart,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -984,9 +986,9 @@ export function TransactionModal({
             <div className="inline-flex p-0.5 bg-[var(--ref-surface-container)] rounded-full flex-wrap gap-0.5">
               {(
                 [
-                  { value: 'expense' as const, label: 'Expense' },
-                  { value: 'income' as const, label: 'Income' },
-                  { value: 'transfer' as const, label: 'Transfer' },
+                  { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },
+                  { value: 'income' as const, label: 'Income', icon: ArrowDownRight },
+                  { value: 'transfer' as const, label: 'Transfer', icon: ArrowRightLeft },
                   { value: 'paylater_buy' as const, label: 'Buy later', icon: ShoppingCart },
                   { value: 'paylater' as const, label: 'Pay later', icon: CreditCard },
                 ] as const
