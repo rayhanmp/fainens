@@ -60,3 +60,5 @@ drizzle/*.sql.json
 # Temporary files
 *.tmp
 *.temp
+backend/data/
+nul
