@@ -843,7 +843,173 @@ export function TransactionModal({
       const toAccount = editingTransaction.lines[1]?.accountId ? accounts.find(a => editingTransaction.lines[1].accountId === a.id) : null;
       const category = editingTransaction.categoryId ? categories.find(c => c.id === editingTransaction.categoryId) : null;
       const amount = editingTransaction.lines?.length ? Math.max(...editingTransaction.lines.map(l => Math.max(l.debit, l.credit))) : 0;
+      const isTransfer = editingTransaction.txType?.includes('transfer');
       
+      // For transfer, use the enhanced design
+      if (isTransfer && fromAccount && toAccount) {
+        return (
+          <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Transfer Detail"
+            subtitle={`ID: #${editingTransaction.id}`}
+            size="xl"
+          >
+            <div className="px-2 pb-6">
+              {/* Status Badge */}
+              <div className="mb-6">
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--ref-surface-container-highest)] text-[var(--color-muted)] font-label text-xs font-semibold tracking-wide">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]"></span>
+                  LOGGED RECORD
+                </span>
+              </div>
+
+              {/* Main Value Display */}
+              <div className="mb-8 text-center">
+                <p className="font-label text-sm text-[var(--color-muted)] mb-2">Total Amount</p>
+                <h2 className="font-headline text-5xl font-extrabold text-[var(--color-on-background)] tracking-tighter">
+                  <span className="text-2xl font-bold text-[var(--color-primary)] align-top mr-1">Rp</span>
+                  {amount.toLocaleString('id-ID')}
+                </h2>
+              </div>
+
+              {/* Visual Transfer Path */}
+              <div className="bg-[var(--ref-surface-container-low)] rounded-xl p-6 mb-6 relative">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative">
+                  {/* Source Account */}
+                  <div className="flex flex-col items-center md:items-start text-center md:text-left z-10 w-full md:w-1/3">
+                    <div className="w-14 h-14 bg-[var(--ref-surface-container-lowest)] rounded-full flex items-center justify-center shadow-sm mb-3">
+                      <Landmark className="w-7 h-7 text-[var(--color-primary)]" />
+                    </div>
+                    <h4 className="font-headline font-semibold text-[var(--color-text-primary)]">{fromAccount.name}</h4>
+                    <p className="font-label text-xs text-[var(--color-muted)] uppercase tracking-widest mt-1">From Account</p>
+                  </div>
+
+                  {/* Connector */}
+                  <div className="hidden md:flex flex-grow items-center justify-center relative px-4">
+                    <div className="h-[2px] w-full bg-[var(--color-border)]/30 absolute"></div>
+                    <div className="w-10 h-10 bg-[var(--color-primary)] rounded-full flex items-center justify-center z-10 shadow-lg shadow-[var(--color-primary)]/20">
+                      <ArrowRightLeft className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                  <div className="md:hidden flex items-center justify-center">
+                    <div className="w-10 h-10 bg-[var(--color-primary)] rounded-full flex items-center justify-center z-10 shadow-lg shadow-[var(--color-primary)]/20">
+                      <ArrowRightLeft className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+
+                  {/* Destination Account */}
+                  <div className="flex flex-col items-center md:items-end text-center md:text-right z-10 w-full md:w-1/3">
+                    <div className="w-14 h-14 bg-[var(--ref-surface-container-lowest)] rounded-full flex items-center justify-center shadow-sm mb-3">
+                      <Wallet className="w-7 h-7 text-[var(--color-secondary)]" />
+                    </div>
+                    <h4 className="font-headline font-semibold text-[var(--color-text-primary)]">{toAccount.name}</h4>
+                    <p className="font-label text-xs text-[var(--color-muted)] uppercase tracking-widest mt-1">To Destination</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Details Bento Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {/* Date */}
+                <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                    <StickyNote className="w-5 h-5 text-[var(--color-muted)]" />
+                  </div>
+                  <div>
+                    <p className="font-label text-xs text-[var(--color-muted)]">Date Recorded</p>
+                    <p className="font-body text-sm font-semibold">{new Date(editingTransaction.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                  </div>
+                </div>
+
+                {/* Purpose/Description */}
+                <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                    <TagIcon className="w-5 h-5 text-[var(--color-muted)]" />
+                  </div>
+                  <div>
+                    <p className="font-label text-xs text-[var(--color-muted)]">Purpose</p>
+                    <p className="font-body text-sm font-semibold">{editingTransaction.description}</p>
+                  </div>
+                </div>
+
+                {/* Category */}
+                {category && (
+                  <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                      <TagIcon className="w-5 h-5 text-[var(--color-muted)]" />
+                    </div>
+                    <div>
+                      <p className="font-label text-xs text-[var(--color-muted)]">Category</p>
+                      <div className="flex gap-2 mt-1">
+                        <span 
+                          className="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-tight"
+                          style={{ backgroundColor: `${category.color || '#666'}22`, color: category.color || '#666' }}
+                        >
+                          {category.name}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Note */}
+                {editingTransaction.notes && (
+                  <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                      <StickyNote className="w-5 h-5 text-[var(--color-muted)]" />
+                    </div>
+                    <div>
+                      <p className="font-label text-xs text-[var(--color-muted)]">Note</p>
+                      <p className="font-body text-sm font-semibold italic">{editingTransaction.notes}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bookkeeping Disclaimer */}
+              <div className="mb-6 p-4 bg-[var(--ref-tertiary)]/5 rounded-xl flex items-start gap-4">
+                <span className="text-[var(--color-tertiary)] mt-0.5">ℹ</span>
+                <div>
+                  <p className="font-headline text-sm font-semibold text-[var(--color-tertiary)]">Bookkeeping Notice</p>
+                  <p className="font-body text-xs text-[var(--color-muted)] leading-relaxed">This record was manually logged to synchronize your accounts. The actual financial transaction was recorded in your books.</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-[var(--color-border)]">
+                <Button 
+                  type="button" 
+                  variant="secondary"
+                  onClick={onClose}
+                  className="w-full md:w-auto px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
+                >
+                  Close
+                </Button>
+                <div className="flex gap-3 w-full md:w-auto">
+                  <Button 
+                    type="button" 
+                    variant="secondary"
+                    onClick={() => setViewMode(false)} 
+                    className="flex-1 md:flex-none px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
+                  >
+                    Edit Record
+                  </Button>
+                  <Button 
+                    type="button" 
+                    onClick={onClose}
+                    className="flex-1 md:flex-none px-8 py-2.5 rounded-full font-headline font-semibold text-sm shadow-lg shadow-[var(--color-primary)]/20"
+                  >
+                    Got it
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Modal>
+        );
+      }
+      
+      // Non-transfer view mode (original simpler design)
       return (
         <Modal
           isOpen={isOpen}
