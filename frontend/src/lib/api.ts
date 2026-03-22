@@ -142,6 +142,7 @@ export const api = {
         txType: string;
         categoryId: number | null;
         periodId: number | null;
+        linkedTxId: number | null;
         lines: Array<{
           id: number;
           accountId: number;
@@ -184,6 +185,7 @@ export const api = {
             tagIds?: number[];
             walletAccountId: number;
             toWalletAccountId?: number;
+            linkedTxId?: number | null;
             // Transport location fields
             originLat?: number | null;
             originLng?: number | null;

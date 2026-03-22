@@ -136,6 +136,8 @@ export type CreateSimpleTransactionInput = {
   walletAccountId: number;
   /** For transfer: the other wallet */
   toWalletAccountId?: number;
+  /** Link to parent transaction (e.g., transfer fee linked to transfer) */
+  linkedTxId?: number | null;
   /** Transport location tracking (for GoRide, Grab, etc.) */
   originLat?: number | null;
   originLng?: number | null;
@@ -212,6 +214,7 @@ export async function createSimpleTransaction(
       txType: input.txType ?? `simple_${input.kind}`,
       periodId: input.periodId ?? null,
       categoryId: input.categoryId ?? null,
+      linkedTxId: input.linkedTxId ?? null,
       lines,
       // Transport location fields
       originLat: input.originLat ?? null,

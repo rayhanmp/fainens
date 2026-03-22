@@ -190,6 +190,7 @@ export default async function (fastify: FastifyInstance) {
           tagIds?: number[];
           walletAccountId: number;
           toWalletAccountId?: number;
+          linkedTxId?: number | null;
           // Transport location fields
           originLat?: number | null;
           originLng?: number | null;
@@ -226,6 +227,7 @@ export default async function (fastify: FastifyInstance) {
           date: new Date(body.date),
           periodId: body.periodId ?? null,
           categoryId: body.categoryId ?? null,
+          linkedTxId: body.linkedTxId ?? null,
           txType:
             body.kind === "transfer"
               ? "simple_transfer"
@@ -369,6 +371,14 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
+    // Check if this is a fee transaction (has a parent/linked transaction)
+    if (existing.linkedTxId) {
+      reply.code(400).send({ 
+        error: "Cannot delete fee transaction independently. Delete the parent transfer transaction instead." 
+      });
+      return;
+    }
+
     const lines = await db
       .select()
       .from(transactionLines)
@@ -378,6 +388,26 @@ export default async function (fastify: FastifyInstance) {
       ...existing,
       lines,
     });
+
+    // Cascade delete: also delete any linked child transactions (e.g., transfer fees)
+    const linkedTransactions = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.linkedTxId, parseInt(id)));
+
+    for (const linkedTx of linkedTransactions) {
+      const linkedLines = await db
+        .select()
+        .from(transactionLines)
+        .where(eq(transactionLines.transactionId, linkedTx.id));
+      
+      await auditDelete("transaction", linkedTx.id, {
+        ...linkedTx,
+        lines: linkedLines,
+      });
+      
+      await db.delete(transactions).where(eq(transactions.id, linkedTx.id));
+    }
 
     await db.delete(transactions).where(eq(transactions.id, parseInt(id)));
 

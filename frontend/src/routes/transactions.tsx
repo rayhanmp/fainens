@@ -47,6 +47,7 @@ interface TransactionRow {
   txType: string;
   categoryId: number | null;
   periodId: number | null;
+  linkedTxId: number | null;
   lines: Array<{
     id: number;
     accountId: number;
@@ -132,6 +133,7 @@ function TransactionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<EditingTransaction | null>(null);
+  const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
   const [filterQuery, setFilterQuery] = useState('');
   const [txTypeFilter, setTxTypeFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
@@ -189,13 +191,13 @@ function TransactionsPage() {
     }
   };
 
-  const openModal = (transaction?: TransactionRow) => {
+  const openModal = (transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit') => {
+    setModalInitialMode(mode);
     if (transaction) {
       setEditingTransaction({
         id: transaction.id,
         date: transaction.date,
         description: transaction.description,
-        reference: transaction.reference,
         notes: transaction.notes,
         categoryId: transaction.categoryId,
         txType: transaction.txType,
@@ -549,6 +551,11 @@ function TransactionsPage() {
                             <div className="min-w-0">
                               <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">
                                 {tx.description}
+                                {tx.linkedTxId && (
+                                  <span className="ml-2 inline-flex items-center rounded-full bg-[var(--color-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-warning)]">
+                                    Transfer Fee
+                                  </span>
+                                )}
                               </p>
                               <p className="truncate text-[11px] font-medium text-[var(--color-muted)]">
                                 {subLine}
@@ -589,9 +596,22 @@ function TransactionsPage() {
                         </td>
                         <td className="px-2 py-4 text-right opacity-100 transition-opacity sm:px-4 sm:opacity-0 sm:group-hover:opacity-100 md:px-6 md:py-5">
                           <div className="inline-flex items-center gap-0.5">
+                            {tx.linkedTxId && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const parentTx = transactions.find(t => t.id === tx.linkedTxId);
+                                  if (parentTx) openModal(parentTx);
+                                }}
+                                className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10"
+                                title="View parent transfer"
+                              >
+                                <ArrowLeftRight className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => openModal(tx)}
+                              onClick={() => openModal(tx, 'view')}
                               className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]"
                               title="Edit"
                             >
@@ -696,6 +716,7 @@ function TransactionsPage() {
           tags={tags}
           editingTransaction={editingTransaction}
           periodId={search.periodId ? parseInt(search.periodId, 10) : null}
+          initialMode={modalInitialMode}
         />
       </div>
     </RequireAuth>

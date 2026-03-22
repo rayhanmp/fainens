@@ -20,9 +20,9 @@ import {
   ImagePlus,
   StickyNote,
   CreditCard,
-  ShoppingCart,
   ArrowUpRight,
   ArrowDownRight,
+  Edit2,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -44,7 +44,7 @@ export type CategoryRow = {
 
 export type TagRow = { id: number; name: string; color: string };
 
-type SimpleTxType = 'expense' | 'income' | 'transfer' | 'paylater_buy' | 'paylater';
+type SimpleTxType = 'expense' | 'income' | 'transfer' | 'paylater';
 
 type TxLine = {
   id: number;
@@ -75,6 +75,7 @@ interface TransactionModalProps {
   tags: TagRow[];
   editingTransaction: EditingTransaction | null;
   periodId?: number | null;
+  initialMode?: 'view' | 'edit';
 }
 
 const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
@@ -105,8 +106,17 @@ export function TransactionModal({
   tags,
   editingTransaction,
   periodId,
+  initialMode = 'edit',
 }: TransactionModalProps) {
   const [isAccountingMode, setIsAccountingMode] = useState(false);
+  const [viewMode, setViewMode] = useState(initialMode === 'view');
+  
+  // Reset view mode when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setViewMode(initialMode === 'view' && editingTransaction !== null);
+    }
+  }, [isOpen, initialMode, editingTransaction]);
 
   const [simpleForm, setSimpleForm] = useState({
     dateTime: toDatetimeLocal(),
@@ -134,6 +144,8 @@ export function TransactionModal({
     /** Transport service fields */
     rideProvider: '' as 'gojek' | 'grab' | 'others' | '',
     rideService: '',
+    /** Transfer admin fee (in rupiah) */
+    transferAdminFee: '',
   });
 
   // Map picker modal state
@@ -191,10 +203,83 @@ export function TransactionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const walletAccounts = accounts.filter(
-    (a) => a.type === 'asset' && !a.systemKey,
+    (a) => (a.type === 'asset' || a.type === 'liability') && !a.systemKey,
   );
-  const expenseAccounts = accounts.filter((a) => a.type === 'expense' && !a.systemKey);
-  const liabilityAccounts = accounts.filter((a) => a.type === 'liability' && !a.systemKey);
+  
+  // Helper to check if an account is a paylater account
+  const isPaylaterAccount = (accountId: string): boolean => {
+    const account = accounts.find(a => a.id.toString() === accountId);
+    return account?.type === 'liability' && !account.systemKey;
+  };
+
+  // Helper to check if account is a bank account
+  const isBankAccount = (accountId: string): boolean => {
+    const account = accounts.find(a => a.id.toString() === accountId);
+    return account?.type === 'asset' && !account.systemKey && 
+           (account.name.toLowerCase().includes('bank') || 
+            account.name.toLowerCase().includes('bca') ||
+            account.name.toLowerCase().includes('bni') ||
+            account.name.toLowerCase().includes('mandiri') ||
+            account.name.toLowerCase().includes('bri'));
+  };
+
+  // Helper to check if account is GoPay
+  const isGoPayAccount = (accountId: string): boolean => {
+    const account = accounts.find(a => a.id.toString() === accountId);
+    return account?.type === 'asset' && !account.systemKey && 
+           account.name.toLowerCase().includes('gopay');
+  };
+
+  // Helper to check if account is OVO
+  const isOVOAccount = (accountId: string): boolean => {
+    const account = accounts.find(a => a.id.toString() === accountId);
+    return account?.type === 'asset' && !account.systemKey && 
+           account.name.toLowerCase().includes('ovo');
+  };
+
+  // Calculate transfer fee and amounts
+  const calculateTransferDetails = () => {
+    if (simpleForm.type !== 'transfer' || !simpleForm.fromAccountId || !simpleForm.toAccountId) {
+      return null;
+    }
+
+    const amount = parseIdNominalToInt(simpleForm.amount);
+    if (!amount || amount <= 0) return null;
+
+    const fromId = simpleForm.fromAccountId;
+    const toId = simpleForm.toAccountId;
+
+    // Check if either account is paylater - no transfers allowed
+    if (isPaylaterAccount(fromId) || isPaylaterAccount(toId)) {
+      return { error: 'Cannot transfer to or from paylater accounts' };
+    }
+
+    // Bank to GoPay: sender pays fee (amount + 1000 deducted from bank)
+    if (isBankAccount(fromId) && isGoPayAccount(toId)) {
+      const fee = 1000;
+      return {
+        fee,
+        senderPays: true,
+        fromAmount: amount + fee,
+        toAmount: amount,
+        description: `Transfer ${formatCurrency(amount)} + Fee ${formatCurrency(fee)} = ${formatCurrency(amount + fee)} deducted from source`
+      };
+    }
+
+    // To OVO: recipient pays fee (amount sent, but fee deducted at destination)
+    if (isOVOAccount(toId)) {
+      const fee = 1000;
+      return {
+        fee,
+        senderPays: false,
+        fromAmount: amount,
+        toAmount: amount - fee,
+        description: `Transfer ${formatCurrency(amount)} - Fee ${formatCurrency(fee)} = ${formatCurrency(amount - fee)} received (fee deducted at destination)`
+      };
+    }
+
+    return null;
+  };
 
   const [editMeta, setEditMeta] = useState({
     date: '',
@@ -258,6 +343,7 @@ export function TransactionModal({
         destination: null,
         rideProvider: '',
         rideService: '',
+        transferAdminFee: '',
       });
       setInstallmentPreview(null);
       setAttachments([]);
@@ -368,39 +454,6 @@ export function TransactionModal({
     let walletAccountId: number;
     let toWalletAccountId: number | undefined;
 
-    if (simpleForm.type === 'paylater_buy') {
-      if (!simpleForm.paylaterExpenseId || !simpleForm.paylaterLiabilityId) {
-        setFormError('Select expense and paylater liability accounts');
-        return;
-      }
-      if (!simpleForm.paylaterFirstDueDate) {
-        setFormError('Select first installment due date');
-        return;
-      }
-      setIsSubmitting(true);
-      try {
-        await api.paylater.recognize({
-          date: new Date(simpleForm.dateTime).getTime(),
-          description: simpleForm.description || 'Paylater purchase',
-          principalAmount: amount,
-          expenseAccountId: parseInt(simpleForm.paylaterExpenseId, 10),
-          paylaterLiabilityAccountId: parseInt(simpleForm.paylaterLiabilityId, 10),
-          installmentMonths: parseInt(simpleForm.paylaterInstallmentMonths, 10) as 1 | 3 | 6 | 12,
-          interestRatePercent: simpleForm.paylaterInterestRate ? parseFloat(simpleForm.paylaterInterestRate) : undefined,
-          adminFeeCents: simpleForm.paylaterAdminFee ? parseIdNominalToInt(simpleForm.paylaterAdminFee) : undefined,
-          firstDueDate: startOfLocalDayMs(new Date(simpleForm.paylaterFirstDueDate).getTime()),
-          notes: simpleForm.notes || undefined,
-        });
-        onSaved();
-        onClose();
-      } catch (err) {
-        setFormError((err as Error).message);
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
     if (simpleForm.type === 'paylater') {
       if (!simpleForm.fromAccountId) {
         setFormError('Please select a wallet to pay from');
@@ -455,6 +508,39 @@ export function TransactionModal({
         setFormError('Please select a category');
         return;
       }
+      
+      // Check if this is a paylater expense
+      const selectedAccount = accounts.find(a => a.id.toString() === simpleForm.fromAccountId);
+      if (selectedAccount?.type === 'liability') {
+        // PayLater purchase
+        if (!simpleForm.paylaterFirstDueDate) {
+          setFormError('Select first installment due date');
+          return;
+        }
+        setIsSubmitting(true);
+        try {
+          await api.paylater.recognize({
+            date: new Date(simpleForm.dateTime).getTime(),
+            description: simpleForm.description || 'PayLater purchase',
+            principalAmount: amount,
+            expenseAccountId: parseInt(simpleForm.categoryId, 10),
+            paylaterLiabilityAccountId: parseInt(simpleForm.fromAccountId, 10),
+            installmentMonths: parseInt(simpleForm.paylaterInstallmentMonths, 10) as 1 | 3 | 6 | 12,
+            interestRatePercent: simpleForm.paylaterInterestRate ? parseFloat(simpleForm.paylaterInterestRate) : undefined,
+            adminFeeCents: simpleForm.paylaterAdminFee ? parseIdNominalToInt(simpleForm.paylaterAdminFee) : undefined,
+            firstDueDate: startOfLocalDayMs(new Date(simpleForm.paylaterFirstDueDate).getTime()),
+            notes: simpleForm.notes || undefined,
+          });
+          onSaved();
+          onClose();
+        } catch (err) {
+          setFormError((err as Error).message);
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+      
       walletAccountId = parseInt(simpleForm.fromAccountId, 10);
     } else if (simpleForm.type === 'income') {
       if (!simpleForm.toAccountId) {
@@ -471,6 +557,13 @@ export function TransactionModal({
         setFormError('Source and destination must differ');
         return;
       }
+      
+      // Prevent transfers to/from paylater accounts
+      if (isPaylaterAccount(simpleForm.fromAccountId) || isPaylaterAccount(simpleForm.toAccountId)) {
+        setFormError('Cannot transfer to or from paylater accounts');
+        return;
+      }
+      
       walletAccountId = parseInt(simpleForm.fromAccountId, 10);
       toWalletAccountId = parseInt(simpleForm.toAccountId, 10);
     }
@@ -496,45 +589,118 @@ export function TransactionModal({
         finalNotes = transportInfo || null;
       }
       
-      const newTransaction = await api.transactions.create({
-        kind: simpleForm.type,
-        amountCents: amount,
-        description: simpleForm.description,
-        notes: finalNotes,
-        place: simpleForm.place || null,
-        date: dateIso,
-        periodId: periodId ?? null,
-        tagIds: simpleForm.tagIds.length ? simpleForm.tagIds : undefined,
-        categoryId:
-          simpleForm.type === 'expense' && simpleForm.categoryId
-            ? parseInt(simpleForm.categoryId, 10)
-            : null,
-        walletAccountId,
-        toWalletAccountId,
-        // Transport location fields (only for transport expenses)
-        ...(isTransport && simpleForm.origin ? {
-          originLat: simpleForm.origin.lat,
-          originLng: simpleForm.origin.lng,
-          originName: simpleForm.origin.name,
-        } : {}),
-        ...(isTransport && simpleForm.destination ? {
-          destLat: simpleForm.destination.lat,
-          destLng: simpleForm.destination.lng,
-          destName: simpleForm.destination.name,
-        } : {}),
-        ...(isTransport && simpleForm.origin && simpleForm.destination ? {
-          distanceKm: calculateDistance(
-            simpleForm.origin.lat,
-            simpleForm.origin.lng,
-            simpleForm.destination.lat,
-            simpleForm.destination.lng
-          ),
-        } : {}),
-      });
+      // Add transfer fee info to notes
+      if (simpleForm.type === 'transfer') {
+        const transferDetails = calculateTransferDetails();
+        if (transferDetails && !('error' in transferDetails)) {
+          const feeInfo = [
+            finalNotes,
+            `Transfer Fee: ${formatCurrency(transferDetails.fee)}`,
+            transferDetails.senderPays 
+              ? `Total deducted from source: ${formatCurrency(transferDetails.fromAmount)}`
+              : `Amount received: ${formatCurrency(transferDetails.toAmount)} (fee deducted)`
+          ].filter(Boolean).join('\n');
+          finalNotes = feeInfo || null;
+        }
+      }
+      
+      // Handle transfer with fee - create main transfer first
+      let mainTransaction;
+      
+      if (simpleForm.type === 'transfer') {
+        const transferDetails = calculateTransferDetails();
+        
+        if (transferDetails && !('error' in transferDetails) && transferDetails.fee > 0) {
+          // Create main transfer with the actual transfer amount
+          mainTransaction = await api.transactions.create({
+            kind: 'transfer',
+            amountCents: amount,
+            description: simpleForm.description,
+            notes: finalNotes,
+            place: simpleForm.place || null,
+            date: dateIso,
+            periodId: periodId ?? null,
+            tagIds: simpleForm.tagIds.length ? simpleForm.tagIds : undefined,
+            categoryId: null,
+            walletAccountId,
+            toWalletAccountId,
+          });
+          
+          // Create separate fee transaction
+          const feeAmount = transferDetails.fee;
+          const feeDescription = `Transfer fee: ${simpleForm.description || 'Transfer'}`;
+          
+          // Fee transaction: Debit expense (Transfer Fee), Credit source wallet
+          await api.transactions.create({
+            kind: 'expense',
+            amountCents: feeAmount,
+            description: feeDescription,
+            notes: `Admin fee for transfer #${mainTransaction.id}. ${transferDetails.senderPays ? 'Fee paid by sender' : 'Fee deducted from recipient'}`,
+            place: simpleForm.place || null,
+            date: dateIso,
+            periodId: periodId ?? null,
+            categoryId: null, // Will use auto expense account
+            walletAccountId,
+            linkedTxId: mainTransaction.id, // Link to parent transfer transaction
+          });
+        } else {
+          // No fee - create normal transfer
+          mainTransaction = await api.transactions.create({
+            kind: 'transfer',
+            amountCents: amount,
+            description: simpleForm.description,
+            notes: finalNotes,
+            place: simpleForm.place || null,
+            date: dateIso,
+            periodId: periodId ?? null,
+            tagIds: simpleForm.tagIds.length ? simpleForm.tagIds : undefined,
+            categoryId: null,
+            walletAccountId,
+            toWalletAccountId,
+          });
+        }
+      } else {
+        // Non-transfer transactions
+        mainTransaction = await api.transactions.create({
+          kind: simpleForm.type,
+          amountCents: amount,
+          description: simpleForm.description,
+          notes: finalNotes,
+          place: simpleForm.place || null,
+          date: dateIso,
+          periodId: periodId ?? null,
+          tagIds: simpleForm.tagIds.length ? simpleForm.tagIds : undefined,
+          categoryId:
+            simpleForm.type === 'expense' && simpleForm.categoryId
+              ? parseInt(simpleForm.categoryId, 10)
+              : null,
+          walletAccountId,
+          toWalletAccountId,
+          // Transport location fields (only for transport expenses)
+          ...(isTransport && simpleForm.origin ? {
+            originLat: simpleForm.origin.lat,
+            originLng: simpleForm.origin.lng,
+            originName: simpleForm.origin.name,
+          } : {}),
+          ...(isTransport && simpleForm.destination ? {
+            destLat: simpleForm.destination.lat,
+            destLng: simpleForm.destination.lng,
+            destName: simpleForm.destination.name,
+          } : {}),
+          ...(isTransport && simpleForm.origin && simpleForm.destination ? {
+            distanceKm: calculateDistance(
+              simpleForm.origin.lat,
+              simpleForm.origin.lng,
+              simpleForm.destination.lat,
+              simpleForm.destination.lng
+            ),
+          } : {}),
+        });
+      }
       
       // Upload pending attachments after transaction is created
       if (pendingAttachments.length > 0) {
-        await uploadPendingAttachments(newTransaction.id, pendingAttachments);
+        await uploadPendingAttachments(mainTransaction.id, pendingAttachments);
       }
       
       onSaved();
@@ -671,6 +837,135 @@ export function TransactionModal({
   };
 
   if (editingTransaction) {
+    // View Mode - Show transaction details read-only
+    if (viewMode) {
+      const fromAccount = accounts.find(a => editingTransaction.lines[0]?.accountId === a.id);
+      const toAccount = editingTransaction.lines[1]?.accountId ? accounts.find(a => editingTransaction.lines[1].accountId === a.id) : null;
+      const category = editingTransaction.categoryId ? categories.find(c => c.id === editingTransaction.categoryId) : null;
+      const amount = editingTransaction.lines?.length ? Math.max(...editingTransaction.lines.map(l => Math.max(l.debit, l.credit))) : 0;
+      
+      return (
+        <Modal
+          isOpen={isOpen}
+          onClose={onClose}
+          title="Transaction Details"
+          subtitle={`#${editingTransaction.id} · ${new Date(editingTransaction.date).toLocaleString()}`}
+          size="xl"
+        >
+          <div className="space-y-6 max-w-3xl">
+            {/* Header with amount and type */}
+            <div className="flex items-center justify-between p-4 bg-[var(--ref-surface-container-low)] rounded-xl">
+              <div>
+                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider">Amount</p>
+                <p className="text-2xl font-bold text-[var(--color-text-primary)]">
+                  {formatCurrency(amount)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider">Type</p>
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium',
+                  editingTransaction.txType?.includes('expense') && 'bg-[var(--color-danger)]/10 text-[var(--color-danger)]',
+                  editingTransaction.txType?.includes('income') && 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
+                  editingTransaction.txType?.includes('transfer') && 'bg-[var(--ref-tertiary)]/10 text-[var(--ref-tertiary)]',
+                )}>
+                  {editingTransaction.txType?.replace('simple_', '').replace('_', ' ')}
+                </span>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">Description</p>
+              <p className="text-lg font-semibold text-[var(--color-text-primary)]">{editingTransaction.description}</p>
+            </div>
+
+            {/* Accounts */}
+            <div className="grid grid-cols-2 gap-4">
+              {fromAccount && (
+                <div className="p-3 bg-[var(--ref-surface-container-lowest)] rounded-lg">
+                  <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">
+                    {editingTransaction.txType?.includes('income') ? 'To Account' : 'From Account'}
+                  </p>
+                  <p className="font-medium text-[var(--color-text-primary)]">{fromAccount.name}</p>
+                  <p className="text-sm text-[var(--color-muted)]">{getAccountTypeLabel(fromAccount.type)}</p>
+                </div>
+              )}
+              {toAccount && (
+                <div className="p-3 bg-[var(--ref-surface-container-lowest)] rounded-lg">
+                  <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">
+                    {editingTransaction.txType?.includes('income') ? 'Source' : 'To Account'}
+                  </p>
+                  <p className="font-medium text-[var(--color-text-primary)]">{toAccount.name}</p>
+                  <p className="text-sm text-[var(--color-muted)]">{getAccountTypeLabel(toAccount.type)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Category */}
+            {category && (
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider">Category:</p>
+                <span 
+                  className="px-3 py-1 rounded-full text-sm font-medium"
+                  style={{ backgroundColor: `${category.color || '#666'}22`, color: category.color || '#666' }}
+                >
+                  {category.name}
+                </span>
+              </div>
+            )}
+
+            {/* Tags */}
+            {editingTransaction.tags.length > 0 && (
+              <div>
+                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-2">Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {editingTransaction.tags.map(tag => (
+                    <span 
+                      key={tag.tagId}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border"
+                      style={{ borderColor: tag.color, color: tag.color }}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {editingTransaction.notes && (
+              <div className="p-4 bg-[var(--ref-surface-container-lowest)] rounded-xl">
+                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">Notes</p>
+                <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap">{editingTransaction.notes}</p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-[var(--color-border)]">
+              <Button 
+                type="button" 
+                onClick={() => setViewMode(false)} 
+                className="flex-1 rounded-full py-4"
+              >
+                <Edit2 className="w-5 h-5 mr-2" />
+                Edit Transaction
+              </Button>
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={onClose} 
+                className="rounded-full py-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      );
+    }
+
+    // Edit Mode
     return (
       <Modal
         isOpen={isOpen}
@@ -680,7 +975,7 @@ export function TransactionModal({
         size="xl"
       >
         <p className="text-sm text-[var(--color-text-secondary)] mb-8 lg:mb-10">
-          Amounts and accounts can’t be changed here — delete this entry and add a new one to adjust
+          Amounts and accounts can't be changed here — delete this entry and add a new one to adjust
           those.
         </p>
         <form onSubmit={handleEditMetaSubmit} className="space-y-8 lg:space-y-10 max-w-3xl">
@@ -989,8 +1284,7 @@ export function TransactionModal({
                   { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },
                   { value: 'income' as const, label: 'Income', icon: ArrowDownRight },
                   { value: 'transfer' as const, label: 'Transfer', icon: ArrowRightLeft },
-                  { value: 'paylater_buy' as const, label: 'Buy later', icon: ShoppingCart },
-                  { value: 'paylater' as const, label: 'Pay later', icon: CreditCard },
+                  { value: 'paylater' as const, label: 'Settlement', icon: CreditCard },
                 ] as const
               ).map((t) => (
                 <button
@@ -1002,11 +1296,6 @@ export function TransactionModal({
                       type: t.value,
                       paylaterRecognitionId:
                         t.value === 'paylater' ? simpleForm.paylaterRecognitionId : '',
-                      paylaterExpenseId:
-                        t.value === 'paylater_buy' ? simpleForm.paylaterExpenseId : '',
-                      paylaterLiabilityId:
-                        t.value === 'paylater_buy' ? simpleForm.paylaterLiabilityId : '',
-                      paylaterFirstDueDate: t.value === 'paylater_buy' ? simpleForm.paylaterFirstDueDate : '',
                     })
                   }
                   className={cn(
@@ -1024,11 +1313,9 @@ export function TransactionModal({
 
             <div className="space-y-4">
               <label className="block text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">
-                {simpleForm.type === 'paylater_buy'
-                  ? 'Principal (IDR)'
-                  : simpleForm.type === 'paylater'
-                    ? 'Payment (IDR)'
-                    : 'Amount (IDR)'}
+                {simpleForm.type === 'paylater'
+                  ? 'Payment (IDR)'
+                  : 'Amount (IDR)'}
               </label>
               <div className="relative flex items-baseline gap-2 min-w-0">
                 <span className="text-2xl sm:text-3xl font-headline font-bold text-[var(--color-accent)] shrink-0">
@@ -1060,11 +1347,7 @@ export function TransactionModal({
                   type="text"
                   value={simpleForm.description}
                   onChange={(e) => setSimpleForm({ ...simpleForm, description: e.target.value })}
-                  placeholder={
-                    simpleForm.type === 'paylater_buy'
-                      ? 'e.g. MacBook — Traveloka PayLater'
-                      : 'e.g. Weekly grocery at Alfamart'
-                  }
+                  placeholder="e.g. Weekly grocery at Alfamart"
                   className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
                   required
                 />
@@ -1081,7 +1364,7 @@ export function TransactionModal({
                   required
                 />
               </div>
-              {simpleForm.type === 'paylater_buy' && (
+              {(simpleForm.type === 'expense' && isPaylaterAccount(simpleForm.fromAccountId)) && (
                 <>
                   {/* Installment Term */}
                   <div className="space-y-2">
@@ -1318,60 +1601,6 @@ export function TransactionModal({
                   </>
                 ) : null;
               })()}
-              {simpleForm.type === 'paylater_buy' && (
-                <>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Expense account
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={simpleForm.paylaterExpenseId}
-                        onChange={(e) =>
-                          setSimpleForm({ ...simpleForm, paylaterExpenseId: e.target.value })
-                        }
-                        className={cn('w-full appearance-none', stitchSelect)}
-                        required
-                      >
-                        <option value="">Select expense…</option>
-                        {expenseAccounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                        ▾
-                      </span>
-                    </div>
-                  </div>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Paylater liability
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={simpleForm.paylaterLiabilityId}
-                        onChange={(e) =>
-                          setSimpleForm({ ...simpleForm, paylaterLiabilityId: e.target.value })
-                        }
-                        className={cn('w-full appearance-none', stitchSelect)}
-                        required
-                      >
-                        <option value="">Select liability…</option>
-                        {liabilityAccounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                        ▾
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
               {simpleForm.type === 'paylater' && (
                 <div className="md:col-span-2 space-y-2">
                   <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
@@ -1417,7 +1646,7 @@ export function TransactionModal({
                   Destination account
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {walletAccounts.map((a, idx) =>
+                  {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
                     renderWalletCard(a, idx, simpleForm.toAccountId === a.id.toString(), () =>
                       setSimpleForm({ ...simpleForm, toAccountId: a.id.toString() }),
                     ),
@@ -1450,12 +1679,11 @@ export function TransactionModal({
                     <Plus className="w-7 h-7 text-[var(--color-muted)]" />
                   </Link>
                 </div>
-              </div>
-            ) : simpleForm.type === 'paylater_buy' ? (
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-4 py-3 text-sm text-[var(--color-text-secondary)]">
-                <strong className="text-[var(--color-text-primary)]">Installment purchase:</strong> debits
-                the expense you chose and credits paylater liability—no wallet line (you hadn&apos;t paid
-                cash yet).
+                {isPaylaterAccount(simpleForm.fromAccountId) && (
+                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-4 py-3 text-sm text-[var(--color-text-secondary)]">
+                    <strong className="text-[var(--color-text-primary)]">PayLater detected:</strong> This purchase will be paid in installments. Configure options below.
+                  </div>
+                )}
               </div>
             ) : simpleForm.type === 'paylater' ? (
               <div className="space-y-4">
@@ -1467,7 +1695,7 @@ export function TransactionModal({
                   PayLater page.
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {walletAccounts.map((a, idx) =>
+                  {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
                     renderWalletCard(a, idx, simpleForm.fromAccountId === a.id.toString(), () =>
                       setSimpleForm({ ...simpleForm, fromAccountId: a.id.toString() }),
                     ),
@@ -1488,7 +1716,7 @@ export function TransactionModal({
                     From account
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {walletAccounts.map((a, idx) =>
+                    {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
                       renderWalletCard(a, idx, simpleForm.fromAccountId === a.id.toString(), () =>
                         setSimpleForm({ ...simpleForm, fromAccountId: a.id.toString() }),
                       ),
@@ -1500,7 +1728,7 @@ export function TransactionModal({
                     To account
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {walletAccounts.map((a, idx) =>
+                    {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
                       renderWalletCard(a, idx, simpleForm.toAccountId === a.id.toString(), () =>
                         setSimpleForm({ ...simpleForm, toAccountId: a.id.toString() }),
                       ),
@@ -1514,6 +1742,54 @@ export function TransactionModal({
                     </Link>
                   </div>
                 </div>
+
+                {/* Transfer Fee Calculation */}
+                {(() => {
+                  const details = calculateTransferDetails();
+                  if (!details) return null;
+                  if ('error' in details) {
+                    return (
+                      <div className="p-4 rounded-xl bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/20 text-[var(--color-danger)] text-sm">
+                        {details.error}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="p-4 rounded-xl bg-[var(--ref-surface-container-low)] border border-[var(--color-border)]">
+                      <h4 className="text-sm font-semibold text-[var(--color-text-primary)] mb-2">
+                        Transfer Summary
+                      </h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-[var(--color-text-secondary)]">Amount:</span>
+                          <span>{formatCurrency(parseIdNominalToInt(simpleForm.amount))}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--color-text-secondary)]">Admin Fee:</span>
+                          <span>{formatCurrency(details.fee)}</span>
+                        </div>
+                        <div className="h-px bg-[var(--color-border)] my-2" />
+                        <div className="flex justify-between font-medium">
+                          <span className="text-[var(--color-text-secondary)]">From Account:</span>
+                          <span className="text-[var(--color-danger)]">-{formatCurrency(details.fromAmount)}</span>
+                        </div>
+                        <div className="flex justify-between font-medium">
+                          <span className="text-[var(--color-text-secondary)]">To Account:</span>
+                          <span className="text-[var(--color-success)]">+{formatCurrency(details.toAmount)}</span>
+                        </div>
+                        {details.senderPays ? (
+                          <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                            *Fee paid by sender (added to source deduction)
+                          </p>
+                        ) : (
+                          <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                            *Fee deducted from recipient amount
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -1569,7 +1845,7 @@ export function TransactionModal({
                 />
               </div>
 
-              {simpleForm.type !== 'paylater' && simpleForm.type !== 'paylater_buy' ? (
+              {simpleForm.type !== 'paylater' ? (
                 <div>
                   <label className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 block">
                     Tags
@@ -1635,18 +1911,14 @@ export function TransactionModal({
               isLoading={isSubmitting}
               className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none"
             >
-              {simpleForm.type === 'paylater_buy' ? (
-                <ShoppingCart className="w-5 h-5" />
-              ) : simpleForm.type === 'paylater' ? (
+              {simpleForm.type === 'paylater' ? (
                 <CreditCard className="w-5 h-5" />
               ) : (
                 <Save className="w-5 h-5" />
               )}
-              {simpleForm.type === 'paylater_buy'
-                ? 'Record paylater purchase'
-                : simpleForm.type === 'paylater'
-                  ? 'Record paylater payment'
-                  : 'Save transaction'}
+              {simpleForm.type === 'paylater'
+                ? 'Record settlement'
+                : 'Save transaction'}
             </Button>
           </div>
         </form>
