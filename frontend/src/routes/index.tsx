@@ -467,7 +467,7 @@ function DashboardPage() {
                   {budgetRows.map((row) => {
                     const pct =
                       row.plannedAmount > 0
-                        ? Math.min(100, (row.actualAmount / row.plannedAmount) * 100)
+                        ? (row.actualAmount / row.plannedAmount) * 100
                         : 0;
                     return (
                       <li key={row.id}>
