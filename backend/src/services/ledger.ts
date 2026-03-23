@@ -211,6 +211,7 @@ export async function createSimpleTransaction(
       description: input.description,
       reference: input.reference ?? null,
       notes: input.notes ?? null,
+      place: input.place ?? null,
       txType: input.txType ?? `simple_${input.kind}`,
       periodId: input.periodId ?? null,
       categoryId: input.categoryId ?? null,
