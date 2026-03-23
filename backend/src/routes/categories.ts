@@ -44,18 +44,29 @@ export default async function (fastify: FastifyInstance) {
       color?: string | null;
     };
 
-    const [category] = await db
-      .insert(categories)
-      .values({
-        name: body.name,
-        icon: body.icon ?? null,
-        color: body.color ?? null,
-      })
-      .returning();
+    // Validation
+    if (!body.name || body.name.trim() === '') {
+      reply.code(400).send({ error: 'Category name is required' });
+      return;
+    }
 
-    await auditCreate("category", category.id, { name: category.name, icon: category.icon, color: category.color });
+    try {
+      const [category] = await db
+        .insert(categories)
+        .values({
+          name: body.name.trim(),
+          icon: body.icon ?? null,
+          color: body.color ?? null,
+        })
+        .returning();
 
-    reply.code(201).send(category);
+      await auditCreate("category", category.id, { name: category.name, icon: category.icon, color: category.color });
+
+      reply.code(201).send(category);
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ error: error instanceof Error ? error.message : 'Failed to create category' });
+    }
   });
 
   fastify.patch("/api/categories/:id", async (request, reply) => {
