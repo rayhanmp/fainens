@@ -1,0 +1,1 @@
+ALTER TABLE `wishlist` ADD `image_url` text;
