@@ -4,8 +4,9 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
+import { CurrencyInput } from '../ui/CurrencyInput';
 import { api } from '../../lib/api';
-import { formatCurrency, cn, getAccountTypeLabel, formatIdNominalInput, parseIdNominalToInt, formatFileSize } from '../../lib/utils';
+import { formatCurrency, cn, getAccountTypeLabel, parseIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
   Plus,
   Trash2,
@@ -1657,32 +1658,13 @@ export function TransactionModal({
               ))}
             </div>
 
-            <div className="space-y-4">
-              <label className="block text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">
-                {simpleForm.type === 'paylater'
-                  ? 'Payment (IDR)'
-                  : 'Amount (IDR)'}
-              </label>
-              <div className="relative flex items-baseline gap-2 min-w-0">
-                <span className="text-2xl sm:text-3xl font-headline font-bold text-[var(--color-accent)] shrink-0">
-                  Rp
-                </span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={simpleForm.amount}
-                  onChange={(e) => {
-                    const formatted = formatIdNominalInput(e.target.value);
-                    setSimpleForm({ ...simpleForm, amount: formatted });
-                  }}
-                  className="font-headline font-extrabold w-full min-w-0 text-3xl sm:text-4xl md:text-5xl leading-none bg-transparent border-none focus:ring-0 p-0 placeholder:text-[var(--ref-surface-container-highest)] text-[var(--color-text-primary)]"
-                  placeholder="0"
-                  required
-                />
-              </div>
-              <div className="h-px w-full bg-[var(--ref-surface-container-highest)]" />
-            </div>
+            <CurrencyInput
+              label={simpleForm.type === 'paylater' ? 'Payment' : 'Amount'}
+              value={simpleForm.amount}
+              onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
+              size="lg"
+              required
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
               <div className="md:col-span-2 space-y-2">
@@ -1767,19 +1749,13 @@ export function TransactionModal({
                   </div>
 
                   {/* Admin Fee */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Admin fee (optional)
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={simpleForm.paylaterAdminFee}
-                      onChange={(e) => setSimpleForm({ ...simpleForm, paylaterAdminFee: formatIdNominalInput(e.target.value) })}
-                      placeholder="0"
-                      className={cn('w-full brutalist-input', stitchSelect)}
-                    />
-                  </div>
+                  <CurrencyInput
+                    label="Admin fee (optional)"
+                    value={simpleForm.paylaterAdminFee}
+                    onChange={(value) => setSimpleForm({ ...simpleForm, paylaterAdminFee: value })}
+                    size="sm"
+                    showDivider={false}
+                  />
 
                   {/* First Due Date */}
                   <div className="space-y-2">

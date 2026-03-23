@@ -17,7 +17,8 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { cn, formatCurrency, formatIdNominalInput, parseIdNominalToInt } from '../lib/utils';
+import { CurrencyInput } from '../components/ui/CurrencyInput';
+import { cn, formatCurrency, parseIdNominalToInt } from '../lib/utils';
 
 export const Route = createFileRoute('/subscriptions')({
   component: SubscriptionsPage,
@@ -189,7 +190,7 @@ function SubscriptionsPage() {
       name: s.name,
       linkedAccountId: String(s.linkedAccountId),
       categoryId: s.categoryId != null ? String(s.categoryId) : '',
-      amountDisplay: formatIdNominalInput(String(s.amount)),
+      amountDisplay: new Intl.NumberFormat('id-ID').format(s.amount),
       billingCycle: s.billingCycle,
       nextRenewalDate: toDateInputValue(s.nextRenewalAt),
       status: s.status,
@@ -594,30 +595,15 @@ function SubscriptionsPage() {
                 </div>
 
                 {/* Amount Input */}
-                <div className="space-y-4">
-                  <label className="block text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">
-                    Amount (IDR)
-                  </label>
-                  <div className="relative flex items-baseline gap-2 min-w-0">
-                    <span className="text-2xl sm:text-3xl font-headline font-bold text-[var(--color-accent)] shrink-0">
-                      Rp
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      value={form.amountDisplay}
-                      onChange={(e) => {
-                        const formatted = formatIdNominalInput(e.target.value);
-                        setForm((f) => ({ ...f, amountDisplay: formatted }));
-                      }}
-                      className="font-headline font-extrabold w-full min-w-0 text-3xl sm:text-4xl md:text-5xl leading-none bg-transparent border-none focus:ring-0 p-0 placeholder:text-[var(--ref-surface-container-highest)] text-[var(--color-text-primary)]"
-                      placeholder="0"
-                      required
-                    />
-                  </div>
-                  <div className="h-px w-full bg-[var(--ref-surface-container-highest)]" />
-                </div>
+                <CurrencyInput
+                  label="Amount"
+                  value={form.amountDisplay}
+                  onChange={(value) =>
+                    setForm((f) => ({ ...f, amountDisplay: value }))
+                  }
+                  size="lg"
+                  required
+                />
 
                 {/* Name & Date */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">

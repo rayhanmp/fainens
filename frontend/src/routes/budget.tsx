@@ -3,10 +3,11 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
+import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
-import { formatCurrency, cn, formatIdNominalInput, parseIdNominalToInt } from '../lib/utils';
+import { formatCurrency, cn, parseIdNominalToInt } from '../lib/utils';
 import {
   Plus,
   PiggyBank,
@@ -818,19 +819,16 @@ function BudgetPage() {
               />
             )}
 
-            <Input
-              label="Planned amount (IDR)"
-              inputMode="numeric"
+            <CurrencyInput
+              label="Planned amount"
               value={budgetForm.plannedAmount}
-              onChange={(e) =>
-                setBudgetForm({ ...budgetForm, plannedAmount: formatIdNominalInput(e.target.value) })
+              onChange={(value) =>
+                setBudgetForm({ ...budgetForm, plannedAmount: value })
               }
-              placeholder="0"
-              autoComplete="off"
+              size="md"
               required
+              error={formError}
             />
-
-            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
 
             <div className="flex flex-wrap gap-3 pt-2">
               <Button type="submit" isLoading={isSubmitting} className="min-w-[140px]">
@@ -852,16 +850,15 @@ function BudgetPage() {
           size="xl"
         >
           <form onSubmit={handleUpdateBudget} className="space-y-5">
-            <Input
-              label="Planned amount (IDR)"
-              inputMode="numeric"
+            <CurrencyInput
+              label="Planned amount"
               value={budgetForm.plannedAmount}
-              onChange={(e) =>
-                setBudgetForm({ ...budgetForm, plannedAmount: formatIdNominalInput(e.target.value) })
+              onChange={(value) =>
+                setBudgetForm({ ...budgetForm, plannedAmount: value })
               }
-              placeholder="0"
-              autoComplete="off"
+              size="md"
               required
+              error={formError}
             />
 
             <div className="p-3 bg-[var(--ref-surface-container-low)] rounded-lg">

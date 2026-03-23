@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { CurrencyInput } from '../ui/CurrencyInput';
 import { api } from '../../lib/api';
-import { cn, formatIdNominalInput, parseIdNominalToInt } from '../../lib/utils';
+import { cn, parseIdNominalToInt } from '../../lib/utils';
 import { Wallet, CreditCard } from 'lucide-react';
 
 type AccountType = 'asset' | 'liability';
@@ -216,19 +217,13 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
         {/* Liability-specific fields */}
         {formData.type === 'liability' && (
           <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                Credit limit
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formData.creditLimit}
-                onChange={(e) => setFormData({ ...formData, creditLimit: formatIdNominalInput(e.target.value) })}
-                placeholder="Rp 0"
-                className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all text-sm"
-              />
-            </div>
+            <CurrencyInput
+              label="Credit limit"
+              value={formData.creditLimit}
+              onChange={(value) => setFormData({ ...formData, creditLimit: value })}
+              size="sm"
+              showDivider={false}
+            />
 
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">

@@ -3,7 +3,8 @@ import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
-import { formatCurrency, formatIdNominalInput, parseIdNominalToInt, cn } from '../../lib/utils';
+import { formatCurrency, parseIdNominalToInt, cn } from '../../lib/utils';
+import { CurrencyInput } from '../ui/CurrencyInput';
 import { Landmark, Wallet, Banknote, ToggleLeft, ToggleRight, Calculator, Info } from 'lucide-react';
 
 type PtkpOption = { code: string; label: string; annualPtkp: number; terCategory: string };
@@ -121,7 +122,7 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
     // Only reset state when modal first opens
     if (!prevIsOpen.current) {
       prevIsOpen.current = true;
-      setGrossStr(initial.grossMonthly > 0 ? formatIdNominalInput(String(initial.grossMonthly)) : '');
+      setGrossStr(initial.grossMonthly > 0 ? new Intl.NumberFormat('id-ID').format(initial.grossMonthly) : '');
       setPayrollDay(initial.payrollDay);
       setPtkpCode(initial.ptkpCode);
       setDepositAccountId(initial.depositAccountId ? String(initial.depositAccountId) : '');
@@ -195,27 +196,13 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         <div className="lg:col-span-8 space-y-6">
           {/* Gross Salary */}
-          <div className="space-y-4">
-            <label className="block text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">
-              Gross monthly salary (IDR)
-            </label>
-            <div className="relative flex items-baseline gap-2 min-w-0">
-              <span className="text-2xl sm:text-3xl font-headline font-bold text-[var(--color-accent)] shrink-0">
-                Rp
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                value={grossStr}
-                onChange={(e) => setGrossStr(formatIdNominalInput(e.target.value))}
-                className="font-headline font-extrabold w-full min-w-0 text-3xl sm:text-4xl md:text-5xl leading-none bg-transparent border-none focus:ring-0 p-0 placeholder:text-[var(--ref-surface-container-highest)] text-[var(--color-text-primary)]"
-                placeholder="0"
-                required
-              />
-            </div>
-            <div className="h-px w-full bg-[var(--ref-surface-container-highest)]" />
-          </div>
+          <CurrencyInput
+            label="Gross monthly salary"
+            value={grossStr}
+            onChange={(value) => setGrossStr(value)}
+            size="lg"
+            required
+          />
 
           {/* Basic Settings */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -369,32 +356,35 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
 
               {/* Wage Caps */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="JP Wage Cap (IDR)"
-                  inputMode="numeric"
-                  value={formatIdNominalInput(String(jpWageCap))}
-                  onChange={(e) => {
-                    const val = parseIdNominalToInt(e.target.value);
+                <CurrencyInput
+                  label="JP Wage Cap"
+                  value={new Intl.NumberFormat('id-ID').format(jpWageCap)}
+                  onChange={(value) => {
+                    const val = parseIdNominalToInt(value);
                     if (!Number.isNaN(val)) setJpWageCap(val);
                   }}
+                  size="sm"
+                  showDivider={false}
                 />
-                <Input
-                  label="JHT Wage Cap (IDR)"
-                  inputMode="numeric"
-                  value={formatIdNominalInput(String(jhtWageCap))}
-                  onChange={(e) => {
-                    const val = parseIdNominalToInt(e.target.value);
+                <CurrencyInput
+                  label="JHT Wage Cap"
+                  value={new Intl.NumberFormat('id-ID').format(jhtWageCap)}
+                  onChange={(value) => {
+                    const val = parseIdNominalToInt(value);
                     if (!Number.isNaN(val)) setJhtWageCap(val);
                   }}
+                  size="sm"
+                  showDivider={false}
                 />
-                <Input
-                  label="BPJS Kes Wage Cap (IDR)"
-                  inputMode="numeric"
-                  value={formatIdNominalInput(String(bpjsKesWageCap))}
-                  onChange={(e) => {
-                    const val = parseIdNominalToInt(e.target.value);
+                <CurrencyInput
+                  label="BPJS Kes Wage Cap"
+                  value={new Intl.NumberFormat('id-ID').format(bpjsKesWageCap)}
+                  onChange={(value) => {
+                    const val = parseIdNominalToInt(value);
                     if (!Number.isNaN(val)) setBpjsKesWageCap(val);
                   }}
+                  size="sm"
+                  showDivider={false}
                 />
               </div>
 
