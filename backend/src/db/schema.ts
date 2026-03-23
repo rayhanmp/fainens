@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, blob, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, blob, real, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const categories: any = sqliteTable("category", {
@@ -247,4 +247,21 @@ export const wishlist = sqliteTable("wishlist", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
-});
+}, (table) => ({
+  categoryIdIdx: index("idx_wishlist_category_id").on(table.categoryId),
+  periodIdIdx: index("idx_wishlist_period_id").on(table.periodId),
+  statusIdx: index("idx_wishlist_status").on(table.status),
+  fulfilledTxIdx: index("idx_wishlist_fulfilled_tx_id").on(table.fulfilledTransactionId),
+}));
+
+// Indexes for performance optimization
+export const transactionsDateIdx = index("idx_transactions_date").on(transactions.date);
+export const transactionsPeriodIdx = index("idx_transactions_period_id").on(transactions.periodId);
+export const transactionsCategoryIdx = index("idx_transactions_category_id").on(transactions.categoryId);
+export const transactionsTypeIdx = index("idx_transactions_tx_type").on(transactions.txType);
+export const transactionLinesTransactionIdx = index("idx_transaction_lines_tx_id").on(transactionLines.transactionId);
+export const transactionLinesAccountIdx = index("idx_transaction_lines_account_id").on(transactionLines.accountId);
+export const transactionTagsTransactionIdx = index("idx_transaction_tags_tx_id").on(transactionTags.transactionId);
+export const transactionTagsTagIdx = index("idx_transaction_tags_tag_id").on(transactionTags.tagId);
+export const paylaterInstallmentsTxIdx = index("idx_paylater_installments_tx_id").on(paylaterInstallments.recognitionTxId);
+export const subscriptionsLinkedAccountIdx = index("idx_subscriptions_account_id").on(subscriptions.linkedAccountId);
