@@ -11,6 +11,7 @@ import {
   Wallet,
   Search,
   Download,
+  Upload,
   SlidersHorizontal,
   ShoppingCart,
   UtensilsCrossed,
@@ -29,6 +30,7 @@ import {
   type EditingTransaction,
   type WalletAccount,
 } from '../components/transactions/TransactionModal';
+import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export const Route = createFileRoute('/transactions')({
@@ -142,6 +144,8 @@ function TransactionsPage() {
   const [txTypeFilter, setTxTypeFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [page, setPage] = useState(1);
+  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -200,6 +204,8 @@ function TransactionsPage() {
       setAccounts(accData as WalletAccount[]);
       setCategories(catData);
       setTags(tagData);
+      // Clear selection when data is refreshed
+      setSelectedTransactions(new Set());
     } finally {
       setIsLoading(false);
     }
@@ -209,6 +215,40 @@ function TransactionsPage() {
     if (!confirm('Delete this transaction?')) return;
     try {
       await api.transactions.delete(id);
+      await loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleToggleSelection = (id: number) => {
+    const newSelected = new Set(selectedTransactions);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedTransactions(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTransactions.size === paginated.length) {
+      setSelectedTransactions(new Set());
+    } else {
+      setSelectedTransactions(new Set(paginated.map(tx => tx.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTransactions.size === 0) return;
+    
+    if (!confirm(`Delete ${selectedTransactions.size} selected transaction(s)? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      await api.transactions.bulkDelete(Array.from(selectedTransactions));
+      setSelectedTransactions(new Set());
       await loadData();
     } catch (err) {
       alert((err as Error).message);
@@ -373,6 +413,14 @@ function TransactionsPage() {
             </button>
             <button
               type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)]"
+            >
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </button>
+            <button
+              type="button"
               onClick={scrollToFilters}
               className="inline-flex items-center gap-2 rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--color-accent)]/15 transition-opacity hover:opacity-90"
             >
@@ -506,10 +554,44 @@ function TransactionsPage() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] shadow-sm">
+            {/* Bulk Actions Bar */}
+            {selectedTransactions.size > 0 && (
+              <div className="flex items-center justify-between bg-[var(--color-accent)]/10 px-4 py-3 border-b border-[var(--color-border)]">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-[var(--color-accent)]">
+                    {selectedTransactions.size} selected
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedTransactions(new Set())}
+                    className="cursor-pointer px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBulkDelete}
+                    className="cursor-pointer flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-[var(--color-danger)] hover:bg-[var(--color-danger)]/90 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Selected
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-left">
                 <thead>
                   <tr className="bg-[var(--ref-surface-container-highest)]">
+                    <th className="px-2 py-3 sm:px-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedTransactions.size > 0 && selectedTransactions.size === paginated.length}
+                        onChange={handleSelectAll}
+                        className="cursor-pointer h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
+                        title={selectedTransactions.size === paginated.length ? "Deselect all" : "Select all"}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] sm:px-6">
                       Date
                     </th>
@@ -556,8 +638,19 @@ function TransactionsPage() {
                     return (
                       <tr
                         key={tx.id}
-                        className="group transition-colors hover:bg-[var(--ref-surface-container-low)]"
+                        className={cn(
+                          "group transition-colors hover:bg-[var(--ref-surface-container-low)]",
+                          selectedTransactions.has(tx.id) && "bg-[var(--ref-surface-container-low)]"
+                        )}
                       >
+                        <td className="px-2 py-4 sm:px-4 sm:py-5">
+                          <input
+                            type="checkbox"
+                            checked={selectedTransactions.has(tx.id)}
+                            onChange={() => handleToggleSelection(tx.id)}
+                            className="cursor-pointer h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
+                          />
+                        </td>
                         <td className="whitespace-nowrap px-4 py-4 text-sm font-medium text-[var(--color-muted)] sm:px-6 sm:py-5">
                           {formatTxTableDate(tx.date)}
                         </td>
@@ -629,7 +722,7 @@ function TransactionsPage() {
                                   const parentTx = transactions.find(t => t.id === tx.linkedTxId);
                                   if (parentTx) openModal(parentTx);
                                 }}
-                                className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10"
+                                className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 cursor-pointer"
                                 title="View parent transfer"
                               >
                                 <ArrowLeftRight className="h-4 w-4" />
@@ -638,7 +731,7 @@ function TransactionsPage() {
                             <button
                               type="button"
                               onClick={() => openModal(tx, 'view')}
-                              className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]"
+                              className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] cursor-pointer"
                               title="Edit"
                             >
                               <Edit2 className="h-4 w-4" />
@@ -646,7 +739,7 @@ function TransactionsPage() {
                             <button
                               type="button"
                               onClick={() => handleDelete(tx.id)}
-                              className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                              className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
                               title="Delete"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -678,7 +771,7 @@ function TransactionsPage() {
                     type="button"
                     disabled={page <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30"
+                    className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
@@ -689,7 +782,7 @@ function TransactionsPage() {
                     type="button"
                     disabled={page >= totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30"
+                    className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
                   >
                     <ChevronRight className="h-5 w-5" />
                   </button>
@@ -743,6 +836,12 @@ function TransactionsPage() {
           editingTransaction={editingTransaction}
           periodId={search.periodId ? parseInt(search.periodId, 10) : null}
           initialMode={modalInitialMode}
+        />
+
+        <ImportCSVModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onSuccess={loadData}
         />
       </div>
     </RequireAuth>

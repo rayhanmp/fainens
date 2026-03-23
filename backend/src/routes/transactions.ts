@@ -1,8 +1,8 @@
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, tags } from "../db/schema";
+import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods } from "../db/schema";
 import { createJournalEntry, createSimpleTransaction } from "../services/ledger";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
 
@@ -413,4 +413,456 @@ export default async function (fastify: FastifyInstance) {
 
     reply.code(204).send();
   });
+
+  // Bulk delete transactions
+  fastify.post("/api/transactions/bulk-delete", async (request, reply) => {
+    const { ids } = request.body as { ids: number[] };
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      reply.code(400).send({ error: "No transaction IDs provided" });
+      return;
+    }
+    
+    // Verify all transactions exist
+    const existingTransactions = await db
+      .select()
+      .from(transactions)
+      .where(inArray(transactions.id, ids));
+    
+    if (existingTransactions.length !== ids.length) {
+      reply.code(404).send({ 
+        error: "Some transactions not found",
+        requested: ids.length,
+        found: existingTransactions.length 
+      });
+      return;
+    }
+    
+    // Delete linked transactions first
+    for (const id of ids) {
+      const linkedTransactions = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.linkedTxId, id));
+      
+      for (const linkedTx of linkedTransactions) {
+        const linkedLines = await db
+          .select()
+          .from(transactionLines)
+          .where(eq(transactionLines.transactionId, linkedTx.id));
+        
+        await auditDelete("transaction", linkedTx.id, {
+          ...linkedTx,
+          lines: linkedLines,
+        });
+        
+        await db.delete(transactions).where(eq(transactions.id, linkedTx.id));
+      }
+    }
+    
+    // Audit and delete main transactions
+    for (const tx of existingTransactions) {
+      const lines = await db
+        .select()
+        .from(transactionLines)
+        .where(eq(transactionLines.transactionId, tx.id));
+      
+      await auditDelete("transaction", tx.id, { ...tx, lines });
+    }
+    
+    // Perform bulk delete
+    await db.delete(transactions).where(inArray(transactions.id, ids));
+    
+    reply.code(200).send({ 
+      success: true, 
+      deletedCount: ids.length,
+      message: `${ids.length} transaction(s) deleted successfully` 
+    });
+  });
+
+  // CSV Import - Preview endpoint
+  fastify.post("/api/transactions/import/preview", async (request, reply) => {
+    const { csvText } = request.body as { csvText: string };
+    
+    if (!csvText || typeof csvText !== 'string') {
+      reply.code(400).send({ error: "CSV text is required" });
+      return;
+    }
+
+    try {
+      // Parse CSV
+      const lines = csvText.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        reply.code(400).send({ error: "CSV must have at least a header row and one data row" });
+        return;
+      }
+
+      // Parse header
+      const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+      const requiredColumns = ['date', 'amount', 'description', 'type', 'account'];
+      const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+      
+      if (missingColumns.length > 0) {
+        reply.code(400).send({ 
+          error: `Missing required columns: ${missingColumns.join(', ')}` 
+        });
+        return;
+      }
+      
+      // Check if period column is provided
+      const hasPeriodColumn = headers.includes('period');
+
+      // Get existing categories, accounts, and periods for matching
+      const existingCategories = await db.select().from(categories);
+      const existingAccounts = await db.select().from(accounts);
+      const existingPeriods = await db.select().from(salaryPeriods);
+      const uniquePeriods = new Set<string>();
+
+      // Parse data rows
+      const rows: any[] = [];
+      const uniqueAccounts = new Set<string>();
+      const uniqueCategories = new Set<string>();
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const values = parseCSVLine(line);
+        const rowData: any = {
+          rowNumber: i,
+          errors: [],
+          warnings: []
+        };
+
+        // Map columns
+        headers.forEach((header, index) => {
+          if (index < values.length) {
+            rowData[header] = values[index].trim();
+          }
+        });
+
+        // Parse and validate date (DD/MM/YYYY)
+        const dateResult = parseDate(rowData.date);
+        if (dateResult === null) {
+          rowData.errors.push(`Invalid date format: "${rowData.date}". Expected DD/MM/YYYY`);
+          rowData.isValid = false;
+        } else {
+          rowData.date = dateResult;
+          rowData.isValid = true;
+        }
+
+        // Parse and validate amount (Rp format)
+        const amountResult = parseAmount(rowData.amount);
+        if (amountResult === null) {
+          rowData.errors.push(`Invalid amount: "${rowData.amount}"`);
+          rowData.isValid = false;
+        } else {
+          rowData.amount = amountResult;
+        }
+
+        // Validate type
+        const validType = rowData.type?.toLowerCase();
+        if (validType !== 'expense' && validType !== 'income') {
+          rowData.errors.push(`Invalid type: "${rowData.type}". Must be 'expense' or 'income'`);
+          rowData.isValid = false;
+        } else {
+          rowData.type = validType;
+        }
+
+        // Validate description
+        if (!rowData.description || rowData.description.trim() === '') {
+          rowData.errors.push('Description is required');
+          rowData.isValid = false;
+        }
+
+        // Validate account
+        if (!rowData.account || rowData.account.trim() === '') {
+          rowData.errors.push('Account is required');
+          rowData.isValid = false;
+        } else {
+          rowData.accountName = rowData.account.trim();
+          uniqueAccounts.add(rowData.accountName);
+          
+          // Try to match account
+          const matchedAccount = existingAccounts.find(
+            a => a.name.toLowerCase() === rowData.accountName.toLowerCase()
+          );
+          rowData.accountMatched = !!matchedAccount;
+          rowData.accountId = matchedAccount?.id || null;
+          
+          if (!rowData.accountMatched) {
+            rowData.warnings.push(`Account "${rowData.accountName}" not found`);
+          }
+        }
+
+        // Validate period (optional - will auto-infer from date if not provided)
+        if (hasPeriodColumn && rowData.period && rowData.period.trim() !== '') {
+          rowData.periodName = rowData.period.trim();
+          uniquePeriods.add(rowData.periodName);
+          
+          // Try to match period by name
+          const matchedPeriod = existingPeriods.find(
+            p => p.name.toLowerCase() === rowData.periodName.toLowerCase()
+          );
+          rowData.periodMatched = !!matchedPeriod;
+          rowData.periodId = matchedPeriod?.id || null;
+          
+          if (!rowData.periodMatched) {
+            rowData.warnings.push(`Period "${rowData.periodName}" not found`);
+          }
+        } else {
+          // Auto-infer period from transaction date
+          const txDate = new Date(rowData.date);
+          const inferredPeriod = existingPeriods.find(p => {
+            const startDate = new Date(p.startDate);
+            const endDate = new Date(p.endDate);
+            return txDate >= startDate && txDate <= endDate;
+          });
+          
+          if (inferredPeriod) {
+            rowData.periodId = inferredPeriod.id;
+            rowData.periodName = inferredPeriod.name;
+            rowData.periodMatched = true;
+          } else {
+            rowData.periodId = null;
+            rowData.periodName = null;
+            rowData.periodMatched = false;
+            rowData.warnings.push('No period found for transaction date');
+          }
+        }
+
+        // Handle category (optional)
+        if (rowData.category && rowData.category.trim() !== '') {
+          rowData.categoryName = rowData.category.trim();
+          uniqueCategories.add(rowData.categoryName);
+          
+          // Try to match category
+          const matchedCategory = existingCategories.find(
+            c => c.name.toLowerCase() === rowData.categoryName.toLowerCase()
+          );
+          rowData.categoryMatched = !!matchedCategory;
+          rowData.categoryId = matchedCategory?.id || null;
+          
+          if (!rowData.categoryMatched) {
+            rowData.warnings.push(`Category "${rowData.categoryName}" not found`);
+          }
+        } else {
+          rowData.categoryName = null;
+          rowData.categoryMatched = false;
+          rowData.categoryId = null;
+        }
+
+        // Handle optional fields
+        rowData.notes = rowData.notes || null;
+        rowData.reference = rowData.reference || null;
+
+        rows.push(rowData);
+      }
+
+      // Calculate summary
+      const summary = {
+        totalRows: rows.length,
+        validRows: rows.filter(r => r.isValid && r.errors.length === 0).length,
+        warningRows: rows.filter(r => r.warnings.length > 0).length,
+        errorRows: rows.filter(r => r.errors.length > 0).length,
+        totalIncome: rows
+          .filter(r => r.type === 'income' && r.amount && !isNaN(r.amount))
+          .reduce((sum, r) => sum + r.amount, 0),
+        totalExpense: rows
+          .filter(r => r.type === 'expense' && r.amount && !isNaN(r.amount))
+          .reduce((sum, r) => sum + r.amount, 0),
+        uniqueAccounts: Array.from(uniqueAccounts),
+        uniqueCategories: Array.from(uniqueCategories),
+        uniquePeriods: Array.from(uniquePeriods),
+        missingAccounts: Array.from(uniqueAccounts).filter(
+          name => !existingAccounts.some(a => a.name.toLowerCase() === name.toLowerCase())
+        ),
+        missingCategories: Array.from(uniqueCategories).filter(
+          name => !existingCategories.some(c => c.name.toLowerCase() === name.toLowerCase())
+        ),
+        missingPeriods: Array.from(uniquePeriods).filter(
+          name => !existingPeriods.some(p => p.name.toLowerCase() === name.toLowerCase())
+        )
+      };
+
+      reply.code(200).send({
+        rows,
+        summary,
+        existingCategories: existingCategories.map(c => ({ id: c.id, name: c.name })),
+        existingAccounts: existingAccounts.map(a => ({ id: a.id, name: a.name })),
+        existingPeriods: existingPeriods.map(p => ({ id: p.id, name: p.name }))
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ 
+        error: error instanceof Error ? error.message : 'Failed to parse CSV' 
+      });
+    }
+  });
+
+  // CSV Import - Confirm endpoint
+  fastify.post("/api/transactions/import/confirm", async (request, reply) => {
+    const { rows, categoryMappings, accountMappings, periodMappings } = request.body as {
+      rows: Array<{
+        date: string;
+        description: string;
+        amount: number;
+        type: 'expense' | 'income';
+        accountId: number;
+        periodId?: number | null;
+        categoryId?: number | null;
+        notes?: string | null;
+        reference?: string | null;
+      }>;
+      categoryMappings?: Record<string, number | null>;
+      accountMappings?: Record<string, number | null>;
+      periodMappings?: Record<string, number | null>;
+    };
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      reply.code(400).send({ error: "No transactions to import" });
+      return;
+    }
+
+    const imported: Array<{ id: number; description: string; amount: number }> = [];
+    const errors: Array<{ row: number; message: string }> = [];
+    let skipped = 0;
+
+    try {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        
+        try {
+          // Determine final account, category, and period IDs
+          const accountId = row.accountId;
+          const categoryId = row.categoryId ?? null;
+          const periodId = row.periodId ?? null;
+
+          if (!accountId) {
+            errors.push({ row: i + 1, message: "Account ID is required" });
+            skipped++;
+            continue;
+          }
+
+          // Create transaction using simple transaction pattern
+          const result = await createSimpleTransaction({
+            kind: row.type,
+            amountCents: row.amount,
+            description: row.description,
+            notes: row.notes || null,
+            place: null,
+            date: new Date(row.date),
+            periodId: periodId,
+            categoryId: categoryId,
+            linkedTxId: null,
+            txType: `simple_${row.type}`,
+            walletAccountId: accountId,
+            toWalletAccountId: undefined,
+            originLat: null,
+            originLng: null,
+            originName: null,
+            destLat: null,
+            destLng: null,
+            destName: null,
+            distanceKm: null
+          });
+
+          imported.push({
+            id: result.transactionId,
+            description: row.description,
+            amount: row.amount
+          });
+        } catch (err) {
+          errors.push({ 
+            row: i + 1, 
+            message: (err as Error).message 
+          });
+          skipped++;
+        }
+      }
+
+      reply.code(200).send({
+        imported: imported.length,
+        skipped,
+        errors,
+        transactions: imported
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ 
+        error: error instanceof Error ? error.message : 'Failed to import transactions' 
+      });
+    }
+  });
+}
+
+// Helper functions for CSV parsing
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Escaped quote
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        // Toggle quote state
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current);
+  return result;
+}
+
+function parseDate(dateStr: string): string | null {
+  if (!dateStr) return null;
+  
+  // Expected format: DD/MM/YYYY
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return null;
+  
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const year = parseInt(parts[2], 10);
+  
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900) return null;
+  
+  // Create date and verify it's valid
+  const date = new Date(year, month - 1, day);
+  if (date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  
+  // Return ISO string
+  return date.toISOString();
+}
+
+function parseAmount(amountStr: string): number | null {
+  if (!amountStr) return null;
+  
+  // Remove Rp, spaces, and thousand separators (commas)
+  const cleaned = amountStr
+    .replace(/Rp/gi, '')
+    .replace(/,/g, '')
+    .replace(/\s/g, '')
+    .trim();
+  
+  const amount = parseInt(cleaned, 10);
+  
+  if (isNaN(amount) || amount < 0) return null;
+  
+  // Return amount in rupiah (IDR uses whole numbers, no cents)
+  return amount;
 }
