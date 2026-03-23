@@ -10,7 +10,6 @@ import { formatCurrency, cn, formatIdNominalInput, parseIdNominalToInt } from '.
 import {
   Plus,
   PiggyBank,
-  Trash2,
   Target,
   CalendarRange,
   ChevronRight,
@@ -20,7 +19,7 @@ import {
   Copy,
   TrendingUp,
   TrendingDown,
-  Edit2,
+  MoreVertical,
 } from 'lucide-react';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 
@@ -107,6 +106,7 @@ function BudgetPage() {
   const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('name');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
+  const [menuRowId, setMenuRowId] = useState<number | null>(null);
 
   const [budgetForm, setBudgetForm] = useState({
     categoryId: '',
@@ -617,7 +617,7 @@ function BudgetPage() {
           <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
             {/* Budget progress */}
             <div className="lg:col-span-2">
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container)] p-6">
+              <div className="rounded-xl border border-[var(--color-border)] bg-white p-6">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                   <h2 className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">Budget progress</h2>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
@@ -632,7 +632,7 @@ function BudgetPage() {
                     const categoryColor = cat?.color || 'var(--ref-primary)';
                     return (
                       <li key={row.id} className="group">
-                        <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface-container-highest)] transition-colors">
+                        <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface)] transition-colors">
                           <Link
                             to="/transactions"
                             search={{ periodId: selectedPeriodId, categoryId: String(row.categoryId) }}
@@ -679,36 +679,62 @@ function BudgetPage() {
                                 pct > 100 ? 'text-[var(--ref-error)]' : 'text-[var(--color-text-primary)]',
                               )}
                             >
-                              {Math.min(pct, 999).toFixed(0)}%
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(row)}
-                              className="p-1.5 rounded-lg text-[var(--color-muted)] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--ref-surface-container)]"
-                              aria-label={`Edit ${row.categoryName}`}
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteBudget(row.id)}
-                              className="p-1.5 rounded-lg text-[var(--ref-error)] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--ref-error)]/10"
-                              aria-label={`Remove ${row.categoryName}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)] mx-3 mb-1">
-                          <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{
-                              width: `${Math.min(pct, 100)}%`,
-                              backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
-                            }}
-                          />
-                        </div>
-                      </li>
+                               {Math.min(pct, 999).toFixed(0)}%
+                             </span>
+                             <div className="h-2 w-16 overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)]">
+                               <div
+                                 className="h-full rounded-full transition-all duration-300"
+                                 style={{
+                                   width: `${Math.min(pct, 100)}%`,
+                                   backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
+                                 }}
+                               />
+                             </div>
+                           </div>
+                           <div className="relative self-center">
+                             <button
+                               type="button"
+                               onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
+                               className="p-1.5 rounded-lg text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)]"
+                               aria-label="More actions"
+                             >
+                               <MoreVertical className="h-4 w-4" />
+                             </button>
+                             {menuRowId === row.id && (
+                               <>
+                                 <button
+                                   type="button"
+                                   className="fixed inset-0 z-10 cursor-default"
+                                   aria-label="Close menu"
+                                   onClick={() => setMenuRowId(null)}
+                                 />
+                                 <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
+                                   <button
+                                     type="button"
+                                     className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
+                                     onClick={() => {
+                                       setMenuRowId(null);
+                                       openEditModal(row);
+                                     }}
+                                   >
+                                     Edit
+                                   </button>
+                                   <button
+                                     type="button"
+                                     className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                     onClick={() => {
+                                       setMenuRowId(null);
+                                       deleteBudget(row.id);
+                                     }}
+                                   >
+                                     Delete
+                                   </button>
+                                 </div>
+                               </>
+                             )}
+                           </div>
+                         </div>
+                       </li>
                     );
                   })}
                 </ul>
