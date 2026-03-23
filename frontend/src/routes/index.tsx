@@ -17,7 +17,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
-import { NetWorthChart, PeriodSummariesChart } from '../components/analytics';
+import { NetWorthChart } from '../components/analytics';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 
@@ -76,6 +76,13 @@ function DashboardPage() {
   const [tags, setTags] = useState<Array<{ id: number; name: string; color: string }>>([]);
   const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; balance: number; systemKey?: string | null }>>([]);
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null);
+  const [topExpenses, setTopExpenses] = useState<Array<{
+    id: number;
+    date: number;
+    description: string;
+    categoryId: number | null;
+    amount: number;
+  }>>([]);
 
   const statusLine = useMemo(() => {
     const now = new Date();
@@ -115,6 +122,8 @@ function DashboardPage() {
 
         // Calculate period income and expense from actual transactions within date range
         const periodTxsArray = periodTxs as Array<{
+          id: number;
+          description: string;
           categoryId: number | null;
           txType: string;
           date: number;
@@ -138,6 +147,23 @@ function DashboardPage() {
         
         setPeriodIncome(calculatedIncome > 0 ? calculatedIncome : null);
         setPeriodExpense(calculatedExpense > 0 ? calculatedExpense : null);
+
+        // Calculate top 5 most expensive expense transactions
+        const expenseTxs = periodTxsArray
+          .filter((tx) => tx.txType?.includes('expense') || tx.categoryId)
+          .map((tx) => ({
+            id: tx.id,
+            date: tx.date,
+            description: tx.description,
+            categoryId: tx.categoryId,
+            amount: tx.lines.length > 0
+              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
+              : 0,
+          }))
+          .filter((tx) => tx.amount > 0)
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 5);
+        setTopExpenses(expenseTxs);
 
         const wallets = accList.filter((a) => a.type === 'asset' && !a.systemKey);
         setWalletTotal(wallets.reduce((s, a) => s + a.balance, 0));
@@ -380,11 +406,65 @@ function DashboardPage() {
               )}
             </div>
 
-            <PeriodSummariesChart />
           </div>
 
-          {/* Right: donut + breakdown + budget */}
+          {/* Right: top expenses + donut + budget */}
           <div className="space-y-8">
+            {/* Top 5 Most Expensive Expenses */}
+            <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-headline font-bold text-lg">Top 5 Expenses</h3>
+                <Link
+                  to="/transactions"
+                  className="text-[var(--ref-primary)] text-xs font-bold inline-flex items-center gap-1 hover:underline"
+                >
+                  View all
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+              <p className="text-xs text-[var(--ref-on-surface-variant)] mb-4">
+                {periodLabel ? `Most expensive transactions in ${periodLabel}` : 'Most expensive expense transactions'}
+              </p>
+              {topExpenses.length === 0 ? (
+                <p className="text-sm text-[var(--ref-on-surface-variant)] py-4 text-center">
+                  No expense transactions found in this period.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {topExpenses.map((tx, index) => {
+                    const cat = tx.categoryId
+                      ? categories.find((c) => c.id === tx.categoryId)
+                      : null;
+                    return (
+                      <Link
+                        key={tx.id}
+                        to="/transactions"
+                        search={{ id: tx.id }}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface-container)] transition-colors group"
+                      >
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--ref-error)]/10 flex items-center justify-center">
+                          <span className="text-xs font-bold text-[var(--ref-error)]">{index + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-[var(--ref-on-surface)] truncate group-hover:text-[var(--ref-primary)] transition-colors">
+                            {tx.description}
+                          </p>
+                          <p className="text-xs text-[var(--ref-on-surface-variant)]">
+                            {cat ? cat.name : 'Uncategorized'} · {formatDate(tx.date)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-sm text-[var(--ref-error)] font-mono">
+                            -{formatCurrency(tx.amount)}
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
               <h3 className="font-headline font-bold text-lg mb-2">
                 Monthly Expenses Breakdown
