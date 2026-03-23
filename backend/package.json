@@ -18,13 +18,16 @@
     "@fastify/oauth2": "^8.2.0",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.5",
+    "axios": "^1.6.0",
     "better-sqlite3": "^12.8.0",
+    "cheerio": "^1.0.0-rc.12",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.8.2",
     "fastify-plugin": "^5.1.0",
     "ioredis": "^5.10.1",
+    "puppeteer": "^24.40.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
