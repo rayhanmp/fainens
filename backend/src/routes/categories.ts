@@ -1,9 +1,19 @@
 import { eq, like, and } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { categories } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
+
+// Validation schemas
+const categorySchema = z.object({
+  name: z.string().min(1).max(100),
+  icon: z.string().max(10).nullable().optional(),
+  color: z.string().max(20).nullable().optional(),
+});
+
+const categoryUpdateSchema = categorySchema.partial();
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
@@ -38,17 +48,17 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.post("/api/categories", async (request, reply) => {
-    const body = request.body as {
-      name: string;
-      icon?: string | null;
-      color?: string | null;
-    };
-
-    // Validation
-    if (!body.name || body.name.trim() === '') {
-      reply.code(400).send({ error: 'Category name is required' });
+    const parseResult = categorySchema.safeParse(request.body);
+    
+    if (!parseResult.success) {
+      reply.code(400).send({ 
+        error: "Validation failed", 
+        details: parseResult.error.issues 
+      });
       return;
     }
+
+    const body = parseResult.data;
 
     try {
       const [category] = await db
@@ -71,11 +81,17 @@ export default async function (fastify: FastifyInstance) {
 
   fastify.patch("/api/categories/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as Partial<{
-      name: string;
-      icon: string | null;
-      color: string | null;
-    }>;
+    
+    const parseResult = categoryUpdateSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      reply.code(400).send({ 
+        error: "Validation failed", 
+        details: parseResult.error.issues 
+      });
+      return;
+    }
+    
+    const body = parseResult.data;
 
     const [existing] = await db.select().from(categories).where(eq(categories.id, parseInt(id))).limit(1);
 
