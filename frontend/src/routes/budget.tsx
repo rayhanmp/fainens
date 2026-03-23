@@ -15,8 +15,6 @@ import {
   Target,
   ShoppingCart,
   CalendarRange,
-  Home,
-  UtensilsCrossed,
   ChevronRight,
 } from 'lucide-react';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
@@ -49,8 +47,6 @@ interface Category {
   icon: string | null;
   color: string | null;
 }
-
-const ICON_FALLBACKS = [Home, UtensilsCrossed, ShoppingCart] as const;
 
 function formatPeriodRange(p: Period) {
   const a = new Date(p.startDate);
@@ -333,35 +329,23 @@ function BudgetPage() {
                   </span>
                 </div>
                 <ul className="space-y-8">
-                  {budgetRows.map((row, idx) => {
+                  {budgetRows.map((row) => {
                     const pct =
                       row.plannedAmount > 0 ? (row.actualAmount / row.plannedAmount) * 100 : 0;
                     const pctCapped = Math.min(pct, 999);
                     const cat = categories.find((c) => c.id === row.categoryId);
-                    const Icon = ICON_FALLBACKS[idx % ICON_FALLBACKS.length];
-                    const barColors = [
-                      'bg-gradient-to-r from-[var(--ref-secondary)] to-[#83d5c5]',
-                      'bg-[var(--ref-primary)]',
-                      'bg-[var(--ref-tertiary)]',
-                    ];
-                    const iconBg = [
-                      'bg-[var(--ref-primary)]',
-                      'bg-[var(--ref-secondary)]',
-                      'bg-[var(--ref-tertiary)]',
-                    ];
+                    const categoryColor = cat?.color || 'var(--ref-primary)';
                     return (
                       <li key={row.id}>
                         <div className="mb-3 flex items-start gap-4">
                           <div
-                            className={cn(
-                              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg text-white',
-                              iconBg[idx % iconBg.length],
-                            )}
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg text-white"
+                            style={{ backgroundColor: categoryColor }}
                           >
                             {cat?.icon ? (
                               <span aria-hidden>{cat.icon}</span>
                             ) : (
-                              <Icon className="h-5 w-5" />
+                              <ShoppingCart className="h-5 w-5" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -393,15 +377,11 @@ function BudgetPage() {
                             </div>
                             <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)]">
                               <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  pct > 100
-                                    ? 'bg-[var(--ref-error)]'
-                                    : pct > 85
-                                      ? 'bg-amber-500'
-                                      : barColors[idx % barColors.length],
-                                )}
-                                style={{ width: `${Math.min(pct, 100)}%` }}
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${Math.min(pct, 100)}%`,
+                                  backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
+                                }}
                               />
                             </div>
                           </div>

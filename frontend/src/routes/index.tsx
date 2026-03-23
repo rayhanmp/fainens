@@ -31,9 +31,6 @@ export const Route = createFileRoute('/')({
   },
 } as any);
 
-/** Stitch HTML palette: primary, secondary, tertiary, + extras */
-const PIE_COLORS = ['#0056d2', '#006b5e', '#2e2bc2', '#4849da', '#0b6f62', '#737785'];
-
 function classifyTx(tx: {
   categoryId: number | null;
   txType: string;
@@ -67,7 +64,7 @@ function DashboardPage() {
       percentUsed: number;
     }>
   >([]);
-  const [categorySpend, setCategorySpend] = useState<Array<{ name: string; value: number }>>([]);
+  const [categorySpend, setCategorySpend] = useState<Array<{ name: string; value: number; color: string }>>([]);
   const [categories, setCategories] = useState<
     Array<{ id: number; name: string; color: string | null; icon: string | null }>
   >([]);
@@ -178,7 +175,7 @@ function DashboardPage() {
         const pie = [...spendMap.entries()]
           .map(([cid, value]) => {
             const c = cats.find((x) => x.id === cid);
-            return { name: c?.name ?? `Category ${cid}`, value };
+            return { name: c?.name ?? `Category ${cid}`, value, color: c?.color || '#737785' };
           })
           .filter((x) => x.value > 0)
           .sort((a, b) => b.value - a.value)
@@ -356,19 +353,8 @@ function DashboardPage() {
                             <td className="px-6 sm:px-8 py-4 text-sm text-[var(--ref-on-surface)]">
                               {formatDate(tx.date)}
                             </td>
-                            <td className="px-6 sm:px-8 py-4">
-                              {cat ? (
-                                <span
-                                  className="px-3 py-1 rounded-full text-[10px] font-bold bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]"
-                                >
-                                  {cat.icon ? `${cat.icon} ` : ''}
-                                  {cat.name}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-[var(--ref-on-surface-variant)]">
-                                  {txSubtitle(tx) || '—'}
-                                </span>
-                              )}
+                            <td className="px-6 sm:px-8 py-4 text-sm text-[var(--ref-on-surface)]">
+                              {cat ? cat.name : (txSubtitle(tx) || '—')}
                             </td>
                             <td className="px-6 sm:px-8 py-4 text-sm font-medium text-[var(--ref-on-surface)] max-w-[200px] truncate">
                               {tx.description}
@@ -426,8 +412,8 @@ function DashboardPage() {
                           paddingAngle={2}
                           isAnimationActive={false}
                         >
-                          {categorySpend.map((entry, i) => (
-                            <Cell key={`cell-${entry.name}-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          {categorySpend.map((entry) => (
+                            <Cell key={`cell-${entry.name}`} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip
@@ -445,11 +431,11 @@ function DashboardPage() {
                   </div>
                   {/* Legend */}
                   <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
-                    {categorySpend.map((entry, i) => (
+                    {categorySpend.map((entry) => (
                       <div key={entry.name} className="flex items-center gap-2">
                         <div
                           className="w-3 h-3 rounded-full shrink-0"
-                          style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                          style={{ backgroundColor: entry.color }}
                         />
                         <span className="text-xs text-[var(--ref-on-surface-variant)]">
                           {entry.name}

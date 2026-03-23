@@ -515,6 +515,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
     breakdown: Array<{ category: string; amount: number; percentage: number }>;
     total: number;
   } | null>(null);
+  const [categories, setCategories] = useState<Array<{ id: number; name: string; color: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -524,8 +525,12 @@ function SpendingReport({ periodId }: { periodId?: number }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const report = await api.reports.spending(periodId);
+      const [report, cats] = await Promise.all([
+        api.reports.spending(periodId),
+        api.categories.list(),
+      ]);
       setData(report);
+      setCategories(cats);
     } catch (err) {
       console.error('Failed to load spending:', err);
     } finally {
@@ -543,14 +548,15 @@ function SpendingReport({ periodId }: { periodId?: number }) {
     );
   }
 
-  const COLORS = ['#8BA888', '#D94F4F', '#D4A843', '#5A9E6F', '#4A90D9', '#9B59B6', '#E67E22', '#34495E'];
-
-  const chartData = data.breakdown.slice(0, 8).map((item, i) => ({
-    name: item.category,
-    value: item.amount,
-    percentage: item.percentage,
-    color: COLORS[i % COLORS.length],
-  }));
+  const chartData = data.breakdown.slice(0, 8).map((item) => {
+    const cat = categories.find((c) => c.name === item.category);
+    return {
+      name: item.category,
+      value: item.amount,
+      percentage: item.percentage,
+      color: cat?.color || '#737785',
+    };
+  });
 
   return (
     <Card title={`Spending Breakdown - Total: ${formatCurrency(data.total)}`}>
