@@ -1,4 +1,4 @@
-import { eq, like, desc, and } from "drizzle-orm";
+import { eq, like, desc, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
@@ -7,6 +7,12 @@ import { computeAccountBalance, computeAccountBalanceRolledUp } from "../service
 import { precomputeAccountBalance } from "../cache/precompute";
 
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
+
+// Sanitize search input to prevent SQL injection
+function sanitizeSearchInput(input: string): string {
+  // Remove SQL special characters that could be used for injection
+  return input.replace(/[%_\[\]]/g, '');
+}
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
@@ -22,7 +28,10 @@ export default async function (fastify: FastifyInstance) {
       conditions.push(eq(accounts.type, type));
     }
     if (search) {
-      conditions.push(like(accounts.name, `%${search}%`));
+      const sanitized = sanitizeSearchInput(search);
+      if (sanitized) {
+        conditions.push(like(accounts.name, `%${sanitized}%`));
+      }
     }
 
     const allAccounts =

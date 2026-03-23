@@ -6,6 +6,12 @@ import { db } from "../db/client";
 import { categories } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
 
+// Sanitize search input to prevent SQL injection
+function sanitizeSearchInput(input: string): string {
+  // Remove SQL special characters that could be used for injection
+  return input.replace(/[%_\[\]]/g, '');
+}
+
 // Validation schemas
 const categorySchema = z.object({
   name: z.string().min(1).max(100),
@@ -23,7 +29,10 @@ export default async function (fastify: FastifyInstance) {
 
     const conditions = [];
     if (search) {
-      conditions.push(like(categories.name, `%${search}%`));
+      const sanitized = sanitizeSearchInput(search);
+      if (sanitized) {
+        conditions.push(like(categories.name, `%${sanitized}%`));
+      }
     }
 
     const allCategories =
