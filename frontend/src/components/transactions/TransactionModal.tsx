@@ -5,11 +5,12 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { api } from '../../lib/api';
-import { formatCurrency, cn, getAccountTypeLabel, formatIdNominalInput, parseIdNominalToInt } from '../../lib/utils';
+import { formatCurrency, cn, getAccountTypeLabel, formatIdNominalInput, parseIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
   Plus,
   Trash2,
   ArrowRightLeft,
+  ArrowRight,
   Calculator,
   Tag as TagIcon,
   Landmark,
@@ -22,7 +23,8 @@ import {
   CreditCard,
   ArrowUpRight,
   ArrowDownRight,
-  Edit2,
+  ShoppingCart,
+  X,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -187,6 +189,17 @@ export function TransactionModal({
     preview?: string;
   }>>([]);
 
+  /** Attachment preview modal */
+  const [previewAttachment, setPreviewAttachment] = useState<{
+    id: number;
+    url: string;
+    filename: string;
+    mimetype: string;
+  } | null>(null);
+
+  /** Attachment URLs for thumbnails (id -> url) */
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+
   const [journalForm, setJournalForm] = useState({
     dateTime: toDatetimeLocal(),
     description: '',
@@ -317,7 +330,17 @@ export function TransactionModal({
       });
       // Load attachments for editing transaction
       api.attachments.list(editingTransaction.id.toString())
-        .then(setAttachments)
+        .then((atts) => {
+          setAttachments(atts);
+          // Fetch URLs for image attachments to show thumbnails
+          atts.filter(a => a.mimetype.startsWith('image/')).forEach(att => {
+            api.attachments.getUrl(att.id, 3600).then(({ url }) => {
+              setAttachmentUrls(prev => ({ ...prev, [att.id]: url }));
+            }).catch(() => {
+              // Silently fail - will show placeholder
+            });
+          });
+        })
         .catch(() => setAttachments([]));
     } else {
       setIsAccountingMode(false);
@@ -347,6 +370,7 @@ export function TransactionModal({
       });
       setInstallmentPreview(null);
       setAttachments([]);
+      setAttachmentUrls({});
       setPendingAttachments([]);
       setJournalForm({
         dateTime: toDatetimeLocal(),
@@ -839,11 +863,23 @@ export function TransactionModal({
   if (editingTransaction) {
     // View Mode - Show transaction details read-only
     if (viewMode) {
-      const fromAccount = accounts.find(a => editingTransaction.lines[0]?.accountId === a.id);
-      const toAccount = editingTransaction.lines[1]?.accountId ? accounts.find(a => editingTransaction.lines[1].accountId === a.id) : null;
       const category = editingTransaction.categoryId ? categories.find(c => c.id === editingTransaction.categoryId) : null;
       const amount = editingTransaction.lines?.length ? Math.max(...editingTransaction.lines.map(l => Math.max(l.debit, l.credit))) : 0;
       const isTransfer = editingTransaction.txType?.includes('transfer');
+      const isExpense = editingTransaction.txType?.includes('expense');
+      const isIncome = editingTransaction.txType?.includes('income');
+      
+      // Find the wallet account: for expense it's the line with credit, for income it's the line with debit
+      const walletAccount = editingTransaction.lines.find(l => {
+        if (isExpense) return l.credit > 0;
+        if (isIncome) return l.debit > 0;
+        return false;
+      });
+      const account = walletAccount ? accounts.find(a => a.id === walletAccount.accountId) : null;
+      
+      // For transfer, we need both accounts
+      const fromAccount = accounts.find(a => editingTransaction.lines[0]?.accountId === a.id);
+      const toAccount = editingTransaction.lines[1]?.accountId ? accounts.find(a => editingTransaction.lines[1].accountId === a.id) : null;
       
       // For transfer, use the enhanced design
       if (isTransfer && fromAccount && toAccount) {
@@ -853,9 +889,10 @@ export function TransactionModal({
             onClose={onClose}
             title="Transfer Detail"
             subtitle={`ID: #${editingTransaction.id}`}
-            size="xl"
+            size="default"
+            className="max-w-2xl shadow-2xl"
           >
-            <div className="px-2 pb-6">
+            <div className="px-2 pb-6 max-w-2xl mx-auto">
               {/* Status Badge */}
               <div className="mb-6">
                 <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--ref-surface-container-highest)] text-[var(--color-muted)] font-label text-xs font-semibold tracking-wide">
@@ -889,12 +926,12 @@ export function TransactionModal({
                   <div className="hidden md:flex flex-grow items-center justify-center relative px-4">
                     <div className="h-[2px] w-full bg-[var(--color-border)]/30 absolute"></div>
                     <div className="w-10 h-10 bg-[var(--color-primary)] rounded-full flex items-center justify-center z-10 shadow-lg shadow-[var(--color-primary)]/20">
-                      <ArrowRightLeft className="w-5 h-5 text-white" />
+                      <ArrowRight className="w-5 h-5 text-black" />
                     </div>
                   </div>
                   <div className="md:hidden flex items-center justify-center">
                     <div className="w-10 h-10 bg-[var(--color-primary)] rounded-full flex items-center justify-center z-10 shadow-lg shadow-[var(--color-primary)]/20">
-                      <ArrowRightLeft className="w-5 h-5 text-white" />
+                      <ArrowRight className="w-5 h-5 text-black" />
                     </div>
                   </div>
 
@@ -952,56 +989,49 @@ export function TransactionModal({
                     </div>
                   </div>
                 )}
+              </div>
 
-                {/* Note */}
-                {editingTransaction.notes && (
-                  <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
-                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
-                      <StickyNote className="w-5 h-5 text-[var(--color-muted)]" />
-                    </div>
-                    <div>
-                      <p className="font-label text-xs text-[var(--color-muted)]">Note</p>
-                      <p className="font-body text-sm font-semibold italic">{editingTransaction.notes}</p>
-                    </div>
+              {/* Note - Full Width */}
+              {editingTransaction.notes && (
+                <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)] mb-6">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                    <StickyNote className="w-5 h-5 text-[var(--color-muted)]" />
                   </div>
-                )}
-              </div>
-
-              {/* Bookkeeping Disclaimer */}
-              <div className="mb-6 p-4 bg-[var(--ref-tertiary)]/5 rounded-xl flex items-start gap-4">
-                <span className="text-[var(--color-tertiary)] mt-0.5">ℹ</span>
-                <div>
-                  <p className="font-headline text-sm font-semibold text-[var(--color-tertiary)]">Bookkeeping Notice</p>
-                  <p className="font-body text-xs text-[var(--color-muted)] leading-relaxed">This record was manually logged to synchronize your accounts. The actual financial transaction was recorded in your books.</p>
+                  <div className="flex-1">
+                    <p className="font-label text-xs text-[var(--color-muted)]">Note</p>
+                    <p className="font-body text-sm font-semibold italic">{editingTransaction.notes}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Action Buttons */}
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-[var(--color-border)]">
-                <Button 
-                  type="button" 
-                  variant="secondary"
-                  onClick={onClose}
-                  className="w-full md:w-auto px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
-                >
-                  Close
-                </Button>
-                <div className="flex gap-3 w-full md:w-auto">
+              {/* Action Buttons - Sticky at bottom */}
+              <div className="sticky bottom-0 bg-[var(--ref-surface-container-lowest)] pt-4 pb-2 border-t border-[var(--color-border)] mt-auto">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                   <Button 
                     type="button" 
                     variant="secondary"
-                    onClick={() => setViewMode(false)} 
-                    className="flex-1 md:flex-none px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
-                  >
-                    Edit Record
-                  </Button>
-                  <Button 
-                    type="button" 
                     onClick={onClose}
-                    className="flex-1 md:flex-none px-8 py-2.5 rounded-full font-headline font-semibold text-sm shadow-lg shadow-[var(--color-primary)]/20"
+                    className="w-full md:w-auto px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
                   >
-                    Got it
+                    Close
                   </Button>
+                  <div className="flex gap-3 w-full md:w-auto">
+                    <Button 
+                      type="button" 
+                      variant="secondary"
+                      onClick={() => setViewMode(false)} 
+                      className="flex-1 md:flex-none px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
+                    >
+                      Edit Record
+                    </Button>
+                    <Button 
+                      type="button" 
+                      onClick={onClose}
+                      className="flex-1 md:flex-none px-8 py-2.5 rounded-full font-headline font-semibold text-sm shadow-lg shadow-[var(--color-primary)]/20"
+                    >
+                      Got it
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1009,122 +1039,283 @@ export function TransactionModal({
         );
       }
       
-      // Non-transfer view mode (original simpler design)
+      // Expense/Income view mode - enhanced design
       return (
         <Modal
           isOpen={isOpen}
           onClose={onClose}
-          title="Transaction Details"
-          subtitle={`#${editingTransaction.id} · ${new Date(editingTransaction.date).toLocaleString()}`}
-          size="xl"
-        >
-          <div className="space-y-6 max-w-3xl">
-            {/* Header with amount and type */}
-            <div className="flex items-center justify-between p-4 bg-[var(--ref-surface-container-low)] rounded-xl">
-              <div>
-                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider">Amount</p>
-                <p className="text-2xl font-bold text-[var(--color-text-primary)]">
-                  {formatCurrency(amount)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider">Type</p>
-                <span className={cn(
-                  'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium',
-                  editingTransaction.txType?.includes('expense') && 'bg-[var(--color-danger)]/10 text-[var(--color-danger)]',
-                  editingTransaction.txType?.includes('income') && 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
-                  editingTransaction.txType?.includes('transfer') && 'bg-[var(--ref-tertiary)]/10 text-[var(--ref-tertiary)]',
-                )}>
-                  {editingTransaction.txType?.replace('simple_', '').replace('_', ' ')}
-                </span>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">Description</p>
-              <p className="text-lg font-semibold text-[var(--color-text-primary)]">{editingTransaction.description}</p>
-            </div>
-
-            {/* Accounts */}
-            <div className="grid grid-cols-2 gap-4">
-              {fromAccount && (
-                <div className="p-3 bg-[var(--ref-surface-container-lowest)] rounded-lg">
-                  <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">
-                    {editingTransaction.txType?.includes('income') ? 'To Account' : 'From Account'}
-                  </p>
-                  <p className="font-medium text-[var(--color-text-primary)]">{fromAccount.name}</p>
-                  <p className="text-sm text-[var(--color-muted)]">{getAccountTypeLabel(fromAccount.type)}</p>
-                </div>
-              )}
-              {toAccount && (
-                <div className="p-3 bg-[var(--ref-surface-container-lowest)] rounded-lg">
-                  <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">
-                    {editingTransaction.txType?.includes('income') ? 'Source' : 'To Account'}
-                  </p>
-                  <p className="font-medium text-[var(--color-text-primary)]">{toAccount.name}</p>
-                  <p className="text-sm text-[var(--color-muted)]">{getAccountTypeLabel(toAccount.type)}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Category */}
-            {category && (
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider">Category:</p>
-                <span 
-                  className="px-3 py-1 rounded-full text-sm font-medium"
-                  style={{ backgroundColor: `${category.color || '#666'}22`, color: category.color || '#666' }}
-                >
-                  {category.name}
-                </span>
-              </div>
-            )}
-
-            {/* Tags */}
-            {editingTransaction.tags.length > 0 && (
-              <div>
-                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-2">Tags</p>
-                <div className="flex flex-wrap gap-2">
-                  {editingTransaction.tags.map(tag => (
-                    <span 
-                      key={tag.tagId}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium border"
-                      style={{ borderColor: tag.color, color: tag.color }}
-                    >
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {editingTransaction.notes && (
-              <div className="p-4 bg-[var(--ref-surface-container-lowest)] rounded-xl">
-                <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-1">Notes</p>
-                <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap">{editingTransaction.notes}</p>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-[var(--color-border)]">
+          title={isExpense ? "Expense Detail" : "Income Detail"}
+          subtitle={`ID: #${editingTransaction.id}`}
+          size="default"
+          className="max-w-4xl"
+          footer={
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 w-full">
               <Button 
                 type="button" 
-                onClick={() => setViewMode(false)} 
-                className="flex-1 rounded-full py-4"
-              >
-                <Edit2 className="w-5 h-5 mr-2" />
-                Edit Transaction
-              </Button>
-              <Button 
-                type="button" 
-                variant="secondary" 
-                onClick={onClose} 
-                className="rounded-full py-4"
+                variant="secondary"
+                onClick={onClose}
+                className="w-full md:w-auto px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
               >
                 Close
               </Button>
+              <div className="flex gap-3 w-full md:w-auto">
+                <Button 
+                  type="button" 
+                  variant="secondary"
+                  onClick={() => setViewMode(false)} 
+                  className="flex-1 md:flex-none px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
+                >
+                  Edit Record
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={onClose}
+                  className="flex-1 md:flex-none px-8 py-2.5 rounded-full font-headline font-semibold text-sm shadow-lg shadow-[var(--color-primary)]/20"
+                >
+                  Got it
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div className="flex flex-col md:flex-row gap-8 p-4">
+            {/* Left Column - Main Content */}
+            <div className="flex-1 px-2">
+              {/* Header with merchant icon and status */}
+              <div className="flex justify-between items-start mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--ref-surface-container)] flex items-center justify-center">
+                    {category?.icon ? (
+                      <span className="text-lg">{category.icon}</span>
+                    ) : (
+                      <ShoppingCart className="w-5 h-5 text-[var(--color-primary)]" />
+                    )}
+                  </div>
+                  <div>
+                    <h1 className="font-headline font-bold text-base tracking-tight text-[var(--color-on-background)]">
+                      {editingTransaction.description}
+                    </h1>
+                    <p className="text-[var(--color-muted)] font-label text-xs mt-0.5 uppercase tracking-widest">
+                      {new Date(editingTransaction.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(editingTransaction.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-[var(--color-secondary-container)]/30 text-[var(--color-on-secondary-container)] px-3 py-1.5 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-[var(--color-success)]"></span>
+                  <span className="font-label text-xs font-semibold">LOGGED</span>
+                </div>
+              </div>
+
+              {/* Amount Hero */}
+              <div className="mb-10">
+                <p className="font-label text-[var(--color-muted)] text-sm mb-2">Total Amount</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-headline font-bold text-3xl text-[var(--color-primary)]">Rp</span>
+                  <span className="font-headline font-extrabold text-6xl tracking-tighter text-[var(--color-on-background)]">
+                    {amount.toLocaleString('id-ID')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Bento Grid Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[var(--color-border)]/30 pt-6 mb-6">
+                {/* Category */}
+                <div className="space-y-0.5">
+                  <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Category</p>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-[var(--color-tertiary-container)]/10 text-[var(--color-tertiary)] rounded-md">
+                      <TagIcon className="w-3.5 h-3.5" />
+                    </div>
+                    {category ? (
+                      <p className="font-headline font-semibold text-base">{category.name}</p>
+                    ) : (
+                      <span className="text-[var(--color-muted)] text-sm">—</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account */}
+                <div className="space-y-0.5">
+                  <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Account</p>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-[var(--color-primary-container)]/10 text-[var(--color-primary)] rounded-md">
+                      <Landmark className="w-3.5 h-3.5" />
+                    </div>
+                    {account ? (
+                      <p className="font-headline font-semibold text-base">{account.name}</p>
+                    ) : (
+                      <span className="text-[var(--color-muted)] text-sm">—</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="space-y-0.5">
+                  <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Tags</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {editingTransaction.tags.length > 0 ? (
+                      editingTransaction.tags.map(tag => (
+                        <span 
+                          key={tag.tagId}
+                          className="px-2 py-0.5 rounded-full text-xs font-medium border"
+                          style={{ borderColor: tag.color, color: tag.color }}
+                        >
+                          {tag.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[var(--color-muted)] text-sm">—</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="space-y-0.5">
+                  <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Location</p>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    {editingTransaction.place ? (
+                      <p className="font-headline font-semibold text-base">{editingTransaction.place}</p>
+                    ) : (
+                      <span className="text-[var(--color-muted)] text-sm">—</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-0.5">
+                  <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Note</p>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
+                      <StickyNote className="w-3.5 h-3.5" />
+                    </div>
+                    {editingTransaction.notes ? (
+                      <p className="font-headline font-semibold text-base italic">{editingTransaction.notes}</p>
+                    ) : (
+                      <span className="text-[var(--color-muted)] text-sm">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column - Sidebar (Attachments) */}
+            <div className="w-full md:w-72 bg-[var(--ref-surface-container-low)] p-6 rounded-2xl border border-[var(--color-border)]/10">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-headline font-bold text-[var(--color-on-background)]">Attachments</h3>
+                <span className="text-[var(--color-muted)] font-label text-xs">{attachments.length} files</span>
+              </div>
+              
+              {attachments.length > 0 ? (
+                <div className="space-y-3">
+                  {attachments.map(att => (
+                    <div 
+                      key={att.id} 
+                      className="bg-[var(--ref-surface-container-lowest)] p-3 rounded-xl group relative overflow-hidden"
+                    >
+                      {/* Preview or Icon */}
+                      <div 
+                        className="w-full h-24 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center mb-3 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={async () => {
+                          try {
+                            if (att.mimetype.startsWith('image/') && attachmentUrls[att.id]) {
+                              // Use cached URL for images
+                              setPreviewAttachment({
+                                id: att.id,
+                                url: attachmentUrls[att.id],
+                                filename: att.filename,
+                                mimetype: att.mimetype,
+                              });
+                            } else {
+                              // Fetch URL for non-images or if not cached
+                              const { url } = await api.attachments.getUrl(att.id, 3600);
+                              if (att.mimetype.startsWith('image/')) {
+                                setPreviewAttachment({
+                                  id: att.id,
+                                  url,
+                                  filename: att.filename,
+                                  mimetype: att.mimetype,
+                                });
+                              } else {
+                                window.open(url, '_blank');
+                              }
+                            }
+                          } catch (err) {
+                            alert('Failed to load attachment');
+                          }
+                        }}
+                      >
+                        {att.mimetype.startsWith('image/') ? (
+                          attachmentUrls[att.id] ? (
+                            <img
+                              src={attachmentUrls[att.id]}
+                              alt={att.filename}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[var(--color-muted)]">
+                              <div className="animate-pulse flex items-center">
+                                <ImagePlus className="w-8 h-8 opacity-50" />
+                                <span className="ml-2 text-xs">Loading...</span>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <div className="text-center">
+                            <svg className="w-8 h-8 mx-auto text-[var(--color-muted)] mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="text-xs text-[var(--color-muted)]">Click to open</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* File Info */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{att.filename}</p>
+                          <p className="text-xs text-[var(--color-muted)]">{formatFileSize(att.fileSize)}</p>
+                        </div>
+                        
+                        {/* Delete Button */}
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (confirm('Delete this attachment?')) {
+                              try {
+                                await api.attachments.delete(att.id);
+                                setAttachments(attachments.filter(a => a.id !== att.id));
+                                setAttachmentUrls(prev => {
+                                  const updated = { ...prev };
+                                  delete updated[att.id];
+                                  return updated;
+                                });
+                              } catch (err) {
+                                alert('Failed to delete attachment');
+                              }
+                            }
+                          }}
+                          className="p-2 text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <ImagePlus className="w-12 h-12 text-[var(--color-muted)] mx-auto mb-3 opacity-50" />
+                  <p className="text-sm text-[var(--color-muted)]">No attachments</p>
+                  <p className="text-xs text-[var(--color-muted)] mt-1">Receipts and documents will appear here</p>
+                </div>
+              )}
             </div>
           </div>
         </Modal>
@@ -2104,6 +2295,67 @@ export function TransactionModal({
           }
         }}
       />
+
+      {/* Attachment Preview Modal */}
+      {previewAttachment && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setPreviewAttachment(null)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[90vh] bg-[var(--ref-surface-container-lowest)] rounded-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+              <h3 className="font-headline font-bold text-lg truncate pr-4">{previewAttachment.filename}</h3>
+              <button
+                onClick={() => setPreviewAttachment(null)}
+                className="p-2 hover:bg-[var(--ref-surface-container-high)] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Preview Content */}
+            <div className="p-4 flex items-center justify-center bg-black">
+              {previewAttachment.mimetype.startsWith('image/') ? (
+                <img 
+                  src={previewAttachment.url} 
+                  alt={previewAttachment.filename}
+                  className="max-w-full max-h-[70vh] object-contain"
+                />
+              ) : (
+                <div className="text-center text-white py-12">
+                  <p className="text-lg mb-4">Preview not available</p>
+                  <button
+                    onClick={() => window.open(previewAttachment.url, '_blank')}
+                    className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-full"
+                  >
+                    Open File
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between p-4 border-t border-[var(--color-border)]">
+              <button
+                onClick={() => window.open(previewAttachment.url, '_blank')}
+                className="px-6 py-2 bg-[var(--ref-surface-container-high)] hover:bg-[var(--ref-surface-container)] rounded-full text-sm font-semibold transition-colors"
+              >
+                Open in New Tab
+              </button>
+              <button
+                onClick={() => setPreviewAttachment(null)}
+                className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
