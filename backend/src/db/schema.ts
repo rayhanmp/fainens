@@ -126,6 +126,28 @@ export const budgetPlans = sqliteTable("budget_plan", {
   plannedAmount: integer("planned_amount").notNull(), // cents
 });
 
+export const budgetTemplates = sqliteTable("budget_template", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
+export const budgetTemplateItems = sqliteTable("budget_template_item", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => budgetTemplates.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id")
+    .notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  plannedAmount: integer("planned_amount").notNull(), // cents
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
 export const attachments = sqliteTable("attachment", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   transactionId: integer("transaction_id")
