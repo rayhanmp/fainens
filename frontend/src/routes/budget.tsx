@@ -11,11 +11,16 @@ import {
   Plus,
   PiggyBank,
   Trash2,
-  Wallet,
   Target,
-  ShoppingCart,
   CalendarRange,
   ChevronRight,
+  ArrowUpDown,
+  Filter,
+  Save,
+  Copy,
+  TrendingUp,
+  TrendingDown,
+  Edit2,
 } from 'lucide-react';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 
@@ -48,6 +53,33 @@ interface Category {
   color: string | null;
 }
 
+interface ComparisonData {
+  categoryId: number;
+  categoryName: string;
+  currentPlanned: number;
+  comparePlanned: number;
+  compareActual: number;
+  plannedDiff: number;
+  actualDiff: number;
+}
+
+interface Template {
+  id: number;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: number;
+  items: Array<{
+    id: number;
+    categoryId: number;
+    plannedAmount: number;
+    categoryName: string;
+  }>;
+}
+
+type SortOption = 'name' | 'percentUsed' | 'amountSpent' | 'variance';
+type FilterOption = 'all' | 'over' | 'near' | 'under' | 'notStarted';
+
 function formatPeriodRange(p: Period) {
   const a = new Date(p.startDate);
   const b = new Date(p.endDate);
@@ -64,12 +96,26 @@ function BudgetPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>(search.periodId || '');
+  const [comparePeriodId, setComparePeriodId] = useState<string>('');
+  const [comparisonData, setComparisonData] = useState<ComparisonData[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isApplyTemplateModalOpen, setIsApplyTemplateModalOpen] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('name');
+  const [filterBy, setFilterBy] = useState<FilterOption>('all');
 
   const [budgetForm, setBudgetForm] = useState({
     categoryId: '',
     plannedAmount: '',
+  });
+
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    description: '',
   });
 
   const [formError, setFormError] = useState('');
@@ -78,6 +124,18 @@ function BudgetPage() {
   useEffect(() => {
     loadData();
   }, [selectedPeriodId]);
+
+  useEffect(() => {
+    if (selectedPeriodId && comparePeriodId && selectedPeriodId !== comparePeriodId) {
+      loadComparison();
+    } else {
+      setComparisonData([]);
+    }
+  }, [selectedPeriodId, comparePeriodId]);
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
 
   const loadData = async () => {
     try {
@@ -95,6 +153,24 @@ function BudgetPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadComparison = async () => {
+    try {
+      const data = await api.budgets.compare(selectedPeriodId, comparePeriodId);
+      setComparisonData(data);
+    } catch (err) {
+      console.error('Failed to load comparison:', err);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const data = await api.budgets.templates.list();
+      setTemplates(data);
+    } catch (err) {
+      console.error('Failed to load templates:', err);
     }
   };
 
@@ -128,11 +204,85 @@ function BudgetPage() {
     }
   };
 
+  const handleUpdateBudget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBudget) return;
+
+    setFormError('');
+    setIsSubmitting(true);
+
+    const digits = budgetForm.plannedAmount.replace(/\D/g, '');
+    const amount = digits === '' ? Number.NaN : parseIdNominalToInt(budgetForm.plannedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFormError('Enter a valid amount in IDR');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      await api.budgets.update(editingBudget.id, { plannedAmount: amount });
+      await loadData();
+      closeEditModal();
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!templateForm.name.trim() || !selectedPeriodId) return;
+
+    setIsSubmitting(true);
+    try {
+      await api.budgets.templates.create({
+        name: templateForm.name,
+        description: templateForm.description,
+        periodId: parseInt(selectedPeriodId, 10),
+      });
+      await loadTemplates();
+      closeTemplateModal();
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleApplyTemplate = async (templateId: number, replaceExisting: boolean) => {
+    if (!selectedPeriodId) return;
+
+    setIsSubmitting(true);
+    try {
+      await api.budgets.templates.apply(templateId, {
+        periodId: parseInt(selectedPeriodId, 10),
+        replaceExisting,
+      });
+      await loadData();
+      setIsApplyTemplateModalOpen(false);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const deleteBudget = async (budgetId: number) => {
     if (!confirm('Delete this budget line?')) return;
     try {
       await api.budgets.delete(budgetId);
       await loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const deleteTemplate = async (templateId: number) => {
+    if (!confirm('Delete this template?')) return;
+    try {
+      await api.budgets.templates.delete(templateId);
+      await loadTemplates();
     } catch (err) {
       alert((err as Error).message);
     }
@@ -150,9 +300,80 @@ function BudgetPage() {
     setFormError('');
   };
 
+  const openEditModal = (budget: BudgetRow) => {
+    setEditingBudget(budget);
+    setBudgetForm({
+      categoryId: budget.categoryId.toString(),
+      plannedAmount: formatCurrency(budget.plannedAmount),
+    });
+    setFormError('');
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingBudget(null);
+    setBudgetForm({ categoryId: '', plannedAmount: '' });
+    setFormError('');
+  };
+
+  const openTemplateModal = () => {
+    setTemplateForm({ name: '', description: '' });
+    setFormError('');
+    setIsTemplateModalOpen(true);
+  };
+
+  const closeTemplateModal = () => {
+    setIsTemplateModalOpen(false);
+    setTemplateForm({ name: '', description: '' });
+    setFormError('');
+  };
+
   const totalBudgeted = budgetRows.reduce((sum, cat) => sum + cat.plannedAmount, 0);
   const totalSpent = budgetRows.reduce((sum, cat) => sum + cat.actualAmount, 0);
   const totalRemaining = totalBudgeted - totalSpent;
+
+  const getComparisonForRow = (row: BudgetRow): ComparisonData | undefined => {
+    return comparisonData.find((c) => c.categoryId === row.categoryId);
+  };
+
+  const filteredAndSortedRows = useMemo(() => {
+    let rows = [...budgetRows];
+
+    // Filter
+    switch (filterBy) {
+      case 'over':
+        rows = rows.filter((r) => r.percentUsed > 100);
+        break;
+      case 'near':
+        rows = rows.filter((r) => r.percentUsed >= 75 && r.percentUsed <= 100);
+        break;
+      case 'under':
+        rows = rows.filter((r) => r.percentUsed > 0 && r.percentUsed < 75);
+        break;
+      case 'notStarted':
+        rows = rows.filter((r) => r.actualAmount === 0);
+        break;
+    }
+
+    // Sort
+    switch (sortBy) {
+      case 'name':
+        rows.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+        break;
+      case 'percentUsed':
+        rows.sort((a, b) => b.percentUsed - a.percentUsed);
+        break;
+      case 'amountSpent':
+        rows.sort((a, b) => b.actualAmount - a.actualAmount);
+        break;
+      case 'variance':
+        rows.sort((a, b) => b.variance - a.variance);
+        break;
+    }
+
+    return rows;
+  }, [budgetRows, sortBy, filterBy]);
 
   const mixRows = useMemo(() => {
     if (totalBudgeted <= 0) return [];
@@ -198,7 +419,7 @@ function BudgetPage() {
   return (
     <RequireAuth>
       <div className="max-w-7xl mx-auto space-y-8 pb-10">
-        {/* Header — Stitch “Financial overview” / localized budgeting */}
+        {/* Header */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)] sm:text-4xl">
@@ -240,7 +461,76 @@ function BudgetPage() {
           </div>
         </div>
 
-        {/* Bento summary — Stitch 3 cards */}
+        {/* Controls: Compare, Sort, Filter, Templates */}
+        {selectedPeriod && budgetRows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 p-4 bg-[var(--ref-surface-container-low)] rounded-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-[var(--color-text-secondary)]">Compare to:</span>
+              <Select
+                value={comparePeriodId}
+                onChange={(e) => setComparePeriodId(e.target.value)}
+                options={[
+                  { value: '', label: 'None' },
+                  ...periods
+                    .filter((p) => p.id.toString() !== selectedPeriodId)
+                    .map((p) => ({ value: p.id.toString(), label: p.name })),
+                ]}
+                className="min-w-[150px] text-xs rounded-lg"
+              />
+            </div>
+            <div className="h-6 w-px bg-[var(--color-border)]" />
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="h-4 w-4 text-[var(--color-muted)]" />
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                options={[
+                  { value: 'name', label: 'Name' },
+                  { value: 'percentUsed', label: '% Used' },
+                  { value: 'amountSpent', label: 'Amount Spent' },
+                  { value: 'variance', label: 'Variance' },
+                ]}
+                className="min-w-[120px] text-xs rounded-lg"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-[var(--color-muted)]" />
+              <Select
+                value={filterBy}
+                onChange={(e) => setFilterBy(e.target.value as FilterOption)}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'over', label: 'Over budget' },
+                  { value: 'near', label: 'Near limit' },
+                  { value: 'under', label: 'Under budget' },
+                  { value: 'notStarted', label: 'Not started' },
+                ]}
+                className="min-w-[130px] text-xs rounded-lg"
+              />
+            </div>
+            <div className="flex-1" />
+            {templates.length > 0 && (
+              <Button
+                variant="secondary"
+                onClick={() => setIsApplyTemplateModalOpen(true)}
+                className="text-xs rounded-full"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Apply Template
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              onClick={openTemplateModal}
+              className="text-xs rounded-full"
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Save as Template
+            </Button>
+          </div>
+        )}
+
+        {/* Bento summary */}
         {selectedPeriod && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-[2rem] bg-[var(--ref-primary-container)] p-8 text-white group">
@@ -266,7 +556,6 @@ function BudgetPage() {
                 </p>
               </div>
               <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-[var(--ref-error)]">
-                <ShoppingCart className="h-4 w-4 shrink-0" />
                 Against budgeted categories
               </div>
             </div>
@@ -284,7 +573,6 @@ function BudgetPage() {
                 </p>
               </div>
               <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-[var(--ref-secondary)]">
-                <Wallet className="h-4 w-4 shrink-0" />
                 {totalRemaining >= 0 ? 'Headroom this period' : 'Over budget'}
               </div>
             </div>
@@ -312,87 +600,126 @@ function BudgetPage() {
             <p className="mb-6 text-sm text-[var(--ref-on-surface-variant)]">
               Add a category budget to track planned vs actual spending.
             </p>
-            <Button className="rounded-full" onClick={openBudgetModal}>
-              <Plus className="w-4 h-4" />
-              Add first budget line
-            </Button>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button className="rounded-full" onClick={openBudgetModal}>
+                <Plus className="w-4 h-4" />
+                Add first budget line
+              </Button>
+              {templates.length > 0 && (
+                <Button variant="secondary" className="rounded-full" onClick={() => setIsApplyTemplateModalOpen(true)}>
+                  <Copy className="w-4 h-4 mr-1" />
+                  Apply Template
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
-            {/* Budget progress — Stitch dashboard widget */}
+            {/* Budget progress */}
             <div className="lg:col-span-2">
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container)] p-6 sm:p-8">
-                <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container)] p-6">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                   <h2 className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">Budget progress</h2>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-                    {budgetRows.length} categories
+                    {filteredAndSortedRows.length} of {budgetRows.length} categories
                   </span>
                 </div>
-                <ul className="space-y-8">
-                  {budgetRows.map((row) => {
-                    const pct =
-                      row.plannedAmount > 0 ? (row.actualAmount / row.plannedAmount) * 100 : 0;
-                    const pctCapped = Math.min(pct, 999);
+                <ul className="space-y-3">
+                  {filteredAndSortedRows.map((row) => {
+                    const pct = row.plannedAmount > 0 ? (row.actualAmount / row.plannedAmount) * 100 : 0;
+                    const comparison = getComparisonForRow(row);
                     const cat = categories.find((c) => c.id === row.categoryId);
                     const categoryColor = cat?.color || 'var(--ref-primary)';
                     return (
-                      <li key={row.id}>
-                        <div className="mb-3 flex items-start gap-4">
-                          <div
-                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg text-white"
-                            style={{ backgroundColor: categoryColor }}
+                      <li key={row.id} className="group">
+                        <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface-container-highest)] transition-colors">
+                          <Link
+                            to="/transactions"
+                            search={{ periodId: selectedPeriodId, categoryId: String(row.categoryId) }}
+                            className="min-w-0 flex-1"
                           >
-                            {cat?.icon ? (
-                              <span aria-hidden>{cat.icon}</span>
-                            ) : (
-                              <ShoppingCart className="h-5 w-5" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                              <div>
-                                <p className="text-xs font-bold text-[var(--ref-on-surface)]">{row.categoryName}</p>
-                                <p className="text-[10px] font-medium text-[var(--ref-outline)]">
-                                  {formatCurrency(row.actualAmount)} of {formatCurrency(row.plannedAmount)}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    'text-xs font-bold',
-                                    pct > 100 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-primary)]',
-                                  )}
-                                >
-                                  {pctCapped.toFixed(0)}%
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-sm text-[var(--color-text-primary)] truncate hover:text-[var(--color-accent)] transition-colors">
+                                {row.categoryName}
+                              </p>
+                              {pct > 100 && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--ref-error)]/10 text-[var(--ref-error)]">
+                                  Over
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => deleteBudget(row.id)}
-                                  className="rounded-full p-2 text-[var(--ref-error)] transition-colors hover:bg-[var(--ref-error)]/10"
-                                  aria-label={`Remove ${row.categoryName}`}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
+                              )}
+                              {pct >= 75 && pct <= 100 && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600">
+                                  Near
+                                </span>
+                              )}
                             </div>
-                            <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)]">
-                              <div
-                                className="h-full rounded-full"
-                                style={{
-                                  width: `${Math.min(pct, 100)}%`,
-                                  backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
-                                }}
-                              />
+                            <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
+                              <span>{formatCurrency(row.actualAmount)} of {formatCurrency(row.plannedAmount)}</span>
+                              {comparison && (
+                                <span className="flex items-center gap-1">
+                                  vs
+                                  <span className={cn(
+                                    comparison.actualDiff > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]'
+                                  )}>
+                                    {comparison.actualDiff > 0 ? '+' : ''}{formatCurrency(Math.abs(comparison.actualDiff))}
+                                  </span>
+                                  {comparison.actualDiff > 0 ? (
+                                    <TrendingUp className="h-3 w-3 text-[var(--ref-error)]" />
+                                  ) : (
+                                    <TrendingDown className="h-3 w-3 text-[var(--ref-secondary)]" />
+                                  )}
+                                </span>
+                              )}
                             </div>
+                          </Link>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={cn(
+                                'text-sm font-bold',
+                                pct > 100 ? 'text-[var(--ref-error)]' : 'text-[var(--color-text-primary)]',
+                              )}
+                            >
+                              {Math.min(pct, 999).toFixed(0)}%
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(row)}
+                              className="p-1.5 rounded-lg text-[var(--color-muted)] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--ref-surface-container)]"
+                              aria-label={`Edit ${row.categoryName}`}
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteBudget(row.id)}
+                              className="p-1.5 rounded-lg text-[var(--ref-error)] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--ref-error)]/10"
+                              aria-label={`Remove ${row.categoryName}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)] mx-3 mb-1">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(pct, 100)}%`,
+                              backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
+                            }}
+                          />
                         </div>
                       </li>
                     );
                   })}
                 </ul>
+                {filteredAndSortedRows.length === 0 && (
+                  <p className="text-center text-sm text-[var(--color-text-secondary)] py-8">
+                    No budgets match the current filter.
+                  </p>
+                )}
                 <Link
                   to="/transactions"
-                  className="mt-8 flex w-full items-center justify-center gap-1 rounded-full border border-transparent bg-[var(--ref-surface-container-highest)] py-3 text-center text-xs font-bold text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--color-border)] hover:bg-white"
+                  className="mt-6 flex w-full items-center justify-center gap-1 rounded-full border border-transparent bg-[var(--ref-surface-container-highest)] py-3 text-center text-xs font-bold text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--color-border)] hover:bg-white"
                 >
                   View transactions
                   <ChevronRight className="h-4 w-4" />
@@ -400,13 +727,13 @@ function BudgetPage() {
               </div>
             </div>
 
-            {/* Budget mix — right column */}
+            {/* Budget mix */}
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 editorial-shadow">
               <h2 className="mb-2 font-headline text-lg font-bold text-[var(--ref-on-surface)]">Budget mix</h2>
               <p className="mb-6 text-xs text-[var(--ref-on-surface-variant)]">
                 Share of total planned budget by category.
               </p>
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {mixRows.map((row, i) => {
                   const tint = ['bg-[var(--ref-primary)]', 'bg-[var(--ref-secondary)]', 'bg-[var(--ref-tertiary)]'];
                   return (
@@ -431,6 +758,7 @@ function BudgetPage() {
           </div>
         )}
 
+        {/* Create Budget Modal */}
         <Modal
           isOpen={isModalOpen}
           onClose={closeBudgetModal}
@@ -485,6 +813,159 @@ function BudgetPage() {
               </Button>
             </div>
           </form>
+        </Modal>
+
+        {/* Edit Budget Modal */}
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={closeEditModal}
+          title="Edit budget"
+          subtitle={`Update planned amount for ${editingBudget?.categoryName || ''}`}
+          size="xl"
+        >
+          <form onSubmit={handleUpdateBudget} className="space-y-5">
+            <Input
+              label="Planned amount (IDR)"
+              inputMode="numeric"
+              value={budgetForm.plannedAmount}
+              onChange={(e) =>
+                setBudgetForm({ ...budgetForm, plannedAmount: formatIdNominalInput(e.target.value) })
+              }
+              placeholder="0"
+              autoComplete="off"
+              required
+            />
+
+            <div className="p-3 bg-[var(--ref-surface-container-low)] rounded-lg">
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                Currently spent: {editingBudget && formatCurrency(editingBudget.actualAmount)}
+              </p>
+            </div>
+
+            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              <Button type="submit" isLoading={isSubmitting} className="min-w-[140px]">
+                Update budget
+              </Button>
+              <Button type="button" variant="secondary" onClick={closeEditModal}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Save Template Modal */}
+        <Modal
+          isOpen={isTemplateModalOpen}
+          onClose={closeTemplateModal}
+          title="Save as Template"
+          subtitle="Save the current period's budgets as a reusable template."
+          size="xl"
+        >
+          <form onSubmit={handleSaveTemplate} className="space-y-5">
+            <Input
+              label="Template name"
+              value={templateForm.name}
+              onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+              placeholder="e.g., Monthly Essentials"
+              required
+            />
+            <Input
+              label="Description (optional)"
+              value={templateForm.description}
+              onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+              placeholder="Brief description of this template"
+            />
+
+            <div className="p-3 bg-[var(--ref-surface-container-low)] rounded-lg">
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                This will save {budgetRows.length} budget categories from {selectedPeriod?.name}
+              </p>
+            </div>
+
+            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              <Button type="submit" isLoading={isSubmitting} className="min-w-[140px]">
+                Save Template
+              </Button>
+              <Button type="button" variant="secondary" onClick={closeTemplateModal}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Apply Template Modal */}
+        <Modal
+          isOpen={isApplyTemplateModalOpen}
+          onClose={() => setIsApplyTemplateModalOpen(false)}
+          title="Apply Template"
+          subtitle={`Apply a saved template to ${selectedPeriod?.name}`}
+          size="xl"
+        >
+          <div className="space-y-4">
+            {templates.length === 0 ? (
+              <p className="text-center text-sm text-[var(--color-text-secondary)] py-4">
+                No templates available. Save your current budgets as a template first.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {templates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="p-4 border border-[var(--color-border)] rounded-lg hover:bg-[var(--ref-surface-container-low)] transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-sm">{template.name}</h3>
+                      <span className="text-xs text-[var(--color-text-secondary)]">
+                        {template.items.length} categories
+                      </span>
+                    </div>
+                    {template.description && (
+                      <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+                        {template.description}
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleApplyTemplate(template.id, false)}
+                        isLoading={isSubmitting}
+                      >
+                        Add Missing
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (confirm('This will replace all existing budgets. Continue?')) {
+                            handleApplyTemplate(template.id, true);
+                          }
+                        }}
+                        isLoading={isSubmitting}
+                      >
+                        Replace All
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => deleteTemplate(template.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button type="button" variant="secondary" onClick={() => setIsApplyTemplateModalOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
         </Modal>
       </div>
     </RequireAuth>
