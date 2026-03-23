@@ -44,6 +44,7 @@ interface TransactionRow {
   description: string;
   reference?: string;
   notes?: string;
+  place?: string;
   txType: string;
   categoryId: number | null;
   periodId: number | null;
@@ -199,6 +200,7 @@ function TransactionsPage() {
         date: transaction.date,
         description: transaction.description,
         notes: transaction.notes,
+        place: transaction.place,
         categoryId: transaction.categoryId,
         txType: transaction.txType,
         lines: transaction.lines,
