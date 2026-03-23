@@ -29,6 +29,7 @@ import auditLogRoutes from "./routes/audit-log";
 import reportsRoutes from "./routes/reports";
 import salarySettingsRoutes from "./routes/salary-settings";
 import subscriptionRoutes from "./routes/subscriptions";
+import wishlistRoutes from "./routes/wishlist";
 
 // Import plugins
 import authPlugin from "./plugins/auth";
@@ -105,6 +106,7 @@ const start = async () => {
     await fastify.register(reportsRoutes);
     await fastify.register(salarySettingsRoutes);
     await fastify.register(subscriptionRoutes);
+    await fastify.register(wishlistRoutes);
 
     await fastify.listen({ port: 3000, host: "0.0.0.0" });
 

@@ -218,3 +218,33 @@ export const subscriptions = sqliteTable("subscription", {
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
 });
+
+/** Wishlist items - planned purchases/goals before they become real transactions */
+export const wishlist = sqliteTable("wishlist", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** Amount in cents */
+  amount: integer("amount").notNull(),
+  /** Category for organizing wishlist items */
+  categoryId: integer("category_id")
+    .references(() => categories.id, { onDelete: "set null" }),
+  /** Optional period assignment for savings planning */
+  periodId: integer("period_id")
+    .references(() => salaryPeriods.id, { onDelete: "set null" }),
+  /** Status: active | fulfilled | cancelled */
+  status: text("status").notNull().default("active"),
+  /** When the wishlist item was fulfilled */
+  fulfilledAt: integer("fulfilled_at", { mode: "timestamp_ms" }),
+  /** Link to the actual transaction when fulfilled */
+  fulfilledTransactionId: integer("fulfilled_transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+  /** Product image R2 key (from URL scraping) */
+  imageUrl: text("image_url"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
