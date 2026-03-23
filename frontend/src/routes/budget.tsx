@@ -632,48 +632,48 @@ function BudgetPage() {
                     const categoryColor = cat?.color || 'var(--ref-primary)';
                     return (
                       <li key={row.id} className="group">
-                        <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface)] transition-colors">
-                          <Link
-                            to="/transactions"
-                            search={{ periodId: selectedPeriodId, categoryId: String(row.categoryId) }}
-                            className="min-w-0 flex-1"
-                          >
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-medium text-sm text-[var(--color-text-primary)] truncate hover:text-[var(--color-accent)] transition-colors">
-                                {row.categoryName}
-                              </p>
-                              {pct > 100 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--ref-error)]/10 text-[var(--ref-error)]">
-                                  Over
-                                </span>
-                              )}
-                              {pct >= 75 && pct <= 100 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600">
-                                  Near
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
-                              <span>{formatCurrency(row.actualAmount)} of {formatCurrency(row.plannedAmount)}</span>
-                              {comparison && (
-                                <span className="flex items-center gap-1">
-                                  vs
-                                  <span className={cn(
-                                    comparison.actualDiff > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]'
-                                  )}>
-                                    {comparison.actualDiff > 0 ? '+' : ''}{formatCurrency(Math.abs(comparison.actualDiff))}
+                        <div className="p-3 rounded-lg hover:bg-[var(--ref-surface)] transition-colors">
+                          <div className="flex items-center gap-3">
+                            <Link
+                              to="/transactions"
+                              search={{ periodId: selectedPeriodId, categoryId: String(row.categoryId) }}
+                              className="min-w-0 flex-1"
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-medium text-sm text-[var(--color-text-primary)] truncate hover:text-[var(--color-accent)] transition-colors">
+                                  {row.categoryName}
+                                </p>
+                                {pct > 100 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--ref-error)]/10 text-[var(--ref-error)]">
+                                    Over
                                   </span>
-                                  {comparison.actualDiff > 0 ? (
-                                    <TrendingUp className="h-3 w-3 text-[var(--ref-error)]" />
-                                  ) : (
-                                    <TrendingDown className="h-3 w-3 text-[var(--ref-secondary)]" />
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          </Link>
-                          <div className="flex items-center gap-4">
-                            <div className="flex flex-col items-end gap-1">
+                                )}
+                                {pct >= 75 && pct <= 100 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600">
+                                    Near
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
+                                <span>{formatCurrency(row.actualAmount)} of {formatCurrency(row.plannedAmount)}</span>
+                                {comparison && (
+                                  <span className="flex items-center gap-1">
+                                    vs
+                                    <span className={cn(
+                                      comparison.actualDiff > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]'
+                                    )}>
+                                      {comparison.actualDiff > 0 ? '+' : ''}{formatCurrency(Math.abs(comparison.actualDiff))}
+                                    </span>
+                                    {comparison.actualDiff > 0 ? (
+                                      <TrendingUp className="h-3 w-3 text-[var(--ref-error)]" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3 text-[var(--ref-secondary)]" />
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+                            </Link>
+                            <div className="flex items-center gap-4">
                               <span
                                 className={cn(
                                   'text-sm font-bold text-right min-w-[40px]',
@@ -682,58 +682,58 @@ function BudgetPage() {
                               >
                                 {Math.min(pct, 999).toFixed(0)}%
                               </span>
-                              <div className="h-2 w-24 overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)]">
-                                <div
-                                  className="h-full rounded-full transition-all duration-300"
-                                  style={{
-                                    width: `${Math.min(pct, 100)}%`,
-                                    backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
-                                  }}
-                                />
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
+                                  className="p-1.5 rounded-lg text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)]"
+                                  aria-label="More actions"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                                {menuRowId === row.id && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="fixed inset-0 z-10 cursor-default"
+                                      aria-label="Close menu"
+                                      onClick={() => setMenuRowId(null)}
+                                    />
+                                    <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
+                                      <button
+                                        type="button"
+                                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
+                                        onClick={() => {
+                                          setMenuRowId(null);
+                                          openEditModal(row);
+                                        }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                        onClick={() => {
+                                          setMenuRowId(null);
+                                          deleteBudget(row.id);
+                                        }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </div>
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
-                                className="p-1.5 rounded-lg text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)]"
-                                aria-label="More actions"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </button>
-                              {menuRowId === row.id && (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="fixed inset-0 z-10 cursor-default"
-                                    aria-label="Close menu"
-                                    onClick={() => setMenuRowId(null)}
-                                  />
-                                  <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
-                                    <button
-                                      type="button"
-                                      className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
-                                      onClick={() => {
-                                        setMenuRowId(null);
-                                        openEditModal(row);
-                                      }}
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                                      onClick={() => {
-                                        setMenuRowId(null);
-                                        deleteBudget(row.id);
-                                      }}
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
+                          </div>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)] mt-2" style={{ marginRight: '44px' }}>
+                            <div
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{
+                                width: `${Math.min(pct, 100)}%`,
+                                backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
+                              }}
+                            />
                           </div>
                         </div>
                       </li>
