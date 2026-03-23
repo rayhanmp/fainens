@@ -203,4 +203,26 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "File not found" });
     }
   });
+
+  // Serve wishlist images (when R2 is not configured)
+  fastify.get("/api/wishlist-images/*", async (request, reply) => {
+    const url = request.url;
+    const key = url.replace('/api/wishlist-images/', '');
+    const decodedKey = decodeURIComponent(key);
+    const filePath = getLocalFilePath(decodedKey);
+
+    try {
+      const stats = await fs.stat(filePath);
+      if (!stats.isFile()) {
+        reply.code(404).send({ error: "Image not found" });
+        return;
+      }
+
+      reply.header("Content-Type", "image/jpeg");
+      const stream = createReadStream(filePath);
+      reply.send(stream);
+    } catch {
+      reply.code(404).send({ error: "Image not found" });
+    }
+  });
 }
