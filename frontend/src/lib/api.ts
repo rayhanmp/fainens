@@ -223,6 +223,77 @@ export const api = {
       categoryId: number | null;
     }>) => fetchApi(`/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/transactions/${id}`, { method: 'DELETE' }),
+    bulkDelete: (ids: number[]) => fetchApi<{ success: boolean; deletedCount: number; message: string }>('/transactions/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+    importPreview: (csvText: string) => fetchApi<{
+      rows: Array<{
+        rowNumber: number;
+        date: string;
+        description: string;
+        amount: number;
+        type: 'expense' | 'income';
+        accountName: string;
+        categoryName: string | null;
+        periodName: string;
+        notes: string | null;
+        reference: string | null;
+        isValid: boolean;
+        errors: string[];
+        warnings: string[];
+        accountMatched: boolean;
+        categoryMatched: boolean;
+        periodMatched: boolean;
+        accountId: number | null;
+        categoryId: number | null;
+        periodId: number | null;
+      }>;
+      summary: {
+        totalRows: number;
+        validRows: number;
+        warningRows: number;
+        errorRows: number;
+        totalIncome: number;
+        totalExpense: number;
+        uniqueAccounts: string[];
+        uniqueCategories: string[];
+        uniquePeriods: string[];
+        missingAccounts: string[];
+        missingCategories: string[];
+        missingPeriods: string[];
+      };
+      existingCategories: Array<{ id: number; name: string }>;
+      existingAccounts: Array<{ id: number; name: string }>;
+      existingPeriods: Array<{ id: number; name: string }>;
+    }>('/transactions/import/preview', {
+      method: 'POST',
+      body: JSON.stringify({ csvText }),
+    }),
+    importConfirm: (data: {
+      rows: Array<{
+        date: string;
+        description: string;
+        amount: number;
+        type: 'expense' | 'income';
+        accountId: number;
+        periodId?: number | null;
+        categoryId?: number | null;
+        notes?: string | null;
+        reference?: string | null;
+      }>;
+      categoryMappings?: Record<string, number | null>;
+      accountMappings?: Record<string, number | null>;
+      periodMappings?: Record<string, number | null>;
+    }) => fetchApi<{
+      imported: number;
+      skipped: number;
+      errors: Array<{ row: number; message: string }>;
+      transactions: Array<{ id: number; description: string; amount: number }>;
+    }>('/transactions/import/confirm', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   },
 
   // Categories
@@ -873,6 +944,231 @@ export const api = {
         if (!res.ok) throw new Error('Export failed');
         return res.text();
       });
+    },
+  },
+
+  // Wishlist - planned purchases and goals
+  wishlist: {
+    list: (filters?: { status?: string; categoryId?: number; periodId?: number }) => {
+      const params = new URLSearchParams();
+      if (filters?.status) params.append('status', filters.status);
+      if (filters?.categoryId) params.append('categoryId', filters.categoryId.toString());
+      if (filters?.periodId) params.append('periodId', filters.periodId.toString());
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return fetchApi<Array<{
+        id: number;
+        name: string;
+        description: string | null;
+        amount: number;
+        status: 'active' | 'fulfilled' | 'cancelled';
+        createdAt: number;
+        updatedAt: number;
+        fulfilledAt: number | null;
+        fulfilledTransactionId: number | null;
+        categoryId: number | null;
+        periodId: number | null;
+        imageUrl: string | null;
+        category: {
+          id: number;
+          name: string;
+          icon: string | null;
+          color: string | null;
+        } | null;
+        period: {
+          id: number;
+          name: string;
+          startDate: number;
+          endDate: number;
+        } | null;
+      }>>(`/wishlist${query}`);
+    },
+    get: (id: number) => fetchApi<{
+      id: number;
+      name: string;
+      description: string | null;
+      amount: number;
+      status: 'active' | 'fulfilled' | 'cancelled';
+      createdAt: number;
+      updatedAt: number;
+      fulfilledAt: number | null;
+      fulfilledTransactionId: number | null;
+      categoryId: number | null;
+      periodId: number | null;
+      category: {
+        id: number;
+        name: string;
+        icon: string | null;
+        color: string | null;
+      } | null;
+      period: {
+        id: number;
+        name: string;
+        startDate: number;
+        endDate: number;
+      } | null;
+    }>(`/wishlist/${id}`),
+    create: (data: {
+      name: string;
+      description?: string | null;
+      amount: number;
+      categoryId?: number | null;
+      periodId?: number | null;
+      imageUrl?: string | null;
+    }) => fetchApi<{
+      id: number;
+      name: string;
+      description: string | null;
+      amount: number;
+      status: string;
+      createdAt: number;
+      updatedAt: number;
+      imageUrl: string | null;
+    }>('/wishlist', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id: number, data: Partial<{
+      name: string;
+      description: string | null;
+      amount: number;
+      categoryId: number | null;
+      periodId: number | null;
+      status: string;
+    }>) => fetchApi<{
+      id: number;
+      name: string;
+      description: string | null;
+      amount: number;
+      status: string;
+      createdAt: number;
+      updatedAt: number;
+    }>(`/wishlist/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    delete: (id: number) => fetchApi<void>(`/wishlist/${id}`, { method: 'DELETE' }),
+    fulfill: (id: number, data: {
+      date: string;
+      accountId: number;
+      description?: string;
+      notes?: string;
+    }) => fetchApi<{
+      wishlist: {
+        id: number;
+        status: string;
+        fulfilledAt: number;
+        fulfilledTransactionId: number;
+      };
+      transaction: {
+        id: number;
+        description: string;
+        amount: number;
+      };
+    }>(`/wishlist/${id}/fulfill`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    link: (id: number, transactionId: number) => fetchApi<{
+      wishlist: {
+        id: number;
+        status: string;
+        fulfilledAt: number;
+        fulfilledTransactionId: number;
+      };
+      transaction: {
+        id: number;
+        description: string;
+        amount: number;
+      };
+    }>(`/wishlist/${id}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ transactionId }),
+    }),
+    scrape: async (url: string) => {
+      const response = await fetch(`${API_BASE}/wishlist/scrape`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+        credentials: 'include',
+      });
+      
+      const data = await response.json();
+      return data as {
+        success: boolean;
+        data?: {
+          name: string;
+          description: string;
+          price: number;
+          originalPrice?: number;
+          discountPercentage?: number;
+          currency: string;
+          imageUrl: string;
+          galleryImages?: string[];
+          rating?: number;
+          reviewCount?: number;
+          sellerName?: string;
+          brand?: string;
+          source: string;
+          url: string;
+        };
+        attempts: Array<{
+          method: string;
+          success: boolean;
+          timestamp: number;
+          duration: number;
+          error?: string;
+          dataFound?: any;
+        }>;
+        requiresAdvancedScraping: boolean;
+        error?: {
+          code: string;
+          message: string;
+          suggestions: string[];
+        };
+      };
+    },
+    scrapeAdvanced: async (url: string) => {
+      const response = await fetch(`${API_BASE}/wishlist/scrape-advanced`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+        credentials: 'include',
+      });
+      
+      const data = await response.json();
+      return data as {
+        success: boolean;
+        data?: {
+          name: string;
+          description: string;
+          price: number;
+          originalPrice?: number;
+          discountPercentage?: number;
+          currency: string;
+          imageUrl: string;
+          galleryImages?: string[];
+          rating?: number;
+          reviewCount?: number;
+          sellerName?: string;
+          brand?: string;
+          source: string;
+          url: string;
+        };
+        attempts: Array<{
+          method: string;
+          success: boolean;
+          timestamp: number;
+          duration: number;
+          error?: string;
+          dataFound?: any;
+        }>;
+        requiresAdvancedScraping: boolean;
+        error?: {
+          code: string;
+          message: string;
+          suggestions: string[];
+        };
+      };
     },
   },
 };
