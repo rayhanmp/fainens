@@ -408,63 +408,8 @@ function DashboardPage() {
 
           </div>
 
-          {/* Right: top expenses + donut + budget */}
+          {/* Right: donut + budget + top expenses */}
           <div className="space-y-8">
-            {/* Top 5 Most Expensive Expenses */}
-            <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-headline font-bold text-lg">Top 5 Expenses</h3>
-                <Link
-                  to="/transactions"
-                  className="text-[var(--ref-primary)] text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                >
-                  View all
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-              <p className="text-xs text-[var(--ref-on-surface-variant)] mb-4">
-                {periodLabel ? `Most expensive transactions in ${periodLabel}` : 'Most expensive expense transactions'}
-              </p>
-              {topExpenses.length === 0 ? (
-                <p className="text-sm text-[var(--ref-on-surface-variant)] py-4 text-center">
-                  No expense transactions found in this period.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {topExpenses.map((tx, index) => {
-                    const cat = tx.categoryId
-                      ? categories.find((c) => c.id === tx.categoryId)
-                      : null;
-                    return (
-                      <Link
-                        key={tx.id}
-                        to="/transactions"
-                        search={{ id: tx.id }}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface-container)] transition-colors group"
-                      >
-                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--ref-error)]/10 flex items-center justify-center">
-                          <span className="text-xs font-bold text-[var(--ref-error)]">{index + 1}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-[var(--ref-on-surface)] truncate group-hover:text-[var(--ref-primary)] transition-colors">
-                            {tx.description}
-                          </p>
-                          <p className="text-xs text-[var(--ref-on-surface-variant)]">
-                            {cat ? cat.name : 'Uncategorized'} · {formatDate(tx.date)}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-sm text-[var(--ref-error)] font-mono">
-                            -{formatCurrency(tx.amount)}
-                          </p>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
               <h3 className="font-headline font-bold text-lg mb-2">
                 Monthly Expenses Breakdown
@@ -585,6 +530,61 @@ function DashboardPage() {
               >
                 Manage all budgets
               </Link>
+            </div>
+
+            {/* Top 5 Most Expensive Expenses */}
+            <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-headline font-bold text-lg">Top 5 Expenses</h3>
+                <Link
+                  to="/transactions"
+                  className="text-[var(--ref-primary)] text-xs font-bold inline-flex items-center gap-1 hover:underline"
+                >
+                  View all
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+              <p className="text-xs text-[var(--ref-on-surface-variant)] mb-4">
+                {periodLabel ? `Most expensive transactions in ${periodLabel}` : 'Most expensive expense transactions'}
+              </p>
+              {topExpenses.length === 0 ? (
+                <p className="text-sm text-[var(--ref-on-surface-variant)] py-4 text-center">
+                  No expense transactions found in this period.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {topExpenses.map((tx, index) => {
+                    const cat = tx.categoryId
+                      ? categories.find((c) => c.id === tx.categoryId)
+                      : null;
+                    return (
+                      <Link
+                        key={tx.id}
+                        to="/transactions"
+                        search={{ id: tx.id }}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--ref-surface-container)] transition-colors group"
+                      >
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--ref-error)]/10 flex items-center justify-center">
+                          <span className="text-xs font-bold text-[var(--ref-error)]">{index + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-[var(--ref-on-surface)] truncate group-hover:text-[var(--ref-primary)] transition-colors">
+                            {tx.description}
+                          </p>
+                          <p className="text-xs text-[var(--ref-on-surface-variant)]">
+                            {cat ? cat.name : 'Uncategorized'} · {formatDate(tx.date)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-sm text-[var(--ref-error)] font-mono">
+                            -{formatCurrency(tx.amount)}
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
