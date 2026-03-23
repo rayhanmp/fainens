@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
@@ -6,6 +6,9 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
+import { CardSkeleton } from '../components/ui/Skeleton';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Download,
   FileText,
@@ -13,6 +16,15 @@ import {
   TrendingUp,
   Scale,
   ArrowRightLeft,
+  RefreshCw,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  FileDown,
+  Wallet,
+  TrendingDown,
+  PiggyBank,
 } from 'lucide-react';
 import {
   PieChart as RePieChart,
@@ -36,7 +48,7 @@ type ReportTab = 'income' | 'balance' | 'cashflow' | 'spending' | 'trends';
 
 function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('income');
-  const [periods, setPeriods] = useState<Array<{ id: number; name: string }>>([]);
+  const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number }>>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
 
   useEffect(() => {
@@ -53,6 +65,80 @@ function ReportsPage() {
     } catch (err) {
       console.error('Failed to load periods:', err);
     }
+  };
+
+  const selectedPeriod = periods.find(p => p.id.toString() === selectedPeriodId);
+  const [summaryData, setSummaryData] = useState<{
+    totalRevenue: number;
+    totalExpenses: number;
+    netIncome: number;
+    totalAssets: number;
+    totalLiabilities: number;
+    previousPeriodRevenue?: number;
+    previousPeriodExpenses?: number;
+  } | null>(null);
+
+  useEffect(() => {
+    loadSummaryData();
+  }, [selectedPeriodId]);
+
+  const loadSummaryData = async () => {
+    if (!selectedPeriodId) {
+      setSummaryData(null);
+      return;
+    }
+    try {
+      const periodId = parseInt(selectedPeriodId);
+      const currentPeriodIndex = periods.findIndex(p => p.id === periodId);
+      const previousPeriod = currentPeriodIndex > 0 ? periods[currentPeriodIndex - 1] : null;
+      
+      const [incomeData, balanceData] = await Promise.all([
+        api.reports.incomeStatement(periodId),
+        api.reports.balanceSheet(selectedPeriod?.endDate),
+      ]);
+
+      let prevData = undefined;
+      if (previousPeriod) {
+        try {
+          const prevIncome = await api.reports.incomeStatement(previousPeriod.id);
+          prevData = {
+            previousPeriodRevenue: prevIncome.totalRevenue,
+            previousPeriodExpenses: prevIncome.totalExpenses,
+          };
+        } catch (e) {
+          // Ignore errors for previous period
+        }
+      }
+
+      setSummaryData({
+        totalRevenue: incomeData.totalRevenue,
+        totalExpenses: incomeData.totalExpenses,
+        netIncome: incomeData.netIncome,
+        totalAssets: balanceData.totalAssets,
+        totalLiabilities: balanceData.totalLiabilities,
+        ...prevData,
+      });
+    } catch (err) {
+      console.error('Failed to load summary:', err);
+    }
+  };
+
+  const handleExportPDF = (reportTitle: string, data: any[]) => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text(reportTitle, 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 14, 30);
+    
+    autoTable(doc, {
+      startY: 40,
+      head: [Object.keys(data[0] || {})],
+      body: data.map(row => Object.values(row)),
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185] },
+    });
+    
+    doc.save(`${reportTitle.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.pdf`);
   };
 
   const handleExport = async (reportType: 'income-statement' | 'balance-sheet' | 'cash-flow') => {
@@ -129,16 +215,53 @@ function ReportsPage() {
           />
         </div>
 
+        {/* Summary Dashboard */}
+        {summaryData && selectedPeriodId && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <SummaryCard
+              title="Total Revenue"
+              amount={summaryData.totalRevenue}
+              icon={<TrendingUp className="w-5 h-5" />}
+              color="success"
+              previousAmount={summaryData.previousPeriodRevenue}
+            />
+            <SummaryCard
+              title="Total Expenses"
+              amount={summaryData.totalExpenses}
+              icon={<TrendingDown className="w-5 h-5" />}
+              color="danger"
+              previousAmount={summaryData.previousPeriodExpenses}
+            />
+            <SummaryCard
+              title="Net Income"
+              amount={summaryData.netIncome}
+              icon={<Wallet className="w-5 h-5" />}
+              color={summaryData.netIncome >= 0 ? 'success' : 'danger'}
+            />
+            <SummaryCard
+              title="Net Worth"
+              amount={summaryData.totalAssets - summaryData.totalLiabilities}
+              icon={<PiggyBank className="w-5 h-5" />}
+              color="accent"
+            />
+          </div>
+        )}
+
         {/* Report Content */}
         <div className="mt-6">
           {activeTab === 'income' && (
             <IncomeStatementReport
               periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined}
               onExport={() => handleExport('income-statement')}
+              onExportPDF={handleExportPDF}
             />
           )}
           {activeTab === 'balance' && (
-            <BalanceSheetReport onExport={() => handleExport('balance-sheet')} />
+            <BalanceSheetReport 
+              periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined}
+              periodEndDate={selectedPeriod?.endDate}
+              onExport={() => handleExport('balance-sheet')} 
+            />
           )}
           {activeTab === 'cashflow' && (
             <CashFlowReport
@@ -153,6 +276,58 @@ function ReportsPage() {
         </div>
       </div>
     </RequireAuth>
+  );
+}
+
+// Summary Card Component
+function SummaryCard({
+  title,
+  amount,
+  icon,
+  color,
+  previousAmount,
+}: {
+  title: string;
+  amount: number;
+  icon: React.ReactNode;
+  color: 'success' | 'danger' | 'accent';
+  previousAmount?: number;
+}) {
+  const colorClasses = {
+    success: 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/30',
+    danger: 'bg-[var(--color-danger)]/10 text-[var(--color-danger)] border-[var(--color-danger)]/30',
+    accent: 'bg-[var(--color-accent)]/10 text-[var(--color-accent)] border-[var(--color-accent)]/30',
+  };
+
+  const percentageChange = previousAmount && previousAmount !== 0
+    ? ((amount - previousAmount) / previousAmount) * 100
+    : null;
+
+  return (
+    <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl border border-[var(--color-border)] editorial-shadow">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm text-[var(--color-text-secondary)]">{title}</span>
+        <div className={cn('p-2 rounded-lg border', colorClasses[color])}>
+          {icon}
+        </div>
+      </div>
+      <p className="text-2xl font-bold font-mono text-[var(--color-text-primary)]">
+        {formatCurrency(amount)}
+      </p>
+      {percentageChange !== null && (
+        <div className={cn(
+          'flex items-center gap-1 text-xs mt-2',
+          percentageChange >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
+        )}>
+          {percentageChange >= 0 ? (
+            <TrendingUp className="w-3 h-3" />
+          ) : (
+            <TrendingDown className="w-3 h-3" />
+          )}
+          <span>{Math.abs(percentageChange).toFixed(1)}% vs last period</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -188,9 +363,11 @@ function TabButton({
 function IncomeStatementReport({
   periodId,
   onExport,
+  onExportPDF,
 }: {
   periodId?: number;
   onExport: () => void;
+  onExportPDF: (title: string, data: any[]) => void;
 }) {
   const [data, setData] = useState<{
     revenue: Array<{ name: string; amount: number; level: number }>;
@@ -201,6 +378,7 @@ function IncomeStatementReport({
     periodName?: string;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -208,27 +386,68 @@ function IncomeStatementReport({
 
   const loadData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const report = await api.reports.incomeStatement(periodId);
       setData(report);
     } catch (err) {
       console.error('Failed to load income statement:', err);
+      setError('Failed to load income statement report');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) return <Card className="p-8 text-center"><p>Loading...</p></Card>;
-  if (!data) return <Card className="p-8 text-center"><p>Failed to load report</p></Card>;
+  const handlePDFExport = () => {
+    if (!data) return;
+    const exportData = [
+      ...data.revenue.map(r => ({ Type: 'Revenue', Item: r.name, Amount: r.amount })),
+      { Type: 'Total', Item: 'Total Revenue', Amount: data.totalRevenue },
+      ...data.expenses.map(e => ({ Type: 'Expense', Item: e.name, Amount: e.amount })),
+      { Type: 'Total', Item: 'Total Expenses', Amount: data.totalExpenses },
+      { Type: 'Net', Item: 'Net Income', Amount: data.netIncome },
+    ];
+    onExportPDF(`Income Statement - ${data.periodName || 'All Periods'}`, exportData);
+  };
+
+  if (isLoading) return <CardSkeleton className="h-96" />;
+  if (error) return (
+    <Card className="p-8 text-center">
+      <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
+      <p className="text-[var(--color-danger)] mb-4">{error}</p>
+      <Button variant="secondary" onClick={loadData}>
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Retry
+      </Button>
+    </Card>
+  );
+  if (!data || (data.revenue.length === 0 && data.expenses.length === 0)) return (
+    <Card className="p-8 text-center">
+      <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
+      <p className="text-[var(--color-text-secondary)] mb-4">No income statement data available for this period</p>
+      <Link to="/transactions">
+        <Button>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Transaction
+        </Button>
+      </Link>
+    </Card>
+  );
 
   return (
     <Card
       title={`Income Statement - ${data.periodName || 'All Periods'}`}
       action={
-        <Button variant="secondary" size="sm" onClick={onExport}>
-          <Download className="w-4 h-4 mr-2" />
-          Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={handlePDFExport}>
+            <FileDown className="w-4 h-4 mr-2" />
+            PDF
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onExport}>
+            <Download className="w-4 h-4 mr-2" />
+            CSV
+          </Button>
+        </div>
       }
     >
       <div className="space-y-6">
@@ -301,7 +520,15 @@ function IncomeStatementReport({
 }
 
 // Balance Sheet Report
-function BalanceSheetReport({ onExport }: { onExport: () => void }) {
+function BalanceSheetReport({ 
+  periodId, 
+  periodEndDate,
+  onExport 
+}: { 
+  periodId?: number;
+  periodEndDate?: number;
+  onExport: () => void;
+}) {
   const [data, setData] = useState<{
     assets: Array<{ name: string; code: string; balance: number; level: number }>;
     liabilities: Array<{ name: string; code: string; balance: number; level: number }>;
@@ -312,39 +539,67 @@ function BalanceSheetReport({ onExport }: { onExport: () => void }) {
     asOfDate: string;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [periodId, periodEndDate]);
 
   const loadData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const report = await api.reports.balanceSheet();
+      // Use period end date as the "as of" date for the balance sheet
+      const asOfDate = periodEndDate;
+      const report = await api.reports.balanceSheet(asOfDate);
       setData(report);
     } catch (err) {
       console.error('Failed to load balance sheet:', err);
+      setError('Failed to load balance sheet report');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) return <Card className="p-8 text-center"><p>Loading...</p></Card>;
-  if (!data) return <Card className="p-8 text-center"><p>Failed to load report</p></Card>;
+  if (isLoading) return <CardSkeleton className="h-96" />;
+  if (error) return (
+    <Card className="p-8 text-center">
+      <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
+      <p className="text-[var(--color-danger)] mb-4">{error}</p>
+      <Button variant="secondary" onClick={loadData}>
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Retry
+      </Button>
+    </Card>
+  );
+  if (!data) return (
+    <Card className="p-8 text-center">
+      <p className="text-[var(--color-text-secondary)] mb-4">No data available</p>
+      <Link to="/transactions">
+        <Button>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Transaction
+        </Button>
+      </Link>
+    </Card>
+  );
 
   const Section = ({
     title,
     items,
     total,
     color,
+    icon,
   }: {
     title: string;
     items: typeof data.assets;
     total: number;
     color: string;
+    icon: React.ReactNode;
   }) => (
     <div className="mb-6">
-      <h3 className="font-mono font-bold text-lg border-b-2 border-[var(--color-border)] pb-2 mb-3">
+      <h3 className="font-mono font-bold text-lg border-b-2 border-[var(--color-border)] pb-2 mb-3 flex items-center gap-2">
+        {icon}
         {title}
       </h3>
       {items.map((item, i) => (
@@ -379,9 +634,9 @@ function BalanceSheetReport({ onExport }: { onExport: () => void }) {
         </Button>
       }
     >
-      <Section title="Assets" items={data.assets} total={data.totalAssets} color="text-[var(--color-success)]" />
-      <Section title="Liabilities" items={data.liabilities} total={data.totalLiabilities} color="text-[var(--color-danger)]" />
-      <Section title="Equity" items={data.equity} total={data.totalEquity} color="text-[var(--color-accent)]" />
+      <Section title="Assets" items={data.assets} total={data.totalAssets} color="text-[var(--color-success)]" icon={<Wallet className="w-5 h-5" />} />
+      <Section title="Liabilities" items={data.liabilities} total={data.totalLiabilities} color="text-[var(--color-danger)]" icon={<ArrowRightLeft className="w-5 h-5" />} />
+      <Section title="Equity" items={data.equity} total={data.totalEquity} color="text-[var(--color-accent)]" icon={<Scale className="w-5 h-5" />} />
 
       {/* Balance Check */}
       <div className="flex justify-between py-3 font-bold text-lg border-t-4 border-[var(--color-border)]">
@@ -421,6 +676,12 @@ function CashFlowReport({
     endingCash: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<{
+    operating: boolean;
+    investing: boolean;
+    financing: boolean;
+  }>({ operating: false, investing: false, financing: false });
 
   useEffect(() => {
     loadData();
@@ -428,51 +689,101 @@ function CashFlowReport({
 
   const loadData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const report = await api.reports.cashFlow(periodId);
       setData(report);
     } catch (err) {
       console.error('Failed to load cash flow:', err);
+      setError('Failed to load cash flow report');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) return <Card className="p-8 text-center"><p>Loading...</p></Card>;
-  if (!data) return <Card className="p-8 text-center"><p>Failed to load report</p></Card>;
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  if (isLoading) return <CardSkeleton className="h-96" />;
+  if (error) return (
+    <Card className="p-8 text-center">
+      <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
+      <p className="text-[var(--color-danger)] mb-4">{error}</p>
+      <Button variant="secondary" onClick={loadData}>
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Retry
+      </Button>
+    </Card>
+  );
+  if (!data) return (
+    <Card className="p-8 text-center">
+      <ArrowRightLeft className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
+      <p className="text-[var(--color-text-secondary)] mb-4">No cash flow data available for this period</p>
+      <Link to="/transactions">
+        <Button>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Transaction
+        </Button>
+      </Link>
+    </Card>
+  );
 
   const Section = ({
     title,
     items,
     total,
+    sectionKey,
   }: {
     title: string;
     items: typeof data.operating;
     total: number;
-  }) => (
-    <div className="mb-4">
-      <h3 className="font-mono font-bold border-b-2 border-[var(--color-border)] pb-2 mb-2">{title}</h3>
-      {items.slice(0, 5).map((item, i) => (
-        <div key={i} className="flex justify-between py-1 text-sm">
-          <span className="truncate max-w-[70%]">{item.description}</span>
-          <span className={cn('font-mono', item.amount >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
-            {item.amount >= 0 ? '+' : ''}
-            {formatCurrency(item.amount)}
+    sectionKey: keyof typeof expandedSections;
+  }) => {
+    const isExpanded = expandedSections[sectionKey];
+    const displayItems = isExpanded ? items : items.slice(0, 5);
+    const hasMore = items.length > 5;
+
+    return (
+      <div className="mb-4">
+        <h3 className="font-mono font-bold border-b-2 border-[var(--color-border)] pb-2 mb-2">{title}</h3>
+        {displayItems.map((item, i) => (
+          <div key={i} className="flex justify-between py-1 text-sm">
+            <span className="truncate max-w-[70%]">{item.description}</span>
+            <span className={cn('font-mono', item.amount >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
+              {item.amount >= 0 ? '+' : ''}
+              {formatCurrency(item.amount)}
+            </span>
+          </div>
+        ))}
+        {hasMore && (
+          <button
+            onClick={() => toggleSection(sectionKey)}
+            className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline mt-2 ml-4"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="w-3 h-3" />
+                Show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3 h-3" />
+                + {items.length - 5} more items
+              </>
+            )}
+          </button>
+        )}
+        <div className="flex justify-between py-2 font-bold border-t border-[var(--color-border)] mt-2">
+          <span>Net {title}</span>
+          <span className={cn('font-mono', total >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
+            {total >= 0 ? '+' : ''}
+            {formatCurrency(total)}
           </span>
         </div>
-      ))}
-      {items.length > 5 && (
-        <p className="text-xs text-[var(--color-muted)] pl-4">+ {items.length - 5} more items</p>
-      )}
-      <div className="flex justify-between py-2 font-bold border-t border-[var(--color-border)] mt-2">
-        <span>Net {title}</span>
-        <span className={cn('font-mono', total >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
-          {total >= 0 ? '+' : ''}
-          {formatCurrency(total)}
-        </span>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <Card
@@ -484,9 +795,9 @@ function CashFlowReport({
         </Button>
       }
     >
-      <Section title="Operating Activities" items={data.operating} total={data.netOperating} />
-      <Section title="Investing Activities" items={data.investing} total={data.netInvesting} />
-      <Section title="Financing Activities" items={data.financing} total={data.netFinancing} />
+      <Section title="Operating Activities" items={data.operating} total={data.netOperating} sectionKey="operating" />
+      <Section title="Investing Activities" items={data.investing} total={data.netInvesting} sectionKey="investing" />
+      <Section title="Financing Activities" items={data.financing} total={data.netFinancing} sectionKey="financing" />
 
       <div className="border-t-4 border-[var(--color-border)] pt-4 space-y-2">
         <div className="flex justify-between font-bold">
@@ -517,6 +828,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
   } | null>(null);
   const [categories, setCategories] = useState<Array<{ id: number; name: string; color: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -524,6 +836,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
 
   const loadData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const [report, cats] = await Promise.all([
         api.reports.spending(periodId),
@@ -533,17 +846,34 @@ function SpendingReport({ periodId }: { periodId?: number }) {
       setCategories(cats);
     } catch (err) {
       console.error('Failed to load spending:', err);
+      setError('Failed to load spending report');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) return <Card className="p-8 text-center"><p>Loading...</p></Card>;
+  if (isLoading) return <CardSkeleton className="h-96" />;
+  if (error) return (
+    <Card className="p-8 text-center">
+      <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
+      <p className="text-[var(--color-danger)] mb-4">{error}</p>
+      <Button variant="secondary" onClick={loadData}>
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Retry
+      </Button>
+    </Card>
+  );
   if (!data || data.breakdown.length === 0) {
     return (
       <Card className="p-8 text-center">
         <PieChart className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
-        <p>No spending data available for this period</p>
+        <p className="text-[var(--color-text-secondary)] mb-4">No spending data available for this period</p>
+        <Link to="/transactions">
+          <Button>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Expense
+          </Button>
+        </Link>
       </Card>
     );
   }
@@ -648,12 +978,13 @@ function TrendsReport() {
     }
   };
 
-  if (isLoading) return <Card className="p-8 text-center"><p>Loading...</p></Card>;
+  if (isLoading) return <CardSkeleton className="h-80" />;
   if (!data || data.length === 0) {
     return (
       <Card className="p-8 text-center">
         <TrendingUp className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
-        <p>No trend data available</p>
+        <p className="text-[var(--color-text-secondary)] mb-4">No trend data available</p>
+        <p className="text-sm text-[var(--color-muted)]">Add transactions across multiple periods to see trends</p>
       </Card>
     );
   }

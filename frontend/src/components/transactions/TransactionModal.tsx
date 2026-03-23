@@ -1157,8 +1157,7 @@ export function TransactionModal({
                       editingTransaction.tags.map(tag => (
                         <span 
                           key={tag.tagId}
-                          className="px-2 py-0.5 rounded-full text-xs font-medium border"
-                          style={{ borderColor: tag.color, color: tag.color }}
+                          className="px-2 py-0.5 rounded-full text-xs font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)]"
                         >
                           {tag.name}
                         </span>
@@ -1389,13 +1388,8 @@ export function TransactionModal({
                     'px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
                     editMeta.tagIds.includes(tag.id)
                       ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                      : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/40',
+                      : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/40 bg-[var(--ref-surface-container)]',
                   )}
-                  style={
-                    editMeta.tagIds.includes(tag.id)
-                      ? {}
-                      : { borderColor: tag.color, color: tag.color }
-                  }
                 >
                   {tag.name}
                 </button>
@@ -1596,13 +1590,8 @@ export function TransactionModal({
                         'px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
                         journalForm.tagIds.includes(tag.id)
                           ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                          : 'border-[var(--color-border)]',
+                          : 'border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)]',
                       )}
-                      style={
-                        journalForm.tagIds.includes(tag.id)
-                          ? {}
-                          : { borderColor: tag.color, color: tag.color }
-                      }
                     >
                       <TagIcon className="w-3 h-3 inline mr-1" />
                       {tag.name}
@@ -2222,13 +2211,8 @@ export function TransactionModal({
                           'px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
                           simpleForm.tagIds.includes(tag.id)
                             ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                            : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/30',
+                            : 'border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)] hover:border-[var(--color-accent)]/30',
                         )}
-                        style={
-                          simpleForm.tagIds.includes(tag.id)
-                            ? {}
-                            : { borderColor: tag.color, color: tag.color }
-                        }
                       >
                         <TagIcon className="w-3 h-3 inline mr-1" />
                         {tag.name}

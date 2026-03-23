@@ -13,6 +13,8 @@ const migrate_1 = require("./db/migrate");
 const redis_1 = require("./cache/redis");
 const precompute_1 = require("./cache/precompute");
 const env_1 = require("./lib/env");
+const subscription_renewals_1 = require("./services/subscription-renewals");
+const client_1 = require("./db/client");
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
 const accounts_1 = __importDefault(require("./routes/accounts"));
@@ -26,10 +28,14 @@ const analytics_1 = __importDefault(require("./routes/analytics"));
 const paylater_1 = __importDefault(require("./routes/paylater"));
 const audit_log_1 = __importDefault(require("./routes/audit-log"));
 const reports_1 = __importDefault(require("./routes/reports"));
+const salary_settings_1 = __importDefault(require("./routes/salary-settings"));
+const subscriptions_1 = __importDefault(require("./routes/subscriptions"));
 // Import plugins
 const auth_2 = __importDefault(require("./plugins/auth"));
 const fastify = (0, fastify_1.default)({
     logger: true,
+    // Allow larger body size for file uploads (10MB)
+    bodyLimit: 15 * 1024 * 1024, // 15MB to be safe with base64 encoding overhead
 });
 // Register CORS
 fastify.register(cors_1.default, {
@@ -63,10 +69,15 @@ const start = async () => {
         await (0, migrate_1.bootstrapDb)();
         // Initialize Redis connection
         (0, redis_1.getRedisClient)();
-        // Precompute all analytics on startup
+        // Precompute all analytics on startup (Redis optional — failures are logged, not fatal)
         fastify.log.info("Precomputing analytics...");
-        await (0, precompute_1.precomputeEverything)();
-        fastify.log.info("Analytics precomputed successfully");
+        try {
+            await (0, precompute_1.precomputeEverything)();
+            fastify.log.info("Analytics precomputed successfully");
+        }
+        catch (err) {
+            fastify.log.warn({ err }, "Analytics precompute skipped (Redis or DB); API will compute on demand");
+        }
         // Register auth plugin (provides JWT and OAuth2)
         await fastify.register(auth_2.default);
         // Register routes
@@ -82,7 +93,25 @@ const start = async () => {
         await fastify.register(paylater_1.default);
         await fastify.register(audit_log_1.default);
         await fastify.register(reports_1.default);
+        await fastify.register(salary_settings_1.default);
+        await fastify.register(subscriptions_1.default);
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
+        const runRenewals = async () => {
+            try {
+                const r = await (0, subscription_renewals_1.processDueSubscriptionRenewals)(client_1.db);
+                if (r.processed > 0 || r.errors.length > 0) {
+                    fastify.log.info({ renewals: r }, "subscription renewals (scheduled)");
+                }
+            }
+            catch (e) {
+                fastify.log.warn({ err: e }, "subscription renewals failed");
+            }
+        };
+        await runRenewals();
+        const renewalIntervalMs = 60 * 60 * 1000;
+        setInterval(() => {
+            void runRenewals();
+        }, renewalIntervalMs);
     }
     catch (err) {
         fastify.log.error(err);

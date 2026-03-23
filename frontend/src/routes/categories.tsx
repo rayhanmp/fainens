@@ -256,15 +256,15 @@ function CategoriesPage() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
           {/* Categories — left */}
-          <div className="lg:col-span-8">
-            <div className="mb-8 flex items-center justify-between gap-4">
-              <h2 className="font-headline text-2xl font-bold text-[var(--color-text-primary)]">
-                Structural categories
+          <div className="lg:col-span-9">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <h2 className="font-headline text-lg font-bold text-[var(--color-text-primary)]">
+                Categories
               </h2>
-              <span className="rounded-full bg-[var(--ref-surface-container-highest)] px-3 py-1 text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                {categories.length} active
+              <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+                {categories.length} total
               </span>
             </div>
 
@@ -279,89 +279,79 @@ function CategoriesPage() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {categories.map((c) => {
                   const count = stats.byCat[c.id] ?? 0;
                   const bgTint = c.color ? `${c.color}22` : 'var(--ref-primary-fixed)';
                   return (
                     <div
                       key={c.id}
-                      className="group relative flex flex-col gap-4 rounded-xl bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm transition-shadow duration-300 hover:shadow-[0px_20px_40px_rgba(25,27,35,0.06)]"
+                      className="group relative flex items-center gap-3 rounded-xl bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:translate-y-[-2px]"
                     >
-                      <div className="flex items-start justify-between">
-                        <div
-                          className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl"
-                          style={{
-                            backgroundColor: bgTint,
-                            color: c.color || 'var(--color-accent)',
-                          }}
-                        >
-                          {c.icon || '📁'}
-                        </div>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMenuCategoryId(menuCategoryId === c.id ? null : c.id)
-                            }
-                            className="rounded-lg p-2 opacity-100 transition-opacity hover:bg-[var(--ref-surface-container-low)] md:opacity-0 md:group-hover:opacity-100"
-                            aria-label="More actions"
-                          >
-                            <MoreVertical className="h-4 w-4 text-[var(--color-muted)]" />
-                          </button>
-                          {menuCategoryId === c.id && (
-                            <>
-                              <button
-                                type="button"
-                                className="fixed inset-0 z-10 cursor-default"
-                                aria-label="Close menu"
-                                onClick={() => setMenuCategoryId(null)}
-                              />
-                              <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
-                                <button
-                                  type="button"
-                                  className="block w-full px-4 py-2 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
-                                  onClick={() => {
-                                    setMenuCategoryId(null);
-                                    openCategoryModal(c);
-                                  }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  className="block w-full px-4 py-2 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                                  onClick={() => {
-                                    setMenuCategoryId(null);
-                                    handleDeleteCategory(c.id);
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl cursor-pointer"
+                        style={{
+                          backgroundColor: bgTint,
+                          color: c.color || 'var(--color-accent)',
+                        }}
+                        onClick={() => openCategoryModal(c)}
+                      >
+                        {c.icon || '📁'}
                       </div>
-                      <div>
-                        <h3 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
+                      <div className="min-w-0 flex-1">
+                        <h3
+                          className="font-headline text-base font-bold text-[var(--color-text-primary)] truncate cursor-pointer hover:text-[var(--color-accent)] transition-colors"
+                          onClick={() => openCategoryModal(c)}
+                        >
                           {c.name}
                         </h3>
-                        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                          {count === 1 ? '1 transaction' : `${count} transactions`} in your ledger
+                        <p className="text-xs text-[var(--color-text-secondary)]">
+                          {count} txns
                         </p>
                       </div>
-                      <div className="mt-auto flex items-end justify-between border-t border-transparent pt-4">
-                        <span className="rounded bg-[var(--ref-surface-container)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--color-text-secondary)]">
-                          Category
-                        </span>
+                      <div className="relative">
                         <button
                           type="button"
-                          onClick={() => openCategoryModal(c)}
-                          className="text-sm font-bold text-[var(--color-accent)] hover:underline"
+                          onClick={() =>
+                            setMenuCategoryId(menuCategoryId === c.id ? null : c.id)
+                          }
+                          className="rounded-lg p-1.5 opacity-60 transition-all hover:bg-[var(--ref-surface-container-low)] hover:opacity-100"
+                          aria-label="More actions"
                         >
-                          Edit
+                          <MoreVertical className="h-4 w-4 text-[var(--color-muted)]" />
                         </button>
+                        {menuCategoryId === c.id && (
+                          <>
+                            <button
+                              type="button"
+                              className="fixed inset-0 z-10 cursor-default"
+                              aria-label="Close menu"
+                              onClick={() => setMenuCategoryId(null)}
+                            />
+                            <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
+                                onClick={() => {
+                                  setMenuCategoryId(null);
+                                  openCategoryModal(c);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                onClick={() => {
+                                  setMenuCategoryId(null);
+                                  handleDeleteCategory(c.id);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -370,38 +360,25 @@ function CategoriesPage() {
             )}
 
             {/* Smart rules — placeholder */}
-            <div className="mt-12 rounded-3xl bg-[var(--ref-surface-container-low)] p-6 sm:p-8">
-              <div className="mb-6 flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-accent)] text-white">
-                  <Sparkles className="h-5 w-5" />
+            <div className="mt-8 rounded-xl bg-[var(--ref-surface-container-low)] p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+                  <Sparkles className="h-4 w-4" />
                 </div>
-                <div>
-                  <h2 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                    Smart classification rules
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-headline text-sm font-bold text-[var(--color-text-primary)]">
+                    Auto-rules
                   </h2>
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    Automate categorization from merchant names (e.g. TOKOPEDIA → Shopping).
+                  <p className="text-xs text-[var(--color-text-secondary)]">
+                    Auto-categorize by merchant (coming soon)
                   </p>
                 </div>
-              </div>
-              <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-8 text-center">
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Auto-rules are not wired to the API yet. This panel will host vendor → category
-                  mappings.
-                </p>
-                <button
-                  type="button"
-                  disabled
-                  className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-[var(--color-accent)] opacity-50"
-                >
-                  Add new logic rule <ChevronRight className="h-4 w-4" />
-                </button>
               </div>
             </div>
           </div>
 
           {/* Tags + stats — right sticky */}
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-3">
             <div className="space-y-10 lg:sticky lg:top-24">
               <div>
                 <div className="mb-8 flex items-center justify-between">
@@ -433,16 +410,10 @@ function CategoriesPage() {
                           key={tag.id}
                           type="button"
                           onClick={() => openTagModal(tag)}
-                          className="group flex items-center gap-2 rounded-full px-5 py-2.5 text-left transition-all"
-                          style={{
-                            backgroundColor: `${tag.color}18`,
-                            borderWidth: 1,
-                            borderColor: `${tag.color}55`,
-                            color: tag.color,
-                          }}
+                          className="group flex items-center gap-2 rounded-full px-4 py-2 text-left transition-all bg-[var(--ref-surface-container)] border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-highest)]"
                         >
-                          <span className="text-sm font-medium">#{tag.name}</span>
-                          <span className="text-[10px] font-bold opacity-60">{uses}x</span>
+                          <span className="text-sm font-medium text-[var(--color-text-secondary)]">#{tag.name}</span>
+                          <span className="text-[10px] font-bold text-[var(--color-muted)]">{uses}x</span>
                         </button>
                       );
                     })}
