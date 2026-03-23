@@ -12,7 +12,8 @@ export type EntityType =
   | "salary_period"
   | "budget_plan"
   | "attachment"
-  | "subscription";
+  | "subscription"
+  | "wishlist";
 
 export type AuditAction = "create" | "update" | "delete";
 
