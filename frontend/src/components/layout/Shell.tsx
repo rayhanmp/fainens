@@ -1,7 +1,8 @@
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useNavigate } from '@tanstack/react-router';
 import { Sidebar } from './Sidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useAuth } from '../../lib/auth';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 interface ShellProps {
   children?: React.ReactNode;
@@ -9,6 +10,14 @@ interface ShellProps {
 
 export function Shell({ children }: ShellProps) {
   const { isDemoMode } = useAuth();
+  const navigate = useNavigate();
+
+  // Global keyboard shortcuts
+  useKeyboardShortcuts({
+    onNewTransaction: () => {
+      navigate({ to: '/transactions', search: { action: 'new' } });
+    },
+  });
 
   return (
     <div className="flex min-h-screen min-h-[100dvh] items-start">

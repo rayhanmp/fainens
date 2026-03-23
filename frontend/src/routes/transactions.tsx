@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { RequireAuth } from '../lib/auth';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import {
@@ -29,11 +29,13 @@ import {
   type EditingTransaction,
   type WalletAccount,
 } from '../components/transactions/TransactionModal';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export const Route = createFileRoute('/transactions')({
   validateSearch: (search: Record<string, unknown>) => ({
     periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
     accountId: typeof search.accountId === 'string' ? search.accountId : undefined,
+    action: typeof search.action === 'string' ? search.action : undefined,
   }),
   component: TransactionsPage,
 } as any);
@@ -121,8 +123,9 @@ function downloadTransactionsCsv(
 }
 
 function TransactionsPage() {
-  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string };
+  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; action?: string };
   const navigate = useNavigate({ from: '/transactions' });
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [accounts, setAccounts] = useState<WalletAccount[]>([]);
@@ -139,6 +142,26 @@ function TransactionsPage() {
   const [txTypeFilter, setTxTypeFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [page, setPage] = useState(1);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    isModalOpen,
+    searchInputRef,
+  });
+
+  // Open modal automatically when action='new' is in URL
+  useEffect(() => {
+    if (search.action === 'new' && !isModalOpen) {
+      openModal();
+      // Clear the action from URL
+      navigate({
+        search: (prev: { periodId?: string; accountId?: string; action?: string }) => ({
+          periodId: prev.periodId,
+          accountId: prev.accountId,
+        }),
+      });
+    }
+  }, [search.action]);
 
   useEffect(() => {
     loadData();
@@ -383,8 +406,9 @@ function TransactionsPage() {
         <div className="relative max-w-xl">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
           <input
+            ref={searchInputRef}
             type="search"
-            placeholder="Search transactions…"
+            placeholder="Search transactions… (Press / to focus)"
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             className="w-full rounded-full border-none bg-[var(--ref-surface-container-highest)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-muted)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
