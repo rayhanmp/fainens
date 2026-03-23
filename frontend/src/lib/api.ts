@@ -286,6 +286,38 @@ export const api = {
     update: (id: number, data: Partial<{ plannedAmount: number }>) =>
       fetchApi(`/budgets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/budgets/${id}`, { method: 'DELETE' }),
+    // Templates
+    templates: {
+      list: () => fetchApi<Array<{
+        id: number;
+        name: string;
+        description: string | null;
+        isActive: boolean;
+        createdAt: number;
+        items: Array<{
+          id: number;
+          categoryId: number;
+          plannedAmount: number;
+          categoryName: string;
+        }>;
+      }>>('/budgets/templates'),
+      create: (data: { name: string; description?: string; periodId: number }) =>
+        fetchApi('/budgets/templates', { method: 'POST', body: JSON.stringify(data) }),
+      apply: (templateId: number, data: { periodId: number; replaceExisting?: boolean }) =>
+        fetchApi<{ applied: number; skipped: number }>(`/budgets/templates/${templateId}/apply`, { method: 'POST', body: JSON.stringify(data) }),
+      delete: (id: number) => fetchApi(`/budgets/templates/${id}`, { method: 'DELETE' }),
+    },
+    // Compare periods
+    compare: (currentPeriodId: string, comparePeriodId: string) =>
+      fetchApi<Array<{
+        categoryId: number;
+        categoryName: string;
+        currentPlanned: number;
+        comparePlanned: number;
+        compareActual: number;
+        plannedDiff: number;
+        actualDiff: number;
+      }>>(`/budgets/compare?currentPeriodId=${currentPeriodId}&comparePeriodId=${comparePeriodId}`),
   },
 
   // Attachments
