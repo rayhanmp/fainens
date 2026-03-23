@@ -47,7 +47,7 @@ function LoginPage() {
             <button
               type="button"
               onClick={login}
-              className="flex w-full items-center justify-center gap-3 rounded-full bg-white px-5 py-3.5 text-sm font-semibold text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.08)] ring-1 ring-slate-200 transition hover:bg-slate-50 hover:ring-slate-300"
+              className="cursor-pointer flex w-full items-center justify-center gap-3 rounded-full bg-white px-5 py-3.5 text-sm font-semibold text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.08)] ring-1 ring-slate-200 transition hover:bg-slate-50 hover:ring-slate-300"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
                 <path

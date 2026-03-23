@@ -137,6 +137,22 @@ h6 {
     overflow: hidden;
   }
 
+  /* Ensure all buttons have pointer cursor */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Disabled buttons should have not-allowed cursor */
+  button:disabled,
+  [role="button"]:disabled,
+  input[type="button"]:disabled,
+  input[type="submit"]:disabled {
+    cursor: not-allowed;
+  }
+
   .brutalist-button::before {
     content: '';
     position: absolute;

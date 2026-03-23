@@ -212,14 +212,14 @@ function PaylaterPage() {
                     <button
                       type="button"
                       onClick={() => shiftMonth(-1)}
-                      className="w-8 h-8 rounded-full bg-[var(--ref-surface-container)] flex items-center justify-center hover:bg-[var(--ref-surface-container-highest)] transition-colors border border-[var(--color-border)]"
+                      className="cursor-pointer w-8 h-8 rounded-full bg-[var(--ref-surface-container)] flex items-center justify-center hover:bg-[var(--ref-surface-container-highest)] transition-colors border border-[var(--color-border)]"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => shiftMonth(1)}
-                      className="w-8 h-8 rounded-full bg-[var(--ref-surface-container)] flex items-center justify-center hover:bg-[var(--ref-surface-container-highest)] transition-colors border border-[var(--color-border)]"
+                      className="cursor-pointer w-8 h-8 rounded-full bg-[var(--ref-surface-container)] flex items-center justify-center hover:bg-[var(--ref-surface-container-highest)] transition-colors border border-[var(--color-border)]"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>

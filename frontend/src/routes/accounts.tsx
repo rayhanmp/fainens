@@ -565,7 +565,7 @@ function AccountTile({
             <Link
               to="/transactions"
               search={{ accountId: String(a.id) }}
-              className="font-bold text-[var(--ref-on-primary-container)] hover:underline"
+              className="font-bold text-[var(--ref-on-primary-container)] hover:underline cursor-pointer"
             >
               Ledger
             </Link>
@@ -624,7 +624,7 @@ function AccountTile({
           >
             Activity
           </Link>
-          <button type="button" onClick={onDelete} className="text-[10px] text-[var(--ref-error)] hover:underline">
+          <button type="button" onClick={onDelete} className="text-[10px] text-[var(--ref-error)] hover:underline cursor-pointer">
             Remove
           </button>
         </div>
@@ -639,7 +639,7 @@ function AccountTile({
           <p className="text-[10px] font-bold uppercase text-[var(--ref-on-surface-variant)]">PayLater</p>
           <button
             type="button"
-            className="rounded p-0.5 text-[var(--ref-outline)] opacity-0 hover:text-[var(--ref-primary)] group-hover:opacity-100"
+            className="rounded p-0.5 text-[var(--ref-outline)] opacity-0 hover:text-[var(--ref-primary)] group-hover:opacity-100 cursor-pointer"
             onClick={onEdit}
           >
             <Edit2 className="h-4 w-4" />
@@ -652,7 +652,7 @@ function AccountTile({
             Entries
           </Link>
         </div>
-        <button type="button" onClick={onDelete} className="mt-2 text-[10px] text-[var(--ref-error)] hover:underline">
+        <button type="button" onClick={onDelete} className="mt-2 text-[10px] text-[var(--ref-error)] hover:underline cursor-pointer">
           Remove
         </button>
       </article>

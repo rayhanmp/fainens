@@ -167,7 +167,7 @@ export function Modal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex items-center gap-1.5 text-[var(--color-muted)] hover:text-[var(--color-accent)] transition-colors shrink-0"
+                className="cursor-pointer flex items-center gap-1.5 text-[var(--color-muted)] hover:text-[var(--color-accent)] transition-colors shrink-0"
                 aria-label="Close dialog"
               >
                 <X className="w-5 h-5" aria-hidden="true" />
@@ -180,7 +180,7 @@ export function Modal({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
+                className="cursor-pointer p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
                 aria-label="Close dialog"
               >
                 <X className="w-5 h-5" aria-hidden="true" />

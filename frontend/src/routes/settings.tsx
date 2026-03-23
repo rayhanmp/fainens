@@ -306,7 +306,7 @@ function SettingsPage() {
                 key={id}
                 onClick={() => setActiveTab(id)}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-200 relative',
+                  'cursor-pointer flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-200 relative',
                   activeTab === id
                     ? 'text-[var(--color-accent)]'
                     : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
@@ -482,7 +482,7 @@ function SettingsPage() {
                         key={value}
                         onClick={() => setSettings({ ...settings, theme: value as any })}
                         className={cn(
-                          'flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all',
+                          'cursor-pointer flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all',
                           settings.theme === value
                             ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10'
                             : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/50'

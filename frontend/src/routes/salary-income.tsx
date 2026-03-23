@@ -242,7 +242,7 @@ function SalaryIncomePage() {
                 <div className="relative" ref={menuRef}>
                   <button
                     type="button"
-                    className="rounded-full p-2 text-[var(--color-text-secondary)] transition hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]"
+                    className="cursor-pointer rounded-full p-2 text-[var(--color-text-secondary)] transition hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]"
                     aria-label="Open salary menu"
                     aria-expanded={menuOpen}
                     onClick={() => setMenuOpen((o) => !o)}
@@ -253,7 +253,7 @@ function SalaryIncomePage() {
                     <div className="absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
                       <button
                         type="button"
-                        className="w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                        className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
                         onClick={() => {
                           setMenuOpen(false);
                           setProfileOpen(true);
@@ -279,7 +279,7 @@ function SalaryIncomePage() {
               type="button"
               disabled={incomeTxs.length === 0}
               onClick={() => downloadIncomeCsv(incomeTxs)}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--ref-secondary-container)] px-6 py-3 text-sm font-bold text-[var(--ref-on-secondary-container)] transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="cursor-pointer disabled:cursor-not-allowed inline-flex items-center gap-2 rounded-full bg-[var(--ref-secondary-container)] px-6 py-3 text-sm font-bold text-[var(--ref-on-secondary-container)] transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               <Download className="h-4 w-4" />
               Download CSV

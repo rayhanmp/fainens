@@ -405,7 +405,7 @@ function SubscriptionsPage() {
                                 <button
                                   type="button"
                                   onClick={() => openEdit(sub)}
-                                  className="rounded-full p-2 text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10"
+                                  className="rounded-full p-2 text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10 cursor-pointer"
                                   aria-label={`Edit ${sub.name}`}
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -413,7 +413,7 @@ function SubscriptionsPage() {
                                 <button
                                   type="button"
                                   onClick={() => void remove(sub.id, sub.name)}
-                                  className="rounded-full p-2 text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10"
+                                  className="rounded-full p-2 text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10 cursor-pointer"
                                   aria-label={`Remove ${sub.name}`}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -583,7 +583,7 @@ function SubscriptionsPage() {
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, billingCycle: cycle.value }))}
                       className={cn(
-                        'inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-sm transition-all',
+                        'cursor-pointer inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-sm transition-all',
                         form.billingCycle === cycle.value
                           ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
                           : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',

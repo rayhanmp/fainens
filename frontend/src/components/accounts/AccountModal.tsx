@@ -147,7 +147,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
                 type="button"
                 onClick={() => setFormData({ ...formData, type: t.value as AccountType })}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-all',
+                  'cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-all',
                   formData.type === t.value
                     ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
                     : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',

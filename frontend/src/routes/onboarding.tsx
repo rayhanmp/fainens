@@ -288,7 +288,7 @@ function OnboardingPage() {
               type="button"
               onClick={goBack}
               disabled={step === 1 || loading}
-              className="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
+              className="cursor-pointer disabled:cursor-not-allowed inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
             >
               <ChevronLeft className="h-4 w-4" />
               Back
@@ -297,7 +297,7 @@ function OnboardingPage() {
               type="button"
               onClick={goNext}
               disabled={loading}
-              className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
+              className="cursor-pointer disabled:cursor-not-allowed inline-flex min-w-[120px] items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -315,7 +315,7 @@ function OnboardingPage() {
           {step === 2 && (
             <button
               type="button"
-              className="mt-4 w-full text-center text-sm text-slate-500 underline-offset-2 hover:underline"
+              className="cursor-pointer disabled:cursor-not-allowed mt-4 w-full text-center text-sm text-slate-500 underline-offset-2 hover:underline"
               disabled={loading}
               onClick={async () => {
                 setError(null);
@@ -391,7 +391,7 @@ function StepWallets(props: {
               key={p.name}
               type="button"
               onClick={() => props.onToggle(p.name)}
-              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+              className={`cursor-pointer inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                 on
                   ? 'border-slate-900 bg-slate-900 text-white'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -414,7 +414,7 @@ function StepWallets(props: {
         <button
           type="button"
           onClick={props.onAddCustom}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+          className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
         >
           Add
         </button>
@@ -476,7 +476,7 @@ function StepCategories(props: {
         <button
           type="button"
           onClick={props.onAdd}
-          className="rounded-xl border border-slate-200 bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+          className="cursor-pointer rounded-xl border border-slate-200 bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
         >
           Add
         </button>

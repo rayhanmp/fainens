@@ -244,7 +244,7 @@ function AuditLogPage() {
                   {searchInput ? (
                     <button
                       type="button"
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--ref-outline)] hover:bg-[var(--ref-surface-container-highest)]"
+                      className="cursor-pointer flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--ref-outline)] hover:bg-[var(--ref-surface-container-highest)]"
                       onClick={() => setSearchInput('')}
                       aria-label="Clear search"
                     >
@@ -371,7 +371,7 @@ function AuditLogPage() {
                           <button
                             type="button"
                             onClick={() => setSelectedEntry(entry)}
-                            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/10 sm:min-h-0 sm:min-w-0 sm:p-2"
+                            className="cursor-pointer inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/10 sm:min-h-0 sm:min-w-0 sm:p-2"
                             title="View payload"
                             aria-label={`View details for entry ${entry.id}`}
                           >

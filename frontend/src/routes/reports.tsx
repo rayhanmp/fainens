@@ -347,7 +347,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex shrink-0 items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+        'cursor-pointer flex shrink-0 items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
         active
           ? 'border-[var(--color-accent)] text-[var(--color-text-primary)]'
           : 'border-transparent text-[var(--color-muted)] hover:text-[var(--color-text-primary)]'
@@ -759,7 +759,7 @@ function CashFlowReport({
         {hasMore && (
           <button
             onClick={() => toggleSection(sectionKey)}
-            className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline mt-2 ml-4"
+            className="cursor-pointer flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline mt-2 ml-4"
           >
             {isExpanded ? (
               <>

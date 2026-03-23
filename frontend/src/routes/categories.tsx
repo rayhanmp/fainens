@@ -315,7 +315,7 @@ function CategoriesPage() {
                           onClick={() =>
                             setMenuCategoryId(menuCategoryId === c.id ? null : c.id)
                           }
-                          className="rounded-lg p-1.5 opacity-60 transition-all hover:bg-[var(--ref-surface-container-low)] hover:opacity-100"
+                          className="rounded-lg p-1.5 opacity-60 transition-all hover:bg-[var(--ref-surface-container-low)] hover:opacity-100 cursor-pointer"
                           aria-label="More actions"
                         >
                           <MoreVertical className="h-4 w-4 text-[var(--color-muted)]" />
@@ -331,7 +331,7 @@ function CategoriesPage() {
                             <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
                               <button
                                 type="button"
-                                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
+                                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
                                 onClick={() => {
                                   setMenuCategoryId(null);
                                   openCategoryModal(c);
@@ -341,7 +341,7 @@ function CategoriesPage() {
                               </button>
                               <button
                                 type="button"
-                                className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
                                 onClick={() => {
                                   setMenuCategoryId(null);
                                   handleDeleteCategory(c.id);

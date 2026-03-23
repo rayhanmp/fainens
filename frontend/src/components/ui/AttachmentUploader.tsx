@@ -203,7 +203,7 @@ export function AttachmentUploader({
           <div className="flex-1 whitespace-pre-line">{uploadError}</div>
           <button 
             onClick={() => setUploadError(null)}
-            className="text-[var(--color-danger)] hover:opacity-70 shrink-0"
+            className="cursor-pointer text-[var(--color-danger)] hover:opacity-70 shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -242,7 +242,7 @@ export function AttachmentUploader({
                     onClick={() => handleDownload(attachment)}
                     disabled={isDeleting}
                     className={cn(
-                      'h-8 w-8 rounded-lg flex items-center justify-center',
+                      'cursor-pointer disabled:cursor-not-allowed h-8 w-8 rounded-lg flex items-center justify-center',
                       'text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--ref-surface-container-high)]',
                       'transition-colors disabled:opacity-50'
                     )}
@@ -255,7 +255,7 @@ export function AttachmentUploader({
                     onClick={() => handleDeleteSaved(attachment.id)}
                     disabled={isDeleting}
                     className={cn(
-                      'h-8 w-8 rounded-lg flex items-center justify-center',
+                      'cursor-pointer disabled:cursor-not-allowed h-8 w-8 rounded-lg flex items-center justify-center',
                       'text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10',
                       'transition-colors disabled:opacity-50'
                     )}
@@ -313,7 +313,7 @@ export function AttachmentUploader({
                       type="button"
                       onClick={() => setPreviewFile(pending)}
                       className={cn(
-                        'h-8 w-8 rounded-lg flex items-center justify-center',
+                        'cursor-pointer h-8 w-8 rounded-lg flex items-center justify-center',
                         'text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--ref-surface-container-high)]',
                         'transition-colors'
                       )}
@@ -326,7 +326,7 @@ export function AttachmentUploader({
                     type="button"
                     onClick={() => removePendingAttachment(pending.id)}
                     className={cn(
-                      'h-8 w-8 rounded-lg flex items-center justify-center',
+                      'cursor-pointer h-8 w-8 rounded-lg flex items-center justify-center',
                       'text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10',
                       'transition-colors'
                     )}
@@ -354,7 +354,7 @@ export function AttachmentUploader({
               <span className="font-medium truncate">{previewFile.filename}</span>
               <button 
                 onClick={() => setPreviewFile(null)}
-                className="p-2 hover:bg-[var(--ref-surface-container-high)] rounded-lg"
+                className="cursor-pointer p-2 hover:bg-[var(--ref-surface-container-high)] rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>

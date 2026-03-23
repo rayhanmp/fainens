@@ -839,7 +839,7 @@ export function TransactionModal({
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex flex-col items-start p-4 rounded-xl transition-all text-left min-h-[96px]',
+          'cursor-pointer flex flex-col items-start p-4 rounded-xl transition-all text-left min-h-[96px]',
           selected
             ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)] shadow-sm'
             : 'bg-[var(--ref-surface-container-low)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
@@ -1300,7 +1300,7 @@ export function TransactionModal({
                               }
                             }
                           }}
-                          className="p-2 text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 rounded-lg transition-colors"
+                          className="cursor-pointer p-2 text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 rounded-lg transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1386,7 +1386,7 @@ export function TransactionModal({
                     setEditMeta({ ...editMeta, tagIds: next });
                   }}
                   className={cn(
-                    'px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
+                    'cursor-pointer px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
                     editMeta.tagIds.includes(tag.id)
                       ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
                       : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/40 bg-[var(--ref-surface-container)]',
@@ -1436,7 +1436,7 @@ export function TransactionModal({
           <button
             type="button"
             onClick={() => setIsAccountingMode(true)}
-            className="group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
+            className="cursor-pointer group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
             title="Switch to journal entry (multi-line debits & credits)"
           >
             <Calculator className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" />
@@ -1446,7 +1446,7 @@ export function TransactionModal({
           <button
             type="button"
             onClick={() => setIsAccountingMode(false)}
-            className="group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
+            className="cursor-pointer group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
             title="Back to simple transaction"
           >
             <ArrowRightLeft className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" />
@@ -1516,7 +1516,7 @@ export function TransactionModal({
                   <button
                     type="button"
                     onClick={() => removeJournalLine(index)}
-                    className="p-2 rounded-lg hover:bg-[var(--color-danger)]/10 text-[var(--color-danger)]"
+                    className="cursor-pointer p-2 rounded-lg hover:bg-[var(--color-danger)]/10 text-[var(--color-danger)]"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -1588,7 +1588,7 @@ export function TransactionModal({
                         setJournalForm({ ...journalForm, tagIds: next });
                       }}
                       className={cn(
-                        'px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
+                        'cursor-pointer px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
                         journalForm.tagIds.includes(tag.id)
                           ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
                           : 'border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)]',
@@ -1646,7 +1646,7 @@ export function TransactionModal({
                     })
                   }
                   className={cn(
-                    'inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-sm transition-all',
+                    'cursor-pointer inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-sm transition-all',
                     simpleForm.type === t.value
                       ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
                       : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',
@@ -1720,7 +1720,7 @@ export function TransactionModal({
                             }
                           }}
                           className={cn(
-                            'py-2 rounded-lg text-sm font-medium transition-all border-2 text-center w-full',
+                            'cursor-pointer py-2 rounded-lg text-sm font-medium transition-all border-2 text-center w-full',
                             simpleForm.paylaterInstallmentMonths === option.value
                               ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
                               : 'bg-[var(--ref-surface-container-low)] border-transparent hover:border-[var(--color-accent)]/30'
@@ -2271,7 +2271,7 @@ export function TransactionModal({
               <h3 className="font-headline font-bold text-lg truncate pr-4">{previewAttachment.filename}</h3>
               <button
                 onClick={() => setPreviewAttachment(null)}
-                className="p-2 hover:bg-[var(--ref-surface-container-high)] rounded-full transition-colors"
+                className="cursor-pointer p-2 hover:bg-[var(--ref-surface-container-high)] rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2290,7 +2290,7 @@ export function TransactionModal({
                   <p className="text-lg mb-4">Preview not available</p>
                   <button
                     onClick={() => window.open(previewAttachment.url, '_blank')}
-                    className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-full"
+                    className="cursor-pointer px-6 py-2 bg-[var(--color-primary)] text-white rounded-full"
                   >
                     Open File
                   </button>
@@ -2302,13 +2302,13 @@ export function TransactionModal({
             <div className="flex items-center justify-between p-4 border-t border-[var(--color-border)]">
               <button
                 onClick={() => window.open(previewAttachment.url, '_blank')}
-                className="px-6 py-2 bg-[var(--ref-surface-container-high)] hover:bg-[var(--ref-surface-container)] rounded-full text-sm font-semibold transition-colors"
+                className="cursor-pointer px-6 py-2 bg-[var(--ref-surface-container-high)] hover:bg-[var(--ref-surface-container)] rounded-full text-sm font-semibold transition-colors"
               >
                 Open in New Tab
               </button>
               <button
                 onClick={() => setPreviewAttachment(null)}
-                className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
+                className="cursor-pointer px-6 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
               >
                 Close
               </button>

@@ -212,13 +212,13 @@ function PeriodsPage() {
                   <div className="flex gap-1">
                     <button
                       onClick={() => openModal(period)}
-                      className="p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
+                      className="cursor-pointer p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(period.id)}
-                      className="p-1 hover:bg-[var(--color-danger)]/20 text-[var(--color-danger)] transition-colors"
+                      className="cursor-pointer p-1 hover:bg-[var(--color-danger)]/20 text-[var(--color-danger)] transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

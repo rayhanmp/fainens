@@ -61,7 +61,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
         </div>
         <button
           onClick={handleRemove}
-          className="p-1 hover:bg-black/10 transition-colors"
+          className="cursor-pointer p-1 hover:bg-black/10 transition-colors"
           aria-label="Close"
         >
           <X className="w-4 h-4" />

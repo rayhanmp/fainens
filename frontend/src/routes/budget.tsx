@@ -687,7 +687,7 @@ function BudgetPage() {
                                 <button
                                   type="button"
                                   onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
-                                  className="p-1.5 rounded-lg text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)]"
+                                  className="p-1.5 rounded-lg text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)] cursor-pointer"
                                   aria-label="More actions"
                                 >
                                   <MoreVertical className="h-4 w-4" />
@@ -703,7 +703,7 @@ function BudgetPage() {
                                     <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
                                       <button
                                         type="button"
-                                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
+                                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
                                         onClick={() => {
                                           setMenuRowId(null);
                                           openEditModal(row);
@@ -713,7 +713,7 @@ function BudgetPage() {
                                       </button>
                                       <button
                                         type="button"
-                                        className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                        className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
                                         onClick={() => {
                                           setMenuRowId(null);
                                           deleteBudget(row.id);

@@ -258,7 +258,7 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
                       type="button"
                       onClick={() => setDepositAccountId(String(a.id))}
                       className={cn(
-                        'flex flex-col items-start p-4 rounded-xl transition-all text-left min-h-[96px]',
+                        'cursor-pointer flex flex-col items-start p-4 rounded-xl transition-all text-left min-h-[96px]',
                         selected
                           ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)] shadow-sm'
                           : 'bg-[var(--ref-surface-container-low)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
@@ -284,7 +284,7 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
+            className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors"
           >
             <Calculator className="w-4 h-4" />
             {showAdvanced ? 'Hide' : 'Show'} advanced statutory settings
@@ -306,7 +306,7 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
                       type="button"
                       onClick={() => setJkkRiskGrade(opt.value)}
                       className={cn(
-                        'flex items-center justify-between p-3 rounded-lg text-left transition-all',
+                        'cursor-pointer flex items-center justify-between p-3 rounded-lg text-left transition-all',
                         jkkRiskGrade === opt.value
                           ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)]'
                           : 'bg-[var(--ref-surface-container)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
@@ -400,7 +400,7 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
                       type="button"
                       onClick={() => setPreviewMonth(i + 1)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                        'cursor-pointer px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
                         previewMonth === i + 1
                           ? 'bg-[var(--color-accent)] text-white'
                           : 'bg-[var(--ref-surface-container)] text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-highest)]',

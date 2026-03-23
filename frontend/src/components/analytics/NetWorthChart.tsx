@@ -146,7 +146,7 @@ export function NetWorthChart() {
               title={o.description}
               onClick={() => setRange(o.range)}
               className={cn(
-                'min-h-[44px] touch-manipulation rounded-full px-3 py-2.5 text-center text-xs font-bold transition-colors sm:min-h-0 sm:min-w-[6.5rem] sm:px-4 sm:py-2',
+                'cursor-pointer min-h-[44px] touch-manipulation rounded-full px-3 py-2.5 text-center text-xs font-bold transition-colors sm:min-h-0 sm:min-w-[6.5rem] sm:px-4 sm:py-2',
                 range === o.range
                   ? 'bg-[var(--ref-primary)] text-white shadow-sm'
                   : 'border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] hover:border-[var(--ref-outline)] hover:text-[var(--ref-on-surface)]',

@@ -258,7 +258,7 @@ export function MapPicker({
                   setSearchQuery('');
                   setSearchResults([]);
                 }}
-                className="p-1 hover:bg-[var(--ref-surface-container-highest)] rounded-full"
+                className="cursor-pointer p-1 hover:bg-[var(--ref-surface-container-highest)] rounded-full"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -272,7 +272,7 @@ export function MapPicker({
                 <button
                   key={result.place_id}
                   onClick={() => handleSelectResult(result)}
-                  className="w-full text-left px-3 py-2 hover:bg-[var(--ref-surface-container-low)] border-b border-[var(--color-border)] last:border-b-0 text-sm"
+                  className="cursor-pointer w-full text-left px-3 py-2 hover:bg-[var(--ref-surface-container-low)] border-b border-[var(--color-border)] last:border-b-0 text-sm"
                 >
                   <div className="truncate">{result.display_name}</div>
                 </button>
@@ -374,7 +374,7 @@ export function TransportRoute({
               <p className="text-sm font-medium truncate">{origin.name}</p>
               <button
                 onClick={onEditOrigin}
-                className="text-xs text-[var(--color-accent)] hover:underline mt-0.5"
+                className="cursor-pointer text-xs text-[var(--color-accent)] hover:underline mt-0.5"
               >
                 Change
               </button>
@@ -382,7 +382,7 @@ export function TransportRoute({
           ) : (
             <button
               onClick={onEditOrigin}
-              className="text-sm text-[var(--color-accent)] hover:underline"
+              className="cursor-pointer text-sm text-[var(--color-accent)] hover:underline"
             >
               Set origin
             </button>
@@ -412,7 +412,7 @@ export function TransportRoute({
               <p className="text-sm font-medium truncate">{destination.name}</p>
               <button
                 onClick={onEditDestination}
-                className="text-xs text-[var(--color-accent)] hover:underline mt-0.5"
+                className="cursor-pointer text-xs text-[var(--color-accent)] hover:underline mt-0.5"
               >
                 Change
               </button>
@@ -420,7 +420,7 @@ export function TransportRoute({
           ) : (
             <button
               onClick={onEditDestination}
-              className="text-sm text-[var(--color-accent)] hover:underline"
+              className="cursor-pointer text-sm text-[var(--color-accent)] hover:underline"
             >
               Set destination
             </button>
