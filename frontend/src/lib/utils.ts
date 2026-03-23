@@ -101,3 +101,45 @@ export function formatFileSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
+// Date utilities namespace
+export const dateUtils = {
+  // Convert timestamp (ms) to date input value (YYYY-MM-DD)
+  toDateInputValue(ms: number): string {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  },
+
+  // Convert date input value (YYYY-MM-DD) to timestamp (ms)
+  fromDateInputValue(s: string): number {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d, 12, 0, 0, 0).getTime();
+  },
+
+  // Convert Date to datetime-local input value (YYYY-MM-DDTHH:MM)
+  toDatetimeLocal(d: Date = new Date()): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  },
+
+  // Get start of local day in milliseconds
+  startOfLocalDayMs(ms: number): number {
+    const d = new Date(ms);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  },
+
+  // Time constants (in milliseconds)
+  timeConstants: {
+    SECOND: 1000,
+    MINUTE: 60 * 1000,
+    HOUR: 60 * 60 * 1000,
+    DAY: 24 * 60 * 60 * 1000,
+    WEEK: 7 * 24 * 60 * 60 * 1000,
+    MONTH: 30 * 24 * 60 * 60 * 1000, // Approximate
+    YEAR: 365 * 24 * 60 * 60 * 1000, // Approximate
+  },
+};
