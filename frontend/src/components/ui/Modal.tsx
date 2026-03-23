@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useEffect, useState } from 'react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -29,7 +30,27 @@ export function Modal({
   size = 'default',
   footer,
 }: ModalProps) {
-  if (!isOpen) return null;
+  const [isVisible, setIsVisible] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      // Small delay to allow render before animation
+      requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+    } else {
+      setIsVisible(false);
+      // Wait for animation to finish before unmounting
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  if (!shouldRender) return null;
 
   const isWide = size === 'xl';
 
@@ -37,14 +58,18 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 lg:p-5">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className={cn(
+          'absolute inset-0 bg-black/50 transition-opacity duration-200',
+          isVisible ? 'opacity-100' : 'opacity-0'
+        )}
         onClick={onClose}
       />
 
       {/* Modal */}
       <div
         className={cn(
-          'brutalist-card relative z-10 w-full max-h-[90vh] flex flex-col overflow-hidden',
+          'brutalist-card relative z-10 w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-200 ease-out',
+          isVisible ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4',
           isWide ? 'max-w-[min(1024px,92vw)]' : 'max-w-lg',
           className,
         )}

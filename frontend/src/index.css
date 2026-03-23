@@ -91,6 +91,25 @@ h6 {
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
   border-radius: var(--radius-md);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.brutalist-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.brutalist-card.interactive {
+  cursor: pointer;
+}
+
+.brutalist-card.interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-border-strong);
+}
+
+.brutalist-card.interactive:active {
+  transform: translateY(0) scale(0.99);
+  transition: transform 0.1s ease;
 }
 
 /* Buttons — in @layer components so Tailwind utilities (text-white, etc.) can override colors. */
@@ -106,23 +125,40 @@ h6 {
     box-shadow: var(--shadow-sm);
     padding: 0.625rem 1.25rem;
     transition:
-      background-color 0.15s ease,
-      box-shadow 0.15s ease,
-      transform 0.1s ease;
+      background-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .brutalist-button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.5s ease;
   }
 
   .brutalist-button:hover {
     filter: brightness(1.05);
     box-shadow: var(--shadow-md);
+    transform: translateY(-2px) scale(1.02);
+  }
+
+  .brutalist-button:hover::before {
+    transform: translateX(100%);
   }
 
   .brutalist-button:active {
-    transform: scale(0.98);
+    transform: scale(0.98) translateY(0);
+    transition: transform 0.08s ease;
   }
 
   .brutalist-button--danger {
@@ -172,6 +208,48 @@ h6 {
 .brutalist-input:focus {
   border-color: var(--ref-primary-container);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-primary-container) 22%, transparent);
+  animation: focusRingGlow 0.3s ease-out;
+}
+
+/* Focus ring animation for all interactive elements */
+@keyframes focusRingGlow {
+  0% {
+    box-shadow: 0 0 0 0px color-mix(in srgb, var(--ref-primary-container) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ref-primary-container) 15%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-primary-container) 22%, transparent);
+  }
+}
+
+/* Enhanced focus styles for buttons and links */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-primary-container) 30%, transparent);
+  animation: focusRingGlow 0.3s ease-out;
+}
+
+/* Danger/error focus state */
+button[data-variant="danger"]:focus-visible,
+.brutalist-button--danger:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 30%, transparent);
+  animation: focusRingGlowDanger 0.3s ease-out;
+}
+
+@keyframes focusRingGlowDanger {
+  0% {
+    box-shadow: 0 0 0 0px color-mix(in srgb, var(--color-danger) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-danger) 15%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 30%, transparent);
+  }
 }
 
 /* Tables */
@@ -209,6 +287,19 @@ h6 {
   background-color: rgba(148, 163, 184, 0.06);
 }
 
+/* Table row hover lift effect */
+.brutalist-table tbody tr {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.brutalist-table tbody tr:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  background-color: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+  z-index: 1;
+  position: relative;
+}
+
 /* Sidebar */
 .sidebar {
   background-color: var(--color-surface);
@@ -223,17 +314,43 @@ h6 {
   font-weight: 500;
   font-size: 0.9375rem;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.2s ease, transform 0.15s ease, padding-left 0.2s ease;
+  position: relative;
 }
 
 .sidebar-item:hover {
   background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  transform: translateX(4px);
 }
 
 .sidebar-item--active {
   background-color: color-mix(in srgb, var(--ref-primary-container) 16%, transparent);
   color: var(--ref-primary);
   font-weight: 600;
+}
+
+.sidebar-item--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--ref-primary-container);
+  border-radius: 0 2px 2px 0;
+  animation: slideInIndicator 0.3s ease-out;
+}
+
+@keyframes slideInIndicator {
+  from {
+    transform: translateY(-50%) scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(-50%) scaleY(1);
+    opacity: 1;
+  }
 }
 
 /* Footer: audit + settings — same row width as Sign out below */
