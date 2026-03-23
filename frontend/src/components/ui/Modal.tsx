@@ -11,8 +11,10 @@ interface ModalProps {
   children: React.ReactNode;
   className?: string;
   contentClassName?: string;
-  /** Wide layout (Stitch “Add Transaction” style) */
+  /** Wide layout (Stitch "Add Transaction" style) */
   size?: 'default' | 'xl';
+  /** Footer content rendered at the bottom of the modal */
+  footer?: React.ReactNode;
 }
 
 export function Modal({
@@ -25,6 +27,7 @@ export function Modal({
   className,
   contentClassName,
   size = 'default',
+  footer,
 }: ModalProps) {
   if (!isOpen) return null;
 
@@ -101,6 +104,13 @@ export function Modal({
         >
           {children}
         </div>
+
+        {/* Footer */}
+        {footer && (
+          <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-4 sm:px-6">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
