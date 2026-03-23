@@ -1,8 +1,21 @@
 import { useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useToast } from './components/ui/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RouterProvider } from '@tanstack/react-router';
 import type { Router } from '@tanstack/react-router';
+
+// Create QueryClient instance
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 interface AppProps {
   router: Router<any, any, any>;
@@ -33,9 +46,11 @@ export function App({ router }: AppProps) {
   }, []);
 
   return (
-    <ErrorBoundary>
-      <RouterProvider router={router} />
-      <ToastContainer />
-    </ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
+        <RouterProvider router={router} />
+        <ToastContainer />
+      </ErrorBoundary>
+    </QueryClientProvider>
   );
 }
