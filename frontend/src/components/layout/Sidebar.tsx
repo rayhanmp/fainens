@@ -12,6 +12,7 @@ import {
   LogOut,
   Banknote,
   Repeat,
+  Sparkles,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
@@ -38,6 +39,7 @@ const restNav: NavItem[] = [
   { to: '/categories', label: 'Categories', icon: Tag },
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
+  { to: '/wishlist', label: 'Wishlist', icon: Sparkles },
   { to: '/subscriptions', label: 'Subscriptions', icon: Repeat },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
 ];
@@ -135,7 +137,7 @@ export function Sidebar() {
             onClick={logout}
             title="Sign out"
             aria-label="Sign out"
-            className="sidebar-footer-icon sidebar-footer-icon--button flex-1 min-h-10"
+            className="cursor-pointer sidebar-footer-icon sidebar-footer-icon--button flex-1 min-h-10"
           >
             <LogOut className="w-5 h-5" />
           </button>
