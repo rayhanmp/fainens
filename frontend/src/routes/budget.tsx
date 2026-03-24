@@ -14,13 +14,15 @@ import {
   Target,
   CalendarRange,
   ChevronRight,
-  ArrowUpDown,
-  Filter,
   Save,
   Copy,
   TrendingUp,
   TrendingDown,
   MoreVertical,
+  Search,
+  ArrowUp,
+  ArrowDown,
+  X,
 } from 'lucide-react';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 
@@ -79,6 +81,7 @@ interface Template {
 
 type SortOption = 'name' | 'percentUsed' | 'amountSpent' | 'variance';
 type FilterOption = 'all' | 'over' | 'near' | 'under' | 'notStarted';
+type SortDirection = 'asc' | 'desc';
 
 function formatPeriodRange(p: Period) {
   const a = new Date(p.startDate);
@@ -106,7 +109,9 @@ function BudgetPage() {
   const [isApplyTemplateModalOpen, setIsApplyTemplateModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [menuRowId, setMenuRowId] = useState<number | null>(null);
 
   const [budgetForm, setBudgetForm] = useState({
@@ -341,7 +346,13 @@ function BudgetPage() {
   const filteredAndSortedRows = useMemo(() => {
     let rows = [...budgetRows];
 
-    // Filter
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      rows = rows.filter((r) => r.categoryName.toLowerCase().includes(query));
+    }
+
+    // Status filter
     switch (filterBy) {
       case 'over':
         rows = rows.filter((r) => r.percentUsed > 100);
@@ -373,8 +384,29 @@ function BudgetPage() {
         break;
     }
 
+    // Apply sort direction
+    if (sortDirection === 'asc') {
+      rows.reverse();
+    }
+
     return rows;
-  }, [budgetRows, sortBy, filterBy]);
+  }, [budgetRows, sortBy, sortDirection, filterBy, searchQuery]);
+
+  // Quick stats
+  const stats = useMemo(() => {
+    const over = budgetRows.filter((r) => r.percentUsed > 100).length;
+    const near = budgetRows.filter((r) => r.percentUsed >= 75 && r.percentUsed <= 100).length;
+    const under = budgetRows.filter((r) => r.percentUsed > 0 && r.percentUsed < 75).length;
+    const notStarted = budgetRows.filter((r) => r.actualAmount === 0).length;
+    return { over, near, under, notStarted, total: budgetRows.length };
+  }, [budgetRows]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterBy !== 'all') count++;
+    if (searchQuery.trim()) count++;
+    return count;
+  }, [filterBy, searchQuery]);
 
   const mixRows = useMemo(() => {
     if (totalBudgeted <= 0) return [];
@@ -451,6 +483,25 @@ function BudgetPage() {
                 className="min-w-[180px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold"
               />
             )}
+            
+            {/* Template buttons */}
+            {templates.length > 0 && (
+              <button
+                onClick={() => setIsApplyTemplateModalOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:text-white transition-colors shadow-sm border border-[var(--color-border)]"
+                title="Apply Template"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={openTemplateModal}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:text-white transition-colors shadow-sm border border-[var(--color-border)]"
+              title="Save as Template"
+            >
+              <Save className="h-4 w-4" />
+            </button>
+            
             <Button
               className="rounded-full px-6 py-3 shadow-lg shadow-[var(--color-accent)]/20"
               onClick={openBudgetModal}
@@ -462,76 +513,7 @@ function BudgetPage() {
           </div>
         </div>
 
-        {/* Controls: Compare, Sort, Filter, Templates */}
-        {selectedPeriod && budgetRows.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 p-4 bg-[var(--ref-surface-container-low)] rounded-xl">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-[var(--color-text-secondary)]">Compare to:</span>
-              <Select
-                value={comparePeriodId}
-                onChange={(e) => setComparePeriodId(e.target.value)}
-                options={[
-                  { value: '', label: 'None' },
-                  ...periods
-                    .filter((p) => p.id.toString() !== selectedPeriodId)
-                    .map((p) => ({ value: p.id.toString(), label: p.name })),
-                ]}
-                className="min-w-[150px] text-xs rounded-lg"
-              />
-            </div>
-            <div className="h-6 w-px bg-[var(--color-border)]" />
-            <div className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4 text-[var(--color-muted)]" />
-              <Select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                options={[
-                  { value: 'name', label: 'Name' },
-                  { value: 'percentUsed', label: '% Used' },
-                  { value: 'amountSpent', label: 'Amount Spent' },
-                  { value: 'variance', label: 'Variance' },
-                ]}
-                className="min-w-[120px] text-xs rounded-lg"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-[var(--color-muted)]" />
-              <Select
-                value={filterBy}
-                onChange={(e) => setFilterBy(e.target.value as FilterOption)}
-                options={[
-                  { value: 'all', label: 'All' },
-                  { value: 'over', label: 'Over budget' },
-                  { value: 'near', label: 'Near limit' },
-                  { value: 'under', label: 'Under budget' },
-                  { value: 'notStarted', label: 'Not started' },
-                ]}
-                className="min-w-[130px] text-xs rounded-lg"
-              />
-            </div>
-            <div className="flex-1" />
-            {templates.length > 0 && (
-              <Button
-                variant="secondary"
-                onClick={() => setIsApplyTemplateModalOpen(true)}
-                className="text-xs rounded-full"
-              >
-                <Copy className="h-3 w-3 mr-1" />
-                Apply Template
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              onClick={openTemplateModal}
-              className="text-xs rounded-full"
-            >
-              <Save className="h-3 w-3 mr-1" />
-              Save as Template
-            </Button>
-          </div>
-        )}
-
-        {/* Bento summary */}
+        {/* Bento summary - Cards at the top */}
         {selectedPeriod && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-[2rem] bg-[var(--ref-primary-container)] p-8 text-white group">
@@ -576,6 +558,134 @@ function BudgetPage() {
               <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-[var(--ref-secondary)]">
                 {totalRemaining >= 0 ? 'Headroom this period' : 'Over budget'}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bento Controls: Search, Compare, Sort, Filter */}
+        {selectedPeriod && budgetRows.length > 0 && (
+          <div className="space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
+              <input
+                type="search"
+                placeholder="Search categories..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-full border-none bg-[var(--ref-surface-container-highest)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-muted)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
+              />
+            </div>
+
+            {/* Bento Filter Cards */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Compare Period */}
+              <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm">
+                <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                  Compare to
+                </label>
+                <select
+                  value={comparePeriodId}
+                  onChange={(e) => setComparePeriodId(e.target.value)}
+                  className="w-full cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-[var(--color-text-primary)] focus:ring-0"
+                >
+                  <option value="">None</option>
+                  {periods
+                    .filter((p) => p.id.toString() !== selectedPeriodId)
+                    .map((p) => (
+                      <option key={p.id} value={p.id.toString()}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Sort with Direction */}
+              <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm">
+                <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                  Sort by
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="flex-1 cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-[var(--color-text-primary)] focus:ring-0"
+                  >
+                    <option value="name">Name</option>
+                    <option value="percentUsed">% Used</option>
+                    <option value="amountSpent">Amount Spent</option>
+                    <option value="variance">Variance</option>
+                  </select>
+                  <button
+                    onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                    className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--color-text-primary)] transition-colors"
+                    title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                  >
+                    {sortDirection === 'asc' ? (
+                      <ArrowUp className="h-4 w-4" />
+                    ) : (
+                      <ArrowDown className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-[var(--color-muted)] mr-2">Filter:</span>
+              {[
+                { value: 'all', label: 'All', count: stats.total },
+                { value: 'over', label: 'Over Budget', count: stats.over },
+                { value: 'near', label: 'Near Limit', count: stats.near },
+                { value: 'under', label: 'Under Budget', count: stats.under },
+                { value: 'notStarted', label: 'Not Started', count: stats.notStarted },
+              ].map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setFilterBy(filter.value as FilterOption)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all border',
+                    filterBy === filter.value
+                      ? filter.value === 'over'
+                        ? 'bg-[var(--ref-error)] text-white border-[var(--ref-error)]'
+                        : filter.value === 'near'
+                        ? 'bg-[var(--color-warning)] text-white border-[var(--color-warning)]'
+                        : filter.value === 'under'
+                        ? 'bg-[var(--color-success)] text-white border-[var(--color-success)]'
+                        : 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
+                      : 'bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)]'
+                  )}
+                >
+                  {filter.label}
+                  <span className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[10px]',
+                    filterBy === filter.value ? 'bg-white/20' : 'bg-[var(--ref-surface-container-high)]'
+                  )}>
+                    {filter.count}
+                  </span>
+                </button>
+              ))}
+
+              {/* Active Filters Badge & Clear */}
+              {activeFiltersCount > 0 && (
+                <>
+                  <div className="h-4 w-px bg-[var(--color-border)] mx-2" />
+                  <span className="text-xs font-medium text-[var(--color-accent)]">
+                    {activeFiltersCount} active
+                  </span>
+                  <button
+                    onClick={() => {
+                      setFilterBy('all');
+                      setSearchQuery('');
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-high)] transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                    Clear all
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -756,32 +866,72 @@ function BudgetPage() {
               </div>
             </div>
 
-            {/* Budget mix */}
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 editorial-shadow">
-              <h2 className="mb-2 font-headline text-lg font-bold text-[var(--ref-on-surface)]">Budget mix</h2>
-              <p className="mb-6 text-xs text-[var(--ref-on-surface-variant)]">
-                Share of total planned budget by category.
-              </p>
-              <div className="space-y-4">
-                {mixRows.map((row, i) => {
-                  const tint = ['bg-[var(--ref-primary)]', 'bg-[var(--ref-secondary)]', 'bg-[var(--ref-tertiary)]'];
-                  return (
-                    <div key={row.id} className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex justify-between gap-2">
-                          <span className="truncate text-xs font-bold text-[var(--ref-on-surface)]">{row.categoryName}</span>
-                          <span className="shrink-0 text-xs font-bold text-[var(--ref-on-surface)]">{row.share}%</span>
-                        </div>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]">
-                          <div
-                            className={cn('h-full rounded-full', tint[i % tint.length])}
-                            style={{ width: `${row.share}%` }}
-                          />
+            {/* Status Overview */}
+            <div className="space-y-6">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 editorial-shadow">
+                <h2 className="mb-4 font-headline text-lg font-bold text-[var(--ref-on-surface)]">Status Overview</h2>
+                <p className="mb-4 text-xs text-[var(--ref-on-surface-variant)]">
+                  Showing {filteredAndSortedRows.length} of {stats.total} categories
+                </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-lg bg-[var(--ref-error)]/10 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-3 rounded-full bg-[var(--ref-error)]" />
+                      <span className="text-sm font-medium text-[var(--ref-on-surface)]">Over Budget</span>
+                    </div>
+                    <span className="text-lg font-bold text-[var(--ref-error)]">{stats.over}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-[var(--color-warning)]/10 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-3 rounded-full bg-[var(--color-warning)]" />
+                      <span className="text-sm font-medium text-[var(--ref-on-surface)]">Near Limit</span>
+                    </div>
+                    <span className="text-lg font-bold text-[var(--color-warning)]">{stats.near}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-[var(--color-success)]/10 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-3 rounded-full bg-[var(--color-success)]" />
+                      <span className="text-sm font-medium text-[var(--ref-on-surface)]">Under Budget</span>
+                    </div>
+                    <span className="text-lg font-bold text-[var(--color-success)]">{stats.under}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-[var(--ref-surface-container-high)] px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-3 rounded-full bg-[var(--color-muted)]" />
+                      <span className="text-sm font-medium text-[var(--ref-on-surface)]">Not Started</span>
+                    </div>
+                    <span className="text-lg font-bold text-[var(--color-text-primary)]">{stats.notStarted}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Budget mix */}
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 editorial-shadow">
+                <h2 className="mb-2 font-headline text-lg font-bold text-[var(--ref-on-surface)]">Budget mix</h2>
+                <p className="mb-6 text-xs text-[var(--ref-on-surface-variant)]">
+                  Share of total planned budget by category.
+                </p>
+                <div className="space-y-4">
+                  {mixRows.map((row, i) => {
+                    const tint = ['bg-[var(--ref-primary)]', 'bg-[var(--ref-secondary)]', 'bg-[var(--ref-tertiary)]'];
+                    return (
+                      <div key={row.id} className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex justify-between gap-2">
+                            <span className="truncate text-xs font-bold text-[var(--ref-on-surface)]">{row.categoryName}</span>
+                            <span className="shrink-0 text-xs font-bold text-[var(--ref-on-surface)]">{row.share}%</span>
+                          </div>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]">
+                            <div
+                              className={cn('h-full rounded-full', tint[i % tint.length])}
+                              style={{ width: `${row.share}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
