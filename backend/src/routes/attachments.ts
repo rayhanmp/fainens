@@ -13,6 +13,22 @@ import {
   getLocalFilePath,
 } from "../services/r2";
 
+// Allowed MIME types for file uploads
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel", // .xls
+];
+
+// Maximum file size: 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
+
 export default async function (fastify: FastifyInstance) {
   // All routes require authentication
   fastify.addHook("onRequest", fastify.authenticate);
@@ -87,6 +103,21 @@ export default async function (fastify: FastifyInstance) {
       data: string; // base64 encoded file data
     };
 
+    // Validate required fields
+    if (!body.transactionId || !body.filename || !body.contentType || !body.data) {
+      reply.code(400).send({ error: "Missing required fields: transactionId, filename, contentType, data" });
+      return;
+    }
+
+    // Validate file type
+    if (!ALLOWED_MIME_TYPES.includes(body.contentType)) {
+      reply.code(400).send({ 
+        error: "Invalid file type",
+        allowedTypes: ALLOWED_MIME_TYPES 
+      });
+      return;
+    }
+
     // Validate transaction exists
     const [transaction] = await db
       .select()
@@ -108,8 +139,25 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
+    // Validate file size
+    if (buffer.length > MAX_FILE_SIZE) {
+      reply.code(400).send({ 
+        error: "File too large", 
+        maxSize: `${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+        actualSize: `${(buffer.length / (1024 * 1024)).toFixed(2)}MB`
+      });
+      return;
+    }
+
+    // Validate filename (prevent path traversal)
+    const sanitizedFilename = body.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    if (!sanitizedFilename || sanitizedFilename.length === 0) {
+      reply.code(400).send({ error: "Invalid filename" });
+      return;
+    }
+
     // Generate key and upload to R2
-    const key = generateAttachmentKey(body.transactionId, body.filename);
+    const key = generateAttachmentKey(body.transactionId, sanitizedFilename);
 
     try {
       await uploadFile(key, buffer, body.contentType);
@@ -119,7 +167,7 @@ export default async function (fastify: FastifyInstance) {
         .insert(attachments)
         .values({
           transactionId: body.transactionId,
-          filename: body.filename,
+          filename: sanitizedFilename,
           r2Key: key,
           mimetype: body.contentType,
           fileSize: buffer.length,
@@ -155,16 +203,30 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
+    let storageDeleted = true;
+    let storageError: string | null = null;
+
     // Delete from R2
     try {
       await deleteFile(attachment.r2Key);
     } catch (err) {
+      storageDeleted = false;
+      storageError = (err as Error).message;
       fastify.log.error(err);
-      // Continue to delete from DB even if R2 delete fails
     }
 
     // Delete from database
     await db.delete(attachments).where(eq(attachments.id, parseInt(id)));
+
+    // Report partial failure if storage delete failed
+    if (!storageDeleted) {
+      reply.code(200).send({ 
+        success: true, 
+        warning: "Attachment metadata deleted but file storage cleanup failed",
+        storageError 
+      });
+      return;
+    }
 
     reply.code(204).send();
   });
