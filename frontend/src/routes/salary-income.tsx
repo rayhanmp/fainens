@@ -65,9 +65,10 @@ function startOfMonth(d: Date) {
 
 function daysUntilPayday(payDay = 25) {
   const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const d = Math.min(Math.max(1, payDay), 31);
   let target = new Date(now.getFullYear(), now.getMonth(), d, 23, 59, 59, 999);
-  if (now.getTime() > target.getTime()) {
+  if (today.getTime() > target.getTime()) {
     target = new Date(now.getFullYear(), now.getMonth() + 1, d, 23, 59, 59, 999);
   }
   const ms = target.getTime() - now.getTime();
