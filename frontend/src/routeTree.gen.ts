@@ -19,6 +19,7 @@ import { Route as PeriodsRouteImport } from './routes/periods'
 import { Route as PaylaterRouteImport } from './routes/paylater'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LoansRouteImport } from './routes/loans'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as BudgetRouteImport } from './routes/budget'
 import { Route as AuditLogRouteImport } from './routes/audit-log'
@@ -75,6 +76,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoansRoute = LoansRouteImport.update({
+  id: '/loans',
+  path: '/loans',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CategoriesRoute = CategoriesRouteImport.update({
   id: '/categories',
   path: '/categories',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
+  '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
+  '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
+  '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/audit-log'
     | '/budget'
     | '/categories'
+    | '/loans'
     | '/login'
     | '/onboarding'
     | '/paylater'
@@ -178,6 +188,7 @@ export interface FileRouteTypes {
     | '/audit-log'
     | '/budget'
     | '/categories'
+    | '/loans'
     | '/login'
     | '/onboarding'
     | '/paylater'
@@ -195,6 +206,7 @@ export interface FileRouteTypes {
     | '/audit-log'
     | '/budget'
     | '/categories'
+    | '/loans'
     | '/login'
     | '/onboarding'
     | '/paylater'
@@ -213,6 +225,7 @@ export interface RootRouteChildren {
   AuditLogRoute: typeof AuditLogRoute
   BudgetRoute: typeof BudgetRoute
   CategoriesRoute: typeof CategoriesRoute
+  LoansRoute: typeof LoansRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   PaylaterRoute: typeof PaylaterRoute
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/loans': {
+      id: '/loans'
+      path: '/loans'
+      fullPath: '/loans'
+      preLoaderRoute: typeof LoansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/categories': {
       id: '/categories'
       path: '/categories'
@@ -341,6 +361,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuditLogRoute: AuditLogRoute,
   BudgetRoute: BudgetRoute,
   CategoriesRoute: CategoriesRoute,
+  LoansRoute: LoansRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   PaylaterRoute: PaylaterRoute,

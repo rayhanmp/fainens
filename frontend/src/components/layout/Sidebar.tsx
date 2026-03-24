@@ -13,6 +13,7 @@ import {
   Banknote,
   Repeat,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
@@ -32,6 +33,7 @@ const topNav: NavItem[] = [
   { to: '/accounts', label: 'Accounts', icon: Wallet },
   { to: '/transactions', label: 'Transactions', icon: Receipt },
   { to: '/paylater', label: 'Pay later', icon: CreditCard },
+  { to: '/loans', label: 'Loans', icon: Users },
 ];
 
 /** Everything after the divider */

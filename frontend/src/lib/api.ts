@@ -1179,4 +1179,226 @@ export const api = {
       };
     },
   },
+
+  // Contacts
+  contacts: {
+    list: (params?: { search?: string; includeInactive?: boolean }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.includeInactive) queryParams.append('includeInactive', 'true');
+      const query = queryParams.toString();
+      return fetchApi<Array<{
+        id: number;
+        name: string;
+        fullName: string | null;
+        nickname: string | null;
+        email: string | null;
+        phone: string | null;
+        relationshipType: string | null;
+        notes: string | null;
+        isActive: boolean;
+        createdAt: number;
+        updatedAt: number;
+        totalLent: number;
+        totalBorrowed: number;
+        netBalance: number;
+        activeLoansCount: number;
+      }>>(`/contacts${query ? `?${query}` : ''}`);
+    },
+    get: (id: number) => fetchApi<{
+      id: number;
+      name: string;
+      fullName: string | null;
+      nickname: string | null;
+      email: string | null;
+      phone: string | null;
+      relationshipType: string | null;
+      notes: string | null;
+      isActive: boolean;
+      createdAt: number;
+      updatedAt: number;
+      loans: Array<{
+        id: number;
+        contactId: number;
+        direction: 'lent' | 'borrowed';
+        amountCents: number;
+        remainingCents: number;
+        startDate: number;
+        dueDate: number | null;
+        status: 'active' | 'repaid' | 'defaulted' | 'written_off';
+        description: string | null;
+        createdAt: number;
+      }>;
+      summary: {
+        totalLent: number;
+        totalBorrowed: number;
+        netBalance: number;
+        activeLoansCount: number;
+        repaidLoansCount: number;
+        totalLentAllTime: number;
+        totalBorrowedAllTime: number;
+      };
+    }>(`/contacts/${id}`),
+    create: (data: {
+      name: string;
+      fullName?: string | null;
+      nickname?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      relationshipType?: string | null;
+      notes?: string | null;
+    }) => fetchApi<{
+      id: number;
+      name: string;
+      fullName: string | null;
+      nickname: string | null;
+      email: string | null;
+      phone: string | null;
+      relationshipType: string | null;
+      notes: string | null;
+      isActive: boolean;
+      createdAt: number;
+      updatedAt: number;
+    }>('/contacts', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<{
+      name: string;
+      fullName: string | null;
+      nickname: string | null;
+      email: string | null;
+      phone: string | null;
+      relationshipType: string | null;
+      notes: string | null;
+    }>) => fetchApi<{
+      id: number;
+      name: string;
+      fullName: string | null;
+      nickname: string | null;
+      email: string | null;
+      phone: string | null;
+      relationshipType: string | null;
+      notes: string | null;
+      isActive: boolean;
+      createdAt: number;
+      updatedAt: number;
+    }>(`/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: number) => fetchApi<void>(`/contacts/${id}`, { method: 'DELETE' }),
+  },
+
+  // Loans
+  loans: {
+    list: (params?: {
+      direction?: 'lent' | 'borrowed';
+      status?: 'active' | 'repaid' | 'defaulted' | 'written_off';
+      contactId?: number;
+      includeHistory?: boolean;
+    }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.direction) queryParams.append('direction', params.direction);
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.contactId) queryParams.append('contactId', params.contactId.toString());
+      if (params?.includeHistory) queryParams.append('includeHistory', 'true');
+      const query = queryParams.toString();
+      return fetchApi<Array<{
+        id: number;
+        contactId: number;
+        direction: 'lent' | 'borrowed';
+        amountCents: number;
+        remainingCents: number;
+        startDate: number;
+        dueDate: number | null;
+        status: string;
+        description: string | null;
+        contact: { id: number; name: string };
+        isOverdue: boolean;
+        daysOverdue: number;
+      }>>(`/loans${query ? `?${query}` : ''}`);
+    },
+    summary: () => fetchApi<{
+      totalLent: number;
+      totalBorrowed: number;
+      netPosition: number;
+      totalRepaid: number;
+      activeLoansCount: number;
+      repaidLoansCount: number;
+      defaultedLoansCount: number;
+    }>('/loans/summary'),
+    get: (id: number) => fetchApi<{
+      id: number;
+      contactId: number;
+      direction: 'lent' | 'borrowed';
+      amountCents: number;
+      remainingCents: number;
+      startDate: number;
+      dueDate: number | null;
+      status: string;
+      description: string | null;
+      sourceType: string;
+      contact: { id: number; name: string };
+      payments: Array<{
+        id: number;
+        loanId: number;
+        amountCents: number;
+        principalCents: number;
+        paymentDate: number;
+        notes: string | null;
+        createdAt: number;
+      }>;
+      isOverdue: boolean;
+      daysOverdue: number;
+    }>(`/loans/${id}`),
+    create: (data: {
+      contactId: number;
+      direction: 'lent' | 'borrowed';
+      amountCents: number;
+      description?: string;
+      dueDate?: number | null;
+      walletAccountId: number;
+    }) => fetchApi<{
+      id: number;
+      contactId: number;
+      direction: 'lent' | 'borrowed';
+      amountCents: number;
+      remainingCents: number;
+      startDate: number;
+      dueDate: number | null;
+      status: string;
+      description: string | null;
+    }>('/loans', { method: 'POST', body: JSON.stringify(data) }),
+    recordPayment: (id: number, data: {
+      amountCents: number;
+      paymentDate?: number;
+      notes?: string;
+      walletAccountId: number;
+    }) => fetchApi<{
+      payment: {
+        id: number;
+        loanId: number;
+        amountCents: number;
+        principalCents: number;
+        paymentDate: number;
+        notes: string | null;
+        createdAt: number;
+      };
+      loan: {
+        id: number;
+        remainingCents: number;
+        status: string;
+      };
+    }>(`/loans/${id}/payments`, { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: {
+      status?: 'active' | 'repaid' | 'defaulted' | 'written_off';
+      description?: string;
+    }) => fetchApi<{
+      id: number;
+      contactId: number;
+      direction: 'lent' | 'borrowed';
+      amountCents: number;
+      remainingCents: number;
+      startDate: number;
+      dueDate: number | null;
+      status: string;
+      description: string | null;
+    }>(`/loans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: number) => fetchApi<void>(`/loans/${id}`, { method: 'DELETE' }),
+  },
 };
