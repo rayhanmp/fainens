@@ -124,7 +124,7 @@ export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<Ne
 }
 
 /** Net worth trend window — all ranges end at “now” (today). */
-export type NetWorthRange = "7d" | "30d" | "6m" | "1y";
+export type NetWorthRange = "7d" | "30d" | "3m" | "6m" | "1y";
 
 function endOfCalendarDayMs(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
@@ -155,10 +155,11 @@ export function buildNetWorthTrendBuckets(range: NetWorthRange): Array<{ label: 
     return out;
   }
 
-  if (range === "6m") {
+  if (range === "3m" || range === "6m") {
+    const monthCount = range === "3m" ? 3 : 6;
     const out: Array<{ label: string; asOfMs: number }> = [];
-    for (let i = 0; i < 6; i++) {
-      const monthsAgo = 5 - i;
+    for (let i = 0; i < monthCount; i++) {
+      const monthsAgo = monthCount - 1 - i;
       const d = new Date();
       d.setDate(1);
       d.setHours(0, 0, 0, 0);

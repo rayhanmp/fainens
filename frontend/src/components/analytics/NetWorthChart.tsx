@@ -12,7 +12,7 @@ import { api } from '../../lib/api';
 import { formatCurrency, cn } from '../../lib/utils';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-type NetWorthRange = '7d' | '30d' | '6m' | '1y';
+type NetWorthRange = '7d' | '30d' | '3m' | '6m' | '1y';
 
 const RANGE_OPTIONS: Array<{
   range: NetWorthRange;
@@ -22,6 +22,7 @@ const RANGE_OPTIONS: Array<{
 }> = [
   { range: '7d', label: '7 days', description: 'Last 7 days, one point per day' },
   { range: '30d', label: '30 days', description: 'Last 30 days, one point per day' },
+  { range: '3m', label: '3 months', description: 'Last 3 months, month-end snapshots' },
   { range: '6m', label: '6 months', description: 'Last 6 months, month-end snapshots' },
   { range: '1y', label: '1 year', description: 'Last 12 months, month-end snapshots' },
 ];
@@ -79,7 +80,7 @@ export function NetWorthChart() {
   }, [range]);
 
   const currentNetWorth = rows.length > 0 ? rows[rows.length - 1].netWorth : 0;
-  const previousNetWorth = rows.length > 1 ? rows[rows.length - 2].netWorth : currentNetWorth;
+  const previousNetWorth = rows.length > 0 ? rows[0].netWorth : currentNetWorth;
 
   const netWorthChange = currentNetWorth - previousNetWorth;
   const netWorthChangePercent =
@@ -97,8 +98,15 @@ export function NetWorthChart() {
     return 'text-[var(--color-muted)]';
   };
 
-  const compareLabel =
-    range === '7d' || range === '30d' ? 'vs prior day' : 'vs prior month';
+  const compareLabel = (() => {
+    switch (range) {
+      case '7d': return 'vs 7 days ago';
+      case '30d': return 'vs 30 days ago';
+      case '3m': return 'vs 3 months ago';
+      case '6m': return 'vs 6 months ago';
+      case '1y': return 'vs 1 year ago';
+    }
+  })();
 
   const xAxisMinTickGap = range === '30d' ? 14 : range === '7d' ? 6 : 10;
 
@@ -126,9 +134,8 @@ export function NetWorthChart() {
           <h3 className="font-headline text-base font-bold text-[var(--ref-on-surface)] sm:text-lg">
             Net worth trend
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--ref-on-surface-variant)] sm:text-sm">
-            Assets minus liabilities from your ledger. Each point is net worth as-of that day or month-end
-            (rolling back from today).
+          <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)] sm:text-sm">
+            Net worth over time, rolling back from today
           </p>
         </div>
 
