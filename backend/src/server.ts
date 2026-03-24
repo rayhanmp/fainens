@@ -249,6 +249,23 @@ const start = async () => {
     setInterval(() => {
       void runRenewals();
     }, renewalIntervalMs);
+
+    // Salary posting scheduled job - runs every hour to check if it's payroll day
+    const runSalaryPosting = async () => {
+      try {
+        const { postSalaryIfPayrollDay } = await import("./services/salary-posting");
+        const result = await postSalaryIfPayrollDay(db);
+        if (result.posted) {
+          fastify.log.info({ result }, "salary posted (scheduled)");
+        }
+      } catch (e) {
+        fastify.log.warn({ err: e }, "salary posting failed");
+      }
+    };
+    await runSalaryPosting();
+    setInterval(() => {
+      void runSalaryPosting();
+    }, renewalIntervalMs);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

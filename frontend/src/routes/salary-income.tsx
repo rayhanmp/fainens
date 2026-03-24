@@ -65,14 +65,20 @@ function startOfMonth(d: Date) {
 
 function daysUntilPayday(payDay = 25) {
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = now.getDate();
   const d = Math.min(Math.max(1, payDay), 31);
-  let target = new Date(now.getFullYear(), now.getMonth(), d, 23, 59, 59, 999);
-  if (today.getTime() > target.getTime()) {
-    target = new Date(now.getFullYear(), now.getMonth() + 1, d, 23, 59, 59, 999);
+  
+  if (today === d) {
+    return { days: 0, date: new Date(now.getFullYear(), now.getMonth(), d, 0, 1, 0, 0) };
+  }
+  
+  let target = new Date(now.getFullYear(), now.getMonth(), d, 0, 1, 0, 0);
+  if (today > d) {
+    target = new Date(now.getFullYear(), now.getMonth() + 1, d, 0, 1, 0, 0);
   }
   const ms = target.getTime() - now.getTime();
-  return { days: Math.max(0, Math.ceil(ms / 86400000)), date: target };
+  const days = Math.max(0, Math.ceil(ms / 86400000));
+  return { days, date: target };
 }
 
 function downloadIncomeCsv(rows: TxRow[]) {
@@ -262,6 +268,25 @@ function SalaryIncomePage() {
                       >
                         Edit salary profile…
                       </button>
+                      {hasPayroll && salary?.settings.depositAccountId && (
+                        <button
+                          type="button"
+                          className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                          onClick={async () => {
+                            setMenuOpen(false);
+                            try {
+                              await api.salarySettings.postSalary();
+                              const data = await api.salarySettings.get();
+                              setSalary(data);
+                              alert('Salary posted!');
+                            } catch (e) {
+                              alert(e instanceof Error ? e.message : 'Failed to post salary');
+                            }
+                          }}
+                        >
+                          Post salary now
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -357,7 +382,7 @@ function SalaryIncomePage() {
                 <p className="font-headline text-xl font-bold text-[var(--color-success)]">
                   {hasPayroll && computed
                     ? formatCurrency(
-                        computed.jhtMonthly + computed.jpMonthly + computed.bpjsKesehatanMonthly,
+                        computed.jhtMonthly + computed.jpMonthly,
                       )
                     : '—'}
                 </p>
@@ -389,9 +414,15 @@ function SalaryIncomePage() {
                 </span>
               </div>
               <h3 className="font-headline text-3xl font-extrabold leading-tight sm:text-4xl">
-                {payday.days} day{payday.days === 1 ? '' : 's'}
-                <br />
-                to payday
+                {payday.days === 0 ? (
+                  <>Yeay, today is payday!</>
+                ) : (
+                  <>
+                    {payday.days} day{payday.days === 1 ? '' : 's'}
+                    <br />
+                    to payday
+                  </>
+                )}
               </h3>
               <p className="mt-2 text-sm text-[var(--ref-primary-fixed)]">
                 Assumed disbursement:{' '}
@@ -513,17 +544,19 @@ function SalaryIncomePage() {
                   </span>
                 </div>
               </div>
-              <div className="relative border-l-2 border-[var(--color-accent)]/30 pl-6">
-                <p className="mb-1 text-xs font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
-                  BPJS Kesehatan
-                </p>
-                <div className="flex flex-wrap items-end justify-between gap-2">
-                  <h4 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                    {hasPayroll && computed ? formatCurrency(computed.bpjsKesehatanMonthly) : '—'}
-                  </h4>
-                  <span className="text-xs text-[var(--color-text-secondary)]">Employee 1% (capped base)</span>
+              {salary?.settings.bpjsKesehatanActive && (
+                <div className="relative border-l-2 border-[var(--color-accent)]/30 pl-6">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
+                    BPJS Kesehatan
+                  </p>
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <h4 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
+                      {hasPayroll && computed ? formatCurrency(computed.bpjsKesehatanMonthly) : '—'}
+                    </h4>
+                    <span className="text-xs text-[var(--color-text-secondary)]">Employee 1% (capped base)</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <div className="mt-8 flex items-start gap-3 rounded-xl bg-[var(--ref-surface-container-highest)] p-4">
               <Info className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-accent)]" />

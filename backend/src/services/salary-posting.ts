@@ -2,9 +2,14 @@ import { eq } from "drizzle-orm";
 import { db as defaultDb } from "../db/client";
 import { salarySettings, accounts } from "../db/schema";
 import { createSimpleTransaction } from "./ledger";
-import { estimatePayroll } from "./indonesia-payroll";
+import { estimatePayroll, getTERCategory } from "./indonesia-payroll";
+import { getRedisClient } from "../cache/redis";
 
 const SINGLETON_ID = 1;
+
+function getSalaryPostedKey(date: Date): string {
+  return `salary:posted:${date.toISOString().split('T')[0]}`;
+}
 
 export type SalaryPostingResult = {
   posted: boolean;
@@ -15,13 +20,20 @@ export type SalaryPostingResult = {
 
 /**
  * Posts salary income transaction on payroll day.
- * Should be called daily (e.g., via cron job or when salary page is loaded).
+ * Uses Redis for idempotency - won't post twice on the same day.
  */
 export async function postSalaryIfPayrollDay(
   dbLike: typeof defaultDb = defaultDb,
 ): Promise<SalaryPostingResult> {
   const today = new Date();
   const todayDay = today.getDate();
+  const redis = getRedisClient();
+
+  const postedKey = getSalaryPostedKey(today);
+  const alreadyPosted = await redis.get(postedKey);
+  if (alreadyPosted) {
+    return { posted: false, message: "Salary already posted today (via Redis)" };
+  }
 
   // Get salary settings
   const [settings] = await dbLike
@@ -91,8 +103,18 @@ export async function postSalaryIfPayrollDay(
     return { posted: false, message: "Deposit account must be an asset (wallet) account" };
   }
 
-  // Calculate net salary
-  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode);
+  // Calculate net salary using full settings (including bpjsKesehatanActive)
+  const payrollSettings = {
+    ptkpCode: settings.ptkpCode,
+    terCategory: (settings.terCategory as "A" | "B" | "C") || getTERCategory(settings.ptkpCode),
+    jkkRiskGrade: settings.jkkRiskGrade / 10000,
+    jkmRate: settings.jkmRate / 10000,
+    bpjsKesehatanActive: settings.bpjsKesehatanActive,
+    jpWageCap: settings.jpWageCap,
+    bpjsKesWageCap: settings.bpjsKesWageCap,
+    jhtWageCap: settings.jhtWageCap,
+  };
+  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode, 1, payrollSettings);
   const netAmount = payroll.estimatedNetMonthly;
 
   if (netAmount <= 0) {
@@ -112,6 +134,9 @@ export async function postSalaryIfPayrollDay(
     },
     dbLike,
   );
+
+  // Set Redis key with 2-day TTL to prevent duplicate posting
+  await redis.setex(postedKey, 60 * 60 * 24 * 2, '1');
 
   return {
     posted: true,
