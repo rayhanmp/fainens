@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDot,
+  HandCoins,
 } from 'lucide-react';
 import {
   TransactionModal,
@@ -90,6 +91,7 @@ function formatTxTime(ts: number) {
 
 function pickCategoryIcon(categoryName: string | undefined, kind: string) {
   const n = (categoryName ?? '').toLowerCase();
+  if (kind === 'loan') return HandCoins;
   if (kind === 'income') return Briefcase;
   if (kind === 'transfer') return ArrowLeftRight;
   if (n.includes('food') || n.includes('dining') || n.includes('meal')) return UtensilsCrossed;
@@ -287,6 +289,36 @@ function TransactionsPage() {
           ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
           : 0;
 
+      // Check for loan-related transactions
+      if (tx.txType?.includes('loan')) {
+        const isLoanCreation = tx.txType === 'loan_creation';
+        const isLoanPayment = tx.txType === 'loan_payment';
+        // Find the wallet account line (not the system loan account)
+        const walletLine = tx.lines.find((l) => {
+          const acc = accounts.find((a) => a.id === l.accountId);
+          // Wallet account is an asset that is NOT a system loan account
+          return acc && acc.type === 'asset' && !acc.systemKey?.includes('loan');
+        });
+        const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
+        // For loans: if wallet has credit, money left your wallet (negative)
+        // if wallet has debit, money entered your wallet (positive)
+        const signedAmount = walletLine
+          ? walletLine.credit > 0
+            ? -amount
+            : amount
+          : amount;
+        return {
+          kind: 'loan' as const,
+          amount: signedAmount,
+          detail: isLoanCreation
+            ? `Loan created · ${acc?.name ?? 'Wallet'}`
+            : isLoanPayment
+            ? `Payment · ${acc?.name ?? 'Wallet'}`
+            : tx.description,
+          loanType: isLoanCreation ? 'creation' : isLoanPayment ? 'payment' : 'other',
+        };
+      }
+
       if (tx.categoryId) {
         const cat = categories.find((c) => c.id === tx.categoryId);
         const walletLine = tx.lines.find((l) => l.credit > 0 && l.debit === 0);
@@ -337,6 +369,7 @@ function TransactionsPage() {
       if (txTypeFilter === 'expense' && kind !== 'expense') return false;
       if (txTypeFilter === 'income' && kind !== 'income') return false;
       if (txTypeFilter === 'transfer' && kind !== 'transfer') return false;
+      if (txTypeFilter === 'loan' && kind !== 'loan') return false;
       if (categoryFilter && String(tx.categoryId ?? '') !== categoryFilter) return false;
       if (!q) return true;
       return (
@@ -520,6 +553,7 @@ function TransactionsPage() {
               <option value="expense">Expense</option>
               <option value="income">Income</option>
               <option value="transfer">Transfer</option>
+              <option value="loan">Loan</option>
             </select>
           </div>
           <div className="flex items-center justify-between rounded-xl bg-[var(--ref-tertiary-container)] p-5 text-[#e8e7ff] shadow-sm">
@@ -626,21 +660,24 @@ function TransactionsPage() {
                           ? -display.amount
                           : display.amount;
 
-                    const categoryPillClass =
-                      display.kind === 'income'
-                        ? 'bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]'
-                        : display.kind === 'transfer'
-                          ? 'bg-[var(--ref-surface-container-highest)] text-[var(--color-text-secondary)]'
-                          : cat?.color
-                            ? 'border border-[var(--color-border)]'
-                            : 'bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]';
+                     const categoryPillClass =
+                      display.kind === 'loan'
+                        ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/30'
+                        : display.kind === 'income'
+                          ? 'bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]'
+                          : display.kind === 'transfer'
+                            ? 'bg-[var(--ref-surface-container-highest)] text-[var(--color-text-secondary)]'
+                            : cat?.color
+                              ? 'border border-[var(--color-border)]'
+                              : 'bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]';
 
                     return (
                       <tr
                         key={tx.id}
                         className={cn(
                           "group transition-colors hover:bg-[var(--ref-surface-container-low)]",
-                          selectedTransactions.has(tx.id) && "bg-[var(--ref-surface-container-low)]"
+                          selectedTransactions.has(tx.id) && "bg-[var(--ref-surface-container-low)]",
+                          display.kind === 'loan' && "bg-[var(--color-accent)]/5"
                         )}
                       >
                         <td className="px-2 py-4 sm:px-4 sm:py-5">
@@ -656,13 +693,19 @@ function TransactionsPage() {
                         </td>
                         <td className="px-4 py-4 sm:px-6 sm:py-5">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--ref-surface-container-highest)]">
+                            <div className={cn(
+                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                              display.kind === 'loan' 
+                                ? 'bg-[var(--color-accent)]/10' 
+                                : 'bg-[var(--ref-surface-container-highest)]'
+                            )}>
                               <Icon
                                 className={cn(
                                   'h-5 w-5',
                                   display.kind === 'expense' && 'text-[var(--color-accent)]',
                                   display.kind === 'income' && 'text-[var(--color-success)]',
                                   display.kind === 'transfer' && 'text-[var(--ref-tertiary)]',
+                                  display.kind === 'loan' && 'text-[var(--color-accent)]',
                                   display.kind === 'other' && 'text-[var(--color-muted)]',
                                 )}
                               />
@@ -670,6 +713,11 @@ function TransactionsPage() {
                             <div className="min-w-0">
                               <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">
                                 {tx.description}
+                                {display.kind === 'loan' && (
+                                  <span className="ml-2 inline-flex items-center rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] font-bold text-white">
+                                    LOAN
+                                  </span>
+                                )}
                                 {tx.linkedTxId && (
                                   <span className="ml-2 inline-flex items-center rounded-full bg-[var(--color-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-warning)]">
                                     Transfer Fee
@@ -694,7 +742,7 @@ function TransactionsPage() {
                                 : undefined
                             }
                           >
-                            {cat?.name ?? display.kind}
+                            {display.kind === 'loan' ? 'Loan' : (cat?.name ?? display.kind)}
                           </span>
                         </td>
                         <td
