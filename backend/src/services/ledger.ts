@@ -62,7 +62,7 @@ const SYSTEM_KEYS = {
 let autoIncomeAccountCache: { id: number } | null = null;
 let autoExpenseAccountCache: { id: number } | null = null;
 
-async function getOrCreateAutoIncomeAccount(dbLike: any): Promise<{ id: number }> {
+export async function getOrCreateAutoIncomeAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
   if (autoIncomeAccountCache) return autoIncomeAccountCache;
 
   const [existing] = await dbLike
@@ -90,7 +90,7 @@ async function getOrCreateAutoIncomeAccount(dbLike: any): Promise<{ id: number }
   return created;
 }
 
-async function getOrCreateAutoExpenseAccount(dbLike: any): Promise<{ id: number }> {
+export async function getOrCreateAutoExpenseAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
   if (autoExpenseAccountCache) return autoExpenseAccountCache;
 
   const [existing] = await dbLike

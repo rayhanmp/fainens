@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import { AccountModal } from '../components/accounts/AccountModal';
+import { ReconciliationModal } from '../components/reconciliation/ReconciliationModal';
 import {
   Plus,
   Edit2,
@@ -18,6 +19,7 @@ import {
   ArrowUp,
   Sparkles,
   NotebookPen,
+  Scale,
   WalletCards,
   Banknote,
 } from 'lucide-react';
@@ -83,6 +85,7 @@ function AccountsPage() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountRow | null>(null);
 
   const [searchInput, setSearchInput] = useState('');
@@ -166,9 +169,11 @@ function AccountsPage() {
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this account? It will be hidden from the ledger.')) return;
     try {
-      await api.accounts.delete(id);
+      const result = await api.accounts.delete(id);
+      console.log('Delete result:', result);
       await loadAccounts();
     } catch (err) {
+      console.error('Delete error:', err);
       alert((err as Error).message);
     }
   };
@@ -247,6 +252,16 @@ function AccountsPage() {
               <Button type="button" size="sm" className="rounded-full" onClick={() => openModal()}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add account
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="rounded-full"
+                onClick={() => setIsReconciliationOpen(true)}
+              >
+                <Scale className="mr-1.5 h-3.5 w-3.5" />
+                Reconcile
               </Button>
             </div>
           </div>
@@ -453,6 +468,13 @@ function AccountsPage() {
           onClose={closeModal}
           onSaved={loadAccounts}
           editingAccount={editingAccount}
+        />
+
+        <ReconciliationModal
+          isOpen={isReconciliationOpen}
+          onClose={() => setIsReconciliationOpen(false)}
+          accounts={accounts}
+          onSuccess={loadAccounts}
         />
       </div>
     </RequireAuth>

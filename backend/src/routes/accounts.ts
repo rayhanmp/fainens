@@ -2,9 +2,10 @@ import { eq, like, desc, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { accounts } from "../db/schema";
-import { computeAccountBalance, computeAccountBalanceRolledUp } from "../services/ledger";
+import { accounts, categories } from "../db/schema";
+import { computeAccountBalance, computeAccountBalanceRolledUp, createSimpleTransaction, getOrCreateAutoIncomeAccount, getOrCreateAutoExpenseAccount } from "../services/ledger";
 import { precomputeAccountBalance } from "../cache/precompute";
+import { invalidateOnTransactionMutation } from "../cache";
 
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
 
@@ -23,7 +24,7 @@ export default async function (fastify: FastifyInstance) {
       search?: string;
     };
 
-    const conditions = [];
+    const conditions = [eq(accounts.isActive, true)];
     if (type && accountTypeEnum.includes(type as (typeof accountTypeEnum)[number])) {
       conditions.push(eq(accounts.type, type));
     }
@@ -209,16 +210,123 @@ export default async function (fastify: FastifyInstance) {
 
   fastify.delete("/api/accounts/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
+    const accountId = parseInt(id);
 
-    const [existing] = await db.select().from(accounts).where(eq(accounts.id, parseInt(id))).limit(1);
+    const [existing] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
 
     if (!existing) {
       reply.code(404).send({ error: "Account not found" });
       return;
     }
 
-    await db.update(accounts).set({ isActive: false }).where(eq(accounts.id, parseInt(id)));
+    console.log(`Deleting account ${accountId}, was isActive: ${existing.isActive}`);
+
+    await db.update(accounts).set({ isActive: false }).where(eq(accounts.id, accountId));
+
+    // Verify it was updated
+    const [updated] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+    console.log(`Account ${accountId} isActive after delete:`, updated?.isActive);
 
     reply.code(204).send();
+  });
+
+  // Reconciliation endpoint
+  fastify.post("/api/reconciliation", async (request, reply) => {
+    const { balances } = request.body as {
+      balances: Array<{ accountId: number; actualBalance: number }>;
+    };
+
+    if (!Array.isArray(balances) || balances.length === 0) {
+      reply.code(400).send({ error: "balances array is required" });
+      return;
+    }
+
+    try {
+      // Find or create Reconciliation category
+      let [reconciliationCategory] = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.name, "Reconciliation"))
+        .limit(1);
+
+      if (!reconciliationCategory) {
+        const [created] = await db
+          .insert(categories)
+          .values({
+            name: "Reconciliation",
+            color: "#6366f1",
+            icon: "scale",
+          })
+          .returning();
+        reconciliationCategory = created;
+      }
+
+      const results: Array<{ accountId: number; difference: number; transactionId?: number; error?: string }> = [];
+
+      for (const item of balances) {
+        try {
+          // Get account name for description
+          const [account] = await db
+            .select({ name: accounts.name })
+            .from(accounts)
+            .where(eq(accounts.id, item.accountId))
+            .limit(1);
+          
+          const accountName = account?.name || `Account ${item.accountId}`;
+          const ledgerBalance = await computeAccountBalance(item.accountId, db);
+          const difference = item.actualBalance - ledgerBalance;
+
+          if (difference === 0) {
+            results.push({ accountId: item.accountId, difference: 0 });
+            continue;
+          }
+
+          let transactionId: number | undefined;
+
+          if (difference > 0) {
+            // Found extra money - create income
+            const incomeAccount = await getOrCreateAutoIncomeAccount(db);
+            const result = await createSimpleTransaction({
+              kind: "income",
+              amountCents: difference,
+              description: `Reconciliation: ${accountName}`,
+              date: new Date(),
+              walletAccountId: item.accountId,
+              categoryId: reconciliationCategory.id,
+              txType: "reconciliation_income",
+            });
+            transactionId = result.transactionId;
+          } else if (difference < 0) {
+            // Missing money - create expense
+            const expenseAccount = await getOrCreateAutoExpenseAccount(db);
+            const result = await createSimpleTransaction({
+              kind: "expense",
+              amountCents: Math.abs(difference),
+              description: `Reconciliation: ${accountName}`,
+              date: new Date(),
+              walletAccountId: item.accountId,
+              categoryId: reconciliationCategory.id,
+              txType: "reconciliation_expense",
+            });
+            transactionId = result.transactionId;
+          }
+
+          // Invalidate cache
+          await invalidateOnTransactionMutation({
+            transactionId: transactionId!,
+            affectedAccountIds: [item.accountId, difference > 0 ? (await getOrCreateAutoIncomeAccount(db)).id : (await getOrCreateAutoExpenseAccount(db)).id],
+          });
+
+          results.push({ accountId: item.accountId, difference, transactionId });
+        } catch (itemErr) {
+          results.push({ accountId: item.accountId, difference: 0, error: (itemErr as Error).message });
+        }
+      }
+
+      reply.send({ success: true, results });
+    } catch (err) {
+      fastify.log.error(err);
+      reply.code(500).send({ error: "Failed to process reconciliation" });
+    }
   });
 }
