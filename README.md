@@ -1,31 +1,50 @@
-# Fainens - Personal Finance Bookkeeping App
+# 💰 Fainens - Personal Finance Bookkeeping App
 
 A Docker-deployable, accrual-based double-entry personal finance app with a React frontend, Fastify backend, Drizzle ORM with SQLite, Redis caching, Google OAuth login, and Cloudflare R2 attachments.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
+[![React](https://img.shields.io/badge/react-18-61DAFB?logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/typescript-5.0-3178C6?logo=typescript)](https://www.typescriptlang.org)
 
-## Features
+---
 
-### Core
+## ✨ Features
+
+### 📊 Core Accounting
 - **Double-entry ledger** with trial balance checks and optional full journal entries
 - **Wallets & categories** — asset/liability accounts with emoji/color; flat spending categories
 - **Simple transactions** — expense / income / transfer with automatic posting
-- **Salary periods & budgets** — planned vs actual by category
+- **Salary periods & budgets** — planned vs actual by category with visual progress tracking
 - **Tags & audit log** for labeling and history
 
-### Paylater & reporting
+### 💸 Advanced Workflows
 - **Paylater** — recognize purchases, interest, and settlement payments (API + UI)
+- **Loans & Debt Tracking** — 
+  - Track money lent to and borrowed from contacts
+  - Full contact management with relationships (family, friend, colleague, professional)
+  - Contact profiles with loan history and net balance
+  - Record payments and track remaining balances
+  - Visual indicators for overdue loans
 - **Reports** — income statement, balance sheet, cash flow, spending, trends; CSV export
 - **Analytics** — net worth, burn rate, runway, period summaries (Redis-backed where configured)
 
-### Technical
+### 🎨 UX & Design
+- **Responsive UI** — desktop sidebar + mobile bottom navigation
+- **Neo-brutalist design system** — warm off-white, thick borders, sage green accents
+- **Budget visualizations** — progress bars, status pills, category mix charts
+- **Real-time filtering** — search, sort, and filter budgets with instant feedback
+- **Keyboard shortcuts** — quick navigation and actions
+
+### 🔒 Security & Deployment
 - Single-user mode with Google OAuth
 - Redis-cached analytics for fast dashboard loads
-- **Responsive UI** — desktop sidebar + mobile bottom navigation; calm minimal design system
 - Docker Compose deployment ready
+- Cloudflare R2 for file attachments
 
-## Tech Stack
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|------------|
@@ -41,7 +60,9 @@ A Docker-deployable, accrual-based double-entry personal finance app with a Reac
 | **Storage** | Cloudflare R2 (S3-compatible) |
 | **Deployment** | Docker Compose |
 
-## Quick Start
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -80,8 +101,8 @@ pnpm dev
 ```
 
 The app will be available at:
-- Frontend: http://localhost:8080
-- Backend API: http://localhost:3000
+- 🌐 Frontend: http://localhost:8080
+- 🔌 Backend API: http://localhost:3000
 
 ### Docker Deployment
 
@@ -103,8 +124,8 @@ docker compose logs -f backend
 ```
 
 4. **Access the app:**
-- Open http://localhost (nginx serves frontend)
-- API available at http://localhost/api
+- 🌐 Open http://localhost (nginx serves frontend)
+- 🔌 API available at http://localhost/api
 
 ### Stopping
 ```bash
@@ -113,7 +134,9 @@ docker compose down
 docker compose down -v
 ```
 
-## Configuration
+---
+
+## ⚙️ Configuration
 
 ### Required Environment Variables
 
@@ -132,82 +155,139 @@ docker compose down -v
 | `R2_*` | Cloudflare R2 for attachments | (optional) |
 | `NODE_ENV` | production or development | production |
 
-## Project Structure
+---
+
+## 📁 Project Structure
 
 ```
 fainens/
-├── docker-compose.yml      # Docker orchestration
-├── .env.example            # Environment template
-├── .env                    # Your secrets (gitignored)
+├── docker-compose.yml          # Docker orchestration
+├── .env.example                # Environment template
+├── .env                        # Your secrets (gitignored)
 ├── backend/
 │   ├── Dockerfile
 │   ├── src/
-│   │   ├── server.ts       # Fastify entry
-│   │   ├── db/             # Drizzle schema & migrations
-│   │   ├── routes/         # API routes
-│   │   ├── services/       # Business logic
-│   │   ├── cache/          # Redis layer
-│   │   └── lib/            # Utilities
-│   └── data/               # SQLite database volume
+│   │   ├── server.ts           # Fastify entry
+│   │   ├── db/                 # Drizzle schema & migrations
+│   │   ├── routes/             # API routes
+│   │   │   ├── auth.ts         # Authentication
+│   │   │   ├── transactions.ts # Transaction CRUD
+│   │   │   ├── loans.ts        # Loan management
+│   │   │   ├── contacts.ts     # Contact management
+│   │   │   ├── budgets.ts      # Budget planning
+│   │   │   └── ...
+│   │   ├── services/           # Business logic
+│   │   ├── cache/              # Redis layer
+│   │   └── lib/                # Utilities
+│   └── data/                   # SQLite database volume
 ├── frontend/
 │   ├── Dockerfile
 │   ├── src/
-│   │   ├── routes/         # TanStack Router pages
-│   │   ├── components/       # React components
-│   │   ├── lib/            # API client & utilities
-│   │   └── index.css        # Tailwind + neo-brutalism
-│   └── dist/               # Production build
+│   │   ├── routes/             # TanStack Router pages
+│   │   │   ├── index.tsx       # Dashboard
+│   │   │   ├── transactions.tsx
+│   │   │   ├── loans.tsx       # Loan tracking
+│   │   │   ├── budget.tsx      # Budget management
+│   │   │   └── ...
+│   │   ├── components/         # React components
+│   │   │   ├── loans/          # Loan-specific components
+│   │   │   ├── transactions/
+│   │   │   └── ui/             # Shared UI components
+│   │   ├── lib/                # API client & utilities
+│   │   └── index.css           # Tailwind + neo-brutalism
+│   └── dist/                   # Production build
 └── nginx/
-    └── nginx.conf          # Reverse proxy config
+    └── nginx.conf              # Reverse proxy config
 ```
 
-## API Endpoints
+---
+
+## 🔌 API Endpoints
 
 ### Authentication
-- `GET /api/auth/google` - Initiate OAuth flow
-- `GET /api/auth/google/callback` - OAuth callback
-- `GET /api/auth/me` - Get current user
-- `POST /api/auth/logout` - Logout
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/google` | Initiate OAuth flow |
+| GET | `/api/auth/google/callback` | OAuth callback |
+| GET | `/api/auth/me` | Get current user |
+| POST | `/api/auth/logout` | Logout |
 
 ### Core CRUD
-- `/api/accounts` - Chart of accounts
-- `/api/transactions` - Journal entries
-- `/api/categories` - Account categories
-- `/api/tags` - Transaction tags
-- `/api/periods` - Salary periods
-- `/api/budgets` - Budget plans
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| CRUD | `/api/accounts` | Chart of accounts |
+| CRUD | `/api/transactions` | Journal entries |
+| CRUD | `/api/categories` | Account categories |
+| CRUD | `/api/tags` | Transaction tags |
+| CRUD | `/api/periods` | Salary periods |
+| CRUD | `/api/budgets` | Budget plans |
+
+### Loans & Contacts
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/loans` | List all loans |
+| POST | `/api/loans` | Create new loan |
+| GET | `/api/loans/:id` | Get loan details with payments |
+| POST | `/api/loans/:id/payments` | Record payment |
+| DELETE | `/api/loans/:id` | Delete loan |
+| GET | `/api/loans/summary` | Loan statistics |
+| GET | `/api/contacts` | List contacts |
+| POST | `/api/contacts` | Create contact |
+| GET | `/api/contacts/:id` | Get contact with loan history |
+| PATCH | `/api/contacts/:id` | Update contact |
 
 ### Workflows
-- `/api/workflows/paylater/*` - Paylater management
-- `/api/workflows/split-bill/*` - Split bill tracking
-- `/api/workflows/barter/*` - Barter settlements
-- `/api/workflows/sinking-fund/*` - Sinking fund rules
-- `/api/workflows/opportunity-cost/*` - Opportunity cost sim
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/workflows/paylater/*` | Paylater management |
+| POST | `/api/workflows/split-bill/*` | Split bill tracking |
+| POST | `/api/workflows/barter/*` | Barter settlements |
+| POST | `/api/workflows/sinking-fund/*` | Sinking fund rules |
+| POST | `/api/workflows/opportunity-cost/*` | Opportunity cost sim |
 
 ### Reports & Analytics
-- `/api/reports/income-statement` - P&L report
-- `/api/reports/balance-sheet` - Balance sheet
-- `/api/reports/cash-flow` - Cash flow statement
-- `/api/reports/spending` - Spending breakdown
-- `/api/reports/trends` - Period trends
-- `/api/import/*` - CSV import endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/reports/income-statement` | P&L report |
+| GET | `/api/reports/balance-sheet` | Balance sheet |
+| GET | `/api/reports/cash-flow` | Cash flow statement |
+| GET | `/api/reports/spending` | Spending breakdown |
+| GET | `/api/reports/trends` | Period trends |
+| POST | `/api/import/*` | CSV import endpoints |
 
-## Database Schema
+---
+
+## 🗄️ Database Schema
 
 ### Core Tables
-- `account` - Chart of accounts
-- `transaction` - Journal header
-- `transaction_line` - Journal lines (debits/credits)
-- `category` - Account categories
-- `tag` - Transaction tags
-- `transaction_tag` - Tag junction
-- `salary_period` - Budget periods
-- `budget_plan` - Period budgets
-- `sinking_fund_rule` - Auto-allocation rules
-- `attachment` - File attachments
-- `audit_log` - Change history
+| Table | Description |
+|-------|-------------|
+| `account` | Chart of accounts (assets, liabilities, equity) |
+| `transaction` | Journal header |
+| `transaction_line` | Journal lines (debits/credits) |
+| `category` | Account categories |
+| `tag` | Transaction tags |
+| `transaction_tag` | Tag junction table |
+| `salary_period` | Budget periods |
+| `budget_plan` | Period budgets |
 
-## Design System
+### Loans & Contacts
+| Table | Description |
+|-------|-------------|
+| `contact` | People you lend to/borrow from |
+| `loan` | Loan records (lent/borrowed) |
+| `loan_payment` | Payment history for loans |
+
+### Other
+| Table | Description |
+|-------|-------------|
+| `sinking_fund_rule` | Auto-allocation rules |
+| `attachment` | File attachments |
+| `audit_log` | Change history |
+
+---
+
+## 🎨 Design System
 
 ### Neo-Brutalist Aesthetic
 - **Background:** Warm off-white (#F5F0EB)
@@ -218,7 +298,15 @@ fainens/
 - **No rounded corners** (or very slight)
 - **No gradients or blur effects**
 
-## Google OAuth Setup
+### Color Coding
+- 🟢 Green — Under budget, positive, success
+- 🟡 Yellow/Amber — Near limit, warning
+- 🔴 Red — Over budget, negative, danger
+- 🔵 Blue — Primary actions, links
+
+---
+
+## 🔐 Google OAuth Setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create a new project
@@ -231,7 +319,9 @@ fainens/
 6. Set in `.env`: `GOOGLE_CALLBACK_URL` to that exact URI, and **`FRONTEND_URL`** to the app origin (e.g. `http://localhost:8080` or `https://your-domain`). After login the backend redirects there; without `FRONTEND_URL`, the callback used to send you to `/` on the **API** host (e.g. `:3000`) instead of the SPA.
 7. Copy Client ID and Secret to `.env`
 
-## Troubleshooting
+---
+
+## 🐛 Troubleshooting
 
 ### Database Issues
 ```bash
@@ -242,8 +332,12 @@ docker compose up -d
 ```
 
 ### Cache Issues
-- Clear Redis: `docker compose exec redis redis-cli FLUSHALL`
-- Or restart: `docker compose restart redis backend`
+```bash
+# Clear Redis
+docker compose exec redis redis-cli FLUSHALL
+# Or restart
+docker compose restart redis backend
+```
 
 ### Port Conflicts
 If port 80 is taken, modify `docker-compose.yml`:
@@ -252,20 +346,41 @@ ports:
   - "8080:80"  # Use 8080 instead
 ```
 
-## License
+---
 
-MIT License - See LICENSE file
+## 📜 License
 
-## Contributing
-
-This is a personal finance app designed for single-user deployment. Contributions are welcome but the primary use case is individual deployment on personal VPS/home server.
-
-## Roadmap (redesign)
-
-- [x] Phase 1–2: Ledger, schema, APIs, caching
-- [x] Phase 3: Core UX (dashboard, transactions, wallets, categories, budget, paylater)
-- [x] Phase 4: Design system refresh, responsive shell (mobile nav), skeleton loading, reports tab UX, docs
+MIT License - See [LICENSE](LICENSE) file
 
 ---
 
-**Fainens** - Salary-to-salary bookkeeping for the modern age.
+## 🤝 Contributing
+
+This is a personal finance app designed for single-user deployment. Contributions are welcome but the primary use case is individual deployment on personal VPS/home server.
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ Completed
+- [x] Phase 1–2: Ledger, schema, APIs, caching
+- [x] Phase 3: Core UX (dashboard, transactions, wallets, categories, budget, paylater)
+- [x] Phase 4: Design system refresh, responsive shell (mobile nav), skeleton loading, reports tab UX, docs
+- [x] Phase 5: **Loans & Contact Management** — Track money lent/borrowed with full contact profiles
+- [x] Phase 6: **Budget UI Redesign** — Visual filters, search, sort direction, status overview
+
+### 🔄 In Progress
+- [ ] Multi-currency support
+- [ ] Recurring transactions
+- [ ] Advanced reporting with PDF export
+
+### 📋 Planned
+- [ ] Mobile app (React Native)
+- [ ] Bank API integrations
+- [ ] Shared budgets (multi-user)
+
+---
+
+**Fainens** — Salary-to-salary bookkeeping for the modern age. 💰
+
+Made with ❤️ for personal finance nerds.
