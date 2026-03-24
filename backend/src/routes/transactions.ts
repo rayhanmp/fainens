@@ -514,57 +514,86 @@ export default async function (fastify: FastifyInstance) {
       }>;
     };
 
+    fastify.log.info({ body, params: request.params }, "PUT transaction request");
+
+    const [existing] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, parseInt(id)))
+      .limit(1);
+
+    if (!existing) {
+      return reply.code(404).send({ error: "Transaction not found" });
+    }
+
     try {
-      // Use transaction to ensure atomic updates
-      await db.transaction(async (tx) => {
-        const [existing] = await tx
-          .select()
-          .from(transactions)
-          .where(eq(transactions.id, parseInt(id)))
-          .limit(1);
-
-        if (!existing) {
-          reply.code(404).send({ error: "Transaction not found" });
-          return;
-        }
-
-        const updates: Record<string, unknown> = {};
-        if (body.date !== undefined) updates.date = new Date(body.date).getTime();
-        if (body.description !== undefined) updates.description = body.description;
-        if (body.reference !== undefined) updates.reference = body.reference;
-        if (body.notes !== undefined) updates.notes = body.notes;
-        if (body.place !== undefined) updates.place = body.place;
-        if (body.txType !== undefined) updates.txType = body.txType;
-        if (body.periodId !== undefined) updates.periodId = body.periodId;
-        if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
-
-        if (Object.keys(updates).length > 0) {
-          await tx.update(transactions).set(updates).where(eq(transactions.id, parseInt(id)));
-        }
-
-        if (body.lines && body.lines.length > 0) {
-          await tx.delete(transactionLines).where(eq(transactionLines.transactionId, parseInt(id)));
-          await tx.insert(transactionLines).values(
-            body.lines.map((line) => ({
-              transactionId: parseInt(id),
-              accountId: line.accountId,
-              debit: line.debit,
-              credit: line.credit,
-              description: line.description ?? null,
-            }))
-          );
-        }
-
-        if (body.tagIds !== undefined) {
-          await tx.delete(transactionTags).where(eq(transactionTags.transactionId, parseInt(id)));
-          if (body.tagIds.length > 0) {
-            await tx.insert(transactionTags).values(body.tagIds.map((tagId) => ({ transactionId: parseInt(id), tagId })));
+      const updates: Record<string, unknown> = {};
+      if (body.date !== undefined) {
+        try {
+          const dateVal = new Date(body.date);
+          if (isNaN(dateVal.getTime())) {
+            throw new Error("Invalid date: " + body.date);
           }
+          updates.date = dateVal.getTime();
+        } catch (dateErr) {
+          fastify.log.error({ err: dateErr, bodyDate: body.date }, "date parsing error");
+          throw dateErr;
         }
+      }
+      if (body.description !== undefined) updates.description = body.description;
+      if (body.reference !== undefined) updates.reference = body.reference;
+      if (body.notes !== undefined) updates.notes = body.notes;
+      if (body.place !== undefined) updates.place = body.place;
+      if (body.txType !== undefined) updates.txType = body.txType;
+      if (body.periodId !== undefined) updates.periodId = body.periodId;
+      if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
 
-        await auditUpdate("transaction", parseInt(id), existing, updates);
-        reply.code(200).send({ id: parseInt(id), ...updates });
-      });
+      // Map camelCase to snake_case for database columns
+      const columnMap: Record<string, string> = {
+        date: 'date',
+        description: 'description',
+        reference: 'reference',
+        notes: 'notes',
+        place: 'place',
+        txType: 'tx_type',
+        periodId: 'period_id',
+        categoryId: 'category_id',
+      };
+
+      if (Object.keys(updates).length > 0) {
+        const setClauses: string[] = [];
+        const values: unknown[] = [];
+        for (const [key, value] of Object.entries(updates)) {
+          const col = columnMap[key] || key;
+          setClauses.push(`${col} = ?`);
+          values.push(value);
+        }
+        const stmt = db.$client.prepare(`UPDATE "transaction" SET ${setClauses.join(', ')} WHERE id = ?`);
+        stmt.run(...values, parseInt(id));
+      }
+
+      if (body.lines && body.lines.length > 0) {
+        await db.delete(transactionLines).where(eq(transactionLines.transactionId, parseInt(id)));
+        await db.insert(transactionLines).values(
+          body.lines.map((line) => ({
+            transactionId: parseInt(id),
+            accountId: line.accountId,
+            debit: line.debit,
+            credit: line.credit,
+            description: line.description ?? null,
+          }))
+        );
+      }
+
+      if (body.tagIds !== undefined) {
+        await db.delete(transactionTags).where(eq(transactionTags.transactionId, parseInt(id)));
+        if (body.tagIds.length > 0) {
+          await db.insert(transactionTags).values(body.tagIds.map((tagId) => ({ transactionId: parseInt(id), tagId })));
+        }
+      }
+
+      // await auditUpdate("transaction", parseInt(id), existing, updates);
+      reply.code(200).send({ id: parseInt(id), ...updates });
     } catch (err) {
       fastify.log.error(err);
       reply.code(400).send({ error: (err as Error).message });

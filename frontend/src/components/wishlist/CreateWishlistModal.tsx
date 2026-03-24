@@ -65,6 +65,7 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
   const [productUrl, setProductUrl] = useState('');
   const [isScraping, setIsScraping] = useState(false);
   const [isAdvancedScraping, setIsAdvancedScraping] = useState(false);
+  const [forceAdvancedScraping, setForceAdvancedScraping] = useState(false);
   const [scrapedData, setScrapedData] = useState<ScrapedData | null>(null);
   const [scrapeError, setScrapeError] = useState<ScrapingError | null>(null);
   const [scrapingAttempts, setScrapingAttempts] = useState<ScrapingAttempt[]>([]);
@@ -96,12 +97,12 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
     
     const timer = setTimeout(() => {
       if (isValidUrl(productUrl)) {
-        scrapeProduct(productUrl, false);
+        scrapeProduct(productUrl, forceAdvancedScraping);
       }
     }, 500);
     
     return () => clearTimeout(timer);
-  }, [productUrl]);
+  }, [productUrl, forceAdvancedScraping, useManualEntry]);
 
   async function loadPeriods() {
     try {
@@ -121,6 +122,7 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
     setRequiresAdvanced(false);
     setUseManualEntry(false);
     setIsAdvancedScraping(false);
+    setForceAdvancedScraping(false);
     setName('');
     setDescription('');
     setAmount('');
@@ -362,6 +364,40 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
             <p className="text-xs text-[var(--color-muted)] mt-2">
               Paste a product URL from Tokopedia, Shopee, or other supported sites to auto-fill details
             </p>
+            
+            {/* Force Advanced Scraping Toggle */}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]">
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-medium text-[var(--color-text-primary)]">
+                  Use Advanced Scraping
+                </span>
+                <span className="text-xs text-[var(--color-muted)]">
+                  (slower but more accurate)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setForceAdvancedScraping(!forceAdvancedScraping);
+                  // Re-scrape if URL is already entered
+                  if (productUrl && isValidUrl(productUrl) && !scrapedData) {
+                    setTimeout(() => scrapeProduct(productUrl, !forceAdvancedScraping), 0);
+                  }
+                }}
+                className={cn(
+                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer',
+                  forceAdvancedScraping ? 'bg-purple-600' : 'bg-[var(--color-border)]'
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                    forceAdvancedScraping ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </button>
+            </div>
           </div>
         )}
 

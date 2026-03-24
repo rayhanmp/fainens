@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vault — Personal Finance Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-bright": "#faf8ff",
+              "on-tertiary-fixed-variant": "#2e2bc2",
+              "surface-dim": "#d9d9e4",
+              "secondary-fixed-dim": "#83d5c5",
+              "on-secondary-container": "#0b6f62",
+              "surface-tint": "#0056d2",
+              "primary-container": "#0056d2",
+              "surface-container-highest": "#e1e2ec",
+              "on-tertiary-fixed": "#07006c",
+              "tertiary-fixed": "#e1e0ff",
+              "inverse-surface": "#2e3038",
+              "inverse-primary": "#b2c5ff",
+              "on-primary-fixed-variant": "#0040a1",
+              "on-primary-container": "#ccd8ff",
+              "on-primary": "#ffffff",
+              "tertiary-fixed-dim": "#c1c1ff",
+              "surface-container-lowest": "#ffffff",
+              "secondary-fixed": "#9ff2e1",
+              "outline-variant": "#c3c6d6",
+              "background": "#faf8ff",
+              "on-secondary": "#ffffff",
+              "primary-fixed": "#dae2ff",
+              "on-tertiary": "#ffffff",
+              "on-error-container": "#93000a",
+              "outline": "#737785",
+              "primary-fixed-dim": "#b2c5ff",
+              "surface-container-high": "#e7e7f2",
+              "inverse-on-surface": "#f0f0fb",
+              "on-secondary-fixed": "#00201b",
+              "surface-variant": "#e1e2ec",
+              "on-primary-fixed": "#001847",
+              "secondary": "#006b5e",
+              "on-tertiary-container": "#d6d5ff",
+              "surface": "#faf8ff",
+              "on-surface-variant": "#424654",
+              "on-error": "#ffffff",
+              "surface-container": "#ededf8",
+              "tertiary-container": "#4849da",
+              "surface-container-low": "#f2f3fe",
+              "on-surface": "#191b23",
+              "error-container": "#ffdad6",
+              "primary": "#0040a1",
+              "on-background": "#191b23",
+              "on-secondary-fixed-variant": "#005046",
+              "secondary-container": "#9cefde",
+              "tertiary": "#2e2bc2",
+              "error": "#ba1a1a"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface-bright text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed min-h-screen pb-24 md:pb-0">
+<!-- Top Navigation Bar -->
+<header class="bg-white/70 dark:bg-slate-950/70 backdrop-blur-xl docked full-width top-0 sticky z-50 shadow-sm border-b border-outline-variant/10">
+<div class="flex justify-between items-center w-full px-6 py-4 max-w-7xl mx-auto">
+<div class="text-2xl font-bold tracking-tight text-blue-800 dark:text-blue-300">Vault</div>
+<nav class="hidden md:flex items-center space-x-8">
+<a class="text-blue-700 dark:text-blue-400 font-semibold border-b-2 border-blue-700 dark:border-blue-400 pb-1" href="#">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-blue-600 dark:hover:text-blue-300 transition-colors duration-200" href="#">Activity</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-blue-600 dark:hover:text-blue-300 transition-colors duration-200" href="#">People</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-blue-600 dark:hover:text-blue-300 transition-colors duration-200" href="#">Reports</a>
+</nav>
+<div class="flex items-center space-x-4">
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all active:scale-95">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all active:scale-95">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="h-10 w-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="professional headshot of a smiling man in a business casual shirt with a clean studio background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJxC-PyVqF13p_2CqgR8_GIel92MbWZJen1g0163sk7UnYvJGbn5IouUHIPZxqoXZIjPfcRiA2B7LadRDqTUE4iuLICLrURuU_K8enCMGg-O09ruArX7VmthIUMkJGlV6f6i0otCut7bqmtzwWsP67SMcq30oP8FfgZzzPg5znsOovR9HU67noDYuTJEJ6pjO8AWM6cnm9BPZiVRO_In5uaGvjKuLJt-DDg9GbInZbTHf2z8VKQvVhzZlMwMoW1MHlPuLQNlPpq0y4"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 pt-12 pb-24">
+<!-- Hero Command Center -->
+<section class="mb-16">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+<div>
+<h1 class="text-display-lg text-4xl md:text-5xl font-extrabold tracking-tight text-on-background mb-2">Command Center</h1>
+<p class="text-on-surface-variant text-lg font-body">Manage your private lending circle with precision.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="bg-primary text-on-primary px-8 py-4 rounded-full font-semibold flex items-center gap-2 transition-all hover:opacity-90 active:scale-95 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined">add</span>
+                        New Transaction
+                    </button>
+</div>
+</div>
+<!-- KPI Cards Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Total Lent -->
+<div class="bg-primary-container p-8 rounded-xl flex flex-col justify-between min-h-[220px] transition-all hover:translate-y-[-4px]">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-white/10 rounded-xl">
+<span class="material-symbols-outlined text-white" data-weight="fill">upload_file</span>
+</div>
+<span class="text-white/60 text-sm font-medium">Lending Activity</span>
+</div>
+<div>
+<p class="text-white/80 font-medium mb-1">Total Terpinjamkan</p>
+<h2 class="text-white text-4xl font-bold font-headline">Rp 12.450.000</h2>
+</div>
+</div>
+<!-- Total Borrowed -->
+<div class="bg-surface-container-lowest p-8 rounded-xl flex flex-col justify-between min-h-[220px] shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all hover:translate-y-[-4px]">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-secondary-container rounded-xl">
+<span class="material-symbols-outlined text-on-secondary-container" data-weight="fill">file_download</span>
+</div>
+<span class="text-on-surface-variant text-sm font-medium">Debt Portfolio</span>
+</div>
+<div>
+<p class="text-on-surface-variant font-medium mb-1">Total Pinjaman Saya</p>
+<h2 class="text-on-surface text-4xl font-bold font-headline">Rp 4.200.000</h2>
+</div>
+</div>
+<!-- Net Balance -->
+<div class="bg-secondary p-8 rounded-xl flex flex-col justify-between min-h-[220px] transition-all hover:translate-y-[-4px]">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-white/10 rounded-xl">
+<span class="material-symbols-outlined text-white" data-weight="fill">account_balance_wallet</span>
+</div>
+<div class="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-white text-xs">trending_up</span>
+<span class="text-white text-xs font-bold">+12%</span>
+</div>
+</div>
+<div>
+<p class="text-white/80 font-medium mb-1">Net Position</p>
+<h2 class="text-white text-4xl font-bold font-headline">Rp 8.250.000</h2>
+</div>
+</div>
+</div>
+</section>
+<!-- Person-Centric Grid -->
+<section>
+<div class="flex items-center justify-between mb-8">
+<h3 class="text-2xl font-bold text-on-background font-headline">Contact Network</h3>
+<button class="text-primary font-semibold flex items-center gap-1 hover:underline">
+                    View all contacts
+                    <span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+<!-- Contact Card 1: Andi (Lent) -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(25,27,35,0.06)] transition-all group">
+<div class="flex items-center gap-4 mb-6">
+<div class="w-14 h-14 rounded-full overflow-hidden">
+<img alt="Andi profile avatar" class="w-full h-full object-cover" data-alt="close-up portrait of a young man with glasses and a friendly expression in natural daylight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQJCGJmcsUNhJriBHlqm0EkHZ9oRoQiBloSo4ZRGjebLMWA6gmSjQzILO0kbfCN7xrZWffcqvihXq2JiCZ31T1jpiIFYtCej-_J3tUN5__mwPwxYRS5xs2OkmSdPZfPWfCYQzKlStRc-vdgsO-5lhS-v6o9JJo0Qfyrzx7kEDcIyyT5dsIa9yOp8-0k2EH1-uCVGxJyAYAuQ6tWCj05VfkbL95k0OdE7ow5CGO5D03rrzVRDF9BnaJCTHCnAKuWoMyVMLMUBk_CnI6"/>
+</div>
+<div>
+<h4 class="font-bold text-lg text-on-surface">Andi Pratama</h4>
+<p class="text-sm text-on-surface-variant flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                                Lent
+                            </p>
+</div>
+</div>
+<div class="mb-6 bg-surface-container-low p-4 rounded-lg">
+<p class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Balance Owed to You</p>
+<p class="text-2xl font-bold text-secondary">Rp 2.500.000</p>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<button class="bg-secondary text-white py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-90 active:scale-95">Repay</button>
+<button class="bg-surface-container-highest text-on-surface py-2.5 rounded-full text-sm font-semibold transition-all hover:bg-surface-variant active:scale-95">History</button>
+</div>
+</div>
+<!-- Contact Card 2: Siska (Owe) -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(25,27,35,0.06)] transition-all group">
+<div class="flex items-center gap-4 mb-6">
+<div class="w-14 h-14 rounded-full overflow-hidden">
+<img alt="Siska profile avatar" class="w-full h-full object-cover" data-alt="portrait of a woman with long dark hair smiling broadly in an outdoor urban setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3DC62lEfTlDhFxJvl-HMnSjU8n60UbDijA6n5qiylbNt6YVhAGmpcT-w2_KFHwz26jzTyyG-SKq4OtNDoG-JjgQUKzz9E0Iuak3G8hyqL7FGhkQGL1vKZkG5nY34-rqgx2iE6flCL5WXEN8-yRkY590AmlSexErtoxJ2AGG2grVoLgrP6q2dy2irXTAuU4RAJFtc5JtWnlduGVzMordlYmO9XYtAt0wRHGZW2RQzCmTaROsClwSasufZW8HEcy0qR1UBF_eHrtbAF"/>
+</div>
+<div>
+<h4 class="font-bold text-lg text-on-surface">Siska Wijaya</h4>
+<p class="text-sm text-on-surface-variant flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+                                Borrowed
+                            </p>
+</div>
+</div>
+<div class="mb-6 bg-surface-container-low p-4 rounded-lg">
+<p class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Balance You Owe</p>
+<p class="text-2xl font-bold text-error">Rp 1.200.000</p>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<button class="bg-primary text-white py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-90 active:scale-95">Pay Now</button>
+<button class="bg-surface-container-highest text-on-surface py-2.5 rounded-full text-sm font-semibold transition-all hover:bg-surface-variant active:scale-95">Details</button>
+</div>
+</div>
+<!-- Contact Card 3: Budi -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(25,27,35,0.06)] transition-all group">
+<div class="flex items-center gap-4 mb-6">
+<div class="w-14 h-14 rounded-full overflow-hidden">
+<img alt="Budi profile avatar" class="w-full h-full object-cover" data-alt="modern portrait of a young creative professional with a short beard and stylish haircut" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADvuYAYn-gTd5ARgfSTKMNqJjjjBUB650M3fVfeDL2UCHXUCpVemjJfv5TQHLrmu9smgvdb9tVORhylHJCXvZlaT1tNhQ8EvMV2CXnzamxMqv03BhotOmyU8eIEtvVS5NodoVnZxneuIn2lVSXKAB-npS5EB78i1xBs_Z6oVMuTu8yC2JBH7VHZsC8QNi0JCgakQtn9co7GTdTdTMva7k-r595VNtlDBhu6nqqdjY0sAqM4wKyjNAsblJP3IM0tcERtgHhF9hhASC_"/>
+</div>
+<div>
+<h4 class="font-bold text-lg text-on-surface">Budi Santoso</h4>
+<p class="text-sm text-on-surface-variant flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                                Lent
+                            </p>
+</div>
+</div>
+<div class="mb-6 bg-surface-container-low p-4 rounded-lg">
+<p class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Balance Owed to You</p>
+<p class="text-2xl font-bold text-secondary">Rp 8.750.000</p>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<button class="bg-secondary text-white py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-90 active:scale-95">Record</button>
+<button class="bg-surface-container-highest text-on-surface py-2.5 rounded-full text-sm font-semibold transition-all hover:bg-surface-variant active:scale-95">Remind</button>
+</div>
+</div>
+<!-- Empty/Add New Contact -->
+<div class="border-2 border-dashed border-outline-variant/50 rounded-xl p-6 flex flex-col items-center justify-center min-h-[250px] group cursor-pointer hover:border-primary/50 transition-all">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center mb-4 group-hover:bg-primary-container group-hover:text-white transition-all">
+<span class="material-symbols-outlined text-3xl">person_add</span>
+</div>
+<p class="font-bold text-on-surface">Add Contact</p>
+<p class="text-sm text-on-surface-variant text-center mt-1">Start tracking a new loan</p>
+</div>
+</div>
+</section>
+<!-- Visual Soul: Trend Analysis Section -->
+<section class="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-8">
+<div class="bg-surface-container-low rounded-xl p-8 relative overflow-hidden h-full">
+<div class="relative z-10">
+<h3 class="text-2xl font-bold font-headline mb-4">Cash Flow Narrative</h3>
+<p class="text-on-surface-variant leading-relaxed mb-8 max-w-md">Your lending activity has increased by 14% this month, primarily due to your support for Andi's startup project. Repayment velocity is healthy.</p>
+<div class="flex items-center gap-6">
+<div>
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Avg Repayment</p>
+<p class="text-2xl font-bold font-headline">14 Days</p>
+</div>
+<div class="w-px h-10 bg-outline-variant/30"></div>
+<div>
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Active Circles</p>
+<p class="text-2xl font-bold font-headline">12 Friends</p>
+</div>
+</div>
+</div>
+<!-- Abstract visual element -->
+<div class="absolute -right-20 -bottom-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl"></div>
+<div class="absolute right-10 top-10 opacity-10">
+<span class="material-symbols-outlined text-[120px]" style="font-variation-settings: 'FILL' 1;">analytics</span>
+</div>
+</div>
+<!-- Mini Recent Activity List -->
+<div class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+<h3 class="text-xl font-bold font-headline mb-6">Recent Records</h3>
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="p-2 bg-secondary-container rounded-lg">
+<span class="material-symbols-outlined text-on-secondary-container">call_made</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Lent to Budi Santoso</p>
+<p class="text-xs text-on-surface-variant">Today, 10:45 AM</p>
+</div>
+</div>
+<p class="font-bold text-on-surface">Rp 500.000</p>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="p-2 bg-primary-container rounded-lg">
+<span class="material-symbols-outlined text-white">call_received</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Repayment from Andi</p>
+<p class="text-xs text-on-surface-variant">Yesterday, 4:20 PM</p>
+</div>
+</div>
+<p class="font-bold text-secondary">Rp 1.000.000</p>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="p-2 bg-surface-container-highest rounded-lg">
+<span class="material-symbols-outlined text-on-surface">account_balance_wallet</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Borrowed from Siska</p>
+<p class="text-xs text-on-surface-variant">2 days ago</p>
+</div>
+</div>
+<p class="font-bold text-error">Rp 200.000</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-white dark:bg-slate-950 z-50 rounded-t-3xl border-t border-slate-100 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+<a class="flex flex-col items-center justify-center bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-2xl px-5 py-2 scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-inter text-[10px] font-medium mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-5 py-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" href="#">
+<span class="material-symbols-outlined">upload_file</span>
+<span class="font-inter text-[10px] font-medium mt-1">Lend</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-5 py-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" href="#">
+<span class="material-symbols-outlined">file_download</span>
+<span class="font-inter text-[10px] font-medium mt-1">Owe</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-5 py-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-inter text-[10px] font-medium mt-1">Profile</span>
+</a>
+</nav>
+</body></html>

@@ -178,7 +178,7 @@ interface ExtractorResult {
   error?: string;
 }
 
-type ExtractorMethod = (html: string, url: string) => ExtractorResult;
+type ExtractorMethod = (html: string, url: string) => ExtractorResult | Promise<ExtractorResult>;
 
 // Generic extractors
 const genericExtractors: Record<string, ExtractorMethod> = {
@@ -314,19 +314,77 @@ const genericExtractors: Record<string, ExtractorMethod> = {
 // Site-specific extractors
 const siteExtractors: Record<string, ExtractorMethod[]> = {
   'tokopedia.com': [
-    // Method 1: Tokopedia specific data attributes
-    (html: string) => {
+    // Method 1: Try multiple Tokopedia APIs (most reliable)
+    async (html: string, url: string) => {
       try {
+        // Extract product path to get shop name and product ID
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/').filter(Boolean);
+        const shopName = pathParts[0];
+        const productIdMatch = url.match(/-(\d+)(?:\?|$)/);
+        
+        if (productIdMatch && shopName) {
+          const productId = productIdMatch[1];
+          
+          // Try different API endpoints
+          const apis = [
+            // API v4 - product info
+            `https://tokopedia.com/${shopName}/p/${productId}`,
+            // Alternative PDP API
+            `https://www.tokopedia.com/api/v2/mini/product/getproductprofilev3?id=${productId}`,
+          ];
+          
+          for (const apiUrl of apis) {
+            try {
+              const apiResponse = await axios.get(apiUrl, {
+                timeout: 10000,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'application/json',
+                  'Referer': url,
+                },
+              });
+              
+              const data = apiResponse.data;
+              // Try different response structures
+              if (data?.data?.name || data?.result?.data?.name) {
+                const product = data.data || data.result.data;
+                return {
+                  success: true,
+                  data: {
+                    name: product.name || '',
+                    description: product.description || '',
+                    price: parsePrice(product.price?.toString() || '0') || 0,
+                    imageUrl: product.images?.[0] || product.thumbnail || '',
+                    sellerName: product.shop?.name || '',
+                    rating: product.rating?.avg || undefined,
+                    reviewCount: product.rating?.count || undefined,
+                  },
+                };
+              }
+            } catch (apiErr) {
+              // Continue to next API
+            }
+          }
+        }
+        
+        // Method 2: HTML parsing with comprehensive selectors
         const $ = cheerio.load(html);
         const result: Partial<ScrapedProductData> = {};
         
-        // Try specific Tokopedia selectors
+        // Updated selectors for current Tokopedia
         result.name = $('[data-testid="lblPDPDetailProductName"]').first().text().trim() ||
                       $('h1[data-testid="pdpProductName"]').first().text().trim() ||
-                      $('h1.css-1os9qcq').first().text().trim() || '';
+                      $('h1[data-testid="pdp_product_name"]').first().text().trim() ||
+                      $('h1[class*="product"]').first().text().trim() ||
+                      $('.css-1os9qcq').first().text().trim() ||
+                      $('h1').first().text().trim() || '';
         
+        // Try multiple price selectors
         const priceText = $('[data-testid="lblPDPDetailProductPrice"]').first().text().trim() ||
-                          $('.price').first().text().trim() || '';
+                          $('[data-testid="pdp_product_price"]').first().text().trim() ||
+                          $('.price').first().text().trim() ||
+                          $('[class*="price"]').first().text().trim() || '';
         
         if (priceText) {
           const priceInfo = parseIndonesianPrice(priceText);
@@ -335,26 +393,80 @@ const siteExtractors: Record<string, ExtractorMethod[]> = {
           result.discountPercentage = priceInfo.discount;
         }
         
-        // Description
-        result.description = $('[data-testid="lblPDPDescriptionProduk"]').first().text().trim() ||
-                            $('.css-1wee9a1').first().text().trim() || '';
+        // Full description - try multiple selectors for product detail tabs
+        const descSelectors = [
+          // Product detail section - this is the main one for Tokopedia!
+          '[data-testid="lblPDPDescriptionProduk"]',
+          '[data-testid="pdp_product_description"]',
+          // Tab content sections
+          '[data-testid="tabPanel-productDetails"]',
+          '[data-testid="tabPanel-detail"]',
+          // Generic description divs
+          '.css-1wee9a1',
+          '.product-description',
+          '[class*="description"]',
+          // All divs that might contain description
+          'div[data-testid*="description"]',
+          // Look for any element with substantial text content in detail area
+          '.css-1egpyis',
+        ];
         
-        // Image from data attribute
+        for (const selector of descSelectors) {
+          const elem = $(selector);
+          if (elem.length > 0) {
+            // Get HTML and replace <br> with newlines, then extract text
+            let text = elem.html() || '';
+            text = text.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ');
+            text = text.replace(/<[^>]+>/g, ''); // Remove remaining HTML tags
+            text = text.replace(/\n+/g, '\n').trim(); // Normalize newlines
+            
+            // Only use if substantial (> 50 chars for description)
+            if (text.length > 50) {
+              result.description = text;
+              break;
+            }
+          }
+        }
+        
+        // If still no description, try getting all text from main content area
+        if (!result.description || result.description.length < 50) {
+          const mainContent = $('#main-container, .container, main, [role="main"]');
+          if (mainContent.length > 0) {
+            let allText = mainContent.html() || '';
+            allText = allText.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ');
+            allText = allText.replace(/<[^>]+>/g, '').trim();
+            allText = allText.replace(/\n+/g, '\n').trim();
+            
+            // Take first substantial paragraph-like content
+            const paragraphs = allText.split(/\n\n+/).filter(p => p.trim().length > 100);
+            if (paragraphs.length > 0) {
+              result.description = paragraphs.slice(0, 5).join('\n\n'); // Take first few paragraphs
+            }
+          }
+        }
+        
+        // Image - try multiple selectors
         const imgElement = $('[data-testid="PDPMainImage"] img').first() ||
-                          $('.css-1c345mg img').first();
+                          $('[data-testid="pdp_product_image"] img').first() ||
+                          $('img[class*="product"]').first() ||
+                          $('img[data-testid*="image"]').first();
         result.imageUrl = imgElement.attr('src') || 
-                          imgElement.attr('data-src') || '';
+                          imgElement.attr('data-src') ||
+                          imgElement.attr('data-original') || '';
         
         // Rating
-        const ratingText = $('[data-testid="lblPDPDetailProductRatingNumber"]').first().text().trim();
+        const ratingText = $('[data-testid="lblPDPDetailProductRatingNumber"]').first().text().trim() ||
+                          $('[data-testid="pdp_rating_number"]').first().text().trim();
         if (ratingText) {
           result.rating = parseFloat(ratingText);
         }
         
         // Seller
-        result.sellerName = $('[data-testid="llbPDPFooterShopName"]').first().text().trim() || '';
+        result.sellerName = $('[data-testid="llbPDPFooterShopName"]').first().text().trim() ||
+                            $('[data-testid="pdp_shop_name"]').first().text().trim() ||
+                            $('[class*="shop"]').first().text().trim() || '';
         
-        if (result.name) {
+        if (result.name && result.name.length > 2) {
           return { success: true, data: result };
         }
         
@@ -370,16 +482,61 @@ const siteExtractors: Record<string, ExtractorMethod[]> = {
   ],
   
   'shopee.co.id': [
-    // Method 1: Try meta tags (most reliable for Shopee)
-    (html: string, url: string) => {
+    // Method 1: Try Shopee API first (most reliable)
+    async (html: string, url: string) => {
       try {
+        // Extract item ID and shop ID from URL
+        const itemMatch = url.match(/\/(\d+)(?:\?|$)/);
+        const shopMatch = url.match(/shop\/(\d+)/);
+        
+        if (itemMatch) {
+          const itemId = itemMatch[1];
+          const shopId = shopMatch ? shopMatch[1] : '0';
+          
+          // Try Shopee's API
+          const apiUrl = `https://shopee.co.id/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`;
+          
+          try {
+            const apiResponse = await axios.get(apiUrl, {
+              timeout: 10000,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Referer': url,
+              },
+            });
+            
+            if (apiResponse.data?.data) {
+              const data = apiResponse.data.data;
+              return {
+                success: true,
+                data: {
+                  name: data.name || '',
+                  description: data.description || '',
+                  price: Math.round((data.price || 0) / 100000), // Shopee stores price in cents
+                  originalPrice: data.original_price ? Math.round(data.original_price / 100000) : undefined,
+                  discountPercentage: data.discount_rate ? Math.round(data.discount_rate / 100) : undefined,
+                  imageUrl: data.images?.[0] ? `https://cf.shopee.co.id/file/${data.images[0]}` : '',
+                  rating: data.rating_star,
+                  reviewCount: data.rating_count?.reduce((a: number, b: number) => a + b, 0) || 0,
+                  sellerName: data.shop_name || '',
+                  brand: data.brand?.name || undefined,
+                },
+              };
+            }
+          } catch (apiErr) {
+            // API failed, continue to HTML parsing
+          }
+        }
+        
+        // Method 2: Try meta tags (most reliable for static HTML)
         const $ = cheerio.load(html);
         const result: Partial<ScrapedProductData> = {};
         
         // Shopee usually has good meta tags
         result.name = $('meta[property="og:title"]').attr('content') ||
                       $('meta[name="twitter:title"]').attr('content') ||
-                      $('title').text().replace(' | Shopee Indonesia', '').trim() || '';
+                      $('title').text().replace(/ \| Shopee.*$/, '').trim() || '';
         
         result.description = $('meta[property="og:description"]').attr('content') || 
                              $('meta[name="description"]').attr('content') || '';
@@ -391,6 +548,18 @@ const siteExtractors: Record<string, ExtractorMethod[]> = {
         const priceMeta = $('meta[property="product:price:amount"]').attr('content');
         if (priceMeta) {
           result.price = parsePrice(priceMeta) || 0;
+        }
+        
+        // Try JSON-LD for price
+        const jsonLdScript = $('script[type="application/ld+json"]').first().text();
+        if (jsonLdScript) {
+          try {
+            const jsonLd = JSON.parse(jsonLdScript);
+            if (jsonLd.offers) {
+              const offers = Array.isArray(jsonLd.offers) ? jsonLd.offers[0] : jsonLd.offers;
+              result.price = parsePrice(offers.price?.toString() || '') || result.price || 0;
+            }
+          } catch {}
         }
         
         // If we got a name, return success but note that advanced scraping might get more data
@@ -411,14 +580,94 @@ const siteExtractors: Record<string, ExtractorMethod[]> = {
   
   'shopee.com': [
     // Same as shopee.co.id
-    (html: string, url: string) => {
+    async (html: string, url: string) => {
       const extractors = siteExtractors['shopee.co.id'];
       for (const extractor of extractors) {
-        const result = extractor(html, url);
+        const result = await extractor(html, url);
         if (result.success) return result;
       }
       return { success: false, error: 'All Shopee extractors failed' };
     },
+  ],
+
+  'lazada.co.id': [
+    // Method 1: Lazada API fallback
+    async (html: string, url: string) => {
+      try {
+        // Extract product ID from URL
+        const productIdMatch = url.match(/(\d+)\.html/);
+        
+        if (productIdMatch) {
+          const productId = productIdMatch[1];
+          
+          // Try Lazada's API
+          const apiUrl = `https://www.lazada.co.id/rest/product-detail/get?itemId=${productId}`;
+          
+          try {
+            const apiResponse = await axios.get(apiUrl, {
+              timeout: 10000,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Referer': url,
+              },
+            });
+            
+            if (apiResponse.data?.data) {
+              const data = apiResponse.data.data;
+              return {
+                success: true,
+                data: {
+                  name: data.name || data.productTitle || '',
+                  description: data.description || '',
+                  price: parsePrice(data.price?.toString() || '0') || 0,
+                  originalPrice: data.originalPrice ? (parsePrice(data.originalPrice.toString()) ?? undefined) : undefined,
+                  imageUrl: data.image?.[0] || '',
+                  rating: data.rating?.averageRating,
+                  reviewCount: data.rating?.totalReview,
+                  sellerName: data.sellerName || '',
+                  brand: data.brandName || undefined,
+                },
+              };
+            }
+          } catch (apiErr) {
+            // API failed, continue
+          }
+        }
+        
+        // Method 2: HTML parsing
+        const $ = cheerio.load(html);
+        const result: Partial<ScrapedProductData> = {};
+        
+        result.name = $('meta[property="og:title"]').attr('content') ||
+                      $('[data-testid="pdp-product-title"]').first().text().trim() ||
+                      $('h1').first().text().trim() || '';
+        
+        const priceText = $('[data-testid="pdp-product-price"]').first().text().trim() ||
+                          $('meta[property="product:price:amount"]').attr('content') || '';
+        
+        if (priceText) {
+          const priceInfo = parseIndonesianPrice(priceText);
+          result.price = priceInfo.price || 0;
+          result.originalPrice = priceInfo.originalPrice;
+          result.discountPercentage = priceInfo.discount;
+        }
+        
+        result.description = $('meta[property="og:description"]').attr('content') || '';
+        result.imageUrl = $('meta[property="og:image"]').attr('content') ||
+                          $('[data-testid="pdp-product-image"] img').first().attr('src') || '';
+        
+        if (result.name && result.name.length > 2) {
+          return { success: true, data: result };
+        }
+        
+        return { success: false, error: 'Lazada selectors failed' };
+      } catch (e) {
+        return { success: false, error: 'Lazada extraction failed' };
+      }
+    },
+    genericExtractors.jsonLd,
+    genericExtractors.metaTags,
   ],
 };
 
@@ -473,7 +722,7 @@ export async function scrapeProduct(url: string, useAdvanced = false): Promise<S
       timeout: useAdvanced ? 30000 : 10000,
       maxRedirects: 5,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.537 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
         'Accept-Encoding': 'gzip, deflate, br',
@@ -522,7 +771,7 @@ export async function scrapeProduct(url: string, useAdvanced = false): Promise<S
     const extractorName = extractor.name || 'unknown';
     
     try {
-      const result = extractor(html, url);
+      const result = await extractor(html, url);
       
       attempts.push({
         method: extractorName,
@@ -739,7 +988,7 @@ export async function scrapeProductAdvanced(url: string): Promise<ScrapingResult
       const extractorName = extractor.name || 'unknown';
       
       try {
-        const result = extractor(html, url);
+        const result = await extractor(html, url);
         
         attempts.push({
           method: `puppeteer+${extractorName}`,

@@ -234,7 +234,7 @@ export const api = {
       date: string;
       tagIds: number[];
       categoryId: number | null;
-    }>) => fetchApi(`/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    }>) => fetchApi(`/transactions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/transactions/${id}`, { method: 'DELETE' }),
     bulkDelete: (ids: number[]) => fetchApi<{ success: boolean; deletedCount: number; message: string }>('/transactions/bulk-delete', {
       method: 'POST',
