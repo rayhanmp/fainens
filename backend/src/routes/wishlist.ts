@@ -5,6 +5,87 @@ import { db } from "../db/client";
 import { wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
 
+// SSRF Protection: Allowed domains for web scraping
+const ALLOWED_SCRAPE_DOMAINS = [
+  "tokopedia.com",
+  "shopee.co.id",
+  "blibli.com",
+  "lazada.co.id",
+  "bukalapak.com",
+  "amazon.com",
+  "ebay.com",
+  "aliexpress.com",
+  "shopify.com",
+  "woocommerce.com",
+  "example.com", // For testing
+];
+
+// SSRF Protection: Blocked IP ranges (private networks)
+const BLOCKED_IP_PATTERNS = [
+  /^127\./, // Loopback
+  /^10\./, // Private Class A
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // Private Class B
+  /^192\.168\./, // Private Class C
+  /^169\.254\./, // Link-local
+  /^0\./, // Current network
+  /^::1$/, // IPv6 loopback
+  /^fc00:/i, // IPv6 unique local
+  /^fe80:/i, // IPv6 link-local
+];
+
+/**
+ * Validates URL to prevent SSRF attacks
+ * - Must be HTTP or HTTPS protocol
+ * - Must not be an IP address (prevents internal network scanning)
+ * - Must not be localhost or private ranges
+ * - Domain must be in allowlist (optional, can be disabled)
+ */
+function validateScrapeUrl(url: string): { valid: boolean; error?: string } {
+  try {
+    const parsed = new URL(url);
+
+    // Check protocol
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { valid: false, error: "URL must use HTTP or HTTPS protocol" };
+    }
+
+    // Check for IP addresses
+    const hostname = parsed.hostname;
+    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipv6Pattern = /^(\[)?[0-9a-fA-F:]+(\])?$/;
+
+    if (ipv4Pattern.test(hostname) || ipv6Pattern.test(hostname)) {
+      return { valid: false, error: "IP addresses are not allowed. Please use a domain name" };
+    }
+
+    // Check for localhost
+    if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+      return { valid: false, error: "Localhost URLs are not allowed" };
+    }
+
+    // Check blocked IP patterns (in case of DNS rebinding)
+    for (const pattern of BLOCKED_IP_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { valid: false, error: "Private network URLs are not allowed" };
+      }
+    }
+
+    // Check domain allowlist
+    const domainAllowed = ALLOWED_SCRAPE_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+
+    if (!domainAllowed) {
+      return {
+        valid: false,
+        error: `Domain not allowed for scraping. Allowed domains: ${ALLOWED_SCRAPE_DOMAINS.join(", ")}`,
+      };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, error: "Invalid URL format" };
+  }
+}
+
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
@@ -363,7 +444,7 @@ export default async function (fastify: FastifyInstance) {
   // Scrape product data from URL
   fastify.post("/api/wishlist/scrape", async (request, reply) => {
     const { url } = request.body as { url: string };
-    
+
     if (!url || typeof url !== 'string') {
       reply.code(400).send({
         success: false,
@@ -377,23 +458,39 @@ export default async function (fastify: FastifyInstance) {
       });
       return;
     }
-    
+
+    // SSRF Protection: Validate URL
+    const validation = validateScrapeUrl(url);
+    if (!validation.valid) {
+      reply.code(400).send({
+        success: false,
+        attempts: [],
+        requiresAdvancedScraping: false,
+        error: {
+          code: 'forbidden_url',
+          message: validation.error,
+          suggestions: ['Please provide a URL from an allowed e-commerce site'],
+        },
+      });
+      return;
+    }
+
     // Import enhanced scraper
     const { scrapeProduct } = await import('../services/scraper-enhanced');
     const result = await scrapeProduct(url);
-    
+
     if (!result.success) {
       reply.code(400).send(result);
       return;
     }
-    
+
     return result;
   });
 
   // Advanced scraping with Puppeteer
   fastify.post("/api/wishlist/scrape-advanced", async (request, reply) => {
     const { url } = request.body as { url: string };
-    
+
     if (!url || typeof url !== 'string') {
       reply.code(400).send({
         success: false,
@@ -407,18 +504,34 @@ export default async function (fastify: FastifyInstance) {
       });
       return;
     }
-    
+
+    // SSRF Protection: Validate URL
+    const validation = validateScrapeUrl(url);
+    if (!validation.valid) {
+      reply.code(400).send({
+        success: false,
+        attempts: [],
+        requiresAdvancedScraping: false,
+        error: {
+          code: 'forbidden_url',
+          message: validation.error,
+          suggestions: ['Please provide a URL from an allowed e-commerce site'],
+        },
+      });
+      return;
+    }
+
     // Import enhanced scraper
     const { scrapeProductAdvanced } = await import('../services/scraper-enhanced');
-    
+
     // Execute puppeteer scraping
     const result = await scrapeProductAdvanced(url);
-    
+
     if (!result.success) {
       reply.code(400).send(result);
       return;
     }
-    
+
     return result;
   });
 }
