@@ -1,11 +1,23 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { eq } from "drizzle-orm";
+import csrf from "@fastify/csrf-protection";
 
 import { env } from "../lib/env";
 import { db } from "../db/client";
 import { accounts, salaryPeriods } from "../db/schema";
 
 export default async function (fastify: FastifyInstance) {
+  // Register CSRF protection
+  await fastify.register(csrf, {
+    cookieOpts: { path: "/", sameSite: "strict", httpOnly: true, secure: env.NODE_ENV === "production" },
+  });
+
+  // CSRF token endpoint
+  fastify.get("/api/auth/csrf-token", async (request: FastifyRequest, reply: FastifyReply) => {
+    const token = await reply.generateCsrf();
+    return { csrfToken: token };
+  });
+
   // Google OAuth callback
   fastify.get("/api/auth/google/callback", async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -69,7 +81,8 @@ export default async function (fastify: FastifyInstance) {
         .redirect(postLoginRedirect);
     } catch (err) {
       fastify.log.error({ err }, "OAuth callback error");
-      reply.code(500).send({ error: "Authentication failed", details: String(err) });
+      // Don't expose error details to client - log internally only
+      reply.code(500).send({ error: "Authentication failed. Please try again." });
     }
   });
 
@@ -97,8 +110,8 @@ export default async function (fastify: FastifyInstance) {
     return { needsOnboarding };
   });
 
-  // Logout
-  fastify.post("/api/auth/logout", async (request: FastifyRequest, reply: FastifyReply) => {
+  // Logout - protected by CSRF
+  fastify.post("/api/auth/logout", { preHandler: fastify.csrfProtection }, async (request: FastifyRequest, reply: FastifyReply) => {
     reply
       .clearCookie("token", { path: "/" })
       .send({ success: true });
