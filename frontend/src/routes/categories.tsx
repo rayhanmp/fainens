@@ -72,14 +72,14 @@ function CategoriesPage() {
 
   const loadData = async () => {
     try {
-      const [catData, tagData, txData] = await Promise.all([
+      const [catData, tagData, txRes] = await Promise.all([
         api.categories.list(),
         api.tags.list(),
         api.transactions.list({ limit: '2000' }),
       ]);
       setCategories(catData);
       setTags(tagData);
-      setTransactions(txData as TxRow[]);
+      setTransactions(txRes.data as TxRow[]);
     } finally {
       setIsLoading(false);
     }

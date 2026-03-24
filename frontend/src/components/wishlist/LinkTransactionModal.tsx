@@ -37,8 +37,8 @@ export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkT
   async function loadTransactions() {
     try {
       setIsLoading(true);
-      const data = await api.transactions.list({ limit: '50' });
-      setTransactions(data.map((t) => {
+      const response = await api.transactions.list({ limit: '50' });
+      setTransactions(response.data.map((t) => {
         // Calculate amount from transaction lines
         const amount = t.lines?.reduce((sum, line) => sum + (line.debit || 0), 0) || 0;
         return {

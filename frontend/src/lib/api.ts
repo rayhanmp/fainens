@@ -132,25 +132,33 @@ export const api = {
       offset?: string;
     }) => {
       const query = params ? new URLSearchParams(params).toString() : '';
-      return fetchApi<Array<{
-        id: number;
-        date: number;
-        description: string;
-        reference: string | null;
-        notes: string | null;
-        place: string | null;
-        txType: string;
-        categoryId: number | null;
-        periodId: number | null;
-        linkedTxId: number | null;
-        lines: Array<{
+      return fetchApi<{
+        data: Array<{
           id: number;
-          accountId: number;
-          debit: number;
-          credit: number;
+          date: number;
+          description: string;
+          reference: string | null;
+          notes: string | null;
+          place: string | null;
+          txType: string;
+          categoryId: number | null;
+          periodId: number | null;
+          linkedTxId: number | null;
+          lines: Array<{
+            id: number;
+            accountId: number;
+            debit: number;
+            credit: number;
+          }>;
+          tags: Array<{ tagId: number; name: string; color: string }>;
         }>;
-        tags: Array<{ tagId: number; name: string; color: string }>;
-      }>>(`/transactions${query ? `?${query}` : ''}`);
+        pagination: {
+          total: number;
+          limit: number;
+          offset: number;
+          hasMore: boolean;
+        };
+      }>(`/transactions${query ? `?${query}` : ''}`);
     },
     get: (id: number) => fetchApi(`/transactions/${id}`),
     create: (

@@ -106,7 +106,7 @@ function DashboardPage() {
         const periodStartDate = currentPeriod ? new Date(currentPeriod.startDate).toISOString() : undefined;
         const periodEndDate = currentPeriod ? new Date(currentPeriod.endDate).toISOString() : undefined;
 
-        const [accList, dash, recentTxList, cats, budgets, periodTxs, , tagsList] = await Promise.all([
+        const [accList, dash, recentTxRes, cats, budgets, periodTxRes, , tagsList] = await Promise.all([
           api.accounts.list(),
           api.analytics.dashboard(),
           api.transactions.list({ limit: '8' }),
@@ -115,10 +115,13 @@ function DashboardPage() {
           // Fetch all transactions within the period date range (includes those without period_id)
           periodStartDate && periodEndDate
             ? api.transactions.list({ startDate: periodStartDate, endDate: periodEndDate, limit: '500' })
-            : Promise.resolve([]),
+            : Promise.resolve({ data: [] }),
           api.analytics.periodSummaries(),
           api.tags.list(),
         ]);
+        
+        const recentTxList = recentTxRes.data;
+        const periodTxs = periodTxRes.data;
 
         // Calculate period income and expense from actual transactions within date range
         const periodTxsArray = periodTxs as Array<{

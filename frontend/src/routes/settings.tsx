@@ -189,7 +189,8 @@ function SettingsPage() {
 
     try {
       if (exportOptions.transactions) {
-        exportData.transactions = await api.transactions.list();
+        const txResponse = await api.transactions.list();
+        exportData.transactions = txResponse.data;
       }
       if (exportOptions.accounts) {
         exportData.accounts = await api.accounts.list();

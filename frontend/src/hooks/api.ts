@@ -42,7 +42,10 @@ export function useTransactions(params?: {
 }) {
   return useQuery({
     queryKey: ['transactions', params],
-    queryFn: () => api.transactions.list(params),
+    queryFn: async () => {
+      const response = await api.transactions.list(params);
+      return response.data;
+    },
   });
 }
 

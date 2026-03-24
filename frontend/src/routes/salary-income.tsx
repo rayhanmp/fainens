@@ -115,7 +115,7 @@ function SalaryIncomePage() {
           api.transactions.list({ limit: '2000' }),
           api.accounts.list(),
         ]);
-        setTransactions(txData as TxRow[]);
+        setTransactions(txData.data as TxRow[]);
         setAccounts(accData as Account[]);
       } finally {
         setIsLoading(false);

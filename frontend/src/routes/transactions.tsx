@@ -200,7 +200,7 @@ function TransactionsPage() {
         api.categories.list(),
         api.tags.list(),
       ]);
-      setTransactions(txData as TransactionRow[]);
+      setTransactions(txData.data as TransactionRow[]);
       setAccounts(accData as WalletAccount[]);
       setCategories(catData);
       setTags(tagData);
