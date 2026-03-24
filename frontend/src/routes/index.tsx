@@ -1,5 +1,6 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
+import { Select } from '../components/ui/Select';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -77,6 +78,18 @@ function DashboardPage() {
   const [tags, setTags] = useState<Array<{ id: number; name: string; color: string }>>([]);
   const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; balance: number; systemKey?: string | null }>>([]);
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null);
+  const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number }>>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
+  const [periodProgress, setPeriodProgress] = useState<{
+    daysRemaining: number;
+    daysElapsed: number;
+    dailyBudget: number;
+    projectedEndBalance: number;
+    avgDailySpend: number;
+    hasIncome: boolean;
+    income: number;
+    expenses: number;
+  } | null>(null);
   const [topExpenses, setTopExpenses] = useState<Array<{
     id: number;
     date: number;
@@ -97,15 +110,27 @@ function DashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const periods = await api.periods.list();
-        // Periods are returned in descending order by startDate (newest first)
-        const currentPeriod = periods.length ? periods[0] : null;
-        const periodId = currentPeriod ? currentPeriod.id : undefined;
-        if (currentPeriod) setPeriodLabel(currentPeriod.name);
+        const periodList = await api.periods.list();
+        setPeriods(periodList);
+        
+        let periodIdToUse = selectedPeriodId;
+        if (periodList.length > 0 && !periodIdToUse) {
+          periodIdToUse = periodList[0].id.toString();
+          setSelectedPeriodId(periodIdToUse);
+        }
+        
+        if (!periodIdToUse) {
+          setIsLoading(false);
+          return;
+        }
+        
+        const periodId = parseInt(periodIdToUse);
+        const period = periodList.find(p => p.id === periodId);
+        if (period) setPeriodLabel(period.name);
 
         // Fetch transactions by date range to include those without period_id
-        const periodStartDate = currentPeriod ? new Date(currentPeriod.startDate).toISOString() : undefined;
-        const periodEndDate = currentPeriod ? new Date(currentPeriod.endDate).toISOString() : undefined;
+        const periodStartDate = period ? new Date(period.startDate).toISOString() : undefined;
+        const periodEndDate = period ? new Date(period.endDate).toISOString() : undefined;
 
         const [accList, dash, recentTxRes, cats, budgets, periodTxRes, , tagsList] = await Promise.all([
           api.accounts.list(),
@@ -170,7 +195,33 @@ function DashboardPage() {
         setTopExpenses(expenseTxs);
 
         const wallets = accList.filter((a) => a.type === 'asset' && !a.systemKey);
-        setWalletTotal(wallets.reduce((s, a) => s + a.balance, 0));
+        const walletBal = wallets.reduce((s, a) => s + a.balance, 0);
+        setWalletTotal(walletBal);
+
+        if (period) {
+          const now = new Date();
+          const periodStartMs = period.startDate;
+          const periodEndMs = period.endDate;
+          const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)));
+          const daysElapsed = Math.max(0, Math.floor((now.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)));
+          const daysRemaining = Math.max(0, daysTotal - daysElapsed);
+          
+          const avgDailySpend = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
+          const remainingBudget = calculatedIncome - calculatedExpense;
+          const projectedEndBalance = walletBal + remainingBudget - (avgDailySpend * daysRemaining);
+          
+          setPeriodProgress({
+            daysRemaining,
+            daysElapsed,
+            dailyBudget: daysRemaining > 0 ? Math.max(0, remainingBudget / daysRemaining) : 0,
+            projectedEndBalance,
+            avgDailySpend,
+            hasIncome: calculatedIncome > 0,
+            income: calculatedIncome,
+            expenses: calculatedExpense,
+          });
+        }
+
         setAnalytics(dash);
         setRecent(recentTxList);
         setBudgetRows(budgets.slice(0, 5));
@@ -216,6 +267,129 @@ function DashboardPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!selectedPeriodId || periods.length === 0) return;
+    
+    (async () => {
+      try {
+        const periodId = parseInt(selectedPeriodId);
+        const period = periods.find(p => p.id === periodId);
+        if (!period) return;
+        
+        setIsLoading(true);
+        setPeriodLabel(period.name);
+
+        const periodStartDate = new Date(period.startDate).toISOString();
+        const periodEndDate = new Date(period.endDate).toISOString();
+
+        const [budgets, periodTxRes] = await Promise.all([
+          api.budgets.list(String(periodId)),
+          api.transactions.list({ startDate: periodStartDate, endDate: periodEndDate, limit: '500' }),
+        ]);
+        
+        const periodTxs = periodTxRes.data;
+        const periodTxsArray = periodTxs as Array<{
+          id: number;
+          description: string;
+          categoryId: number | null;
+          txType: string;
+          date: number;
+          lines: Array<{ debit: number; credit: number }>;
+        }>;
+        
+        let calculatedIncome = 0;
+        let calculatedExpense = 0;
+        
+        for (const tx of periodTxsArray) {
+          const amt = tx.lines.length > 0
+            ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
+            : 0;
+            
+          if (tx.txType?.includes('income')) {
+            calculatedIncome += amt;
+          } else if (tx.txType?.includes('expense') || tx.categoryId) {
+            calculatedExpense += amt;
+          }
+        }
+        
+        setPeriodIncome(calculatedIncome > 0 ? calculatedIncome : null);
+        setPeriodExpense(calculatedExpense > 0 ? calculatedExpense : null);
+
+        const now = new Date();
+        const periodStartMs = period.startDate;
+        const periodEndMs = period.endDate;
+        const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)));
+        const daysElapsed = Math.max(0, Math.floor((now.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)));
+        const daysRemaining = Math.max(0, daysTotal - daysElapsed);
+        
+        const avgDailySpend = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
+        const remainingBudget = calculatedIncome - calculatedExpense;
+        const projectedEndBalance = walletTotal + remainingBudget - (avgDailySpend * daysRemaining);
+        
+        setPeriodProgress({
+          daysRemaining,
+          daysElapsed,
+          dailyBudget: daysRemaining > 0 ? Math.max(0, remainingBudget / daysRemaining) : 0,
+          projectedEndBalance,
+          avgDailySpend,
+          hasIncome: calculatedIncome > 0,
+          income: calculatedIncome,
+          expenses: calculatedExpense,
+        });
+
+        const expenseTxs = periodTxsArray
+          .filter((tx) => tx.txType?.includes('expense') || tx.categoryId)
+          .map((tx) => ({
+            id: tx.id,
+            date: tx.date,
+            description: tx.description,
+            categoryId: tx.categoryId,
+            amount: tx.lines.length > 0
+              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
+              : 0,
+          }))
+          .filter((tx) => tx.amount > 0)
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 5);
+        setTopExpenses(expenseTxs);
+
+        setBudgetRows(budgets.slice(0, 5));
+        setCurrentPeriodId(periodId);
+
+        const spendMap = new Map<number, number>();
+        
+        for (const tx of periodTxsArray as Array<{
+          categoryId: number | null;
+          txType: string;
+          lines: Array<{ debit: number; credit: number }>;
+        }>) {
+          if (!tx.categoryId) continue;
+          const isExpense = tx.txType?.includes('expense') || tx.categoryId !== null;
+          if (!isExpense) continue;
+          const amt =
+            tx.lines.length > 0
+              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
+              : 0;
+          if (amt > 0) {
+            spendMap.set(tx.categoryId, (spendMap.get(tx.categoryId) || 0) + amt);
+          }
+        }
+        
+        const pie = [...spendMap.entries()]
+          .map(([cid, value]) => {
+            const c = categories.find((x) => x.id === cid);
+            return { name: c?.name ?? `Category ${cid}`, value, color: c?.color || '#737785' };
+          })
+          .filter((x) => x.value > 0)
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 6);
+        setCategorySpend(pie);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [selectedPeriodId]);
 
   const txAmount = (tx: (typeof recent)[0]) =>
     tx.lines?.length ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit))) : 0;
@@ -266,6 +440,14 @@ function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3 items-center">
+            {periods.length > 0 && (
+              <Select
+                value={selectedPeriodId}
+                onChange={(e) => setSelectedPeriodId(e.target.value)}
+                options={periods.map((p) => ({ value: p.id.toString(), label: p.name }))}
+                className="min-w-[160px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold"
+              />
+            )}
             <Link to="/reports">
               <button
                 type="button"
@@ -282,7 +464,7 @@ function DashboardPage() {
         </div>
 
         {/* Bento summary — 3 cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="relative overflow-hidden bg-[var(--ref-primary-container)] p-8 rounded-[2rem] flex flex-col justify-between min-h-[180px] text-white group">
             <div className="relative z-10">
               <p className="text-[var(--ref-on-primary-container)] text-xs font-bold uppercase tracking-widest mb-2 opacity-90">
@@ -329,6 +511,51 @@ function DashboardPage() {
               From analytics period summaries
             </div>
           </div>
+
+          {periodProgress && (
+            <div className="bg-[var(--ref-surface-container-lowest)] p-8 rounded-[2rem] min-h-[180px] flex flex-col justify-between editorial-shadow border border-[var(--color-border)]">
+              <div>
+                <p className="text-[var(--ref-outline)] text-xs font-bold uppercase tracking-widest mb-2">
+                  Period progress
+                </p>
+                <p className="text-2xl sm:text-3xl font-bold font-headline text-[var(--ref-on-surface)] tracking-tight">
+                  {periodProgress.daysRemaining} days left
+                </p>
+              </div>
+              {!periodProgress.hasIncome ? (
+                <p className="text-sm text-[var(--ref-outline)] mt-4">
+                  No income recorded for this period
+                </p>
+              ) : (
+                <div className="space-y-3 mt-4">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--ref-outline)]">Income</span>
+                    <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.income)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--ref-outline)]">Spent</span>
+                    <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.expenses)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--ref-outline)]">Daily budget</span>
+                    <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.dailyBudget)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--ref-outline)]">Avg daily spend</span>
+                    <span className="font-bold text-[var(--ref-on-surface)]">
+                      {periodProgress.daysElapsed > 0 ? formatCurrency(periodProgress.avgDailySpend) : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--ref-outline)]">Remaining</span>
+                    <span className={`font-bold ${(periodProgress.income - periodProgress.expenses) >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]'}`}>
+                      {formatCurrency(periodProgress.income - periodProgress.expenses)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -414,7 +641,7 @@ function DashboardPage() {
 
           {/* Right: donut + budget + top expenses */}
           <div className="space-y-8">
-            <AIInsightCard type="dashboard" />
+            <AIInsightCard type="dashboard" periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined} />
 
             <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
               <h3 className="font-headline font-bold text-lg mb-2">
