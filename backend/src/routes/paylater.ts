@@ -17,8 +17,8 @@ export default async function (fastify: FastifyInstance) {
         date: number;
         description: string;
         principalAmount: number;
-        expenseAccountId: number;
         paylaterLiabilityAccountId: number;
+        categoryId?: number;
         installmentMonths: 1 | 3 | 6 | 12;
         interestRatePercent?: number;
         adminFeeCents?: number;
@@ -42,8 +42,8 @@ export default async function (fastify: FastifyInstance) {
         date: body.date || Date.now(),
         description: body.description,
         principalAmount: body.principalAmount,
-        expenseAccountId: body.expenseAccountId,
         paylaterLiabilityAccountId: body.paylaterLiabilityAccountId,
+        categoryId: body.categoryId,
         installmentMonths: body.installmentMonths,
         interestRatePercent: body.interestRatePercent ?? 0,
         adminFeeCents: body.adminFeeCents ?? 0,

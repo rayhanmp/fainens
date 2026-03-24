@@ -1,7 +1,7 @@
 import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactions, transactionLines, paylaterInstallments } from "../db/schema";
-import { createJournalEntry, CreateJournalEntryInput } from "./ledger";
+import { createJournalEntry, CreateJournalEntryInput, getOrCreateAutoExpenseAccount } from "./ledger";
 import { auditCreate } from "./audit";
 
 async function assertPaylaterRecognitionId(originalTxId: number | undefined | null) {
@@ -56,8 +56,9 @@ export interface PaylaterRecognitionInput {
   date: Date | number;
   description: string; // e.g., "iPhone 15 Pro - Installment Plan"
   principalAmount: number; // cents - the actual cost of the item
-  expenseAccountId: number; // e.g., Electronics expense account
   paylaterLiabilityAccountId: number; // Accounts Payable - Paylater
+  /** Optional category for reporting */
+  categoryId?: number;
   /** Installment plan options */
   installmentMonths: 1 | 3 | 6 | 12; // Number of months for installment
   interestRatePercent?: number; // Annual interest rate (e.g., 12 for 12%)
@@ -185,16 +186,8 @@ export function calculateInstallmentSchedule(params: {
 export async function recognizePaylaterPurchase(
   input: PaylaterRecognitionInput
 ): Promise<{ transactionId: number; installments: InstallmentScheduleItem[] }> {
-  // Validate accounts
-  const [expenseAccount] = await db
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
-    .from(accounts)
-    .where(eq(accounts.id, input.expenseAccountId))
-    .limit(1);
-
-  if (!expenseAccount) throw new Error(`Expense account not found: ${input.expenseAccountId}`);
-  if (!expenseAccount.isActive) throw new Error("Expense account is not active");
-  if (expenseAccount.type !== "expense") throw new Error("Account must be an expense account");
+  // Use auto-expense account (like regular expenses)
+  const expenseAccount = await getOrCreateAutoExpenseAccount(db);
 
   const [liabilityAccount] = await db
     .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
@@ -227,9 +220,10 @@ export async function recognizePaylaterPurchase(
     reference: input.reference,
     notes: input.notes,
     txType: "paylater_recognition",
+    categoryId: input.categoryId ?? null,
     lines: [
       {
-        accountId: input.expenseAccountId,
+        accountId: expenseAccount.id,
         debit: input.principalAmount,
         credit: 0,
         description: "Principal amount",
@@ -280,7 +274,6 @@ export async function recognizePaylaterPurchase(
     totalFees,
     totalLiability,
     installmentMonths: input.installmentMonths,
-    expenseAccountId: input.expenseAccountId,
     paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
   });
 

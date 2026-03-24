@@ -117,6 +117,11 @@ export const api = {
       parentId: number | null;
     }>) => fetchApi(`/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/accounts/${id}`, { method: 'DELETE' }),
+    reconcile: (balances: Array<{ accountId: number; actualBalance: number }>) => 
+      fetchApi<{ success: boolean; results: Array<{ accountId: number; difference: number; transactionId?: number; error?: string }> }>('/reconciliation', { 
+        method: 'POST', 
+        body: JSON.stringify({ balances }) 
+      }),
   },
 
   // Transactions
@@ -446,12 +451,12 @@ export const api = {
       trialBalance: { totalDebits: number; totalCredits: number; isBalanced: boolean };
     }>('/analytics/dashboard'),
     netWorth: () => fetchApi('/analytics/net-worth'),
-    netWorthTrend: (params?: { range?: '7d' | '30d' | '6m' | '1y' }) => {
+    netWorthTrend: (params?: { range?: '7d' | '30d' | '3m' | '6m' | '1y' }) => {
       const q = new URLSearchParams();
       if (params?.range) q.set('range', params.range);
       const qs = q.toString();
       return fetchApi<{
-        range: '7d' | '30d' | '6m' | '1y';
+        range: '7d' | '30d' | '3m' | '6m' | '1y';
         bucketCount: number;
         series: Array<{
           label: string;
@@ -777,8 +782,8 @@ export const api = {
       date: number;
       description: string;
       principalAmount: number;
-      expenseAccountId: number;
       paylaterLiabilityAccountId: number;
+      categoryId?: number;
       installmentMonths: 1 | 3 | 6 | 12;
       interestRatePercent?: number;
       adminFeeCents?: number;
@@ -1406,12 +1411,12 @@ export const api = {
   },
 
   insights: {
-    generateDashboard: () => fetchApi<{ insight: string; generatedAt: string }>('/insights/dashboard', { method: 'POST' }),
+    generateDashboard: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string }>(`/insights/dashboard${periodId ? `?periodId=${periodId}` : ''}`, { method: 'POST' }),
     generateBudget: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string }>(`/insights/budget`, { 
       method: 'POST', 
       body: JSON.stringify({ periodId }) 
     }),
-    getDashboardLatest: () => fetchApi<{ insight: string | null; generatedAt: string | null }>('/insights/dashboard/latest'),
+    getDashboardLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/dashboard/latest${periodId ? `?periodId=${periodId}` : ''}`),
     getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
   },
 };
