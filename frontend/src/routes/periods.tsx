@@ -73,13 +73,11 @@ function PeriodsPage() {
 
     try {
       if (editingPeriod) {
-        // Update existing period
-        await api.periods.create({
+        await api.periods.update(editingPeriod.id, {
           name: formData.name,
           startDate: formData.startDate,
           endDate: formData.endDate,
         });
-        // Note: There's no update API, so we delete and recreate or handle differently
       } else {
         await api.periods.create({
           name: formData.name,
