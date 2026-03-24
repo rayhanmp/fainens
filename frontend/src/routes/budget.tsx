@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
+import { AIInsightCard } from '../components/insights/AIInsightCard';
 
 export const Route = createFileRoute('/budget')({
   component: BudgetPage,
@@ -934,6 +935,14 @@ function BudgetPage() {
                 </div>
               </div>
             </div>
+
+            {/* AI Insight */}
+            {selectedPeriod && (
+              <AIInsightCard 
+                type="budget" 
+                periodId={parseInt(selectedPeriodId) || undefined}
+              />
+            )}
           </div>
         )}
 

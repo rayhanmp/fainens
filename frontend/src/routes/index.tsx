@@ -20,6 +20,7 @@ import {
 import { NetWorthChart } from '../components/analytics';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { TransactionModal } from '../components/transactions/TransactionModal';
+import { AIInsightCard } from '../components/insights/AIInsightCard';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -280,7 +281,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        {/* Bento summary — Stitch 3 cards */}
+        {/* Bento summary — 3 cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="relative overflow-hidden bg-[var(--ref-primary-container)] p-8 rounded-[2rem] flex flex-col justify-between min-h-[180px] text-white group">
             <div className="relative z-10">
@@ -413,6 +414,8 @@ function DashboardPage() {
 
           {/* Right: donut + budget + top expenses */}
           <div className="space-y-8">
+            <AIInsightCard type="dashboard" />
+
             <div className="bg-[var(--ref-surface-container-lowest)] p-6 sm:p-8 rounded-xl editorial-shadow border border-[var(--color-border)]">
               <h3 className="font-headline font-bold text-lg mb-2">
                 Monthly Expenses Breakdown
@@ -589,6 +592,7 @@ function DashboardPage() {
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </div>

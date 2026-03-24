@@ -338,6 +338,9 @@ export const api = {
     get: (id: number) => fetchApi(`/periods/${id}`),
     create: (data: { name: string; startDate: string; endDate: string }) =>
       fetchApi('/periods', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<{ name: string; startDate: string; endDate: string }>) =>
+      fetchApi(`/periods/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: number) => fetchApi(`/periods/${id}`, { method: 'DELETE' }),
     suggestNext: () => fetchApi<{
       suggestedName: string;
       suggestedStartDate: string;
@@ -1400,5 +1403,15 @@ export const api = {
       description: string | null;
     }>(`/loans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi<void>(`/loans/${id}`, { method: 'DELETE' }),
+  },
+
+  insights: {
+    generateDashboard: () => fetchApi<{ insight: string; generatedAt: string }>('/insights/dashboard', { method: 'POST' }),
+    generateBudget: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string }>(`/insights/budget`, { 
+      method: 'POST', 
+      body: JSON.stringify({ periodId }) 
+    }),
+    getDashboardLatest: () => fetchApi<{ insight: string | null; generatedAt: string | null }>('/insights/dashboard/latest'),
+    getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
   },
 };
