@@ -3,14 +3,15 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { api } from '../../lib/api';
-import { formatCurrency, parseIdNominalToInt } from '../../lib/utils';
-import { Check, AlertCircle } from 'lucide-react';
+import { formatCurrency, parseIdNominalToInt, cn } from '../../lib/utils';
+import { Check, AlertCircle, Wallet, Building2, CreditCard } from 'lucide-react';
 
 type Account = {
   id: number;
   name: string;
   type: string;
   balance: number;
+  icon?: string | null;
 };
 
 type ReconciliationRow = {
@@ -19,6 +20,7 @@ type ReconciliationRow = {
   ledgerBalance: number;
   actualBalance: string;
   difference: number;
+  hasChanges: boolean;
 };
 
 interface ReconciliationModalProps {
@@ -26,6 +28,17 @@ interface ReconciliationModalProps {
   onClose: () => void;
   accounts: Account[];
   onSuccess: () => void;
+}
+
+function AccountIcon({ name }: { name: string }) {
+  const lowerName = name.toLowerCase();
+  if (lowerName.includes('bank') || lowerName.includes('bca') || lowerName.includes('bni') || lowerName.includes('mandiri') || lowerName.includes('bri')) {
+    return <Building2 className="w-4 h-4" />;
+  }
+  if (lowerName.includes('card') || lowerName.includes('kartu')) {
+    return <CreditCard className="w-4 h-4" />;
+  }
+  return <Wallet className="w-4 h-4" />;
 }
 
 export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: ReconciliationModalProps) {
@@ -44,8 +57,9 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
         accountId: a.id,
         accountName: a.name,
         ledgerBalance: a.balance,
-        actualBalance: '',
+        actualBalance: formatCurrency(a.balance),
         difference: 0,
+        hasChanges: false,
       })));
       setError(null);
     }
@@ -61,6 +75,19 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       ...newRows[index],
       actualBalance: value,
       difference: diff,
+      hasChanges: diff !== 0,
+    };
+    setRows(newRows);
+  };
+
+  const handleResetToLedger = (index: number) => {
+    const row = rows[index];
+    const newRows = [...rows];
+    newRows[index] = {
+      ...row,
+      actualBalance: formatCurrency(row.ledgerBalance),
+      difference: 0,
+      hasChanges: false,
     };
     setRows(newRows);
   };
@@ -79,7 +106,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
     );
   }, [rows]);
 
-  const hasChanges = rows.some(r => r.difference !== 0);
+  const hasChanges = rows.some(r => r.hasChanges);
 
   const handleSubmit = async () => {
     if (!hasChanges) return;
@@ -89,7 +116,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
 
     try {
       const balances = rows
-        .filter(r => r.difference !== 0 && r.actualBalance !== '')
+        .filter(r => r.hasChanges)
         .map(r => ({
           accountId: r.accountId,
           actualBalance: parseIdNominalToInt(r.actualBalance),
@@ -115,7 +142,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       isOpen={isOpen}
       onClose={onClose}
       title="Reconciliation"
-      subtitle="Enter the actual balance from your bank/e-wallet apps. Differences will be created as income or expense transactions."
+      subtitle="Enter actual balance from your bank/e-wallet. Differences create income or expense transactions."
       className="max-w-2xl"
     >
       <div className="space-y-4">
@@ -126,59 +153,92 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           </div>
         )}
 
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--ref-surface-container)]">
-              <tr>
-                <th className="text-left p-3 font-semibold text-[var(--ref-on-surface)]">Account</th>
-                <th className="text-right p-3 font-semibold text-[var(--ref-on-surface)]">Ledger Balance</th>
-                <th className="text-right p-3 font-semibold text-[var(--ref-on-surface)]">Actual Balance</th>
-                <th className="text-right p-3 font-semibold text-[var(--ref-on-surface)]">Difference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => (
-                <tr key={row.accountId} className="border-t border-[var(--color-border)]">
-                  <td className="p-3 text-[var(--ref-on-surface)]">{row.accountName}</td>
-                  <td className="p-3 text-right font-mono text-[var(--ref-on-surface)]">
-                    {formatCurrency(row.ledgerBalance)}
-                  </td>
-                  <td className="p-2">
-                    <Input
-                      type="text"
-                      value={row.actualBalance}
-                      onChange={(e) => handleActualBalanceChange(idx, e.target.value)}
-                      placeholder="Enter actual"
-                      className="text-right font-mono"
-                    />
-                  </td>
-                  <td className={`p-3 text-right font-mono font-semibold ${
-                    row.difference > 0 ? 'text-green-600' : 
-                    row.difference < 0 ? 'text-red-600' : 
-                    'text-[var(--ref-on-surface-variant)]'
-                  }`}>
-                    {row.difference !== 0 ? (row.difference > 0 ? '+' : '') + formatCurrency(row.difference) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot className="bg-[var(--ref-surface-container-lowest)] font-semibold">
-              <tr>
-                <td className="p-3 text-[var(--ref-on-surface)]">Total</td>
-                <td className="p-3 text-right font-mono text-[var(--ref-on-surface)]">
-                  {formatCurrency(totals.ledger)}
-                </td>
-                <td className="p-3"></td>
-                <td className={`p-3 text-right font-mono ${
-                  totals.diff > 0 ? 'text-green-600' : 
-                  totals.diff < 0 ? 'text-red-600' : 
-                  'text-[var(--ref-on-surface-variant)]'
-                }`}>
-                  {totals.diff !== 0 ? (totals.diff > 0 ? '+' : '') + formatCurrency(totals.diff) : '—'}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+        <div className="space-y-2">
+          {rows.map((row, idx) => (
+            <div 
+              key={row.accountId} 
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border transition-colors",
+                row.hasChanges 
+                  ? "bg-[var(--ref-secondary-container)]/30 border-[var(--ref-secondary)]/30" 
+                  : "bg-[var(--ref-surface-container-lowest)] border-[var(--color-border)]"
+              )}
+            >
+              <div className="w-8 h-8 rounded-full bg-[var(--ref-primary-container)] flex items-center justify-center text-[var(--ref-on-primary-container)]">
+                <AccountIcon name={row.accountName} />
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[var(--ref-on-surface)] truncate">{row.accountName}</p>
+                <p className="text-xs text-[var(--ref-on-surface-variant)]">
+                  Ledger: <span className="font-mono">{formatCurrency(row.ledgerBalance)}</span>
+                </p>
+              </div>
+
+              <div className="w-32">
+                <Input
+                  type="text"
+                  value={row.actualBalance}
+                  onChange={(e) => handleActualBalanceChange(idx, e.target.value)}
+                  className={cn(
+                    "text-right font-mono text-sm",
+                    row.hasChanges && "font-bold"
+                  )}
+                />
+              </div>
+
+              <div className={cn(
+                "w-24 text-right font-mono text-sm font-semibold",
+                row.difference > 0 && "text-green-600",
+                row.difference < 0 && "text-red-600",
+                row.difference === 0 && "text-[var(--ref-on-surface-variant)]"
+              )}>
+                {row.hasChanges ? (
+                  <>
+                    {row.difference > 0 ? '+' : ''}{formatCurrency(row.difference)}
+                  </>
+                ) : (
+                  <span className="text-xs">Matched</span>
+                )}
+              </div>
+
+              {row.hasChanges && (
+                <button
+                  type="button"
+                  onClick={() => handleResetToLedger(idx)}
+                  className="text-xs text-[var(--ref-outline)] hover:text-[var(--ref-on-surface)] underline"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Summary */}
+        <div className={cn(
+          "flex items-center justify-between p-4 rounded-lg border",
+          hasChanges 
+            ? "bg-[var(--ref-secondary-container)] border-[var(--ref-secondary)]/30" 
+            : "bg-[var(--ref-surface-container-lowest)] border-[var(--color-border)]"
+        )}>
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium text-[var(--ref-on-surface)]">Summary</span>
+            <span className="text-xs text-[var(--ref-on-surface-variant)]">
+              Ledger Total: <span className="font-mono font-semibold">{formatCurrency(totals.ledger)}</span>
+            </span>
+            <span className="text-xs text-[var(--ref-on-surface-variant)]">
+              Actual Total: <span className="font-mono font-semibold">{formatCurrency(totals.actual)}</span>
+            </span>
+          </div>
+          <div className={cn(
+            "font-mono font-bold",
+            totals.diff > 0 && "text-green-600",
+            totals.diff < 0 && "text-red-600",
+            totals.diff === 0 && "text-[var(--ref-on-surface)]"
+          )}>
+            {totals.diff !== 0 ? (totals.diff > 0 ? '+' : '') + formatCurrency(totals.diff) : 'Balanced'}
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
@@ -195,7 +255,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
             ) : (
               <>
                 <Check className="w-4 h-4" />
-                Reconcile {hasChanges && `(${rows.filter(r => r.difference !== 0).length} accounts)`}
+                Reconcile {hasChanges && `(${rows.filter(r => r.hasChanges).length})`}
               </>
             )}
           </Button>
