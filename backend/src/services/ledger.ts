@@ -507,14 +507,20 @@ export async function createJournalEntry(
 
   const result = { transactionId, balancesByAccountId };
 
-  invalidateAndRecomputeOnTransactionMutation({
-    transactionId: result.transactionId,
-    affectedAccountIds: uniqueReferencedAccountIds,
-    affectedPeriodIds: input.periodId ? [input.periodId] : undefined,
-  }).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error("Cache invalidation failed:", err);
-  });
+  // Fire-and-forget cache invalidation with proper error handling
+  // This should not block the response but errors should be logged
+  void (async () => {
+    try {
+      await invalidateAndRecomputeOnTransactionMutation({
+        transactionId: result.transactionId,
+        affectedAccountIds: uniqueReferencedAccountIds,
+        affectedPeriodIds: input.periodId ? [input.periodId] : undefined,
+      });
+    } catch (err) {
+      // Log error but don't throw - cache will be recomputed on next request
+      console.error("Cache invalidation failed (non-critical):", err);
+    }
+  })();
 
   return result;
 }
