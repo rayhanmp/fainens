@@ -33,6 +33,7 @@ import subscriptionRoutes from "./routes/subscriptions";
 import wishlistRoutes from "./routes/wishlist";
 import loanRoutes from "./routes/loans";
 import contactRoutes from "./routes/contacts";
+import insightsRoutes from "./routes/insights";
 
 // Import plugins
 import authPlugin from "./plugins/auth";
@@ -229,6 +230,7 @@ const start = async () => {
     await fastify.register(wishlistRoutes);
     await fastify.register(loanRoutes);
     await fastify.register(contactRoutes);
+    await fastify.register(insightsRoutes);
 
     await fastify.listen({ port: 3000, host: "0.0.0.0" });
 

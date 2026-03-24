@@ -20,6 +20,9 @@ const envSchema = z.object({
   // Redis — use redis://127.0.0.1:6379 for local dev; in Docker Compose use redis://redis:6379
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
 
+  // OpenRouter API for LLM insights
+  OPENROUTER_API_KEY: z.string().optional(),
+
   // App
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 
