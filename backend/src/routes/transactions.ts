@@ -5,6 +5,7 @@ import { db } from "../db/client";
 import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods, loans } from "../db/schema";
 import { createJournalEntry, createSimpleTransaction } from "../services/ledger";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
+import { invalidateOnTransactionMutation } from "../cache";
 
 // Pagination constants
 const MAX_LIMIT = 100;
@@ -575,6 +576,13 @@ export default async function (fastify: FastifyInstance) {
     const txId = parseInt(id);
 
     try {
+      // Get affected account IDs before deleting
+      const linesToDelete = await db
+        .select({ accountId: transactionLines.accountId })
+        .from(transactionLines)
+        .where(eq(transactionLines.transactionId, txId));
+      const affectedAccountIds = [...new Set(linesToDelete.map(l => l.accountId))];
+
       // Use transaction to ensure atomic deletion
       await db.transaction(async (tx) => {
         // Fetch transaction before deleting for audit log
@@ -613,10 +621,88 @@ export default async function (fastify: FastifyInstance) {
         await auditDelete("transaction", txId, existing);
       });
 
+      // Invalidate caches after successful deletion
+      try {
+        await invalidateOnTransactionMutation({
+          transactionId: txId,
+          affectedAccountIds,
+        });
+      } catch (cacheErr) {
+        console.error('Cache invalidation error (transaction was deleted):', cacheErr);
+      }
+
       reply.code(204).send();
     } catch (err) {
       fastify.log.error(err);
-      reply.code(500).send({ error: "Failed to delete transaction" });
+      console.error('Delete transaction error:', err);
+      reply.code(500).send({ error: "Failed to delete transaction", details: (err as Error).message });
+    }
+  });
+
+  // Bulk delete transactions
+  fastify.post("/api/transactions/bulk-delete", async (request, reply) => {
+    const { ids } = request.body as { ids: number[] };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      reply.code(400).send({ error: "ids array is required" });
+      return;
+    }
+
+    try {
+      let deletedCount = 0;
+      for (const txId of ids) {
+        // Get affected account IDs before deleting
+        const linesToDelete = await db
+          .select({ accountId: transactionLines.accountId })
+          .from(transactionLines)
+          .where(eq(transactionLines.transactionId, txId));
+        const affectedAccountIds = [...new Set(linesToDelete.map(l => l.accountId))];
+
+        const [existing] = await db
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, txId))
+          .limit(1);
+
+        if (!existing) continue;
+
+        // Check for linked loans
+        const linkedLoans = await db
+          .select()
+          .from(loans)
+          .where(eq(loans.lendingTransactionId, txId));
+        
+        for (const loan of linkedLoans) {
+          await db
+            .update(loans)
+            .set({ 
+              isActive: false,
+              updatedAt: sql`(unixepoch('now') * 1000)`,
+            })
+            .where(eq(loans.id, loan.id));
+        }
+
+        await db.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
+        await db.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
+        await db.delete(transactions).where(eq(transactions.id, txId));
+        
+        await auditDelete("transaction", txId, existing);
+        deletedCount++;
+
+        // Invalidate cache for this transaction
+        try {
+          await invalidateOnTransactionMutation({
+            transactionId: txId,
+            affectedAccountIds,
+          });
+        } catch (cacheErr) {
+          console.error('Cache invalidation error:', cacheErr);
+        }
+      }
+
+      reply.send({ success: true, deletedCount, message: `Deleted ${deletedCount} transaction(s)` });
+    } catch (err) {
+      fastify.log.error(err);
+      reply.code(500).send({ error: "Failed to bulk delete transactions" });
     }
   });
 

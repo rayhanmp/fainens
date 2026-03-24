@@ -24,13 +24,13 @@ export default async function (fastify: FastifyInstance) {
     return data;
   });
 
-  /** Historical net worth (rolling from today). Query: range=7d|30d|6m|1y */
+  /** Historical net worth (rolling from today). Query: range=7d|30d|3m|6m|1y */
   fastify.get("/api/analytics/net-worth-trend", async (request, reply) => {
     const q = request.query as { range?: string };
     const r = (q.range ?? "30d").toLowerCase();
-    const valid: NetWorthRange[] = ["7d", "30d", "6m", "1y"];
+    const valid: NetWorthRange[] = ["7d", "30d", "3m", "6m", "1y"];
     if (!valid.includes(r as NetWorthRange)) {
-      reply.code(400).send({ error: "Invalid range (use 7d, 30d, 6m, 1y)" });
+      reply.code(400).send({ error: "Invalid range (use 7d, 30d, 3m, 6m, 1y)" });
       return;
     }
     return getNetWorthTrend(r as NetWorthRange);
