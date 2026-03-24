@@ -514,53 +514,56 @@ export default async function (fastify: FastifyInstance) {
     };
 
     try {
-      const [existing] = await db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.id, parseInt(id)))
-        .limit(1);
+      // Use transaction to ensure atomic updates
+      await db.transaction(async (tx) => {
+        const [existing] = await tx
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, parseInt(id)))
+          .limit(1);
 
-      if (!existing) {
-        reply.code(404).send({ error: "Transaction not found" });
-        return;
-      }
-
-      const updates: Record<string, unknown> = {};
-      if (body.date !== undefined) updates.date = new Date(body.date).getTime();
-      if (body.description !== undefined) updates.description = body.description;
-      if (body.reference !== undefined) updates.reference = body.reference;
-      if (body.notes !== undefined) updates.notes = body.notes;
-      if (body.place !== undefined) updates.place = body.place;
-      if (body.txType !== undefined) updates.txType = body.txType;
-      if (body.periodId !== undefined) updates.periodId = body.periodId;
-      if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
-
-      if (Object.keys(updates).length > 0) {
-        await db.update(transactions).set(updates).where(eq(transactions.id, parseInt(id)));
-      }
-
-      if (body.lines && body.lines.length > 0) {
-        await db.delete(transactionLines).where(eq(transactionLines.transactionId, parseInt(id)));
-        await db.insert(transactionLines).values(
-          body.lines.map((line) => ({
-            transactionId: parseInt(id),
-            accountId: line.accountId,
-            debit: line.debit,
-            credit: line.credit,
-            description: line.description ?? null,
-          }))
-        );
-      }
-
-      if (body.tagIds !== undefined) {
-        await db.delete(transactionTags).where(eq(transactionTags.transactionId, parseInt(id)));
-        if (body.tagIds.length > 0) {
-          await db.insert(transactionTags).values(body.tagIds.map((tagId) => ({ transactionId: parseInt(id), tagId })));
+        if (!existing) {
+          reply.code(404).send({ error: "Transaction not found" });
+          return;
         }
-      }
 
-      await auditUpdate("transaction", parseInt(id), existing, updates);
-      reply.code(200).send({ id: parseInt(id), ...updates });
+        const updates: Record<string, unknown> = {};
+        if (body.date !== undefined) updates.date = new Date(body.date).getTime();
+        if (body.description !== undefined) updates.description = body.description;
+        if (body.reference !== undefined) updates.reference = body.reference;
+        if (body.notes !== undefined) updates.notes = body.notes;
+        if (body.place !== undefined) updates.place = body.place;
+        if (body.txType !== undefined) updates.txType = body.txType;
+        if (body.periodId !== undefined) updates.periodId = body.periodId;
+        if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
+
+        if (Object.keys(updates).length > 0) {
+          await tx.update(transactions).set(updates).where(eq(transactions.id, parseInt(id)));
+        }
+
+        if (body.lines && body.lines.length > 0) {
+          await tx.delete(transactionLines).where(eq(transactionLines.transactionId, parseInt(id)));
+          await tx.insert(transactionLines).values(
+            body.lines.map((line) => ({
+              transactionId: parseInt(id),
+              accountId: line.accountId,
+              debit: line.debit,
+              credit: line.credit,
+              description: line.description ?? null,
+            }))
+          );
+        }
+
+        if (body.tagIds !== undefined) {
+          await tx.delete(transactionTags).where(eq(transactionTags.transactionId, parseInt(id)));
+          if (body.tagIds.length > 0) {
+            await tx.insert(transactionTags).values(body.tagIds.map((tagId) => ({ transactionId: parseInt(id), tagId })));
+          }
+        }
+
+        await auditUpdate("transaction", parseInt(id), existing, updates);
+        reply.code(200).send({ id: parseInt(id), ...updates });
+      });
     } catch (err) {
       fastify.log.error(err);
       reply.code(400).send({ error: (err as Error).message });
@@ -571,24 +574,33 @@ export default async function (fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const txId = parseInt(id);
 
-    // Fetch transaction before deleting for audit log
-    const [existing] = await db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.id, txId))
-      .limit(1);
+    try {
+      // Use transaction to ensure atomic deletion
+      await db.transaction(async (tx) => {
+        // Fetch transaction before deleting for audit log
+        const [existing] = await tx
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, txId))
+          .limit(1);
 
-    if (!existing) {
-      reply.code(404).send({ error: "Transaction not found" });
-      return;
+        if (!existing) {
+          reply.code(404).send({ error: "Transaction not found" });
+          return;
+        }
+
+        await tx.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
+        await tx.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
+        await tx.delete(transactions).where(eq(transactions.id, txId));
+
+        await auditDelete("transaction", txId, existing);
+      });
+
+      reply.code(204).send();
+    } catch (err) {
+      fastify.log.error(err);
+      reply.code(500).send({ error: "Failed to delete transaction" });
     }
-
-    await db.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
-    await db.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
-    await db.delete(transactions).where(eq(transactions.id, txId));
-
-    await auditDelete("transaction", txId, existing);
-    reply.code(204).send();
   });
 
   // Import preview endpoint
@@ -655,27 +667,33 @@ export default async function (fastify: FastifyInstance) {
     };
 
     try {
-      const results = [];
-      for (const row of rows) {
-        const kind: "expense" | "income" = row.amountCents >= 0 ? "expense" : "income";
-        const absAmount = Math.abs(row.amountCents);
-
-        const txResult = await createSimpleTransaction({
-          kind,
-          amountCents: absAmount,
-          description: row.description || defaultDescription,
-          date: new Date(row.date),
-          periodId,
-          walletAccountId: accountId,
-        });
+      // Use transaction for atomic bulk import
+      const results = await db.transaction(async (tx) => {
+        const imported: Array<{ id: number; transactionId: number; balancesByAccountId: Record<number, number> }> = [];
         
-        // Handle tags separately
-        if (tagIds && tagIds.length > 0) {
-          await db.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: txResult.transactionId, tagId })));
+        for (const row of rows) {
+          const kind: "expense" | "income" = row.amountCents >= 0 ? "expense" : "income";
+          const absAmount = Math.abs(row.amountCents);
+
+          const txResult = await createSimpleTransaction({
+            kind,
+            amountCents: absAmount,
+            description: row.description || defaultDescription,
+            date: new Date(row.date),
+            periodId,
+            walletAccountId: accountId,
+          });
+          
+          // Handle tags separately
+          if (tagIds && tagIds.length > 0) {
+            await tx.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: txResult.transactionId, tagId })));
+          }
+          
+          imported.push({ id: txResult.transactionId, ...txResult });
         }
         
-        results.push({ id: txResult.transactionId, ...txResult });
-      }
+        return imported;
+      });
 
       reply.code(201).send({ imported: results.length, transactions: results });
     } catch (err) {
