@@ -2,7 +2,7 @@ import { eq, and, desc, sql, inArray, count, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods } from "../db/schema";
+import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods, loans } from "../db/schema";
 import { createJournalEntry, createSimpleTransaction } from "../services/ledger";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
 
@@ -587,6 +587,23 @@ export default async function (fastify: FastifyInstance) {
         if (!existing) {
           reply.code(404).send({ error: "Transaction not found" });
           return;
+        }
+
+        // Check if this transaction is linked to a loan and delete the loan too
+        const linkedLoans = await tx
+          .select()
+          .from(loans)
+          .where(eq(loans.lendingTransactionId, txId));
+        
+        for (const loan of linkedLoans) {
+          // Soft delete the loan
+          await tx
+            .update(loans)
+            .set({ 
+              isActive: false,
+              updatedAt: sql`(unixepoch('now') * 1000)`,
+            })
+            .where(eq(loans.id, loan.id));
         }
 
         await tx.delete(transactionTags).where(eq(transactionTags.transactionId, txId));

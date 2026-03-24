@@ -31,6 +31,8 @@ import reportsRoutes from "./routes/reports";
 import salarySettingsRoutes from "./routes/salary-settings";
 import subscriptionRoutes from "./routes/subscriptions";
 import wishlistRoutes from "./routes/wishlist";
+import loanRoutes from "./routes/loans";
+import contactRoutes from "./routes/contacts";
 
 // Import plugins
 import authPlugin from "./plugins/auth";
@@ -49,7 +51,7 @@ fastify.register(cors, {
 
 // Register rate limiting
 fastify.register(rateLimit, {
-  max: 100,
+  max: 1000,
   timeWindow: '1 minute',
   redis: getRedisClient(),
   keyGenerator: (req) => {
@@ -69,8 +71,8 @@ fastify.register(rateLimit, {
 // Stricter rate limit for auth endpoints
 fastify.register(async function (fastify) {
   fastify.register(rateLimit, {
-    max: 5,
-    timeWindow: '15 minutes',
+    max: 10,
+    timeWindow: '5 minutes',
     redis: getRedisClient(),
     keyGenerator: (req) => req.ip,
     errorResponseBuilder: (req, context) => {
@@ -225,6 +227,8 @@ const start = async () => {
     await fastify.register(salarySettingsRoutes);
     await fastify.register(subscriptionRoutes);
     await fastify.register(wishlistRoutes);
+    await fastify.register(loanRoutes);
+    await fastify.register(contactRoutes);
 
     await fastify.listen({ port: 3000, host: "0.0.0.0" });
 
