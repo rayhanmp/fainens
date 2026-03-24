@@ -6,6 +6,7 @@ config({ path: resolve(__dirname, "../../.env") });
 
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 
 import { bootstrapDb } from "./db/migrate";
 import { getRedisClient, closeRedisConnection } from "./cache/redis";
@@ -45,6 +46,123 @@ fastify.register(cors, {
   origin: env.NODE_ENV === "production" ? false : ["http://localhost:8080", "http://localhost:3000"],
   credentials: true,
 });
+
+// Register rate limiting
+fastify.register(rateLimit, {
+  max: 100,
+  timeWindow: '1 minute',
+  redis: getRedisClient(),
+  keyGenerator: (req) => {
+    // Use user ID if authenticated, otherwise IP address
+    return (req.user as { id?: string })?.id || req.ip;
+  },
+  errorResponseBuilder: (req, context) => {
+    return {
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded. Try again in ${context.after}`,
+      retryAfter: context.after
+    };
+  }
+});
+
+// Stricter rate limit for auth endpoints
+fastify.register(async function (fastify) {
+  fastify.register(rateLimit, {
+    max: 5,
+    timeWindow: '15 minutes',
+    redis: getRedisClient(),
+    keyGenerator: (req) => req.ip,
+    errorResponseBuilder: (req, context) => {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Too many authentication attempts. Please try again later.',
+        retryAfter: context.after
+      };
+    }
+  });
+}, { prefix: '/auth' });
+
+// Rate limit for expensive operations (import/export)
+fastify.register(async function (fastify) {
+  fastify.register(rateLimit, {
+    max: 10,
+    timeWindow: '1 minute',
+    redis: getRedisClient(),
+    keyGenerator: (req) => {
+      return (req.user as { id?: string })?.id || req.ip;
+    },
+    errorResponseBuilder: (req, context) => {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Import/Export rate limit exceeded. Please try again later.',
+        retryAfter: context.after
+      };
+    }
+  });
+}, { prefix: '/transactions/import' });
+
+// Rate limit for attachment uploads
+fastify.register(async function (fastify) {
+  fastify.register(rateLimit, {
+    max: 20,
+    timeWindow: '1 minute',
+    redis: getRedisClient(),
+    keyGenerator: (req) => {
+      return (req.user as { id?: string })?.id || req.ip;
+    },
+    errorResponseBuilder: (req, context) => {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Upload rate limit exceeded. Please try again later.',
+        retryAfter: context.after
+      };
+    }
+  });
+}, { prefix: '/attachments' });
+
+// Rate limit for expensive analytics/reporting endpoints
+fastify.register(async function (fastify) {
+  fastify.register(rateLimit, {
+    max: 30,
+    timeWindow: '1 minute',
+    redis: getRedisClient(),
+    keyGenerator: (req) => {
+      return (req.user as { id?: string })?.id || req.ip;
+    },
+    errorResponseBuilder: (req, context) => {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Analytics rate limit exceeded. Please try again later.',
+        retryAfter: context.after
+      };
+    }
+  });
+}, { prefix: '/reports' });
+
+// Rate limit for wishlist scraper (external calls)
+fastify.register(async function (fastify) {
+  fastify.register(rateLimit, {
+    max: 10,
+    timeWindow: '1 minute',
+    redis: getRedisClient(),
+    keyGenerator: (req) => {
+      return (req.user as { id?: string })?.id || req.ip;
+    },
+    errorResponseBuilder: (req, context) => {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Scraper rate limit exceeded. Please try again later.',
+        retryAfter: context.after
+      };
+    }
+  });
+}, { prefix: '/wishlist' });
 
 // Health check (public)
 fastify.get("/health", async () => {
