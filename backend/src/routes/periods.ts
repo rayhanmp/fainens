@@ -2,7 +2,7 @@ import { eq, desc, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { salaryPeriods, budgetPlans, categories } from "../db/schema";
+import { salaryPeriods, budgetPlans, categories, salarySettings } from "../db/schema";
 import { precomputePeriodSummary } from "../cache/precompute";
 
 export default async function (fastify: FastifyInstance) {
@@ -165,25 +165,31 @@ export default async function (fastify: FastifyInstance) {
       .orderBy(desc(salaryPeriods.endDate))
       .limit(1);
 
-    if (!latestPeriod) {
-      // No periods yet, suggest current month
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const [settings] = await db
+      .select()
+      .from(salarySettings)
+      .limit(1);
 
-      return {
-        suggestedName: `${now.toLocaleString("default", { month: "long" })} ${now.getFullYear()}`,
-        suggestedStartDate: startOfMonth.toISOString().split("T")[0],
-        suggestedEndDate: endOfMonth.toISOString().split("T")[0],
-      };
+    const payrollDay = settings?.payrollDay ?? 25;
+
+    let suggestedStart: Date;
+    let suggestedEnd: Date;
+
+    if (!latestPeriod) {
+      const now = new Date();
+      suggestedStart = new Date(now.getFullYear(), now.getMonth(), payrollDay);
+      suggestedEnd = new Date(suggestedStart.getFullYear(), suggestedStart.getMonth() + 1, payrollDay - 1);
+    } else {
+      const latestEnd = new Date(latestPeriod.endDate);
+      suggestedStart = new Date(latestEnd.getFullYear(), latestEnd.getMonth(), payrollDay);
+      if (suggestedStart.getTime() <= latestPeriod.endDate) {
+        suggestedStart = new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, payrollDay);
+      }
+      suggestedEnd = new Date(suggestedStart.getFullYear(), suggestedStart.getMonth() + 1, payrollDay - 1);
     }
 
-    // Suggest period starting the day after the latest period ends
-    const suggestedStart = new Date(latestPeriod.endDate + 24 * 60 * 60 * 1000);
-    const suggestedEnd = new Date(suggestedStart.getFullYear(), suggestedStart.getMonth() + 1, 0);
-
     return {
-      suggestedName: `${suggestedStart.toLocaleString("default", { month: "long" })} ${suggestedStart.getFullYear()}`,
+      suggestedName: `${suggestedEnd.toLocaleString("default", { month: "long" })} ${suggestedEnd.getFullYear()}`,
       suggestedStartDate: suggestedStart.toISOString().split("T")[0],
       suggestedEndDate: suggestedEnd.toISOString().split("T")[0],
     };
@@ -197,21 +203,30 @@ export default async function (fastify: FastifyInstance) {
       .orderBy(desc(salaryPeriods.endDate))
       .limit(1);
 
+    const [settings] = await db
+      .select()
+      .from(salarySettings)
+      .limit(1);
+
+    const payrollDay = settings?.payrollDay ?? 25;
+
     let startDate: Date;
     let endDate: Date;
     let name: string;
 
     if (!latestPeriod) {
-      // Create first period for current month
       const now = new Date();
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      name = `${now.toLocaleString("default", { month: "long" })} ${now.getFullYear()}`;
+      startDate = new Date(now.getFullYear(), now.getMonth(), payrollDay);
+      endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, payrollDay - 1);
+      name = `${endDate.toLocaleString("default", { month: "long" })} ${endDate.getFullYear()}`;
     } else {
-      // Create period starting day after latest ends
-      startDate = new Date(latestPeriod.endDate + 24 * 60 * 60 * 1000);
-      endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
-      name = `${startDate.toLocaleString("default", { month: "long" })} ${startDate.getFullYear()}`;
+      const latestEnd = new Date(latestPeriod.endDate);
+      startDate = new Date(latestEnd.getFullYear(), latestEnd.getMonth(), payrollDay);
+      if (startDate.getTime() <= latestPeriod.endDate) {
+        startDate = new Date(latestEnd.getFullYear(), latestEnd.getMonth() + 1, payrollDay);
+      }
+      endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, payrollDay - 1);
+      name = `${endDate.toLocaleString("default", { month: "long" })} ${endDate.getFullYear()}`;
     }
 
     // Check if this period already exists
