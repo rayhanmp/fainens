@@ -24,7 +24,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
     try {
       let response;
       if (type === 'dashboard') {
-        response = await api.insights.generateDashboard();
+        response = await api.insights.generateDashboard(periodId);
       } else {
         response = await api.insights.generateBudget(periodId);
       }
@@ -43,7 +43,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
     try {
       let response;
       if (type === 'dashboard') {
-        response = await api.insights.getDashboardLatest();
+        response = await api.insights.getDashboardLatest(periodId);
       } else {
         response = await api.insights.getBudgetLatest(periodId);
       }

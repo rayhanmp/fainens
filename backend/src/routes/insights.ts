@@ -151,12 +151,20 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
   // POST /api/insights/dashboard - Generate dashboard insight
   fastify.post("/api/insights/dashboard", async (request, reply) => {
     const userId = (request.user as { id?: string })?.id || 'anonymous';
+    const q = request.query as { periodId?: string };
+    const periodId = q.periodId ? parseInt(q.periodId) : undefined;
     
     try {
-      const currentPeriodResult = await db.all(sql`
-        SELECT * FROM salary_period ORDER BY end_date DESC LIMIT 1
-      `);
-      const currentPeriod = currentPeriodResult[0] as any;
+      let currentPeriod;
+      if (periodId) {
+        const periodResult = await db.all(sql`SELECT * FROM salary_period WHERE id = ${periodId} LIMIT 1`);
+        currentPeriod = periodResult[0] as any;
+      } else {
+        const currentPeriodResult = await db.all(sql`
+          SELECT * FROM salary_period ORDER BY end_date DESC LIMIT 1
+        `);
+        currentPeriod = currentPeriodResult[0] as any;
+      }
 
       if (!currentPeriod) {
         reply.code(404).send({ error: "No active period found" });
@@ -379,7 +387,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       };
 
       const insight = await generateDashboardInsight(data);
-      await setCachedInsight(userId, 'dashboard', insight);
+      await setCachedInsight(userId, 'dashboard', insight, periodId?.toString());
       
       reply.send({ insight, generatedAt: new Date().toISOString() });
     } catch (err) {
@@ -562,9 +570,10 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
   // GET /api/insights/dashboard/latest - Get cached dashboard insight
   fastify.get("/api/insights/dashboard/latest", async (request, reply) => {
     const userId = (request.user as { id?: string })?.id || 'anonymous';
+    const { periodId } = request.query as { periodId?: string };
     
     try {
-      const cached = await getCachedInsight(userId, 'dashboard');
+      const cached = await getCachedInsight(userId, 'dashboard', periodId);
       reply.send({ 
         insight: cached,
         generatedAt: cached ? new Date().toISOString() : null 
