@@ -15,6 +15,13 @@
       "when": 1774264103233,
       "tag": "0001_violet_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774318513128,
+      "tag": "0002_red_clea",
+      "breakpoints": true
     }
   ]
 }

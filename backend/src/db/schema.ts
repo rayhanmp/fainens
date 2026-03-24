@@ -265,3 +265,104 @@ export const transactionTagsTransactionIdx = index("idx_transaction_tags_tx_id")
 export const transactionTagsTagIdx = index("idx_transaction_tags_tag_id").on(transactionTags.tagId);
 export const paylaterInstallmentsTxIdx = index("idx_paylater_installments_tx_id").on(paylaterInstallments.recognitionTxId);
 export const subscriptionsLinkedAccountIdx = index("idx_subscriptions_account_id").on(subscriptions.linkedAccountId);
+
+/** Contacts - people you lend to or borrow from */
+export const contacts = sqliteTable("contact", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  fullName: text("full_name"),
+  nickname: text("nickname"),
+  email: text("email"),
+  phone: text("phone"),
+  relationshipType: text("relationship_type"),
+  notes: text("notes"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
+/** Loans - tracks money lent to or borrowed from contacts */
+export const loans = sqliteTable("loan", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  direction: text("direction").notNull(), // 'lent' | 'borrowed' - from YOUR perspective
+  amountCents: integer("amount_cents").notNull(),
+  remainingCents: integer("remaining_cents").notNull(),
+  startDate: integer("start_date", { mode: "timestamp_ms" }).notNull(),
+  dueDate: integer("due_date", { mode: "timestamp_ms" }),
+  status: text("status").notNull().default("active"), // active, repaid, defaulted, written_off
+  description: text("description"),
+  /** Source of the loan (manual entry or split bill) */
+  sourceType: text("source_type").notNull().default("manual"), // manual, split_bill
+  sourceTransactionId: integer("source_transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+  /** The wallet/account involved in the original transaction */
+  walletAccountId: integer("wallet_account_id")
+    .references(() => accounts.id, { onDelete: "set null" }),
+  /** The transaction that created this loan */
+  lendingTransactionId: integer("lending_transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  contactIdIdx: index("idx_loan_contact_id").on(table.contactId),
+  directionIdx: index("idx_loan_direction").on(table.direction),
+  statusIdx: index("idx_loan_status").on(table.status),
+  startDateIdx: index("idx_loan_start_date").on(table.startDate),
+  dueDateIdx: index("idx_loan_due_date").on(table.dueDate),
+  sourceTxIdx: index("idx_loan_source_tx_id").on(table.sourceTransactionId),
+}));
+
+/** Loan Payments - tracks repayments on loans */
+export const loanPayments = sqliteTable("loan_payment", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  loanId: integer("loan_id")
+    .notNull()
+    .references(() => loans.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(),
+  principalCents: integer("principal_cents").notNull(),
+  paymentDate: integer("payment_date", { mode: "timestamp_ms" }).notNull(),
+  /** The transaction that recorded this payment */
+  transactionId: integer("transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  loanIdIdx: index("idx_loan_payment_loan_id").on(table.loanId),
+  paymentDateIdx: index("idx_loan_payment_date").on(table.paymentDate),
+  transactionIdIdx: index("idx_loan_payment_tx_id").on(table.transactionId),
+}));
+
+/** Loan Payment Attachments - receipts for loan payments */
+export const loanPaymentAttachments = sqliteTable("loan_payment_attachment", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  loanPaymentId: integer("loan_payment_id")
+    .notNull()
+    .references(() => loanPayments.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  r2Key: text("r2_key").notNull(),
+  mimetype: text("mimetype").notNull(),
+  fileSize: integer("file_size").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  loanPaymentIdIdx: index("idx_loan_payment_attachment_payment_id").on(table.loanPaymentId),
+}));
+
+// Additional indexes for contacts
+export const contactsNameIdx = index("idx_contacts_name").on(contacts.name);
+export const contactsIsActiveIdx = index("idx_contacts_is_active").on(contacts.isActive);
