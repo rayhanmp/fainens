@@ -933,18 +933,20 @@ function BudgetPage() {
                     );
                   })}
                 </div>
+                </div>
+              </div>
+
+              {/* Sidebar */}
+              <div className="space-y-6">
+                {selectedPeriod && (
+                  <AIInsightCard 
+                    type="budget" 
+                    periodId={parseInt(selectedPeriodId) || undefined}
+                  />
+                )}
               </div>
             </div>
-
-            {/* AI Insight */}
-            {selectedPeriod && (
-              <AIInsightCard 
-                type="budget" 
-                periodId={parseInt(selectedPeriodId) || undefined}
-              />
-            )}
-          </div>
-        )}
+          )}
 
         {/* Create Budget Modal */}
         <Modal
