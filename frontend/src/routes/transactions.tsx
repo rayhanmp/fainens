@@ -149,6 +149,7 @@ function TransactionsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [newlyAddedTxId, setNewlyAddedTxId] = useState<number | null>(null);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -678,7 +679,8 @@ function TransactionsPage() {
                         className={cn(
                           "group transition-colors hover:bg-[var(--ref-surface-container-low)]",
                           selectedTransactions.has(tx.id) && "bg-[var(--ref-surface-container-low)]",
-                          display.kind === 'loan' && "bg-[var(--color-accent)]/5"
+                          display.kind === 'loan' && "bg-[var(--color-accent)]/5",
+                          tx.id === newlyAddedTxId && "animate-slide-in"
                         )}
                       >
                         <td className="px-2 py-4 sm:px-4 sm:py-5">
@@ -899,6 +901,11 @@ function TransactionsPage() {
           isOpen={isModalOpen}
           onClose={closeModal}
           onSaved={loadData}
+          onSuccess={(txId) => {
+            setNewlyAddedTxId(txId);
+            loadData();
+            setTimeout(() => setNewlyAddedTxId(null), 300);
+          }}
           accounts={accounts}
           categories={categories}
           tags={tags}

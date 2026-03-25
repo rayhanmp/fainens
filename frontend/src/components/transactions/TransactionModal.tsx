@@ -73,6 +73,7 @@ interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onSuccess?: (txId: number) => void;
   accounts: WalletAccount[];
   categories: CategoryRow[];
   tags: TagRow[];
@@ -104,6 +105,7 @@ export function TransactionModal({
   isOpen,
   onClose,
   onSaved,
+  onSuccess,
   accounts,
   categories,
   tags,
@@ -555,9 +557,9 @@ export function TransactionModal({
             adminFeeCents: simpleForm.paylaterAdminFee ? parseIdNominalToInt(simpleForm.paylaterAdminFee) : undefined,
             firstDueDate: startOfLocalDayMs(new Date(simpleForm.paylaterFirstDueDate).getTime()),
             notes: simpleForm.notes || undefined,
-          });
-          onSaved();
-          onClose();
+      });
+      onSaved();
+      onClose();
         } catch (err) {
           setFormError((err as Error).message);
         } finally {
@@ -729,6 +731,7 @@ export function TransactionModal({
       }
       
       onSaved();
+      onSuccess?.(mainTransaction.id);
       onClose();
     } catch (err) {
       setFormError((err as Error).message);
