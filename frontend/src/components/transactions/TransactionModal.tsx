@@ -2192,7 +2192,17 @@ export function TransactionModal({
                     </label>
                     <select
                       value={simpleForm.subscriptionId}
-                      onChange={(e) => setSimpleForm({ ...simpleForm, subscriptionId: e.target.value })}
+                      onChange={(e) => {
+                        const subId = e.target.value;
+                        setSimpleForm({ ...simpleForm, subscriptionId: subId });
+                        // Auto-fill amount with subscription amount
+                        if (subId) {
+                          const sub = subscriptions.find(s => s.id === parseInt(subId, 10));
+                          if (sub) {
+                            setSimpleForm(prev => ({ ...prev, amount: sub.amount.toString() }));
+                          }
+                        }
+                      }}
                       className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
                     >
                       <option value="">None</option>
