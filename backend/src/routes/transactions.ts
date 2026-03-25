@@ -615,43 +615,40 @@ export default async function (fastify: FastifyInstance) {
         .where(eq(transactionLines.transactionId, txId));
       const affectedAccountIds = [...new Set(linesToDelete.map(l => l.accountId))];
 
-      // Use transaction to ensure atomic deletion
-      await db.transaction(async (tx) => {
-        // Fetch transaction before deleting for audit log
-        const [existing] = await tx
-          .select()
-          .from(transactions)
-          .where(eq(transactions.id, txId))
-          .limit(1);
+      // Fetch transaction before deleting for audit log
+      const [existing] = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.id, txId))
+        .limit(1);
 
-        if (!existing) {
-          reply.code(404).send({ error: "Transaction not found" });
-          return;
-        }
+      if (!existing) {
+        reply.code(404).send({ error: "Transaction not found" });
+        return;
+      }
 
-        // Check if this transaction is linked to a loan and delete the loan too
-        const linkedLoans = await tx
-          .select()
-          .from(loans)
-          .where(eq(loans.lendingTransactionId, txId));
-        
-        for (const loan of linkedLoans) {
-          // Soft delete the loan
-          await tx
-            .update(loans)
-            .set({ 
-              isActive: false,
-              updatedAt: sql`(unixepoch('now') * 1000)`,
-            })
-            .where(eq(loans.id, loan.id));
-        }
+      // Check if this transaction is linked to a loan and delete the loan too
+      const linkedLoans = await db
+        .select()
+        .from(loans)
+        .where(eq(loans.lendingTransactionId, txId));
+      
+      // Soft delete linked loans
+      for (const loan of linkedLoans) {
+        await db
+          .update(loans)
+          .set({ 
+            isActive: false,
+            updatedAt: sql`(unixepoch('now') * 1000)`,
+          })
+          .where(eq(loans.id, loan.id));
+      }
 
-        await tx.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
-        await tx.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
-        await tx.delete(transactions).where(eq(transactions.id, txId));
+      await db.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
+      await db.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
+      await db.delete(transactions).where(eq(transactions.id, txId));
 
-        await auditDelete("transaction", txId, existing);
-      });
+      await auditDelete("transaction", txId, existing);
 
       // Invalidate caches after successful deletion
       try {
