@@ -81,12 +81,13 @@ function LoansPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [loansData, contactsData, summaryData] = await Promise.all([
-        api.loans.list(),
+      const [activeLoans, repaidLoans, contactsData, summaryData] = await Promise.all([
+        api.loans.list({ status: 'active' }),
+        api.loans.list({ status: 'repaid' }),
         api.contacts.list(),
         api.loans.summary(),
       ]);
-      setLoans(loansData);
+      setLoans([...activeLoans, ...repaidLoans]);
       setContacts(contactsData);
       setSummary(summaryData);
     } finally {
@@ -100,14 +101,17 @@ function LoansPage() {
 
   // Group contacts by net balance for display
   const contactsWithLoans = useMemo(() => {
-    return contacts
-      .filter(c => c.activeLoansCount > 0)
-      .sort((a, b) => Math.abs(b.netBalance) - Math.abs(a.netBalance));
+    return [...contacts].sort((a, b) => Math.abs(b.netBalance) - Math.abs(a.netBalance));
   }, [contacts]);
 
-  // Recent activity (last 5 loans)
+  // Recent activity (last 5 loans, sorted: active first, then by date)
   const recentActivity = useMemo(() => {
-    return loans
+    return [...loans]
+      .sort((a, b) => {
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (b.status === 'active' && a.status !== 'active') return 1;
+        return b.startDate - a.startDate;
+      })
       .slice(0, 5)
       .map(loan => ({
         ...loan,
@@ -417,10 +421,15 @@ function LoansPage() {
                         <p className="text-xs text-[var(--color-muted)] flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {loan.date}
-                          {loan.isOverdue && (
+                          {loan.status === 'active' && loan.isOverdue && (
                             <span className="text-[var(--ref-error)] flex items-center gap-1">
                               <AlertCircle className="w-3 h-3" />
                               Overdue
+                            </span>
+                          )}
+                          {loan.status === 'repaid' && (
+                            <span className="text-[var(--ref-secondary)] bg-[var(--ref-secondary-container)] px-1.5 py-0.5 rounded text-xs">
+                              Repaid
                             </span>
                           )}
                         </p>
