@@ -208,7 +208,7 @@ export default async function (fastify: FastifyInstance) {
     }
 
     const patch: Record<string, unknown> = {
-      updatedAt: Date.now(),
+      updatedAt: new Date(),
     };
 
     if (body.name !== undefined) patch.name = body.name.trim();
