@@ -33,6 +33,7 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
     amount: (loan.remainingCents / 100).toLocaleString('id-ID'),
     rawAmount: loan.remainingCents.toString(),
     paymentDate: new Date().toISOString().split('T')[0],
+    paymentTime: new Date().toTimeString().slice(0, 5),
     notes: '',
     walletAccountId: '',
   });
@@ -84,9 +85,13 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
 
     setIsSubmitting(true);
     try {
-      await api.loans.recordPayment(loan.id, {
+      const [hours, minutes] = formData.paymentTime.split(':').map(Number);
+    const paymentDateWithTime = new Date(formData.paymentDate);
+    paymentDateWithTime.setHours(hours, minutes, 0, 0);
+    
+    await api.loans.recordPayment(loan.id, {
         amountCents,
-        paymentDate: new Date(formData.paymentDate).getTime(),
+        paymentDate: paymentDateWithTime.getTime(),
         notes: formData.notes || undefined,
         walletAccountId: parseInt(formData.walletAccountId),
       });
@@ -183,18 +188,27 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
               </button>
             </div>
 
-            {/* Payment Date */}
+            {/* Payment Date & Time */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                Payment Date
+                Payment Date & Time
               </label>
-              <input
-                type="date"
-                value={formData.paymentDate}
-                onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={formData.paymentDate}
+                  onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
+                  className="flex-1 bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
+                  required
+                />
+                <input
+                  type="time"
+                  value={formData.paymentTime}
+                  onChange={(e) => setFormData({ ...formData, paymentTime: e.target.value })}
+                  className="w-32 bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
+                  required
+                />
+              </div>
             </div>
 
             {/* Notes */}
