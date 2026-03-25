@@ -71,7 +71,7 @@ interface Category {
   color?: string | null;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 function formatTxTableDate(ts: number) {
   return new Date(ts).toLocaleDateString('en-US', {
@@ -146,6 +146,7 @@ function TransactionsPage() {
   const [txTypeFilter, setTxTypeFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
@@ -393,11 +394,11 @@ function TransactionsPage() {
   }, [filtered, getTransactionDisplay]);
 
   const paginated = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
   const periodLabel = useMemo(() => {
     if (!search.periodId) return null;
@@ -805,35 +806,55 @@ function TransactionsPage() {
             </div>
 
             {/* Pagination */}
-            {filtered.length > PAGE_SIZE && (
+            {filtered.length > 0 && (
               <div className="flex flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-                <p className="text-xs font-medium text-[var(--color-muted)]">
-                  Showing{' '}
-                  <span className="font-bold text-[var(--color-text-primary)]">
-                    {(page - 1) * PAGE_SIZE + 1} – {Math.min(page * PAGE_SIZE, filtered.length)}
-                  </span>{' '}
-                  of {filtered.length} transactions
-                </p>
+                <div className="flex items-center gap-4">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">
+                    Showing{' '}
+                    <span className="font-bold text-[var(--color-text-primary)]">
+                      {(page - 1) * pageSize + 1} – {Math.min(page * pageSize, filtered.length)}
+                    </span>{' '}
+                    of {filtered.length} transactions
+                  </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs font-medium text-[var(--color-text-primary)] cursor-pointer"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  <span className="px-2 text-xs font-bold text-[var(--color-text-secondary)]">
-                    {page} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
+                  {totalPages > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <span className="px-2 text-xs font-bold text-[var(--color-text-secondary)]">
+                        {page} / {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={page >= totalPages}
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}

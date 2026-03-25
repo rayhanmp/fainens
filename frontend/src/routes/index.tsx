@@ -533,10 +533,6 @@ function DashboardPage() {
                     <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.income)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-[var(--ref-outline)]">Spent</span>
-                    <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.expenses)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
                     <span className="text-[var(--ref-outline)]">Daily budget</span>
                     <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.dailyBudget)}</span>
                   </div>
