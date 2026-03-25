@@ -270,6 +270,7 @@ function DashboardPage() {
 
   useEffect(() => {
     if (!selectedPeriodId || periods.length === 0) return;
+    if (categories.length === 0) return; // Wait for categories to load
     
     (async () => {
       try {
