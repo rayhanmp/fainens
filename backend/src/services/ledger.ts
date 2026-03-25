@@ -229,6 +229,8 @@ export async function createSimpleTransaction(
       destLng: input.destLng ?? null,
       destName: input.destName ?? null,
       distanceKm: input.distanceKm ?? null,
+      // Subscription payment
+      subscriptionId: input.subscriptionId ?? null,
     },
     dbLike,
   );
