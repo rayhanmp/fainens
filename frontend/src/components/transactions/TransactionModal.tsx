@@ -1373,91 +1373,146 @@ export function TransactionModal({
         subtitle="Update description, date, notes, tags, and category."
         size="xl"
       >
-        <p className="text-sm text-[var(--color-text-secondary)] mb-8 lg:mb-10">
-          Amounts and accounts can't be changed here — delete this entry and add a new one to adjust
-          those.
-        </p>
-        <form onSubmit={handleEditMetaSubmit} className="space-y-8 lg:space-y-10 max-w-3xl">
-          <Input
-            label="Date"
-            type="date"
-            value={editMeta.date}
-            onChange={(e) => setEditMeta({ ...editMeta, date: e.target.value })}
-            className="rounded-xl border-none bg-[var(--ref-surface-container-low)] px-4 py-4"
-            required
-          />
-          <Input
-            label="Transaction name"
-            value={editMeta.description}
-            onChange={(e) => setEditMeta({ ...editMeta, description: e.target.value })}
-            className="rounded-xl border-none bg-[var(--ref-surface-container-low)] px-4 py-4"
-            required
-          />
-          {showCategoryOnEdit && (
-            <Select
-              label="Category"
-              value={editMeta.categoryId}
-              onChange={(e) => setEditMeta({ ...editMeta, categoryId: e.target.value })}
-              className={stitchSelect}
-              options={[
-                { value: '', label: 'None' },
-                ...categories.map((c) => ({ value: c.id.toString(), label: c.name })),
-              ]}
-            />
-          )}
-          <Input
-            label="Place (optional)"
-            value={editMeta.place}
-            onChange={(e) => setEditMeta({ ...editMeta, place: e.target.value })}
-            placeholder="e.g. Starbucks, Indomaret, Online"
-            className="rounded-xl border-none bg-[var(--ref-surface-container-low)] px-4 py-4"
-          />
-          <div>
-            <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-              Tags
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => {
-                    const next = editMeta.tagIds.includes(tag.id)
-                      ? editMeta.tagIds.filter((id) => id !== tag.id)
-                      : [...editMeta.tagIds, tag.id];
-                    setEditMeta({ ...editMeta, tagIds: next });
-                  }}
-                  className={cn(
-                    'cursor-pointer px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
-                    editMeta.tagIds.includes(tag.id)
-                      ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                      : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/40 bg-[var(--ref-surface-container)]',
-                  )}
+        <div className="bg-[var(--ref-surface-container-low)] rounded-2xl p-4 mb-6">
+          <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+            <StickyNote className="w-4 h-4 text-[var(--color-warning)]" />
+            <span>Amounts and accounts can't be changed here — delete this entry and add a new one to adjust those.</span>
+          </div>
+        </div>
+        <form onSubmit={handleEditMetaSubmit}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {/* Date */}
+            <div className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl space-y-2 group hover:bg-[var(--ref-surface-container-low)] transition-colors">
+              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                <CalendarClock className="w-3.5 h-3.5" />
+                Date
+              </label>
+              <input
+                type="date"
+                value={editMeta.date}
+                onChange={(e) => setEditMeta({ ...editMeta, date: e.target.value })}
+                className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
+                required
+              />
+            </div>
+
+            {/* Category (if available) */}
+            {showCategoryOnEdit && (
+              <div className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl space-y-2 group hover:bg-[var(--ref-surface-container-low)] transition-colors">
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                  <TagIcon className="w-3.5 h-3.5" />
+                  Category
+                </label>
+                <select
+                  value={editMeta.categoryId}
+                  onChange={(e) => setEditMeta({ ...editMeta, categoryId: e.target.value })}
+                  className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
                 >
-                  {tag.name}
-                </button>
-              ))}
+                  <option value="">None</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id.toString()}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Transaction Name */}
+            <div className="md:col-span-2 bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl space-y-2 group hover:bg-[var(--ref-surface-container-low)] transition-colors">
+              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                <TagIcon className="w-3.5 h-3.5" />
+                Transaction Name
+              </label>
+              <input
+                type="text"
+                value={editMeta.description}
+                onChange={(e) => setEditMeta({ ...editMeta, description: e.target.value })}
+                className="w-full bg-transparent text-base font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
+                placeholder="Enter transaction description..."
+                required
+              />
+            </div>
+
+            {/* Place */}
+            <div className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl space-y-2 group hover:bg-[var(--ref-surface-container-low)] transition-colors">
+              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Place
+              </label>
+              <input
+                type="text"
+                value={editMeta.place}
+                onChange={(e) => setEditMeta({ ...editMeta, place: e.target.value })}
+                className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
+                placeholder="e.g. Starbucks, Indomaret, Online"
+              />
+            </div>
+
+            {/* Tags */}
+            <div className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl space-y-2">
+              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                <TagIcon className="w-3.5 h-3.5" />
+                Tags
+              </label>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => {
+                      const next = editMeta.tagIds.includes(tag.id)
+                        ? editMeta.tagIds.filter((id) => id !== tag.id)
+                        : [...editMeta.tagIds, tag.id];
+                      setEditMeta({ ...editMeta, tagIds: next });
+                    }}
+                    className={cn(
+                      'cursor-pointer px-2.5 py-1 text-xs rounded-full border transition-all',
+                      editMeta.tagIds.includes(tag.id)
+                        ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)] shadow-sm'
+                        : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/40 bg-[var(--ref-surface-container)]',
+                    )}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+                {tags.length === 0 && (
+                  <span className="text-xs text-[var(--color-muted)]">No tags available</span>
+                )}
+              </div>
+            </div>
+
+            {/* Notes - Full Width */}
+            <div className="md:col-span-2 bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl space-y-2">
+              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                <StickyNote className="w-3.5 h-3.5" />
+                Memo
+              </label>
+              <textarea
+                className="w-full min-h-[100px] rounded-lg bg-transparent px-2 py-1 text-sm text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50 resize-none"
+                placeholder="Write a note..."
+                value={editMeta.notes}
+                onChange={(e) => setEditMeta({ ...editMeta, notes: e.target.value })}
+              />
             </div>
           </div>
-          <div>
-            <label className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] mb-2">
+
+          {formError && (
+            <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-[var(--color-danger)]/10 text-[var(--color-danger)] text-sm">
               <StickyNote className="w-4 h-4" />
-              Memo
-            </label>
-            <textarea
-              className="w-full min-h-[100px] rounded-xl border-none bg-[var(--ref-surface-container-lowest)] px-4 py-3 text-sm text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
-              placeholder="Write a note..."
-              value={editMeta.notes}
-              onChange={(e) => setEditMeta({ ...editMeta, notes: e.target.value })}
-            />
-          </div>
-          {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <Button type="submit" isLoading={isSubmitting} className="flex-1 rounded-full py-4">
-              <Save className="w-5 h-5" />
+              {formError}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-[var(--color-border)]">
+            <Button type="submit" isLoading={isSubmitting} className="flex-1 rounded-full py-3.5 shadow-lg shadow-[var(--color-primary)]/20">
+              <Save className="w-4 h-4 mr-2" />
               Save changes
             </Button>
-            <Button type="button" variant="secondary" onClick={onClose} className="rounded-full py-4">
+            <Button type="button" variant="secondary" onClick={onClose} className="rounded-full py-3.5">
               Cancel
             </Button>
           </div>
