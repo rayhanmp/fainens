@@ -405,11 +405,12 @@ export default async function (fastify: FastifyInstance) {
           destLng?: number | null;
           destName?: string | null;
           distanceKm?: number | null;
+          subscriptionId?: number;
         };
 
     try {
       if ("kind" in body) {
-        const { kind, amountCents, description, notes, place, date, periodId, categoryId, tagIds, walletAccountId, toWalletAccountId, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm } = body;
+        const { kind, amountCents, description, notes, place, date, periodId, categoryId, tagIds, walletAccountId, toWalletAccountId, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
         if (kind === "transfer") {
           if (!toWalletAccountId) {
             reply.code(400).send({ error: "toWalletAccountId is required for transfers" });
@@ -427,6 +428,7 @@ export default async function (fastify: FastifyInstance) {
             walletAccountId,
             toWalletAccountId,
             linkedTxId,
+            subscriptionId,
           });
           
           // Handle tags separately since createSimpleTransaction doesn't support them
@@ -456,6 +458,7 @@ export default async function (fastify: FastifyInstance) {
           destLng,
           destName,
           distanceKm,
+          subscriptionId,
         });
         
         // Handle tags separately since createSimpleTransaction doesn't support them
