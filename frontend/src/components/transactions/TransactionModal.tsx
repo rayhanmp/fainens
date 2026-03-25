@@ -2162,6 +2162,7 @@ export function TransactionModal({
               </h3>
 
               <div className="space-y-3 opacity-60">
+                {simpleForm.type === 'expense' && (
                 <div className="flex justify-between items-center gap-4">
                   <div className="flex items-center gap-3 min-w-0">
                     <Users className="w-5 h-5 text-[var(--ref-tertiary)] shrink-0" />
@@ -2176,6 +2177,7 @@ export function TransactionModal({
                     <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white shadow" />
                   </button>
                 </div>
+                )}
               </div>
 
               <div className="h-px bg-[var(--color-border)]/40" />
@@ -2218,18 +2220,20 @@ export function TransactionModal({
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                  Place (optional)
-                </label>
-                <input
-                  type="text"
-                  value={simpleForm.place}
-                  onChange={(e) => setSimpleForm({ ...simpleForm, place: e.target.value })}
-                  placeholder="e.g. Starbucks, Indomaret, Online"
-                  className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
-                />
-              </div>
+              {simpleForm.type === 'expense' && (
+                <div>
+                  <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
+                    Place (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={simpleForm.place}
+                    onChange={(e) => setSimpleForm({ ...simpleForm, place: e.target.value })}
+                    placeholder="e.g. Starbucks, Indomaret, Online"
+                    className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
+                  />
+                </div>
+              )}
 
               {simpleForm.type !== 'paylater' ? (
                 <div>
