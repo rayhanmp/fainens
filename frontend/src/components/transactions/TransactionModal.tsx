@@ -716,6 +716,9 @@ export function TransactionModal({
             categoryId: null,
             walletAccountId,
             toWalletAccountId,
+            ...(simpleForm.subscriptionId ? {
+              subscriptionId: parseInt(simpleForm.subscriptionId, 10),
+            } : {}),
           });
         }
       } else {
