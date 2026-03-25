@@ -55,6 +55,8 @@ export const transactions = sqliteTable("transaction", {
   destLng: real("dest_lng"), // Destination longitude
   destName: text("dest_name"), // Destination place name
   distanceKm: real("distance_km"), // Distance in kilometers
+  /** Optional subscription this transaction is paying for (advances subscription renewal) */
+  subscriptionId: integer("subscription_id").references(() => subscriptions.id),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),

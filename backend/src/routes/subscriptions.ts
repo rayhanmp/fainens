@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client";
 import { subscriptions, accounts } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
-import { processDueSubscriptionRenewals } from "../services/subscription-renewals";
+import { processDueSubscriptionRenewals, addOneMonth, addOneYear } from "../services/subscription-renewals";
 
 type SubRow = typeof subscriptions.$inferSelect;
 
@@ -242,6 +242,47 @@ export default async function (fastify: FastifyInstance) {
     await auditUpdate(
       "subscription",
       parseInt(id, 10),
+      await serializeSubscription(existing) as Record<string, unknown>,
+      await serializeSubscription(updated) as Record<string, unknown>,
+    );
+
+    return serializeSubscription(updated);
+  });
+
+  // Advance subscription renewal (called when a transaction pays for the subscription)
+  fastify.post("/api/subscriptions/:id/advance", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const subId = parseInt(id, 10);
+
+    const [existing] = await db.select().from(subscriptions).where(eq(subscriptions.id, subId)).limit(1);
+
+    if (!existing) {
+      reply.code(404).send({ error: "Subscription not found" });
+      return;
+    }
+
+    if (existing.status !== "active") {
+      reply.code(400).send({ error: "Can only advance active subscriptions" });
+      return;
+    }
+
+    const currentRenewal = existing.nextRenewalAt.getTime();
+    const newRenewal = existing.billingCycle === "annual"
+      ? addOneYear(currentRenewal)
+      : addOneMonth(currentRenewal);
+
+    const [updated] = await db
+      .update(subscriptions)
+      .set({
+        nextRenewalAt: new Date(newRenewal),
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.id, subId))
+      .returning();
+
+    await auditUpdate(
+      "subscription",
+      subId,
       await serializeSubscription(existing) as Record<string, unknown>,
       await serializeSubscription(updated) as Record<string, unknown>,
     );

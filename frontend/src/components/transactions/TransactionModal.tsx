@@ -26,6 +26,7 @@ import {
   ArrowDownRight,
   ShoppingCart,
   X,
+  CalendarClock,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -123,6 +124,13 @@ export function TransactionModal({
     }
   }, [isOpen, initialMode, editingTransaction]);
 
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSimpleForm(prev => ({ ...prev, subscriptionId: '' }));
+    }
+  }, [isOpen]);
+
   const [simpleForm, setSimpleForm] = useState({
     dateTime: toDatetimeLocal(),
     type: 'expense' as SimpleTxType,
@@ -151,6 +159,8 @@ export function TransactionModal({
     rideService: '',
     /** Transfer admin fee (in rupiah) */
     transferAdminFee: '',
+    /** Subscription this transaction pays for */
+    subscriptionId: '',
   });
 
   // Map picker modal state
@@ -172,6 +182,24 @@ export function TransactionModal({
   const [paylaterObligationsState, setPaylaterObligationsState] = useState<Awaited<
     ReturnType<typeof api.paylater.obligations>
   > | null>(null);
+
+  /** Loaded when modal opens — active subscriptions for "Paid for subscription" field */
+  const [subscriptions, setSubscriptions] = useState<Array<{
+    id: number;
+    name: string;
+    amount: number;
+    billingCycle: string;
+    nextRenewalAt: number;
+  }>>([]);
+
+  // Fetch subscriptions when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      api.subscriptions.list().then(data => {
+        setSubscriptions(data.subscriptions.filter((s: any) => s.status === 'active'));
+      }).catch(() => setSubscriptions([]));
+    }
+  }, [isOpen]);
 
   /** Attachments for the transaction */
   const [attachments, setAttachments] = useState<Array<{
@@ -370,6 +398,7 @@ export function TransactionModal({
         rideProvider: '',
         rideService: '',
         transferAdminFee: '',
+        subscriptionId: '',
       });
       setInstallmentPreview(null);
       setAttachments([]);
@@ -651,6 +680,9 @@ export function TransactionModal({
             categoryId: null,
             walletAccountId,
             toWalletAccountId,
+            ...(simpleForm.subscriptionId ? {
+              subscriptionId: parseInt(simpleForm.subscriptionId, 10),
+            } : {}),
           });
           
           // Create separate fee transaction
@@ -721,6 +753,10 @@ export function TransactionModal({
               simpleForm.destination.lat,
               simpleForm.destination.lng
             ),
+          } : {}),
+          // Subscription payment
+          ...(simpleForm.subscriptionId ? {
+            subscriptionId: parseInt(simpleForm.subscriptionId, 10),
           } : {}),
         });
       }
@@ -2140,6 +2176,29 @@ export function TransactionModal({
                     <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white shadow" />
                   </button>
                 </div>
+              </div>
+
+              <div className="h-px bg-[var(--color-border)]/40" />
+
+              <div>
+                <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
+                  <span className="flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4" />
+                    Paid for subscription
+                  </span>
+                </label>
+                <select
+                  value={simpleForm.subscriptionId}
+                  onChange={(e) => setSimpleForm({ ...simpleForm, subscriptionId: e.target.value })}
+                  className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
+                >
+                  <option value="">None</option>
+                  {subscriptions.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {sub.name} ({formatCurrency(sub.amount)}/{sub.billingCycle === 'annual' ? 'yr' : 'mo'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="h-px bg-[var(--color-border)]/40" />

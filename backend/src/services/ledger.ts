@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { accounts, transactionLines, transactions } from "../db/schema";
+import { accounts, transactionLines, transactions, subscriptions } from "../db/schema";
 import { db as defaultDb } from "../db/client";
 import { invalidateAndRecomputeOnTransactionMutation } from "../cache/invalidation";
 
@@ -33,6 +33,8 @@ export type CreateJournalEntryInput = {
   destLng?: number | null;
   destName?: string | null;
   distanceKm?: number | null;
+  /** Optional subscription this transaction pays for (advances subscription renewal) */
+  subscriptionId?: number | null;
 };
 
 function assertIntegerCents(value: unknown, fieldName: string): asserts value is number {
@@ -146,6 +148,8 @@ export type CreateSimpleTransactionInput = {
   destLng?: number | null;
   destName?: string | null;
   distanceKm?: number | null;
+  /** Optional subscription this transaction pays for (advances subscription renewal) */
+  subscriptionId?: number | null;
 };
 
 /**
@@ -470,11 +474,41 @@ export async function createJournalEntry(
       destLng: input.destLng ?? null,
       destName: input.destName ?? null,
       distanceKm: input.distanceKm ?? null,
+      // Subscription payment
+      subscriptionId: input.subscriptionId ?? null,
     })
     .returning({ id: transactions.id });
 
   const transactionId = inserted[0]?.id;
   if (!transactionId) throw new Error("Failed to create transaction row");
+
+  // Advance subscription renewal if this transaction is linked to a subscription
+  if (input.subscriptionId) {
+    try {
+      const { addOneMonth, addOneYear } = await import("./subscription-renewals");
+      const [sub] = await dbLike
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, input.subscriptionId))
+        .limit(1);
+      if (sub && sub.status === "active") {
+        const currentRenewal = sub.nextRenewalAt.getTime();
+        const newRenewal = sub.billingCycle === "annual"
+          ? addOneYear(currentRenewal)
+          : addOneMonth(currentRenewal);
+        await dbLike
+          .update(subscriptions)
+          .set({
+            nextRenewalAt: new Date(newRenewal),
+            updatedAt: new Date(),
+          })
+          .where(eq(subscriptions.id, input.subscriptionId));
+      }
+    } catch (e) {
+      // Log but don't fail the transaction if subscription advance fails
+      console.error("Failed to advance subscription:", e);
+    }
+  }
 
   await dbLike.insert(transactionLines).values(
     validatedLines.map((l) => ({

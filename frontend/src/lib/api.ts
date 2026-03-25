@@ -207,6 +207,8 @@ export const api = {
             destLng?: number | null;
             destName?: string | null;
             distanceKm?: number | null;
+            // Subscription payment
+            subscriptionId?: number;
           },
     ) => fetchApi<{
       id: number;
