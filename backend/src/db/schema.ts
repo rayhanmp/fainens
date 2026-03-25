@@ -366,3 +366,28 @@ export const loanPaymentAttachments = sqliteTable("loan_payment_attachment", {
 // Additional indexes for contacts
 export const contactsNameIdx = index("idx_contacts_name").on(contacts.name);
 export const contactsIsActiveIdx = index("idx_contacts_is_active").on(contacts.isActive);
+
+/** Pending transactions from WhatsApp/other sources - waiting for user approval */
+export const pendingTransactions = sqliteTable("pending_transaction", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Original raw message from user */
+  rawMessage: text("raw_message").notNull(),
+  /** Parsed transaction data as JSON */
+  parsedData: text("parsed_data").notNull(),
+  /** Status: pending, approved, rejected, failed */
+  status: text("status").notNull().default("pending"),
+  /** Number of parsing attempts */
+  parseAttempts: integer("parse_attempts").notNull().default(0),
+  /** Last parsing error message */
+  lastError: text("last_error"),
+  /** User message ID for responding */
+  userMessageId: text("user_message_id"),
+  /** Source (e.g., whatsapp, telegram) */
+  source: text("source").notNull().default("whatsapp"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});

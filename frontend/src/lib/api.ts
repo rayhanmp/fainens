@@ -1419,4 +1419,52 @@ export const api = {
     getDashboardLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/dashboard/latest${periodId ? `?periodId=${periodId}` : ''}`),
     getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
   },
+
+  pendingTransactions: {
+    list: () =>
+      fetchApi<Array<{
+        id: number;
+        rawMessage: string;
+        parsedData: {
+          type: string;
+          amount: number;
+          description: string;
+          category: string;
+          date?: string;
+          place?: string;
+          notes?: string;
+          confidence: number;
+        };
+        status: string;
+        parseAttempts: number;
+        lastError: string | null;
+        createdAt: number;
+      }>>('/pending-transactions'),
+    get: (id: number) =>
+      fetchApi<{
+        id: number;
+        rawMessage: string;
+        parsedData: {
+          type: string;
+          amount: number;
+          description: string;
+          category: string;
+          date?: string;
+          place?: string;
+          notes?: string;
+          confidence: number;
+        };
+        status: string;
+        parseAttempts: number;
+        lastError: string | null;
+        source: string;
+        createdAt: number;
+      }>(`/pending-transactions/${id}`),
+    approve: (id: number) =>
+      fetchApi<{ success: boolean; transactionId?: number; message?: string }>(`/pending-transactions/${id}/approve`, { method: 'POST' }),
+    reject: (id: number) =>
+      fetchApi<{ success: boolean }>(`/pending-transactions/${id}/reject`, { method: 'POST' }),
+    retry: (id: number) =>
+      fetchApi<{ success: boolean; parsed?: unknown }>(`/pending-transactions/${id}/retry`, { method: 'POST' }),
+  },
 };

@@ -68,6 +68,7 @@ const wishlist_1 = __importDefault(require("./routes/wishlist"));
 const loans_1 = __importDefault(require("./routes/loans"));
 const contacts_1 = __importDefault(require("./routes/contacts"));
 const insights_1 = __importDefault(require("./routes/insights"));
+const pending_transactions_1 = __importDefault(require("./routes/pending-transactions"));
 // Import plugins
 const auth_2 = __importDefault(require("./plugins/auth"));
 const fastify = (0, fastify_1.default)({
@@ -248,6 +249,7 @@ const start = async () => {
         await fastify.register(loans_1.default);
         await fastify.register(contacts_1.default);
         await fastify.register(insights_1.default);
+        await fastify.register(pending_transactions_1.default);
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
         const runRenewals = async () => {
             try {
