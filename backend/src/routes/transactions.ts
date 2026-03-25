@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, inArray, count, SQL } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, count, SQL, lte, gte } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
@@ -10,6 +10,21 @@ import { invalidateOnTransactionMutation } from "../cache";
 // Pagination constants
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
+
+// Helper to find period ID based on transaction date
+async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
+  const [period] = await db
+    .select({ id: salaryPeriods.id })
+    .from(salaryPeriods)
+    .where(
+      and(
+        lte(salaryPeriods.startDate, dateMs),
+        gte(salaryPeriods.endDate, dateMs)
+      )
+    )
+    .limit(1);
+  return period?.id ?? null;
+}
 
 // Transaction columns selection - shared across all queries to avoid duplication
 const transactionColumns = {
@@ -410,7 +425,12 @@ export default async function (fastify: FastifyInstance) {
 
     try {
       if ("kind" in body) {
-        const { kind, amountCents, description, notes, place, date, periodId, categoryId, tagIds, walletAccountId, toWalletAccountId, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
+        const { kind, amountCents, description, notes, place, date, categoryId, tagIds, walletAccountId, toWalletAccountId, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
+        
+        // Auto-detect period based on transaction date
+        const dateMs = new Date(date).getTime();
+        const autoPeriodId = await findPeriodIdForDate(dateMs);
+        
         if (kind === "transfer") {
           if (!toWalletAccountId) {
             reply.code(400).send({ error: "toWalletAccountId is required for transfers" });
@@ -423,7 +443,7 @@ export default async function (fastify: FastifyInstance) {
             notes,
             place,
             date: new Date(date),
-            periodId,
+            periodId: autoPeriodId,
             categoryId,
             walletAccountId,
             toWalletAccountId,
@@ -447,7 +467,7 @@ export default async function (fastify: FastifyInstance) {
           notes,
           place,
           date: new Date(date),
-          periodId,
+          periodId: autoPeriodId,
           categoryId,
           walletAccountId,
           linkedTxId,
@@ -471,7 +491,12 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      const { date, description, reference, notes, place, txType, periodId, linkedTxId, tagIds, categoryId, lines } = body;
+      const { date, description, reference, notes, place, txType, linkedTxId, tagIds, categoryId, lines } = body;
+      
+      // Auto-detect period based on transaction date
+      const dateMs = new Date(date).getTime();
+      const autoPeriodId = await findPeriodIdForDate(dateMs);
+      
       const txResult = await createJournalEntry({
         date: new Date(date),
         description,
@@ -479,7 +504,7 @@ export default async function (fastify: FastifyInstance) {
         notes: notes ?? null,
         place: place ?? null,
         txType,
-        periodId,
+        periodId: autoPeriodId,
         linkedTxId,
         categoryId,
         lines,
@@ -531,13 +556,16 @@ export default async function (fastify: FastifyInstance) {
 
     try {
       const updates: Record<string, unknown> = {};
+      let newDateMs: number | null = null;
+      
       if (body.date !== undefined) {
         try {
           const dateVal = new Date(body.date);
           if (isNaN(dateVal.getTime())) {
             throw new Error("Invalid date: " + body.date);
           }
-          updates.date = dateVal.getTime();
+          newDateMs = dateVal.getTime();
+          updates.date = newDateMs;
         } catch (dateErr) {
           fastify.log.error({ err: dateErr, bodyDate: body.date }, "date parsing error");
           throw dateErr;
@@ -548,8 +576,13 @@ export default async function (fastify: FastifyInstance) {
       if (body.notes !== undefined) updates.notes = body.notes;
       if (body.place !== undefined) updates.place = body.place;
       if (body.txType !== undefined) updates.txType = body.txType;
-      if (body.periodId !== undefined) updates.periodId = body.periodId;
       if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
+
+      // Auto-update periodId based on transaction date if date is changing
+      if (newDateMs !== null) {
+        const newPeriodId = await findPeriodIdForDate(newDateMs);
+        updates.periodId = newPeriodId;
+      }
 
       // Map camelCase to snake_case for database columns
       const columnMap: Record<string, string> = {
