@@ -2180,26 +2180,28 @@ export function TransactionModal({
 
               <div className="h-px bg-[var(--color-border)]/40" />
 
-              <div>
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                  <span className="flex items-center gap-2">
-                    <CalendarClock className="w-4 h-4" />
-                    Paid for subscription
-                  </span>
-                </label>
-                <select
-                  value={simpleForm.subscriptionId}
-                  onChange={(e) => setSimpleForm({ ...simpleForm, subscriptionId: e.target.value })}
-                  className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
-                >
-                  <option value="">None</option>
-                  {subscriptions.map((sub) => (
-                    <option key={sub.id} value={sub.id}>
-                      {sub.name} ({formatCurrency(sub.amount)}/{sub.billingCycle === 'annual' ? 'yr' : 'mo'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {simpleForm.type === 'expense' && (
+                <div>
+                  <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
+                    <span className="flex items-center gap-2">
+                      <CalendarClock className="w-4 h-4" />
+                      Paid for subscription
+                    </span>
+                  </label>
+                  <select
+                    value={simpleForm.subscriptionId}
+                    onChange={(e) => setSimpleForm({ ...simpleForm, subscriptionId: e.target.value })}
+                    className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
+                  >
+                    <option value="">None</option>
+                    {subscriptions.map((sub) => (
+                      <option key={sub.id} value={sub.id}>
+                        {sub.name} ({formatCurrency(sub.amount)}/{sub.billingCycle === 'annual' ? 'yr' : 'mo'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="h-px bg-[var(--color-border)]/40" />
 
