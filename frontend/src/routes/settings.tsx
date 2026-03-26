@@ -642,7 +642,11 @@ function SettingsPage() {
             </div>
             <div className="flex items-center gap-4">
               <span>Fainens v1.0.0</span>
-              <Button variant="secondary" size="sm" onClick={() => api.auth.logout()}>
+              <Button variant="secondary" size="sm" onClick={() => {
+                if (confirm('Are you sure you want to sign out?')) {
+                  api.auth.logout();
+                }
+              }}>
                 Sign Out
               </Button>
             </div>

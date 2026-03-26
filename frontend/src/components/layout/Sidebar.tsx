@@ -136,7 +136,11 @@ export function Sidebar() {
           </Link>
           <button
             type="button"
-            onClick={logout}
+            onClick={() => {
+              if (confirm('Are you sure you want to sign out?')) {
+                logout();
+              }
+            }}
             title="Sign out"
             aria-label="Sign out"
             className="cursor-pointer sidebar-footer-icon sidebar-footer-icon--button flex-1 min-h-10"
