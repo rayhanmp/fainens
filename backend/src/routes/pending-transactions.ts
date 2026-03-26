@@ -8,6 +8,7 @@ import { createSimpleTransaction } from "../services/ledger";
 const MAX_PARSE_ATTEMPTS = 3;
 
 export default async function pendingRoutes(fastify: FastifyInstance) {
+  fastify.addHook("onRequest", fastify.authenticate);
   // List all pending transactions
   fastify.get("/api/pending-transactions", async (request, reply) => {
     const pending = await db

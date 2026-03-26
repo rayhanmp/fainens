@@ -132,6 +132,8 @@ interface BudgetInsightData {
 }
 
 export default async function insightsRoutes(fastify: FastifyInstance) {
+  fastify.addHook("onRequest", fastify.authenticate);
+
   async function getCachedInsight(userId: string, type: string, periodId?: string): Promise<string | null> {
     const redis = getRedisClient();
     const cacheKey = periodId 
