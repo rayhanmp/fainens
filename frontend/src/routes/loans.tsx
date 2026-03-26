@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -151,7 +152,7 @@ function LoansPage() {
 
   return (
     <RequireAuth>
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <PageContainer>
         {/* Hero Section */}
         <section className="mb-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
@@ -467,7 +468,7 @@ function LoansPage() {
             </div>
           </div>
         </section>
-      </div>
+      </PageContainer>
 
       {/* Modals */}
       <NewLoanModal

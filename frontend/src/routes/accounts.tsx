@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -200,7 +201,7 @@ function AccountsPage() {
 
   return (
     <RequireAuth>
-      <div className="mx-auto max-w-7xl space-y-6 pb-10 sm:space-y-8">
+      <PageContainer>
         {/* Stitch: Command Center top bar (content only — shell has sidebar) */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <PageHeader
@@ -478,7 +479,7 @@ function AccountsPage() {
           accounts={accounts}
           onSuccess={loadAccounts}
         />
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

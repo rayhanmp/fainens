@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -220,7 +221,7 @@ function CategoriesPage() {
 
   return (
     <RequireAuth>
-      <div className="pb-12">
+      <PageContainer>
         {/* Hero — Stitch Categories & Tags Management */}
         <header className="mb-10 lg:mb-12">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
@@ -575,7 +576,7 @@ function CategoriesPage() {
             </div>
           </form>
         </Modal>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

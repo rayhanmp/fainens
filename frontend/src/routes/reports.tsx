@@ -3,6 +3,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -163,7 +164,7 @@ function ReportsPage() {
 
   return (
     <RequireAuth>
-      <div className="space-y-6">
+      <PageContainer>
         <div className="flex items-center justify-between">
           <PageHeader
             subtext="Analytics & insights"
@@ -274,7 +275,7 @@ function ReportsPage() {
           )}
           {activeTab === 'trends' && <TrendsReport />}
         </div>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

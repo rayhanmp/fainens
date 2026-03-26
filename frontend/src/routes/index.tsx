@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -409,7 +410,7 @@ function DashboardPage() {
   if (isLoading) {
     return (
       <RequireAuth>
-        <div className="space-y-6 animate-slide-in max-w-7xl mx-auto">
+        <PageContainer>
           <div className="h-8 w-48 rounded-md bg-[var(--ref-surface-container-highest)] animate-pulse" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StatCardSkeleton />
@@ -422,14 +423,14 @@ function DashboardPage() {
             </div>
             <CardSkeleton />
           </div>
-        </div>
+        </PageContainer>
       </RequireAuth>
     );
   }
 
   return (
     <RequireAuth>
-      <div className="max-w-7xl mx-auto space-y-8 pb-4">
+      <PageContainer>
         {/* Header — Stitch "Financial Overview" */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
           <PageHeader
@@ -821,7 +822,7 @@ function DashboardPage() {
 
           </div>
         </div>
-      </div>
+      </PageContainer>
 
       <TransactionModal
         isOpen={isModalOpen}

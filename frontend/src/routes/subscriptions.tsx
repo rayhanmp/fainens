@@ -18,6 +18,7 @@ import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
+import { PageContainer } from '../components/ui/PageContainer';
 import { cn, formatCurrency, parseIdNominalToInt } from '../lib/utils';
 
 export const Route = createFileRoute('/subscriptions')({
@@ -311,7 +312,7 @@ function SubscriptionsPage() {
 
   return (
     <RequireAuth>
-      <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+      <PageContainer className="pt-8 pb-16 px-4 sm:px-6 lg:px-8">
         {banner && (
           <div
             className={cn(
@@ -767,7 +768,7 @@ function SubscriptionsPage() {
             </div>
           </form>
         </Modal>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

@@ -8,6 +8,7 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency } from '../lib/utils';
+import { PageContainer } from '../components/ui/PageContainer';
 import {
   Calendar,
   ChevronLeft,
@@ -159,7 +160,7 @@ function PaylaterPage() {
 
   return (
     <RequireAuth>
-      <div className="space-y-8 pb-16">
+      <PageContainer>
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)] mb-2">
@@ -530,7 +531,7 @@ function PaylaterPage() {
           </form>
         </Modal>
 
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

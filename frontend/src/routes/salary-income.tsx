@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { SalaryProfileModal } from '../components/salary/SalaryProfileModal';
 import {
   Download,
@@ -217,7 +218,7 @@ function SalaryIncomePage() {
 
   return (
     <RequireAuth>
-      <div className="space-y-8 pb-10">
+      <PageContainer>
         <SalaryProfileModal
           isOpen={profileOpen}
           onClose={() => setProfileOpen(false)}
@@ -617,7 +618,7 @@ function SalaryIncomePage() {
             )}
           </section>
         </div>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

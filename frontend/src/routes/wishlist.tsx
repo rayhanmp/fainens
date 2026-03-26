@@ -14,6 +14,7 @@ import {
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { formatCurrency, cn } from '../lib/utils';
 import { CreateWishlistModal } from '../components/wishlist/CreateWishlistModal';
 import { FulfillWishlistModal } from '../components/wishlist/FulfillWishlistModal';
@@ -137,7 +138,7 @@ export default function WishlistPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <PageContainer>
       {/* Hero Header */}
       <section>
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -502,6 +503,6 @@ export default function WishlistPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

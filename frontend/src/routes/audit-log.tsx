@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -177,7 +178,7 @@ function AuditLogPage() {
 
   return (
     <RequireAuth>
-      <div className="mx-auto max-w-7xl space-y-6 pb-10 sm:space-y-8">
+      <PageContainer>
         {/* Header — Stitch reference (no hero icon) */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
@@ -466,7 +467,7 @@ function AuditLogPage() {
             </div>
           )}
         </Modal>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

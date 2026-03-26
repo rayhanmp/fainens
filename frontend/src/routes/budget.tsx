@@ -5,6 +5,7 @@ import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -433,7 +434,7 @@ function BudgetPage() {
   if (isLoading) {
     return (
       <RequireAuth>
-        <div className="max-w-7xl mx-auto space-y-8 pb-10 animate-slide-in">
+        <PageContainer>
           <div className="h-10 w-64 rounded-md bg-[var(--ref-surface-container-highest)] animate-pulse" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <StatCardSkeleton />
@@ -446,14 +447,14 @@ function BudgetPage() {
             </div>
             <CardSkeleton className="min-h-[240px]" />
           </div>
-        </div>
+        </PageContainer>
       </RequireAuth>
     );
   }
 
   return (
     <RequireAuth>
-      <div className="max-w-7xl mx-auto space-y-8 pb-10">
+      <PageContainer>
         {/* Header */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <PageHeader
@@ -1150,7 +1151,7 @@ function BudgetPage() {
             </div>
           </div>
         </Modal>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

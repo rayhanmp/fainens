@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -162,7 +163,7 @@ function PeriodsPage() {
 
   return (
     <RequireAuth>
-      <div className="space-y-6">
+      <PageContainer>
         <div className="flex items-center justify-between">
           <PageHeader
             subtext="Period tracking"
@@ -302,7 +303,7 @@ function PeriodsPage() {
             </div>
           </form>
         </Modal>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }

@@ -5,6 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
+import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
@@ -270,7 +271,7 @@ function SettingsPage() {
 
   return (
     <RequireAuth>
-      <div className="space-y-6">
+      <PageContainer>
         {/* Header */}
         <div className="flex items-center justify-between">
           <PageHeader
@@ -706,7 +707,7 @@ function SettingsPage() {
             </div>
           </div>
         </Modal>
-      </div>
+      </PageContainer>
     </RequireAuth>
   );
 }
