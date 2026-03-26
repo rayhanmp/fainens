@@ -10,78 +10,148 @@ export default async function (fastify: FastifyInstance) {
   fastify.get("/api/budgets", async (request) => {
     const { periodId } = request.query as { periodId?: string };
 
-    let plansQuery = db
-      .select({
-        id: budgetPlans.id,
-        periodId: budgetPlans.periodId,
-        categoryId: budgetPlans.categoryId,
-        plannedAmount: budgetPlans.plannedAmount,
-        categoryName: categories.name,
-      })
-      .from(budgetPlans)
-      .innerJoin(categories, eq(budgetPlans.categoryId, categories.id));
-
+    // Get all periods with budgets or the requested one
+    let periodsToFetch: number[] = [];
     if (periodId) {
-      plansQuery = plansQuery.where(eq(budgetPlans.periodId, parseInt(periodId))) as typeof plansQuery;
+      periodsToFetch = [parseInt(periodId)];
+    } else {
+      const allPlans = await db.select({ periodId: budgetPlans.periodId }).from(budgetPlans);
+      periodsToFetch = [...new Set(allPlans.map(p => p.periodId))];
     }
 
-    const plans = await plansQuery;
+    const budgetSummary: {
+      periodId: number;
+      income: number;
+      totalPlanned: number;
+      percentOfIncome: number;
+      plans: Array<{
+        id: number;
+        periodId: number;
+        categoryId: number;
+        plannedAmount: number;
+        categoryName: string;
+        actualAmount: number;
+        variance: number;
+        percentUsed: number;
+      }>;
+    }[] = [];
 
-    const plansWithActual = await Promise.all(
-      plans.map(async (plan) => {
-        const [period] = await db
-          .select()
-          .from(salaryPeriods)
-          .where(eq(salaryPeriods.id, plan.periodId))
-          .limit(1);
+    for (const pid of periodsToFetch) {
+      const [period] = await db
+        .select()
+        .from(salaryPeriods)
+        .where(eq(salaryPeriods.id, pid))
+        .limit(1);
 
-        let actualAmount = 0;
-        if (period) {
-          const expenseAccounts = await db
-            .select({ id: accounts.id })
-            .from(accounts)
-            .where(eq(accounts.type, "expense"));
-          const expIds = expenseAccounts.map((a) => a.id);
-          if (expIds.length > 0) {
-            // Count transactions with matching periodId OR transactions with null periodId but date within range
-            const [row] = await db
-              .select({
-                total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-              })
-              .from(transactions)
-              .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
-              .where(
-                and(
-                  eq(transactions.categoryId, plan.categoryId),
-                  sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
-                  or(
-                    eq(transactions.periodId, plan.periodId),
-                    and(
-                      isNull(transactions.periodId),
-                      gte(transactions.date, new Date(period.startDate)),
-                      lte(transactions.date, new Date(period.endDate))
-                    )
-                  ),
+      let totalIncome = 0;
+      if (period) {
+        const revenueAccounts = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.type, "revenue"));
+        const revIds = revenueAccounts.map((a) => a.id);
+
+        if (revIds.length > 0) {
+          const [incomeRow] = await db
+            .select({
+              total: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+            })
+            .from(transactions)
+            .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
+            .where(
+              and(
+                sql`${transactionLines.accountId} IN (${sql.join(revIds.map(String), sql`, `)})`,
+                or(
+                  eq(transactions.periodId, pid),
+                  and(
+                    isNull(transactions.periodId),
+                    gte(transactions.date, new Date(period.startDate)),
+                    lte(transactions.date, new Date(period.endDate))
+                  )
                 ),
-              );
-            actualAmount = row?.total ?? 0;
-          }
+              ),
+            );
+          totalIncome = incomeRow?.total ?? 0;
         }
+      }
 
-        const variance = plan.plannedAmount - actualAmount;
-        const percentUsed =
-          plan.plannedAmount > 0 ? Math.round((actualAmount / plan.plannedAmount) * 10000) / 100 : 0;
+      let plansQuery = db
+        .select({
+          id: budgetPlans.id,
+          periodId: budgetPlans.periodId,
+          categoryId: budgetPlans.categoryId,
+          plannedAmount: budgetPlans.plannedAmount,
+          categoryName: categories.name,
+        })
+        .from(budgetPlans)
+        .innerJoin(categories, eq(budgetPlans.categoryId, categories.id))
+        .where(eq(budgetPlans.periodId, pid)) as any;
 
-        return {
-          ...plan,
-          actualAmount,
-          variance,
-          percentUsed,
-        };
-      }),
-    );
+      const plans = await plansQuery;
 
-    return plansWithActual;
+      const plansWithActual = await Promise.all(
+        plans.map(async (plan: typeof plans[number]) => {
+          let actualAmount = 0;
+          if (period) {
+            const expenseAccounts = await db
+              .select({ id: accounts.id })
+              .from(accounts)
+              .where(eq(accounts.type, "expense"));
+            const expIds = expenseAccounts.map((a) => a.id);
+            if (expIds.length > 0) {
+              const [row] = await db
+                .select({
+                  total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+                })
+                .from(transactions)
+                .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
+                .where(
+                  and(
+                    eq(transactions.categoryId, plan.categoryId),
+                    sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
+                    or(
+                      eq(transactions.periodId, plan.periodId),
+                      and(
+                        isNull(transactions.periodId),
+                        gte(transactions.date, new Date(period.startDate)),
+                        lte(transactions.date, new Date(period.endDate))
+                      )
+                    ),
+                  ),
+                );
+              actualAmount = row?.total ?? 0;
+            }
+          }
+
+          const variance = plan.plannedAmount - actualAmount;
+          const percentUsed =
+            plan.plannedAmount > 0 ? Math.round((actualAmount / plan.plannedAmount) * 10000) / 100 : 0;
+
+          return {
+            ...plan,
+            actualAmount,
+            variance,
+            percentUsed,
+          };
+        }),
+      );
+
+      const totalPlanned = plans.reduce((sum: number, p: typeof plans[number]) => sum + p.plannedAmount, 0);
+      const percentOfIncome = totalIncome > 0 ? Math.round((totalPlanned / totalIncome) * 10000) / 100 : 0;
+
+      budgetSummary.push({
+        periodId: pid,
+        income: totalIncome,
+        totalPlanned,
+        percentOfIncome,
+        plans: plansWithActual,
+      });
+    }
+
+    if (periodId) {
+      return budgetSummary[0];
+    }
+    return budgetSummary;
   });
 
   fastify.post("/api/budgets", async (request, reply) => {

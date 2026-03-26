@@ -26,6 +26,13 @@ import {
   ArrowDown,
   X,
 } from 'lucide-react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { AIInsightCard } from '../components/insights/AIInsightCard';
 
@@ -106,6 +113,8 @@ function BudgetPage() {
   const [comparisonData, setComparisonData] = useState<ComparisonData[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [periodIncome, setPeriodIncome] = useState<number>(0);
+  const [budgetPercentOfIncome, setBudgetPercentOfIncome] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -153,7 +162,19 @@ function BudgetPage() {
         api.periods.list(),
         api.categories.list(),
       ]);
-      setBudgetRows(budgetData);
+      
+      // Handle new API response format - can be array or single object
+      const data = budgetData as any;
+      if (Array.isArray(data)) {
+        const firstPeriod = data[0];
+        setBudgetRows(firstPeriod?.plans || []);
+        setPeriodIncome(firstPeriod?.income || 0);
+        setBudgetPercentOfIncome(firstPeriod?.percentOfIncome || 0);
+      } else {
+        setBudgetRows(data.plans || []);
+        setPeriodIncome(data.income || 0);
+        setBudgetPercentOfIncome(data.percentOfIncome || 0);
+      }
       setPeriods(periodData);
       setCategories(categoryData);
 
@@ -416,20 +437,15 @@ function BudgetPage() {
     return [...budgetRows]
       .sort((a, b) => b.plannedAmount - a.plannedAmount)
       .slice(0, 6)
-      .map((row) => ({
-        ...row,
-        share: Math.round((row.plannedAmount / totalBudgeted) * 100),
-      }));
-  }, [budgetRows, totalBudgeted]);
-
-  const statusLine = useMemo(() => {
-    const now = new Date();
-    return `Updated ${now.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })}`;
-  }, []);
+      .map((row) => {
+        const cat = categories.find(c => c.id === row.categoryId);
+        return {
+          ...row,
+          share: Math.round((row.plannedAmount / totalBudgeted) * 100),
+          color: cat?.color || 'var(--ref-primary)',
+        };
+      });
+  }, [budgetRows, totalBudgeted, categories]);
 
   if (isLoading) {
     return (
@@ -516,30 +532,42 @@ function BudgetPage() {
 
         {/* Bento summary - Cards at the top */}
         {selectedPeriod && (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
             <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-[2rem] bg-[var(--ref-primary-container)] p-8 text-white group">
               <div className="relative z-10">
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-on-primary-container)] opacity-90">
                   Total budget
                 </p>
-                <p className="font-headline text-3xl font-extrabold tracking-tight sm:text-4xl">
+                <p className="text-3xl sm:text-4xl font-extrabold font-headline tracking-tight">
                   {formatCurrency(totalBudgeted)}
                 </p>
               </div>
-              <div className="relative z-10 mt-4 text-xs font-medium text-[var(--ref-on-primary-container)] opacity-95">
-                Planned for {selectedPeriod.name}
+              <div className="relative z-10 mt-4 inline-flex items-center px-3 py-1.5 rounded-full bg-white/20 text-sm font-bold">
+                {budgetPercentOfIncome}% of income
               </div>
               <div className="absolute -bottom-8 -right-8 h-32 w-32 rounded-full bg-white/10 blur-3xl transition-transform duration-500 group-hover:scale-125" />
             </div>
 
             <div className="flex min-h-[180px] flex-col justify-between rounded-[2rem] border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-8 editorial-shadow">
               <div>
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Income</p>
+                <p className="text-2xl sm:text-3xl font-bold font-headline tracking-tight text-[var(--ref-on-surface)]">
+                  {formatCurrency(periodIncome)}
+                </p>
+              </div>
+              <div className="mt-4 text-sm font-semibold text-[var(--ref-secondary)]">
+                For {selectedPeriod.name}
+              </div>
+            </div>
+
+            <div className="flex min-h-[180px] flex-col justify-between rounded-[2rem] border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-8 editorial-shadow">
+              <div>
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Spent</p>
-                <p className="font-headline text-2xl font-bold tracking-tight text-[var(--ref-on-surface)] sm:text-3xl">
+                <p className="text-2xl sm:text-3xl font-bold font-headline tracking-tight text-[var(--ref-on-surface)]">
                   {formatCurrency(totalSpent)}
                 </p>
               </div>
-              <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-[var(--ref-error)]">
+              <div className="mt-4 text-sm font-semibold text-[var(--ref-error)]">
                 Against budgeted categories
               </div>
             </div>
@@ -549,14 +577,14 @@ function BudgetPage() {
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Remaining</p>
                 <p
                   className={cn(
-                    'font-headline text-2xl font-bold tracking-tight sm:text-3xl',
+                    'text-2xl sm:text-3xl font-bold font-headline tracking-tight',
                     totalRemaining < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]',
                   )}
                 >
                   {formatCurrency(totalRemaining)}
                 </p>
               </div>
-              <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-[var(--ref-secondary)]">
+              <div className="mt-4 text-sm font-semibold text-[var(--ref-secondary)]">
                 {totalRemaining >= 0 ? 'Headroom this period' : 'Over budget'}
               </div>
             </div>
@@ -912,27 +940,57 @@ function BudgetPage() {
                 <p className="mb-6 text-xs text-[var(--ref-on-surface-variant)]">
                   Share of total planned budget by category.
                 </p>
-                <div className="space-y-4">
-                  {mixRows.map((row, i) => {
-                    const tint = ['bg-[var(--ref-primary)]', 'bg-[var(--ref-secondary)]', 'bg-[var(--ref-tertiary)]'];
-                    return (
-                      <div key={row.id} className="flex items-center gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="mb-1 flex justify-between gap-2">
-                            <span className="truncate text-xs font-bold text-[var(--ref-on-surface)]">{row.categoryName}</span>
-                            <span className="shrink-0 text-xs font-bold text-[var(--ref-on-surface)]">{row.share}%</span>
-                          </div>
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]">
-                            <div
-                              className={cn('h-full rounded-full', tint[i % tint.length])}
-                              style={{ width: `${row.share}%` }}
-                            />
-                          </div>
+                {mixRows.length === 0 ? (
+                  <p className="text-sm text-[var(--ref-on-surface-variant)] py-8 text-center">
+                    No budget categories yet.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="h-56 w-full relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={mixRows}
+                            dataKey="share"
+                            nameKey="categoryName"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={48}
+                            outerRadius={80}
+                            paddingAngle={2}
+                            isAnimationActive={false}
+                          >
+                            {mixRows.map((entry) => (
+                              <Cell key={`cell-${entry.id}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value) => `${value}%`}
+                            contentStyle={{
+                              fontFamily: 'var(--font-mono)',
+                              borderRadius: 8,
+                              border: '1px solid var(--ref-surface-container-highest)',
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Legend */}
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                      {mixRows.map((entry) => (
+                        <div key={entry.id} className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: entry.color }}
+                          />
+                          <span className="text-xs text-[var(--ref-on-surface-variant)]">
+                            {entry.categoryName} ({entry.share}%)
+                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* AI Insights */}
