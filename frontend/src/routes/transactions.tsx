@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useSearch, redirect } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +12,6 @@ import {
   Search,
   Download,
   Upload,
-  SlidersHorizontal,
   ShoppingCart,
   UtensilsCrossed,
   Car,
@@ -25,6 +24,7 @@ import {
   ChevronRight,
   CircleDot,
   HandCoins,
+  Clock,
 } from 'lucide-react';
 import {
   TransactionModal,
@@ -32,6 +32,7 @@ import {
   type WalletAccount,
 } from '../components/transactions/TransactionModal';
 import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
+import { PendingTransactionsModal } from '../components/transactions/PendingTransactionsModal';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export const Route = createFileRoute('/transactions')({
@@ -40,6 +41,23 @@ export const Route = createFileRoute('/transactions')({
     accountId: typeof search.accountId === 'string' ? search.accountId : undefined,
     action: typeof search.action === 'string' ? search.action : undefined,
   }),
+
+  beforeLoad: async ({ search }: { search: any }) => {
+    if (search.periodId) return;
+    
+    const periods = await api.periods.list() as Array<{ id: number; startDate: number; endDate: number }>;
+    const now = Date.now();
+    const current = periods.find((p) => p.startDate <= now && p.endDate >= now);
+    
+    if (current) {
+      throw redirect({
+        to: '/transactions',
+        search: { ...search, periodId: String(current.id) },
+        replace: true,
+      });
+    }
+  },
+
   component: TransactionsPage,
 } as any);
 
@@ -150,6 +168,23 @@ function TransactionsPage() {
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [newlyAddedTxId, setNewlyAddedTxId] = useState<number | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+  const [editingPendingTx, setEditingPendingTx] = useState<{
+    id: number;
+    parsedData: {
+      type: string;
+      amount: number;
+      description: string;
+      category: string;
+      date?: string;
+      place?: string;
+      memo?: string;
+      fromAccount?: string;
+      toAccount?: string;
+      confidence: number;
+    };
+  } | null>(null);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -174,6 +209,10 @@ function TransactionsPage() {
   useEffect(() => {
     loadData();
   }, [search.periodId, search.accountId]);
+
+  useEffect(() => {
+    api.pendingTransactions.list().then((txs) => setPendingCount(txs.length)).catch(() => setPendingCount(0));
+  }, []);
 
   useEffect(() => {
     api.periods
@@ -282,6 +321,7 @@ function TransactionsPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingTransaction(null);
+    setEditingPendingTx(null);
   };
 
   const getTransactionDisplay = useCallback(
@@ -415,10 +455,6 @@ function TransactionsPage() {
     return a?.name ?? `Account #${id}`;
   }, [search.accountId, accounts]);
 
-  const scrollToFilters = () => {
-    document.getElementById('tx-filters')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   return (
     <RequireAuth>
       <div className="space-y-6 lg:space-y-8 pb-8">
@@ -454,17 +490,21 @@ function TransactionsPage() {
               <Upload className="h-4 w-4" />
               Import CSV
             </button>
-            <button
-              type="button"
-              onClick={scrollToFilters}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--color-accent)]/15 transition-opacity hover:opacity-90"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-            </button>
             <Button onClick={() => openModal()} className="rounded-full px-5 py-2.5">
               <Plus className="w-4 h-4 mr-2" />
               Add transaction
+            </Button>
+            <Button
+              onClick={() => setIsPendingModalOpen(true)}
+              variant="secondary"
+              className="rounded-full px-3 py-2.5 relative"
+            >
+              <Clock className="w-4 h-4" />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5">
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
             </Button>
           </div>
         </div>
@@ -875,15 +915,8 @@ function TransactionsPage() {
                 </p>
               </div>
               <div className="relative z-10 pt-4">
-                <button
-                  type="button"
-                  onClick={scrollToFilters}
-                  className="rounded-full bg-white px-5 py-2 text-sm font-bold text-[var(--color-accent)] transition-colors hover:bg-[var(--ref-surface-container-low)]"
-                >
-                  Adjust filters
-                </button>
+                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
               </div>
-              <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
             </div>
             <div className="flex flex-col items-center justify-center rounded-xl border-t-4 border-[var(--color-success)] bg-[var(--ref-surface-container-lowest)] p-6 text-center shadow-sm">
               <CircleDot className="mb-3 h-10 w-10 text-[var(--color-success)]" />
@@ -905,6 +938,7 @@ function TransactionsPage() {
             setNewlyAddedTxId(txId);
             loadData();
             setTimeout(() => setNewlyAddedTxId(null), 300);
+            setEditingPendingTx(null);
           }}
           accounts={accounts}
           categories={categories}
@@ -912,12 +946,26 @@ function TransactionsPage() {
           editingTransaction={editingTransaction}
           periodId={search.periodId ? parseInt(search.periodId, 10) : null}
           initialMode={modalInitialMode}
+          pendingTransaction={editingPendingTx}
         />
 
         <ImportCSVModal
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
           onSuccess={loadData}
+        />
+
+        <PendingTransactionsModal
+          isOpen={isPendingModalOpen}
+          onClose={() => setIsPendingModalOpen(false)}
+          onEdit={(pendingTx) => {
+            setEditingPendingTx(pendingTx);
+            setIsPendingModalOpen(false);
+            openModal();
+          }}
+          onRefresh={() => {
+            api.pendingTransactions.list().then((txs) => setPendingCount(txs.length)).catch(() => setPendingCount(0));
+          }}
         />
       </div>
     </RequireAuth>

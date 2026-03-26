@@ -201,11 +201,30 @@ export default async function (fastify: FastifyInstance) {
     }
 
     // Build base conditions
+    let periodIdToUse = periodId;
+    
+    // If no periodId is provided, default to current period
+    if (!periodIdToUse) {
+      const now = Date.now();
+      const [currentPeriod] = await db
+        .select({ id: salaryPeriods.id })
+        .from(salaryPeriods)
+        .where(and(
+          lte(salaryPeriods.startDate, now),
+          gte(salaryPeriods.endDate, now)
+        ))
+        .limit(1);
+      
+      if (currentPeriod) {
+        periodIdToUse = String(currentPeriod.id);
+      }
+    }
+    
     const { conditions: baseConditions, errors: validationErrors } = buildBaseConditions(
       startDate,
       endDate,
       txType,
-      periodId
+      periodIdToUse
     );
 
     if (validationErrors.length > 0) {
