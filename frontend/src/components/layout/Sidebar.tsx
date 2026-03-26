@@ -14,7 +14,6 @@ import {
   Repeat,
   Sparkles,
   Users,
-  Clock,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
@@ -41,7 +40,6 @@ const topNav: NavItem[] = [
 const restNav: NavItem[] = [
   { to: '/categories', label: 'Categories', icon: Tag },
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
-  { to: '/pending-transactions', label: 'Pending', icon: Clock },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
   { to: '/wishlist', label: 'Wishlist', icon: Sparkles },
   { to: '/subscriptions', label: 'Subscriptions', icon: Repeat },

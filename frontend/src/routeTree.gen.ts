@@ -16,7 +16,6 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SalaryIncomeRouteImport } from './routes/salary-income'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PeriodsRouteImport } from './routes/periods'
-import { Route as PendingTransactionsRouteImport } from './routes/pending-transactions'
 import { Route as PaylaterRouteImport } from './routes/paylater'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
@@ -60,11 +59,6 @@ const ReportsRoute = ReportsRouteImport.update({
 const PeriodsRoute = PeriodsRouteImport.update({
   id: '/periods',
   path: '/periods',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PendingTransactionsRoute = PendingTransactionsRouteImport.update({
-  id: '/pending-transactions',
-  path: '/pending-transactions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PaylaterRoute = PaylaterRouteImport.update({
@@ -123,7 +117,6 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
-  '/pending-transactions': typeof PendingTransactionsRoute
   '/periods': typeof PeriodsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
@@ -142,7 +135,6 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
-  '/pending-transactions': typeof PendingTransactionsRoute
   '/periods': typeof PeriodsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
@@ -162,7 +154,6 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
-  '/pending-transactions': typeof PendingTransactionsRoute
   '/periods': typeof PeriodsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
@@ -183,7 +174,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/paylater'
-    | '/pending-transactions'
     | '/periods'
     | '/reports'
     | '/salary-income'
@@ -202,7 +192,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/paylater'
-    | '/pending-transactions'
     | '/periods'
     | '/reports'
     | '/salary-income'
@@ -221,7 +210,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/paylater'
-    | '/pending-transactions'
     | '/periods'
     | '/reports'
     | '/salary-income'
@@ -241,7 +229,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   PaylaterRoute: typeof PaylaterRoute
-  PendingTransactionsRoute: typeof PendingTransactionsRoute
   PeriodsRoute: typeof PeriodsRoute
   ReportsRoute: typeof ReportsRoute
   SalaryIncomeRoute: typeof SalaryIncomeRoute
@@ -300,13 +287,6 @@ declare module '@tanstack/react-router' {
       path: '/periods'
       fullPath: '/periods'
       preLoaderRoute: typeof PeriodsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pending-transactions': {
-      id: '/pending-transactions'
-      path: '/pending-transactions'
-      fullPath: '/pending-transactions'
-      preLoaderRoute: typeof PendingTransactionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/paylater': {
@@ -385,7 +365,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   PaylaterRoute: PaylaterRoute,
-  PendingTransactionsRoute: PendingTransactionsRoute,
   PeriodsRoute: PeriodsRoute,
   ReportsRoute: ReportsRoute,
   SalaryIncomeRoute: SalaryIncomeRoute,

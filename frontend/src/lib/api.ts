@@ -1468,5 +1468,55 @@ export const api = {
       fetchApi<{ success: boolean }>(`/pending-transactions/${id}/reject`, { method: 'POST' }),
     retry: (id: number) =>
       fetchApi<{ success: boolean; parsed?: unknown }>(`/pending-transactions/${id}/retry`, { method: 'POST' }),
+    preview: (message: string) =>
+      fetchApi<{
+        parsed: {
+          type: string;
+          amount: number;
+          description: string;
+          category: string;
+          date?: string;
+          place?: string;
+          memo?: string;
+          fromAccount?: string;
+          toAccount?: string;
+          confidence: number;
+        };
+      }>('/pending-transactions/preview', {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+      }),
+    create: (message: string, parsed: {
+      type: string;
+      amount: number;
+      description: string;
+      category: string;
+      date?: string;
+      place?: string;
+      memo?: string;
+      fromAccount?: string;
+      toAccount?: string;
+      confidence: number;
+    }) =>
+      fetchApi<{ pendingId: number }>('/pending-transactions', {
+        method: 'POST',
+        body: JSON.stringify({ message, parsed, source: 'web' }),
+      }),
+    update: (id: number, parsed: {
+      type: string;
+      amount: number;
+      description: string;
+      category: string;
+      date?: string;
+      place?: string;
+      memo?: string;
+      fromAccount?: string;
+      toAccount?: string;
+      confidence: number;
+    }) =>
+      fetchApi<{ success: boolean }>(`/pending-transactions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ parsed }),
+      }),
   },
 };
