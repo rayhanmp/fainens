@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -180,16 +181,11 @@ function AuditLogPage() {
         {/* Header — Stitch reference (no hero icon) */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-              Security &amp; compliance
-            </p>
-            <h1 className="font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)] sm:text-3xl md:text-4xl">
-              Security audit log
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">
-              Immutable trail of create, update, and delete events across your ledger and settings. Search and
-              filter to investigate changes.
-            </p>
+            <PageHeader
+              subtext="Security & compliance"
+              title="Security audit log"
+              description="Immutable trail of create, update, and delete events across your ledger and settings. Search and filter to investigate changes."
+            />
           </div>
           <Button
             type="button"

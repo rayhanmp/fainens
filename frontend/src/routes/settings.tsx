@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
@@ -272,12 +273,11 @@ function SettingsPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-mono text-3xl font-bold">Settings</h1>
-            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-              Configure your app preferences
-            </p>
-          </div>
+          <PageHeader
+            subtext="App configuration"
+            title="Settings"
+            description="Configure your app preferences"
+          />
           <div className="flex items-center gap-3">
             {saveStatus !== 'idle' && (
               <div

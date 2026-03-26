@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate, useSearch, redirect } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
@@ -463,18 +464,17 @@ function TransactionsPage() {
       <div className="space-y-6 lg:space-y-8 pb-8">
         {/* Hero — Stitch Localized Transactions */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <h1 className="font-headline text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--color-text-primary)] mb-2">
-              Transactions
-            </h1>
-            <p className="text-sm text-[var(--color-text-secondary)] font-body">
-              {isLoading
+          <PageHeader
+            subtext="Transaction records"
+            title="Transactions"
+            description={
+              isLoading
                 ? 'Loading activity…'
                 : `Reviewing ${filtered.length} activit${filtered.length === 1 ? 'y' : 'ies'}${
                     periodLabel ? ` · ${periodLabel}` : ''
-                  }${accountFilterLabel ? ` · ${accountFilterLabel}` : ''}`}
-            </p>
-          </div>
+                  }${accountFilterLabel ? ` · ${accountFilterLabel}` : ''}`
+            }
+          />
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"

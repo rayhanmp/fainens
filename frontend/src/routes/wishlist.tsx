@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 import { formatCurrency, cn } from '../lib/utils';
 import { CreateWishlistModal } from '../components/wishlist/CreateWishlistModal';
 import { FulfillWishlistModal } from '../components/wishlist/FulfillWishlistModal';
@@ -140,14 +141,11 @@ export default function WishlistPage() {
       {/* Hero Header */}
       <section>
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-[var(--color-text-primary)] mb-4">
-              Wishlist
-            </h1>
-            <p className="text-[var(--color-text-secondary)] max-w-md text-lg leading-relaxed">
-              Plan your future purchases and financial goals. Track what you're saving for and fulfill them when ready.
-            </p>
-          </div>
+          <PageHeader
+            subtext="Savings goals"
+            title="Wishlist"
+            description="Plan your future purchases and financial goals. Track what you're saving for and fulfill them when ready."
+          />
           <div className="bg-[var(--ref-surface-container-low)] px-8 py-6 rounded-xl text-right">
             <span className="block text-xs font-bold text-[var(--color-accent)] uppercase tracking-widest mb-1">
               Target Amount

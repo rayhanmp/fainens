@@ -4,6 +4,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -455,17 +456,15 @@ function BudgetPage() {
       <div className="max-w-7xl mx-auto space-y-8 pb-10">
         {/* Header */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)] sm:text-4xl">
-              Localized budgeting
-            </h1>
-            <p className="mt-2 max-w-xl font-body text-sm text-[var(--ref-on-surface-variant)]">
-              {selectedPeriod
+          <PageHeader
+            subtext="Budget planning"
+            title="Localized budgeting"
+            description={
+              selectedPeriod
                 ? `${selectedPeriod.name} · ${formatPeriodRange(selectedPeriod)}`
-                : 'Plan spending by category for each salary period.'}{' '}
-              <span className="text-[var(--ref-outline)]">· {statusLine}</span>
-            </p>
-          </div>
+                : 'Plan spending by category for each salary period.'
+            }
+          />
           <div className="flex flex-wrap items-center gap-3">
             <Link to="/periods">
               <button

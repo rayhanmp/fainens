@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -202,9 +203,10 @@ function AccountsPage() {
       <div className="mx-auto max-w-7xl space-y-6 pb-10 sm:space-y-8">
         {/* Stitch: Command Center top bar (content only — shell has sidebar) */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <h1 className="font-headline text-lg font-bold text-[var(--ref-on-surface)] md:text-xl">
-            Command Center
-          </h1>
+          <PageHeader
+            subtext="Account overview"
+            title="Accounts"
+          />
           <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <div className="hidden min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]/80 px-3 py-1.5 sm:flex sm:max-w-xs md:max-w-sm">
               <Search className="h-3.5 w-3.5 shrink-0 text-[var(--ref-outline)]" aria-hidden />

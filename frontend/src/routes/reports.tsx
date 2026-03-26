@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -164,12 +165,11 @@ function ReportsPage() {
     <RequireAuth>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-mono text-3xl font-bold">Financial Reports</h1>
-            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-              Income statements, balance sheets, and analytics
-            </p>
-          </div>
+          <PageHeader
+            subtext="Analytics & insights"
+            title="Financial Reports"
+            description="Income statements, balance sheets, and analytics"
+          />
           <Select
             value={selectedPeriodId}
             onChange={(e) => setSelectedPeriodId(e.target.value)}

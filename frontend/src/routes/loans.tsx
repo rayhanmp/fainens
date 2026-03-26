@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -154,14 +155,11 @@ function LoansPage() {
         {/* Hero Section */}
         <section className="mb-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <div>
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-[var(--color-text-primary)] mb-2">
-                Command Center
-              </h1>
-              <p className="text-[var(--color-muted)] text-lg">
-                Manage your private lending circle with precision.
-              </p>
-            </div>
+            <PageHeader
+              subtext="Lending & borrowing"
+              title="Loans"
+              description="Manage your private lending circle with precision."
+            />
             <div className="flex items-center gap-3">
               <Button
                 variant="secondary"

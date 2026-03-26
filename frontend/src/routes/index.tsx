@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -429,17 +430,18 @@ function DashboardPage() {
   return (
     <RequireAuth>
       <div className="max-w-7xl mx-auto space-y-8 pb-4">
-        {/* Header — Stitch “Financial Overview” */}
+        {/* Header — Stitch "Financial Overview" */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
-          <div>
-            <h1 className="font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">
-              Financial overview
-            </h1>
-            <p className="text-sm mt-1 text-[var(--ref-on-surface-variant)] font-body">
-              {statusLine}
-              {periodLabel ? ` · ${periodLabel}` : ''}
-            </p>
-          </div>
+          <PageHeader
+            subtext="Overview"
+            title="Financial overview"
+            description={
+              <>
+                {statusLine}
+                {periodLabel ? ` · ${periodLabel}` : ''}
+              </>
+            }
+          />
           <div className="flex flex-wrap gap-3 items-center">
             {periods.length > 0 && (
               <Select

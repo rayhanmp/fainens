@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -222,18 +223,12 @@ function CategoriesPage() {
       <div className="pb-12">
         {/* Hero — Stitch Categories & Tags Management */}
         <header className="mb-10 lg:mb-12">
-          <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[var(--ref-tertiary)]">
-            Internal organization
-          </span>
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h1 className="font-headline text-3xl font-extrabold leading-none tracking-tight text-[var(--color-text-primary)] sm:text-4xl md:text-5xl">
-                Ledger classification
-              </h1>
-              <p className="mt-4 max-w-xl text-lg text-[var(--color-text-secondary)] font-body">
-                Manage how spending is categorized and tagged across every transaction.
-              </p>
-            </div>
+            <PageHeader
+              subtext="Category management"
+              title="Ledger classification"
+              description="Manage how spending is categorized and tagged across every transaction."
+            />
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"

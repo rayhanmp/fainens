@@ -3,6 +3,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -163,7 +164,10 @@ function PeriodsPage() {
     <RequireAuth>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="font-mono text-3xl font-bold">Salary Periods</h1>
+          <PageHeader
+            subtext="Period tracking"
+            title="Salary Periods"
+          />
           <div className="flex gap-2">
             <Button onClick={handleAutoCreate} isLoading={isSubmitting} variant="secondary">
               <Plus className="w-4 h-4 mr-2" />

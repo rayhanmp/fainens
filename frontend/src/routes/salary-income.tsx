@@ -4,6 +4,7 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 import { SalaryProfileModal } from '../components/salary/SalaryProfileModal';
 import {
   Download,
@@ -243,10 +244,11 @@ function SalaryIncomePage() {
           <div className="flex flex-1 flex-wrap items-start gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3">
-                <h1 className="font-headline text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)] sm:text-4xl">
-                  Salary &amp; income
-                </h1>
-                <div className="relative" ref={menuRef}>
+                <PageHeader
+                  subtext="Income management"
+                  title="Salary & income"
+                />
+                <div className="relative" ref={menuRef} style={{ marginTop: '2rem', marginLeft: '-0.5rem' }}>
                   <button
                     type="button"
                     className="cursor-pointer rounded-full p-2 text-[var(--color-text-secondary)] transition hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]"
