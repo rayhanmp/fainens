@@ -27,6 +27,7 @@ import {
   ShoppingCart,
   X,
   CalendarClock,
+  Sparkles,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -81,6 +82,21 @@ interface TransactionModalProps {
   editingTransaction: EditingTransaction | null;
   periodId?: number | null;
   initialMode?: 'view' | 'edit';
+  pendingTransaction?: {
+    id: number;
+    parsedData: {
+      type: string;
+      amount: number;
+      description: string;
+      category: string;
+      date?: string;
+      place?: string;
+      memo?: string;
+      fromAccount?: string;
+      toAccount?: string;
+      confidence: number;
+    };
+  } | null;
 }
 
 const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
@@ -113,8 +129,9 @@ export function TransactionModal({
   editingTransaction,
   periodId,
   initialMode = 'edit',
+  pendingTransaction,
 }: TransactionModalProps) {
-  const [isAccountingMode, setIsAccountingMode] = useState(false);
+  const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
   
   // Reset view mode when modal opens/closes
@@ -124,12 +141,48 @@ export function TransactionModal({
     }
   }, [isOpen, initialMode, editingTransaction]);
 
-  // Reset form when modal opens
+  // Prefill form when editing pending transaction
   useEffect(() => {
-    if (isOpen) {
-      setSimpleForm(prev => ({ ...prev, subscriptionId: '' }));
+    console.log('Pending tx effect running:', { hasPending: !!pendingTransaction, isOpen });
+    if (!pendingTransaction || !isOpen) return;
+    
+    const parsed = pendingTransaction.parsedData;
+    const cat = categories.find(c => c.name === parsed.category);
+    const fromAcc = accounts.find(a => a.name.toLowerCase().includes((parsed.fromAccount || '').toLowerCase()));
+    
+    setSimpleForm(prev => ({
+      ...prev,
+      subscriptionId: '',
+      dateTime: parsed.date ? `${parsed.date}T${new Date().getHours().toString().padStart(2,'0')}:${new Date().getMinutes().toString().padStart(2,'0')}` : toDatetimeLocal(),
+      type: parsed.type === 'income' ? 'income' : parsed.type === 'transfer' ? 'transfer' : 'expense',
+      fromAccountId: fromAcc?.id.toString() || '',
+      categoryId: cat?.id.toString() || '',
+      amount: parsed.amount.toString(),
+      description: parsed.description,
+      notes: parsed.memo || '',
+      place: parsed.place || '',
+    }));
+    setInputMode('simple');
+  }, [pendingTransaction, isOpen, categories, accounts]);
+
+  // Reset form when modal opens for new transaction
+  useEffect(() => {
+    if (!isOpen || pendingTransaction) return;
+    
+    setSimpleForm(prev => ({ ...prev, subscriptionId: '' }));
+    setAiInput('');
+    setAiParsed(null);
+    setParseError('');
+  }, [isOpen, pendingTransaction]);
+
+  // Reset AI form when switching away from AI mode
+  useEffect(() => {
+    if (inputMode !== 'ai') {
+      setAiInput('');
+      setAiParsed(null);
+      setParseError('');
     }
-  }, [isOpen]);
+  }, [inputMode]);
 
   const [simpleForm, setSimpleForm] = useState({
     dateTime: toDatetimeLocal(),
@@ -243,6 +296,24 @@ export function TransactionModal({
     ] as Array<{ accountId: string; debit: string; credit: string; description: string }>,
   });
 
+  // AI mode state
+  const [aiInput, setAiInput] = useState('');
+  const [aiParsed, setAiParsed] = useState<{
+    type: string;
+    amount: number;
+    description: string;
+    category: string;
+    date?: string;
+    place?: string;
+    memo?: string;
+    fromAccount?: string;
+    toAccount?: string;
+    confidence: number;
+  } | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [parseError, setParseError] = useState('');
+
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -327,6 +398,7 @@ export function TransactionModal({
 
   const [editMeta, setEditMeta] = useState({
     date: '',
+    time: '',
     description: '',
     notes: '',
     place: '',
@@ -337,9 +409,11 @@ export function TransactionModal({
   useEffect(() => {
     if (!isOpen) return;
     if (editingTransaction) {
-      setIsAccountingMode(false);
+      setInputMode('simple');
+      const txDate = new Date(editingTransaction.date);
       setEditMeta({
-        date: new Date(editingTransaction.date).toISOString().split('T')[0],
+        date: txDate.toISOString().split('T')[0],
+        time: txDate.toTimeString().slice(0, 5),
         description: editingTransaction.description,
         notes: editingTransaction.notes || '',
         place: editingTransaction.place || '',
@@ -374,7 +448,7 @@ export function TransactionModal({
         })
         .catch(() => setAttachments([]));
     } else {
-      setIsAccountingMode(false);
+      setInputMode('simple');
       setSimpleForm({
         dateTime: toDatetimeLocal(),
         type: 'expense',
@@ -480,11 +554,12 @@ export function TransactionModal({
     setFormError('');
     setIsSubmitting(true);
     try {
+      const dateTime = editMeta.time ? `${editMeta.date}T${editMeta.time}:00` : editMeta.date;
       await api.transactions.update(editingTransaction.id, {
         description: editMeta.description,
         notes: editMeta.notes || null,
         place: editMeta.place || null,
-        date: editMeta.date,
+        date: dateTime,
         tagIds: editMeta.tagIds,
         categoryId: editMeta.categoryId ? parseInt(editMeta.categoryId, 10) : null,
       });
@@ -1381,19 +1456,28 @@ export function TransactionModal({
         </div>
         <form onSubmit={handleEditMetaSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {/* Date */}
+            {/* Date & Time */}
             <div className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl space-y-2 group hover:bg-[var(--ref-surface-container-low)] transition-colors">
               <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
                 <CalendarClock className="w-3.5 h-3.5" />
-                Date
+                Date & Time
               </label>
-              <input
-                type="date"
-                value={editMeta.date}
-                onChange={(e) => setEditMeta({ ...editMeta, date: e.target.value })}
-                className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={editMeta.date}
+                  onChange={(e) => setEditMeta({ ...editMeta, date: e.target.value })}
+                  className="flex-1 bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
+                  required
+                />
+                <input
+                  type="time"
+                  value={editMeta.time}
+                  onChange={(e) => setEditMeta({ ...editMeta, time: e.target.value })}
+                  className="w-24 bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
+                  required
+                />
+              </div>
             </div>
 
             {/* Category (if available) */}
@@ -1529,30 +1613,23 @@ export function TransactionModal({
       subtitle="Create a detailed record for your books."
       size="xl"
       headerExtra={
-        !isAccountingMode ? (
-          <button
-            type="button"
-            onClick={() => setIsAccountingMode(true)}
-            className="cursor-pointer group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
-            title="Switch to journal entry (multi-line debits & credits)"
-          >
-            <Calculator className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" />
-            Journal
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setIsAccountingMode(false)}
-            className="cursor-pointer group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
-            title="Back to simple transaction"
-          >
-            <ArrowRightLeft className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" />
-            Simple
-          </button>
-        )
+        <button
+          type="button"
+          onClick={() => {
+            if (inputMode === 'simple') setInputMode('ai');
+            else if (inputMode === 'ai') setInputMode('journal');
+            else setInputMode('simple');
+          }}
+          className="cursor-pointer group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
+          title="Cycle through input modes"
+        >
+          {inputMode === 'simple' && <><Sparkles className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> AI</>}
+          {inputMode === 'ai' && <><Calculator className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> Journal</>}
+          {inputMode === 'journal' && <><ArrowRightLeft className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> Simple</>}
+        </button>
       }
     >
-      {isAccountingMode ? (
+      {inputMode === 'journal' ? (
         <form onSubmit={handleJournalSubmit} className="flex flex-col gap-0">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           <div className="lg:col-span-8 space-y-6 lg:space-y-8">
@@ -1718,6 +1795,142 @@ export function TransactionModal({
             </div>
           </div>
         </form>
+      ) : inputMode === 'ai' ? (
+        <div className="flex flex-col gap-4">
+          {!aiParsed ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!aiInput.trim()) return;
+                setIsParsing(true);
+                setParseError('');
+                try {
+                  const result = await api.pendingTransactions.preview(aiInput);
+                  if (result.parsed && result.parsed.confidence > 0) {
+                    setAiParsed(result.parsed);
+                  } else {
+                    setParseError('Failed to parse transaction');
+                  }
+                } catch (err) {
+                  setParseError(err instanceof Error ? err.message : 'Failed to parse');
+                } finally {
+                  setIsParsing(false);
+                }
+              }}
+              className="flex flex-col gap-4"
+            >
+              <div>
+                <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
+                  Describe your transaction
+                </label>
+                <textarea
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  placeholder="e.g., Makan siang di McD 45rb, belanja grocery di Indomaret 150rb untuk minggu ini"
+                  className="w-full h-32 bg-[var(--ref-surface-container-low)] border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all resize-none"
+                />
+              </div>
+              {parseError && (
+                <p className="text-red-500 text-sm">{parseError}</p>
+              )}
+              <div className="flex justify-end">
+                <Button type="submit" isLoading={isParsing} className="rounded-full">
+                  <Sparkles className="w-4 h-4" />
+                  Parse
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="p-4 bg-[var(--ref-surface-container-low)] rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--color-muted)]">Type</span>
+                  <span className="font-medium capitalize">{aiParsed.type}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--color-muted)]">Amount</span>
+                  <span className="font-medium">{formatCurrency(aiParsed.amount)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--color-muted)]">Category</span>
+                  <span className="font-medium">{aiParsed.category}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--color-muted)]">Description</span>
+                  <span className="font-medium">{aiParsed.description}</span>
+                </div>
+                {aiParsed.date && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--color-muted)]">Date</span>
+                    <span className="font-medium">{aiParsed.date}</span>
+                  </div>
+                )}
+                {aiParsed.place && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--color-muted)]">Place</span>
+                    <span className="font-medium">{aiParsed.place}</span>
+                  </div>
+                )}
+                {aiParsed.fromAccount && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--color-muted)]">Account</span>
+                    <span className="font-medium">{aiParsed.fromAccount}</span>
+                  </div>
+                )}
+                {aiParsed.toAccount && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--color-muted)]">To Account</span>
+                    <span className="font-medium">{aiParsed.toAccount}</span>
+                  </div>
+                )}
+                {aiParsed.memo && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--color-muted)]">Memo</span>
+                    <span className="font-medium">{aiParsed.memo}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--color-muted)]">Confidence</span>
+                  <span className="font-medium">{Math.round(aiParsed.confidence * 100)}%</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setAiParsed(null);
+                    setAiInput('');
+                    setParseError('');
+                  }}
+                  className="flex-1 rounded-full"
+                >
+                  Try Again
+                </Button>
+                <Button
+                  type="button"
+                  isLoading={isConfirming}
+                  onClick={async () => {
+                    if (!aiParsed) return;
+                    setIsConfirming(true);
+                    try {
+                      await api.pendingTransactions.create(aiInput, aiParsed);
+                      onSaved();
+                      onClose();
+                    } catch (err) {
+                      setParseError(err instanceof Error ? err.message : 'Failed to create pending transaction');
+                    } finally {
+                      setIsConfirming(false);
+                    }
+                  }}
+                  className="flex-1 rounded-full"
+                >
+                  Confirm
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         <form onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
@@ -2360,20 +2573,89 @@ export function TransactionModal({
 
           <div className={stickyFooter}>
             {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
-            <Button
-              type="submit"
-              isLoading={isSubmitting}
-              className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none"
-            >
-              {simpleForm.type === 'paylater' ? (
-                <CreditCard className="w-5 h-5" />
-              ) : (
-                <Save className="w-5 h-5" />
-              )}
-              {simpleForm.type === 'paylater'
-                ? 'Record settlement'
-                : 'Save transaction'}
-            </Button>
+            {pendingTransaction ? (
+              <div className="flex gap-2 w-full max-w-md mx-auto">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    if (!pendingTransaction) return;
+                    setIsSubmitting(true);
+                    try {
+                      await api.pendingTransactions.update(pendingTransaction.id, {
+                        type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
+                        amount: parseIdNominalToInt(simpleForm.amount) || 0,
+                        description: simpleForm.description,
+                        category: categories.find(c => c.id.toString() === simpleForm.categoryId)?.name || 'Others',
+                        date: simpleForm.dateTime.split('T')[0],
+                        place: simpleForm.place || undefined,
+                        memo: simpleForm.notes || undefined,
+                        fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
+                        toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
+                        confidence: 1,
+                      });
+                      onSaved();
+                      onClose();
+                    } catch (err) {
+                      setFormError(err instanceof Error ? err.message : 'Failed to save');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  isLoading={isSubmitting}
+                  className="flex-1 rounded-full"
+                >
+                  Save & Keep Pending
+                </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (!pendingTransaction) return;
+                    setIsSubmitting(true);
+                    try {
+                      await api.pendingTransactions.update(pendingTransaction.id, {
+                        type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
+                        amount: parseIdNominalToInt(simpleForm.amount) || 0,
+                        description: simpleForm.description,
+                        category: categories.find(c => c.id.toString() === simpleForm.categoryId)?.name || 'Others',
+                        date: simpleForm.dateTime.split('T')[0],
+                        place: simpleForm.place || undefined,
+                        memo: simpleForm.notes || undefined,
+                        fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
+                        toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
+                        confidence: 1,
+                      });
+                      await api.pendingTransactions.approve(pendingTransaction.id);
+                      onSaved();
+                      onClose();
+                    } catch (err) {
+                      setFormError(err instanceof Error ? err.message : 'Failed to approve');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  isLoading={isSubmitting}
+                  className="flex-1 rounded-full"
+                >
+                  Approve
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="submit"
+                isLoading={isSubmitting}
+                className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none"
+              >
+                {simpleForm.type === 'paylater' ? (
+                  <CreditCard className="w-5 h-5" />
+                ) : (
+                  <Save className="w-5 h-5" />
+                )}
+                {simpleForm.type === 'paylater'
+                  ? 'Record settlement'
+                  : 'Save transaction'}
+              </Button>
+            )}
           </div>
         </form>
       )}
