@@ -206,16 +206,16 @@ function DashboardPage() {
           const daysElapsed = Math.max(0, Math.floor((now.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)));
           const daysRemaining = Math.max(0, daysTotal - daysElapsed);
           
-          const avgDailySpend = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
+          const burnRate = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
           const remainingBudget = calculatedIncome - calculatedExpense;
-          const projectedEndBalance = walletBal + remainingBudget - (avgDailySpend * daysRemaining);
+          const projectedEndBalance = walletBal + remainingBudget - (burnRate * daysRemaining);
           
           setPeriodProgress({
             daysRemaining,
             daysElapsed,
             dailyBudget: daysRemaining > 0 ? Math.max(0, remainingBudget / daysRemaining) : 0,
             projectedEndBalance,
-            avgDailySpend,
+            avgDailySpend: burnRate,
             hasIncome: calculatedIncome > 0,
             income: calculatedIncome,
             expenses: calculatedExpense,
@@ -324,16 +324,16 @@ function DashboardPage() {
         const daysElapsed = Math.max(0, Math.floor((now.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)));
         const daysRemaining = Math.max(0, daysTotal - daysElapsed);
         
-        const avgDailySpend = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
+        const burnRate = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
         const remainingBudget = calculatedIncome - calculatedExpense;
-        const projectedEndBalance = walletTotal + remainingBudget - (avgDailySpend * daysRemaining);
+        const projectedEndBalance = walletTotal + remainingBudget - (burnRate * daysRemaining);
         
         setPeriodProgress({
           daysRemaining,
           daysElapsed,
           dailyBudget: daysRemaining > 0 ? Math.max(0, remainingBudget / daysRemaining) : 0,
           projectedEndBalance,
-          avgDailySpend,
+          avgDailySpend: burnRate,
           hasIncome: calculatedIncome > 0,
           income: calculatedIncome,
           expenses: calculatedExpense,
@@ -538,7 +538,7 @@ function DashboardPage() {
                     <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.dailyBudget)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-[var(--ref-outline)]">Avg daily spend</span>
+                    <span className="text-[var(--ref-outline)]">Burn rate</span>
                     <span className="font-bold text-[var(--ref-on-surface)]">
                       {periodProgress.daysElapsed > 0 ? formatCurrency(periodProgress.avgDailySpend) : '—'}
                     </span>
