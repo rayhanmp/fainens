@@ -203,8 +203,12 @@ export default async function (fastify: FastifyInstance) {
     // Build base conditions
     let periodIdToUse = periodId;
     
-    // If no periodId is provided, default to current period
-    if (!periodIdToUse) {
+    // If periodId is "all", don't filter by period
+    if (periodIdToUse === 'all') {
+      periodIdToUse = undefined;
+    }
+    // If no periodId is provided AND no date range is specified, default to current period
+    else if (!periodIdToUse && !startDate && !endDate) {
       const now = Date.now();
       const [currentPeriod] = await db
         .select({ id: salaryPeriods.id })

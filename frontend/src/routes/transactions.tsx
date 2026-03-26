@@ -43,7 +43,9 @@ export const Route = createFileRoute('/transactions')({
   }),
 
   beforeLoad: async ({ search }: { search: any }) => {
-    if (search.periodId) return;
+    // Don't redirect if periodId is "all" (show all) or a specific period number
+    if (search.periodId === 'all') return;
+    if (search.periodId && !isNaN(parseInt(search.periodId, 10))) return;
     
     const periods = await api.periods.list() as Array<{ id: number; startDate: number; endDate: number }>;
     const now = Date.now();
@@ -226,6 +228,7 @@ function TransactionsPage() {
       const periodId =
         search.periodId && search.periodId !== 'undefined' && !isNaN(parseInt(search.periodId, 10))
           ? search.periodId
+          : search.periodId === 'all' ? 'all'
           : undefined;
 
       const accountId =
@@ -551,13 +554,13 @@ function TransactionsPage() {
                 navigate({
                   search: (prev: { periodId?: string }) => ({
                     ...prev,
-                    periodId: v || undefined,
+                    periodId: v === 'all' ? 'all' : (v || undefined),
                   }),
                 });
               }}
               className="w-full cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-[var(--color-text-primary)] focus:ring-0"
             >
-              <option value="">All periods</option>
+              <option value="all">All periods</option>
               {periods.map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.name}
