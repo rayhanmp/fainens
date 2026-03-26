@@ -313,78 +313,86 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      // Get the loan
-      const [loan] = await db
-        .select()
-        .from(loans)
-        .where(and(eq(loans.id, parseInt(id)), eq(loans.isActive, true)))
-        .limit(1);
+      // Get the loan and process payment in a transaction
+      const result = await db.transaction(async (tx) => {
+        const [loan] = await tx
+          .select()
+          .from(loans)
+          .where(and(eq(loans.id, parseInt(id)), eq(loans.isActive, true)))
+          .limit(1);
 
-      if (!loan) {
-        reply.code(404).send({ error: "Loan not found" });
-        return;
-      }
+        if (!loan) {
+          reply.code(404).send({ error: "Loan not found" });
+          return null;
+        }
 
-      if (loan.status !== 'active') {
-        reply.code(400).send({ error: "Cannot record payment on a non-active loan" });
-        return;
-      }
+        if (loan.status !== 'active') {
+          reply.code(400).send({ error: "Cannot record payment on a non-active loan" });
+          return null;
+        }
 
-      if (body.amountCents > loan.remainingCents) {
-        reply.code(400).send({ error: "Payment amount cannot exceed remaining balance" });
-        return;
-      }
+        if (body.amountCents > loan.remainingCents) {
+          reply.code(400).send({ error: "Payment amount cannot exceed remaining balance" });
+          return null;
+        }
 
-      // Get contact and system accounts
-      const [contact, loansReceivable, loansPayable] = await Promise.all([
-        db.select().from(contacts).where(eq(contacts.id, loan.contactId)).limit(1),
-        getLoansReceivableAccount(db),
-        getLoansPayableAccount(db),
-      ]);
+        // Get contact and system accounts
+        const [contact, loansReceivable, loansPayable] = await Promise.all([
+          tx.select().from(contacts).where(eq(contacts.id, loan.contactId)).limit(1),
+          getLoansReceivableAccount(tx),
+          getLoansPayableAccount(tx),
+        ]);
 
-      const loanAccountId = loan.direction === 'lent' ? loansReceivable.id : loansPayable.id;
+        const loanAccountId = loan.direction === 'lent' ? loansReceivable.id : loansPayable.id;
 
-      // Create the journal entry for the payment
-      const journalEntry = await createJournalEntry({
-        date: body.paymentDate || Date.now(),
-        description: `Payment on loan - ${contact[0]?.name}`,
-        txType: 'loan_payment',
-        lines: loan.direction === 'lent'
-          ? [
-              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
-              { accountId: loanAccountId, debit: 0, credit: body.amountCents },
-            ]
-          : [
-              { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
-              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents },
-            ],
-      }, db);
+        // Create the journal entry for the payment
+        const journalEntry = await createJournalEntry({
+          date: body.paymentDate || Date.now(),
+          description: `Payment on loan - ${contact[0]?.name}`,
+          txType: 'loan_payment',
+          lines: loan.direction === 'lent'
+            ? [
+                { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
+                { accountId: loanAccountId, debit: 0, credit: body.amountCents },
+              ]
+            : [
+                { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
+                { accountId: body.walletAccountId, debit: 0, credit: body.amountCents },
+              ],
+        }, tx);
 
-      // Create the payment record
-      const [payment] = await db
-        .insert(loanPayments)
-        .values({
-          loanId: loan.id,
-          amountCents: body.amountCents,
-          principalCents: body.amountCents,
-          paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
-          transactionId: journalEntry.transactionId,
-          notes: body.notes ?? null,
-        })
-        .returning();
+        // Create the payment record
+        const [payment] = await tx
+          .insert(loanPayments)
+          .values({
+            loanId: loan.id,
+            amountCents: body.amountCents,
+            principalCents: body.amountCents,
+            paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+            transactionId: journalEntry.transactionId,
+            notes: body.notes ?? null,
+          })
+          .returning();
 
-      // Update loan remaining balance
-      const newRemaining = loan.remainingCents - body.amountCents;
-      const newStatus = newRemaining === 0 ? 'repaid' : 'active';
+        // Update loan remaining balance
+        const newRemaining = loan.remainingCents - body.amountCents;
+        const newStatus = newRemaining === 0 ? 'repaid' : 'active';
 
-      await db
-        .update(loans)
-        .set({
-          remainingCents: newRemaining,
-          status: newStatus,
-          updatedAt: sql`(unixepoch('now') * 1000)`,
-        })
-        .where(eq(loans.id, loan.id));
+        await tx
+          .update(loans)
+          .set({
+            remainingCents: newRemaining,
+            status: newStatus,
+            updatedAt: sql`(unixepoch('now') * 1000)`,
+          })
+          .where(eq(loans.id, loan.id));
+
+        return { payment, loan, newRemaining, newStatus };
+      });
+
+      if (!result) return;
+
+      const { payment, loan, newRemaining, newStatus } = result;
 
       reply.code(201).send({
         payment,
