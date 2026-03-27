@@ -670,7 +670,11 @@ function TransactionsPage() {
                 const amountSigned = display.kind === 'income' ? display.amount : display.kind === 'expense' ? -display.amount : display.amount;
 
                 return (
-                  <div key={tx.id} className={cn("bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 space-y-3", tx.id === newlyAddedTxId && "animate-slide-in")}>
+                  <div 
+                    key={tx.id} 
+                    className={cn("bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 space-y-3 cursor-pointer hover:bg-[var(--ref-surface-container-low)]", tx.id === newlyAddedTxId && "animate-slide-in")} 
+                    onClick={() => openModal(tx, 'view')}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", display.kind === 'loan' ? 'bg-[var(--color-accent)]/10' : 'bg-[var(--ref-surface-container-highest)]')}>
