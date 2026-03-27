@@ -61,18 +61,18 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div
-        className="absolute inset-0 bg-black/50 transition-opacity"
+        className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-[var(--color-surface)] shadow-xl flex flex-col slide-in-from-left">
-        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+      <div className="absolute inset-0 bg-[var(--color-surface)] flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] pt-[env(safe-area-inset-top)]">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Menu</h2>
           <button
             type="button"
             onClick={onClose}
             className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
@@ -86,13 +86,13 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                     to={to}
                     onClick={handleLinkClick}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
                       active
                         ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--color-text-primary)]'
                     )}
                   >
-                    <Icon className="w-5 h-5 shrink-0" />
+                    <Icon className="w-6 h-6 shrink-0" />
                     <span>{label}</span>
                   </Link>
                 </li>
@@ -111,13 +111,13 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                     to={to}
                     onClick={handleLinkClick}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
                       active
                         ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--color-text-primary)]'
                     )}
                   >
-                    <Icon className="w-5 h-5 shrink-0" />
+                    <Icon className="w-6 h-6 shrink-0" />
                     <span>{label}</span>
                   </Link>
                 </li>
@@ -126,7 +126,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
           </ul>
         </nav>
 
-        <div className="p-3 border-t border-[var(--color-border)]">
+        <div className="p-3 border-t border-[var(--color-border)] pb-[env(safe-area-inset-bottom)]">
           <button
             type="button"
             onClick={() => {
@@ -134,9 +134,9 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                 logout();
               }
             }}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors cursor-pointer"
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-base font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors cursor-pointer"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-6 h-6" />
             <span>Sign Out</span>
           </button>
         </div>
