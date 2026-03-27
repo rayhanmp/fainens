@@ -440,6 +440,20 @@ button[data-variant="danger"]:focus-visible,
   animation: slideIn 0.25s ease-out;
 }
 
+/* Mobile menu slide-in from left */
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.slide-in-from-left {
+  animation: slideInFromLeft 0.2s ease-out;
+}
+
 /* Horizontal scroll tabs (reports) */
 .reports-tabs-scroll {
   -webkit-overflow-scrolling: touch;

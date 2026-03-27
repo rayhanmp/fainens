@@ -14,6 +14,7 @@ import {
   Repeat,
   Sparkles,
   Users,
+  Calculator,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
@@ -44,6 +45,7 @@ const restNav: NavItem[] = [
   { to: '/wishlist', label: 'Wishlist', icon: Sparkles },
   { to: '/subscriptions', label: 'Subscriptions', icon: Repeat },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
 ];
 
 export function Sidebar() {

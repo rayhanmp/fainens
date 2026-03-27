@@ -139,7 +139,7 @@ function DashboardPage() {
           api.analytics.dashboard(),
           api.transactions.list({ limit: '8' }),
           api.categories.list(),
-          periodId ? api.budgets.list(String(periodId)) : Promise.resolve([]),
+          periodId ? api.budgets.list(String(periodId)) : Promise.resolve({ plans: [] }),
           // Fetch all transactions within the period date range (includes those without period_id)
           periodStartDate && periodEndDate
             ? api.transactions.list({ startDate: periodStartDate, endDate: periodEndDate, limit: '500' })
@@ -150,6 +150,12 @@ function DashboardPage() {
         
         const recentTxList = recentTxRes.data;
         const periodTxs = periodTxRes.data;
+
+        // Handle budget API response format (can be array or object with plans)
+        const budgetData = budgets as any;
+        const budgetPlans = Array.isArray(budgetData) 
+          ? budgetData[0]?.plans || [] 
+          : budgetData.plans || [];
 
         // Calculate period income and expense from actual transactions within date range
         const periodTxsArray = periodTxs as Array<{
@@ -226,7 +232,7 @@ function DashboardPage() {
 
         setAnalytics(dash);
         setRecent(recentTxList);
-        setBudgetRows(budgets.slice(0, 5));
+        setBudgetRows(budgetPlans.slice(0, 5));
         setCategories(cats);
         setAccounts(accList);
         setTags(tagsList);
@@ -292,6 +298,10 @@ function DashboardPage() {
         ]);
         
         const periodTxs = periodTxRes.data;
+        const budgetData2 = budgets as any;
+        const budgetPlans2 = Array.isArray(budgetData2) 
+          ? budgetData2[0]?.plans || [] 
+          : budgetData2.plans || [];
         const periodTxsArray = periodTxs as Array<{
           id: number;
           description: string;
@@ -357,7 +367,7 @@ function DashboardPage() {
           .slice(0, 5);
         setTopExpenses(expenseTxs);
 
-        setBudgetRows(budgets.slice(0, 5));
+        setBudgetRows(budgetPlans2.slice(0, 5));
         setCurrentPeriodId(periodId);
 
         const spendMap = new Map<number, number>();

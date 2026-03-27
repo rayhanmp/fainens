@@ -13,6 +13,7 @@ import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SavingsSimulatorRouteImport } from './routes/savings-simulator'
 import { Route as SalaryIncomeRouteImport } from './routes/salary-income'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PeriodsRouteImport } from './routes/periods'
@@ -44,6 +45,11 @@ const SubscriptionsRoute = SubscriptionsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SavingsSimulatorRoute = SavingsSimulatorRouteImport.update({
+  id: '/savings-simulator',
+  path: '/savings-simulator',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SalaryIncomeRoute = SalaryIncomeRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/periods': typeof PeriodsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
+  '/savings-simulator': typeof SavingsSimulatorRoute
   '/settings': typeof SettingsRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/periods': typeof PeriodsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
+  '/savings-simulator': typeof SavingsSimulatorRoute
   '/settings': typeof SettingsRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/periods': typeof PeriodsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
+  '/savings-simulator': typeof SavingsSimulatorRoute
   '/settings': typeof SettingsRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/periods'
     | '/reports'
     | '/salary-income'
+    | '/savings-simulator'
     | '/settings'
     | '/subscriptions'
     | '/transactions'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/periods'
     | '/reports'
     | '/salary-income'
+    | '/savings-simulator'
     | '/settings'
     | '/subscriptions'
     | '/transactions'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/periods'
     | '/reports'
     | '/salary-income'
+    | '/savings-simulator'
     | '/settings'
     | '/subscriptions'
     | '/transactions'
@@ -232,6 +244,7 @@ export interface RootRouteChildren {
   PeriodsRoute: typeof PeriodsRoute
   ReportsRoute: typeof ReportsRoute
   SalaryIncomeRoute: typeof SalaryIncomeRoute
+  SavingsSimulatorRoute: typeof SavingsSimulatorRoute
   SettingsRoute: typeof SettingsRoute
   SubscriptionsRoute: typeof SubscriptionsRoute
   TransactionsRoute: typeof TransactionsRoute
@@ -266,6 +279,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/savings-simulator': {
+      id: '/savings-simulator'
+      path: '/savings-simulator'
+      fullPath: '/savings-simulator'
+      preLoaderRoute: typeof SavingsSimulatorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/salary-income': {
@@ -368,6 +388,7 @@ const rootRouteChildren: RootRouteChildren = {
   PeriodsRoute: PeriodsRoute,
   ReportsRoute: ReportsRoute,
   SalaryIncomeRoute: SalaryIncomeRoute,
+  SavingsSimulatorRoute: SavingsSimulatorRoute,
   SettingsRoute: SettingsRoute,
   SubscriptionsRoute: SubscriptionsRoute,
   TransactionsRoute: TransactionsRoute,
