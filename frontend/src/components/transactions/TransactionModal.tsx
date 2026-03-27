@@ -1935,7 +1935,7 @@ export function TransactionModal({
         <form onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           <div className="lg:col-span-8 space-y-6 lg:space-y-8">
-            <div className="inline-flex p-0.5 bg-[var(--ref-surface-container)] rounded-full flex-wrap gap-0.5">
+            <div className="flex flex-wrap p-1 bg-[var(--ref-surface-container)] rounded-2xl gap-1">
               {(
                 [
                   { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },
@@ -1956,7 +1956,7 @@ export function TransactionModal({
                     })
                   }
                   className={cn(
-                    'cursor-pointer inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-sm transition-all',
+                    'cursor-pointer flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 rounded-xl sm:rounded-full text-xs sm:text-sm transition-all min-w-[70px]',
                     simpleForm.type === t.value
                       ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
                       : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',
