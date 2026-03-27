@@ -659,7 +659,43 @@ function TransactionsPage() {
                 </div>
               </div>
             )}
-            <div className="overflow-x-auto">
+
+            {/* Mobile card view */}
+            <div className="md:hidden space-y-2">
+              {paginated.map((tx) => {
+                const display = getTransactionDisplay(tx);
+                const cat = tx.categoryId ? categories.find((c) => c.id === tx.categoryId) : null;
+                const Icon = pickCategoryIcon(cat?.name, display.kind);
+                const subLine = `${display.detail} · ${formatTxTime(tx.date)}`;
+                const amountSigned = display.kind === 'income' ? display.amount : display.kind === 'expense' ? -display.amount : display.amount;
+
+                return (
+                  <div key={tx.id} className={cn("bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 space-y-3", tx.id === newlyAddedTxId && "animate-slide-in")}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", display.kind === 'loan' ? 'bg-[var(--color-accent)]/10' : 'bg-[var(--ref-surface-container-highest)]')}>
+                          <Icon className={cn('h-5 w-5', display.kind === 'expense' && 'text-[var(--color-accent)]', display.kind === 'income' && 'text-[var(--color-success)]', display.kind === 'transfer' && 'text-[var(--ref-tertiary)]', display.kind === 'loan' && 'text-[var(--color-accent)]', display.kind === 'other' && 'text-[var(--color-muted)]')} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">{tx.description}</p>
+                          <p className="truncate text-[11px] font-medium text-[var(--color-muted)]">{subLine}</p>
+                        </div>
+                      </div>
+                      <div className={cn("whitespace-nowrap text-right font-headline text-sm font-extrabold shrink-0", amountSigned > 0 && 'text-[var(--color-success)]', amountSigned < 0 && 'text-[var(--color-text-primary)]')}>
+                        {amountSigned > 0 ? '+' : ''}{formatCurrency(Math.abs(amountSigned))}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="inline-block rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-tight bg-[var(--ref-surface-container-highest)]">{display.kind === 'loan' ? 'Loan' : (cat?.name ?? display.kind)}</span>
+                      {tx.linkedTxId && <span className="inline-flex items-center rounded-full bg-[var(--color-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-warning)]">Transfer Fee</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop table view */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-left">
                 <thead>
                   <tr className="bg-[var(--ref-surface-container-highest)]">
