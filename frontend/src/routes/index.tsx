@@ -587,8 +587,33 @@ function DashboardPage() {
               {recent.length === 0 ? (
                 <p className="p-8 text-sm text-[var(--ref-on-surface-variant)]">No transactions yet.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
+                <>
+                  {/* Mobile card view */}
+                  <div className="md:hidden divide-y divide-[var(--ref-surface-container)]">
+                    {recent.map((tx) => {
+                      const kind = classifyTx(tx);
+                      const amt = txAmount(tx);
+                      const cat = tx.categoryId ? categories.find((c) => c.id === tx.categoryId) : null;
+                      return (
+                        <div key={tx.id} className="p-4 hover:bg-[var(--ref-surface-container-low)]/60">
+                          <div className="flex justify-between items-start gap-3 mb-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-[var(--ref-on-surface)] truncate">{tx.description}</p>
+                              <p className="text-xs text-[var(--ref-outline)]">{cat ? cat.name : (txSubtitle(tx) || '—')}</p>
+                            </div>
+                            <div className={cn('text-sm font-bold font-mono shrink-0', kind === 'expense' && 'text-[var(--ref-error)]', kind === 'income' && 'text-[var(--ref-secondary)]', kind === 'neutral' && 'text-[var(--ref-on-surface)]')}>
+                              {kind === 'expense' && '-'}{kind === 'income' && '+'}{formatCurrency(amt)}
+                            </div>
+                          </div>
+                          <p className="text-xs text-[var(--ref-outline)]">{formatDate(tx.date)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table view */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left">
                     <thead>
                       <tr className="bg-[var(--ref-surface-container-low)]">
                         <th className="px-6 sm:px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
@@ -644,6 +669,7 @@ function DashboardPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
 

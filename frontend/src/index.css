@@ -208,15 +208,16 @@ h6 {
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
-  min-width: 120px;
+  min-width: 0;
+  width: 100%;
 }
 
 .brutalist-input--wide {
-  min-width: 200px;
+  min-width: 0;
 }
 
 .brutalist-input--currency {
-  min-width: 160px;
+  min-width: 0;
   font-family: var(--font-mono);
   text-align: right;
 }
