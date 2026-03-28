@@ -24,6 +24,7 @@ import { NetWorthChart } from '../components/analytics';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 import { AIInsightCard } from '../components/insights/AIInsightCard';
+import { MonthlyReportModal } from '../components/pdf/MonthlyReportModal';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -77,6 +78,7 @@ function DashboardPage() {
   const [periodExpense, setPeriodExpense] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [tags, setTags] = useState<Array<{ id: number; name: string; color: string }>>([]);
   const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; balance: number; systemKey?: string | null }>>([]);
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null);
@@ -469,14 +471,13 @@ function DashboardPage() {
                 className="min-w-[160px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold"
               />
             )}
-            <Link to="/reports">
-              <button
-                type="button"
-                className="cursor-pointer px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors"
-              >
-                Export report
-              </button>
-            </Link>
+            <button
+              type="button"
+              onClick={() => setIsReportModalOpen(true)}
+              className="cursor-pointer px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors"
+            >
+              Export report
+            </button>
             <Button className="rounded-full shadow-md" onClick={() => setIsModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add transaction
@@ -881,6 +882,11 @@ function DashboardPage() {
         tags={tags}
         editingTransaction={null}
         periodId={currentPeriodId}
+      />
+
+      <MonthlyReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
       />
     </RequireAuth>
   );
