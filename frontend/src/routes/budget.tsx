@@ -837,7 +837,7 @@ function BudgetPage() {
           <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
             {/* Budget progress */}
             <div className="lg:col-span-2">
-              <div className="rounded-xl border border-[var(--color-border)] bg-white p-6">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                   <h2 className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">Budget progress</h2>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
@@ -951,7 +951,7 @@ function BudgetPage() {
                               className="h-full rounded-full transition-all duration-300"
                               style={{
                                 width: `${Math.min(pct, 100)}%`,
-                                backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? '#f59e0b' : categoryColor,
+                                backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? 'var(--color-warning)' : categoryColor,
                               }}
                             />
                           </div>
@@ -967,7 +967,7 @@ function BudgetPage() {
                 )}
                 <Link
                   to="/transactions"
-                  className="mt-6 flex w-full items-center justify-center gap-1 rounded-full border border-transparent bg-[var(--ref-surface-container-highest)] py-3 text-center text-xs font-bold text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--color-border)] hover:bg-white"
+                  className="mt-6 flex w-full items-center justify-center gap-1 rounded-full border border-transparent bg-[var(--ref-surface-container-highest)] py-3 text-center text-xs font-bold text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--color-border)] hover:bg-[var(--color-surface)]"
                 >
                   View transactions
                   <ChevronRight className="h-4 w-4" />

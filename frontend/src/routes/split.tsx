@@ -649,7 +649,7 @@ function SplitBillPage() {
                       value={contactSearch}
                       onChange={(e) => setContactSearch(e.target.value)}
                       placeholder="Search contacts..."
-                      className="w-full bg-white border border-[var(--color-border)]/10 rounded-lg py-2 pl-10 pr-4 text-sm"
+                      className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg py-2 pl-10 pr-4 text-sm"
                       autoFocus
                     />
                   </div>
@@ -963,7 +963,7 @@ function SplitBillPage() {
                       value={contactSearch}
                       onChange={(e) => setContactSearch(e.target.value)}
                       placeholder="Search contacts..."
-                      className="w-full bg-white border border-[var(--color-border)]/10 rounded-lg py-2 pl-10 pr-4 text-sm"
+                      className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg py-2 pl-10 pr-4 text-sm"
                       autoFocus
                     />
                   </div>
@@ -973,7 +973,7 @@ function SplitBillPage() {
                         <button
                           key={contact.id}
                           onClick={() => handleAddParticipant(contact)}
-                          className="w-full px-3 py-2 text-left hover:bg-white rounded-lg flex items-center gap-2"
+                          className="w-full px-3 py-2 text-left hover:bg-[var(--color-surface)] rounded-lg flex items-center gap-2"
                         >
                           <div className="w-6 h-6 rounded-full bg-[var(--ref-surface-container-highest)] flex items-center justify-center text-[10px] font-bold">
                             {getInitials(contact.name)}

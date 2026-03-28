@@ -227,7 +227,7 @@ export function LifestyleCreepGauge() {
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
                     return (
-                      <div className="bg-white border-2 border-[var(--color-border)] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
+                      <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
                         <p className="font-mono text-xs font-bold">{label}</p>
                         <p className="font-mono text-sm">
                           MPC: {((payload[0].value as number) * 100).toFixed(1)}%

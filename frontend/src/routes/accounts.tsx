@@ -570,12 +570,12 @@ function AccountTile({
 
   if (darkCard) {
     return (
-      <article className="group relative overflow-hidden rounded-xl bg-[#2e3038] p-5 text-white transition-all hover:shadow-[0px_20px_40px_rgba(25,27,35,0.1)]">
+      <article className="group relative overflow-hidden rounded-xl bg-[var(--ref-surface-container-highest)] p-5 text-[var(--color-text-primary)] transition-all hover:shadow-[0px_20px_40px_rgba(25,27,35,0.1)]">
         <div className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/5 blur-2xl" />
         <div className="relative z-10">
           <div className="mb-4 flex items-start justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase text-white/50">
+              <p className="text-[10px] font-bold uppercase text-[var(--color-text-secondary)]">
                 {a.type === 'liability' ? 'Liability' : 'Asset'}
               </p>
               <h4 className="font-headline text-sm font-bold">{a.name}</h4>
@@ -583,7 +583,7 @@ function AccountTile({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="rounded p-1 text-white/50 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+                className="rounded p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-[var(--color-text-primary)] group-hover:opacity-100"
                 onClick={onEdit}
               >
                 <Edit2 className="h-4 w-4" />
@@ -591,10 +591,10 @@ function AccountTile({
               <CreditCard className="h-5 w-5 text-amber-400" aria-hidden />
             </div>
           </div>
-          <p className="text-[10px] text-white/60">Ledger balance</p>
+          <p className="text-[10px] text-[var(--color-text-secondary)]">Ledger balance</p>
           <p className="font-headline text-xl font-extrabold tracking-tight">{formatCurrency(a.balance)}</p>
-          <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 text-[10px]">
-            <span className="text-white/50">Ref: {maskHint}</span>
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-3 text-[10px]">
+            <span className="text-[var(--color-muted)]">Ref: {maskHint}</span>
             <Link
               to="/transactions"
               search={{ accountId: String(a.id) }}
@@ -606,7 +606,7 @@ function AccountTile({
           <button
             type="button"
             onClick={onDelete}
-            className="mt-2 text-[10px] text-red-300 hover:text-red-100"
+            className="mt-2 text-[10px] text-[var(--color-danger)] hover:opacity-80"
           >
             Remove
           </button>

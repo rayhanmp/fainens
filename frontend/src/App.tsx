@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { RouterProvider } from '@tanstack/react-router';
 import type { Router } from '@tanstack/react-router';
 import { ConfirmProvider } from './components/ui/ConfirmDialog';
+import { ThemeProvider } from './hooks/useTheme';
 
 // Create QueryClient instance
 const queryClient = new QueryClient({
@@ -47,13 +48,15 @@ export function App({ router }: AppProps) {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ConfirmProvider>
-        <ErrorBoundary>
-          <RouterProvider router={router} />
-          <ToastContainer />
-        </ErrorBoundary>
-      </ConfirmProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <ConfirmProvider>
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+            <ToastContainer />
+          </ErrorBoundary>
+        </ConfirmProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

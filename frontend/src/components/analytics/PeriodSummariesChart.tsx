@@ -123,7 +123,7 @@ export function PeriodSummariesChart() {
               content={({ active, payload, label }) => {
                 if (active && payload && payload.length) {
                   return (
-                    <div className="bg-white border-2 border-[var(--color-border)] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
+                    <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
                       <p className="font-mono text-sm font-bold mb-2">{label}</p>
                       {payload.map((entry, index) => (
                         <p key={index} className="text-sm" style={{ color: entry.color }}>

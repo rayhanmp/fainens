@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { useTheme } from '../hooks/useTheme';
 import {
   DollarSign,
   Percent,
@@ -83,6 +84,7 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 ];
 
 function SettingsPage() {
+  const { theme, setTheme } = useTheme();
   const [settings, setSettings] = useState<AppSettings>({
     currency: 'IDR',
     dateFormat: 'DD/MM/YYYY',
@@ -484,10 +486,10 @@ function SettingsPage() {
                     ].map(({ value, label, icon: Icon }) => (
                       <button
                         key={value}
-                        onClick={() => setSettings({ ...settings, theme: value as any })}
+                        onClick={() => setTheme(value as 'light' | 'dark' | 'auto')}
                         className={cn(
                           'cursor-pointer flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all',
-                          settings.theme === value
+                          theme === value
                             ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10'
                             : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/50'
                         )}
@@ -498,7 +500,7 @@ function SettingsPage() {
                     ))}
                   </div>
                   <p className="text-xs text-[var(--color-muted)]">
-                    Auto follows your system preference. Theme changes will apply on next reload.
+                    Auto follows your system preference.
                   </p>
                 </div>
               </Card>

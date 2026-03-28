@@ -914,7 +914,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload as typeof chartData[0];
                     return (
-                      <div className="bg-white border-2 border-[var(--color-border)] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
+                      <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
                         <p className="font-mono text-sm font-bold">{data.name}</p>
                         <p className="font-mono">{formatCurrency(data.value)}</p>
                         <p className="text-xs text-[var(--color-muted)]">{data.percentage.toFixed(1)}%</p>
@@ -1010,7 +1010,7 @@ function TrendsReport() {
               content={({ active, payload, label }) => {
                 if (active && payload && payload.length) {
                   return (
-                    <div className="bg-white border-2 border-[var(--color-border)] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
+                    <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
                       <p className="font-mono text-sm font-bold">{label}</p>
                       {payload.map((entry, index) => (
                         <p key={index} className="text-sm" style={{ color: entry.color }}>

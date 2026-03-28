@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--color-background)]">
           <div className="max-w-lg w-full">
-            <div className="border-4 border-[var(--color-border)] bg-white p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+            <div className="border-4 border-[var(--color-border)] bg-[var(--color-surface)] p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
               {/* Icon */}
               <div className="flex justify-center mb-6">
                 <div className="w-20 h-20 bg-[var(--color-danger)]/20 border-4 border-[var(--color-danger)] flex items-center justify-center">

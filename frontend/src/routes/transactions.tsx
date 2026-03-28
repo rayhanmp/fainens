@@ -663,7 +663,7 @@ function TransactionsPage() {
               <option value="loan">Loan</option>
             </select>
           </div>
-          <div className="flex items-center justify-between rounded-xl bg-[var(--ref-tertiary-container)] p-5 text-[#e8e7ff] shadow-sm">
+          <div className="flex items-center justify-between rounded-xl bg-[var(--ref-tertiary-container)] p-5 text-[var(--ref-on-tertiary-container)] shadow-sm">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider opacity-90">Expense total</p>
               <p className="font-headline text-xl font-extrabold tracking-tight">

@@ -1070,7 +1070,7 @@ export function TransactionModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {/* Date */}
                 <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-[var(--color-surface)] transition-colors">
                     <StickyNote className="w-5 h-5 text-[var(--color-muted)]" />
                   </div>
                   <div>
@@ -1081,7 +1081,7 @@ export function TransactionModal({
 
                 {/* Purpose/Description */}
                 <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-[var(--color-surface)] transition-colors">
                     <TagIcon className="w-5 h-5 text-[var(--color-muted)]" />
                   </div>
                   <div>
@@ -1093,7 +1093,7 @@ export function TransactionModal({
                 {/* Category */}
                 {category && (
                   <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)]">
-                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-[var(--color-surface)] transition-colors">
                       <TagIcon className="w-5 h-5 text-[var(--color-muted)]" />
                     </div>
                     <div>
@@ -1114,7 +1114,7 @@ export function TransactionModal({
               {/* Note - Full Width */}
               {editingTransaction.notes && (
                 <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)] mb-6">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-white transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-[var(--color-surface)] transition-colors">
                     <StickyNote className="w-5 h-5 text-[var(--color-muted)]" />
                   </div>
                   <div className="flex-1">

@@ -252,7 +252,7 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
                 <button
                   type="button"
                   onClick={() => setIsContactModalOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-[var(--ref-surface-container-lowest)] border border-dashed border-[var(--color-border)] hover:border-primary/50 hover:bg-white transition-all group mb-4"
+                  className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-[var(--ref-surface-container-lowest)] border border-dashed border-[var(--color-border)] hover:border-primary/50 hover:bg-[var(--color-surface)] transition-all group mb-4"
                 >
                   <Plus className="w-4 h-4 text-[var(--color-text-secondary)] group-hover:text-primary transition-colors" />
                   <span className="text-sm font-medium text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)]">
@@ -279,7 +279,7 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
                             'w-full flex items-center p-3 rounded-xl transition-all group text-left',
                             isSelected
                               ? 'bg-[var(--ref-surface-container-lowest)] border-l-4 border-primary'
-                              : 'bg-[var(--ref-surface-container-lowest)] border-l-4 border-transparent hover:bg-white hover:border-primary/50'
+                              : 'bg-[var(--ref-surface-container-lowest)] border-l-4 border-transparent hover:bg-[var(--color-surface)] hover:border-primary/50'
                           )}
                         >
                           {/* Avatar */}

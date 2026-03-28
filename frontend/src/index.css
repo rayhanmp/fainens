@@ -33,6 +33,7 @@
   --ref-on-secondary-container: #0b6f62;
   --ref-tertiary: #2e2bc2;
   --ref-tertiary-container: #4849da;
+  --ref-on-tertiary-container: #e8e7ff;
   --ref-error: #ba1a1a;
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -53,6 +54,46 @@
   --space-lg: 1.5rem;
   --space-xl: 2rem;
   --space-2xl: 3rem;
+}
+
+/* Dark mode */
+.dark {
+  --color-background: #0f172a;
+  --color-surface: #1e293b;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-border: #334155;
+  --color-border-strong: #475569;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-success: #10b981;
+  --color-muted: #94a3b8;
+
+  /* Stitch reference palette - dark */
+  --ref-primary: #60a5fa;
+  --ref-primary-container: #3b82f6;
+  --ref-on-primary-container: #1e3a8a;
+  --ref-on-surface: #f1f5f9;
+  --ref-on-surface-variant: #94a3b8;
+  --ref-outline: #94a3b8;
+  --ref-outline-variant: #475569;
+  --ref-surface-container-low: #1e293b;
+  --ref-surface-container-lowest: #0f172a;
+  --ref-surface-container: #334155;
+  --ref-surface-container-highest: #475569;
+  --ref-secondary: #10b981;
+  --ref-secondary-container: #064e3b;
+  --ref-on-secondary-container: #a7f3d0;
+  --ref-tertiary: #818cf8;
+  --ref-tertiary-container: #3730a3;
+  --ref-on-tertiary-container: #e0e7ff;
+  --ref-error: #ef4444;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-editorial: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
 @theme {
@@ -462,4 +503,109 @@ button[data-variant="danger"]:focus-visible,
 }
 .reports-tabs-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* Dark mode fixes */
+.dark .bg-white {
+  background-color: var(--color-surface);
+}
+
+.dark .text-white {
+  color: #ffffff;
+}
+
+.dark .border-white {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark .hover\:bg-white:hover {
+  background-color: var(--color-surface);
+}
+
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="number"],
+.dark input[type="search"],
+.dark textarea,
+.dark select {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.dark .bg-slate-900 {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+.dark .bg-slate-800 {
+  background-color: var(--ref-surface-container);
+}
+
+.dark .text-slate-800 {
+  color: var(--color-text-primary);
+}
+
+.dark .text-slate-700 {
+  color: var(--color-text-secondary);
+}
+
+.dark .border-slate-200 {
+  border-color: var(--color-border);
+}
+
+.dark .bg-slate-50 {
+  background-color: var(--ref-surface-container-low);
+}
+
+.dark .dark\:bg-slate-800 {
+  background-color: var(--ref-surface-container);
+}
+
+/* Fix blur overlay effects for dark mode */
+.dark .bg-white\/5,
+.dark .bg-white\/10,
+.dark .bg-white\/20 {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Fix text on dark backgrounds */
+.dark .text-white\/50,
+.dark .text-white\/60,
+.dark .text-white\/70,
+.dark .text-white\/80 {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dark .text-blue-200 {
+  color: #93c5fd;
+}
+
+/* Fix chart tooltips and grids for dark mode */
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: var(--color-border);
+}
+
+.dark .recharts-text {
+  fill: var(--color-text-secondary);
+}
+
+/* Fix placeholder text colors for dark mode */
+.dark ::placeholder {
+  color: var(--color-muted);
+  opacity: 0.6;
+}
+
+/* Fix table header and cell colors for dark mode */
+.dark .brutalist-table th {
+  background-color: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
+.dark .brutalist-table tbody tr:nth-child(even) {
+  background-color: rgba(148, 163, 184, 0.08);
+}
+
+.dark .brutalist-table tbody tr:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
 }

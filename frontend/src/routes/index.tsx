@@ -804,7 +804,7 @@ function DashboardPage() {
               )}
               <Link
                 to="/budget"
-                className="mt-8 block w-full py-3 text-center bg-[var(--ref-surface-container-highest)] text-[var(--ref-on-surface-variant)] text-xs font-bold rounded-full hover:bg-white border border-transparent hover:border-[var(--color-border)] transition-colors"
+                className="mt-8 block w-full py-3 text-center bg-[var(--ref-surface-container-highest)] text-[var(--ref-on-surface-variant)] text-xs font-bold rounded-full hover:bg-[var(--color-surface)] border border-transparent hover:border-[var(--color-border)] transition-colors"
               >
                 Manage all budgets
               </Link>
