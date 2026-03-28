@@ -490,9 +490,9 @@ function DashboardPage() {
                 {formatCurrency(walletTotal)}
               </p>
             </div>
-            {analytics && (
+            {analytics && analytics.netWorth.netWorth > 0 && (
               <div className="relative z-10 mt-4 text-xs font-medium text-[var(--ref-on-primary-container)] opacity-95">
-                Net worth {formatCurrency(analytics.netWorth.netWorth)}
+                Net worth {formatCurrency(analytics.netWorth.netWorth)} ({Math.round(walletTotal / analytics.netWorth.netWorth * 100)}% cash)
               </div>
             )}
             <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:scale-125 transition-transform duration-500" />
@@ -521,6 +521,11 @@ function DashboardPage() {
               <p className="text-2xl sm:text-3xl font-bold font-headline text-[var(--ref-on-surface)] tracking-tight">
                 {periodExpense != null ? formatCurrency(periodExpense) : '—'}
               </p>
+              {periodProgress && periodProgress.hasIncome && (
+                <p className="text-xs text-[var(--color-muted)] mt-2">
+                  Budget: {formatCurrency(periodProgress.income)} · {Math.round((periodExpense || 0) / periodProgress.income * 100)}% used
+                </p>
+              )}
             </div>
             <div className="mt-4 flex items-center gap-2 text-[var(--ref-error)] text-xs font-semibold">
               <span className="inline-block rotate-0">↓</span>
@@ -544,10 +549,6 @@ function DashboardPage() {
                 </p>
               ) : (
                 <div className="space-y-3 mt-4">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[var(--ref-outline)]">Income</span>
-                    <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.income)}</span>
-                  </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-[var(--ref-outline)]">Daily budget</span>
                     <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.dailyBudget)}</span>
