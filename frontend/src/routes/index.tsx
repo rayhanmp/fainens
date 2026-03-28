@@ -91,6 +91,7 @@ function DashboardPage() {
     hasIncome: boolean;
     income: number;
     expenses: number;
+    totalBudget: number;
   } | null>(null);
   const [topExpenses, setTopExpenses] = useState<Array<{
     id: number;
@@ -217,6 +218,7 @@ function DashboardPage() {
           const burnRate = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
           const remainingBudget = calculatedIncome - calculatedExpense;
           const projectedEndBalance = walletBal + remainingBudget - (burnRate * daysRemaining);
+          const totalBudget = budgetPlans.reduce((sum: number, b: any) => sum + (b.plannedAmount || 0), 0);
           
           setPeriodProgress({
             daysRemaining,
@@ -227,6 +229,7 @@ function DashboardPage() {
             hasIncome: calculatedIncome > 0,
             income: calculatedIncome,
             expenses: calculatedExpense,
+            totalBudget,
           });
         }
 
@@ -340,6 +343,7 @@ function DashboardPage() {
         const burnRate = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
         const remainingBudget = calculatedIncome - calculatedExpense;
         const projectedEndBalance = walletTotal + remainingBudget - (burnRate * daysRemaining);
+        const totalBudget2 = budgetPlans2.reduce((sum: number, b: any) => sum + (b.plannedAmount || 0), 0);
         
         setPeriodProgress({
           daysRemaining,
@@ -350,6 +354,7 @@ function DashboardPage() {
           hasIncome: calculatedIncome > 0,
           income: calculatedIncome,
           expenses: calculatedExpense,
+          totalBudget: totalBudget2,
         });
 
         const expenseTxs = periodTxsArray
@@ -521,9 +526,9 @@ function DashboardPage() {
               <p className="text-2xl sm:text-3xl font-bold font-headline text-[var(--ref-on-surface)] tracking-tight">
                 {periodExpense != null ? formatCurrency(periodExpense) : '—'}
               </p>
-              {periodProgress && periodProgress.hasIncome && (
+              {periodProgress && periodProgress.totalBudget > 0 && (
                 <p className="text-xs text-[var(--color-muted)] mt-2">
-                  Budget: {formatCurrency(periodProgress.income)} · {Math.round((periodExpense || 0) / periodProgress.income * 100)}% used
+                  Budget: {formatCurrency(periodProgress.totalBudget)} · {Math.round((periodExpense || 0) / periodProgress.totalBudget * 100)}% used
                 </p>
               )}
             </div>
