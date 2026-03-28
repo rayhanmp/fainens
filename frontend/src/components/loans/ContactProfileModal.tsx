@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   XCircle,
   UserX,
+  Pencil,
+  X,
+  Save,
 } from 'lucide-react';
 
 
@@ -71,6 +74,17 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'loans'>('overview');
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    fullName: '',
+    nickname: '',
+    email: '',
+    phone: '',
+    relationshipType: '',
+    notes: '',
+  });
 
   useEffect(() => {
     if (isOpen && contactId) {
@@ -83,9 +97,19 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
     
     setIsLoading(true);
     setError('');
+    setIsEditing(false);
     try {
       const data = await api.contacts.get(contactId);
       setContact(data);
+      setEditForm({
+        name: data.name || '',
+        fullName: data.fullName || '',
+        nickname: data.nickname || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        relationshipType: data.relationshipType || '',
+        notes: data.notes || '',
+      });
     } catch (err) {
       setError('Failed to load contact details');
       console.error(err);
@@ -158,6 +182,30 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!contactId || !editForm.name.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const updated = await api.contacts.update(contactId, {
+        name: editForm.name.trim(),
+        fullName: editForm.fullName.trim() || null,
+        nickname: editForm.nickname.trim() || null,
+        email: editForm.email.trim() || null,
+        phone: editForm.phone.trim() || null,
+        relationshipType: editForm.relationshipType || null,
+        notes: editForm.notes.trim() || null,
+      });
+      setContact(prev => prev ? { ...prev, ...updated } : null);
+      setIsEditing(false);
+    } catch (err) {
+      setError('Failed to update contact');
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!contactId) return null;
 
   return (
@@ -184,52 +232,153 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
             <div className="flex flex-col items-center mb-6">
               <div className="w-24 h-24 rounded-full bg-[var(--ref-primary-container)] flex items-center justify-center mb-4">
                 <span className="text-2xl font-bold text-white">
-                  {getInitials(contact.name)}
+                  {getInitials(isEditing ? editForm.name : contact.name)}
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-[var(--color-text-primary)] text-center">
-                {contact.name}
-              </h2>
-              {contact.fullName && contact.fullName !== contact.name && (
-                <p className="text-sm text-[var(--color-muted)] text-center">
-                  {contact.fullName}
-                </p>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="text-xl font-bold text-[var(--color-text-primary)] text-center bg-transparent border-b border-[var(--color-border)] focus:border-primary outline-none w-full py-1"
+                  placeholder="Name"
+                />
+              ) : (
+                <h2 className="text-xl font-bold text-[var(--color-text-primary)] text-center">
+                  {contact.name}
+                </h2>
               )}
-              {contact.relationshipType && (
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                  className="text-sm text-[var(--color-muted)] text-center bg-transparent border-b border-[var(--color-border)] focus:border-primary outline-none w-full py-1 mt-1"
+                  placeholder="Full Name (optional)"
+                />
+              ) : (
+                contact.fullName && contact.fullName !== contact.name && (
+                  <p className="text-sm text-[var(--color-muted)] text-center">
+                    {contact.fullName}
+                  </p>
+                )
+              )}
+              {isEditing ? (
+                <select
+                  value={editForm.relationshipType}
+                  onChange={(e) => setEditForm({ ...editForm, relationshipType: e.target.value })}
+                  className="mt-2 px-3 py-1 bg-[var(--ref-surface-container-highest)] rounded-full text-xs font-medium text-[var(--color-text-secondary)] border-none outline-none cursor-pointer"
+                >
+                  <option value="">No relationship</option>
+                  {Object.entries(RELATIONSHIP_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              ) : contact.relationshipType ? (
                 <span className="mt-2 px-3 py-1 bg-[var(--ref-surface-container-highest)] rounded-full text-xs font-medium text-[var(--color-text-secondary)]">
                   {RELATIONSHIP_LABELS[contact.relationshipType] || contact.relationshipType}
                 </span>
+              ) : null}
+            </div>
+
+            {/* Edit/Save Actions */}
+            <div className="flex justify-center gap-2 mb-6">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="p-2 rounded-lg bg-[var(--ref-surface-container-highest)] text-[var(--color-muted)] hover:bg-[var(--color-border)] transition-colors"
+                    disabled={isSaving}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={isSaving || !editForm.name.trim()}
+                    className="p-2 rounded-lg bg-[var(--ref-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Edit
+                </button>
               )}
             </div>
 
             {/* Contact Details */}
             <div className="space-y-4">
-              {contact.phone && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
-                    <Phone className="w-5 h-5 text-[var(--color-muted)]" />
+              {isEditing ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
+                      <Phone className="w-5 h-5 text-[var(--color-muted)]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs text-[var(--color-muted)]">Phone</p>
+                      <input
+                        type="tel"
+                        value={editForm.phone}
+                        onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                        className="w-full text-sm font-medium text-[var(--color-text-primary)] bg-transparent border-b border-[var(--color-border)] focus:border-primary outline-none py-1"
+                        placeholder="Phone number"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-muted)]">Phone</p>
-                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                      {formatPhone(contact.phone)}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-[var(--color-muted)]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs text-[var(--color-muted)]">Email</p>
+                      <input
+                        type="email"
+                        value={editForm.email}
+                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                        className="w-full text-sm font-medium text-[var(--color-text-primary)] bg-transparent border-b border-[var(--color-border)] focus:border-primary outline-none py-1"
+                        placeholder="Email address"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {contact.email && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
-                    <Mail className="w-5 h-5 text-[var(--color-muted)]" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-muted)]">Email</p>
-                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                      {contact.email}
-                    </p>
-                  </div>
-                </div>
+                </>
+              ) : (
+                <>
+                  {contact.phone && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
+                        <Phone className="w-5 h-5 text-[var(--color-muted)]" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--color-muted)]">Phone</p>
+                        <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                          {formatPhone(contact.phone)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {contact.email && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
+                        <Mail className="w-5 h-5 text-[var(--color-muted)]" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--color-muted)]">Email</p>
+                        <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                          {contact.email}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="flex items-center gap-3">
