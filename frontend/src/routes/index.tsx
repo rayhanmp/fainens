@@ -232,7 +232,8 @@ function DashboardPage() {
 
         setAnalytics(dash);
         setRecent(recentTxList);
-        setBudgetRows(budgetPlans.slice(0, 5));
+        const sortedBudgets = [...budgetPlans].sort((a, b) => b.actualAmount - a.actualAmount);
+        setBudgetRows(sortedBudgets.slice(0, 5));
         setCategories(cats);
         setAccounts(accList);
         setTags(tagsList);
@@ -367,7 +368,8 @@ function DashboardPage() {
           .slice(0, 5);
         setTopExpenses(expenseTxs);
 
-        setBudgetRows(budgetPlans2.slice(0, 5));
+        const sortedBudgets2 = [...budgetPlans2].sort((a, b) => b.actualAmount - a.actualAmount);
+        setBudgetRows(sortedBudgets2.slice(0, 5));
         setCurrentPeriodId(periodId);
 
         const spendMap = new Map<number, number>();

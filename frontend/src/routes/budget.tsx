@@ -120,7 +120,7 @@ function BudgetPage() {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isApplyTemplateModalOpen, setIsApplyTemplateModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>('name');
+  const [sortBy, setSortBy] = useState<SortOption>('amountSpent');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [searchQuery, setSearchQuery] = useState('');
