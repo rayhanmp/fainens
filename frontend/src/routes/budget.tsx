@@ -25,6 +25,8 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  Sparkles,
+  Repeat,
 } from 'lucide-react';
 import {
   PieChart,
@@ -490,6 +492,24 @@ function BudgetPage() {
               >
                 <CalendarRange className="h-4 w-4" />
                 Salary periods
+              </button>
+            </Link>
+            <Link to="/wishlist">
+              <button
+                type="button"
+                className="px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center gap-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                Wishlist
+              </button>
+            </Link>
+            <Link to="/subscriptions">
+              <button
+                type="button"
+                className="px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center gap-2"
+              >
+                <Repeat className="h-4 w-4" />
+                Subscriptions
               </button>
             </Link>
             {periods.length > 0 && (

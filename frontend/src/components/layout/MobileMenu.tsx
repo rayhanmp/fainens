@@ -8,8 +8,6 @@ import {
   Tag,
   Banknote,
   PiggyBank,
-  Sparkles,
-  Repeat,
   BarChart3,
   Shield,
   Calculator,
@@ -29,8 +27,6 @@ const navItems = [
   { to: '/categories', label: 'Categories', icon: Tag },
   { to: '/salary-income', label: 'Salary & Income', icon: Banknote },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
-  { to: '/wishlist', label: 'Wishlist', icon: Sparkles },
-  { to: '/subscriptions', label: 'Subscriptions', icon: Repeat },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
 ] as const;
