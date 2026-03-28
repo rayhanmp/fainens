@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
@@ -89,6 +90,7 @@ function AccountsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountRow | null>(null);
+  const { confirm } = useConfirm();
 
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -169,7 +171,13 @@ function AccountsPage() {
   }, [userAccounts]);
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this account? It will be hidden from the ledger.')) return;
+    const confirmed = await confirm({
+      title: 'Delete Account',
+      message: 'Delete this account? It will be hidden from the ledger.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       const result = await api.accounts.delete(id);
       console.log('Delete result:', result);

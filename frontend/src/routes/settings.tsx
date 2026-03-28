@@ -10,6 +10,7 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
   DollarSign,
   Percent,
@@ -99,6 +100,7 @@ function SettingsPage() {
   const [showClearCacheModal, setShowClearCacheModal] = useState(false);
   const [showDeleteDataModal, setShowDeleteDataModal] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
+  const { confirm } = useConfirm();
   
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     transactions: true,
@@ -642,8 +644,14 @@ function SettingsPage() {
             </div>
             <div className="flex items-center gap-4">
               <span>Fainens v1.0.0</span>
-              <Button variant="secondary" size="sm" onClick={() => {
-                if (confirm('Are you sure you want to sign out?')) {
+              <Button variant="secondary" size="sm" onClick={async () => {
+                const confirmed = await confirm({
+                  title: 'Sign Out',
+                  message: 'Are you sure you want to sign out?',
+                  confirmLabel: 'Sign Out',
+                  variant: 'default',
+                });
+                if (confirmed) {
                   api.auth.logout();
                 }
               }}>

@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { CurrencyInput } from '../ui/CurrencyInput';
+import { useConfirm } from '../ui/ConfirmDialog';
 import { api } from '../../lib/api';
 import { formatCurrency, cn, getAccountTypeLabel, parseIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
@@ -133,6 +134,7 @@ export function TransactionModal({
 }: TransactionModalProps) {
   const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
+  const { confirm } = useConfirm();
   
   // Reset view mode when modal opens/closes
   useEffect(() => {
@@ -1403,7 +1405,13 @@ export function TransactionModal({
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (confirm('Delete this attachment?')) {
+                            const confirmed = await confirm({
+                              title: 'Delete Attachment',
+                              message: 'Are you sure you want to delete this attachment?',
+                              confirmLabel: 'Delete',
+                              variant: 'danger',
+                            });
+                            if (confirmed) {
                               try {
                                 await api.attachments.delete(att.id);
                                 setAttachments(attachments.filter(a => a.id !== att.id));

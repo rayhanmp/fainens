@@ -8,6 +8,7 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
   Plus,
   Sparkles,
@@ -56,6 +57,7 @@ function CategoriesPage() {
   const [tags, setTags] = useState<TagRow[]>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { confirm } = useConfirm();
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isTagModalOpen, setIsTagModalOpen] = useState(false);
@@ -160,7 +162,13 @@ function CategoriesPage() {
   };
 
   const handleDeleteCategory = async (id: number) => {
-    if (!confirm('Delete this category?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Category',
+      message: 'Are you sure you want to delete this category?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.categories.delete(id);
       await loadData();
@@ -170,7 +178,13 @@ function CategoriesPage() {
   };
 
   const handleDeleteTag = async (id: number) => {
-    if (!confirm('Delete this tag?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Tag',
+      message: 'Are you sure you want to delete this tag?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.tags.delete(id);
       await loadData();
@@ -557,7 +571,13 @@ function CategoriesPage() {
                   type="button"
                   variant="danger"
                   onClick={async () => {
-                    if (!confirm('Delete this tag?')) return;
+                    const confirmed = await confirm({
+                      title: 'Delete Tag',
+                      message: 'Are you sure you want to delete this tag?',
+                      confirmLabel: 'Delete',
+                      variant: 'danger',
+                    });
+                    if (!confirmed) return;
                     try {
                       await api.tags.delete(editingTag.id);
                       await loadData();

@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { formatCurrency, cn } from '../lib/utils';
 import {
   TrendingUp,
@@ -205,6 +206,7 @@ function TabButton({
 
 function SavingsSimulatorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('projection');
+  const { confirm } = useConfirm();
 
   return (
     <RequireAuth>
@@ -836,8 +838,14 @@ function ScenariosTab() {
     closeModal();
   };
 
-  const deleteScenario = (id: string) => {
-    if (confirm('Delete this scenario?')) {
+  const deleteScenario = async (id: string) => {
+    const confirmed = await confirm({
+      title: 'Delete Scenario',
+      message: 'Are you sure you want to delete this scenario?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (confirmed) {
       saveToStorage(scenarios.filter((s) => s.id !== id));
     }
   };

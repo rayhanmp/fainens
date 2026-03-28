@@ -10,6 +10,7 @@ import { NewLoanModal } from '../components/loans/NewLoanModal';
 import { RecordPaymentModal } from '../components/loans/RecordPaymentModal';
 import { ContactProfileModal } from '../components/loans/ContactProfileModal';
 import { NewContactModal } from '../components/loans/NewContactModal';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
   Plus,
   ArrowUpRight,
@@ -81,6 +82,7 @@ function LoansPage() {
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
   const [isNewContactModalOpen, setIsNewContactModalOpen] = useState(false);
+  const { confirm } = useConfirm();
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -454,7 +456,13 @@ function LoansPage() {
                       </p>
                       <button
                         onClick={async () => {
-                          if (confirm('Delete this loan? This will also delete the associated transaction.')) {
+                          const confirmed = await confirm({
+                            title: 'Delete Loan',
+                            message: 'Delete this loan? This will also delete the associated transaction.',
+                            confirmLabel: 'Delete',
+                            variant: 'danger',
+                          });
+                          if (confirmed) {
                             try {
                               await api.loans.delete(loan.id);
                               loadData();

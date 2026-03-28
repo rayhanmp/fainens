@@ -16,6 +16,7 @@ import {
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
 import { cn } from '../../lib/utils';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 function pathMatches(pathname: string, to: string) {
   if (to === '/') return pathname === '/';
@@ -45,6 +46,7 @@ const restNav: NavItem[] = [
 export function Sidebar() {
   const location = useLocation();
   const { logout } = useAuth();
+  const { confirm } = useConfirm();
 
   const isActive = (to: string) =>
     to === '/' ? location.pathname === '/' : pathMatches(location.pathname, to);
@@ -132,8 +134,14 @@ export function Sidebar() {
           </Link>
           <button
             type="button"
-            onClick={() => {
-              if (confirm('Are you sure you want to sign out?')) {
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: 'Sign Out',
+                message: 'Are you sure you want to sign out?',
+                confirmLabel: 'Sign Out',
+                variant: 'default',
+              });
+              if (confirmed) {
                 logout();
               }
             }}

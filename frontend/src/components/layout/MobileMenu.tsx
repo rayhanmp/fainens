@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../lib/auth';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -47,6 +48,7 @@ interface MobileMenuProps {
 export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const location = useLocation();
   const { logout } = useAuth();
+  const { confirm } = useConfirm();
 
   const handleLinkClick = () => onClose();
 
@@ -123,8 +125,14 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
         <div className="p-3 border-t border-[var(--color-border)] pb-[env(safe-area-inset-bottom)]">
           <button
             type="button"
-            onClick={() => {
-              if (confirm('Are you sure you want to sign out?')) {
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: 'Sign Out',
+                message: 'Are you sure you want to sign out?',
+                confirmLabel: 'Sign Out',
+                variant: 'default',
+              });
+              if (confirmed) {
                 logout();
               }
             }}

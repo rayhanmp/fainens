@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { Modal } from '../components/ui/Modal';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
@@ -153,6 +154,7 @@ function TransactionsPage() {
   const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; action?: string };
   const navigate = useNavigate({ from: '/transactions' });
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { confirm } = useConfirm();
 
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [accounts, setAccounts] = useState<WalletAccount[]>([]);
@@ -302,7 +304,13 @@ function TransactionsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this transaction?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Transaction',
+      message: 'Are you sure you want to delete this transaction? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.transactions.delete(id);
       await loadData();
@@ -332,9 +340,13 @@ function TransactionsPage() {
   const handleBulkDelete = async () => {
     if (selectedTransactions.size === 0) return;
     
-    if (!confirm(`Delete ${selectedTransactions.size} selected transaction(s)? This action cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: 'Delete Transactions',
+      message: `Are you sure you want to delete ${selectedTransactions.size} selected transaction(s)? This action cannot be undone.`,
+      confirmLabel: 'Delete All',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     
     try {
       await api.transactions.bulkDelete(Array.from(selectedTransactions));

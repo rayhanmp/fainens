@@ -18,6 +18,7 @@ import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { PageContainer } from '../components/ui/PageContainer';
 import { cn, formatCurrency, parseIdNominalToInt } from '../lib/utils';
 
@@ -124,6 +125,7 @@ function SubscriptionsPage() {
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const { confirm } = useConfirm();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -267,7 +269,13 @@ function SubscriptionsPage() {
   };
 
   const remove = async (id: number, label: string) => {
-    if (!window.confirm(`Remove "${label}" from subscriptions?`)) return;
+    const confirmed = await confirm({
+      title: 'Remove Subscription',
+      message: `Remove "${label}" from subscriptions?`,
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     setBanner(null);
     try {
       await api.subscriptions.delete(id);

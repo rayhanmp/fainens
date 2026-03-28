@@ -6,6 +6,7 @@ import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
@@ -124,6 +125,7 @@ function BudgetPage() {
   const [isApplyTemplateModalOpen, setIsApplyTemplateModalOpen] = useState(false);
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const { confirm } = useConfirm();
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
@@ -320,7 +322,13 @@ function BudgetPage() {
   };
 
   const deleteBudget = async (budgetId: number) => {
-    if (!confirm('Delete this budget line?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Budget Line',
+      message: 'Are you sure you want to delete this budget line?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.budgets.delete(budgetId);
       await loadData();
@@ -330,7 +338,13 @@ function BudgetPage() {
   };
 
   const deleteTemplate = async (templateId: number) => {
-    if (!confirm('Delete this template?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Template',
+      message: 'Are you sure you want to delete this template?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.budgets.templates.delete(templateId);
       await loadTemplates();
@@ -1247,8 +1261,14 @@ function BudgetPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => {
-                          if (confirm('This will replace all existing budgets. Continue?')) {
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: 'Replace All Budgets',
+                            message: 'This will replace all existing budgets. Continue?',
+                            confirmLabel: 'Replace',
+                            variant: 'warning',
+                          });
+                          if (confirmed) {
                             handleApplyTemplate(template.id, true);
                           }
                         }}

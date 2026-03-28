@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/utils';
 import { Plus, Calendar, ChevronRight, Edit2, Trash2, TrendingUp, Wallet } from 'lucide-react';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 
 export const Route = createFileRoute('/periods')({
   component: PeriodsPage,
@@ -27,6 +28,7 @@ function PeriodsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<Period | null>(null);
+  const { confirm } = useConfirm();
   const [suggestedDates, setSuggestedDates] = useState<{
     suggestedName: string;
     suggestedStartDate: string;
@@ -97,9 +99,13 @@ function PeriodsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this period? All associated budgets will be deleted.')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: 'Delete Period',
+      message: 'Are you sure you want to delete this period? All associated budgets will be deleted.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       const response = await fetch(`/api/periods/${id}`, {
         method: 'DELETE',
