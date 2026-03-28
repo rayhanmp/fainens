@@ -77,6 +77,7 @@ function DashboardPage() {
   const [periodIncome, setPeriodIncome] = useState<number | null>(null);
   const [periodExpense, setPeriodExpense] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPeriodLoading, setIsPeriodLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [tags, setTags] = useState<Array<{ id: number; name: string; color: string }>>([]);
@@ -292,7 +293,7 @@ function DashboardPage() {
         const period = periods.find(p => p.id === periodId);
         if (!period) return;
         
-        setIsLoading(true);
+        setIsPeriodLoading(true);
         setPeriodLabel(period.name);
 
         const periodStartDate = new Date(period.startDate).toISOString();
@@ -408,7 +409,7 @@ function DashboardPage() {
           .slice(0, 6);
         setCategorySpend(pie);
       } finally {
-        setIsLoading(false);
+        setIsPeriodLoading(false);
       }
     })();
   }, [selectedPeriodId]);
@@ -427,6 +428,27 @@ function DashboardPage() {
   };
 
   if (isLoading) {
+    return (
+      <RequireAuth>
+        <PageContainer>
+          <div className="h-8 w-48 rounded-md bg-[var(--ref-surface-container-highest)] animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <CardSkeleton className="min-h-[280px]" />
+            </div>
+            <CardSkeleton />
+          </div>
+        </PageContainer>
+      </RequireAuth>
+    );
+  }
+
+  if (isPeriodLoading) {
     return (
       <RequireAuth>
         <PageContainer>
