@@ -25,8 +25,11 @@ async function fetchApi<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    const error = await response.json().catch(() => ({ error: 'Unknown error', message: 'Something went wrong' }));
+    const errorMessage = error.message || error.error || `HTTP ${response.status}`;
+    const apiError = new Error(errorMessage) as Error & { response?: { data?: { error?: string; message?: string } } };
+    apiError.response = { data: { error: error.error, message: error.message } };
+    throw apiError;
   }
 
   if (response.status === 204) {
@@ -1518,5 +1521,120 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify({ parsed }),
       }),
+  },
+
+  // Splitbill
+  splitbill: {
+    scan: (imageData: string, filename: string) =>
+      fetchApi<{
+        parsed: {
+          merchantName: string;
+          receiptDate: string;
+          expenseCategory: string;
+          items: Array<{
+            name: string;
+            quantity: number;
+            unitPrice: number;
+            totalPrice: number;
+            notes: string | null;
+          }>;
+          subtotal: number;
+          tax: number;
+          taxPercent: number;
+          serviceFee: number;
+          servicePercent: number;
+          discount: number;
+          discountPercent: number;
+          total: number;
+          paymentMethod: string | null;
+          currency: string;
+        };
+        r2Key: string;
+      }>('/splitbill/scan', {
+        method: 'POST',
+        body: JSON.stringify({ imageData, filename }),
+      }),
+    calculate: (data: {
+      items: Array<{
+        name: string;
+        quantity: number;
+        unitPrice: number;
+        totalPrice: number;
+        notes: string | null;
+      }>;
+      people: Array<{ id?: number; name: string; isNew?: boolean }>;
+      assignments: Array<{ itemIndex: number; personIds: number[] }>;
+      tax: number;
+      serviceFee: number;
+      discount: number;
+    }) =>
+      fetchApi<Array<{
+        personId: number;
+        personName: string;
+        assignedItems: Array<{
+          name: string;
+          quantity: number;
+          unitPrice: number;
+          totalPrice: number;
+          notes: string | null;
+        }>;
+        subtotal: number;
+        taxShare: number;
+        serviceShare: number;
+        discountShare: number;
+        total: number;
+      }>>('/splitbill/calculate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    createLoans: (data: {
+      splitResults: Array<{
+        personId: number;
+        personName: string;
+        total: number;
+      }>;
+      isBorrower: boolean;
+      walletAccountId?: number;
+      expenseCategory?: string;
+    }) =>
+      fetchApi<Array<{
+        id: number;
+        contactId: number;
+        direction: string;
+        amountCents: number;
+        remainingCents: number;
+        status: string;
+      }>>('/splitbill/create-loans', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    history: () =>
+      fetchApi<Array<{
+        id: number;
+        merchantName: string | null;
+        receiptDate: number | null;
+        total: number;
+        status: string;
+        createdAt: number;
+      }>>('/splitbill/history'),
+    get: (id: number) =>
+      fetchApi<{
+        id: number;
+        merchantName: string | null;
+        receiptDate: number | null;
+        receiptImageR2Key: string | null;
+        parsedItemsJson: string | null;
+        subtotal: number | null;
+        tax: number | null;
+        serviceFee: number | null;
+        discount: number | null;
+        total: number;
+        peopleJson: string | null;
+        assignmentsJson: string | null;
+        splitResultJson: string | null;
+        loanIds: string | null;
+        status: string;
+        createdAt: number;
+      }>(`/splitbill/${id}`),
   },
 };

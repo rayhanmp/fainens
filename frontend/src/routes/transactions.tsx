@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate, useSearch, redirect } from '@tansta
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
+import { Modal } from '../components/ui/Modal';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
@@ -27,9 +28,9 @@ import {
   CircleDot,
   HandCoins,
   Clock,
+  Receipt,
 } from 'lucide-react';
-import {
-  TransactionModal,
+import { TransactionModal,
   type EditingTransaction,
   type WalletAccount,
 } from '../components/transactions/TransactionModal';
@@ -189,6 +190,10 @@ function TransactionsPage() {
       confidence: number;
     };
   } | null>(null);
+  const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false);
+  const [isSplitLoading, setIsSplitLoading] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
+  const splitFileInputRef = useRef<HTMLInputElement>(null);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -224,6 +229,43 @@ function TransactionsPage() {
       .then(setPeriods)
       .catch(() => setPeriods([]));
   }, []);
+
+  const handleSplitFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsSplitLoading(true);
+    setSplitError(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        try {
+          const result = await api.splitbill.scan(base64, file.name);
+          // Store parsed result in localStorage for split page to read
+          localStorage.setItem('splitbill_parsed', JSON.stringify({
+            parsed: result.parsed,
+            imageUrl: base64,
+          }));
+          // Navigate to split page
+          navigate({ to: '/split' });
+        } catch (err) {
+          setSplitError((err as Error).message || 'Failed to scan receipt');
+        } finally {
+          setIsSplitLoading(false);
+        }
+      };
+      reader.onerror = () => {
+        setSplitError('Failed to read file');
+        setIsSplitLoading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setSplitError((err as Error).message);
+      setIsSplitLoading(false);
+    }
+  }, [navigate]);
 
   const loadData = async () => {
     try {
@@ -497,6 +539,13 @@ function TransactionsPage() {
             <Button onClick={() => openModal()} className="rounded-full px-5 py-2.5">
               <Plus className="w-4 h-4 mr-2" />
               Add transaction
+            </Button>
+            <Button
+              onClick={() => setIsSplitBillModalOpen(true)}
+              variant="secondary"
+              className="rounded-full px-3 py-2.5"
+            >
+              <Receipt className="w-4 h-4" />
             </Button>
             <Button
               onClick={() => setIsPendingModalOpen(true)}
@@ -1011,6 +1060,46 @@ function TransactionsPage() {
             api.pendingTransactions.list().then((txs) => setPendingCount(txs.length)).catch(() => setPendingCount(0));
           }}
         />
+
+        <Modal
+          isOpen={isSplitBillModalOpen}
+          onClose={() => setIsSplitBillModalOpen(false)}
+          title="Split Bill"
+          subtitle="Upload a receipt to start splitting the bill"
+        >
+          <div className="flex flex-col items-center">
+            <div 
+              className="border-2 border-dashed border-[var(--color-border)] rounded-xl p-8 w-full text-center cursor-pointer hover:bg-[var(--color-surface)] transition-colors"
+              onClick={() => splitFileInputRef.current?.click()}
+            >
+              <input
+                ref={splitFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleSplitFileSelect}
+              />
+              {isSplitLoading ? (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                  <p className="text-sm text-[var(--color-text-secondary)]">Scanning receipt...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
+                    <Upload className="w-8 h-8 text-[var(--color-text-secondary)]" />
+                  </div>
+                  <p className="font-semibold text-lg">Upload Receipt</p>
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">PNG, JPG up to 5MB</p>
+                </>
+              )}
+            </div>
+            
+            {splitError && (
+              <p className="text-sm text-[var(--color-danger)] mt-4 text-center">{splitError}</p>
+            )}
+          </div>
+        </Modal>
       </PageContainer>
     </RequireAuth>
   );

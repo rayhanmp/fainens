@@ -393,3 +393,38 @@ export const pendingTransactions = sqliteTable("pending_transaction", {
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
 });
+
+/** Splitbill sessions - stores receipt OCR and split history */
+export const splitbillSessions = sqliteTable("splitbill_session", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+
+  merchantName: text("merchant_name"),
+  receiptDate: integer("receipt_date", { mode: "timestamp_ms" }),
+  receiptImageR2Key: text("receipt_image_r2_key"),
+
+  parsedItemsJson: text("parsed_items_json"),
+  subtotalCents: integer("subtotal_cents"),
+  taxCents: integer("tax_cents"),
+  serviceFeeCents: integer("service_fee_cents"),
+  discountCents: integer("discount_cents"),
+  totalCents: integer("total_cents").notNull(),
+
+  peopleJson: text("people_json"),
+  assignmentsJson: text("assignments_json"),
+
+  splitResultJson: text("split_result_json"),
+
+  loanIds: text("loan_ids"),
+
+  status: text("status").notNull().default("pending"),
+
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  statusIdx: index("idx_splitbill_status").on(table.status),
+  createdAtIdx: index("idx_splitbill_created_at").on(table.createdAt),
+}));

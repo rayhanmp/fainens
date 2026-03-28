@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
+import { Route as SplitRouteImport } from './routes/split'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SavingsSimulatorRouteImport } from './routes/savings-simulator'
 import { Route as SalaryIncomeRouteImport } from './routes/salary-income'
@@ -40,6 +41,11 @@ const TransactionsRoute = TransactionsRouteImport.update({
 const SubscriptionsRoute = SubscriptionsRouteImport.update({
   id: '/subscriptions',
   path: '/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SplitRoute = SplitRouteImport.update({
+  id: '/split',
+  path: '/split',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/salary-income': typeof SalaryIncomeRoute
   '/savings-simulator': typeof SavingsSimulatorRoute
   '/settings': typeof SettingsRoute
+  '/split': typeof SplitRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/salary-income': typeof SalaryIncomeRoute
   '/savings-simulator': typeof SavingsSimulatorRoute
   '/settings': typeof SettingsRoute
+  '/split': typeof SplitRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/salary-income': typeof SalaryIncomeRoute
   '/savings-simulator': typeof SavingsSimulatorRoute
   '/settings': typeof SettingsRoute
+  '/split': typeof SplitRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
@@ -188,6 +197,7 @@ export interface FileRouteTypes {
     | '/salary-income'
     | '/savings-simulator'
     | '/settings'
+    | '/split'
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/salary-income'
     | '/savings-simulator'
     | '/settings'
+    | '/split'
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/salary-income'
     | '/savings-simulator'
     | '/settings'
+    | '/split'
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
@@ -246,6 +258,7 @@ export interface RootRouteChildren {
   SalaryIncomeRoute: typeof SalaryIncomeRoute
   SavingsSimulatorRoute: typeof SavingsSimulatorRoute
   SettingsRoute: typeof SettingsRoute
+  SplitRoute: typeof SplitRoute
   SubscriptionsRoute: typeof SubscriptionsRoute
   TransactionsRoute: typeof TransactionsRoute
   WishlistRoute: typeof WishlistRoute
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       path: '/subscriptions'
       fullPath: '/subscriptions'
       preLoaderRoute: typeof SubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/split': {
+      id: '/split'
+      path: '/split'
+      fullPath: '/split'
+      preLoaderRoute: typeof SplitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -390,6 +410,7 @@ const rootRouteChildren: RootRouteChildren = {
   SalaryIncomeRoute: SalaryIncomeRoute,
   SavingsSimulatorRoute: SavingsSimulatorRoute,
   SettingsRoute: SettingsRoute,
+  SplitRoute: SplitRoute,
   SubscriptionsRoute: SubscriptionsRoute,
   TransactionsRoute: TransactionsRoute,
   WishlistRoute: WishlistRoute,
