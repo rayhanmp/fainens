@@ -9,6 +9,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import { NewLoanModal } from '../components/loans/NewLoanModal';
 import { RecordPaymentModal } from '../components/loans/RecordPaymentModal';
 import { ContactProfileModal } from '../components/loans/ContactProfileModal';
+import { NewContactModal } from '../components/loans/NewContactModal';
 import {
   Plus,
   ArrowUpRight,
@@ -79,6 +80,7 @@ function LoansPage() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
+  const [isNewContactModalOpen, setIsNewContactModalOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -126,6 +128,11 @@ function LoansPage() {
 
   const handleLoanCreated = () => {
     setIsNewLoanModalOpen(false);
+    loadData();
+  };
+
+  const handleContactCreated = () => {
+    setIsNewContactModalOpen(false);
     loadData();
   };
 
@@ -342,7 +349,7 @@ function LoansPage() {
 
             {/* Add Contact Card */}
             <button
-              onClick={() => setIsNewLoanModalOpen(true)}
+              onClick={() => setIsNewContactModalOpen(true)}
               className="border-2 border-dashed border-[var(--color-border)] rounded-2xl p-6 flex flex-col items-center justify-center min-h-[250px] group cursor-pointer hover:border-[var(--ref-primary)]/50 transition-colors text-left"
             >
               <div className="w-12 h-12 rounded-full bg-[var(--ref-surface-container-high)] flex items-center justify-center mb-4 group-hover:bg-[var(--ref-primary-container)] transition-colors">
@@ -496,6 +503,12 @@ function LoansPage() {
           setIsContactProfileOpen(false);
           setSelectedContactId(null);
         }}
+      />
+
+      <NewContactModal
+        isOpen={isNewContactModalOpen}
+        onClose={() => setIsNewContactModalOpen(false)}
+        onSuccess={handleContactCreated}
       />
     </RequireAuth>
   );
