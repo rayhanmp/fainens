@@ -130,7 +130,6 @@ export default async function (fastify: FastifyInstance) {
     const body = request.body as {
       name: string;
       fullName?: string | null;
-      nickname?: string | null;
       email?: string | null;
       phone?: string | null;
       relationshipType?: string | null;
@@ -147,7 +146,6 @@ export default async function (fastify: FastifyInstance) {
       .values({
         name: body.name.trim(),
         fullName: body.fullName ?? null,
-        nickname: body.nickname ?? null,
         email: body.email ?? null,
         phone: body.phone ?? null,
         relationshipType: body.relationshipType ?? null,
@@ -164,7 +162,6 @@ export default async function (fastify: FastifyInstance) {
     const body = request.body as Partial<{
       name: string;
       fullName: string | null;
-      nickname: string | null;
       email: string | null;
       phone: string | null;
       relationshipType: string | null;
@@ -187,7 +184,6 @@ export default async function (fastify: FastifyInstance) {
       .set({
         ...(body.name !== undefined && { name: body.name }),
         ...(body.fullName !== undefined && { fullName: body.fullName }),
-        ...(body.nickname !== undefined && { nickname: body.nickname }),
         ...(body.email !== undefined && { email: body.email }),
         ...(body.phone !== undefined && { phone: body.phone }),
         ...(body.relationshipType !== undefined && { relationshipType: body.relationshipType }),

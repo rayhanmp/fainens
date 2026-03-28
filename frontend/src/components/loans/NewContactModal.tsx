@@ -23,7 +23,6 @@ export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalP
   const [formData, setFormData] = useState({
     name: '',
     fullName: '',
-    nickname: '',
     email: '',
     phone: '',
     relationshipType: '',
@@ -44,7 +43,6 @@ export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalP
       const contact = await api.contacts.create({
         name: formData.name.trim(),
         fullName: formData.fullName.trim() || null,
-        nickname: formData.nickname.trim() || null,
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
         relationshipType: formData.relationshipType || null,
@@ -54,7 +52,6 @@ export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalP
       setFormData({
         name: '',
         fullName: '',
-        nickname: '',
         email: '',
         phone: '',
         relationshipType: '',
@@ -112,14 +109,14 @@ export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalP
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-              Nickname
+              Phone
             </label>
             <input
-              type="text"
-              value={formData.nickname}
-              onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               className="w-full px-3 py-2 bg-[var(--ref-surface-container-low)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:border-primary focus:outline-none"
-              placeholder="Nickname"
+              placeholder="Phone number"
             />
           </div>
           <div>
@@ -139,31 +136,17 @@ export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalP
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-              Phone
-            </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-3 py-2 bg-[var(--ref-surface-container-low)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:border-primary focus:outline-none"
-              placeholder="Phone number"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 bg-[var(--ref-surface-container-low)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:border-primary focus:outline-none"
-              placeholder="Email address"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
+            Email
+          </label>
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            className="w-full px-3 py-2 bg-[var(--ref-surface-container-low)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:border-primary focus:outline-none"
+            placeholder="Email address"
+          />
         </div>
 
         <div>

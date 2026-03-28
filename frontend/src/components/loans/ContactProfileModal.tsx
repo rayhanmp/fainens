@@ -17,6 +17,7 @@ import {
   Pencil,
   X,
   Save,
+  FileText,
 } from 'lucide-react';
 
 
@@ -43,7 +44,6 @@ interface ContactDetails {
   id: number;
   name: string;
   fullName: string | null;
-  nickname: string | null;
   email: string | null;
   phone: string | null;
   relationshipType: string | null;
@@ -79,7 +79,6 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
   const [editForm, setEditForm] = useState({
     name: '',
     fullName: '',
-    nickname: '',
     email: '',
     phone: '',
     relationshipType: '',
@@ -104,7 +103,6 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
       setEditForm({
         name: data.name || '',
         fullName: data.fullName || '',
-        nickname: data.nickname || '',
         email: data.email || '',
         phone: data.phone || '',
         relationshipType: data.relationshipType || '',
@@ -190,7 +188,6 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
       const updated = await api.contacts.update(contactId, {
         name: editForm.name.trim(),
         fullName: editForm.fullName.trim() || null,
-        nickname: editForm.nickname.trim() || null,
         email: editForm.email.trim() || null,
         phone: editForm.phone.trim() || null,
         relationshipType: editForm.relationshipType || null,
@@ -349,6 +346,21 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                       />
                     </div>
                   </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-[var(--color-muted)]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs text-[var(--color-muted)]">Notes</p>
+                      <textarea
+                        value={editForm.notes}
+                        onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                        className="w-full text-sm font-medium text-[var(--color-text-primary)] bg-transparent border-b border-[var(--color-border)] focus:border-primary outline-none py-1 resize-none"
+                        rows={2}
+                        placeholder="Notes..."
+                      />
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>
@@ -392,6 +404,20 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                   </p>
                 </div>
               </div>
+
+              {contact.notes && (
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-highest)] flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-[var(--color-muted)]" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--color-muted)]">Notes</p>
+                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                      {contact.notes}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

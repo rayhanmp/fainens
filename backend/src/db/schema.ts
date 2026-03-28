@@ -273,7 +273,6 @@ export const contacts = sqliteTable("contact", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   fullName: text("full_name"),
-  nickname: text("nickname"),
   email: text("email"),
   phone: text("phone"),
   relationshipType: text("relationship_type"),
