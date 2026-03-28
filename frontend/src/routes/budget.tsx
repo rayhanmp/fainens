@@ -27,6 +27,7 @@ import {
   X,
   Sparkles,
   Repeat,
+  Tag,
 } from 'lucide-react';
 import {
   PieChart,
@@ -492,6 +493,15 @@ function BudgetPage() {
               >
                 <CalendarRange className="h-4 w-4" />
                 Salary periods
+              </button>
+            </Link>
+            <Link to="/categories">
+              <button
+                type="button"
+                className="p-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center justify-center"
+                title="Categories"
+              >
+                <Tag className="h-4 w-4" />
               </button>
             </Link>
             <Link to="/wishlist">

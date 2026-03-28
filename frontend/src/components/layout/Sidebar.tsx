@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Wallet,
   Receipt,
-  Tag,
   PiggyBank,
   CreditCard,
   BarChart3,
@@ -37,7 +36,6 @@ const topNav: NavItem[] = [
 
 /** Everything after the divider */
 const restNav: NavItem[] = [
-  { to: '/categories', label: 'Categories', icon: Tag },
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
