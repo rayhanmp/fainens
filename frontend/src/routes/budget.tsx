@@ -7,20 +7,20 @@ import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn, parseIdNominalToInt } from '../lib/utils';
 import {
   Plus,
   PiggyBank,
   Target,
-  CalendarRange,
   ChevronRight,
   Save,
   Copy,
   TrendingUp,
   TrendingDown,
   MoreVertical,
+  MoreHorizontal,
   Search,
   ArrowUp,
   ArrowDown,
@@ -122,6 +122,24 @@ function BudgetPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isApplyTemplateModalOpen, setIsApplyTemplateModalOpen] = useState(false);
+  const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const templateMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menus on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (templateMenuRef.current && !templateMenuRef.current.contains(event.target as Node)) {
+        setIsTemplateMenuOpen(false);
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('amountSpent');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -486,42 +504,6 @@ function BudgetPage() {
             }
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Link to="/periods">
-              <button
-                type="button"
-                className="px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center gap-2"
-              >
-                <CalendarRange className="h-4 w-4" />
-                Salary periods
-              </button>
-            </Link>
-            <Link to="/categories">
-              <button
-                type="button"
-                className="p-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center justify-center"
-                title="Categories"
-              >
-                <Tag className="h-4 w-4" />
-              </button>
-            </Link>
-            <Link to="/wishlist">
-              <button
-                type="button"
-                className="px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center gap-2"
-              >
-                <Sparkles className="h-4 w-4" />
-                Wishlist
-              </button>
-            </Link>
-            <Link to="/subscriptions">
-              <button
-                type="button"
-                className="px-5 py-2.5 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-primary)] text-xs font-bold rounded-full editorial-shadow border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)] transition-colors inline-flex items-center gap-2"
-              >
-                <Repeat className="h-4 w-4" />
-                Subscriptions
-              </button>
-            </Link>
             {periods.length > 0 && (
               <Select
                 value={selectedPeriodId}
@@ -531,23 +513,77 @@ function BudgetPage() {
               />
             )}
             
-            {/* Template buttons */}
-            {templates.length > 0 && (
+            {/* Template button with dropdown */}
+            <div className="relative" ref={templateMenuRef}>
               <button
-                onClick={() => setIsApplyTemplateModalOpen(true)}
+                type="button"
+                onClick={() => setIsTemplateMenuOpen(!isTemplateMenuOpen)}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:text-white transition-colors shadow-sm border border-[var(--color-border)]"
-                title="Apply Template"
+                title="Templates"
               >
                 <Copy className="h-4 w-4" />
               </button>
-            )}
-            <button
-              onClick={openTemplateModal}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:text-white transition-colors shadow-sm border border-[var(--color-border)]"
-              title="Save as Template"
-            >
-              <Save className="h-4 w-4" />
-            </button>
+              {isTemplateMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--ref-surface-container-lowest)] rounded-xl editorial-shadow border border-[var(--color-border)] py-2 z-50">
+                  {templates.length > 0 && (
+                    <button
+                      onClick={() => { setIsApplyTemplateModalOpen(true); setIsTemplateMenuOpen(false); }}
+                      className="flex w-full items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Apply Template
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { openTemplateModal(); setIsTemplateMenuOpen(false); }}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save as Template
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* More menu - Categories, Wishlist, Subscriptions */}
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)] hover:bg-[var(--color-accent)] hover:text-white transition-colors shadow-sm border border-[var(--color-border)]"
+                title="More"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {isMoreMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--ref-surface-container-lowest)] rounded-xl editorial-shadow border border-[var(--color-border)] py-2 z-50">
+                  <Link
+                    to="/categories"
+                    className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                    onClick={() => setIsMoreMenuOpen(false)}
+                  >
+                    <Tag className="h-4 w-4" />
+                    Categories
+                  </Link>
+                  <Link
+                    to="/wishlist"
+                    className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                    onClick={() => setIsMoreMenuOpen(false)}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Wishlist
+                  </Link>
+                  <Link
+                    to="/subscriptions"
+                    className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                    onClick={() => setIsMoreMenuOpen(false)}
+                  >
+                    <Repeat className="h-4 w-4" />
+                    Subscriptions
+                  </Link>
+                </div>
+              )}
+            </div>
             
             <Button
               className="rounded-full px-6 py-3 shadow-lg shadow-[var(--color-accent)]/20"
