@@ -151,6 +151,17 @@ function generateGaussianRandom(): number {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
+function formatDateFromToday(monthsFromNow: number): string {
+  const date = addMonths(new Date(), monthsFromNow);
+  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
 function calculateMonthsToGoal(
   goalAmount: number,
   startingBalance: number,
@@ -206,7 +217,6 @@ function TabButton({
 
 function SavingsSimulatorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('projection');
-  const { confirm } = useConfirm();
 
   return (
     <RequireAuth>
@@ -313,7 +323,8 @@ function ProjectionTab() {
 
   const chartData = useMemo(() => {
     const baseData = projectionData.map((d) => ({
-      month: `M${d.month}`,
+      month: formatDateFromToday(d.month),
+      monthIndex: d.month,
       Balance: d.balance,
       'Real Balance': d.realBalance,
       Contributions: d.contributions,
@@ -524,7 +535,10 @@ function ProjectionTab() {
 
           {summary && (
             <Card className="p-6 border-2 border-[var(--color-accent)] bg-[var(--ref-surface-container-lowest)]">
-              <h3 className="font-headline text-lg font-bold mb-4 text-[var(--color-accent)]">Summary</h3>
+              <h3 className="font-headline text-lg font-bold mb-2 text-[var(--color-accent)]">Summary</h3>
+              <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+                {formatDateFromToday(0)} → {formatDateFromToday(effectiveMonths)}
+              </p>
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-[var(--color-text-secondary)]">Final Balance (Nominal)</span>
@@ -631,10 +645,16 @@ function ProjectionTab() {
                   <Tooltip
                     formatter={(value, name) => [formatCurrency(Number(value) || 0), name]}
                     labelFormatter={(label) => {
-                      const months = parseInt(label.replace('M', '')) || 0;
+                      const dataPoint = chartData.find((d) => d.month === label);
+                      const months = dataPoint?.monthIndex || 0;
                       const years = Math.floor(months / 12);
                       const remainingMonths = months % 12;
-                      return remainingMonths > 0 ? `${years} year${years !== 1 ? 's' : ''}, ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}` : `${years} year${years !== 1 ? 's' : ''}`;
+                      const timeStr = remainingMonths > 0 
+                        ? `${years} year${years !== 1 ? 's' : ''}, ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}` 
+                        : years > 0 
+                          ? `${years} year${years !== 1 ? 's' : ''}`
+                          : 'Now';
+                      return `${label} (${timeStr})`;
                     }}
                     contentStyle={{
                       backgroundColor: 'var(--color-surface)',
@@ -749,7 +769,7 @@ function ProjectionTab() {
                 <tbody>
                   {projectionData.filter((_, i) => i % Math.max(1, Math.floor(projectionData.length / 12)) === 0 || i === projectionData.length - 1).map((row) => (
                     <tr key={row.month} className="border-b border-[var(--color-border)]/50">
-                      <td className="py-2 px-3">Month {row.month}</td>
+                      <td className="py-2 px-3">{formatDateFromToday(row.month)}</td>
                       <td className="text-right py-2 px-3 font-medium">{formatCurrency(row.balance)}</td>
                       {enableInflation && (
                         <td className="text-right py-2 px-3 text-[var(--color-success)]">{formatCurrency(row.realBalance)}</td>
@@ -769,6 +789,7 @@ function ProjectionTab() {
 }
 
 function ScenariosTab() {
+  const { confirm: confirmDialog } = useConfirm();
   const [scenarios, setScenarios] = useState<Scenario[]>(() => {
     const saved = localStorage.getItem('savings-scenarios');
     return saved ? JSON.parse(saved) : [];
@@ -839,11 +860,11 @@ function ScenariosTab() {
   };
 
   const deleteScenario = async (id: string) => {
-    const confirmed = await confirm({
+    const confirmed = await confirmDialog({
       title: 'Delete Scenario',
       message: 'Are you sure you want to delete this scenario?',
       confirmLabel: 'Delete',
-      variant: 'danger',
+      variant: 'danger' as const,
     });
     if (confirmed) {
       saveToStorage(scenarios.filter((s) => s.id !== id));
