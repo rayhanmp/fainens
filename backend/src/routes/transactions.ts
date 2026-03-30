@@ -172,6 +172,65 @@ async function fetchTransactionDetails(txIds: number[]) {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
+  fastify.post("/api/transactions/recommend-category", async (request, reply) => {
+    const { name } = request.body as { name?: string };
+    
+    if (!name || name.trim().length < 2) {
+      reply.code(400).send({ error: "Transaction name is required (min 2 characters)" });
+      return;
+    }
+
+    const allCategories = await db.select().from(categories);
+    
+    if (allCategories.length === 0) {
+      reply.code(500).send({ error: "No categories found in database" });
+      return;
+    }
+
+    const categoryList = allCategories.map(c => `${c.icon || ''} ${c.name}`).join('\n');
+    const systemPrompt = `You are a transaction categorizer. Given a transaction name/description, recommend the most appropriate category from the list below.
+    
+CATEGORIES:
+${categoryList}
+
+RULES:
+- Return ONLY the exact category name (without icon) that best matches the transaction
+- If uncertain, choose "Others"
+- Do not explain your choice, just return the category name
+- Match based on the main purpose of the transaction`;
+
+    const userPrompt = `Transaction: "${name.trim()}"`;
+
+    try {
+      const { callOpenRouter } = await import('../services/openrouter');
+      const { env } = await import('../lib/env');
+      const apiKey = env.OPENROUTER_API_KEY;
+      
+      if (!apiKey) {
+        reply.code(500).send({ error: "OpenRouter API key not configured" });
+        return;
+      }
+
+      const recommendedName = await callOpenRouter(systemPrompt, userPrompt, apiKey);
+      const matchedCategory = allCategories.find(
+        c => c.name.toLowerCase() === recommendedName.trim().toLowerCase()
+      );
+
+      if (!matchedCategory) {
+        const othersCategory = allCategories.find(c => c.name.toLowerCase() === 'others');
+        if (othersCategory) {
+          return { categoryId: othersCategory.id, categoryName: othersCategory.name };
+        }
+        return { categoryId: allCategories[0].id, categoryName: allCategories[0].name };
+      }
+
+      return { categoryId: matchedCategory.id, categoryName: matchedCategory.name };
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ error: "Failed to get category recommendation" });
+    }
+  });
+
   fastify.get("/api/transactions", async (request, reply) => {
     const {
       startDate,
@@ -541,7 +600,7 @@ export default async function (fastify: FastifyInstance) {
       reply.code(201).send({ id: txResult.transactionId, ...txResult });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to create transaction" });
     }
   });
 
@@ -655,7 +714,7 @@ export default async function (fastify: FastifyInstance) {
       reply.code(200).send({ id: parseInt(id), ...updates });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to update transaction" });
     }
   });
 
@@ -720,7 +779,7 @@ export default async function (fastify: FastifyInstance) {
     } catch (err) {
       fastify.log.error(err);
       console.error('Delete transaction error:', err);
-      reply.code(500).send({ error: "Failed to delete transaction", details: (err as Error).message });
+      reply.code(500).send({ error: "Failed to delete transaction" });
     }
   });
 
@@ -840,7 +899,7 @@ export default async function (fastify: FastifyInstance) {
       reply.send({ preview, totalRows: rows.length });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to preview import" });
     }
   });
 
@@ -886,7 +945,7 @@ export default async function (fastify: FastifyInstance) {
       reply.code(201).send({ imported: results.length, transactions: results });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to import transactions" });
     }
   });
 }

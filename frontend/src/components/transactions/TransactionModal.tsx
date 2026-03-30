@@ -319,6 +319,44 @@ export function TransactionModal({
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [categoryRecommendation, setCategoryRecommendation] = useState<{
+    categoryId: number;
+    categoryName: string;
+  } | null>(null);
+  const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
+
+  // Debounced category recommendation
+  useEffect(() => {
+    if (!simpleForm.description || simpleForm.description.length < 3) {
+      setCategoryRecommendation(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      // Only recommend if no category is selected yet
+      if (simpleForm.categoryId) return;
+
+      setIsLoadingRecommendation(true);
+      try {
+        const result = await api.transactions.recommendCategory(simpleForm.description);
+        setCategoryRecommendation(result);
+      } catch {
+        setCategoryRecommendation(null);
+      } finally {
+        setIsLoadingRecommendation(false);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [simpleForm.description, simpleForm.categoryId]);
+
+  const applyCategoryRecommendation = () => {
+    if (categoryRecommendation) {
+      setSimpleForm({ ...simpleForm, categoryId: categoryRecommendation.categoryId.toString() });
+      setCategoryRecommendation(null);
+    }
+  };
+
   const walletAccounts = accounts.filter(
     (a) => (a.type === 'asset' || a.type === 'liability') && !a.systemKey,
   );
@@ -480,6 +518,7 @@ export function TransactionModal({
       setAttachments([]);
       setAttachmentUrls({});
       setPendingAttachments([]);
+      setCategoryRecommendation(null);
       setJournalForm({
         dateTime: toDatetimeLocal(),
         description: '',
@@ -1997,6 +2036,20 @@ export function TransactionModal({
                   className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
                   required
                 />
+                {categoryRecommendation && (
+                  <button
+                    type="button"
+                    onClick={applyCategoryRecommendation}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] text-sm hover:bg-[var(--color-accent)]/20 transition-colors"
+                  >
+                    <span>Recommend:</span>
+                    <span className="font-medium">{categoryRecommendation.categoryName}</span>
+                    <span className="text-xs opacity-70">(click to apply)</span>
+                  </button>
+                )}
+                {isLoadingRecommendation && !categoryRecommendation && (
+                  <p className="text-xs text-[var(--color-muted)]">Getting category recommendation...</p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
@@ -2125,7 +2178,10 @@ export function TransactionModal({
                   <div className="relative">
                     <select
                       value={simpleForm.categoryId}
-                      onChange={(e) => setSimpleForm({ ...simpleForm, categoryId: e.target.value })}
+                      onChange={(e) => {
+                        setSimpleForm({ ...simpleForm, categoryId: e.target.value });
+                        setCategoryRecommendation(null);
+                      }}
                       className={cn('w-full appearance-none', stitchSelect)}
                       required
                     >

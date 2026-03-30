@@ -245,6 +245,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids }),
     }),
+    recommendCategory: (name: string) => fetchApi<{ categoryId: number; categoryName: string }>('/transactions/recommend-category', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
     importPreview: (csvText: string) => fetchApi<{
       rows: Array<{
         rowNumber: number;
