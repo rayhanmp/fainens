@@ -62,3 +62,10 @@ drizzle/*.sql.json
 *.temp
 backend/data/
 nul
+
+# WAHA env (contains secrets)
+backend/waha/.env
+
+# Production environment
+.env.production
+

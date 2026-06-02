@@ -140,7 +140,7 @@ async function downloadImage(imageUrl: string): Promise<Buffer | null> {
     });
     
     const contentType = response.headers['content-type'];
-    if (!contentType || !contentType.startsWith('image/')) {
+    if (!contentType || typeof contentType !== 'string' || !contentType.startsWith('image/')) {
       return null;
     }
     

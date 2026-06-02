@@ -79,7 +79,7 @@ async function downloadImage(imageUrl: string): Promise<Buffer | null> {
     
     // Validate it's an image
     const contentType = response.headers['content-type'];
-    if (!contentType || !contentType.startsWith('image/')) {
+    if (!contentType || typeof contentType !== 'string' || !contentType.startsWith('image/')) {
       console.warn('Downloaded content is not an image:', contentType);
       return null;
     }
@@ -358,7 +358,6 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct | Scrap
   const cacheKey = getCacheKey(url);
   const cached = await cacheGet<ScrapedProduct>(cacheKey);
   if (cached && cached.success) {
-    console.log('Returning cached scrape result for:', url);
     return cached;
   }
   
