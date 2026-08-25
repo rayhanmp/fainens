@@ -1,17 +1,17 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "fs";
 import { promises as fs } from "fs";
 
 import { db } from "../db/client";
-import { attachments, transactions } from "../db/schema";
+import { attachments, auditLogs, storageDeletionOutbox, transactions } from "../db/schema";
 import {
   uploadFile,
-  deleteFile,
   generatePresignedDownloadUrl,
   generateAttachmentKey,
   getLocalFilePath,
 } from "../services/r2";
+import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 
 // Allowed MIME types for file uploads
 const ALLOWED_MIME_TYPES = [
@@ -131,11 +131,14 @@ export default async function (fastify: FastifyInstance) {
     }
 
     // Decode base64 data
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(body.data, "base64");
-    } catch {
+    const encoded = body.data.trim();
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
       reply.code(400).send({ error: "Invalid base64 data" });
+      return;
+    }
+    const buffer = Buffer.from(encoded, "base64");
+    if (buffer.length === 0) {
+      reply.code(400).send({ error: "Attachment data cannot be empty" });
       return;
     }
 
@@ -161,30 +164,57 @@ export default async function (fastify: FastifyInstance) {
 
     try {
       await uploadFile(key, buffer, body.contentType);
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.code(500).send({ error: "Failed to store uploaded file" });
+    }
 
-      // Store metadata in database
-      const [attachment] = await db
-        .insert(attachments)
-        .values({
-          transactionId: body.transactionId,
-          filename: sanitizedFilename,
-          r2Key: key,
-          mimetype: body.contentType,
-          fileSize: buffer.length,
-        })
-        .returning();
-
-      // Generate download URL
-      const downloadUrl = await generatePresignedDownloadUrl(key, 3600);
-
-      reply.code(201).send({
-        ...attachment,
-        downloadUrl,
-        expiresIn: 3600,
+    let attachment: any;
+    try {
+      attachment = db.transaction((tx) => {
+        const inserted = tx
+          .insert(attachments)
+          .values({
+            transactionId: body.transactionId,
+            filename: sanitizedFilename,
+            r2Key: key,
+            mimetype: body.contentType,
+            fileSize: buffer.length,
+          })
+          .returning()
+          .all()[0];
+        if (!inserted) throw new Error("Failed to store attachment metadata");
+        tx.insert(auditLogs).values({
+          entityType: "attachment",
+          entityId: inserted.id,
+          action: "create",
+          afterSnapshot: Buffer.from(JSON.stringify(inserted)),
+        }).run();
+        return inserted;
       });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(500).send({ error: "Failed to upload file" });
+      // The object already exists. Preserve a durable retry key even though
+      // its metadata transaction failed.
+      try {
+        const queued = await db
+          .insert(storageDeletionOutbox)
+          .values({ r2Key: key, entityType: "orphan_upload", entityId: body.transactionId })
+          .returning({ id: storageDeletionOutbox.id });
+        if (queued[0]) void processStorageDeletionOutbox([queued[0].id]);
+      } catch (queueError) {
+        fastify.log.error(queueError, "Failed to enqueue orphan upload cleanup");
+      }
+      return reply.code(500).send({ error: "Failed to save attachment metadata" });
+    }
+
+    try {
+      const downloadUrl = await generatePresignedDownloadUrl(key, 3600);
+      return reply.code(201).send({ ...attachment, downloadUrl, expiresIn: 3600 });
+    } catch (err) {
+      // The upload is valid even if a temporary signing operation fails.
+      fastify.log.error(err, "Attachment stored but download URL generation failed");
+      return reply.code(201).send({ ...attachment, downloadUrl: null, expiresIn: 0 });
     }
   });
 
@@ -192,53 +222,68 @@ export default async function (fastify: FastifyInstance) {
   fastify.delete("/api/attachments/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const [attachment] = await db
-      .select()
-      .from(attachments)
-      .where(eq(attachments.id, parseInt(id)))
-      .limit(1);
-
-    if (!attachment) {
-      reply.code(404).send({ error: "Attachment not found" });
-      return;
-    }
-
-    let storageDeleted = true;
-    let storageError: string | null = null;
-
-    // Delete from R2
     try {
-      await deleteFile(attachment.r2Key);
-    } catch (err) {
-      storageDeleted = false;
-      storageError = (err as Error).message;
-      fastify.log.error(err);
-    }
-
-    // Delete from database
-    await db.delete(attachments).where(eq(attachments.id, parseInt(id)));
-
-    // Report partial failure if storage delete failed
-    if (!storageDeleted) {
-      reply.code(200).send({ 
-        success: true, 
-        warning: "Attachment metadata deleted but file storage cleanup failed",
-        storageError 
+      const attachmentId = parseInt(id, 10);
+      if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+        return reply.code(400).send({ error: "Invalid attachment ID" });
+      }
+      const outboxId = db.transaction((tx) => {
+        const attachment = tx
+          .select()
+          .from(attachments)
+          .where(eq(attachments.id, attachmentId))
+          .limit(1)
+          .all()[0];
+        if (!attachment) return null;
+        const queued = tx
+          .insert(storageDeletionOutbox)
+          .values({
+            r2Key: attachment.r2Key,
+            entityType: "attachment",
+            entityId: attachment.id,
+          })
+          .returning({ id: storageDeletionOutbox.id })
+          .all()[0];
+        if (!queued) throw new Error("Failed to enqueue attachment cleanup");
+        tx.insert(auditLogs).values({
+          entityType: "attachment",
+          entityId: attachment.id,
+          action: "delete",
+          beforeSnapshot: Buffer.from(JSON.stringify(attachment)),
+        }).run();
+        tx.delete(attachments).where(eq(attachments.id, attachment.id)).run();
+        return queued.id;
       });
-      return;
-    }
+      if (outboxId === null) return reply.code(404).send({ error: "Attachment not found" });
 
-    reply.code(204).send();
+      const cleanup = await processStorageDeletionOutbox([outboxId]);
+      if (cleanup.failed > 0) {
+        return reply.code(202).send({
+          success: true,
+          cleanupPending: true,
+          message: "Attachment removed; storage cleanup is queued for retry",
+        });
+      }
+      return reply.code(204).send();
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.code(500).send({ error: "Failed to delete attachment" });
+    }
   });
 
   // Serve local files (when R2 is not configured)
   fastify.get("/api/attachments/local/*", async (request, reply) => {
-    const url = request.url;
-    const key = url.replace('/api/attachments/local/', '');
-    const decodedKey = decodeURIComponent(key);
-    const filePath = getLocalFilePath(decodedKey);
-
     try {
+      const key = request.url.replace('/api/attachments/local/', '');
+      const decodedKey = decodeURIComponent(key);
+      const filePath = getLocalFilePath(decodedKey);
+      const [attachment] = await db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.r2Key, decodedKey))
+        .limit(1);
+      if (!attachment) return reply.code(404).send({ error: "File not found" });
+
       // Check if file exists
       const stats = await fs.stat(filePath);
       if (!stats.isFile()) {
@@ -246,17 +291,10 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      // Get the attachment record to determine content type
-      const [attachment] = await db
-        .select()
-        .from(attachments)
-        .where(eq(attachments.r2Key, decodedKey))
-        .limit(1);
-
-      if (attachment) {
-        reply.header("Content-Type", attachment.mimetype);
-        reply.header("Content-Disposition", `inline; filename="${attachment.filename}"`);
-      }
+      reply.header("Content-Type", attachment.mimetype);
+      reply.header("X-Content-Type-Options", "nosniff");
+      const safeDownloadName = attachment.filename.replace(/["\r\n]/g, "_");
+      reply.header("Content-Disposition", `inline; filename="${safeDownloadName}"`);
 
       // Stream the file
       const stream = createReadStream(filePath);
@@ -268,12 +306,10 @@ export default async function (fastify: FastifyInstance) {
 
   // Serve wishlist images (when R2 is not configured)
   fastify.get("/api/wishlist-images/*", async (request, reply) => {
-    const url = request.url;
-    const key = url.replace('/api/wishlist-images/', '');
-    const decodedKey = decodeURIComponent(key);
-    const filePath = getLocalFilePath(decodedKey);
-
     try {
+      const key = request.url.replace('/api/wishlist-images/', '');
+      const decodedKey = decodeURIComponent(key);
+      const filePath = getLocalFilePath(decodedKey);
       const stats = await fs.stat(filePath);
       if (!stats.isFile()) {
         reply.code(404).send({ error: "Image not found" });

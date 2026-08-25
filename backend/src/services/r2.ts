@@ -6,9 +6,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promises as fs } from "fs";
-import { join, dirname } from "path";
+import { dirname, join } from "path";
 
 import { env } from "../lib/env";
+import { resolveStorageKey } from "./storage-path";
 
 // Check if R2 is configured with valid values
 const isR2Configured = () => {
@@ -24,6 +25,10 @@ const isR2Configured = () => {
 
 // Local storage path for when R2 is not configured
 const LOCAL_STORAGE_PATH = join(process.cwd(), "data", "attachments");
+
+export function resolveLocalStorageKey(key: string): string {
+  return resolveStorageKey(LOCAL_STORAGE_PATH, key);
+}
 
 // Ensure local storage directory exists
 async function ensureLocalStorageDir(): Promise<void> {
@@ -76,7 +81,7 @@ export async function uploadFile(
   // If R2 is not configured, store locally
   if (!isR2Configured()) {
     await ensureLocalStorageDir();
-    const filePath = join(LOCAL_STORAGE_PATH, key);
+    const filePath = resolveLocalStorageKey(key);
     
     // Ensure subdirectory exists
     const dir = dirname(filePath);
@@ -109,6 +114,7 @@ export async function generatePresignedDownloadUrl(
 ): Promise<string> {
   // If R2 is not configured, serve local file directly
   if (!isR2Configured()) {
+    resolveLocalStorageKey(key);
     // For local files, we serve them through a different endpoint
     // Return a local URL that the backend will handle
     return `/api/attachments/local/${encodeURIComponent(key)}`;
@@ -131,10 +137,10 @@ export async function deleteFile(key: string): Promise<void> {
   // If R2 is not configured, delete local file
   if (!isR2Configured()) {
     try {
-      const filePath = join(LOCAL_STORAGE_PATH, key);
+      const filePath = resolveLocalStorageKey(key);
       await fs.unlink(filePath);
-    } catch {
-      // File might not exist, ignore error
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     return;
   }
@@ -166,5 +172,5 @@ export function generateAttachmentKey(
 
 // Get local file path for serving files stored locally
 export function getLocalFilePath(key: string): string {
-  return join(LOCAL_STORAGE_PATH, key);
+  return resolveLocalStorageKey(key);
 }
