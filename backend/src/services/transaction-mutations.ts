@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import { invalidateOnTransactionMutation } from "../cache";
 import { db } from "../db/client";
@@ -21,8 +21,7 @@ import { validateJournalLines, type ValidatedJournalLine } from "./journal-valid
 import { getIntrinsicTransactionProtectionReasons } from "./transaction-mutation-policy";
 import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
 import { bumpFinancialRevisionSync } from "./financial-revision";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { assertJournalPeriodOpen, findPeriodForDate, inclusivePeriodEnd } from "./period-locking";
 
 export class TransactionMutationError extends Error {
   constructor(message: string, public readonly statusCode: number) {
@@ -39,29 +38,18 @@ function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : Number(value);
 }
 
-function inclusivePeriodEnd(end: number): number {
-  return end % DAY_MS === 0 ? end + DAY_MS - 1 : end;
-}
-
 export async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
-  const candidates = await db
-    .select({ id: salaryPeriods.id, endDate: salaryPeriods.endDate })
-    .from(salaryPeriods)
-    .where(lte(salaryPeriods.startDate, dateMs));
-  const containing = candidates
-    .filter((period) => dateMs <= inclusivePeriodEnd(Number(period.endDate)))
-    .sort((a, b) => Number(b.endDate) - Number(a.endDate))[0];
-  return containing?.id ?? null;
+  return (await findPeriodForDate(dateMs))?.id ?? null;
 }
 
 function findPeriodInCandidates(
   dateMs: number,
-  candidates: Array<{ id: number; startDate: number; endDate: number }>,
-): number | null {
+  candidates: Array<{ id: number; startDate: number; endDate: number; status: string }>,
+): { id: number; status: string } | null {
   const containing = candidates
     .filter((period) => dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate)))
     .sort((a, b) => Number(b.startDate) - Number(a.startDate))[0];
-  return containing?.id ?? null;
+  return containing ? { id: containing.id, status: containing.status } : null;
 }
 
 function assertGenericMutationAllowed(tx: any, executor: any): void {
@@ -167,7 +155,7 @@ export async function updateTransactionAtomically(
     throw new TransactionMutationError("Transaction type cannot be changed through the generic editor", 409);
   }
 
-  const periodId = await findPeriodIdForDate(effectiveDate);
+  const periodId = await assertJournalPeriodOpen(effectiveDate, null);
   const validatedLines = input.lines === undefined ? undefined : validateJournalLines(input.lines).lines;
   if (validatedLines) {
     const accountIds = [...new Set(validatedLines.map((line) => line.accountId))];
@@ -397,7 +385,7 @@ export async function importTransactionsAtomically(input: {
   }
 
   const periods = await db
-    .select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+    .select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, status: salaryPeriods.status })
     .from(salaryPeriods);
   const normalizedRows = input.rows.map((row, index) => {
     const dateMs = new Date(row.date).getTime();
@@ -411,12 +399,16 @@ export async function importTransactionsAtomically(input: {
     if (!description) {
       throw new TransactionMutationError(`Row ${index + 1} description is required`, 400);
     }
+    const period = findPeriodInCandidates(dateMs, periods);
+    if (period?.status === "closed") {
+      throw new TransactionMutationError(`Period ${period.id} is closed; reopen it before importing transactions`, 409);
+    }
     return {
       dateMs,
       amount: Math.abs(row.amount),
       kind: row.amount >= 0 ? "expense" as const : "income" as const,
       description,
-      periodId: findPeriodInCandidates(dateMs, periods),
+      periodId: period?.id ?? null,
     };
   });
 

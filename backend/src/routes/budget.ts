@@ -165,6 +165,10 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "Salary period not found" });
       return;
     }
+    if (period.status === "closed") {
+      reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
+      return;
+    }
 
     const [category] = await db
       .select()
@@ -216,6 +220,12 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "Budget plan not found" });
       return;
     }
+    const [period] = await db.select({ status: salaryPeriods.status }).from(salaryPeriods)
+      .where(eq(salaryPeriods.id, existing.periodId)).limit(1);
+    if (!period) return reply.code(409).send({ error: "Budget plan has no valid period" });
+    if (period.status === "closed") {
+      return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
+    }
 
     const [updated] = await db
       .update(budgetPlans)
@@ -240,6 +250,12 @@ export default async function (fastify: FastifyInstance) {
     if (!existing) {
       reply.code(404).send({ error: "Budget plan not found" });
       return;
+    }
+    const [period] = await db.select({ status: salaryPeriods.status }).from(salaryPeriods)
+      .where(eq(salaryPeriods.id, existing.periodId)).limit(1);
+    if (!period) return reply.code(409).send({ error: "Budget plan has no valid period" });
+    if (period.status === "closed") {
+      return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
     }
 
     await db.delete(budgetPlans).where(eq(budgetPlans.id, parseInt(id)));
@@ -343,6 +359,13 @@ export default async function (fastify: FastifyInstance) {
     if (!body.periodId) {
       reply.code(400).send({ error: "periodId is required" });
       return;
+    }
+
+    const [targetPeriod] = await db.select({ status: salaryPeriods.status }).from(salaryPeriods)
+      .where(eq(salaryPeriods.id, body.periodId)).limit(1);
+    if (!targetPeriod) return reply.code(404).send({ error: "Salary period not found" });
+    if (targetPeriod.status === "closed") {
+      return reply.code(409).send({ error: "Period is closed; reopen it before applying a budget template" });
     }
 
     // Get template

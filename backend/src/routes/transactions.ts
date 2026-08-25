@@ -1,8 +1,8 @@
-import { eq, and, desc, sql, inArray, count, SQL, lte, gte } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, count, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods, auditLogs } from "../db/schema";
+import { transactions, transactionLines, transactionTags, tags, accounts, categories, auditLogs } from "../db/schema";
 import {
   createJournalEntry,
   createSimpleTransaction,
@@ -18,6 +18,7 @@ import {
 } from "../services/transaction-mutations";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { parseIdrInteger } from "../services/money";
+import { findPeriodForDate } from "../services/period-locking";
 
 // Pagination constants
 const MAX_LIMIT = 100;
@@ -25,17 +26,7 @@ const DEFAULT_LIMIT = 50;
 
 // Helper to find period ID based on transaction date
 async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
-  const [period] = await db
-    .select({ id: salaryPeriods.id })
-    .from(salaryPeriods)
-    .where(
-      and(
-        lte(salaryPeriods.startDate, dateMs),
-        gte(salaryPeriods.endDate, dateMs)
-      )
-    )
-    .limit(1);
-  return period?.id ?? null;
+  return (await findPeriodForDate(dateMs))?.id ?? null;
 }
 
 // Transaction columns selection - shared across all queries to avoid duplication
@@ -315,15 +306,7 @@ RULES:
     }
     // If no periodId is provided AND no date range is specified, default to current period
     else if (!periodIdToUse && !startDate && !endDate) {
-      const now = Date.now();
-      const [currentPeriod] = await db
-        .select({ id: salaryPeriods.id })
-        .from(salaryPeriods)
-        .where(and(
-          lte(salaryPeriods.startDate, now),
-          gte(salaryPeriods.endDate, now)
-        ))
-        .limit(1);
+      const currentPeriod = await findPeriodForDate(Date.now());
       
       if (currentPeriod) {
         periodIdToUse = String(currentPeriod.id);

@@ -5,6 +5,10 @@ import { db as defaultDb } from "../db/client";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { validateJournalLines } from "./journal-validation";
 import { bumpFinancialRevisionSync } from "./financial-revision";
+import {
+  assertJournalPeriodOpen,
+  assertPreparedJournalPeriodOpenSync,
+} from "./period-locking";
 
 export type JournalLineInput = {
   accountId: number;
@@ -49,6 +53,7 @@ export type CreateJournalEntryInput = {
  */
 export type PreparedJournalEntry = {
   dateMs: number;
+  periodId: number | null;
   validatedLines: JournalLineInput[];
   totalDebit: number;
   totalCredit: number;
@@ -441,9 +446,11 @@ export async function prepareJournalEntry(
   if (dueMs != null && !Number.isFinite(dueMs)) {
     throw new Error("Invalid due date");
   }
+  const periodId = await assertJournalPeriodOpen(dateMs, input.periodId, dbLike);
 
   return {
     dateMs,
+    periodId,
     validatedLines,
     totalDebit,
     totalCredit,
@@ -458,7 +465,7 @@ export async function prepareJournalEntry(
       place: input.place ?? null,
       txType: input.txType ?? "manual",
       status: "posted",
-      periodId: input.periodId ?? null,
+      periodId,
       linkedTxId: input.linkedTxId ?? null,
       reversalOfTxId: input.reversalOfTxId ?? null,
       categoryId: input.categoryId ?? null,
@@ -480,6 +487,7 @@ export async function prepareJournalEntry(
  * caller's outer transaction.
  */
 export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJournalEntry): number {
+  assertPreparedJournalPeriodOpenSync(tx, prepared);
   const inserted = tx
     .insert(transactions)
     .values(prepared.transactionValues)
@@ -602,7 +610,7 @@ export async function createJournalEntry(
     await invalidateOnTransactionMutation({
       transactionId: result.transactionId,
       affectedAccountIds: prepared.accountIds,
-      affectedPeriodIds: input.periodId != null ? [input.periodId] : undefined,
+      affectedPeriodIds: prepared.periodId != null ? [prepared.periodId] : undefined,
       revisionBumped: true,
     });
   }

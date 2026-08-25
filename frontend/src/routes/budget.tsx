@@ -60,6 +60,7 @@ interface Period {
   name: string;
   startDate: number;
   endDate: number;
+  status: 'open' | 'closed';
 }
 
 interface Category {
@@ -236,6 +237,7 @@ function BudgetPage() {
   };
 
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
+  const isPeriodClosed = selectedPeriod?.status === 'closed';
 
   const handleCreateBudget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -362,6 +364,7 @@ function BudgetPage() {
   };
 
   const openBudgetModal = () => {
+    if (isPeriodClosed) return;
     setBudgetForm({ categoryId: '', plannedAmount: '' });
     setFormError('');
     setIsModalOpen(true);
@@ -374,6 +377,7 @@ function BudgetPage() {
   };
 
   const openEditModal = (budget: BudgetRow) => {
+    if (isPeriodClosed) return;
     setEditingBudget(budget);
     setBudgetForm({
       categoryId: budget.categoryId.toString(),
@@ -537,7 +541,7 @@ function BudgetPage() {
             title="Localized budgeting"
             description={
               selectedPeriod
-                ? `${selectedPeriod.name} · ${formatPeriodRange(selectedPeriod)}`
+                ? `${selectedPeriod.name} · ${formatPeriodRange(selectedPeriod)}${isPeriodClosed ? ' · CLOSED — read only' : ''}`
                 : 'Plan spending by category for each salary period.'
             }
           />
@@ -546,7 +550,7 @@ function BudgetPage() {
               <Select
                 value={selectedPeriodId}
                 onChange={(e) => setSelectedPeriodId(e.target.value)}
-                options={periods.map((p) => ({ value: p.id.toString(), label: p.name }))}
+                options={periods.map((p) => ({ value: p.id.toString(), label: `${p.name}${p.status === 'closed' ? ' (closed)' : ''}` }))}
                 className="min-w-[180px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold"
               />
             )}
@@ -565,8 +569,9 @@ function BudgetPage() {
                 <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--ref-surface-container-lowest)] rounded-xl editorial-shadow border border-[var(--color-border)] py-2 z-50">
                   {templates.length > 0 && (
                     <button
+                      disabled={isPeriodClosed}
                       onClick={() => { setIsApplyTemplateModalOpen(true); setIsTemplateMenuOpen(false); }}
-                      className="flex w-full items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
+                      className="flex w-full items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Copy className="h-4 w-4" />
                       Apply Template
@@ -626,7 +631,7 @@ function BudgetPage() {
             <Button
               className="rounded-full px-6 py-3 shadow-lg shadow-[var(--color-accent)]/20"
               onClick={openBudgetModal}
-              disabled={!selectedPeriod}
+              disabled={!selectedPeriod || isPeriodClosed}
             >
               <Plus className="h-4 w-4" />
               Add budget line
@@ -692,6 +697,12 @@ function BudgetPage() {
                 {totalRemaining >= 0 ? 'Headroom this period' : 'Over budget'}
               </div>
             </div>
+          </div>
+        )}
+
+        {isPeriodClosed && (
+          <div className="rounded-xl border border-[var(--color-warning)] bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-[var(--color-text-primary)]">
+            This accounting period is closed. Budget history is read-only until it is reopened from Salary Periods.
           </div>
         )}
 
@@ -845,12 +856,12 @@ function BudgetPage() {
               Add a category budget to track planned vs actual spending.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
-              <Button className="rounded-full" onClick={openBudgetModal}>
+              <Button className="rounded-full" onClick={openBudgetModal} disabled={isPeriodClosed}>
                 <Plus className="w-4 h-4" />
                 Add first budget line
               </Button>
               {templates.length > 0 && (
-                <Button variant="secondary" className="rounded-full" onClick={() => setIsApplyTemplateModalOpen(true)}>
+                <Button variant="secondary" className="rounded-full" onClick={() => setIsApplyTemplateModalOpen(true)} disabled={isPeriodClosed}>
                   <Copy className="w-4 h-4 mr-1" />
                   Apply Template
                 </Button>
@@ -926,7 +937,7 @@ function BudgetPage() {
                               >
                                 {Math.min(pct, 999).toFixed(0)}%
                               </span>
-                              <div className="relative">
+                              {!isPeriodClosed && <div className="relative">
                                 <button
                                   type="button"
                                   onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
@@ -967,7 +978,7 @@ function BudgetPage() {
                                     </div>
                                   </>
                                 )}
-                              </div>
+                              </div>}
                             </div>
                           </div>
                           <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-lowest)] mt-2" style={{ marginRight: '44px' }}>

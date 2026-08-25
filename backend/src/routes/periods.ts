@@ -1,21 +1,17 @@
-import { eq, desc, sql, and, lte, gte } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { salaryPeriods, budgetPlans, categories, salarySettings, transactions } from "../db/schema";
+import { salaryPeriods, budgetPlans, categories, salarySettings, transactions, auditLogs } from "../db/schema";
 import { precomputePeriodSummary } from "../cache/precompute";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-function inclusiveEnd(ms: number): number {
-  return ms % DAY_MS === 0 ? ms + DAY_MS - 1 : ms;
-}
+import { inclusivePeriodEnd } from "../services/period-locking";
 
 async function assertNoPeriodOverlap(startMs: number, endMs: number, excludeId?: number): Promise<void> {
   const periods = await db.select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
     .from(salaryPeriods);
   const overlap = periods.find((period) => period.id !== excludeId &&
-    startMs <= inclusiveEnd(Number(period.endDate)) && Number(period.startDate) <= inclusiveEnd(endMs));
+    startMs <= inclusivePeriodEnd(Number(period.endDate)) && Number(period.startDate) <= inclusivePeriodEnd(endMs));
   if (overlap) throw new Error(`Period overlaps existing period ${overlap.id}`);
 }
 
@@ -126,6 +122,10 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "Period not found" });
       return;
     }
+    if (existing.status === "closed") {
+      reply.code(409).send({ error: "Period is closed; reopen it before changing dates or name" });
+      return;
+    }
 
     const updates: any = {};
 
@@ -166,6 +166,87 @@ export default async function (fastify: FastifyInstance) {
     return updated;
   });
 
+  // Close a completed accounting period. Closing is deliberate, audited, and
+  // blocks any new/backdated journal in the period at the database layer.
+  fastify.post("/api/periods/:id/close", async (request, reply) => {
+    const periodId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(periodId) || periodId <= 0) {
+      return reply.code(400).send({ error: "Invalid period ID" });
+    }
+    try {
+      const now = Date.now();
+      const closed = db.transaction((tx) => {
+        const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).all()[0];
+        if (!period) throw new Error("Period not found");
+        if (period.status === "closed") throw new Error("Period is already closed");
+
+        // Drafts are not part of statements, but allowing them to survive a
+        // close would make their eventual posting ambiguous.
+        const draft = tx.select({ id: transactions.id }).from(transactions)
+          .where(and(
+            eq(transactions.status, "draft"),
+            sql`(${transactions.periodId} = ${periodId} OR (${transactions.date} >= ${period.startDate} AND ${transactions.date} <= ${inclusivePeriodEnd(Number(period.endDate))}))`,
+          ))
+          .limit(1).all()[0];
+        if (draft) throw new Error(`Resolve or remove draft transaction ${draft.id} before closing this period`);
+
+        const updated = tx.update(salaryPeriods)
+          .set({ status: "closed", closedAt: new Date(now), reopenedAt: null })
+          .where(and(eq(salaryPeriods.id, periodId), eq(salaryPeriods.status, "open")))
+          .returning().all()[0];
+        if (!updated) throw new Error("Period was changed; retry closing it");
+        tx.insert(auditLogs).values({
+          entityType: "salary_period",
+          entityId: periodId,
+          action: "close",
+          beforeSnapshot: Buffer.from(JSON.stringify(period)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        }).run();
+        bumpFinancialRevisionSync(tx);
+        return updated;
+      });
+      return reply.send(closed);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to close period";
+      return reply.code(message === "Period not found" ? 404 : 409).send({ error: message });
+    }
+  });
+
+  // Reopening is explicit and audited. It is required before historical
+  // correction entries or budget/date changes can be made.
+  fastify.post("/api/periods/:id/reopen", async (request, reply) => {
+    const periodId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(periodId) || periodId <= 0) {
+      return reply.code(400).send({ error: "Invalid period ID" });
+    }
+    try {
+      const now = Date.now();
+      const reopened = db.transaction((tx) => {
+        const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).all()[0];
+        if (!period) throw new Error("Period not found");
+        if (period.status !== "closed") throw new Error("Only a closed period can be reopened");
+        const updated = tx.update(salaryPeriods)
+          .set({ status: "open", reopenedAt: new Date(now) })
+          .where(and(eq(salaryPeriods.id, periodId), eq(salaryPeriods.status, "closed")))
+          .returning().all()[0];
+        if (!updated) throw new Error("Period was changed; retry reopening it");
+        tx.insert(auditLogs).values({
+          entityType: "salary_period",
+          entityId: periodId,
+          action: "reopen",
+          beforeSnapshot: Buffer.from(JSON.stringify(period)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        }).run();
+        bumpFinancialRevisionSync(tx);
+        return updated;
+      });
+      return reply.send(reopened);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to reopen period";
+      return reply.code(message === "Period not found" ? 404 : 409).send({ error: message });
+    }
+  });
+
   // Delete salary period
   fastify.delete("/api/periods/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -178,6 +259,10 @@ export default async function (fastify: FastifyInstance) {
 
     if (!existing) {
       reply.code(404).send({ error: "Period not found" });
+      return;
+    }
+    if (existing.status === "closed") {
+      reply.code(409).send({ error: "Period is closed; reopen it before deletion" });
       return;
     }
 

@@ -108,6 +108,15 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (!columnExists("transaction", "reversal_of_tx_id")) {
       db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN reversal_of_tx_id integer REFERENCES \"transaction\"(id)");
     }
+    if (!columnExists("salary_period", "status")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN status text DEFAULT 'open' NOT NULL");
+    }
+    if (!columnExists("salary_period", "closed_at")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN closed_at integer");
+    }
+    if (!columnExists("salary_period", "reopened_at")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN reopened_at integer");
+    }
     db.$client.exec(`
       CREATE TABLE IF NOT EXISTS __drizzle_migrations (
         id SERIAL PRIMARY KEY,
@@ -131,6 +140,7 @@ function assertRequiredSchema(): void {
     splitbill_session: ["total_cents", "status"],
     reconciliation_session: ["as_of_date", "status"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
+    salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
     financial_state: ["id", "revision", "updated_at"],
   };

@@ -428,13 +428,23 @@ export const api = {
 
   // Periods
   periods: {
-    list: () => fetchApi<Array<{ id: number; name: string; startDate: number; endDate: number }>>('/periods'),
+    list: () => fetchApi<Array<{
+      id: number;
+      name: string;
+      startDate: number;
+      endDate: number;
+      status: 'open' | 'closed';
+      closedAt: number | null;
+      reopenedAt: number | null;
+    }>>('/periods'),
     get: (id: number) => fetchApi(`/periods/${id}`),
     create: (data: { name: string; startDate: string; endDate: string }) =>
       fetchApi('/periods', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<{ name: string; startDate: string; endDate: string }>) =>
       fetchApi(`/periods/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/periods/${id}`, { method: 'DELETE' }),
+    close: (id: number) => fetchApi(`/periods/${id}/close`, { method: 'POST' }),
+    reopen: (id: number) => fetchApi(`/periods/${id}/reopen`, { method: 'POST' }),
     suggestNext: () => fetchApi<{
       suggestedName: string;
       suggestedStartDate: string;

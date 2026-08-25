@@ -9,7 +9,7 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/utils';
-import { Plus, Calendar, ChevronRight, Edit2, Trash2, TrendingUp, Wallet } from 'lucide-react';
+import { Plus, Calendar, ChevronRight, Edit2, Trash2, TrendingUp, Wallet, Lock, LockOpen } from 'lucide-react';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 
 export const Route = createFileRoute('/periods')({
@@ -21,6 +21,9 @@ interface Period {
   name: string;
   startDate: number;
   endDate: number;
+  status: 'open' | 'closed';
+  closedAt: number | null;
+  reopenedAt: number | null;
 }
 
 function PeriodsPage() {
@@ -137,6 +140,38 @@ function PeriodsPage() {
     }
   };
 
+  const handleClose = async (period: Period) => {
+    const confirmed = await confirm({
+      title: 'Close Accounting Period',
+      message: `Close ${period.name}? New or backdated journals and budget changes for this period will be blocked until you explicitly reopen it.`,
+      confirmLabel: 'Close Period',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await api.periods.close(period.id);
+      await loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleReopen = async (period: Period) => {
+    const confirmed = await confirm({
+      title: 'Reopen Accounting Period',
+      message: `Reopen ${period.name}? This permits new corrections and budget changes in that historical period.`,
+      confirmLabel: 'Reopen Period',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await api.periods.reopen(period.id);
+      await loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
   const openModal = (period?: Period) => {
     if (period) {
       setEditingPeriod(period);
@@ -217,20 +252,44 @@ function PeriodsPage() {
                     <p className="text-sm text-[var(--color-text-secondary)]">
                       {formatDate(period.startDate)} - {formatDate(period.endDate)}
                     </p>
+                    <span className={`inline-flex mt-2 px-2 py-0.5 text-xs font-mono border ${period.status === 'closed'
+                      ? 'border-[var(--color-warning)] text-[var(--color-warning)]'
+                      : 'border-[var(--color-success)] text-[var(--color-success)]'}`}>
+                      {period.status === 'closed' ? 'CLOSED' : 'OPEN'}
+                    </span>
                   </div>
                   <div className="flex gap-1">
-                    <button
-                      onClick={() => openModal(period)}
-                      className="cursor-pointer p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(period.id)}
-                      className="cursor-pointer p-1 hover:bg-[var(--color-danger)]/20 text-[var(--color-danger)] transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {period.status === 'closed' ? (
+                      <button
+                        title="Reopen period"
+                        onClick={() => handleReopen(period)}
+                        className="cursor-pointer p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
+                      >
+                        <LockOpen className="w-4 h-4" />
+                      </button>
+                    ) : <>
+                      <button
+                        title="Close period"
+                        onClick={() => handleClose(period)}
+                        className="cursor-pointer p-1 hover:bg-[var(--color-warning)]/20 text-[var(--color-warning)] transition-colors"
+                      >
+                        <Lock className="w-4 h-4" />
+                      </button>
+                      <button
+                        title="Edit period"
+                        onClick={() => openModal(period)}
+                        className="cursor-pointer p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        title="Delete period"
+                        onClick={() => handleDelete(period.id)}
+                        className="cursor-pointer p-1 hover:bg-[var(--color-danger)]/20 text-[var(--color-danger)] transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>}
                   </div>
                 </div>
 

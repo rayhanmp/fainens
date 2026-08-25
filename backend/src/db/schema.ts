@@ -119,6 +119,10 @@ export const salaryPeriods = sqliteTable("salary_period", {
   name: text("name").notNull(),
   startDate: integer("start_date").notNull(), // ms since epoch
   endDate: integer("end_date").notNull(),
+  /** An accounting close prevents new or backdated journals from changing history. */
+  status: text("status").notNull().default("open"), // open | closed
+  closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+  reopenedAt: integer("reopened_at", { mode: "timestamp_ms" }),
 });
 
 export const budgetPlans = sqliteTable("budget_plan", {
