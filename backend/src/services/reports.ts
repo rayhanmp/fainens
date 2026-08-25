@@ -68,6 +68,13 @@ export interface SpendingBreakdown {
   percentage: number;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Salary-period end dates are commonly stored as midnight from an HTML date input. */
+function inclusiveEndOfSelectedDay(timestamp: number): number {
+  return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
+}
+
 // Generate Income Statement (Profit & Loss) for a period
 export async function generateIncomeStatement(
   periodId?: number,
@@ -78,7 +85,7 @@ export async function generateIncomeStatement(
   let periodEnd: number;
   let periodName = "All Periods";
 
-  if (periodId) {
+  if (periodId !== undefined) {
     const [period] = await db
       .select({
         startDate: salaryPeriods.startDate,
@@ -91,11 +98,14 @@ export async function generateIncomeStatement(
 
     if (!period) throw new Error(`Period not found: ${periodId}`);
     periodStart = period.startDate;
-    periodEnd = period.endDate;
+    periodEnd = inclusiveEndOfSelectedDay(period.endDate);
     periodName = period.name;
-  } else if (startDate && endDate) {
+  } else if (startDate !== undefined && endDate !== undefined) {
+    if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
+      throw new Error("Invalid report date range");
+    }
     periodStart = startDate;
-    periodEnd = endDate;
+    periodEnd = inclusiveEndOfSelectedDay(endDate);
     periodName = `${new Date(startDate).toLocaleDateString()} - ${new Date(
       endDate
     ).toLocaleDateString()}`;
@@ -124,7 +134,7 @@ export async function generateIncomeStatement(
     .orderBy(accounts.name);
 
   // Get transaction lines for revenue in period
-  const revenueLines = await db
+  const revenueLines = revenueAccounts.length === 0 ? [] : await db
     .select({
       accountId: transactionLines.accountId,
       credit: sql<number>`sum(${transactionLines.credit})`,
@@ -145,7 +155,7 @@ export async function generateIncomeStatement(
     .groupBy(transactionLines.accountId);
 
   // Get transaction lines for expenses in period
-  const expenseLines = await db
+  const expenseLines = expenseAccounts.length === 0 ? [] : await db
     .select({
       accountId: transactionLines.accountId,
       debit: sql<number>`sum(${transactionLines.debit})`,
@@ -217,7 +227,10 @@ export async function generateIncomeStatement(
 
 // Generate Balance Sheet as of a specific date
 export async function generateBalanceSheet(asOfDate?: number): Promise<BalanceSheet> {
-  const date = asOfDate || Date.now();
+  if (asOfDate !== undefined && !Number.isFinite(asOfDate)) {
+    throw new Error("Invalid balance-sheet date");
+  }
+  const date = asOfDate === undefined ? Date.now() : inclusiveEndOfSelectedDay(asOfDate);
   const dateStr = new Date(date).toISOString().split("T")[0];
 
   // Get all accounts by type
@@ -325,7 +338,7 @@ export async function generateCashFlowStatement(
   let periodEnd: number;
   let periodName = "All Periods";
 
-  if (periodId) {
+  if (periodId !== undefined) {
     const [period] = await db
       .select({
         startDate: salaryPeriods.startDate,
@@ -338,11 +351,15 @@ export async function generateCashFlowStatement(
 
     if (!period) throw new Error(`Period not found: ${periodId}`);
     periodStart = period.startDate;
-    periodEnd = period.endDate;
+    periodEnd = inclusiveEndOfSelectedDay(period.endDate);
     periodName = period.name;
-  } else if (startDate && endDate) {
+  } else if (startDate !== undefined && endDate !== undefined) {
+    if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
+      throw new Error("Invalid report date range");
+    }
     periodStart = startDate;
-    periodEnd = endDate;
+    periodEnd = inclusiveEndOfSelectedDay(endDate);
+    periodName = `${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`;
   } else {
     periodStart = Date.now() - 365 * 24 * 60 * 60 * 1000;
     periodEnd = Date.now();
@@ -485,7 +502,7 @@ export async function generateSpendingBreakdown(
   let periodStart: number;
   let periodEnd: number;
 
-  if (periodId) {
+  if (periodId !== undefined) {
     const [period] = await db
       .select({
         startDate: salaryPeriods.startDate,
@@ -497,10 +514,13 @@ export async function generateSpendingBreakdown(
 
     if (!period) throw new Error(`Period not found: ${periodId}`);
     periodStart = period.startDate;
-    periodEnd = period.endDate;
-  } else if (startDate && endDate) {
+    periodEnd = inclusiveEndOfSelectedDay(period.endDate);
+  } else if (startDate !== undefined && endDate !== undefined) {
+    if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
+      throw new Error("Invalid report date range");
+    }
     periodStart = startDate;
-    periodEnd = endDate;
+    periodEnd = inclusiveEndOfSelectedDay(endDate);
   } else {
     periodStart = Date.now() - 30 * 24 * 60 * 60 * 1000; // Last 30 days
     periodEnd = Date.now();
@@ -532,10 +552,10 @@ export async function generateSpendingBreakdown(
     .groupBy(accounts.id, accounts.name)
     .orderBy(sql`sum(${transactionLines.debit}) DESC`);
 
-  const totalExpenses = expenses.reduce((sum, e) => sum + (e.total || 0), 0);
+  const positiveExpenses = expenses.filter((expense) => expense.total > 0);
+  const totalExpenses = positiveExpenses.reduce((sum, expense) => sum + expense.total, 0);
 
-  return expenses
-    .filter((e) => e.total > 0)
+  return positiveExpenses
     .map((e) => ({
       category: e.accountName,
       accountId: e.accountId,
@@ -547,49 +567,76 @@ export async function generateSpendingBreakdown(
 // Export report as CSV
 export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashFlowStatement): string {
   const lines: string[] = [];
+  const cell = (value: unknown): string => {
+    let text = value == null ? "" : String(value);
+    // Prevent spreadsheet applications from interpreting user-controlled text
+    // as a formula when a CSV is opened interactively.
+    if (typeof value === "string" && /^[=+\-@]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const row = (...values: unknown[]) => lines.push(values.map(cell).join(","));
 
   if ("revenue" in report) {
     // Income Statement
-    lines.push("INCOME STATEMENT");
-    lines.push(`Period: ${report.periodName || "All Periods"}`);
+    row("INCOME STATEMENT");
+    row("Period", report.periodName || "All Periods");
     lines.push("");
-    lines.push("REVENUE");
+    row("REVENUE");
     for (const item of report.revenue) {
-      lines.push(`${"  ".repeat(item.level)}${item.name},${item.amount}`);
+      row(`${"  ".repeat(item.level)}${item.name}`, item.amount);
     }
-    lines.push(`TOTAL REVENUE,${report.totalRevenue}`);
+    row("TOTAL REVENUE", report.totalRevenue);
     lines.push("");
-    lines.push("EXPENSES");
+    row("EXPENSES");
     for (const item of report.expenses) {
-      lines.push(`${"  ".repeat(item.level)}${item.name},${item.amount}`);
+      row(`${"  ".repeat(item.level)}${item.name}`, item.amount);
     }
-    lines.push(`TOTAL EXPENSES,${report.totalExpenses}`);
+    row("TOTAL EXPENSES", report.totalExpenses);
     lines.push("");
-    lines.push(`NET INCOME,${report.netIncome}`);
+    row("NET INCOME", report.netIncome);
   } else if ("assets" in report) {
     // Balance Sheet
-    lines.push("BALANCE SHEET");
-    lines.push(`As of: ${report.asOfDate}`);
+    row("BALANCE SHEET");
+    row("As of", report.asOfDate);
     lines.push("");
-    lines.push("ASSETS");
+    row("ASSETS");
     for (const item of report.assets) {
-      lines.push(`${"  ".repeat(item.level)}${item.name},${item.balance}`);
+      row(`${"  ".repeat(item.level)}${item.name}`, item.balance);
     }
-    lines.push(`TOTAL ASSETS,${report.totalAssets}`);
+    row("TOTAL ASSETS", report.totalAssets);
     lines.push("");
-    lines.push("LIABILITIES");
+    row("LIABILITIES");
     for (const item of report.liabilities) {
-      lines.push(`${"  ".repeat(item.level)}${item.name},${item.balance}`);
+      row(`${"  ".repeat(item.level)}${item.name}`, item.balance);
     }
-    lines.push(`TOTAL LIABILITIES,${report.totalLiabilities}`);
+    row("TOTAL LIABILITIES", report.totalLiabilities);
     lines.push("");
-    lines.push("EQUITY");
+    row("EQUITY");
     for (const item of report.equity) {
-      lines.push(`${"  ".repeat(item.level)}${item.name},${item.balance}`);
+      row(`${"  ".repeat(item.level)}${item.name}`, item.balance);
     }
-    lines.push(`TOTAL EQUITY,${report.totalEquity}`);
+    row("TOTAL EQUITY", report.totalEquity);
     lines.push("");
-    lines.push(`TOTAL LIABILITIES + EQUITY,${report.totalLiabilities + report.totalEquity}`);
+    row("TOTAL LIABILITIES + EQUITY", report.totalLiabilities + report.totalEquity);
+  } else if ("operating" in report) {
+    row("CASH FLOW STATEMENT");
+    row("Period", report.periodName || "All Periods");
+    lines.push("");
+    for (const [title, items, total] of [
+      ["OPERATING ACTIVITIES", report.operating, report.netOperating],
+      ["INVESTING ACTIVITIES", report.investing, report.netInvesting],
+      ["FINANCING ACTIVITIES", report.financing, report.netFinancing],
+    ] as const) {
+      row(title);
+      for (const item of items) row(item.description, item.category, item.amount);
+      row(`NET ${title}`, total);
+      lines.push("");
+    }
+    row("BEGINNING CASH", report.beginningCash);
+    row("NET CHANGE", report.netChange);
+    row("ENDING CASH", report.endingCash);
+  } else {
+    throw new Error("Unsupported report shape");
   }
 
   return lines.join("\n");
