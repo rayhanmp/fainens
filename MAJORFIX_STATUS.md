@@ -99,6 +99,16 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Monthly report data is cleared when the selected period changes or generation fails; stale-period downloads are disabled.
 - Spending charts aggregate omitted categories into a disclosed `Other` slice.
 
+### `56e07a4` — posted-journal lifecycle, period guards, and modular agent tools
+
+- Added checked migration `0008` for `transaction.status` (`posted`/`draft`/`reversed`) and `reversal_of_tx_id`; legacy databases are upgraded in place.
+- Posted journals are immutable through generic edit/delete routes. The transaction UI offers an explicit equal-and-opposite reversal, preserves the original, and links both entries for auditability.
+- Period creation/update rejects overlapping ranges; period deletion preserves periods with posted transactions or budget plans instead of cascading away history.
+- Canonical facts, account balances, trial balance, reports, budgets, analytics, reconciliation, and PayLater summaries exclude draft journals.
+- Added an authenticated read-only agent registry with independent tools for facts, budgets, account balances, loans, PayLater, recurring previews, transaction search, reconciliation status, period listing, and budget-plan previews.
+- The LLM query route uses OpenRouter function/tool calls, executes only the allow-listed read-only tools, returns tool calls/results and financial revision, caps calls/rounds, and never mutates data. The compatibility context endpoint is composed from those same tools.
+- Added frontend API access to discover tools and call a single tool directly. Budget planning remains a preview and explicitly reports that no write occurred.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -106,6 +116,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Historic 100× outliers remain a data-quality task: they must be detected and reviewed, not blindly divided because legitimate large transactions exist.
 - Old reconciliation plug transactions remain historical ledger entries. They should be identified and reversed/classified through an explicit migration tool; the new reconciliation path does not add more.
 - Domain-owned transactions are deliberately blocked from generic edit/delete until their owning reversal workflows are implemented.
+- The `0008` migration adds posted/draft/reversed state without deleting transaction rows; existing rows are treated as posted and remain available for reversal.
 
 ## Verification completed
 
@@ -116,20 +127,16 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## High-risk work still open
 
-1. Add a durable monotonic financial-data revision and revision-aware cache values/outbox. Explicit invalidation is improved but Redis failure can still preserve stale values.
-2. Rewrite PayLater recognition, interest, installment allocation, and settlement as one transactional subledger command; enforce exact principal/interest/fee allocation and control-account reconciliation.
-3. Rewrite loan create/payment/write-off/delete flows to remove async SQLite transaction callbacks, make journal/subledger changes atomic, and add owning reversals.
-4. Replace split-bill per-person posting with one receipt-level balanced command and deterministic largest-remainder allocation. The immediate 100× and borrowed-journal defects are stopped, but the paid-by-user multi-loan flow can still duplicate the personal expense.
-5. Add posted/reversed/reversal-link state, immutable posted journals, period close/reopen, and domain reversal endpoints.
-6. Complete period overlap/gap prevention, `period_id` foreign-key migration, period delete/archive policy, and one shared membership function across reports/budgets/insights.
-7. Replace cash-flow inference: distinguish cash-equivalent assets from receivables/investments and classify every line of multi-line journals.
-8. Replace insight/dashboard transaction-credit heuristics and 100-row frontend subsets with shared backend financial-fact DTOs.
-9. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
-10. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
-11. Finish safe account/category/period/contact/template archive dependency previews and restore flows.
-12. Fix remaining rate-limit scope wiring and add route-level injection tests.
-13. Build read-only agent query/planning tools over the shared facts, then guarded preview/approval/idempotency for agent-proposed writes.
-14. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
+1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
+2. Add period close/reopen and domain-specific reversal workflows for salary, subscription, PayLater, loan, and split-bill ownership where a correction needs more than a generic journal reversal.
+3. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
+4. Replace cash-flow inference: distinguish cash-equivalent assets from receivables/investments and classify every line of multi-line journals.
+5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
+6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
+7. Finish safe account/category/contact/template archive dependency previews and restore flows.
+8. Fix remaining rate-limit scope wiring and add route-level injection tests.
+9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
+10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
 
 ## Merge policy
 

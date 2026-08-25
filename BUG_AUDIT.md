@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-25 (Asia/Jakarta)
 
-Status: investigation and design notes only. No fixes described here have been implemented unless explicitly marked otherwise.
+Status: durable audit and design notes. Implementation is being landed incrementally on the `majorfix` branch; see `MAJORFIX_STATUS.md` for the commit-by-commit state and remaining risks. Findings below remain the source checklist even when a fix has already landed.
 
 ## Purpose
 
