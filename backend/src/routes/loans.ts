@@ -9,6 +9,7 @@ import {
 } from "../services/ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
+import { insertDomainReversalSync, prepareDomainReversal } from "../services/domain-reversal";
 
 // System account keys for loans
 const SYSTEM_KEYS = {
@@ -481,6 +482,73 @@ export default async function (fastify: FastifyInstance) {
       });
     } catch (err) {
       reply.code(400).send({ error: "Failed to record payment" });
+    }
+  });
+
+  /** Reverse a payment and restore the loan subledger in the same commit. */
+  fastify.post("/api/loans/payments/:paymentId/reverse", async (request, reply) => {
+    const paymentId = Number((request.params as { paymentId?: string }).paymentId);
+    const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
+    if (!Number.isSafeInteger(paymentId) || paymentId <= 0) return reply.code(400).send({ error: "Invalid payment id" });
+    if (!reason || reason.length > 500) return reply.code(400).send({ error: "reason is required and must be at most 500 characters" });
+    try {
+      const [payment] = await db.select().from(loanPayments).where(eq(loanPayments.id, paymentId)).limit(1);
+      if (!payment?.transactionId || payment.status !== "posted") {
+        return reply.code(409).send({ error: "A posted loan payment is required for reversal" });
+      }
+      const reversal = await prepareDomainReversal(payment.transactionId, reason, db);
+      const result = db.transaction((tx) => {
+        const currentPayment = tx.select().from(loanPayments).where(eq(loanPayments.id, paymentId)).limit(1).all()[0];
+        if (!currentPayment || currentPayment.status !== "posted" || currentPayment.transactionId !== payment.transactionId) {
+          throw new Error("Loan payment changed; retry reversal");
+        }
+        const currentLoan = tx.select().from(loans).where(eq(loans.id, currentPayment.loanId)).limit(1).all()[0];
+        if (!currentLoan || !currentLoan.isActive || ["defaulted", "written_off"].includes(currentLoan.status)) {
+          throw new Error("Only an active, non-written-off loan payment can be reversed");
+        }
+        const restoredRemaining = currentLoan.remainingCents + currentPayment.principalCents;
+        if (!Number.isSafeInteger(restoredRemaining) || restoredRemaining > currentLoan.amountCents) {
+          throw new Error("Loan balance is inconsistent; cannot safely reverse this payment");
+        }
+        const reversalTransactionId = insertDomainReversalSync(tx, payment.transactionId!, reversal.prepared, reason);
+        const paymentChanged = tx.update(loanPayments).set({
+          status: "reversed",
+          reversalTransactionId,
+          reversedAt: new Date(),
+          reversalReason: reason,
+        }).where(and(eq(loanPayments.id, paymentId), eq(loanPayments.status, "posted"))).run();
+        if (paymentChanged.changes !== 1) throw new Error("Loan payment changed; retry reversal");
+        const loanChanged = tx.update(loans).set({
+          remainingCents: restoredRemaining,
+          status: "active",
+          updatedAt: new Date(),
+        }).where(eq(loans.id, currentLoan.id)).run();
+        if (loanChanged.changes !== 1) throw new Error("Loan changed; retry reversal");
+        tx.insert(auditLogs).values({
+          entityType: "loan_payment",
+          entityId: paymentId,
+          action: "reverse",
+          beforeSnapshot: Buffer.from(JSON.stringify(currentPayment)),
+          afterSnapshot: Buffer.from(JSON.stringify({ ...currentPayment, status: "reversed", reversalTransactionId, reason })),
+        }).run();
+        tx.insert(auditLogs).values({
+          entityType: "loan",
+          entityId: currentLoan.id,
+          action: "update",
+          beforeSnapshot: Buffer.from(JSON.stringify(currentLoan)),
+          afterSnapshot: Buffer.from(JSON.stringify({ ...currentLoan, remainingCents: restoredRemaining, status: "active" })),
+        }).run();
+        return { reversalTransactionId, loanId: currentLoan.id, remainingCents: restoredRemaining };
+      });
+      await invalidateOnTransactionMutation({
+        transactionId: result.reversalTransactionId,
+        affectedAccountIds: reversal.prepared.accountIds,
+        affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+        revisionBumped: true,
+      });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to reverse loan payment" });
     }
   });
 

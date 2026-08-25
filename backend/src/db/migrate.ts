@@ -126,6 +126,18 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (!columnExists("reconciliation_session", "void_reason")) {
       db.$client.exec("ALTER TABLE reconciliation_session ADD COLUMN void_reason text");
     }
+    if (!columnExists("loan_payment", "status")) {
+      db.$client.exec("ALTER TABLE loan_payment ADD COLUMN status text DEFAULT 'posted' NOT NULL");
+    }
+    if (!columnExists("loan_payment", "reversal_transaction_id")) {
+      db.$client.exec("ALTER TABLE loan_payment ADD COLUMN reversal_transaction_id integer REFERENCES \"transaction\"(id)");
+    }
+    if (!columnExists("loan_payment", "reversed_at")) {
+      db.$client.exec("ALTER TABLE loan_payment ADD COLUMN reversed_at integer");
+    }
+    if (!columnExists("loan_payment", "reversal_reason")) {
+      db.$client.exec("ALTER TABLE loan_payment ADD COLUMN reversal_reason text");
+    }
     db.$client.exec(`
       CREATE TABLE IF NOT EXISTS __drizzle_migrations (
         id SERIAL PRIMARY KEY,
@@ -151,6 +163,7 @@ function assertRequiredSchema(): void {
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
     salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
+    loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
     financial_state: ["id", "revision", "updated_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {

@@ -431,6 +431,12 @@ export const loanPayments = sqliteTable("loan_payment", {
   /** The transaction that recorded this payment */
   transactionId: integer("transaction_id")
     .references(() => transactions.id, { onDelete: "set null" }),
+  /** Posted payments are retained when corrected; their inverse is linked here. */
+  status: text("status").notNull().default("posted"), // posted | reversed
+  reversalTransactionId: integer("reversal_transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+  reversedAt: integer("reversed_at", { mode: "timestamp_ms" }),
+  reversalReason: text("reversal_reason"),
   notes: text("notes"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
