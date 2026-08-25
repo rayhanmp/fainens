@@ -127,6 +127,13 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - SQLite triggers block every direct insert or date/period reassignment into a closed period, covering CSV imports and domain workflows that do not use the generic ledger helper.
 - Budget create/update/delete/template-apply paths reject closed periods. The Periods and Budget screens expose the closed state and make history visibly read-only until an explicit reopen.
 
+### `7dfffe7` — reconciliation control-evidence lifecycle
+
+- Reconciliation remains a dated control snapshot rather than a financial transaction. Recording a balance check no longer bumps the financial-facts revision or invalidates reports, balances, budgets, and insights.
+- Added migration `0010`: sessions carry an `active`/`voided` lifecycle, void timestamp, and required reason. Legacy pushed-schema databases are upgraded without deleting reconciliation evidence.
+- A mistaken check is voided through an audited endpoint; it is not deleted and no journal reversal is created. History and agent retrieval retain the original outcome, void state, reason, and item-level evidence.
+- The reconciliation dialog exposes recent checks and supports an explicit reasoned void action.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -140,7 +147,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Backend TypeScript build passes using the bundled runtime.
 - Frontend TypeScript project build passes.
-- Drizzle migration journal/schema integrity check passes, including migration `0009`.
+- Drizzle migration journal/schema integrity check passes, including migrations `0009` and `0010`.
 - Focused recurrence/reconciliation suite passes 8 tests after the latest wave; an earlier broader pure run passed 49 tests across journal validation, mutation policy, IDR parsing, report CSV behavior, and storage path confinement.
 - The complete DB-backed suite is still blocked locally because installed `better-sqlite3` targets Node ABI 127 while the bundled Node runtime requires ABI 137. Do not treat this environment failure as a test pass.
 
