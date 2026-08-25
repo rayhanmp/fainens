@@ -514,6 +514,11 @@ RULES:
     try {
       if ("kind" in body) {
         const { kind, amountCents, description, notes, place, date, categoryId, tagIds, walletAccountId, toWalletAccountId, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
+        if (subscriptionId !== undefined) {
+          return reply.code(409).send({
+            error: "Subscription payments must confirm a concrete renewal occurrence",
+          });
+        }
         
         // Auto-detect period based on transaction date
         const dateMs = new Date(date).getTime();
@@ -536,7 +541,6 @@ RULES:
             walletAccountId,
             toWalletAccountId,
             linkedTxId,
-            subscriptionId,
             tagIds,
           });
 
@@ -561,7 +565,6 @@ RULES:
           destLng,
           destName,
           distanceKm,
-          subscriptionId,
           tagIds,
         });
 

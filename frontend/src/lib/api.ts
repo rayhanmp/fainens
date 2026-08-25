@@ -719,7 +719,17 @@ export const api = {
           createdAt: number;
           updatedAt: number;
         }>;
-        renewal: { processed: number; skippedNoAccount: number; errors: string[] };
+        renewalPreview: {
+          occurrences: Array<{
+            subscriptionId: number;
+            subscriptionName: string;
+            dueAt: number;
+            amount: number;
+            linkedAccountId: number;
+            billingCycle: string;
+          }>;
+          truncated: boolean;
+        };
       }>('/subscriptions'),
     get: (id: number) =>
       fetchApi<{
@@ -793,10 +803,13 @@ export const api = {
         updatedAt: number;
       }>(`/subscriptions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi<void>(`/subscriptions/${id}`, { method: 'DELETE' }),
-    runRenewals: () =>
-      fetchApi<{ processed: number; skippedNoAccount: number; errors: string[] }>(
+    runRenewals: (
+      mode: 'post' | 'skip',
+      occurrences: Array<{ subscriptionId: number; dueAt: number }>,
+    ) =>
+      fetchApi<{ posted: number; skipped: number; transactionIds: number[] }>(
         '/subscriptions/run-renewals',
-        { method: 'POST' },
+        { method: 'POST', body: JSON.stringify({ mode, occurrences }) },
       ),
   },
 

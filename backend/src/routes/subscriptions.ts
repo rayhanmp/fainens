@@ -2,9 +2,12 @@ import { eq, desc, asc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { subscriptions, accounts } from "../db/schema";
-import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
-import { processDueSubscriptionRenewals, addOneMonth, addOneYear } from "../services/subscription-renewals";
+import { subscriptions, accounts, categories } from "../db/schema";
+import { auditCreate, auditUpdate } from "../services/audit";
+import {
+  applySubscriptionOccurrences,
+  previewDueSubscriptionRenewals,
+} from "../services/subscription-renewals";
 
 type SubRow = typeof subscriptions.$inferSelect;
 
@@ -48,29 +51,32 @@ function isBillingCycle(s: string): s is (typeof BILLING_CYCLES)[number] {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/subscriptions", async (request) => {
-    const renewal = await processDueSubscriptionRenewals(db);
-    if (renewal.processed > 0 || renewal.errors.length > 0) {
-      request.log.info(
-        { processed: renewal.processed, skipped: renewal.skippedNoAccount, errors: renewal.errors },
-        "subscription renewals",
-      );
-    }
-
+  fastify.get("/api/subscriptions", async () => {
     const rows = await db
       .select()
       .from(subscriptions)
       .orderBy(desc(subscriptions.sortOrder), asc(subscriptions.name));
 
     return {
-      subscriptions: await Promise.all(rows.map(serializeSubscription)),
-      renewal,
+      subscriptions: await Promise.all(rows.filter((row) => row.status !== "archived").map(serializeSubscription)),
+      renewalPreview: await previewDueSubscriptionRenewals(),
     };
   });
 
-  fastify.post("/api/subscriptions/run-renewals", async () => {
-    const result = await processDueSubscriptionRenewals(db);
-    return result;
+  fastify.post("/api/subscriptions/run-renewals", { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const body = request.body as {
+      mode?: "post" | "skip";
+      occurrences?: Array<{ subscriptionId: number; dueAt: number }>;
+    };
+    if (!body || !["post", "skip"].includes(body.mode ?? "") || !Array.isArray(body.occurrences)) {
+      return reply.code(400).send({ error: "mode and occurrences are required" });
+    }
+    try {
+      return await applySubscriptionOccurrences({ mode: body.mode!, occurrences: body.occurrences });
+    } catch (error) {
+      request.log.error(error);
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to process renewals" });
+    }
   });
 
   fastify.get("/api/subscriptions/:id", async (request, reply) => {
@@ -109,17 +115,22 @@ export default async function (fastify: FastifyInstance) {
     }
     // Validate the account exists
     const [account] = await db.select().from(accounts).where(eq(accounts.id, body.linkedAccountId)).limit(1);
-    if (!account) {
-      reply.code(400).send({ error: "linkedAccountId must reference a valid account" });
+    if (!account || !account.isActive || !["asset", "liability"].includes(account.type)) {
+      reply.code(400).send({ error: "linkedAccountId must reference an active asset or liability account" });
       return;
     }
-    if (typeof body.amount !== "number" || !Number.isFinite(body.amount) || body.amount < 0) {
-      reply.code(400).send({ error: "amount must be a non-negative number" });
+    if (!Number.isSafeInteger(body.amount) || body.amount <= 0) {
+      reply.code(400).send({ error: "amount must be a positive integer rupiah value" });
       return;
     }
-    if (typeof body.nextRenewalAt !== "number" || !Number.isFinite(body.nextRenewalAt)) {
+    if (!Number.isSafeInteger(body.nextRenewalAt) || body.nextRenewalAt < 0) {
       reply.code(400).send({ error: "nextRenewalAt must be a valid timestamp (ms)" });
       return;
+    }
+    if (body.categoryId != null) {
+      const [category] = await db.select({ id: categories.id }).from(categories)
+        .where(eq(categories.id, body.categoryId)).limit(1);
+      if (!category) return reply.code(400).send({ error: "categoryId does not exist" });
     }
 
     const status = body.status ?? "active";
@@ -201,10 +212,15 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
       const [account] = await db.select().from(accounts).where(eq(accounts.id, body.linkedAccountId)).limit(1);
-      if (!account) {
-        reply.code(400).send({ error: "linkedAccountId must reference a valid account" });
+      if (!account || !account.isActive || !["asset", "liability"].includes(account.type)) {
+        reply.code(400).send({ error: "linkedAccountId must reference an active asset or liability account" });
         return;
       }
+    }
+    if (body.categoryId != null) {
+      const [category] = await db.select({ id: categories.id }).from(categories)
+        .where(eq(categories.id, body.categoryId)).limit(1);
+      if (!category) return reply.code(400).send({ error: "categoryId does not exist" });
     }
 
     const patch: Record<string, unknown> = {
@@ -215,15 +231,15 @@ export default async function (fastify: FastifyInstance) {
     if (body.linkedAccountId !== undefined) patch.linkedAccountId = body.linkedAccountId;
     if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
     if (body.amount !== undefined) {
-      if (typeof body.amount !== "number" || !Number.isFinite(body.amount) || body.amount < 0) {
-        reply.code(400).send({ error: "amount must be a non-negative number" });
+      if (!Number.isSafeInteger(body.amount) || body.amount <= 0) {
+        reply.code(400).send({ error: "amount must be a positive integer rupiah value" });
         return;
       }
       patch.amount = Math.round(body.amount);
     }
     if (body.billingCycle !== undefined) patch.billingCycle = body.billingCycle;
     if (body.nextRenewalAt !== undefined) {
-      if (typeof body.nextRenewalAt !== "number" || !Number.isFinite(body.nextRenewalAt)) {
+      if (!Number.isSafeInteger(body.nextRenewalAt) || body.nextRenewalAt < 0) {
         reply.code(400).send({ error: "nextRenewalAt must be a valid timestamp (ms)" });
         return;
       }
@@ -251,43 +267,9 @@ export default async function (fastify: FastifyInstance) {
 
   // Advance subscription renewal (called when a transaction pays for the subscription)
   fastify.post("/api/subscriptions/:id/advance", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const subId = parseInt(id, 10);
-
-    const [existing] = await db.select().from(subscriptions).where(eq(subscriptions.id, subId)).limit(1);
-
-    if (!existing) {
-      reply.code(404).send({ error: "Subscription not found" });
-      return;
-    }
-
-    if (existing.status !== "active") {
-      reply.code(400).send({ error: "Can only advance active subscriptions" });
-      return;
-    }
-
-    const currentRenewal = existing.nextRenewalAt.getTime();
-    const newRenewal = existing.billingCycle === "annual"
-      ? addOneYear(currentRenewal)
-      : addOneMonth(currentRenewal);
-
-    const [updated] = await db
-      .update(subscriptions)
-      .set({
-        nextRenewalAt: new Date(newRenewal),
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptions.id, subId))
-      .returning();
-
-    await auditUpdate(
-      "subscription",
-      subId,
-      await serializeSubscription(existing) as Record<string, unknown>,
-      await serializeSubscription(updated) as Record<string, unknown>,
-    );
-
-    return serializeSubscription(updated);
+    return reply.code(410).send({
+      error: "Direct schedule advancement is disabled; confirm or skip a concrete renewal occurrence",
+    });
   });
 
   fastify.delete("/api/subscriptions/:id", async (request, reply) => {
@@ -300,9 +282,14 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    await db.delete(subscriptions).where(eq(subscriptions.id, parseInt(id, 10)));
-
-    await auditDelete("subscription", parseInt(id, 10), await serializeSubscription(existing) as Record<string, unknown>);
+    const [archived] = await db.update(subscriptions).set({ status: "archived", updatedAt: new Date() })
+      .where(eq(subscriptions.id, parseInt(id, 10))).returning();
+    await auditUpdate(
+      "subscription",
+      parseInt(id, 10),
+      await serializeSubscription(existing) as Record<string, unknown>,
+      await serializeSubscription(archived) as Record<string, unknown>,
+    );
 
     reply.code(204).send();
   });

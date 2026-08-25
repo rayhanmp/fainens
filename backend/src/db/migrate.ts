@@ -119,6 +119,7 @@ function assertRequiredSchema(): void {
     splitbill_session: ["total_cents", "status"],
     reconciliation_session: ["as_of_date", "status"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
+    recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

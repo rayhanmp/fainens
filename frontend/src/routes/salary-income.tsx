@@ -277,6 +277,7 @@ function SalaryIncomePage() {
                           className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
                           onClick={async () => {
                             setMenuOpen(false);
+                            if (!window.confirm('Post the currently due monthly salary occurrence using the saved payroll estimate?')) return;
                             try {
                               await api.salarySettings.postSalary();
                               const data = await api.salarySettings.get();
@@ -287,7 +288,7 @@ function SalaryIncomePage() {
                             }
                           }}
                         >
-                          Post salary now
+                          Review & post due salary
                         </button>
                       )}
                     </div>
@@ -598,7 +599,7 @@ function SalaryIncomePage() {
                     <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                     <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} />
                     <Tooltip
-                      formatter={(value: number) => [formatCurrency(value), 'Income']}
+                      formatter={(value) => [formatCurrency(Number(value)), 'Income']}
                       labelStyle={{ color: 'var(--color-text-primary)' }}
                       contentStyle={{
                         borderRadius: 12,

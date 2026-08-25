@@ -147,7 +147,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.post("/api/salary-settings/post-salary", async (request, reply) => {
-    const result = await postSalaryIfPayrollDay(db);
+    const result = await postSalaryIfPayrollDay(db, true);
     if (result.posted) {
       return result;
     } else {

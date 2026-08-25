@@ -1,109 +1,42 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
+
+import { invalidateOnTransactionMutation } from "../cache";
 import { db as defaultDb } from "../db/client";
-import { salarySettings, accounts } from "../db/schema";
-import { createSimpleTransaction } from "./ledger";
+import {
+  accounts,
+  auditLogs,
+  recurringOccurrences,
+  salarySettings,
+  transactionLines,
+  transactions,
+} from "../db/schema";
 import { estimatePayroll, getTERCategory } from "./indonesia-payroll";
-import { getRedisClient } from "../cache/redis";
+import { getOrCreateAutoIncomeAccount } from "./ledger";
+import { monthlyOccurrenceDate } from "./recurrence-calendar";
+import { findPeriodIdForDate } from "./transaction-mutations";
 
 const SINGLETON_ID = 1;
-
-function getSalaryPostedKey(date: Date): string {
-  return `salary:posted:${date.toISOString().split('T')[0]}`;
-}
 
 export type SalaryPostingResult = {
   posted: boolean;
   transactionId?: number;
   netAmount?: number;
+  occurrenceDate?: number;
   message?: string;
 };
 
-/**
- * Posts salary income transaction on payroll day.
- * Uses Redis for idempotency - won't post twice on the same day.
- */
-export async function postSalaryIfPayrollDay(
-  dbLike: typeof defaultDb = defaultDb,
-): Promise<SalaryPostingResult> {
-  const today = new Date();
-  const todayDay = today.getDate();
-  const redis = getRedisClient();
-
-  const postedKey = getSalaryPostedKey(today);
-  const alreadyPosted = await redis.get(postedKey);
-  if (alreadyPosted) {
-    return { posted: false, message: "Salary already posted today (via Redis)" };
+async function salaryContext(now = new Date()) {
+  const [settings] = await defaultDb.select().from(salarySettings)
+    .where(eq(salarySettings.id, SINGLETON_ID)).limit(1);
+  if (!settings) return { error: "Salary settings not configured" } as const;
+  if (!settings.depositAccountId) return { error: "No deposit account configured" } as const;
+  const [account] = await defaultDb
+    .select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive })
+    .from(accounts).where(eq(accounts.id, settings.depositAccountId)).limit(1);
+  if (!account || !account.isActive || account.type !== "asset") {
+    return { error: "Deposit account must be an active asset account" } as const;
   }
-
-  // Get salary settings
-  const [settings] = await dbLike
-    .select()
-    .from(salarySettings)
-    .where(eq(salarySettings.id, SINGLETON_ID))
-    .limit(1);
-
-  if (!settings) {
-    return { posted: false, message: "Salary settings not configured" };
-  }
-
-  if (!settings.depositAccountId) {
-    return { posted: false, message: "No deposit account configured" };
-  }
-
-  // Check if today is the payroll day
-  if (todayDay !== settings.payrollDay) {
-    return { posted: false, message: `Today is not payroll day (${settings.payrollDay})` };
-  }
-
-  // Check if salary already posted today
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-
-  const { transactions } = await import("../db/schema");
-  const [existingTx] = await dbLike
-    .select({ id: transactions.id })
-    .from(transactions)
-    .where(
-      eq(transactions.txType, "salary_income")
-    )
-    .limit(1);
-
-  // For simplicity, we check if any salary income exists today
-  // In a real implementation, you might want to track this more precisely
-  const todaysSalary = await dbLike
-    .select({ id: transactions.id })
-    .from(transactions)
-    .where(
-      eq(transactions.txType, "salary_income")
-    )
-    .limit(1);
-
-  if (todaysSalary.length > 0) {
-    // Check if it's from today by date comparison
-    const todayStr = today.toISOString().split('T')[0];
-    // This is a simplified check - in production you'd want proper date range filtering
-  }
-
-  // Validate the deposit account exists and is an asset
-  const [account] = await dbLike
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
-    .from(accounts)
-    .where(eq(accounts.id, settings.depositAccountId))
-    .limit(1);
-
-  if (!account) {
-    return { posted: false, message: "Deposit account not found" };
-  }
-
-  if (!account.isActive) {
-    return { posted: false, message: "Deposit account is not active" };
-  }
-
-  if (account.type !== "asset") {
-    return { posted: false, message: "Deposit account must be an asset (wallet) account" };
-  }
-
-  // Calculate net salary using full settings (including bpjsKesehatanActive)
+  const occurrenceDate = monthlyOccurrenceDate(now.getFullYear(), now.getMonth(), settings.payrollDay);
   const payrollSettings = {
     ptkpCode: settings.ptkpCode,
     terCategory: (settings.terCategory as "A" | "B" | "C") || getTERCategory(settings.ptkpCode),
@@ -114,44 +47,121 @@ export async function postSalaryIfPayrollDay(
     bpjsKesWageCap: settings.bpjsKesWageCap,
     jhtWageCap: settings.jhtWageCap,
   };
-  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode, 1, payrollSettings);
-  const netAmount = payroll.estimatedNetMonthly;
-
-  if (netAmount <= 0) {
-    return { posted: false, message: "Net salary must be greater than 0" };
-  }
-
-  // Create the income transaction
-  const result = await createSimpleTransaction(
-    {
-      kind: "income",
-      amountCents: netAmount,
-      description: `Salary income - ${today.toLocaleDateString('en-ID', { month: 'long', year: 'numeric' })}`,
-      notes: `Gross: ${settings.grossMonthly}, Net: ${netAmount}, PTKP: ${settings.ptkpCode}`,
-      date: today.getTime(),
-      walletAccountId: settings.depositAccountId,
-      txType: "salary_income",
-    },
-    dbLike,
-  );
-
-  // Set Redis key with 2-day TTL to prevent duplicate posting
-  await redis.setex(postedKey, 60 * 60 * 24 * 2, '1');
-
-  return {
-    posted: true,
-    transactionId: result.transactionId,
-    netAmount,
-    message: `Salary posted: ${netAmount} to account`,
-  };
+  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode, now.getMonth() + 1, payrollSettings);
+  return { settings, account, occurrenceDate, payroll } as const;
 }
 
 /**
- * Preview what would happen if we posted salary today.
+ * Scheduler calls are detection-only. The route must pass confirmed=true;
+ * occurrence uniqueness then makes retries and multiple instances harmless.
  */
-export async function previewSalaryPosting(
-  dbLike: typeof defaultDb = defaultDb,
-): Promise<{
+export async function postSalaryIfPayrollDay(
+  _dbLike: typeof defaultDb = defaultDb,
+  confirmed = false,
+): Promise<SalaryPostingResult> {
+  const now = new Date();
+  const context = await salaryContext(now);
+  if ("error" in context) return { posted: false, message: context.error };
+  const { settings, account, occurrenceDate, payroll } = context;
+  if (Date.now() < occurrenceDate) {
+    return { posted: false, occurrenceDate, message: `Payroll occurrence is due on ${new Date(occurrenceDate).toLocaleDateString()}` };
+  }
+  if (payroll.estimatedNetMonthly <= 0) return { posted: false, message: "Net salary must be greater than 0" };
+
+  const [existing] = await defaultDb
+    .select({ id: recurringOccurrences.id, transactionId: recurringOccurrences.transactionId })
+    .from(recurringOccurrences)
+    .where(and(
+      eq(recurringOccurrences.jobType, "salary"),
+      eq(recurringOccurrences.scheduleId, SINGLETON_ID),
+      eq(recurringOccurrences.occurrenceDate, new Date(occurrenceDate)),
+    )).limit(1);
+  if (existing) {
+    return { posted: false, transactionId: existing.transactionId ?? undefined, occurrenceDate, message: "Salary occurrence already processed" };
+  }
+  const occurrence = new Date(occurrenceDate);
+  const monthStart = new Date(occurrence.getFullYear(), occurrence.getMonth(), 1, 0, 0, 0, 0);
+  const monthEnd = new Date(occurrence.getFullYear(), occurrence.getMonth() + 1, 0, 23, 59, 59, 999);
+  const [legacySalary] = await defaultDb
+    .select({ id: transactions.id })
+    .from(transactions)
+    .where(and(
+      eq(transactions.txType, "salary_income"),
+      gte(transactions.date, monthStart),
+      lte(transactions.date, monthEnd),
+    )).limit(1);
+  if (legacySalary) {
+    return {
+      posted: false,
+      transactionId: legacySalary.id,
+      occurrenceDate,
+      message: "A legacy salary transaction already exists for this month",
+    };
+  }
+  if (!confirmed) {
+    return { posted: false, occurrenceDate, netAmount: payroll.estimatedNetMonthly, message: "Salary occurrence is due and requires confirmation" };
+  }
+
+  const incomeAccount = await getOrCreateAutoIncomeAccount(defaultDb);
+  const periodId = await findPeriodIdForDate(occurrenceDate);
+  let transactionId: number;
+  try {
+    transactionId = defaultDb.transaction((tx) => {
+      const occurrence = tx.insert(recurringOccurrences).values({
+        jobType: "salary",
+        scheduleId: SINGLETON_ID,
+        occurrenceDate: new Date(occurrenceDate),
+        status: "pending",
+      }).returning({ id: recurringOccurrences.id }).all()[0];
+      if (!occurrence) throw new Error("Failed to claim salary occurrence");
+      const transaction = tx.insert(transactions).values({
+        date: new Date(occurrenceDate),
+        description: `Salary income - ${new Date(occurrenceDate).toLocaleDateString("en-ID", { month: "long", year: "numeric" })}`,
+        notes: `Gross: ${settings.grossMonthly}, Net: ${payroll.estimatedNetMonthly}, PTKP: ${settings.ptkpCode}`,
+        reference: `salary:${SINGLETON_ID}:${new Date(occurrenceDate).getFullYear()}-${String(new Date(occurrenceDate).getMonth() + 1).padStart(2, "0")}`,
+        txType: "salary_income",
+        periodId,
+      }).returning({ id: transactions.id }).all()[0];
+      if (!transaction) throw new Error("Failed to post salary transaction");
+      const lines = [
+        { transactionId: transaction.id, accountId: account.id, debit: payroll.estimatedNetMonthly, credit: 0 },
+        { transactionId: transaction.id, accountId: incomeAccount.id, debit: 0, credit: payroll.estimatedNetMonthly },
+      ];
+      tx.insert(transactionLines).values(lines).run();
+      tx.update(recurringOccurrences).set({
+        status: "posted",
+        transactionId: transaction.id,
+        updatedAt: new Date(),
+      }).where(eq(recurringOccurrences.id, occurrence.id)).run();
+      tx.insert(auditLogs).values({
+        entityType: "transaction",
+        entityId: transaction.id,
+        action: "create",
+        afterSnapshot: Buffer.from(JSON.stringify({ occurrenceId: occurrence.id, transaction, lines })),
+      }).run();
+      return transaction.id;
+    });
+  } catch (error) {
+    if (error instanceof Error && /UNIQUE constraint failed/.test(error.message)) {
+      return { posted: false, occurrenceDate, message: "Salary occurrence already processed" };
+    }
+    throw error;
+  }
+  await invalidateOnTransactionMutation({
+    transactionId,
+    affectedAccountIds: [account.id, incomeAccount.id],
+    affectedPeriodIds: periodId == null ? undefined : [periodId],
+  });
+  return {
+    posted: true,
+    transactionId,
+    occurrenceDate,
+    netAmount: payroll.estimatedNetMonthly,
+    message: `Salary posted: ${payroll.estimatedNetMonthly}`,
+  };
+}
+
+export async function previewSalaryPosting(_dbLike: typeof defaultDb = defaultDb): Promise<{
   wouldPost: boolean;
   isPayrollDay: boolean;
   todayDay: number;
@@ -160,56 +170,35 @@ export async function previewSalaryPosting(
   netMonthly: number;
   depositAccountId: number | null;
   depositAccountName: string | null;
+  occurrenceDate?: number;
   message: string;
 }> {
-  const today = new Date();
-  const todayDay = today.getDate();
-
-  const [settings] = await dbLike
-    .select()
-    .from(salarySettings)
-    .where(eq(salarySettings.id, SINGLETON_ID))
-    .limit(1);
-
-  if (!settings) {
+  const now = new Date();
+  const context = await salaryContext(now);
+  if ("error" in context) {
     return {
       wouldPost: false,
       isPayrollDay: false,
-      todayDay,
+      todayDay: now.getDate(),
       payrollDay: 25,
       grossMonthly: 0,
       netMonthly: 0,
       depositAccountId: null,
       depositAccountName: null,
-      message: "Salary settings not configured",
+      message: context.error ?? "Salary settings are incomplete",
     };
   }
-
-  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode);
-
-  let accountName: string | null = null;
-  if (settings.depositAccountId) {
-    const [account] = await dbLike
-      .select({ name: accounts.name })
-      .from(accounts)
-      .where(eq(accounts.id, settings.depositAccountId))
-      .limit(1);
-    accountName = account?.name ?? null;
-  }
-
+  const result = await postSalaryIfPayrollDay(defaultDb, false);
   return {
-    wouldPost: todayDay === settings.payrollDay && !!settings.depositAccountId && payroll.estimatedNetMonthly > 0,
-    isPayrollDay: todayDay === settings.payrollDay,
-    todayDay,
-    payrollDay: settings.payrollDay,
-    grossMonthly: settings.grossMonthly,
-    netMonthly: payroll.estimatedNetMonthly,
-    depositAccountId: settings.depositAccountId,
-    depositAccountName: accountName,
-    message: todayDay === settings.payrollDay
-      ? settings.depositAccountId
-        ? `Salary would be posted: ${payroll.estimatedNetMonthly} net`
-        : "Configure deposit account to auto-post salary"
-      : `Next payroll on day ${settings.payrollDay}`,
+    wouldPost: result.message === "Salary occurrence is due and requires confirmation",
+    isPayrollDay: now.getDate() === new Date(context.occurrenceDate).getDate(),
+    todayDay: now.getDate(),
+    payrollDay: context.settings.payrollDay,
+    grossMonthly: context.settings.grossMonthly,
+    netMonthly: context.payroll.estimatedNetMonthly,
+    depositAccountId: context.settings.depositAccountId,
+    depositAccountName: context.account.name,
+    occurrenceDate: context.occurrenceDate,
+    message: result.message ?? "Salary occurrence preview",
   };
 }

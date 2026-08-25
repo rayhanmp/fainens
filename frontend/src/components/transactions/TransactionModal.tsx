@@ -238,24 +238,6 @@ export function TransactionModal({
     ReturnType<typeof api.paylater.obligations>
   > | null>(null);
 
-  /** Loaded when modal opens — active subscriptions for "Paid for subscription" field */
-  const [subscriptions, setSubscriptions] = useState<Array<{
-    id: number;
-    name: string;
-    amount: number;
-    billingCycle: string;
-    nextRenewalAt: number;
-  }>>([]);
-
-  // Fetch subscriptions when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      api.subscriptions.list().then(data => {
-        setSubscriptions(data.subscriptions.filter((s: any) => s.status === 'active'));
-      }).catch(() => setSubscriptions([]));
-    }
-  }, [isOpen]);
-
   /** Attachments for the transaction */
   const [attachments, setAttachments] = useState<Array<{
     id: number;
@@ -796,9 +778,6 @@ export function TransactionModal({
             categoryId: null,
             walletAccountId,
             toWalletAccountId,
-            ...(simpleForm.subscriptionId ? {
-              subscriptionId: parseInt(simpleForm.subscriptionId, 10),
-            } : {}),
           });
           
           // Create separate fee transaction
@@ -832,9 +811,6 @@ export function TransactionModal({
             categoryId: null,
             walletAccountId,
             toWalletAccountId,
-            ...(simpleForm.subscriptionId ? {
-              subscriptionId: parseInt(simpleForm.subscriptionId, 10),
-            } : {}),
           });
         }
       } else {
@@ -872,10 +848,6 @@ export function TransactionModal({
               simpleForm.destination.lat,
               simpleForm.destination.lng
             ),
-          } : {}),
-          // Subscription payment
-          ...(simpleForm.subscriptionId ? {
-            subscriptionId: parseInt(simpleForm.subscriptionId, 10),
           } : {}),
         });
       }
@@ -2514,42 +2486,6 @@ export function TransactionModal({
                 </div>
                 )}
               </div>
-
-              {simpleForm.type === 'expense' && (
-                <>
-                  <div className="h-px bg-[var(--color-border)]/40" />
-                  <div>
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                      <span className="flex items-center gap-2">
-                        <CalendarClock className="w-4 h-4" />
-                        Paid for subscription
-                      </span>
-                    </label>
-                    <select
-                      value={simpleForm.subscriptionId}
-                      onChange={(e) => {
-                        const subId = e.target.value;
-                        setSimpleForm({ ...simpleForm, subscriptionId: subId });
-                        // Auto-fill amount with subscription amount
-                        if (subId) {
-                          const sub = subscriptions.find(s => s.id === parseInt(subId, 10));
-                          if (sub) {
-                            setSimpleForm(prev => ({ ...prev, amount: sub.amount.toString() }));
-                          }
-                        }
-                      }}
-                      className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
-                    >
-                      <option value="">None</option>
-                      {subscriptions.map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {sub.name} ({formatCurrency(sub.amount)}/{sub.billingCycle === 'annual' ? 'yr' : 'mo'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
 
               <div className="h-px bg-[var(--color-border)]/40" />
 

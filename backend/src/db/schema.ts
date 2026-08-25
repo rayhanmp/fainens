@@ -212,6 +212,28 @@ export const reconciliationItems = sqliteTable("reconciliation_item", {
   accountIdx: index("idx_reconciliation_item_account").on(table.accountId),
 }));
 
+/** Durable identity and outcome for every inferred recurring financial event. */
+export const recurringOccurrences = sqliteTable("recurring_occurrence", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobType: text("job_type").notNull(),
+  scheduleId: integer("schedule_id").notNull(),
+  occurrenceDate: integer("occurrence_date", { mode: "timestamp_ms" }).notNull(),
+  status: text("status").notNull(), // pending | posted | skipped | failed
+  transactionId: integer("transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  occurrenceUnique: uniqueIndex("idx_recurring_occurrence_identity")
+    .on(table.jobType, table.scheduleId, table.occurrenceDate),
+  statusIdx: index("idx_recurring_occurrence_status").on(table.status),
+}));
+
 export const auditLogs = sqliteTable("audit_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   entityType: text("entity_type").notNull(),

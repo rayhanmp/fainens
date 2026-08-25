@@ -44,6 +44,15 @@ type ApiSubscription = {
   updatedAt: number;
 };
 
+type RenewalOccurrence = {
+  subscriptionId: number;
+  subscriptionName: string;
+  dueAt: number;
+  amount: number;
+  linkedAccountId: number;
+  billingCycle: string;
+};
+
 const ICON_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'car', label: 'Transport' },
@@ -125,6 +134,11 @@ function SubscriptionsPage() {
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const [renewalPreview, setRenewalPreview] = useState<{ occurrences: RenewalOccurrence[]; truncated: boolean }>({
+    occurrences: [],
+    truncated: false,
+  });
+  const [processingRenewals, setProcessingRenewals] = useState(false);
   const { confirm } = useConfirm();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -151,16 +165,9 @@ function SubscriptionsPage() {
         api.categories.list(),
       ]);
       setRows(data.subscriptions);
+      setRenewalPreview(data.renewalPreview);
       setAccounts(accs.map((a) => ({ id: a.id, name: a.name })));
       setCategories(cats.map((c) => ({ id: c.id, name: c.name })));
-      if (data.renewal.errors.length > 0) {
-        setBanner({ type: 'error', text: data.renewal.errors.join(' ') });
-      } else if (data.renewal.processed > 0) {
-        setBanner({
-          type: 'success',
-          text: `Posted ${data.renewal.processed} renewal charge(s) to Transactions.`,
-        });
-      }
     } catch (e) {
       setBanner({ type: 'error', text: e instanceof Error ? e.message : 'Failed to load subscriptions' });
     } finally {
@@ -219,7 +226,7 @@ function SubscriptionsPage() {
       return;
     }
     const amount = parseIdNominalToInt(form.amountDisplay);
-    if (!Number.isFinite(amount) || amount < 0) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
       setBanner({ type: 'error', text: 'Enter a valid amount.' });
       return;
     }
@@ -283,6 +290,38 @@ function SubscriptionsPage() {
       await load();
     } catch (e) {
       setBanner({ type: 'error', text: e instanceof Error ? e.message : 'Delete failed' });
+    }
+  };
+
+  const processRenewals = async (mode: 'post' | 'skip') => {
+    const count = renewalPreview.occurrences.length;
+    const confirmed = await confirm({
+      title: mode === 'post' ? 'Post missed renewals?' : 'Skip missed renewals?',
+      message: mode === 'post'
+        ? `Post ${count} dated renewal charge${count === 1 ? '' : 's'}? Review the dates below first.`
+        : `Skip ${count} missed occurrence${count === 1 ? '' : 's'} and resume from the next date? No transactions will be created.`,
+      confirmLabel: mode === 'post' ? 'Post charges' : 'Skip and resume',
+      variant: mode === 'post' ? 'default' : 'danger',
+    });
+    if (!confirmed) return;
+    setProcessingRenewals(true);
+    setBanner(null);
+    try {
+      const result = await api.subscriptions.runRenewals(
+        mode,
+        renewalPreview.occurrences.map((item) => ({ subscriptionId: item.subscriptionId, dueAt: item.dueAt })),
+      );
+      setBanner({
+        type: 'success',
+        text: mode === 'post'
+          ? `Posted ${result.posted} confirmed renewal charge(s).`
+          : `Skipped ${result.skipped} missed occurrence(s); no financial transactions were created.`,
+      });
+      await load();
+    } catch (error) {
+      setBanner({ type: 'error', text: error instanceof Error ? error.message : 'Renewal processing failed' });
+    } finally {
+      setProcessingRenewals(false);
     }
   };
 
@@ -360,6 +399,38 @@ function SubscriptionsPage() {
           <p className="text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
         ) : (
           <>
+            {renewalPreview.occurrences.length > 0 && (
+              <section className="mb-8 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <h2 className="font-headline text-lg font-bold">
+                      {renewalPreview.occurrences.length} missed renewal occurrence(s) need a decision
+                    </h2>
+                    <p className="mt-1 text-sm">
+                      Nothing was posted automatically. Confirm charges only if the subscriptions were active on these dates,
+                      or skip them to resume the schedules without changing the ledger.
+                    </p>
+                    <p className="mt-2 text-xs">
+                      {renewalPreview.occurrences.slice(0, 8).map((item) =>
+                        `${item.subscriptionName} · ${formatShortDate(item.dueAt)} · ${formatCurrency(item.amount)}`
+                      ).join('  |  ')}
+                      {renewalPreview.occurrences.length > 8 ? `  |  +${renewalPreview.occurrences.length - 8} more` : ''}
+                    </p>
+                    {renewalPreview.truncated && (
+                      <p className="mt-2 font-semibold">The gap exceeds the safety limit; resolve the shown batch first.</p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button disabled={processingRenewals} variant="secondary" onClick={() => void processRenewals('skip')}>
+                      Skip & resume
+                    </Button>
+                    <Button disabled={processingRenewals} onClick={() => void processRenewals('post')}>
+                      Review confirmed · Post
+                    </Button>
+                  </div>
+                </div>
+              </section>
+            )}
             <div className="grid grid-cols-1 gap-8 md:grid-cols-12">
               <section className="space-y-8 md:col-span-8">
                 <div className="mb-4 flex items-center justify-between">
@@ -534,9 +605,8 @@ function SubscriptionsPage() {
                   <Sparkles className="mb-4 h-8 w-8" aria-hidden />
                   <h2 className="mb-4 font-headline text-xl font-bold">Tips</h2>
                   <p className="text-xs leading-relaxed text-white/80">
-                    After the renewal moment passes, Fainens posts an expense to <strong className="text-white">Transactions</strong>{' '}
-                    and advances the next date by the billing cycle. Use{' '}
-                    <strong className="text-white">paused</strong> to skip charges without posting.
+                    Fainens previews renewal occurrences after their due date. You decide whether to post the dated charges or
+                    skip missed months. Viewing this page never changes your ledger.
                   </p>
                 </div>
               </aside>
