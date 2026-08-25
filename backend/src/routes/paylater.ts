@@ -4,6 +4,7 @@ import {
   recognizePaylaterPurchase,
   recordPaylaterInterest,
   settlePaylaterPayment,
+  reversePaylaterTransaction,
   getPaylaterSummary,
   getPaylaterObligations,
 } from "../services/paylater";
@@ -54,7 +55,7 @@ export default async function (fastify: FastifyInstance) {
 
       return result;
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to recognize paylater purchase" });
     }
   });
 
@@ -85,7 +86,7 @@ export default async function (fastify: FastifyInstance) {
 
       return { installments: schedule };
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to calculate schedule" });
     }
   });
 
@@ -117,7 +118,7 @@ export default async function (fastify: FastifyInstance) {
 
       return result;
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to record interest" });
     }
   });
 
@@ -149,7 +150,18 @@ export default async function (fastify: FastifyInstance) {
 
       return result;
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to settle paylater" });
+    }
+  });
+
+  fastify.post("/api/paylater/:transactionId/reverse", async (request, reply) => {
+    const transactionId = Number((request.params as { transactionId?: string }).transactionId);
+    const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
+    try {
+      const result = await reversePaylaterTransaction({ transactionId, reason });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to reverse PayLater transaction" });
     }
   });
 

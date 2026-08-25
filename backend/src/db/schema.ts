@@ -114,6 +114,26 @@ export const paylaterInstallments = sqliteTable("paylater_installment", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** Exact installment allocations for every PayLater settlement. */
+export const paylaterSettlementAllocations = sqliteTable("paylater_settlement_allocation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  settlementTxId: integer("settlement_tx_id")
+    .notNull()
+    .references(() => transactions.id, { onDelete: "cascade" }),
+  installmentId: integer("installment_id")
+    .notNull()
+    .references(() => paylaterInstallments.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  settlementTxIdx: index("idx_paylater_settlement_allocation_tx").on(table.settlementTxId),
+  installmentIdx: index("idx_paylater_settlement_allocation_installment").on(table.installmentId),
+  settlementInstallmentUnique: uniqueIndex("idx_paylater_settlement_allocation_unique")
+    .on(table.settlementTxId, table.installmentId),
+}));
+
 export const salaryPeriods = sqliteTable("salary_period", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),

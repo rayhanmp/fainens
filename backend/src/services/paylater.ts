@@ -1,6 +1,6 @@
 import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client";
-import { accounts, transactions, transactionLines, paylaterInstallments, auditLogs } from "../db/schema";
+import { accounts, transactions, transactionLines, paylaterInstallments, paylaterSettlementAllocations, auditLogs } from "../db/schema";
 import {
   CreateJournalEntryInput,
   getOrCreateAutoExpenseAccount,
@@ -9,6 +9,7 @@ import {
 } from "./ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { addMonthsClamped } from "./recurrence-calendar";
+import { insertDomainReversalSync, prepareDomainReversal } from "./domain-reversal";
 
 async function assertPaylaterRecognitionId(originalTxId: number | undefined | null) {
   if (originalTxId == null) return;
@@ -94,7 +95,7 @@ export interface PaylaterInstallmentData {
   feeCents: number;
   totalCents: number;
   paidCents: number;
-  status: "pending" | "paid" | "overdue";
+  status: "pending" | "paid" | "overdue" | "cancelled";
   paidTxId: number | null;
 }
 
@@ -528,6 +529,13 @@ export async function settlePaylaterPayment(
       }
     }
     const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    if (allocations.length > 0) {
+      tx.insert(paylaterSettlementAllocations).values(allocations.map((allocation) => ({
+        settlementTxId: transactionId,
+        installmentId: allocation.id,
+        amountCents: allocation.amount,
+      }))).run();
+    }
     for (const allocation of allocations) {
       const current = tx.select({ paidCents: paylaterInstallments.paidCents })
         .from(paylaterInstallments)
@@ -562,6 +570,110 @@ export async function settlePaylaterPayment(
     revisionBumped: true,
   });
   return { transactionId: result };
+}
+
+/**
+ * Reverse a PayLater event while restoring the installment subledger.  Old
+ * settlements without allocation rows are deliberately refused: guessing a
+ * partial-payment allocation would corrupt the obligation schedule.
+ */
+export async function reversePaylaterTransaction(input: {
+  transactionId: number;
+  reason: string;
+}): Promise<{ reversalTransactionId: number }> {
+  if (!Number.isSafeInteger(input.transactionId) || input.transactionId <= 0) throw new Error("Invalid transaction id");
+  const reason = input.reason.trim();
+  if (!reason || reason.length > 500) throw new Error("reason is required and must be at most 500 characters");
+  const [original] = await db.select().from(transactions).where(eq(transactions.id, input.transactionId)).limit(1);
+  if (!original || !["paylater_recognition", "paylater_interest", "paylater_settlement"].includes(original.txType)) {
+    throw new Error("A PayLater recognition, interest, or settlement transaction is required");
+  }
+  const reversal = await prepareDomainReversal(input.transactionId, reason, db);
+  const result = db.transaction((tx) => {
+    const current = tx.select().from(transactions).where(eq(transactions.id, input.transactionId)).limit(1).all()[0];
+    if (!current || current.status !== "posted" || current.txType !== original.txType) {
+      throw new Error("PayLater transaction changed; retry reversal");
+    }
+    if (current.txType === "paylater_recognition") {
+      const descendants = tx.select({ id: transactions.id }).from(transactions).where(and(
+        eq(transactions.linkedTxId, current.id),
+        eq(transactions.status, "posted"),
+      )).all();
+      if (descendants.length > 0) {
+        throw new Error("Reverse linked PayLater interest and settlements before reversing the recognition");
+      }
+      const installments = tx.select().from(paylaterInstallments)
+        .where(eq(paylaterInstallments.recognitionTxId, current.id)).all();
+      if (installments.some((installment: typeof paylaterInstallments.$inferSelect) => Number(installment.paidCents ?? 0) !== 0)) {
+        throw new Error("Cannot reverse a recognition with paid installments");
+      }
+      const reversalTransactionId = insertDomainReversalSync(tx, current.id, reversal.prepared, reason);
+      tx.update(paylaterInstallments).set({ status: "cancelled", paidTxId: null })
+        .where(eq(paylaterInstallments.recognitionTxId, current.id)).run();
+      tx.insert(auditLogs).values({
+        entityType: "paylater_recognition",
+        entityId: current.id,
+        action: "reverse",
+        beforeSnapshot: Buffer.from(JSON.stringify({ transaction: current, installments })),
+        afterSnapshot: Buffer.from(JSON.stringify({ reversalTransactionId, reason, installmentsStatus: "cancelled" })),
+      }).run();
+      return { reversalTransactionId };
+    }
+
+    if (current.txType === "paylater_settlement") {
+      const allocations = tx.select().from(paylaterSettlementAllocations)
+        .where(eq(paylaterSettlementAllocations.settlementTxId, current.id)).all();
+      const linkedRecognitionId = current.linkedTxId;
+      const scheduleCount = linkedRecognitionId == null ? 0 : tx.select({ id: paylaterInstallments.id })
+        .from(paylaterInstallments).where(eq(paylaterInstallments.recognitionTxId, linkedRecognitionId)).all().length;
+      if (scheduleCount > 0 && allocations.length === 0) {
+        throw new Error("This legacy settlement has no allocation evidence and cannot be safely reversed");
+      }
+      for (const allocation of allocations) {
+        const installment = tx.select().from(paylaterInstallments)
+          .where(eq(paylaterInstallments.id, allocation.installmentId)).limit(1).all()[0];
+        if (!installment || Number(installment.paidCents ?? 0) < allocation.amountCents) {
+          throw new Error("Installment allocation is inconsistent; cannot safely reverse this settlement");
+        }
+      }
+      const reversalTransactionId = insertDomainReversalSync(tx, current.id, reversal.prepared, reason);
+      for (const allocation of allocations) {
+        const installment = tx.select().from(paylaterInstallments)
+          .where(eq(paylaterInstallments.id, allocation.installmentId)).limit(1).all()[0];
+        const nextPaid = Number(installment.paidCents ?? 0) - allocation.amountCents;
+        tx.update(paylaterInstallments).set({
+          paidCents: nextPaid,
+          status: nextPaid >= installment.totalCents ? "paid" : "pending",
+          paidTxId: null,
+        }).where(eq(paylaterInstallments.id, installment.id)).run();
+      }
+      tx.insert(auditLogs).values({
+        entityType: "paylater_settlement",
+        entityId: current.id,
+        action: "reverse",
+        beforeSnapshot: Buffer.from(JSON.stringify({ transaction: current, allocations })),
+        afterSnapshot: Buffer.from(JSON.stringify({ reversalTransactionId, reason })),
+      }).run();
+      return { reversalTransactionId };
+    }
+
+    const reversalTransactionId = insertDomainReversalSync(tx, current.id, reversal.prepared, reason);
+    tx.insert(auditLogs).values({
+      entityType: "paylater_interest",
+      entityId: current.id,
+      action: "reverse",
+      beforeSnapshot: Buffer.from(JSON.stringify(current)),
+      afterSnapshot: Buffer.from(JSON.stringify({ reversalTransactionId, reason })),
+    }).run();
+    return { reversalTransactionId };
+  });
+  await invalidateOnTransactionMutation({
+    transactionId: result.reversalTransactionId,
+    affectedAccountIds: reversal.prepared.accountIds,
+    affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+    revisionBumped: true,
+  });
+  return result;
 }
 
 async function recognitionLiabilityMeta(txId: number): Promise<{
@@ -662,7 +774,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
   const recognitions = await db
     .select()
     .from(transactions)
-    .where(and(eq(transactions.txType, "paylater_recognition"), sql`${transactions.status} <> 'draft'`))
+    .where(and(eq(transactions.txType, "paylater_recognition"), eq(transactions.status, "posted")))
     .orderBy(desc(transactions.date));
 
   const obligations: PaylaterObligation[] = [];
@@ -704,7 +816,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
     const children = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.linkedTxId, tx.id), sql`${transactions.status} <> 'draft'`));
+      .where(and(eq(transactions.linkedTxId, tx.id), eq(transactions.status, "posted")));
 
     let interestPostedCents = 0;
     let paymentsPostedCents = paidInstallmentsTotal;

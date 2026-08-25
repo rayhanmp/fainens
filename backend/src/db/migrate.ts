@@ -84,6 +84,18 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
       );
       CREATE INDEX IF NOT EXISTS idx_storage_deletion_outbox_status
         ON storage_deletion_outbox(status);
+      CREATE TABLE IF NOT EXISTS paylater_settlement_allocation (
+        id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+        settlement_tx_id integer NOT NULL REFERENCES "transaction"(id) ON DELETE CASCADE,
+        installment_id integer NOT NULL REFERENCES paylater_installment(id) ON DELETE CASCADE,
+        amount_cents integer NOT NULL,
+        created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+        UNIQUE(settlement_tx_id, installment_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_paylater_settlement_allocation_tx
+        ON paylater_settlement_allocation(settlement_tx_id);
+      CREATE INDEX IF NOT EXISTS idx_paylater_settlement_allocation_installment
+        ON paylater_settlement_allocation(installment_id);
       CREATE TABLE IF NOT EXISTS financial_state (
         id integer PRIMARY KEY NOT NULL,
         revision integer DEFAULT 0 NOT NULL,
@@ -164,6 +176,7 @@ function assertRequiredSchema(): void {
     salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
     loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
+    paylater_settlement_allocation: ["settlement_tx_id", "installment_id", "amount_cents"],
     financial_state: ["id", "revision", "updated_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
