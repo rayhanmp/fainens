@@ -1,8 +1,9 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { accounts, transactionLines, transactions, subscriptions } from "../db/schema";
+import { accounts, transactionLines, transactions } from "../db/schema";
 import { db as defaultDb } from "../db/client";
 import { invalidateAndRecomputeOnTransactionMutation } from "../cache/invalidation";
+import { validateJournalLines } from "./journal-validation";
 
 export type JournalLineInput = {
   accountId: number;
@@ -36,16 +37,6 @@ export type CreateJournalEntryInput = {
   /** Optional subscription this transaction pays for (advances subscription renewal) */
   subscriptionId?: number | null;
 };
-
-function assertIntegerCents(value: unknown, fieldName: string): asserts value is number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`${fieldName} must be a non-negative integer (cents)`);
-  }
-  const cents = value as number;
-  if (cents < 0) {
-    throw new Error(`${fieldName} must be a non-negative integer (cents)`);
-  }
-}
 
 function normalBalanceSign(accountType: string): 1 | -1 {
   if (accountType === "asset") return 1;
@@ -387,49 +378,10 @@ export async function createJournalEntry(
   input: CreateJournalEntryInput,
   dbLike: any = defaultDb,
 ): Promise<{ transactionId: number; balancesByAccountId: Record<number, number> }> {
-  if (!input.lines.length) throw new Error("Journal entry must include at least one line");
-
   const dateMs = typeof input.date === "number" ? input.date : input.date.getTime();
   if (!Number.isFinite(dateMs)) throw new Error("Invalid journal entry date");
 
-  const validatedLines = input.lines.map((line) => {
-    assertIntegerCents(line.debit, "debit");
-    assertIntegerCents(line.credit, "credit");
-    if (!Number.isInteger(line.accountId) || line.accountId <= 0) {
-      throw new Error("accountId must be a positive integer");
-    }
-    return line;
-  });
-
-  let totalDebit = validatedLines.reduce((sum, l) => sum + l.debit, 0);
-  let totalCredit = validatedLines.reduce((sum, l) => sum + l.credit, 0);
-
-  if (totalDebit !== totalCredit) {
-    const difference = totalDebit - totalCredit;
-    if (difference > 0) {
-      const autoIncomeAccount = await getOrCreateAutoIncomeAccount(dbLike);
-      validatedLines.push({
-        accountId: autoIncomeAccount.id,
-        debit: 0,
-        credit: difference,
-        description: "Auto-balanced: Income",
-      });
-    } else if (difference < 0) {
-      const autoExpenseAccount = await getOrCreateAutoExpenseAccount(dbLike);
-      validatedLines.push({
-        accountId: autoExpenseAccount.id,
-        debit: -difference,
-        credit: 0,
-        description: "Auto-balanced: Expense",
-      });
-    }
-    totalDebit = validatedLines.reduce((sum, l) => sum + l.debit, 0);
-    totalCredit = validatedLines.reduce((sum, l) => sum + l.credit, 0);
-  }
-
-  if (totalDebit !== totalCredit) {
-    throw new Error(`Journal entry is not balanced: debits=${totalDebit} credits=${totalCredit}`);
-  }
+  const { lines: validatedLines, totalDebit, totalCredit } = validateJournalLines(input.lines);
 
   const accountIds = Array.from(new Set(validatedLines.map((l) => l.accountId)));
   for (const accountId of accountIds) {
@@ -455,85 +407,89 @@ export async function createJournalEntry(
     throw new Error("Invalid due date");
   }
 
-  const inserted = await dbLike
-    .insert(transactions)
-    .values({
-      date: new Date(dateMs),
-      dueDate: dueMs != null ? new Date(dueMs) : null,
-      description: input.description,
-      reference: input.reference ?? null,
-      notes: input.notes ?? null,
-      place: input.place ?? null,
-      txType: input.txType ?? "manual",
-      periodId: input.periodId ?? null,
-      linkedTxId: input.linkedTxId ?? null,
-      categoryId: input.categoryId ?? null,
-      // Transport location fields
-      originLat: input.originLat ?? null,
-      originLng: input.originLng ?? null,
-      originName: input.originName ?? null,
-      destLat: input.destLat ?? null,
-      destLng: input.destLng ?? null,
-      destName: input.destName ?? null,
-      distanceKm: input.distanceKm ?? null,
-      // Subscription payment
-      subscriptionId: input.subscriptionId ?? null,
-    })
-    .returning({ id: transactions.id });
+  const transactionValues = {
+    date: new Date(dateMs),
+    dueDate: dueMs != null ? new Date(dueMs) : null,
+    description: input.description,
+    reference: input.reference ?? null,
+    notes: input.notes ?? null,
+    place: input.place ?? null,
+    txType: input.txType ?? "manual",
+    periodId: input.periodId ?? null,
+    linkedTxId: input.linkedTxId ?? null,
+    categoryId: input.categoryId ?? null,
+    originLat: input.originLat ?? null,
+    originLng: input.originLng ?? null,
+    originName: input.originName ?? null,
+    destLat: input.destLat ?? null,
+    destLng: input.destLng ?? null,
+    destName: input.destName ?? null,
+    distanceKm: input.distanceKm ?? null,
+    subscriptionId: input.subscriptionId ?? null,
+  };
 
-  const transactionId = inserted[0]?.id;
-  if (!transactionId) throw new Error("Failed to create transaction row");
+  const lineValues = (transactionId: number) => validatedLines.map((line) => ({
+    transactionId,
+    accountId: line.accountId,
+    debit: line.debit,
+    credit: line.credit,
+    description: line.description ?? null,
+  }));
 
-  // Advance subscription renewal if this transaction is linked to a subscription
-  if (input.subscriptionId) {
-    try {
-      const { addOneMonth, addOneYear } = await import("./subscription-renewals");
-      const [sub] = await dbLike
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.id, input.subscriptionId))
-        .limit(1);
-      if (sub && sub.status === "active") {
-        const currentRenewal = sub.nextRenewalAt.getTime();
-        const newRenewal = sub.billingCycle === "annual"
-          ? addOneYear(currentRenewal)
-          : addOneMonth(currentRenewal);
-        await dbLike
-          .update(subscriptions)
-          .set({
-            nextRenewalAt: new Date(newRenewal),
-            updatedAt: new Date(),
-          })
-          .where(eq(subscriptions.id, input.subscriptionId));
-      }
-    } catch (e) {
-      // Log but don't fail the transaction if subscription advance fails
-      console.error("Failed to advance subscription:", e);
+  const verifyPersistedLines = (lineSums: Array<{ debitTotal: number; creditTotal: number }>) => {
+    const persistedDebit = lineSums[0]?.debitTotal ?? 0;
+    const persistedCredit = lineSums[0]?.creditTotal ?? 0;
+    if (persistedDebit !== totalDebit || persistedCredit !== totalCredit) {
+      throw new Error(
+        `Persisted journal totals differ from validated totals: debits=${persistedDebit} credits=${persistedCredit}`,
+      );
     }
-  }
+  };
 
-  await dbLike.insert(transactionLines).values(
-    validatedLines.map((l) => ({
-      transactionId,
-      accountId: l.accountId,
-      debit: l.debit,
-      credit: l.credit,
-      description: l.description ?? null,
-    })),
-  );
+  let transactionId: number;
+  if (dbLike === defaultDb) {
+    // better-sqlite3 transactions must be synchronous. Explicit .all()/.run()
+    // calls keep the header, lines, and verification inside the same commit.
+    transactionId = defaultDb.transaction((tx) => {
+      const inserted = tx
+        .insert(transactions)
+        .values(transactionValues)
+        .returning({ id: transactions.id })
+        .all();
+      const id = inserted[0]?.id;
+      if (!id) throw new Error("Failed to create transaction row");
 
-  const lineSums = await dbLike
-    .select({
-      debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-      creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
-    })
-    .from(transactionLines)
-    .where(eq(transactionLines.transactionId, transactionId));
-
-  const d = lineSums[0]?.debitTotal ?? 0;
-  const c = lineSums[0]?.creditTotal ?? 0;
-  if (d !== c) {
-    throw new Error(`Transaction lines not balanced: debits=${d} credits=${c}`);
+      tx.insert(transactionLines).values(lineValues(id)).run();
+      const lineSums = tx
+        .select({
+          debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+          creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+        })
+        .from(transactionLines)
+        .where(eq(transactionLines.transactionId, id))
+        .all();
+      verifyPersistedLines(lineSums);
+      return id;
+    });
+  } else {
+    // A supplied executor is assumed to be an existing domain transaction or
+    // a test double; its owner controls the outer commit boundary.
+    const inserted = await dbLike
+      .insert(transactions)
+      .values(transactionValues)
+      .returning({ id: transactions.id });
+    const id = inserted[0]?.id;
+    if (!id) throw new Error("Failed to create transaction row");
+    await dbLike.insert(transactionLines).values(lineValues(id));
+    const lineSums = await dbLike
+      .select({
+        debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+        creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+      })
+      .from(transactionLines)
+      .where(eq(transactionLines.transactionId, id));
+    verifyPersistedLines(lineSums);
+    transactionId = id;
   }
 
   const balancesByAccountId: Record<number, number> = {};
