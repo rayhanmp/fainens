@@ -22,6 +22,13 @@
       "when": 1774318513128,
       "tag": "0002_red_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787662740050,
+      "tag": "0003_slow_big_bertha",
+      "breakpoints": true
     }
   ]
 }

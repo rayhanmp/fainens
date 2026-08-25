@@ -2,10 +2,15 @@ import { eq, and, desc, sql, inArray, count, SQL, lte, gte } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods, loans } from "../db/schema";
+import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods } from "../db/schema";
 import { createJournalEntry, createSimpleTransaction } from "../services/ledger";
-import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
-import { invalidateOnTransactionMutation } from "../cache";
+import { auditCreate } from "../services/audit";
+import {
+  deleteTransactionsAtomically,
+  TransactionMutationError,
+  updateTransactionAtomically,
+} from "../services/transaction-mutations";
+import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 
 // Pagination constants
 const MAX_LIMIT = 100;
@@ -613,7 +618,6 @@ RULES:
       notes?: string | null;
       place?: string | null;
       txType?: string;
-      periodId?: number | null;
       categoryId?: number | null;
       tagIds?: number[];
       lines?: Array<{
@@ -624,229 +628,58 @@ RULES:
       }>;
     };
 
-    fastify.log.info({ body, params: request.params }, "PUT transaction request");
-
-    const [existing] = await db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.id, parseInt(id)))
-      .limit(1);
-
-    if (!existing) {
-      return reply.code(404).send({ error: "Transaction not found" });
-    }
-
     try {
-      const updates: Record<string, unknown> = {};
-      let newDateMs: number | null = null;
-      
-      if (body.date !== undefined) {
-        try {
-          const dateVal = new Date(body.date);
-          if (isNaN(dateVal.getTime())) {
-            throw new Error("Invalid date: " + body.date);
-          }
-          newDateMs = dateVal.getTime();
-          updates.date = newDateMs;
-        } catch (dateErr) {
-          fastify.log.error({ err: dateErr, bodyDate: body.date }, "date parsing error");
-          throw dateErr;
-        }
+      const transactionId = parseIdParam(id);
+      if (transactionId === null) {
+        return reply.code(400).send({ error: "Invalid transaction ID" });
       }
-      if (body.description !== undefined) updates.description = body.description;
-      if (body.reference !== undefined) updates.reference = body.reference;
-      if (body.notes !== undefined) updates.notes = body.notes;
-      if (body.place !== undefined) updates.place = body.place;
-      if (body.txType !== undefined) updates.txType = body.txType;
-      if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
-
-      // Auto-update periodId based on transaction date if date is changing
-      if (newDateMs !== null) {
-        const newPeriodId = await findPeriodIdForDate(newDateMs);
-        updates.periodId = newPeriodId;
-      }
-
-      // Map camelCase to snake_case for database columns
-      const columnMap: Record<string, string> = {
-        date: 'date',
-        description: 'description',
-        reference: 'reference',
-        notes: 'notes',
-        place: 'place',
-        txType: 'tx_type',
-        periodId: 'period_id',
-        categoryId: 'category_id',
-      };
-
-      if (Object.keys(updates).length > 0) {
-        const setClauses: string[] = [];
-        const values: unknown[] = [];
-        for (const [key, value] of Object.entries(updates)) {
-          const col = columnMap[key] || key;
-          setClauses.push(`${col} = ?`);
-          values.push(value);
-        }
-        const stmt = db.$client.prepare(`UPDATE "transaction" SET ${setClauses.join(', ')} WHERE id = ?`);
-        stmt.run(...values, parseInt(id));
-      }
-
-      if (body.lines && body.lines.length > 0) {
-        await db.delete(transactionLines).where(eq(transactionLines.transactionId, parseInt(id)));
-        await db.insert(transactionLines).values(
-          body.lines.map((line) => ({
-            transactionId: parseInt(id),
-            accountId: line.accountId,
-            debit: line.debit,
-            credit: line.credit,
-            description: line.description ?? null,
-          }))
-        );
-      }
-
-      if (body.tagIds !== undefined) {
-        await db.delete(transactionTags).where(eq(transactionTags.transactionId, parseInt(id)));
-        if (body.tagIds.length > 0) {
-          await db.insert(transactionTags).values(body.tagIds.map((tagId) => ({ transactionId: parseInt(id), tagId })));
-        }
-      }
-
-      // await auditUpdate("transaction", parseInt(id), existing, updates);
-      reply.code(200).send({ id: parseInt(id), ...updates });
+      const updated = await updateTransactionAtomically(transactionId, body);
+      return reply.code(200).send(updated);
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: "Failed to update transaction" });
+      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "Failed to update transaction",
+      });
     }
   });
 
   fastify.delete("/api/transactions/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const txId = parseInt(id);
-
     try {
-      // Get affected account IDs before deleting
-      const linesToDelete = await db
-        .select({ accountId: transactionLines.accountId })
-        .from(transactionLines)
-        .where(eq(transactionLines.transactionId, txId));
-      const affectedAccountIds = [...new Set(linesToDelete.map(l => l.accountId))];
-
-      // Fetch transaction before deleting for audit log
-      const [existing] = await db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.id, txId))
-        .limit(1);
-
-      if (!existing) {
-        reply.code(404).send({ error: "Transaction not found" });
-        return;
-      }
-
-      // Check if this transaction is linked to a loan and delete the loan too
-      const linkedLoans = await db
-        .select()
-        .from(loans)
-        .where(eq(loans.lendingTransactionId, txId));
-      
-      // Soft delete linked loans
-      for (const loan of linkedLoans) {
-        await db
-          .update(loans)
-          .set({ 
-            isActive: false,
-            updatedAt: sql`(unixepoch('now') * 1000)`,
-          })
-          .where(eq(loans.id, loan.id));
-      }
-
-      await db.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
-      await db.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
-      await db.delete(transactions).where(eq(transactions.id, txId));
-
-      await auditDelete("transaction", txId, existing);
-
-      // Invalidate caches after successful deletion
-      try {
-        await invalidateOnTransactionMutation({
-          transactionId: txId,
-          affectedAccountIds,
-        });
-      } catch (cacheErr) {
-        console.error('Cache invalidation error (transaction was deleted):', cacheErr);
-      }
-
-      reply.code(204).send();
+      const txId = parseIdParam(id);
+      if (txId === null) return reply.code(400).send({ error: "Invalid transaction ID" });
+      const result = await deleteTransactionsAtomically([txId]);
+      // Cleanup is best-effort after commit; failures remain durable in the outbox.
+      if (result.outboxIds.length > 0) void processStorageDeletionOutbox(result.outboxIds);
+      return reply.code(204).send();
     } catch (err) {
       fastify.log.error(err);
-      console.error('Delete transaction error:', err);
-      reply.code(500).send({ error: "Failed to delete transaction" });
+      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "Failed to delete transaction",
+      });
     }
   });
 
   // Bulk delete transactions
   fastify.post("/api/transactions/bulk-delete", async (request, reply) => {
     const { ids } = request.body as { ids: number[] };
-    if (!Array.isArray(ids) || ids.length === 0) {
-      reply.code(400).send({ error: "ids array is required" });
-      return;
-    }
-
     try {
-      let deletedCount = 0;
-      for (const txId of ids) {
-        // Get affected account IDs before deleting
-        const linesToDelete = await db
-          .select({ accountId: transactionLines.accountId })
-          .from(transactionLines)
-          .where(eq(transactionLines.transactionId, txId));
-        const affectedAccountIds = [...new Set(linesToDelete.map(l => l.accountId))];
-
-        const [existing] = await db
-          .select()
-          .from(transactions)
-          .where(eq(transactions.id, txId))
-          .limit(1);
-
-        if (!existing) continue;
-
-        // Check for linked loans
-        const linkedLoans = await db
-          .select()
-          .from(loans)
-          .where(eq(loans.lendingTransactionId, txId));
-        
-        for (const loan of linkedLoans) {
-          await db
-            .update(loans)
-            .set({ 
-              isActive: false,
-              updatedAt: sql`(unixepoch('now') * 1000)`,
-            })
-            .where(eq(loans.id, loan.id));
-        }
-
-        await db.delete(transactionTags).where(eq(transactionTags.transactionId, txId));
-        await db.delete(transactionLines).where(eq(transactionLines.transactionId, txId));
-        await db.delete(transactions).where(eq(transactions.id, txId));
-        
-        await auditDelete("transaction", txId, existing);
-        deletedCount++;
-
-        // Invalidate cache for this transaction
-        try {
-          await invalidateOnTransactionMutation({
-            transactionId: txId,
-            affectedAccountIds,
-          });
-        } catch (cacheErr) {
-          console.error('Cache invalidation error:', cacheErr);
-        }
-      }
-
-      reply.send({ success: true, deletedCount, message: `Deleted ${deletedCount} transaction(s)` });
+      if (!Array.isArray(ids)) throw new TransactionMutationError("ids array is required", 400);
+      const result = await deleteTransactionsAtomically(ids);
+      if (result.outboxIds.length > 0) void processStorageDeletionOutbox(result.outboxIds);
+      return reply.send({
+        success: true,
+        deletedCount: result.deletedCount,
+        message: `Deleted ${result.deletedCount} transaction(s)`,
+      });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(500).send({ error: "Failed to bulk delete transactions" });
+      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "Failed to bulk delete transactions",
+      });
     }
   });
 

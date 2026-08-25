@@ -161,6 +161,27 @@ export const attachments = sqliteTable("attachment", {
   fileSize: integer("file_size").notNull(),
 });
 
+/**
+ * Durable cleanup work for objects whose owning database row has been removed.
+ * The row is committed with the domain deletion, so a transient R2/local-storage
+ * failure never discards the only key needed to retry cleanup.
+ */
+export const storageDeletionOutbox = sqliteTable("storage_deletion_outbox", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  r2Key: text("r2_key").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  processedAt: integer("processed_at", { mode: "timestamp_ms" }),
+}, (table) => ({
+  statusIdx: index("idx_storage_deletion_outbox_status").on(table.status),
+}));
+
 export const auditLogs = sqliteTable("audit_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   entityType: text("entity_type").notNull(),
