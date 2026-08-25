@@ -662,7 +662,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
   const recognitions = await db
     .select()
     .from(transactions)
-    .where(eq(transactions.txType, "paylater_recognition"))
+    .where(and(eq(transactions.txType, "paylater_recognition"), sql`${transactions.status} <> 'draft'`))
     .orderBy(desc(transactions.date));
 
   const obligations: PaylaterObligation[] = [];
@@ -704,7 +704,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
     const children = await db
       .select()
       .from(transactions)
-      .where(eq(transactions.linkedTxId, tx.id));
+      .where(and(eq(transactions.linkedTxId, tx.id), sql`${transactions.status} <> 'draft'`));
 
     let interestPostedCents = 0;
     let paymentsPostedCents = paidInstallmentsTotal;
@@ -932,7 +932,8 @@ export async function getPaylaterSummary(): Promise<PaylaterSummary> {
         credit: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
       })
       .from(transactionLines)
-      .where(eq(transactionLines.accountId, account.id));
+      .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+      .where(and(eq(transactionLines.accountId, account.id), sql`${transactions.status} <> 'draft'`));
 
     const debit = lines[0]?.debit ?? 0;
     const credit = lines[0]?.credit ?? 0;

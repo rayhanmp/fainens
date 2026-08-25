@@ -56,6 +56,7 @@ export async function getFinancialFacts(input: {
     WHERE t.date >= ${input.startMs}
       AND t.date <= ${input.endMs}
       AND t.date <= ${asOfMs}
+      AND t.status <> 'draft'
       ${input.periodId == null ? sql`` : sql`AND t.period_id = ${input.periodId}`}
     GROUP BY t.id, t.date, t.description, t.category_id, c.name, t.tx_type
     ORDER BY t.date ASC, t.id ASC
@@ -88,6 +89,7 @@ export async function getFinancialFacts(input: {
     INNER JOIN "transaction" t ON t.id = tl.transaction_id
     INNER JOIN account a ON a.id = tl.account_id
     WHERE t.date <= ${asOfMs}
+      AND t.status <> 'draft'
   `);
 
   return {
@@ -122,6 +124,7 @@ export async function getBudgetFacts(periodId: number): Promise<Array<{
     LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
     WHERE bp.period_id = ${periodId}
+      AND (t.id IS NULL OR t.status <> 'draft')
     GROUP BY bp.id, bp.category_id, c.name, bp.planned_amount
     ORDER BY c.name ASC
   `) as unknown as Array<Record<string, unknown>>;

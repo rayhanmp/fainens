@@ -30,6 +30,7 @@ import {
   HandCoins,
   Clock,
   Receipt,
+  RotateCcw,
 } from 'lucide-react';
 import { TransactionModal,
   type EditingTransaction,
@@ -75,6 +76,8 @@ interface TransactionRow {
   notes?: string;
   place?: string;
   txType: string;
+  status?: string;
+  reversalOfTxId?: number | null;
   categoryId: number | null;
   periodId: number | null;
   linkedTxId: number | null;
@@ -319,7 +322,25 @@ function TransactionsPage() {
     }
   };
 
+  const handleReverse = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Reverse Posted Journal',
+      message: 'This keeps the original entry and posts an equal opposite journal. Continue?',
+      confirmLabel: 'Reverse',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await api.transactions.reverse(id);
+      await loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
   const handleToggleSelection = (id: number) => {
+    const row = transactions.find((tx) => tx.id === id);
+    if (row && row.status !== 'draft') return;
     const newSelected = new Set(selectedTransactions);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -330,10 +351,11 @@ function TransactionsPage() {
   };
 
   const handleSelectAll = () => {
-    if (selectedTransactions.size === paginated.length) {
+    const deletable = paginated.filter((tx) => tx.status === 'draft');
+    if (selectedTransactions.size === deletable.length) {
       setSelectedTransactions(new Set());
     } else {
-      setSelectedTransactions(new Set(paginated.map(tx => tx.id)));
+      setSelectedTransactions(new Set(deletable.map(tx => tx.id)));
     }
   };
 
@@ -767,10 +789,10 @@ function TransactionsPage() {
                     <th className="px-2 py-3 sm:px-4">
                       <input
                         type="checkbox"
-                        checked={selectedTransactions.size > 0 && selectedTransactions.size === paginated.length}
+                        checked={selectedTransactions.size > 0 && selectedTransactions.size === paginated.filter((tx) => tx.status === 'draft').length}
                         onChange={handleSelectAll}
                         className="cursor-pointer h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
-                        title={selectedTransactions.size === paginated.length ? "Deselect all" : "Select all"}
+                        title={selectedTransactions.size === paginated.filter((tx) => tx.status === 'draft').length ? "Deselect all" : "Select all"}
                       />
                     </th>
                     <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] sm:px-6">
@@ -833,6 +855,7 @@ function TransactionsPage() {
                             type="checkbox"
                             checked={selectedTransactions.has(tx.id)}
                             onChange={() => handleToggleSelection(tx.id)}
+                            disabled={tx.status !== 'draft'}
                             className="cursor-pointer h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
                           />
                         </td>
@@ -904,9 +927,12 @@ function TransactionsPage() {
                           {formatCurrency(Math.abs(amountSigned))}
                         </td>
                         <td className="hidden px-4 py-4 md:table-cell sm:px-6 sm:py-5">
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--color-success)]">
-                            <CircleDot className="h-3.5 w-3.5 fill-[var(--color-success)] text-[var(--color-success)]" />
-                            Posted
+                          <div className={cn(
+                            'flex items-center gap-1.5 text-[11px] font-bold',
+                            tx.status === 'reversed' ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]',
+                          )}>
+                            <CircleDot className="h-3.5 w-3.5 fill-current" />
+                            {tx.status === 'reversed' ? 'Reversed' : tx.status === 'draft' ? 'Draft' : 'Posted'}
                           </div>
                         </td>
                         <td className="px-2 py-4 text-right opacity-100 transition-opacity sm:px-4 sm:opacity-0 sm:group-hover:opacity-100 md:px-6 md:py-5">
@@ -924,22 +950,20 @@ function TransactionsPage() {
                                 <ArrowLeftRight className="h-4 w-4" />
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => openModal(tx, 'view')}
-                              className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] cursor-pointer"
-                              title="Edit"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(tx.id)}
-                              className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {tx.status === 'draft' ? (
+                              <>
+                                <button type="button" onClick={() => openModal(tx, 'view')} className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] cursor-pointer" title="Edit">
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+                                <button type="button" onClick={() => handleDelete(tx.id)} className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer" title="Delete">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : tx.status !== 'reversed' ? (
+                              <button type="button" onClick={() => handleReverse(tx.id)} className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 cursor-pointer" title="Reverse posted journal">
+                                <RotateCcw className="h-4 w-4" />
+                              </button>
+                            ) : null}
                             <span className="hidden sm:inline">
                               <MoreHorizontal className="h-4 w-4 text-[var(--color-muted)] opacity-50" />
                             </span>

@@ -102,6 +102,12 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
         "ALTER TABLE \"transaction\" ADD COLUMN subscription_id integer REFERENCES subscription(id)",
       );
     }
+    if (!columnExists("transaction", "status")) {
+      db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN status text DEFAULT 'posted' NOT NULL");
+    }
+    if (!columnExists("transaction", "reversal_of_tx_id")) {
+      db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN reversal_of_tx_id integer REFERENCES \"transaction\"(id)");
+    }
     db.$client.exec(`
       CREATE TABLE IF NOT EXISTS __drizzle_migrations (
         id SERIAL PRIMARY KEY,
@@ -118,7 +124,7 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
 
 function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
-    transaction: ["id", "date", "tx_type", "subscription_id"],
+    transaction: ["id", "date", "tx_type", "subscription_id", "status", "reversal_of_tx_id"],
     transaction_line: ["transaction_id", "account_id", "debit", "credit"],
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],

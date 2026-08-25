@@ -163,6 +163,7 @@ export const api = {
           notes: string | null;
           place: string | null;
           txType: string;
+          status: string;
           categoryId: number | null;
           periodId: number | null;
           linkedTxId: number | null;
@@ -183,6 +184,7 @@ export const api = {
       }>(`/transactions${query ? `?${query}` : ''}`);
     },
     get: (id: number) => fetchApi(`/transactions/${id}`),
+    reverse: (id: number) => fetchApi<{ id: number; reversalOfTxId: number }>(`/transactions/${id}/reverse`, { method: 'POST' }),
     create: (
       data:
         | {
@@ -1454,6 +1456,38 @@ export const api = {
     }),
     getDashboardLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/dashboard/latest${periodId ? `?periodId=${periodId}` : ''}`),
     getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
+  },
+
+  agent: {
+    tools: () => fetchApi<{
+      schemaVersion: number;
+      revision: number;
+      tools: Array<{
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+      }>;
+      policy: { readOnly: boolean; writesRequireExplicitConfirmation: boolean };
+    }>('/agent/tools'),
+    toolCall: (data: { name: string; input?: Record<string, unknown> }) =>
+      fetchApi<{ tool: string; revision: number; readOnly: true; data: unknown }>('/agent/tool-call', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
+    context: (params?: { periodId?: number; startDate?: number; endDate?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.periodId) query.set('periodId', String(params.periodId));
+      if (params?.startDate) query.set('startDate', String(params.startDate));
+      if (params?.endDate) query.set('endDate', String(params.endDate));
+      return fetchApi(`/agent/context${query.toString() ? `?${query.toString()}` : ''}`);
+    },
+    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number }) =>
+      fetchApi<{ answer: string | null; llmAvailable: boolean; context: unknown; scope?: unknown; revision?: number; toolCalls: Array<{ id: string; name: string; input: unknown }>; toolResults: Array<{ id: string; name: string; result: unknown }>; message?: string }>('/agent/query', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
+    planBudget: (data: { periodId?: number; targetSavingsRate?: number }) =>
+      fetchApi<{ revision: number; targetSavingsRate: number; incomeCents: number; targetSpendCents: number; recommendations: Array<{ categoryId: number | null; category: string; suggestedAmountCents: number; basis: string }>; requiresConfirmation: boolean; writesPerformed: boolean }>('/agent/plan-budget', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
   },
 
   pendingTransactions: {

@@ -1,9 +1,23 @@
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, lte, gte } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { salaryPeriods, budgetPlans, categories, salarySettings } from "../db/schema";
+import { salaryPeriods, budgetPlans, categories, salarySettings, transactions } from "../db/schema";
 import { precomputePeriodSummary } from "../cache/precompute";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+function inclusiveEnd(ms: number): number {
+  return ms % DAY_MS === 0 ? ms + DAY_MS - 1 : ms;
+}
+
+async function assertNoPeriodOverlap(startMs: number, endMs: number, excludeId?: number): Promise<void> {
+  const periods = await db.select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+    .from(salaryPeriods);
+  const overlap = periods.find((period) => period.id !== excludeId &&
+    startMs <= inclusiveEnd(Number(period.endDate)) && Number(period.startDate) <= inclusiveEnd(endMs));
+  if (overlap) throw new Error(`Period overlaps existing period ${overlap.id}`);
+}
 
 export default async function (fastify: FastifyInstance) {
   // All routes require authentication
@@ -72,19 +86,23 @@ export default async function (fastify: FastifyInstance) {
     const startMs = new Date(body.startDate).getTime();
     const endMs = new Date(body.endDate).getTime();
 
-    if (endMs <= startMs) {
-      reply.code(400).send({ error: "End date must be after start date" });
+    if (!body.name?.trim() || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      reply.code(400).send({ error: "name, startDate, and endDate are required; endDate must be after startDate" });
+      return;
+    }
+    try { await assertNoPeriodOverlap(startMs, endMs); } catch (error) {
+      reply.code(409).send({ error: (error as Error).message });
       return;
     }
 
-    const [period] = await db
-      .insert(salaryPeriods)
-      .values({
-        name: body.name,
-        startDate: startMs,
-        endDate: endMs,
-      })
-      .returning();
+    const period = db.transaction((tx) => {
+      const inserted = (tx.insert(salaryPeriods).values({
+        name: body.name.trim(), startDate: startMs, endDate: endMs,
+      }).returning().all() as any[])[0];
+      if (!inserted) throw new Error("Failed to create period");
+      bumpFinancialRevisionSync(tx);
+      return inserted;
+    });
 
     reply.code(201).send(period);
   });
@@ -119,16 +137,22 @@ export default async function (fastify: FastifyInstance) {
     const startMs = updates.startDate ?? existing.startDate;
     const endMs = updates.endDate ?? existing.endDate;
 
-    if (endMs <= startMs) {
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
       reply.code(400).send({ error: "End date must be after start date" });
       return;
     }
+    try { await assertNoPeriodOverlap(startMs, endMs, parseInt(id)); } catch (error) {
+      reply.code(409).send({ error: (error as Error).message });
+      return;
+    }
 
-    const [updated] = await db
-      .update(salaryPeriods)
-      .set(updates)
-      .where(eq(salaryPeriods.id, parseInt(id)))
-      .returning();
+    const updated = db.transaction((tx) => {
+      const row = (tx.update(salaryPeriods).set(updates)
+        .where(eq(salaryPeriods.id, parseInt(id))).returning().all() as any[])[0];
+      if (!row) throw new Error("Period update failed");
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
 
     // Invalidate cache
     await precomputePeriodSummary(parseInt(id));
@@ -151,8 +175,22 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    // Budget plans for this period will be cascade deleted
-    await db.delete(salaryPeriods).where(eq(salaryPeriods.id, parseInt(id)));
+    const [linkedTransaction] = await db.select({ id: transactions.id }).from(transactions)
+      .where(eq(transactions.periodId, parseInt(id))).limit(1);
+    if (linkedTransaction) {
+      reply.code(409).send({ error: "A period with posted transactions cannot be deleted; keep it for audit history" });
+      return;
+    }
+    const [linkedBudget] = await db.select({ id: budgetPlans.id }).from(budgetPlans)
+      .where(eq(budgetPlans.periodId, parseInt(id))).limit(1);
+    if (linkedBudget) {
+      reply.code(409).send({ error: "A period with budget plans cannot be deleted; remove or archive the plans first" });
+      return;
+    }
+    db.transaction((tx) => {
+      tx.delete(salaryPeriods).where(eq(salaryPeriods.id, parseInt(id))).run();
+      bumpFinancialRevisionSync(tx);
+    });
 
     reply.code(204).send();
   });

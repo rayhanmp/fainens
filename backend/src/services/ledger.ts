@@ -23,6 +23,7 @@ export type CreateJournalEntryInput = {
   /** Optional place/location where the transaction occurred */
   place?: string | null;
   txType?: string;
+  reversalOfTxId?: number | null;
   periodId?: number | null;
   linkedTxId?: number | null;
   categoryId?: number | null;
@@ -316,7 +317,7 @@ export async function computeTrialBalanceTotals(dbLike: any = defaultDb) {
     })
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
-    .where(sql`${transactions.date} <= ${now}`);
+    .where(and(sql`${transactions.date} <= ${now}`, sql`${transactions.status} <> 'draft'`));
 
   const debitTotal = rows[0]?.debitTotal ?? 0;
   const creditTotal = rows[0]?.creditTotal ?? 0;
@@ -345,6 +346,7 @@ export async function computeAccountBalance(
       and(
         eq(transactionLines.accountId, accountId),
         sql`${transactions.date} <= ${Date.now()}`,
+        sql`${transactions.status} <> 'draft'`,
       ),
     );
 
@@ -376,7 +378,11 @@ export async function computeAccountBalanceAsOf(
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
     .where(
-      and(eq(transactionLines.accountId, accountId), sql`${transactions.date} <= ${asOfInclusiveMs}`),
+      and(
+        eq(transactionLines.accountId, accountId),
+        sql`${transactions.date} <= ${asOfInclusiveMs}`,
+        sql`${transactions.status} <> 'draft'`,
+      ),
     );
 
   const debitSum = sums?.debitSum ?? 0;
@@ -451,8 +457,10 @@ export async function prepareJournalEntry(
       notes: input.notes ?? null,
       place: input.place ?? null,
       txType: input.txType ?? "manual",
+      status: "posted",
       periodId: input.periodId ?? null,
       linkedTxId: input.linkedTxId ?? null,
+      reversalOfTxId: input.reversalOfTxId ?? null,
       categoryId: input.categoryId ?? null,
       originLat: input.originLat ?? null,
       originLng: input.originLng ?? null,

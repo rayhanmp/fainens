@@ -61,6 +61,7 @@ export default async function (fastify: FastifyInstance) {
             .where(
               and(
                 sql`${transactionLines.accountId} IN (${sql.join(revIds.map(String), sql`, `)})`,
+                sql`${transactions.status} <> 'draft'`,
                 or(
                   eq(transactions.periodId, pid),
                   and(
@@ -109,6 +110,7 @@ export default async function (fastify: FastifyInstance) {
                   and(
                     eq(transactions.categoryId, plan.categoryId),
                     sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
+                    sql`${transactions.status} <> 'draft'`,
                     or(
                       eq(transactions.periodId, plan.periodId),
                       and(
@@ -490,6 +492,7 @@ export default async function (fastify: FastifyInstance) {
                 and(
                   eq(transactions.categoryId, budget.categoryId),
                   sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
+                  sql`${transactions.status} <> 'draft'`,
                   or(
                     eq(transactions.periodId, parseInt(comparePeriodId)),
                     and(

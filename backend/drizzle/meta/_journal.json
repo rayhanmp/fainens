@@ -57,6 +57,13 @@
       "when": 1787670127879,
       "tag": "0007_short_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787670769297,
+      "tag": "0008_brainy_shatterstar",
+      "breakpoints": true
     }
   ]
 }

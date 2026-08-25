@@ -558,6 +558,7 @@ export default async function (fastify: FastifyInstance) {
         await invalidateOnTransactionMutation({
           transactionId: result.transactionId,
           affectedAccountIds: prepared.accountIds,
+          revisionBumped: true,
         });
         reply.code(201).send(result.createdLoans);
       } catch (err) {

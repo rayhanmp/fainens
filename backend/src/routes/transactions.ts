@@ -2,8 +2,14 @@ import { eq, and, desc, sql, inArray, count, SQL, lte, gte } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods } from "../db/schema";
-import { createJournalEntry, createSimpleTransaction } from "../services/ledger";
+import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods, auditLogs } from "../db/schema";
+import {
+  createJournalEntry,
+  createSimpleTransaction,
+  insertPreparedJournalEntrySync,
+  prepareJournalEntry,
+} from "../services/ledger";
+import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import {
   deleteTransactionsAtomically,
   importTransactionsAtomically,
@@ -42,8 +48,10 @@ const transactionColumns = {
   notes: transactions.notes,
   place: transactions.place,
   txType: transactions.txType,
+  status: transactions.status,
   periodId: transactions.periodId,
   linkedTxId: transactions.linkedTxId,
+  reversalOfTxId: transactions.reversalOfTxId,
   categoryId: transactions.categoryId,
   installmentMonths: transactions.installmentMonths,
   interestRatePercent: transactions.interestRatePercent,
@@ -319,8 +327,10 @@ RULES:
       notes: string | null;
       place: string | null;
       txType: string;
+      status: string;
       periodId: number | null;
       linkedTxId: number | null;
+      reversalOfTxId: number | null;
       categoryId: number | null;
       installmentMonths: number | null;
       interestRatePercent: number | null;
@@ -405,7 +415,7 @@ RULES:
         .where(whereCondition)
         .orderBy(desc(transactions.date))
         .limit(limit)
-        .offset(offset);
+        .offset(offset) as unknown as TransactionRow[];
     }
 
     // Fetch transaction details efficiently (bulk query, no N+1)
@@ -595,6 +605,76 @@ RULES:
     } catch (err) {
       fastify.log.error(err);
       reply.code(400).send({ error: "Failed to create transaction" });
+    }
+  });
+
+  /** Reverse a posted journal without erasing its audit history. */
+  fastify.post("/api/transactions/:id/reverse", async (request, reply) => {
+    const transactionId = parseIdParam((request.params as { id?: string }).id);
+    if (transactionId === null) return reply.code(400).send({ error: "Invalid transaction ID" });
+    try {
+      const [original] = await db.select().from(transactions)
+        .where(eq(transactions.id, transactionId)).limit(1);
+      if (!original) return reply.code(404).send({ error: "Transaction not found" });
+      if (original.status !== "posted") {
+        return reply.code(409).send({ error: "Only a posted transaction can be reversed" });
+      }
+      const [existingReversal] = await db.select({ id: transactions.id })
+        .from(transactions).where(eq(transactions.reversalOfTxId, transactionId)).limit(1);
+      if (existingReversal) {
+        return reply.code(409).send({ error: `Transaction already has reversal ${existingReversal.id}` });
+      }
+      const originalLines = await db.select().from(transactionLines)
+        .where(eq(transactionLines.transactionId, transactionId));
+      if (originalLines.length < 2) return reply.code(409).send({ error: "Cannot reverse an incomplete journal" });
+      const reversalDate = Date.now();
+      const reversalPeriodId = await findPeriodIdForDate(reversalDate);
+      const prepared = await prepareJournalEntry({
+        date: reversalDate,
+        description: `Reversal: ${original.description}`,
+        reference: original.reference ? `REVERSAL:${original.reference}` : `REVERSAL:${original.id}`,
+        notes: `Reverses posted transaction #${original.id}`,
+        txType: "reversal",
+        periodId: reversalPeriodId,
+        reversalOfTxId: original.id,
+        lines: originalLines.map((line) => ({
+          accountId: line.accountId,
+          debit: line.credit,
+          credit: line.debit,
+          description: `Reversal of ${line.description ?? original.description}`,
+        })),
+      }, db);
+
+      const result = db.transaction((tx) => {
+        const fresh = tx.select().from(transactions)
+          .where(eq(transactions.id, transactionId)).limit(1).all()[0];
+        if (!fresh || fresh.status !== "posted") throw new Error("Transaction was changed; retry reversal");
+        const [already] = tx.select({ id: transactions.id }).from(transactions)
+          .where(eq(transactions.reversalOfTxId, transactionId)).limit(1).all();
+        if (already) throw new Error(`Transaction already has reversal ${already.id}`);
+        const reversalId = insertPreparedJournalEntrySync(tx, prepared);
+        const updated = tx.update(transactions).set({ status: "reversed" })
+          .where(and(eq(transactions.id, transactionId), eq(transactions.status, "posted"))).run();
+        if (updated.changes !== 1) throw new Error("Failed to mark original transaction reversed");
+        tx.insert(auditLogs).values({
+          entityType: "transaction",
+          entityId: transactionId,
+          action: "update",
+          beforeSnapshot: Buffer.from(JSON.stringify(fresh)),
+          afterSnapshot: Buffer.from(JSON.stringify({ ...fresh, status: "reversed", reversalTransactionId: reversalId })),
+        }).run();
+        return reversalId;
+      });
+      await invalidateOnTransactionMutation({
+        transactionId: result,
+        affectedAccountIds: prepared.accountIds,
+        affectedPeriodIds: reversalPeriodId == null ? undefined : [reversalPeriodId],
+        revisionBumped: true,
+      });
+      return reply.code(201).send({ id: result, reversalOfTxId: transactionId });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.code(409).send({ error: err instanceof Error ? err.message : "Failed to reverse transaction" });
     }
   });
 

@@ -242,6 +242,7 @@ export async function calculateBurnRate(months: number = 3): Promise<BurnRateRes
       and(
         sql`${transactions.date} >= ${cutoffDate}`,
         sql`${transactions.date} <= ${Date.now()}`,
+        sql`${transactions.status} <> 'draft'`,
         sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
         // Exclude non-operational txTypes (transfers, settlements, etc.)
         sql`${transactions.txType} NOT IN ('paylater_settlement', 'simple_transfer')`,
@@ -347,6 +348,7 @@ export async function calculateLifestyleCreep(periodCount: number = 6): Promise<
           and(
             sql`${transactions.date} >= ${periodDetails.startDate}`,
             sql`${transactions.date} <= ${periodDetails.endDate}`,
+            sql`${transactions.status} <> 'draft'`,
             sql`${transactionLines.accountId} IN (${sql.join(revenueAccountIds.map(String), sql`, `)})`,
           ),
         );

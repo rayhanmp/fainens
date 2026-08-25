@@ -363,7 +363,7 @@ export default async function (fastify: FastifyInstance) {
       if (!fresh) throw new Error("Wishlist item not found");
       if (fresh.status === "fulfilled") throw new Error("Wishlist item is already fulfilled");
       const description = (body.description || fresh.name).trim();
-      const transaction = tx
+      const transaction = (tx
         .insert(transactions)
         .values({
           date: new Date(dateMs),
@@ -374,7 +374,7 @@ export default async function (fastify: FastifyInstance) {
           categoryId: fresh.categoryId,
         })
         .returning()
-        .all()[0];
+        .all() as any[])[0];
       if (!transaction) throw new Error("Failed to create wishlist transaction");
       const lines = [
         { transactionId: transaction.id, accountId: expenseAccount.id, debit: fresh.amount, credit: 0, description },

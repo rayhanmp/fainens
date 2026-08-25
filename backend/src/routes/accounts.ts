@@ -292,6 +292,7 @@ export default async function (fastify: FastifyInstance) {
             .where(and(
               eq(transactionLines.accountId, item.accountId),
               sql`${transactions.date} <= ${asOfDate}`,
+              sql`${transactions.status} <> 'draft'`,
             ))
             .all()[0];
           const calculated = calculateReconciliationItem({

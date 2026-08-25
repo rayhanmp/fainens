@@ -116,7 +116,8 @@ export async function generateIncomeStatement(
         minDate: sql<number>`min(${transactions.date})`,
         maxDate: sql<number>`max(${transactions.date})`,
       })
-      .from(transactions);
+      .from(transactions)
+      .where(sql`${transactions.status} <> 'draft'`);
     periodStart = range?.minDate || Date.now() - 365 * 24 * 60 * 60 * 1000;
     periodEnd = range?.maxDate || Date.now();
   }
@@ -146,6 +147,7 @@ export async function generateIncomeStatement(
       and(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
+        sql`${transactions.status} <> 'draft'`,
         sql`${transactionLines.accountId} IN (${sql.join(
           revenueAccounts.map((a) => a.id.toString()),
           sql`, `
@@ -167,6 +169,7 @@ export async function generateIncomeStatement(
       and(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
+        sql`${transactions.status} <> 'draft'`,
         sql`${transactionLines.accountId} IN (${sql.join(
           expenseAccounts.map((a) => a.id.toString()),
           sql`, `
@@ -265,7 +268,8 @@ export async function generateBalanceSheet(asOfDate?: number): Promise<BalanceSh
       .where(
         and(
           eq(transactionLines.accountId, account.id),
-          sql`${transactions.date} <= ${date}`
+          sql`${transactions.date} <= ${date}`,
+          sql`${transactions.status} <> 'draft'`,
         )
       );
 
@@ -396,6 +400,7 @@ export async function generateCashFlowStatement(
     .where(
       and(
         sql`${transactions.date} < ${periodStart}`,
+        sql`${transactions.status} <> 'draft'`,
         sql`${transactionLines.accountId} IN (${sql.join(
           cashAccountIds.map(String),
           sql`, `
@@ -425,6 +430,7 @@ export async function generateCashFlowStatement(
       and(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
+        sql`${transactions.status} <> 'draft'`,
         sql`${transactionLines.accountId} IN (${sql.join(
           cashAccountIds.map(String),
           sql`, `
@@ -546,7 +552,8 @@ export async function generateSpendingBreakdown(
       and(
         eq(accounts.type, "expense"),
         sql`${transactions.date} >= ${periodStart} OR ${transactions.date} IS NULL`,
-        sql`${transactions.date} <= ${periodEnd} OR ${transactions.date} IS NULL`
+        sql`${transactions.date} <= ${periodEnd} OR ${transactions.date} IS NULL`,
+        sql`(${transactions.id} IS NULL OR ${transactions.status} <> 'draft')`,
       )
     )
     .groupBy(accounts.id, accounts.name)

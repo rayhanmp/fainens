@@ -28,7 +28,7 @@ export const accounts: any = sqliteTable("account", {
   parentId: integer("parent_id").references(() => accounts.id, { onDelete: "set null" }),
 });
 
-export const transactions = sqliteTable("transaction", {
+export const transactions: any = sqliteTable("transaction", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   date: integer("date", { mode: "timestamp_ms" }).notNull(),
   /** Optional due date for paylater recognition/interest installments (ms since epoch). */
@@ -39,8 +39,11 @@ export const transactions = sqliteTable("transaction", {
   /** Optional place/location where the transaction occurred */
   place: text("place"),
   txType: text("tx_type").notNull().default("manual"),
+  /** Posted journals are immutable; corrections use a linked reversal. */
+  status: text("status").notNull().default("posted"), // posted | draft | reversed
   periodId: integer("period_id"),
   linkedTxId: integer("linked_tx_id"),
+  reversalOfTxId: integer("reversal_of_tx_id").references(() => transactions.id, { onDelete: "set null" }),
   categoryId: integer("category_id").references(() => categories.id),
   /** Paylater installment metadata */
   installmentMonths: integer("installment_months"), // 1, 3, 6, 12
