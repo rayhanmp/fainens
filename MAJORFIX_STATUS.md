@@ -153,6 +153,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - PayLater settlements now persist exact installment allocations in migration `0012`. Reversal restores each allocated installment amount before it posts the inverse journal; a legacy partial settlement without allocation evidence is deliberately refused instead of guessed. Recognition reversal is allowed only after its posted interest/settlements are unwound, and cancels the untouched schedule. Obligation retrieval now ignores reversed roots and children.
 - A loan's original event can be reversed only before a repayment or status change; it is then archived rather than deleted. A split-bill journal can likewise be reversed only while every derived loan remains untouched; all derived loans are atomically archived with the inverse journal. These dependency rules preserve audit history and prevent orphaned balances.
 
+### `ac6c782` — period identity and consistent scope membership
+
+- Migration `0013` makes `transaction.period_id` a restrictive foreign key to `salary_period`. It retains all journals and converts only dangling legacy IDs to the existing unassigned (`NULL`) fallback before rebuilding the table; required transaction indexes are explicitly restored. Startup fails closed if the FK is absent.
+- Reports, canonical financial facts, budget facts, cached period summaries, and agent transaction search use the same assigned-or-legacy membership predicate. An assigned journal in another period can no longer leak into a selected period merely because its date overlaps; legacy null assignments remain eligible only through each consumer's date range.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -173,7 +178,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-2. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
+2. Complete a formal period archive/restore policy for metadata itself. Transaction identity and shared read-side membership are now enforced; closed periods are already immutable, but a separate archival lifecycle is not yet needed or modeled.
 3. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
