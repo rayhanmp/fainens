@@ -162,7 +162,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-2. Add domain-specific correction/reversal workflows for salary, subscription, PayLater, loan, and split-bill ownership where a correction needs more than a generic journal reversal. Period close/reopen is now audited and enforced; salary catch-up posting/skip is available, but correction is not.
+2. Complete domain-specific correction/reversal workflows for PayLater, loan, and split-bill ownership. Salary and subscription now have atomic correction endpoints: they post an inverse journal plus a replacement and update their durable occurrence in the same SQLite transaction. Generic transaction reversal refuses every domain-owned type so it cannot leave an occurrence or obligation in a false state. Period close/reopen is audited and enforced; corrections default to the current open period and cannot backdate through a closed period.
 3. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
 4. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
