@@ -22,6 +22,10 @@ const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
 const MAX_RECONCILIATION_SESSIONS = 50;
 
+function inclusiveEndOfSelectedDay(timestamp: number): number {
+  return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
+}
+
 export interface AgentScopeInput {
   periodId?: number;
   startDate?: number;
@@ -228,8 +232,9 @@ export async function resolveAgentScope(input: AgentScopeInput = {}): Promise<Ag
 
   const fallbackEnd = Date.now();
   const startMs = input.startDate ?? (period?.startDate ?? fallbackEnd - 30 * DAY_MS);
-  const endMs = input.endDate ?? (period?.endDate ?? fallbackEnd);
-  if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || startMs < 0 || endMs < startMs) {
+  const rawEndMs = input.endDate ?? (period?.endDate ?? fallbackEnd);
+  const endMs = inclusiveEndOfSelectedDay(rawEndMs);
+  if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(rawEndMs) || !Number.isSafeInteger(endMs) || startMs < 0 || endMs < startMs) {
     throw new Error("Invalid scope date range");
   }
 
@@ -356,7 +361,7 @@ export async function searchTransactionsTool(input: unknown) {
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
       AND t.status <> 'draft'
-      ${scope.periodId == null ? sql`` : sql`AND t.period_id = ${scope.periodId}`}
+      ${scope.periodId == null ? sql`` : sql`AND (t.period_id = ${scope.periodId} OR t.period_id IS NULL)`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
     GROUP BY t.id, t.date, t.description, t.reference, t.notes, t.tx_type, t.status, t.period_id, t.category_id, c.name
     ORDER BY t.date DESC, t.id DESC

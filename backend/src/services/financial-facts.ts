@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 
+const DAY_MS = 86_400_000;
+
 export interface FinancialFactRow {
   id: number;
   date: number;
@@ -27,7 +29,8 @@ export interface FinancialFacts {
 /**
  * Canonical read model for narrative/reporting consumers. Amounts come from
  * account normal balances, never from a transaction's arbitrary line side:
- * expense = expense debits and income = revenue credits.
+ * expense = expense debits minus credits and income = revenue credits minus
+ * debits, so refunds and reversals net correctly.
  */
 export async function getFinancialFacts(input: {
   startMs: number;
@@ -57,7 +60,7 @@ export async function getFinancialFacts(input: {
       AND t.date <= ${input.endMs}
       AND t.date <= ${asOfMs}
       AND t.status <> 'draft'
-      ${input.periodId == null ? sql`` : sql`AND t.period_id = ${input.periodId}`}
+      ${input.periodId == null ? sql`` : sql`AND (t.period_id = ${input.periodId} OR t.period_id IS NULL)`}
     GROUP BY t.id, t.date, t.description, t.category_id, c.name, t.tx_type
     ORDER BY t.date ASC, t.id ASC
   `) as unknown as Array<Record<string, unknown>>;
@@ -122,7 +125,11 @@ export async function getBudgetFacts(periodId: number): Promise<Array<{
       COUNT(DISTINCT CASE WHEN a.type = 'expense' AND tl.debit - tl.credit > 0 THEN t.id END) AS transaction_count
     FROM budget_plan bp
     INNER JOIN category c ON c.id = bp.category_id
-    LEFT JOIN "transaction" t ON t.period_id = bp.period_id AND t.category_id = bp.category_id
+    INNER JOIN salary_period sp ON sp.id = bp.period_id
+    LEFT JOIN "transaction" t ON t.category_id = bp.category_id
+      AND t.date >= sp.start_date
+      AND t.date <= sp.end_date + ${DAY_MS - 1}
+      AND (t.period_id = bp.period_id OR t.period_id IS NULL)
     LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
     WHERE bp.period_id = ${periodId}

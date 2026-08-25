@@ -70,6 +70,10 @@ export interface SpendingBreakdown {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function periodMembership(periodId?: number) {
+  return periodId == null ? undefined : sql`(${transactions.periodId} = ${periodId} OR ${transactions.periodId} IS NULL)`;
+}
+
 /** Salary-period end dates are commonly stored as midnight from an HTML date input. */
 function inclusiveEndOfSelectedDay(timestamp: number): number {
   return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
@@ -148,6 +152,7 @@ export async function generateIncomeStatement(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
         sql`${transactions.status} <> 'draft'`,
+        periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           revenueAccounts.map((a) => a.id.toString()),
           sql`, `
@@ -170,6 +175,7 @@ export async function generateIncomeStatement(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
         sql`${transactions.status} <> 'draft'`,
+        periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           expenseAccounts.map((a) => a.id.toString()),
           sql`, `
@@ -450,6 +456,7 @@ export async function generateCashFlowStatement(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
         sql`${transactions.status} <> 'draft'`,
+        periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           cashAccountIds.map(String),
           sql`, `
@@ -576,6 +583,7 @@ export async function generateSpendingBreakdown(
         sql`${transactions.date} >= ${periodStart} OR ${transactions.date} IS NULL`,
         sql`${transactions.date} <= ${periodEnd} OR ${transactions.date} IS NULL`,
         sql`(${transactions.id} IS NULL OR ${transactions.status} <> 'draft')`,
+        periodMembership(periodId),
       )
     )
     .groupBy(accounts.id, accounts.name)
