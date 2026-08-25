@@ -138,6 +138,10 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Contact archive is now an atomic, audited operation that refuses to hide a contact with active outstanding loans. A contact can be restored explicitly without deleting historical loan records.
 
+### `7db8b0f` — budget-template archive lifecycle
+
+- Budget-template archival is now audited, idempotently guarded, and reversible through an explicit restore action. Inactive templates can be deliberately retrieved for archive-management views without appearing in ordinary template pickers.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -163,7 +167,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 4. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
-7. Finish safe account/category/template archive dependency previews and restore flows. Contacts now reject archival with active loans and support restore.
+7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
