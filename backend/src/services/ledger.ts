@@ -4,6 +4,7 @@ import { accounts, auditLogs, tags, transactionLines, transactions, transactionT
 import { db as defaultDb } from "../db/client";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { validateJournalLines } from "./journal-validation";
+import { bumpFinancialRevisionSync } from "./financial-revision";
 
 export type JournalLineInput = {
   accountId: number;
@@ -518,6 +519,7 @@ export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJourna
       tagIds: prepared.tagIds,
     })),
   }).run();
+  bumpFinancialRevisionSync(tx);
   return id;
 }
 
@@ -593,6 +595,7 @@ export async function createJournalEntry(
       transactionId: result.transactionId,
       affectedAccountIds: prepared.accountIds,
       affectedPeriodIds: input.periodId != null ? [input.periodId] : undefined,
+      revisionBumped: true,
     });
   }
 

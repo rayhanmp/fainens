@@ -1,0 +1,1 @@
+ALTER TABLE `paylater_installment` ADD `paid_cents` integer DEFAULT 0 NOT NULL;

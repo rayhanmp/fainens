@@ -14,6 +14,7 @@ import { estimatePayroll, getTERCategory } from "./indonesia-payroll";
 import { getOrCreateAutoIncomeAccount } from "./ledger";
 import { monthlyOccurrenceDate } from "./recurrence-calendar";
 import { findPeriodIdForDate } from "./transaction-mutations";
+import { bumpFinancialRevisionSync } from "./financial-revision";
 
 const SINGLETON_ID = 1;
 
@@ -139,6 +140,7 @@ export async function postSalaryIfPayrollDay(
         action: "create",
         afterSnapshot: Buffer.from(JSON.stringify({ occurrenceId: occurrence.id, transaction, lines })),
       }).run();
+      bumpFinancialRevisionSync(tx);
       return transaction.id;
     });
   } catch (error) {
@@ -151,6 +153,7 @@ export async function postSalaryIfPayrollDay(
     transactionId,
     affectedAccountIds: [account.id, incomeAccount.id],
     affectedPeriodIds: periodId == null ? undefined : [periodId],
+    revisionBumped: true,
   });
   return {
     posted: true,

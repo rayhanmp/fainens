@@ -20,6 +20,7 @@ import {
 import { validateJournalLines, type ValidatedJournalLine } from "./journal-validation";
 import { getIntrinsicTransactionProtectionReasons } from "./transaction-mutation-policy";
 import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
+import { bumpFinancialRevisionSync } from "./financial-revision";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -255,6 +256,7 @@ export async function updateTransactionAtomically(
       beforeSnapshot: auditSnapshot({ transaction: fresh, lines: currentLines, tags: currentTags }),
       afterSnapshot: auditSnapshot({ transaction: updated, lines: nextLines, tags: nextTags }),
     }).run();
+    bumpFinancialRevisionSync(tx);
     return { ...updated, lines: nextLines, tagIds: nextTags.map((tag) => tag.tagId) };
   });
 
@@ -263,7 +265,7 @@ export async function updateTransactionAtomically(
     ...(validatedLines ?? currentLines).map((line) => line.accountId),
   ])];
   const affectedPeriodIds = [...new Set([current.periodId, periodId].filter((id): id is number => id != null))];
-  await invalidateOnTransactionMutation({ transactionId, affectedAccountIds, affectedPeriodIds });
+  await invalidateOnTransactionMutation({ transactionId, affectedAccountIds, affectedPeriodIds, revisionBumped: true });
   return after;
 }
 
@@ -340,6 +342,8 @@ export async function deleteTransactionsAtomically(ids: number[]): Promise<Delet
     tx.delete(transactionLines).where(inArray(transactionLines.transactionId, uniqueIds)).run();
     tx.delete(transactions).where(inArray(transactions.id, uniqueIds)).run();
 
+    bumpFinancialRevisionSync(tx);
+
     return {
       deletedCount: rows.length,
       affectedAccountIds: [...new Set(lines.map((line) => line.accountId))],
@@ -352,6 +356,7 @@ export async function deleteTransactionsAtomically(ids: number[]): Promise<Delet
     transactionId: uniqueIds[0],
     affectedAccountIds: result.affectedAccountIds,
     affectedPeriodIds: result.affectedPeriodIds,
+    revisionBumped: true,
   });
   return result;
 }
@@ -422,7 +427,8 @@ export async function importTransactionsAtomically(input: {
     ? await getOrCreateAutoIncomeAccount(db)
     : null;
 
-  const imported = db.transaction((tx) => normalizedRows.map((row) => {
+  const imported = db.transaction((tx) => {
+    const result = normalizedRows.map((row) => {
     const inserted = tx
       .insert(transactions)
       .values({
@@ -462,7 +468,12 @@ export async function importTransactionsAtomically(input: {
       }),
     }).run();
     return { id: inserted.id, transactionId: inserted.id };
-  }));
+    });
+    // The import is one compound commit; a single revision invalidates all
+    // derived facts without exposing partially imported state.
+    bumpFinancialRevisionSync(tx);
+    return result;
+  });
 
   const affectedAccountIds = [wallet.id, expenseAccount?.id, incomeAccount?.id]
     .filter((id): id is number => id != null);
@@ -471,6 +482,7 @@ export async function importTransactionsAtomically(input: {
     transactionId: imported[0].transactionId,
     affectedAccountIds,
     affectedPeriodIds,
+    revisionBumped: true,
   });
   return imported;
 }

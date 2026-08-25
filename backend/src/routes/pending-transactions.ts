@@ -6,6 +6,7 @@ import { parseNaturalLanguageTransaction } from "../services/transaction-parser"
 import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "../services/ledger";
 import { findPeriodIdForDate } from "../services/transaction-mutations";
 import { invalidateOnTransactionMutation } from "../cache";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 const MAX_PARSE_ATTEMPTS = 3;
 
@@ -209,6 +210,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
         action: "create",
         afterSnapshot: Buffer.from(JSON.stringify({ source: "pending_approval", pendingId, lines })),
       }).run();
+      bumpFinancialRevisionSync(tx);
         return inserted.id;
       });
     } catch (error) {
@@ -222,6 +224,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       transactionId,
       affectedAccountIds: [account.id, counterparty.id],
       affectedPeriodIds: periodId == null ? undefined : [periodId],
+      revisionBumped: true,
     });
 
     return {

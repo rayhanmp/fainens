@@ -6,12 +6,14 @@ import { computeAccountBalance, computeAccountBalanceRolledUp, computeTrialBalan
 import { cacheSet, CacheKeys } from "./redis";
 import { CACHE_TTL, Keys } from "./keys";
 import { ANALYTICS_KEYS } from "./keys";
+import { getFinancialRevision } from "../services/financial-revision";
 
 // Types for cached data
 export interface AccountBalanceCache {
   accountId: number;
   balance: number; // cents
   computedAt: number; // timestamp ms
+  revision: number;
 }
 
 export interface PeriodSummaryCache {
@@ -21,6 +23,7 @@ export interface PeriodSummaryCache {
   net: number; // cents
   savingsRate: number; // percentage (0-100)
   computedAt: number;
+  revision: number;
 }
 
 export interface NetWorthCache {
@@ -30,12 +33,14 @@ export interface NetWorthCache {
   liquidAssets: number; // cents (cash, bank)
   illiquidAssets: number; // cents (receivables)
   computedAt: number;
+  revision: number;
 }
 
 export interface BurnRateCache {
   grossBurnRate: number; // cents per month (avg)
   period: string; // description of period analyzed
   computedAt: number;
+  revision: number;
 }
 
 export interface RunwayCache {
@@ -43,6 +48,7 @@ export interface RunwayCache {
   liquidAssets: number; // cents
   grossBurnRate: number; // cents per month
   computedAt: number;
+  revision: number;
 }
 
 export interface TrialBalanceCache {
@@ -50,6 +56,7 @@ export interface TrialBalanceCache {
   totalCredits: number; // cents
   isBalanced: boolean;
   computedAt: number;
+  revision: number;
 }
 
 // Precompute and cache account balance for a single account
@@ -60,6 +67,7 @@ export async function precomputeAccountBalance(accountId: number): Promise<Accou
     accountId,
     balance,
     computedAt: Date.now(),
+    revision: await getFinancialRevision(),
   };
 
   await cacheSet(Keys.accountBalance(accountId), data, CACHE_TTL.ACCOUNT_BALANCE);
@@ -155,6 +163,7 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     net,
     savingsRate: Math.round(savingsRate * 100) / 100, // 2 decimal places
     computedAt: Date.now(),
+    revision: await getFinancialRevision(),
   };
 
   await cacheSet(Keys.periodSummary(periodId), data, CACHE_TTL.PERIOD_SUMMARY);
@@ -199,6 +208,7 @@ export async function precomputeNetWorth(): Promise<NetWorthCache> {
     liquidAssets,
     illiquidAssets,
     computedAt: Date.now(),
+    revision: await getFinancialRevision(),
   };
 
   await cacheSet(Keys.analytics(ANALYTICS_KEYS.NET_WORTH), data, CACHE_TTL.ANALYTICS);
@@ -240,6 +250,7 @@ export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCa
     grossBurnRate,
     period: `Last ${months} months`,
     computedAt: Date.now(),
+    revision: await getFinancialRevision(),
   };
 
   await cacheSet(Keys.analytics(ANALYTICS_KEYS.BURN_RATE), data, CACHE_TTL.ANALYTICS);
@@ -270,6 +281,7 @@ export async function precomputeRunway(): Promise<RunwayCache> {
     liquidAssets,
     grossBurnRate,
     computedAt: Date.now(),
+    revision: await getFinancialRevision(),
   };
 
   await cacheSet(Keys.analytics(ANALYTICS_KEYS.RUNWAY), data, CACHE_TTL.ANALYTICS);
@@ -285,6 +297,7 @@ export async function precomputeTrialBalance(): Promise<TrialBalanceCache> {
     totalCredits: totals.creditTotal,
     isBalanced: totals.isBalanced,
     computedAt: Date.now(),
+    revision: await getFinancialRevision(),
   };
 
   await cacheSet(Keys.analytics(ANALYTICS_KEYS.TRIAL_BALANCE), data, CACHE_TTL.ANALYTICS);

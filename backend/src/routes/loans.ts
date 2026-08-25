@@ -8,6 +8,7 @@ import {
   prepareJournalEntry,
 } from "../services/ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 // System account keys for loans
 const SYSTEM_KEYS = {
@@ -327,6 +328,7 @@ export default async function (fastify: FastifyInstance) {
       await invalidateOnTransactionMutation({
         transactionId: result.transactionId,
         affectedAccountIds: prepared.accountIds,
+        revisionBumped: true,
       });
 
       reply.code(201).send(result.loan);
@@ -464,6 +466,7 @@ export default async function (fastify: FastifyInstance) {
       await invalidateOnTransactionMutation({
         transactionId: result.transactionId,
         affectedAccountIds: prepared.accountIds,
+        revisionBumped: true,
       });
 
       const { payment, loan, newRemaining, newStatus } = result;
@@ -574,15 +577,15 @@ export default async function (fastify: FastifyInstance) {
           beforeSnapshot: Buffer.from(JSON.stringify(current)),
           afterSnapshot: Buffer.from(JSON.stringify({ ...current, status: nextStatus, remainingCents: nextRemaining, description: body.description ?? current.description })),
         }).run();
+        if (!prepared) bumpFinancialRevisionSync(tx);
         return { transactionId, nextStatus, nextRemaining };
       });
 
-      if (result.transactionId && prepared) {
-        await invalidateOnTransactionMutation({
-          transactionId: result.transactionId,
-          affectedAccountIds: prepared.accountIds,
-        });
-      }
+      await invalidateOnTransactionMutation({
+        transactionId: result.transactionId ?? loan.lendingTransactionId ?? loan.id,
+        affectedAccountIds: prepared?.accountIds ?? [],
+        revisionBumped: Boolean(result.transactionId && prepared),
+      });
 
       const [updated] = await db
         .select()

@@ -1,5 +1,7 @@
 import { cacheDelete, cacheDeletePattern, cacheGet, cacheSet } from "./redis";
 import { Keys, CACHE_TTL, ANALYTICS_KEYS } from "./keys";
+import { bumpFinancialRevision } from "../services/financial-revision";
+import { getFinancialRevision } from "../services/financial-revision";
 import {
   precomputeAccountBalance,
   precomputeNetWorth,
@@ -71,12 +73,19 @@ export interface TransactionMutationContext {
   transactionId: number;
   affectedAccountIds: number[];
   affectedPeriodIds?: number[];
+  /** Set when the owning write transaction already bumped the revision. */
+  revisionBumped?: boolean;
 }
 
 // Main invalidation pipeline - call this after any transaction mutation
 export async function invalidateOnTransactionMutation(
   context: TransactionMutationContext,
 ): Promise<void> {
+  // Legacy mutation paths call this after their DB commit. Keep them
+  // revision-safe even if Redis invalidation is unavailable. Compound commands
+  // bump inside their own transaction and set revisionBumped to avoid a double
+  // increment.
+  if (!context.revisionBumped) bumpFinancialRevision();
   // 1. Invalidate affected account balances
   for (const accountId of context.affectedAccountIds) {
     await invalidateAccountBalance(accountId);
@@ -122,7 +131,8 @@ export async function invalidateAndRecomputeOnTransactionMutation(
 // Cache read helpers that fallback to DB on cache miss
 export async function getAccountBalanceCached(accountId: number): Promise<number> {
   const cached = await cacheGet<{ balance: number }>(Keys.accountBalance(accountId));
-  if (cached) {
+  const revision = await getFinancialRevision();
+  if (cached && (cached as { revision?: number }).revision === revision) {
     return cached.balance;
   }
 
@@ -140,9 +150,11 @@ export async function getNetWorthCached(): Promise<{
     totalAssets: number;
     totalLiabilities: number;
     netWorth: number;
+    revision?: number;
   }>(Keys.analytics(ANALYTICS_KEYS.NET_WORTH));
 
-  if (cached) {
+  const revision = await getFinancialRevision();
+  if (cached && cached.revision === revision) {
     return cached;
   }
 
@@ -162,9 +174,11 @@ export async function getBurnRateCached(): Promise<{
   const cached = await cacheGet<{
     grossBurnRate: number;
     period: string;
+    revision?: number;
   }>(Keys.analytics(ANALYTICS_KEYS.BURN_RATE));
 
-  if (cached) {
+  const revision = await getFinancialRevision();
+  if (cached && cached.revision === revision) {
     return cached;
   }
 
@@ -182,9 +196,11 @@ export async function getRunwayCached(): Promise<{
   const cached = await cacheGet<{
     runwayMonths: number;
     liquidAssets: number;
+    revision?: number;
   }>(Keys.analytics(ANALYTICS_KEYS.RUNWAY));
 
-  if (cached) {
+  const revision = await getFinancialRevision();
+  if (cached && cached.revision === revision) {
     return cached;
   }
 
@@ -204,9 +220,11 @@ export async function getTrialBalanceCached(): Promise<{
     totalDebits: number;
     totalCredits: number;
     isBalanced: boolean;
+    revision?: number;
   }>(Keys.analytics(ANALYTICS_KEYS.TRIAL_BALANCE));
 
-  if (cached) {
+  const revision = await getFinancialRevision();
+  if (cached && cached.revision === revision) {
     return cached;
   }
 

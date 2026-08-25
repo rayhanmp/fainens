@@ -13,6 +13,7 @@ import {
 import { getOrCreateAutoExpenseAccount } from "./ledger";
 import { findPeriodIdForDate } from "./transaction-mutations";
 import { addOneMonth, addOneYear } from "./recurrence-calendar";
+import { bumpFinancialRevisionSync } from "./financial-revision";
 
 export { addOneMonth, addOneYear } from "./recurrence-calendar";
 
@@ -183,8 +184,9 @@ export async function applySubscriptionOccurrences(input: {
           .where(and(
             eq(subscriptions.id, subscription.id),
             eq(subscriptions.nextRenewalAt, subscription.nextRenewalAt),
-          )).run();
+        )).run();
       }
+      bumpFinancialRevisionSync(tx);
       return {
         posted: input.mode === "post" ? input.occurrences.length : 0,
         skipped: input.mode === "skip" ? input.occurrences.length : 0,
@@ -199,11 +201,12 @@ export async function applySubscriptionOccurrences(input: {
     throw error;
   }
 
-  if (result.transactionIds.length > 0) {
+  if (result.transactionIds.length > 0 || result.skipped > 0) {
     await invalidateOnTransactionMutation({
-      transactionId: result.transactionIds[0],
-      affectedAccountIds: [expenseAccount!.id, ...accountIds],
+      transactionId: result.transactionIds[0] ?? subscriptionIds[0],
+      affectedAccountIds: [expenseAccount?.id, ...accountIds].filter((id): id is number => id != null),
       affectedPeriodIds: result.periodIds,
+      revisionBumped: true,
     });
   }
   return { posted: result.posted, skipped: result.skipped, transactionIds: result.transactionIds };

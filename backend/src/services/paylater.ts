@@ -93,6 +93,7 @@ export interface PaylaterInstallmentData {
   interestCents: number;
   feeCents: number;
   totalCents: number;
+  paidCents: number;
   status: "pending" | "paid" | "overdue";
   paidTxId: number | null;
 }
@@ -117,6 +118,8 @@ export interface PaylaterSettlementInput {
   paylaterLiabilityAccountId: number; // Paylater liability account to reduce
   bankAccountId: number; // Bank/Cash asset account paying from
   originalTxId?: number; // Link to original recognition transaction
+  /** Optional installment allocation; omitted means oldest outstanding installments. */
+  installmentIds?: number[];
   reference?: string;
   notes?: string;
 }
@@ -308,6 +311,7 @@ export async function recognizePaylaterPurchase(
   await invalidateOnTransactionMutation({
     transactionId: result,
     affectedAccountIds: prepared.accountIds,
+    revisionBumped: true,
   });
   return { transactionId: result, installments: schedule };
 }
@@ -398,6 +402,7 @@ export async function recordPaylaterInterest(
   await invalidateOnTransactionMutation({
     transactionId: result,
     affectedAccountIds: prepared.accountIds,
+    revisionBumped: true,
   });
   return { transactionId: result };
 }
@@ -411,6 +416,13 @@ export async function settlePaylaterPayment(
   input: PaylaterSettlementInput
 ): Promise<{ transactionId: number }> {
   assertPositiveSafeInteger(input.paymentAmount, "paymentAmount");
+  if (input.installmentIds && (
+    !Array.isArray(input.installmentIds) ||
+    input.installmentIds.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+    new Set(input.installmentIds).size !== input.installmentIds.length
+  )) {
+    throw new Error("installmentIds must contain unique positive integers");
+  }
   // Validate accounts
   const [liabilityAccount] = await db
     .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
@@ -469,6 +481,7 @@ export async function settlePaylaterPayment(
 
   const prepared = await prepareJournalEntry(journalEntry, db);
   const result = db.transaction((tx) => {
+    const allocations: Array<{ id: number; amount: number; fullyPaid: boolean }> = [];
     if (input.originalTxId != null) {
       // A linked payment cannot reduce the selected obligation below zero.
       // This check is inside the write transaction so two concurrent payments
@@ -487,8 +500,46 @@ export async function settlePaylaterPayment(
       if (input.paymentAmount > outstanding) {
         throw new Error(`Payment exceeds outstanding paylater liability (${outstanding})`);
       }
+
+      const installments = tx.select().from(paylaterInstallments)
+        .where(eq(paylaterInstallments.recognitionTxId, input.originalTxId))
+        .orderBy(paylaterInstallments.installmentNumber)
+        .all();
+      const candidates = input.installmentIds
+        ? installments.filter((item) => input.installmentIds!.includes(item.id))
+        : installments.filter((item) => Number(item.paidCents ?? 0) < item.totalCents);
+      if (input.installmentIds && candidates.length !== input.installmentIds.length) {
+        throw new Error("One or more installments do not belong to the selected obligation");
+      }
+      let remaining = input.paymentAmount;
+      for (const installment of candidates) {
+        if (remaining <= 0) break;
+        const paidCents = Number(installment.paidCents ?? 0);
+        const open = Math.max(0, installment.totalCents - paidCents);
+        if (open <= 0) continue;
+        const amount = Math.min(open, remaining);
+        allocations.push({ id: installment.id, amount, fullyPaid: paidCents + amount >= installment.totalCents });
+        remaining -= amount;
+      }
+      // If a schedule exists, do not silently attach a payment to no
+      // installment. Manual/legacy interest without a schedule remains valid.
+      if (installments.length > 0 && remaining > 0) {
+        throw new Error("Payment exceeds the outstanding installment schedule");
+      }
     }
     const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    for (const allocation of allocations) {
+      const current = tx.select({ paidCents: paylaterInstallments.paidCents })
+        .from(paylaterInstallments)
+        .where(eq(paylaterInstallments.id, allocation.id)).limit(1).all()[0];
+      if (!current) throw new Error("Installment disappeared during settlement");
+      const nextPaid = Number(current.paidCents ?? 0) + allocation.amount;
+      tx.update(paylaterInstallments).set({
+        paidCents: nextPaid,
+        status: allocation.fullyPaid ? "paid" : "pending",
+        paidTxId: allocation.fullyPaid ? transactionId : null,
+      }).where(eq(paylaterInstallments.id, allocation.id)).run();
+    }
     tx.insert(auditLogs).values({
       entityType: "transaction",
       entityId: transactionId,
@@ -500,6 +551,7 @@ export async function settlePaylaterPayment(
         paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
         bankAccountId: input.bankAccountId,
         originalTxId: input.originalTxId,
+        allocations,
       })),
     }).run();
     return transactionId;
@@ -507,6 +559,7 @@ export async function settlePaylaterPayment(
   await invalidateOnTransactionMutation({
     transactionId: result,
     affectedAccountIds: prepared.accountIds,
+    revisionBumped: true,
   });
   return { transactionId: result };
 }
@@ -636,8 +689,9 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
     let nextPendingDueDate: number | null = null;
 
     for (const inst of installments) {
-      if (inst.status === "paid") {
-        paidInstallmentsTotal += inst.totalCents;
+      const paidCents = Math.min(inst.totalCents, Math.max(0, Number(inst.paidCents ?? 0)));
+      if (paidCents >= inst.totalCents || inst.status === "paid") {
+        paidInstallmentsTotal += inst.status === "paid" ? inst.totalCents : paidCents;
       } else {
         pendingInstallments.push(inst);
         if (nextPendingDueDate === null || inst.dueDate.getTime() < nextPendingDueDate) {
@@ -730,6 +784,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
         interestCents: inst.interestCents,
         feeCents: inst.feeCents,
         totalCents: inst.totalCents,
+        paidCents: Number(inst.paidCents ?? 0),
         status: inst.status as "pending" | "paid" | "overdue",
         paidTxId: inst.paidTxId,
       }));
@@ -745,7 +800,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
         recognitionTxId: tx.id,
         transactionId: inst.id,
         description: `${tx.description} - Installment ${inst.installmentNumber}/${inst.totalInstallments}`,
-        amountCents: inst.totalCents,
+        amountCents: Math.max(0, inst.totalCents - Number(inst.paidCents ?? 0)),
         liabilityAccountId: meta.liabilityAccountId,
         liabilityAccountName: meta.liabilityAccountName,
         installmentNumber: inst.installmentNumber,

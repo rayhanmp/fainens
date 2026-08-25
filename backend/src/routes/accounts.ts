@@ -6,6 +6,7 @@ import { accounts, auditLogs, reconciliationItems, reconciliationSessions, trans
 import { computeAccountBalance, computeAccountBalanceRolledUp } from "../services/ledger";
 import { precomputeAccountBalance } from "../cache/precompute";
 import { calculateReconciliationItem } from "../services/reconciliation";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
 
@@ -122,9 +123,8 @@ export default async function (fastify: FastifyInstance) {
       }
     }
 
-    const [account] = await db
-      .insert(accounts)
-      .values({
+    const account = db.transaction((tx) => {
+      const inserted = (tx.insert(accounts).values({
         name: body.name.trim(),
         type: body.type,
         icon: body.icon ?? null,
@@ -138,8 +138,11 @@ export default async function (fastify: FastifyInstance) {
         billingDate: body.billingDate ?? null,
         provider: body.provider ?? null,
         parentId: body.parentId ?? null,
-      })
-      .returning();
+      }).returning().all() as any[])[0];
+      if (!inserted) throw new Error("Failed to create account");
+      bumpFinancialRevisionSync(tx);
+      return inserted;
+    });
 
     reply.code(201).send(account);
   });
@@ -183,9 +186,8 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    const [updated] = await db
-      .update(accounts)
-      .set({
+    const updated = db.transaction((tx) => {
+      const row = (tx.update(accounts).set({
         ...(body.name !== undefined && { name: body.name }),
         ...(body.type && { type: body.type }),
         ...(body.icon !== undefined && { icon: body.icon }),
@@ -199,9 +201,11 @@ export default async function (fastify: FastifyInstance) {
         ...(body.billingDate !== undefined && { billingDate: body.billingDate }),
         ...(body.provider !== undefined && { provider: body.provider }),
         ...(body.parentId !== undefined && { parentId: body.parentId }),
-      })
-      .where(eq(accounts.id, parseInt(id)))
-      .returning();
+      }).where(eq(accounts.id, parseInt(id))).returning().all() as any[])[0];
+      if (!row) throw new Error("Account update failed");
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
 
     await precomputeAccountBalance(parseInt(id));
 
@@ -221,7 +225,10 @@ export default async function (fastify: FastifyInstance) {
 
     console.log(`Deleting account ${accountId}, was isActive: ${existing.isActive}`);
 
-    await db.update(accounts).set({ isActive: false }).where(eq(accounts.id, accountId));
+    db.transaction((tx) => {
+      tx.update(accounts).set({ isActive: false }).where(eq(accounts.id, accountId)).run();
+      bumpFinancialRevisionSync(tx);
+    });
 
     // Verify it was updated
     const [updated] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
@@ -330,6 +337,7 @@ export default async function (fastify: FastifyInstance) {
           action: "create",
           afterSnapshot: Buffer.from(JSON.stringify({ session, items })),
         }).run();
+        bumpFinancialRevisionSync(tx);
         return { session, items: insertedItems.map((row, index) => ({ ...row, accountName: items[index].accountName })) };
       });
       const requiresClassification = result.items.some((item) => item.difference !== 0);

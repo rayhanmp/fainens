@@ -103,6 +103,7 @@ export const paylaterInstallments = sqliteTable("paylater_installment", {
   interestCents: integer("interest_cents").notNull().default(0), // Interest for this installment
   feeCents: integer("fee_cents").notNull().default(0),      // Admin/service fee
   totalCents: integer("total_cents").notNull(),             // principal + interest + fee
+  paidCents: integer("paid_cents").notNull().default(0),   // Amount allocated from settlements
   status: text("status").notNull().default("pending"),      // pending, paid, overdue
   paidTxId: integer("paid_tx_id"),                          // Link to settlement transaction
   createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -233,6 +234,15 @@ export const recurringOccurrences = sqliteTable("recurring_occurrence", {
     .on(table.jobType, table.scheduleId, table.occurrenceDate),
   statusIdx: index("idx_recurring_occurrence_status").on(table.status),
 }));
+
+/** Durable revision for all financial facts and subledger state. */
+export const financialState = sqliteTable("financial_state", {
+  id: integer("id").primaryKey(),
+  revision: integer("revision").notNull().default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
 
 export const auditLogs = sqliteTable("audit_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),

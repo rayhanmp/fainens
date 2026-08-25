@@ -7,6 +7,7 @@ import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
 import { getOrCreateAutoExpenseAccount } from "../services/ledger";
 import { findPeriodIdForDate } from "../services/transaction-mutations";
 import { invalidateOnTransactionMutation } from "../cache";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 // SSRF Protection: Allowed domains for web scraping
 const ALLOWED_SCRAPE_DOMAINS = [
@@ -407,12 +408,14 @@ export default async function (fastify: FastifyInstance) {
           afterSnapshot: Buffer.from(JSON.stringify({ wishlistId: fresh.id, transaction, lines })),
         },
       ]).run();
+      bumpFinancialRevisionSync(tx);
       return { wishlist: updated, transaction };
     });
     await invalidateOnTransactionMutation({
       transactionId: result.transaction.id,
       affectedAccountIds: [wallet.id, expenseAccount.id],
       affectedPeriodIds: periodId == null ? undefined : [periodId],
+      revisionBumped: true,
     });
 
     return result;

@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { generateDashboardInsight, generateBudgetInsight } from "../services/insightGenerator";
 import { getRedisClient } from "../cache/redis";
+import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
+import { getFinancialRevision } from "../services/financial-revision";
 
 const CACHE_TTL_SECONDS = 24 * 60 * 60;
 
@@ -16,20 +18,21 @@ function getWeekDistribution(totalDays: number): number[] {
   return distribution.map(d => base + d);
 }
 
-function getWeekBounds(periodStartMs: number, weekNumber: number): { start: number; end: number } {
-  const weekDistribution = getWeekDistribution(Math.floor((periodStartMs + 31 * 24 * 60 * 60 * 1000 - periodStartMs) / (24 * 60 * 60 * 1000)));
+function getWeekBounds(periodStartMs: number, weekNumber: number, periodEndMs = periodStartMs + 31 * 24 * 60 * 60 * 1000): { start: number; end: number } {
+  const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (24 * 60 * 60 * 1000)) + 1);
+  const weekDistribution = getWeekDistribution(daysTotal);
   let start = periodStartMs;
   for (let i = 0; i < weekNumber - 1; i++) {
     start += weekDistribution[i] * 24 * 60 * 60 * 1000;
   }
   const daysInWeek = weekDistribution[weekNumber - 1] || 7;
-  const end = start + (daysInWeek * 24 * 60 * 60 * 1000) - 1;
+  const end = Math.min(periodEndMs, start + (daysInWeek * 24 * 60 * 60 * 1000) - 1);
   return { start, end };
 }
 
 function getCurrentWeek(periodStartMs: number, today: Date, periodEndMs: number): number {
-  const daysTotal = Math.floor((periodEndMs - periodStartMs) / (24 * 60 * 60 * 1000));
-  const daysElapsed = Math.floor((today.getTime() - periodStartMs) / (24 * 60 * 60 * 1000)) + 1;
+  const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (24 * 60 * 60 * 1000)) + 1);
+  const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - periodStartMs) / (24 * 60 * 60 * 1000)) + 1));
   const distribution = getWeekDistribution(daysTotal);
   let accumulatedDays = 0;
   for (let i = 0; i < distribution.length; i++) {
@@ -42,8 +45,8 @@ function getCurrentWeek(periodStartMs: number, today: Date, periodEndMs: number)
 }
 
 function getDaysLeftInWeek(periodStartMs: number, today: Date, periodEndMs: number): number {
-  const daysTotal = Math.floor((periodEndMs - periodStartMs) / (24 * 60 * 60 * 1000));
-  const daysElapsed = Math.floor((today.getTime() - periodStartMs) / (24 * 60 * 60 * 1000)) + 1;
+  const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (24 * 60 * 60 * 1000)) + 1);
+  const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - periodStartMs) / (24 * 60 * 60 * 1000)) + 1));
   const distribution = getWeekDistribution(daysTotal);
   let accumulatedDays = 0;
   for (const days of distribution) {
@@ -134,7 +137,7 @@ interface BudgetInsightData {
 export default async function insightsRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  type CachedInsight = { content: string; generatedAt: string };
+  type CachedInsight = { content: string; generatedAt: string; revision: number };
 
   async function getCachedInsight(userId: string, type: string, periodId?: string): Promise<CachedInsight | null> {
     const redis = getRedisClient();
@@ -145,8 +148,10 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw) as Partial<CachedInsight>;
+      const revision = await getFinancialRevision();
       return typeof parsed.content === "string" && typeof parsed.generatedAt === "string"
-        ? { content: parsed.content, generatedAt: parsed.generatedAt }
+        && Number.isSafeInteger(parsed.revision) && parsed.revision === revision
+        ? { content: parsed.content, generatedAt: parsed.generatedAt, revision: parsed.revision }
         : null;
     } catch {
       // Legacy plain-string entries have no trustworthy provenance.
@@ -159,7 +164,11 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
     const cacheKey = periodId 
       ? `insights:${userId}:${type}:${periodId}`
       : `insights:${userId}:${type}`;
-    const value: CachedInsight = { content, generatedAt: new Date().toISOString() };
+    const value: CachedInsight = {
+      content,
+      generatedAt: new Date().toISOString(),
+      revision: await getFinancialRevision(),
+    };
     await redis.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(value));
     return value;
   }
@@ -190,80 +199,42 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const today = new Date();
       const periodStartMs = currentPeriod.start_date;
       const periodEndMs = currentPeriod.end_date;
-      const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)));
-      const daysElapsed = Math.floor((today.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)) + 1;
+      const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)) + 1);
+      const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)) + 1));
       const daysRemaining = Math.max(0, daysTotal - daysElapsed);
       const currentWeek = getCurrentWeek(periodStartMs, today, periodEndMs);
       const daysLeftInWeek = getDaysLeftInWeek(periodStartMs, today, periodEndMs);
       const weekDistribution = getWeekDistribution(daysTotal);
 
-      // Wallet balance
-      const walletBalanceResult = await db.all(sql`
-        SELECT COALESCE(SUM(tl.debit - tl.credit), 0) as balance
-        FROM account a
-        LEFT JOIN "transaction_line" tl ON tl.account_id = a.id
-        WHERE a.type = 'asset'
-      `);
-      const walletBalance = (walletBalanceResult[0] as any)?.balance || 0;
-
-      // Monthly income
-      const incomeResult = await db.all(sql`
-        SELECT COALESCE(SUM(tl.debit), 0) as income
-        FROM "transaction" t
-        LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-        WHERE t.period_id = ${currentPeriod.id}
-        AND t.tx_type = 'income'
-        AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-      `);
-      const monthlyIncome = (incomeResult[0] as any)?.income || 0;
-
-      // Get all period transactions with category info (exclude Reconciliation and income)
-      const allTransactionsResult = await db.all(sql`
-        SELECT t.id, t.date, c.name as category, t.description,
-               SUM(CASE WHEN tl.credit > 0 THEN tl.credit ELSE 0 END) as amount
-        FROM "transaction" t
-        LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-        LEFT JOIN category c ON c.id = t.category_id
-        WHERE t.period_id = ${currentPeriod.id}
-        AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-        AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        GROUP BY t.id, c.name, t.description
-      `);
-
-      const txList = (allTransactionsResult as any[]);
-      const totalSpent = txList.reduce((sum, t) => sum + (t.amount || 0), 0);
+      const periodFacts = await getFinancialFacts({
+        startMs: periodStartMs,
+        endMs: periodEndMs,
+        asOfMs: Math.min(Date.now(), periodEndMs),
+        periodId: currentPeriod.id,
+      });
+      const walletBalance = periodFacts.walletBalanceCents;
+      const monthlyIncome = periodFacts.totalIncomeCents;
+      const txList = periodFacts.rows
+        .filter((row) => row.expenseCents > 0)
+        .map((row) => ({
+          id: row.id,
+          date: row.date,
+          category: row.category,
+          description: row.description,
+          amount: row.expenseCents,
+        }));
+      const totalSpent = periodFacts.totalSpentCents;
       const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - totalSpent) / monthlyIncome) * 100 : 0;
       const dailyBurnRate = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
       const expectedTotalSpend = dailyBurnRate * daysTotal;
 
-      // Budget data
-      const budgetsResult = await db.all(sql`
-        SELECT bp.category_id, bp.planned_amount, COALESCE(SUM(tl.credit), 0) as spent
-        FROM budget_plan bp
-        LEFT JOIN "transaction" t ON t.period_id = bp.period_id AND t.category_id = bp.category_id
-          AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-          AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-        WHERE bp.period_id = ${currentPeriod.id}
-        GROUP BY bp.id, bp.category_id, bp.planned_amount
-      `);
-
-      const categoryIds = [...new Set((budgetsResult as any[]).map((b: any) => b.category_id))];
-      let categoryMap = new Map<number, string>();
-      
-      if (categoryIds.length > 0) {
-        const idList = categoryIds.join(',');
-        const categoriesResult = await db.all(sql`
-          SELECT id, name FROM category WHERE id IN (${sql.raw(idList)})
-        `);
-        categoryMap = new Map((categoriesResult as any[]).map((c: any) => [c.id, c.name]));
-      }
-
-      // Calculate budget status
-      const budgets = (budgetsResult as any[]).map((b: any) => ({
-        category: categoryMap.get(b.category_id) || 'Unknown',
-        planned: b.planned_amount || 0,
-        spent: b.spent || 0,
+      // Budget facts use expense-account debits, so income/transfer lines can
+      // never masquerade as spending.
+      const budgetFacts = await getBudgetFacts(currentPeriod.id);
+      const budgets = budgetFacts.map((b) => ({
+        category: b.category,
+        planned: b.plannedCents,
+        spent: b.spentCents,
       }));
 
       const totalPlanned = budgets.reduce((sum, b) => sum + b.planned, 0);
@@ -324,34 +295,21 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const previousWeekNums = getPreviousWeeks(currentWeek);
       const previousWeeks = [];
       for (const weekNum of previousWeekNums) {
-        const { start, end } = getWeekBounds(periodStartMs, weekNum);
-        const weekTotalResult = await db.all(sql`
-          SELECT COALESCE(SUM(tl.credit), 0) as total
-          FROM "transaction" t
-          LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-          WHERE t.date >= ${start} AND t.date <= ${end}
-          AND t.period_id = ${currentPeriod.id}
-          AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-          AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        `);
-        previousWeeks.push({ week: weekNum, total: (weekTotalResult[0] as any)?.total || 0 });
+        const { start, end } = getWeekBounds(periodStartMs, weekNum, periodEndMs);
+        const weekTotal = txList
+          .filter((t) => t.date >= start && t.date <= end)
+          .reduce((sum, t) => sum + t.amount, 0);
+        previousWeeks.push({ week: weekNum, total: weekTotal });
       }
 
       // Spending velocity
       let spendingVelocity: 'faster' | 'slower' | 'same' | 'unknown' = 'unknown';
       if (previousWeeks.length > 0) {
         const prevAvg = previousWeeks.reduce((s, w) => s + w.total, 0) / previousWeeks.length;
-        const { start: currentStart, end: currentEnd } = getWeekBounds(periodStartMs, currentWeek);
-        const currentWeekResult = await db.all(sql`
-          SELECT COALESCE(SUM(tl.credit), 0) as total
-          FROM "transaction" t
-          LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-          WHERE t.date >= ${currentStart} AND t.date <= ${currentEnd}
-          AND t.period_id = ${currentPeriod.id}
-          AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-          AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        `);
-        const currentWeekTotal = (currentWeekResult[0] as any)?.total || 0;
+        const { start: currentStart, end: currentEnd } = getWeekBounds(periodStartMs, currentWeek, periodEndMs);
+        const currentWeekTotal = txList
+          .filter((t) => t.date >= currentStart && t.date <= currentEnd)
+          .reduce((sum, t) => sum + t.amount, 0);
         if (prevAvg > 0) {
           if (currentWeekTotal > prevAvg * 1.15) {
             spendingVelocity = 'faster';
@@ -364,7 +322,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       }
 
       // This week's transactions
-      const { start: weekStart, end: weekEnd } = getWeekBounds(periodStartMs, currentWeek);
+      const { start: weekStart, end: weekEnd } = getWeekBounds(periodStartMs, currentWeek, periodEndMs);
       const weekTransactions = txList
         .filter(t => t.date >= weekStart && t.date <= weekEnd)
         .map(t => ({
@@ -433,57 +391,35 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       }
 
       const today = new Date();
-      const daysTotal = Math.max(1, Math.floor((period.end_date - period.start_date) / (1000 * 60 * 60 * 24)));
-      const daysElapsed = Math.floor((today.getTime() - period.start_date) / (1000 * 60 * 60 * 24)) + 1;
+      const daysTotal = Math.max(1, Math.floor((period.end_date - period.start_date) / (1000 * 60 * 60 * 24)) + 1);
+      const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - period.start_date) / (1000 * 60 * 60 * 24)) + 1));
       const daysRemaining = Math.max(0, daysTotal - daysElapsed);
       const currentWeek = getCurrentWeek(period.start_date, today, period.end_date);
       const daysLeftInWeek = getDaysLeftInWeek(period.start_date, today, period.end_date);
       const weekDistribution = getWeekDistribution(daysTotal);
 
-      // Get all transactions (exclude Reconciliation and income)
-      const allTransactionsResult = await db.all(sql`
-        SELECT t.id, t.date, c.name as category, t.description,
-               SUM(CASE WHEN tl.credit > 0 THEN tl.credit ELSE 0 END) as amount
-        FROM "transaction" t
-        LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-        LEFT JOIN category c ON c.id = t.category_id
-        WHERE t.period_id = ${period.id}
-        AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-        AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        GROUP BY t.id, c.name, t.description
-      `);
-
-      const txList = (allTransactionsResult as any[]);
-      const totalSpent = txList.reduce((sum, t) => sum + (t.amount || 0), 0);
-
-      // Budget status (exclude income transactions)
-      const budgetsResult = await db.all(sql`
-        SELECT bp.category_id, bp.planned_amount, COALESCE(SUM(tl.credit), 0) as spent, COUNT(DISTINCT t.id) as transaction_count
-        FROM budget_plan bp
-        LEFT JOIN "transaction" t ON t.period_id = bp.period_id AND t.category_id = bp.category_id
-          AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-          AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-        WHERE bp.period_id = ${period.id}
-        GROUP BY bp.id, bp.category_id, bp.planned_amount
-      `);
-
-      const categoryIds = [...new Set((budgetsResult as any[]).map((b: any) => b.category_id))];
-      let categoryMap = new Map<number, string>();
-      
-      if (categoryIds.length > 0) {
-        const idList = categoryIds.join(',');
-        const categoriesResult = await db.all(sql`
-          SELECT id, name FROM category WHERE id IN (${sql.raw(idList)})
-        `);
-        categoryMap = new Map(categoriesResult.map((c: any) => [c.id, c.name]));
-      }
-
-      const budgets = (budgetsResult as any[]).map((b: any) => ({
-        category: categoryMap.get(b.category_id) || 'Unknown',
-        planned: b.planned_amount || 0,
-        spent: b.spent || 0,
-        transactions: b.transaction_count || 0,
+      const periodFacts = await getFinancialFacts({
+        startMs: period.start_date,
+        endMs: period.end_date,
+        asOfMs: Math.min(Date.now(), period.end_date),
+        periodId: period.id,
+      });
+      const txList = periodFacts.rows
+        .filter((row) => row.expenseCents > 0)
+        .map((row) => ({
+          id: row.id,
+          date: row.date,
+          category: row.category,
+          description: row.description,
+          amount: row.expenseCents,
+        }));
+      const totalSpent = periodFacts.totalSpentCents;
+      const budgetFacts = await getBudgetFacts(period.id);
+      const budgets = budgetFacts.map((b) => ({
+        category: b.category,
+        planned: b.plannedCents,
+        spent: b.spentCents,
+        transactions: b.transactionCount,
       }));
 
       const totalPlanned = budgets.reduce((sum, b) => sum + b.planned, 0);
@@ -529,15 +465,13 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const lastMonthPeriod = lastMonthPeriodResult[0] as any;
       let lastMonthTotal = 0;
       if (lastMonthPeriod) {
-        const lastMonthTotalResult = await db.all(sql`
-          SELECT COALESCE(SUM(tl.credit), 0) as total
-          FROM "transaction" t
-          LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-          WHERE t.period_id = ${lastMonthPeriod.id}
-          AND (t.description IS NULL OR t.description NOT LIKE '%Reconciliation%')
-          AND (t.tx_type NOT LIKE '%income%' AND t.tx_type NOT LIKE '%Income%')
-        `);
-        lastMonthTotal = (lastMonthTotalResult[0] as any)?.total || 0;
+        const lastMonthFacts = await getFinancialFacts({
+          startMs: lastMonthPeriod.start_date,
+          endMs: lastMonthPeriod.end_date,
+          asOfMs: Math.min(Date.now(), lastMonthPeriod.end_date),
+          periodId: lastMonthPeriod.id,
+        });
+        lastMonthTotal = lastMonthFacts.totalSpentCents;
       }
       const savingsComparison = lastMonthTotal > 0 ? ((lastMonthTotal - totalSpent) / lastMonthTotal) * 100 : 0;
 
@@ -593,7 +527,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       reply.send({ 
         insight: cached?.content ?? null,
         generatedAt: cached?.generatedAt ?? null,
-        stale: false,
+        stale: cached == null,
       });
     } catch (err) {
       fastify.log.error(err);
@@ -611,7 +545,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       reply.send({ 
         insight: cached?.content ?? null,
         generatedAt: cached?.generatedAt ?? null,
-        stale: false,
+        stale: cached == null,
       });
     } catch (err) {
       fastify.log.error(err);

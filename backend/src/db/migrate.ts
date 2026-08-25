@@ -84,6 +84,12 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
       );
       CREATE INDEX IF NOT EXISTS idx_storage_deletion_outbox_status
         ON storage_deletion_outbox(status);
+      CREATE TABLE IF NOT EXISTS financial_state (
+        id integer PRIMARY KEY NOT NULL,
+        revision integer DEFAULT 0 NOT NULL,
+        updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
+      );
+      INSERT OR IGNORE INTO financial_state (id, revision) VALUES (1, 0);
     `);
     if (!columnExists("contact", "full_name")) {
       db.$client.exec("ALTER TABLE contact ADD COLUMN full_name text");
@@ -120,6 +126,7 @@ function assertRequiredSchema(): void {
     reconciliation_session: ["as_of_date", "status"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
+    financial_state: ["id", "revision", "updated_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

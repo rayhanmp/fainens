@@ -130,6 +130,7 @@ export default async function (fastify: FastifyInstance) {
         paylaterLiabilityAccountId: number;
         bankAccountId: number;
         originalTxId?: number;
+        installmentIds?: number[];
         reference?: string;
         notes?: string;
       };
@@ -141,6 +142,7 @@ export default async function (fastify: FastifyInstance) {
         paylaterLiabilityAccountId: body.paylaterLiabilityAccountId,
         bankAccountId: body.bankAccountId,
         originalTxId: body.originalTxId,
+        installmentIds: body.installmentIds,
         reference: body.reference,
         notes: body.notes,
       });
