@@ -109,6 +109,16 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The LLM query route uses OpenRouter function/tool calls, executes only the allow-listed read-only tools, returns tool calls/results and financial revision, caps calls/rounds, and never mutates data. The compatibility context endpoint is composed from those same tools.
 - Added frontend API access to discover tools and call a single tool directly. Budget planning remains a preview and explicitly reports that no write occurred.
 
+### `e4e64f7` — canonical retrieval, cache races, frontend scope, and absence recovery
+
+- Agent retrieval is now a small allow-listed read-only registry: financial facts and transaction search return canonical ledger facets (income, expense, debit, and credit) rather than largest-line or `txType` guesses. The LLM may select these tools directly; no special write function is exposed.
+- Dashboard and salary-income views use canonical facts, deterministic full pagination, explicit scope/request guards, and completeness warnings. CSV export uses signed amounts and formula-safe escaping. Category filters are URL-backed and chart aggregation discloses `Other`.
+- Reports use the newest period by default, inclusive selected-day boundaries, canonical all-period posted history, and guarded preview/download state. Cash-flow classification considers all counterparties and excludes loan receivables from liquidity.
+- Insight payloads carry their source revision; AI cards display provenance. Net-worth comparisons use the exact as-of date, and the lifestyle metric is labeled as an average spending ratio rather than marginal propensity to consume.
+- Cache precomputation refuses to publish a result if the financial revision changes mid-read. Empty queries and old runway cache shapes are handled safely; zero burn is represented as `runwayMonths: null` with `isUnbounded: true` instead of an ambiguous JSON infinity/null.
+- Salary now has a read-only catch-up preview plus explicit post/skip occurrence actions, including a requested historical occurrence date, so a user returning after months away can recover missing payroll without page-load side effects.
+- Account deletion now blocks system accounts, non-zero balances, and parents with children. Budget and period queries use the same assigned-or-date scope and full-day semantics.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -122,19 +132,19 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Backend TypeScript build passes using the bundled runtime.
 - Frontend TypeScript project build passes.
-- Focused pure suite currently passes 49 tests across journal validation, mutation policy, IDR parsing, reconciliation math, recurrence calendar behavior, report CSV behavior, and storage path confinement.
+- Focused recurrence/reconciliation suite passes 8 tests after the latest wave; an earlier broader pure run passed 49 tests across journal validation, mutation policy, IDR parsing, report CSV behavior, and storage path confinement.
 - The complete DB-backed suite is still blocked locally because installed `better-sqlite3` targets Node ABI 127 while the bundled Node runtime requires ABI 137. Do not treat this environment failure as a test pass.
 
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-2. Add period close/reopen and domain-specific reversal workflows for salary, subscription, PayLater, loan, and split-bill ownership where a correction needs more than a generic journal reversal.
+2. Add period close/reopen and domain-specific correction/reversal workflows for salary, subscription, PayLater, loan, and split-bill ownership where a correction needs more than a generic journal reversal. Salary catch-up posting/skip is now available, but correction is not.
 3. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
-4. Replace cash-flow inference: distinguish cash-equivalent assets from receivables/investments and classify every line of multi-line journals.
+4. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
 7. Finish safe account/category/contact/template archive dependency previews and restore flows.
-8. Fix remaining rate-limit scope wiring and add route-level injection tests.
+8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
 
