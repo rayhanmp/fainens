@@ -495,7 +495,7 @@ export const api = {
     delete: (id: number) => fetchApi(`/budgets/${id}`, { method: 'DELETE' }),
     // Templates
     templates: {
-      list: () => fetchApi<Array<{
+      list: (params?: { includeInactive?: boolean }) => fetchApi<Array<{
         id: number;
         name: string;
         description: string | null;
@@ -507,12 +507,13 @@ export const api = {
           plannedAmount: number;
           categoryName: string;
         }>;
-      }>>('/budgets/templates'),
+      }>>(`/budgets/templates${params?.includeInactive ? '?includeInactive=true' : ''}`),
       create: (data: { name: string; description?: string; periodId: number }) =>
         fetchApi('/budgets/templates', { method: 'POST', body: JSON.stringify(data) }),
       apply: (templateId: number, data: { periodId: number; replaceExisting?: boolean }) =>
         fetchApi<{ applied: number; skipped: number }>(`/budgets/templates/${templateId}/apply`, { method: 'POST', body: JSON.stringify(data) }),
       delete: (id: number) => fetchApi(`/budgets/templates/${id}`, { method: 'DELETE' }),
+      restore: (id: number) => fetchApi(`/budgets/templates/${id}/restore`, { method: 'POST' }),
     },
     // Compare periods
     compare: (currentPeriodId: string, comparePeriodId: string) =>

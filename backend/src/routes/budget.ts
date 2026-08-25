@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client";
 
 const DAY_MS = 86_400_000;
-import { budgetPlans, budgetTemplates, budgetTemplateItems, categories, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
+import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
@@ -264,7 +264,8 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get all budget templates
-  fastify.get("/api/budgets/templates", async () => {
+  fastify.get("/api/budgets/templates", async (request) => {
+    const { includeInactive } = request.query as { includeInactive?: string };
     const templates = await db
       .select({
         id: budgetTemplates.id,
@@ -274,7 +275,7 @@ export default async function (fastify: FastifyInstance) {
         createdAt: budgetTemplates.createdAt,
       })
       .from(budgetTemplates)
-      .where(eq(budgetTemplates.isActive, true))
+      .where(includeInactive === "true" ? undefined : eq(budgetTemplates.isActive, true))
       .orderBy(desc(budgetTemplates.createdAt));
 
     const templatesWithItems = await Promise.all(
@@ -435,14 +436,55 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "Template not found" });
       return;
     }
+    if (!existing.isActive) {
+      return reply.code(409).send({ error: "Template is already archived" });
+    }
 
-    // Soft delete by setting isActive to false
-    await db
-      .update(budgetTemplates)
-      .set({ isActive: false })
-      .where(eq(budgetTemplates.id, parseInt(id)));
+    db.transaction((tx) => {
+      const updated = tx.update(budgetTemplates).set({ isActive: false })
+        .where(and(eq(budgetTemplates.id, parseInt(id)), eq(budgetTemplates.isActive, true)))
+        .returning().all()[0];
+      if (!updated) throw new Error("Template was changed; retry archiving it");
+      tx.insert(auditLogs).values({
+        entityType: "budget_template",
+        entityId: updated.id,
+        action: "archive",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify(updated)),
+      }).run();
+    });
 
     reply.code(204).send();
+  });
+
+  fastify.post("/api/budgets/templates/:id/restore", async (request, reply) => {
+    const templateId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(templateId) || templateId <= 0) {
+      return reply.code(400).send({ error: "Invalid template ID" });
+    }
+    try {
+      const restored = db.transaction((tx) => {
+        const existing = tx.select().from(budgetTemplates).where(eq(budgetTemplates.id, templateId)).limit(1).all()[0];
+        if (!existing) throw new Error("Template not found");
+        if (existing.isActive) throw new Error("Template is already active");
+        const updated = tx.update(budgetTemplates).set({ isActive: true })
+          .where(and(eq(budgetTemplates.id, templateId), eq(budgetTemplates.isActive, false)))
+          .returning().all()[0];
+        if (!updated) throw new Error("Template was changed; retry restoring it");
+        tx.insert(auditLogs).values({
+          entityType: "budget_template",
+          entityId: templateId,
+          action: "restore",
+          beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        }).run();
+        return updated;
+      });
+      return reply.send(restored);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to restore template";
+      return reply.code(message === "Template not found" ? 404 : 409).send({ error: message });
+    }
   });
 
   // Compare budgets between two periods
