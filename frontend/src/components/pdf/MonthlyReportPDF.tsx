@@ -194,11 +194,6 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const formatPercent = (value: number) => {
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(1)}%`;
-};
-
 interface MonthlyReportProps {
   periodName: string;
   startDate: string;
@@ -361,7 +356,7 @@ export function MonthlyReportPDF({
                   <Text style={[styles.tableCellRight, styles.col4]}>{formatCurrency(item.budget)}</Text>
                   <Text style={[styles.tableCellRight, styles.col5]}>{formatCurrency(item.actual)}</Text>
                   <Text style={[styles.tableCellRight, styles.col6, item.variance >= 0 ? styles.positive : styles.negative]}>
-                    {formatPercent(item.variance)}
+                    {formatCurrency(item.variance)}
                   </Text>
                 </View>
               ))}

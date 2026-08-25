@@ -11,6 +11,8 @@ import {
   generateSpendingBreakdown,
   exportReportToCSV,
 } from "../services/reports";
+import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
+import { getFinancialRevision } from "../services/financial-revision";
 
 // Query parameter schemas
 const periodQuerySchema = z.object({
@@ -29,6 +31,11 @@ const periodQuerySchema = z.object({
 const asOfQuerySchema = z.object({
   asOfDate: z.coerce.number().int().nonnegative().optional(),
 });
+
+const DAY_MS = 86_400_000;
+function inclusiveEnd(timestamp: number): number {
+  return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
+}
 
 function reportError(fastify: FastifyInstance, reply: any, err: unknown, fallback: string) {
   if (err instanceof z.ZodError) {
@@ -110,6 +117,60 @@ export default async function (fastify: FastifyInstance) {
       return { breakdown, total: breakdown.reduce((sum, b) => sum + b.amount, 0) };
     } catch (err) {
       return reportError(fastify, reply, err, "Failed to generate spending breakdown");
+    }
+  });
+
+  /**
+   * One canonical, period-scoped payload for the monthly PDF. The browser must
+   * not reconstruct income/expense from txType or from a capped transaction
+   * list, and the balance sheet must use the selected period's as-of date.
+   */
+  fastify.get("/api/reports/monthly", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
+    try {
+      const { periodId } = z.object({ periodId: z.coerce.number().int().positive() }).parse(request.query);
+      const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+        .from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1);
+      if (!period) return reply.code(404).send({ error: "Period not found" });
+      const [facts, incomeStatement, balanceSheet, budgets, revision] = await Promise.all([
+        getFinancialFacts({ startMs: period.startDate, endMs: inclusiveEnd(period.endDate), asOfMs: inclusiveEnd(period.endDate), periodId }),
+        generateIncomeStatement(periodId),
+        generateBalanceSheet(period.endDate),
+        getBudgetFacts(periodId),
+        getFinancialRevision(),
+      ]);
+      const transactionRows = facts.rows
+        .map((row) => {
+          const signed = row.incomeCents - row.expenseCents;
+          return {
+            id: row.id,
+            date: row.date,
+            description: row.description,
+            category: row.category ?? "Uncategorized",
+            amountCents: Math.abs(signed),
+            type: signed > 0 ? "income" : signed < 0 ? "expense" : "transfer",
+          };
+        })
+        .filter((row) => row.amountCents > 0);
+      return {
+        revision,
+        period,
+        incomeStatement,
+        balanceSheet,
+        incomeBySource: incomeStatement.revenue.filter((row) => row.amount !== 0).map((row) => ({ name: row.name, amount: row.amount })),
+        expensesByCategory: facts.byCategory.filter((row) => row.spentCents !== 0).map((row) => ({ name: row.category, amount: row.spentCents })),
+        budgetComparison: budgets.map((row) => ({
+          category: row.category,
+          budget: row.plannedCents,
+          actual: row.spentCents,
+          variance: row.plannedCents - row.spentCents,
+        })),
+        transactions: transactionRows,
+        provenance: { source: "canonical-financial-facts", asOfMs: inclusiveEnd(period.endDate), includesDrafts: false },
+      };
+    } catch (err) {
+      return reportError(fastify, reply, err, "Failed to generate monthly report");
     }
   });
 

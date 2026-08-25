@@ -40,114 +40,34 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
     try {
       const periodId = parseInt(selectedPeriodId);
       const period = periods.find(p => p.id === periodId);
-      
-      // Fetch transactions and categories in parallel
-      const [transactionsData, categoriesData, balanceData] = await Promise.all([
-        api.transactions.list({ periodId: selectedPeriodId, limit: '10000' }),
-        api.categories.list(),
-        api.reports.balanceSheet(),
-      ]);
+      if (!period) throw new Error('Selected period not found');
 
-      const transactions = transactionsData.data || [];
-      const categories = categoriesData || [];
-      const categoryMap = new Map(categories.map((c: any) => [c.id, c.name]));
-
-      // Process transactions - separate income and expenses
-      const incomeMap = new Map<number, number>();
-      const expenseMap = new Map<number, number>();
-      const allTransactions: Array<{
-        date: string;
-        description: string;
-        category: string;
-        amount: number;
-        type: string;
-      }> = [];
-
-      let totalIncome = 0;
-      let totalExpenses = 0;
-
-      for (const tx of transactions) {
-        // Determine if income or expense based on txType
-        const isIncome = tx.txType?.includes('income') || tx.txType === 'simple_income';
-        
-        // Get category name - use "Income" for income transactions
-        let categoryName: string;
-        if (isIncome) {
-          categoryName = 'Income';
-        } else {
-          categoryName = tx.categoryId ? categoryMap.get(tx.categoryId) || 'Uncategorized' : 'No Category';
-        }
-        
-        // Calculate amount from lines
-        const debit = tx.lines?.reduce((sum, line) => sum + (line.debit || 0), 0) || 0;
-        const credit = tx.lines?.reduce((sum, line) => sum + (line.credit || 0), 0) || 0;
-        
-        // Determine amount and type - use credit for income, debit for expense
-        let amount = 0;
-        let txType = 'expense';
-        
-        if (isIncome && credit > 0) {
-          amount = credit;
-          txType = 'income';
-          const current = incomeMap.get(0) || 0;
-          incomeMap.set(0, current + amount);
-          totalIncome += amount;
-        } else if (!isIncome && debit > 0) {
-          amount = debit;
-          txType = 'expense';
-          const current = expenseMap.get(tx.categoryId || 0) || 0;
-          expenseMap.set(tx.categoryId || 0, current + amount);
-          totalExpenses += amount;
-        }
-        
-        // Only add if there's a valid amount
-        if (amount > 0) {
-          allTransactions.push({
-            date: formatDate(tx.date),
-            description: tx.description || '-',
-            category: categoryName,
-            amount: amount,
-            type: txType,
-          });
-        }
-      }
-
-      // Convert maps to arrays
-      const incomeBySource = Array.from(incomeMap.entries())
-        .map(([catId, amount]) => ({
-          name: categoryMap.get(catId) || 'Uncategorized',
-          amount,
-        }))
-        .sort((a, b) => b.amount - a.amount);
-
-      const expensesByCategory = Array.from(expenseMap.entries())
-        .map(([catId, amount]) => ({
-          name: categoryMap.get(catId) || 'Uncategorized',
-          amount,
-        }))
-        .sort((a, b) => b.amount - a.amount);
-
-      // Sort transactions by date (newest first)
-      allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-
-
-      const budgetComparison: any[] = [];
+      // The backend returns one canonical period-scoped payload. This avoids
+      // txType heuristics, the 100-row transaction cap, and a current-date
+      // balance sheet leaking into a historical report.
+      const monthly = await api.reports.monthly(periodId);
+      const allTransactions = monthly.transactions.map((tx) => ({
+        date: formatDate(tx.date),
+        description: tx.description || '-',
+        category: tx.category,
+        amount: tx.amountCents,
+        type: tx.type,
+      }));
 
       const newReportData = {
         periodId: selectedPeriodId,
-        periodName: period?.name || 'Unknown',
-        startDate: period ? formatDate(period.startDate) : '',
-        endDate: period ? formatDate(period.endDate) : '',
-        totalIncome,
-        totalExpenses,
-        netIncome: totalIncome - totalExpenses,
-        totalAssets: balanceData?.totalAssets || 0,
-        totalLiabilities: balanceData?.totalLiabilities || 0,
-        netWorth: (balanceData?.totalAssets || 0) - (balanceData?.totalLiabilities || 0),
-        incomeBySource,
-        expensesByCategory,
-        budgetComparison,
+        periodName: monthly.period.name,
+        startDate: formatDate(monthly.period.startDate),
+        endDate: formatDate(monthly.period.endDate),
+        totalIncome: monthly.incomeStatement.totalRevenue,
+        totalExpenses: monthly.incomeStatement.totalExpenses,
+        netIncome: monthly.incomeStatement.netIncome,
+        totalAssets: monthly.balanceSheet.totalAssets,
+        totalLiabilities: monthly.balanceSheet.totalLiabilities,
+        netWorth: monthly.balanceSheet.totalAssets - monthly.balanceSheet.totalLiabilities,
+        incomeBySource: monthly.incomeBySource,
+        expensesByCategory: monthly.expensesByCategory,
+        budgetComparison: monthly.budgetComparison,
         allTransactions,
       };
       

@@ -972,6 +972,17 @@ export const api = {
         total: number;
       }>(`/reports/spending?${params.toString()}`);
     },
+    monthly: (periodId: number) => fetchApi<{
+      revision: number;
+      period: { id: number; name: string; startDate: number; endDate: number };
+      incomeStatement: { totalRevenue: number; totalExpenses: number; netIncome: number };
+      balanceSheet: { totalAssets: number; totalLiabilities: number; totalEquity: number; asOfDate: string };
+      incomeBySource: Array<{ name: string; amount: number }>;
+      expensesByCategory: Array<{ name: string; amount: number }>;
+      budgetComparison: Array<{ category: string; budget: number; actual: number; variance: number }>;
+      transactions: Array<{ id: number; date: number; description: string; category: string; amountCents: number; type: string }>;
+      provenance: { source: string; asOfMs: number; includesDrafts: boolean };
+    }>(`/reports/monthly?periodId=${periodId}`),
     trends: (periodCount?: number) => {
       const params = periodCount ? `?periodCount=${periodCount}` : '';
       return fetchApi<Array<{
