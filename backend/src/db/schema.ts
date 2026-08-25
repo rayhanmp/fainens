@@ -41,7 +41,8 @@ export const transactions: any = sqliteTable("transaction", {
   txType: text("tx_type").notNull().default("manual"),
   /** Posted journals are immutable; corrections use a linked reversal. */
   status: text("status").notNull().default("posted"), // posted | draft | reversed
-  periodId: integer("period_id"),
+  /** Period identity is referential; legacy unassigned journals remain null. */
+  periodId: integer("period_id").references(() => salaryPeriods.id, { onDelete: "restrict" }),
   linkedTxId: integer("linked_tx_id"),
   reversalOfTxId: integer("reversal_of_tx_id").references(() => transactions.id, { onDelete: "set null" }),
   categoryId: integer("category_id").references(() => categories.id),

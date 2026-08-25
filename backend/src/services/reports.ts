@@ -2,6 +2,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactions, transactionLines, salaryPeriods } from "../db/schema";
 import { computeAccountBalanceRolledUp, computeTrialBalanceTotals } from "./ledger";
+import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 
 // Report types
 export interface IncomeStatementItem {
@@ -70,14 +71,10 @@ export interface SpendingBreakdown {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function periodMembership(periodId?: number) {
-  return periodId == null ? undefined : sql`(${transactions.periodId} = ${periodId} OR ${transactions.periodId} IS NULL)`;
-}
+const periodMembership = (periodId?: number) => assignedOrLegacyPeriodMembership(periodId, transactions.periodId);
 
 /** Salary-period end dates are commonly stored as midnight from an HTML date input. */
-function inclusiveEndOfSelectedDay(timestamp: number): number {
-  return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
-}
+const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
 
 /** Shared scope for the UI's “All Periods” selector: posted history through now. */
 async function allPostedReportRange(): Promise<{ start: number; end: number }> {

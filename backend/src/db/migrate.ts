@@ -21,6 +21,12 @@ function columnExists(table: string, column: string): boolean {
   return rows.some((row) => row.name === column);
 }
 
+function foreignKeyExists(table: string, fromColumn: string, toTable: string): boolean {
+  const safeTable = table.replace(/[^a-zA-Z0-9_]/g, "");
+  const rows = db.$client.prepare(`PRAGMA foreign_key_list('${safeTable}')`).all() as Array<{ from: string; table: string }>;
+  return rows.some((row) => row.from === fromColumn && row.table === toTable);
+}
+
 /**
  * Databases created before checked-in migrations were enabled have all of the
  * user's data but no __drizzle_migrations history. Upgrade those databases in
@@ -185,6 +191,9 @@ function assertRequiredSchema(): void {
   });
   if (missing.length > 0) {
     throw new Error(`Database schema is incomplete after migration: ${missing.join(", ")}`);
+  }
+  if (!foreignKeyExists("transaction", "period_id", "salary_period")) {
+    throw new Error("Database schema is incomplete after migration: transaction.period_id foreign key");
   }
 }
 

@@ -18,14 +18,13 @@ import { getFinancialRevision } from "./financial-revision";
 import { getPaylaterObligations } from "./paylater";
 import { previewDueSubscriptionRenewals } from "./subscription-renewals";
 import { previewSalaryCatchUp } from "./salary-posting";
+import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
 const MAX_RECONCILIATION_SESSIONS = 50;
 
-function inclusiveEndOfSelectedDay(timestamp: number): number {
-  return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
-}
+const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
 
 export interface AgentScopeInput {
   periodId?: number;
@@ -374,7 +373,7 @@ export async function searchTransactionsTool(input: unknown) {
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
       AND t.status <> 'draft'
-      ${scope.periodId == null ? sql`` : sql`AND (t.period_id = ${scope.periodId} OR t.period_id IS NULL)`}
+      ${scope.periodId == null ? sql`` : sql`AND ${assignedOrLegacyPeriodMembership(scope.periodId, sql`t.period_id`)}`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
     GROUP BY t.id, t.date, t.description, t.reference, t.notes, t.tx_type, t.status, t.period_id, t.category_id, c.name
     ORDER BY t.date DESC, t.id DESC

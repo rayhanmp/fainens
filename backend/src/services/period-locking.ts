@@ -1,4 +1,4 @@
-import { eq, lte } from "drizzle-orm";
+import { eq, lte, sql } from "drizzle-orm";
 
 import { db as defaultDb } from "../db/client";
 import { salaryPeriods } from "../db/schema";
@@ -24,6 +24,11 @@ export function inclusivePeriodEnd(endMs: number): number {
 
 export function periodContainsDate(period: Pick<PeriodState, "startDate" | "endDate">, dateMs: number): boolean {
   return dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate));
+}
+
+/** Shared read-side membership: assigned journals plus date-scoped legacy nulls. */
+export function assignedOrLegacyPeriodMembership(periodId: number | null | undefined, periodColumn: any) {
+  return periodId == null ? undefined : sql`(${periodColumn} = ${periodId} OR ${periodColumn} IS NULL)`;
 }
 
 export async function findPeriodForDate(dateMs: number, dbLike: any = defaultDb): Promise<PeriodState | null> {

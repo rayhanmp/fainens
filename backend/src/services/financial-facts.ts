@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "../db/client";
+import { assignedOrLegacyPeriodMembership } from "./period-locking";
 
 const DAY_MS = 86_400_000;
 
@@ -60,7 +61,7 @@ export async function getFinancialFacts(input: {
       AND t.date <= ${input.endMs}
       AND t.date <= ${asOfMs}
       AND t.status <> 'draft'
-      ${input.periodId == null ? sql`` : sql`AND (t.period_id = ${input.periodId} OR t.period_id IS NULL)`}
+      ${input.periodId == null ? sql`` : sql`AND ${assignedOrLegacyPeriodMembership(input.periodId, sql`t.period_id`)}`}
     GROUP BY t.id, t.date, t.description, t.category_id, c.name, t.tx_type
     ORDER BY t.date ASC, t.id ASC
   `) as unknown as Array<Record<string, unknown>>;
@@ -129,7 +130,7 @@ export async function getBudgetFacts(periodId: number): Promise<Array<{
     LEFT JOIN "transaction" t ON t.category_id = bp.category_id
       AND t.date >= sp.start_date
       AND t.date <= sp.end_date + ${DAY_MS - 1}
-      AND (t.period_id = bp.period_id OR t.period_id IS NULL)
+      AND ${assignedOrLegacyPeriodMembership(periodId, sql`t.period_id`)}
     LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
     WHERE bp.period_id = ${periodId}
