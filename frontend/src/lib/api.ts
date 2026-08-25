@@ -1627,6 +1627,9 @@ export const api = {
       isBorrower: boolean;
       walletAccountId?: number;
       expenseCategory?: string;
+      receiptTotal?: number;
+      merchantName?: string;
+      payerContactId?: number;
     }) =>
       fetchApi<Array<{
         id: number;

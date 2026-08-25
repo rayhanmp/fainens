@@ -1,8 +1,14 @@
 import { eq, and, sql, desc } from "drizzle-orm";
 import { db } from "../db/client";
-import { accounts, transactions, transactionLines, paylaterInstallments } from "../db/schema";
-import { createJournalEntry, CreateJournalEntryInput, getOrCreateAutoExpenseAccount } from "./ledger";
-import { auditCreate } from "./audit";
+import { accounts, transactions, transactionLines, paylaterInstallments, auditLogs } from "../db/schema";
+import {
+  CreateJournalEntryInput,
+  getOrCreateAutoExpenseAccount,
+  insertPreparedJournalEntrySync,
+  prepareJournalEntry,
+} from "./ledger";
+import { invalidateOnTransactionMutation } from "../cache/invalidation";
+import { addMonthsClamped } from "./recurrence-calendar";
 
 async function assertPaylaterRecognitionId(originalTxId: number | undefined | null) {
   if (originalTxId == null) return;
@@ -141,8 +147,9 @@ export function calculateInstallmentSchedule(params: {
   const schedule: InstallmentScheduleItem[] = [];
   
   for (let i = 1; i <= months; i++) {
-    const dueDate = new Date(firstDueDateMs);
-    dueDate.setMonth(dueDate.getMonth() + (i - 1));
+    // Clamp against the original day-of-month, so a 31st-of-month plan is
+    // Feb 28/29 then Mar 31 instead of drifting permanently to the 28th.
+    const dueDateMs = addMonthsClamped(firstDueDateMs, i - 1);
     
     const isFirst = i === 1;
     const isLast = i === months;
@@ -168,7 +175,7 @@ export function calculateInstallmentSchedule(params: {
     schedule.push({
       installmentNumber: i,
       totalInstallments: months,
-      dueDate: dueDate.getTime(),
+      dueDate: dueDateMs,
       principalCents: installmentPrincipal,
       interestCents: installmentInterest,
       feeCents: installmentFee,
@@ -179,6 +186,18 @@ export function calculateInstallmentSchedule(params: {
   return schedule;
 }
 
+function assertPositiveSafeInteger(value: unknown, fieldName: string): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+}
+
+function assertNonNegativeSafeInteger(value: unknown, fieldName: string): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error(`${fieldName} must be a non-negative integer`);
+  }
+}
+
 // Recognition: Buy item on installment (recognize expense and liability)
 // Journal Entry:
 //   Expense (Asset/Item)    Debit  $3,000
@@ -186,6 +205,16 @@ export function calculateInstallmentSchedule(params: {
 export async function recognizePaylaterPurchase(
   input: PaylaterRecognitionInput
 ): Promise<{ transactionId: number; installments: InstallmentScheduleItem[] }> {
+  assertPositiveSafeInteger(input.principalAmount, "principalAmount");
+  assertNonNegativeSafeInteger(input.adminFeeCents ?? 0, "adminFeeCents");
+  if (!Number.isFinite(input.interestRatePercent ?? 0) || (input.interestRatePercent ?? 0) < 0) {
+    throw new Error("interestRatePercent must be a non-negative number");
+  }
+  if (![1, 3, 6, 12].includes(input.installmentMonths)) {
+    throw new Error("installmentMonths must be 1, 3, 6, or 12");
+  }
+  if (!Number.isFinite(input.firstDueDate)) throw new Error("firstDueDate must be a valid timestamp");
+
   // Use auto-expense account (like regular expenses)
   const expenseAccount = await getOrCreateAutoExpenseAccount(db);
 
@@ -237,23 +266,18 @@ export async function recognizePaylaterPurchase(
     ],
   };
 
-  const result = await createJournalEntry(journalEntry);
-
-  // Update transaction with installment metadata
-  await db
-    .update(transactions)
-    .set({
+  const prepared = await prepareJournalEntry(journalEntry, db);
+  const result = db.transaction((tx) => {
+    const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    tx.update(transactions).set({
       installmentMonths: input.installmentMonths,
       interestRatePercent: input.interestRatePercent ?? 0,
       adminFeeCents: input.adminFeeCents ?? 0,
       totalInstallments: input.installmentMonths,
-    })
-    .where(eq(transactions.id, result.transactionId));
+    }).where(eq(transactions.id, transactionId)).run();
 
-  // Create installment schedule records
-  for (const item of schedule) {
-    await db.insert(paylaterInstallments).values({
-      recognitionTxId: result.transactionId,
+    tx.insert(paylaterInstallments).values(schedule.map((item) => ({
+      recognitionTxId: transactionId,
       installmentNumber: item.installmentNumber,
       totalInstallments: item.totalInstallments,
       dueDate: new Date(item.dueDate),
@@ -262,22 +286,30 @@ export async function recognizePaylaterPurchase(
       feeCents: item.feeCents,
       totalCents: item.totalCents,
       status: "pending",
-    });
-  }
-
-  // Audit log
-  await auditCreate("transaction", result.transactionId, {
-    type: "paylater_recognition",
-    description: input.description,
-    principalAmount: input.principalAmount,
-    totalInterest,
-    totalFees,
-    totalLiability,
-    installmentMonths: input.installmentMonths,
-    paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
+    }))).run();
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: transactionId,
+      action: "create",
+      afterSnapshot: Buffer.from(JSON.stringify({
+        type: "paylater_recognition",
+        description: input.description,
+        principalAmount: input.principalAmount,
+        totalInterest,
+        totalFees,
+        totalLiability,
+        installmentMonths: input.installmentMonths,
+        paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
+      })),
+    }).run();
+    return transactionId;
   });
 
-  return { transactionId: result.transactionId, installments: schedule };
+  await invalidateOnTransactionMutation({
+    transactionId: result,
+    affectedAccountIds: prepared.accountIds,
+  });
+  return { transactionId: result, installments: schedule };
 }
 
 // Interest Separation: Record interest separately from principal
@@ -287,6 +319,7 @@ export async function recognizePaylaterPurchase(
 export async function recordPaylaterInterest(
   input: PaylaterInterestInput
 ): Promise<{ transactionId: number }> {
+  assertPositiveSafeInteger(input.interestAmount, "interestAmount");
   // Validate accounts
   const [expenseAccount] = await db
     .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
@@ -344,19 +377,29 @@ export async function recordPaylaterInterest(
     ],
   };
 
-  const result = await createJournalEntry(journalEntry);
-
-  // Audit log
-  await auditCreate("transaction", result.transactionId, {
-    type: "paylater_interest",
-    description: input.description,
-    interestAmount: input.interestAmount,
-    interestExpenseAccountId: input.interestExpenseAccountId,
-    paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
-    originalTxId: input.originalTxId,
+  const prepared = await prepareJournalEntry(journalEntry, db);
+  const result = db.transaction((tx) => {
+    const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: transactionId,
+      action: "create",
+      afterSnapshot: Buffer.from(JSON.stringify({
+        type: "paylater_interest",
+        description: input.description,
+        interestAmount: input.interestAmount,
+        interestExpenseAccountId: input.interestExpenseAccountId,
+        paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
+        originalTxId: input.originalTxId,
+      })),
+    }).run();
+    return transactionId;
   });
-
-  return { transactionId: result.transactionId };
+  await invalidateOnTransactionMutation({
+    transactionId: result,
+    affectedAccountIds: prepared.accountIds,
+  });
+  return { transactionId: result };
 }
 
 // Settlement: Make a payment (reduce liability, reduce cash)
@@ -367,6 +410,7 @@ export async function recordPaylaterInterest(
 export async function settlePaylaterPayment(
   input: PaylaterSettlementInput
 ): Promise<{ transactionId: number }> {
+  assertPositiveSafeInteger(input.paymentAmount, "paymentAmount");
   // Validate accounts
   const [liabilityAccount] = await db
     .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
@@ -423,19 +467,48 @@ export async function settlePaylaterPayment(
     ],
   };
 
-  const result = await createJournalEntry(journalEntry);
-
-  // Audit log
-  await auditCreate("transaction", result.transactionId, {
-    type: "paylater_settlement",
-    description: input.description,
-    paymentAmount: input.paymentAmount,
-    paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
-    bankAccountId: input.bankAccountId,
-    originalTxId: input.originalTxId,
+  const prepared = await prepareJournalEntry(journalEntry, db);
+  const result = db.transaction((tx) => {
+    if (input.originalTxId != null) {
+      // A linked payment cannot reduce the selected obligation below zero.
+      // This check is inside the write transaction so two concurrent payments
+      // cannot both spend the same liability balance.
+      const liabilityRows = tx.select({
+        credit: transactionLines.credit,
+        debit: transactionLines.debit,
+      })
+        .from(transactionLines)
+        .where(and(
+          eq(transactionLines.accountId, input.paylaterLiabilityAccountId),
+          sql`${transactionLines.transactionId} = ${input.originalTxId} OR ${transactionLines.transactionId} IN (SELECT id FROM "transaction" WHERE linked_tx_id = ${input.originalTxId})`,
+        ))
+        .all();
+      const outstanding = liabilityRows.reduce((sum, row) => sum + row.credit - row.debit, 0);
+      if (input.paymentAmount > outstanding) {
+        throw new Error(`Payment exceeds outstanding paylater liability (${outstanding})`);
+      }
+    }
+    const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: transactionId,
+      action: "create",
+      afterSnapshot: Buffer.from(JSON.stringify({
+        type: "paylater_settlement",
+        description: input.description,
+        paymentAmount: input.paymentAmount,
+        paylaterLiabilityAccountId: input.paylaterLiabilityAccountId,
+        bankAccountId: input.bankAccountId,
+        originalTxId: input.originalTxId,
+      })),
+    }).run();
+    return transactionId;
   });
-
-  return { transactionId: result.transactionId };
+  await invalidateOnTransactionMutation({
+    transactionId: result,
+    affectedAccountIds: prepared.accountIds,
+  });
+  return { transactionId: result };
 }
 
 async function recognitionLiabilityMeta(txId: number): Promise<{
@@ -558,16 +631,11 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
       .orderBy(paylaterInstallments.installmentNumber);
 
     // Calculate totals from installments
-    let totalInterestFromInstallments = 0;
-    let totalFeesFromInstallments = 0;
     let paidInstallmentsTotal = 0;
     let pendingInstallments: typeof installments = [];
     let nextPendingDueDate: number | null = null;
 
     for (const inst of installments) {
-      totalInterestFromInstallments += inst.interestCents;
-      totalFeesFromInstallments += inst.feeCents;
-      
       if (inst.status === "paid") {
         paidInstallmentsTotal += inst.totalCents;
       } else {
@@ -600,14 +668,12 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
       }
     }
 
-    // Calculate outstanding from pending installments or fallback to old method
-    let outstandingCents = 0;
-    if (pendingInstallments.length > 0) {
-      outstandingCents = pendingInstallments.reduce((sum, inst) => sum + inst.totalCents, 0);
-    } else {
-      const rawOutstanding = meta.principalCents + interestPostedCents - paymentsPostedCents;
-      outstandingCents = Math.max(0, rawOutstanding);
-    }
+    // Only posted journal entries are liabilities. Future interest/fees in the
+    // schedule are forecasts and must not inflate the current balance sheet.
+    // The old implementation summed pending installment totals here, making a
+    // newly recognized principal appear to owe unearned interest immediately.
+    const rawOutstanding = meta.principalCents + interestPostedCents - paymentsPostedCents;
+    const outstandingCents = Math.max(0, rawOutstanding);
     
     totalOutstandingCents += outstandingCents;
 
@@ -641,7 +707,7 @@ export async function getPaylaterObligations(): Promise<PaylaterObligationsPaylo
       liabilityAccountId: meta.liabilityAccountId,
       liabilityAccountName: meta.liabilityAccountName,
       principalCents: meta.principalCents,
-      interestPostedCents: totalInterestFromInstallments || interestPostedCents,
+      interestPostedCents,
       paymentsPostedCents,
       outstandingCents,
       dueDateMs,

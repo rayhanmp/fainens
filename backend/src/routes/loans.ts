@@ -2,14 +2,19 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { contacts, loans, loanPayments, accounts, transactions, transactionLines } from "../db/schema";
-import { createJournalEntry } from "../services/ledger";
+import { contacts, loans, loanPayments, accounts, auditLogs } from "../db/schema";
+import {
+  insertPreparedJournalEntrySync,
+  prepareJournalEntry,
+} from "../services/ledger";
+import { invalidateOnTransactionMutation } from "../cache/invalidation";
 
 // System account keys for loans
 const SYSTEM_KEYS = {
   loansReceivable: "loans-receivable",
   loansPayable: "loans-payable",
   badDebtExpense: "bad-debt-expense",
+  forgivenessIncome: "loan-forgiveness-income",
 };
 
 async function getOrCreateSystemAccount(
@@ -54,6 +59,27 @@ async function getLoansPayableAccount(dbLike: any = db) {
 
 async function getBadDebtExpenseAccount(dbLike: any = db) {
   return getOrCreateSystemAccount(dbLike, SYSTEM_KEYS.badDebtExpense, "Bad Debt Expense", "expense");
+}
+
+async function getForgivenessIncomeAccount(dbLike: any = db) {
+  return getOrCreateSystemAccount(dbLike, SYSTEM_KEYS.forgivenessIncome, "Loan Forgiveness Income", "revenue");
+}
+
+function assertPositiveSafeInteger(value: unknown, fieldName: string): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+}
+
+async function getActiveWalletAccount(accountId: number) {
+  const [account] = await db
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .limit(1);
+  if (!account) throw new Error("Wallet account not found");
+  if (!account.isActive || account.type !== "asset") throw new Error("Wallet must be an active asset account");
+  return account;
 }
 
 export default async function (fastify: FastifyInstance) {
@@ -209,7 +235,7 @@ export default async function (fastify: FastifyInstance) {
       };
 
       // Validate required fields
-      if (!body.contactId) {
+      if (!Number.isSafeInteger(body.contactId) || body.contactId <= 0) {
         reply.code(400).send({ error: "contactId is required" });
         return;
       }
@@ -219,13 +245,18 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      if (!body.amountCents || body.amountCents <= 0) {
-        reply.code(400).send({ error: "amountCents must be a positive number" });
+      if (!Number.isSafeInteger(body.amountCents) || body.amountCents <= 0) {
+        reply.code(400).send({ error: "amountCents must be a positive integer" });
         return;
       }
 
-      if (!body.walletAccountId) {
+      if (!Number.isSafeInteger(body.walletAccountId) || body.walletAccountId <= 0) {
         reply.code(400).send({ error: "walletAccountId is required" });
+        return;
+      }
+
+      if (body.dueDate != null && (!Number.isFinite(body.dueDate) || body.dueDate <= 0)) {
+        reply.code(400).send({ error: "dueDate must be a valid timestamp" });
         return;
       }
 
@@ -236,10 +267,12 @@ export default async function (fastify: FastifyInstance) {
         .where(eq(contacts.id, body.contactId))
         .limit(1);
 
-      if (!contact) {
+      if (!contact || !contact.isActive) {
         reply.code(404).send({ error: "Contact not found" });
         return;
       }
+
+      await getActiveWalletAccount(body.walletAccountId);
 
       // Get system accounts
       const [loansReceivable, loansPayable] = await Promise.all([
@@ -247,10 +280,8 @@ export default async function (fastify: FastifyInstance) {
         getLoansPayableAccount(db),
       ]);
 
-      // Create the journal entry for the loan
       const loanAccountId = body.direction === 'lent' ? loansReceivable.id : loansPayable.id;
-      
-      const journalEntry = await createJournalEntry({
+      const journalInput = {
         date: Date.now(),
         description: body.description || `${body.direction === 'lent' ? 'Loan to' : 'Loan from'} ${contact.name}`,
         txType: 'loan_creation',
@@ -263,12 +294,14 @@ export default async function (fastify: FastifyInstance) {
               { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
               { accountId: loanAccountId, debit: 0, credit: body.amountCents },
             ],
-      }, db);
+      };
+      const prepared = await prepareJournalEntry(journalInput, db);
 
-      // Create the loan record
-      const [loan] = await db
-        .insert(loans)
-        .values({
+      // The journal and subledger row share one synchronous commit. A failed
+      // loan insert can therefore never leave an orphaned cash movement.
+      const result = db.transaction((tx) => {
+        const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+        const insertedLoans = tx.insert(loans).values({
           contactId: body.contactId,
           direction: body.direction,
           amountCents: body.amountCents,
@@ -278,11 +311,25 @@ export default async function (fastify: FastifyInstance) {
           status: 'active',
           description: body.description ?? null,
           walletAccountId: body.walletAccountId,
-          lendingTransactionId: journalEntry.transactionId,
-        })
-        .returning();
+          lendingTransactionId: transactionId,
+        }).returning().all();
+        const loan = insertedLoans[0];
+        if (!loan) throw new Error("Failed to create loan row");
+        tx.insert(auditLogs).values({
+          entityType: "loan",
+          entityId: loan.id,
+          action: "create",
+          afterSnapshot: Buffer.from(JSON.stringify({ loan, transactionId })),
+        }).run();
+        return { loan, transactionId };
+      });
 
-      reply.code(201).send(loan);
+      await invalidateOnTransactionMutation({
+        transactionId: result.transactionId,
+        affectedAccountIds: prepared.accountIds,
+      });
+
+      reply.code(201).send(result.loan);
     } catch (err) {
       reply.code(400).send({ error: "Failed to create loan" });
     }
@@ -292,6 +339,7 @@ export default async function (fastify: FastifyInstance) {
   fastify.post("/api/loans/:id/payments", async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
+      const loanId = Number(id);
       const body = request.body as {
         amountCents: number;
         paymentDate?: number;
@@ -299,94 +347,124 @@ export default async function (fastify: FastifyInstance) {
         walletAccountId: number;
       };
 
-      if (!body.amountCents || body.amountCents <= 0) {
-        reply.code(400).send({ error: "amountCents must be a positive number" });
+      if (!Number.isSafeInteger(loanId) || loanId <= 0) {
+        reply.code(400).send({ error: "Invalid loan id" });
         return;
       }
 
-      if (!body.walletAccountId) {
+      if (!Number.isSafeInteger(body.amountCents) || body.amountCents <= 0) {
+        reply.code(400).send({ error: "amountCents must be a positive integer" });
+        return;
+      }
+
+      if (!Number.isSafeInteger(body.walletAccountId) || body.walletAccountId <= 0) {
         reply.code(400).send({ error: "walletAccountId is required" });
         return;
       }
 
-      // Get the loan and process payment in a transaction
-      const result = await db.transaction(async (tx) => {
-        const [loan] = await tx
-          .select()
-          .from(loans)
-          .where(and(eq(loans.id, parseInt(id)), eq(loans.isActive, true)))
-          .limit(1);
+      if (body.paymentDate != null && (!Number.isFinite(body.paymentDate) || body.paymentDate <= 0)) {
+        reply.code(400).send({ error: "paymentDate must be a valid timestamp" });
+        return;
+      }
 
-        if (!loan) {
-          reply.code(404).send({ error: "Loan not found" });
-          return null;
+      await getActiveWalletAccount(body.walletAccountId);
+
+      const [loanSnapshot] = await db
+        .select()
+        .from(loans)
+        .where(and(eq(loans.id, loanId), eq(loans.isActive, true)))
+        .limit(1);
+      if (!loanSnapshot) {
+        reply.code(404).send({ error: "Loan not found" });
+        return;
+      }
+      if (loanSnapshot.status !== "active") {
+        reply.code(400).send({ error: "Cannot record payment on a non-active loan" });
+        return;
+      }
+      if (body.amountCents > loanSnapshot.remainingCents) {
+        reply.code(400).send({ error: "Payment amount cannot exceed remaining balance" });
+        return;
+      }
+
+      const [contact] = await db
+        .select({ name: contacts.name })
+        .from(contacts)
+        .where(eq(contacts.id, loanSnapshot.contactId))
+        .limit(1);
+      const [loansReceivable, loansPayable] = await Promise.all([
+        getLoansReceivableAccount(db),
+        getLoansPayableAccount(db),
+      ]);
+      const loanAccountId = loanSnapshot.direction === "lent" ? loansReceivable.id : loansPayable.id;
+      const journalInput = {
+        date: body.paymentDate || Date.now(),
+        description: `Payment on loan - ${contact?.name ?? "contact"}`,
+        txType: "loan_payment",
+        lines: loanSnapshot.direction === "lent"
+          ? [
+              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
+              { accountId: loanAccountId, debit: 0, credit: body.amountCents },
+            ]
+          : [
+              { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
+              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents },
+            ],
+      };
+      const prepared = await prepareJournalEntry(journalInput, db);
+
+      const result = db.transaction((tx) => {
+        // Re-read under the write transaction. This prevents two concurrent
+        // repayments from both spending the same remaining balance.
+        const current = tx.select().from(loans)
+          .where(and(eq(loans.id, loanId), eq(loans.isActive, true)))
+          .limit(1).all()[0];
+        if (!current) throw new Error("Loan not found");
+        if (current.status !== "active") throw new Error("Cannot record payment on a non-active loan");
+        if (body.amountCents > current.remainingCents) {
+          throw new Error("Payment amount cannot exceed remaining balance");
         }
 
-        if (loan.status !== 'active') {
-          reply.code(400).send({ error: "Cannot record payment on a non-active loan" });
-          return null;
-        }
+        const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+        const insertedPayments = tx.insert(loanPayments).values({
+          loanId: current.id,
+          amountCents: body.amountCents,
+          principalCents: body.amountCents,
+          paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+          transactionId,
+          notes: body.notes ?? null,
+        }).returning().all();
+        const payment = insertedPayments[0];
+        if (!payment) throw new Error("Failed to create payment row");
 
-        if (body.amountCents > loan.remainingCents) {
-          reply.code(400).send({ error: "Payment amount cannot exceed remaining balance" });
-          return null;
-        }
-
-        // Get contact and system accounts
-        const [contact, loansReceivable, loansPayable] = await Promise.all([
-          tx.select().from(contacts).where(eq(contacts.id, loan.contactId)).limit(1),
-          getLoansReceivableAccount(tx),
-          getLoansPayableAccount(tx),
-        ]);
-
-        const loanAccountId = loan.direction === 'lent' ? loansReceivable.id : loansPayable.id;
-
-        // Create the journal entry for the payment
-        const journalEntry = await createJournalEntry({
-          date: body.paymentDate || Date.now(),
-          description: `Payment on loan - ${contact[0]?.name}`,
-          txType: 'loan_payment',
-          lines: loan.direction === 'lent'
-            ? [
-                { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
-                { accountId: loanAccountId, debit: 0, credit: body.amountCents },
-              ]
-            : [
-                { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
-                { accountId: body.walletAccountId, debit: 0, credit: body.amountCents },
-              ],
-        }, tx);
-
-        // Create the payment record
-        const [payment] = await tx
-          .insert(loanPayments)
-          .values({
-            loanId: loan.id,
-            amountCents: body.amountCents,
-            principalCents: body.amountCents,
-            paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
-            transactionId: journalEntry.transactionId,
-            notes: body.notes ?? null,
-          })
-          .returning();
-
-        // Update loan remaining balance
-        const newRemaining = loan.remainingCents - body.amountCents;
-        const newStatus = newRemaining === 0 ? 'repaid' : 'active';
-
-        await tx
-          .update(loans)
-          .set({
-            remainingCents: newRemaining,
-            status: newStatus,
-            updatedAt: sql`(unixepoch('now') * 1000)`,
-          })
-          .where(eq(loans.id, loan.id));
-
-        return { payment, loan, newRemaining, newStatus };
+        const newRemaining = current.remainingCents - body.amountCents;
+        const newStatus = newRemaining === 0 ? "repaid" : "active";
+        const updateResult = tx.update(loans).set({
+          remainingCents: newRemaining,
+          status: newStatus,
+          updatedAt: sql`(unixepoch('now') * 1000)`,
+        }).where(and(eq(loans.id, current.id), eq(loans.status, "active"), sql`${loans.remainingCents} >= ${body.amountCents}`)).run();
+        if (updateResult.changes !== 1) throw new Error("Loan balance changed; retry payment");
+        tx.insert(auditLogs).values({
+          entityType: "loan_payment",
+          entityId: payment.id,
+          action: "create",
+          afterSnapshot: Buffer.from(JSON.stringify({ payment, loanId: current.id, transactionId })),
+        }).run();
+        tx.insert(auditLogs).values({
+          entityType: "loan",
+          entityId: current.id,
+          action: "update",
+          beforeSnapshot: Buffer.from(JSON.stringify(current)),
+          afterSnapshot: Buffer.from(JSON.stringify({ ...current, remainingCents: newRemaining, status: newStatus })),
+        }).run();
+        return { payment, loan: current, newRemaining, newStatus, transactionId };
       });
 
-      if (!result) return;
+      await invalidateOnTransactionMutation({
+        transactionId: result.transactionId,
+        affectedAccountIds: prepared.accountIds,
+      });
 
       const { payment, loan, newRemaining, newStatus } = result;
 
@@ -407,15 +485,25 @@ export default async function (fastify: FastifyInstance) {
   fastify.patch("/api/loans/:id", async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
+      const loanId = Number(id);
       const body = request.body as {
         status?: 'active' | 'repaid' | 'defaulted' | 'written_off';
         description?: string;
       };
 
+      if (!Number.isSafeInteger(loanId) || loanId <= 0) {
+        reply.code(400).send({ error: "Invalid loan id" });
+        return;
+      }
+      if (body.status && !['active', 'repaid', 'defaulted', 'written_off'].includes(body.status)) {
+        reply.code(400).send({ error: "Invalid loan status" });
+        return;
+      }
+
       const [loan] = await db
         .select()
         .from(loans)
-        .where(and(eq(loans.id, parseInt(id)), eq(loans.isActive, true)))
+        .where(and(eq(loans.id, loanId), eq(loans.isActive, true)))
         .limit(1);
 
       if (!loan) {
@@ -423,53 +511,83 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      // Handle write-off (bad debt)
-      if (body.status === 'written_off' && loan.status === 'active' && loan.remainingCents > 0) {
-        const [contact, loansReceivable, badDebtExpense] = await Promise.all([
-          db.select().from(contacts).where(eq(contacts.id, loan.contactId)).limit(1),
-          getLoansReceivableAccount(db),
-          getBadDebtExpenseAccount(db),
-        ]);
+      if (body.status === "repaid" && loan.remainingCents !== 0) {
+        reply.code(409).send({ error: "A loan can be marked repaid only after its balance reaches zero" });
+        return;
+      }
+      if (body.status === "active" && loan.remainingCents === 0) {
+        reply.code(409).send({ error: "A zero-balance loan cannot be reopened as active" });
+        return;
+      }
+      if (body.status === "written_off" && loan.status !== "active") {
+        reply.code(409).send({ error: "Only an active loan can be written off" });
+        return;
+      }
 
-        // Only write off loans you've lent (assets)
-        if (loan.direction === 'lent') {
-          await createJournalEntry({
-            date: Date.now(),
-            description: `Write off bad debt - ${contact[0]?.name}`,
-            txType: 'loan_writeoff',
-            lines: [
-              { accountId: badDebtExpense.id, debit: loan.remainingCents, credit: 0 },
+      const changingToWriteoff = body.status === "written_off" && loan.remainingCents > 0;
+      let prepared: Awaited<ReturnType<typeof prepareJournalEntry>> | null = null;
+      if (changingToWriteoff) {
+        const [contact] = await db.select({ name: contacts.name }).from(contacts)
+          .where(eq(contacts.id, loan.contactId)).limit(1);
+        const loansReceivable = await getLoansReceivableAccount(db);
+        const journalLines = loan.direction === "lent"
+          ? [
+              { accountId: (await getBadDebtExpenseAccount(db)).id, debit: loan.remainingCents, credit: 0 },
               { accountId: loansReceivable.id, debit: 0, credit: loan.remainingCents },
-            ],
-          }, db);
-        }
+            ]
+          : [
+              { accountId: (await getLoansPayableAccount(db)).id, debit: loan.remainingCents, credit: 0 },
+              { accountId: (await getForgivenessIncomeAccount(db)).id, debit: 0, credit: loan.remainingCents },
+            ];
+        prepared = await prepareJournalEntry({
+          date: Date.now(),
+          description: loan.direction === "lent"
+            ? `Write off bad debt - ${contact?.name ?? "contact"}`
+            : `Forgive loan payable - ${contact?.name ?? "contact"}`,
+          txType: "loan_writeoff",
+          lines: journalLines,
+        }, db);
+      }
 
-        // Update loan to written off status and zero out remaining
-        await db
-          .update(loans)
-          .set({
-            status: 'written_off',
-            remainingCents: 0,
-            updatedAt: sql`(unixepoch('now') * 1000)`,
-            ...(body.description !== undefined && { description: body.description }),
-          })
-          .where(eq(loans.id, loan.id));
-      } else {
-        // Simple status update
-        await db
-          .update(loans)
-          .set({
-            ...(body.status && { status: body.status }),
-            ...(body.description !== undefined && { description: body.description }),
-            updatedAt: sql`(unixepoch('now') * 1000)`,
-          })
-          .where(eq(loans.id, loan.id));
+      const result = db.transaction((tx) => {
+        const current = tx.select().from(loans)
+          .where(and(eq(loans.id, loan.id), eq(loans.isActive, true)))
+          .limit(1).all()[0];
+        if (!current) throw new Error("Loan not found");
+        if (current.status !== loan.status || current.remainingCents !== loan.remainingCents) {
+          throw new Error("Loan changed; retry update");
+        }
+        const transactionId = prepared ? insertPreparedJournalEntrySync(tx, prepared) : null;
+        const nextRemaining = changingToWriteoff ? 0 : current.remainingCents;
+        const nextStatus = body.status ?? current.status;
+        const updateResult = tx.update(loans).set({
+          ...(body.status && { status: nextStatus }),
+          remainingCents: nextRemaining,
+          ...(body.description !== undefined && { description: body.description }),
+          updatedAt: sql`(unixepoch('now') * 1000)`,
+        }).where(and(eq(loans.id, current.id), eq(loans.status, current.status), eq(loans.remainingCents, current.remainingCents))).run();
+        if (updateResult.changes !== 1) throw new Error("Loan changed; retry update");
+        tx.insert(auditLogs).values({
+          entityType: "loan",
+          entityId: current.id,
+          action: "update",
+          beforeSnapshot: Buffer.from(JSON.stringify(current)),
+          afterSnapshot: Buffer.from(JSON.stringify({ ...current, status: nextStatus, remainingCents: nextRemaining, description: body.description ?? current.description })),
+        }).run();
+        return { transactionId, nextStatus, nextRemaining };
+      });
+
+      if (result.transactionId && prepared) {
+        await invalidateOnTransactionMutation({
+          transactionId: result.transactionId,
+          affectedAccountIds: prepared.accountIds,
+        });
       }
 
       const [updated] = await db
         .select()
         .from(loans)
-        .where(eq(loans.id, parseInt(id)))
+        .where(eq(loans.id, loanId))
         .limit(1);
 
       return updated;

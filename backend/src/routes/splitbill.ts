@@ -1,12 +1,16 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { splitbillSessions, contacts, loans, accounts } from "../db/schema";
+import { splitbillSessions, contacts, loans, accounts, auditLogs } from "../db/schema";
 import { uploadFile, generatePresignedDownloadUrl } from "../services/r2";
 import { callOpenRouterVision } from "../services/openrouter";
 import { env } from "../lib/env";
-import { createJournalEntry } from "../services/ledger";
+import {
+  insertPreparedJournalEntrySync,
+  prepareJournalEntry,
+} from "../services/ledger";
+import { invalidateOnTransactionMutation } from "../cache/invalidation";
 
 const GEMINI_MODEL = "google/gemini-3.1-flash-lite-preview";
 
@@ -213,123 +217,76 @@ function calculateSplit(
   return results.sort((a, b) => b.total - a.total);
 }
 
-async function createLoanFromSplit(
-  contactId: number,
-  direction: "lent" | "borrowed",
-  amount: number,
-  description: string,
-  walletAccountId: number | undefined,
-  expenseAmount: number,
-  expenseCategoryName: string
-) {
-  // Receipt parser and all IDR UI inputs use canonical integer rupiah.
-  const amountCents = Math.round(amount);
-  const expenseAmountCents = Math.round(expenseAmount);
-  const totalCashOutCents = amountCents + expenseAmountCents;
-
-  const loansReceivable = await getOrCreateSystemAccount("loans-receivable", "Loans Receivable", "asset");
-  const loansPayable = await getOrCreateSystemAccount("loans-payable", "Loans Payable", "liability");
-
-  if (direction === "lent" && walletAccountId) {
-    // Me paid → Cash goes out, record expense + loans receivable
-    // Find or create expense category account
-    const expenseAccount = await getOrCreateExpenseAccount(expenseCategoryName);
-
-    await createJournalEntry({
-      date: Date.now(),
-      description,
-      txType: "split_bill_lent",
-      lines: [
-        { accountId: loansReceivable.id, debit: amountCents, credit: 0 },
-        { accountId: expenseAccount.id, debit: expenseAmountCents, credit: 0 },
-        { accountId: walletAccountId, debit: 0, credit: totalCashOutCents },
-      ],
-    }, db);
-  } else if (direction === "borrowed") {
-    // Contact paid for my consumption: recognize the expense and payable.
-    const expenseAccount = await getOrCreateExpenseAccount(expenseCategoryName);
-    await createJournalEntry({
-      date: Date.now(),
-      description,
-      txType: "split_bill_borrowed",
-      lines: [
-        { accountId: expenseAccount.id, debit: amountCents, credit: 0 },
-        { accountId: loansPayable.id, debit: 0, credit: amountCents },
-      ],
-    }, db);
-  }
-
-  const [loan] = await db
-    .insert(loans)
-    .values({
-      contactId,
-      direction,
-      amountCents,
-      remainingCents: amountCents,
-      startDate: new Date(),
-      status: "active",
-      description,
-      sourceType: "split_bill",
-      walletAccountId: walletAccountId || null,
-    })
-    .returning();
-
-  return loan;
-}
-
 async function getOrCreateExpenseAccount(categoryName: string): Promise<{ id: number }> {
-  // Try to find existing account with this name
   const [existing] = await db
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
     .from(accounts)
     .where(eq(accounts.name, categoryName))
     .limit(1);
-
   if (existing) {
-    return existing;
+    if (existing.type !== "expense" || !existing.isActive) {
+      throw new Error(`Expense account ${categoryName} must be an active expense account`);
+    }
+    return { id: existing.id };
   }
-
-  // Create new expense account
-  const [created] = await db
-    .insert(accounts)
-    .values({
-      name: categoryName,
-      type: "expense",
-      isActive: true,
-    })
-    .returning({ id: accounts.id });
-
+  const [created] = await db.insert(accounts).values({
+    name: categoryName,
+    type: "expense",
+    isActive: true,
+  }).returning({ id: accounts.id });
+  if (!created) throw new Error("Failed to create expense account");
   return created;
 }
 
-let systemAccountsCache: Record<string, { id: number }> = {};
-
-async function getOrCreateSystemAccount(key: string, name: string, type: string): Promise<{ id: number }> {
-  if (systemAccountsCache[key]) return systemAccountsCache[key];
-
+async function getOrCreateSystemAccount(
+  key: string,
+  name: string,
+  type: "asset" | "liability",
+): Promise<{ id: number }> {
   const [existing] = await db
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
     .from(accounts)
     .where(eq(accounts.systemKey, key))
     .limit(1);
-
   if (existing) {
-    systemAccountsCache[key] = existing;
-    return existing;
+    if (existing.type !== type || !existing.isActive) {
+      throw new Error(`System account ${key} must be an active ${type} account`);
+    }
+    return { id: existing.id };
   }
-
-  const [created] = await db
-    .insert(accounts)
-    .values({
+  try {
+    const [created] = await db.insert(accounts).values({
       name,
       type,
       isActive: true,
       systemKey: key,
-    })
-    .returning({ id: accounts.id });
+    }).returning({ id: accounts.id });
+    if (!created) throw new Error(`Failed to create system account ${key}`);
+    return created;
+  } catch (error) {
+    const [winner] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+      .from(accounts).where(eq(accounts.systemKey, key)).limit(1);
+    if (!winner || winner.type !== type || !winner.isActive) throw error;
+    return { id: winner.id };
+  }
+}
 
-  systemAccountsCache[key] = created;
-  return created;
+function normalizeLargestRemainder(
+  rows: Array<{ personId: number; personName: string; total: number }>,
+  targetTotal: number,
+): Array<{ personId: number; personName: string; total: number }> {
+  const floors = rows.map((row) => ({
+    ...row,
+    total: Math.floor(row.total),
+    fraction: row.total - Math.floor(row.total),
+  }));
+  let remainder = targetTotal - floors.reduce((sum, row) => sum + row.total, 0);
+  if (remainder < 0 || remainder > floors.length) throw new Error("Split totals cannot be reconciled to receipt total");
+  floors.sort((a, b) => b.fraction - a.fraction || a.personId - b.personId);
+  for (let i = 0; i < remainder; i++) floors[i].total += 1;
+  return floors
+    .sort((a, b) => a.personId - b.personId)
+    .map(({ fraction: _fraction, ...row }) => row);
 }
 
 export default async function (fastify: FastifyInstance) {
@@ -427,74 +384,185 @@ export default async function (fastify: FastifyInstance) {
     }
   );
 
-  fastify.post<{ Body: { splitResults: PersonSplitResult[]; isBorrower: boolean; walletAccountId?: number; expenseCategory?: string } }>(
+  fastify.post<{ Body: {
+    splitResults: PersonSplitResult[];
+    isBorrower: boolean;
+    walletAccountId?: number;
+    expenseCategory?: string;
+    receiptTotal?: number;
+    merchantName?: string;
+    payerContactId?: number;
+  } }>(
     "/api/splitbill/create-loans",
     async (request, reply) => {
       try {
-        const { splitResults, isBorrower, walletAccountId, expenseCategory } = request.body;
+        const {
+          splitResults,
+          isBorrower,
+          walletAccountId,
+          expenseCategory,
+          receiptTotal,
+          merchantName,
+          payerContactId,
+        } = request.body;
 
-        if (!splitResults) {
+        if (!Array.isArray(splitResults) || splitResults.length === 0) {
           reply.code(400).send({ error: "splitResults is required" });
           return;
         }
 
-        if (!isBorrower && !walletAccountId) {
+        if (typeof isBorrower !== "boolean") {
+          reply.code(400).send({ error: "isBorrower is required" });
+          return;
+        }
+        if (!isBorrower && (!Number.isSafeInteger(walletAccountId) || (walletAccountId as number) <= 0)) {
           reply.code(400).send({ error: "walletAccountId is required when you pay" });
           return;
         }
 
-        const categoryName = expenseCategory || "Food & Dining";
-        const createdLoans: typeof loans.$inferSelect[] = [];
-
-        if (isBorrower) {
-          // Contact paid → Create ONE loan FROM me TO the payer
-          // The splitResults contains: { personId: 0, personName: "Me", total: myShare }
-          const meResult = splitResults.find(r => r.personId === 0 && r.total > 0);
-          if (meResult) {
-            // Find who paid (the contact not in splitResults with personId !== 0)
-            const payerResult = splitResults.find(r => r.personId !== 0);
-            if (payerResult) {
-              const loan = await createLoanFromSplit(
-                payerResult.personId,
-                "borrowed",
-                meResult.total,
-                `Borrowed from ${payerResult.personName} for split bill`,
-                undefined, // no wallet impact
-                0, // no expense for borrowed
-                categoryName
-              );
-              createdLoans.push(loan);
-            }
+        const rawRows = splitResults.map((result) => {
+          if (!Number.isSafeInteger(result.personId) || result.personId < 0) {
+            throw new Error("Each split result needs a valid person id");
           }
-        } else {
-          // Me paid → Create loans FROM each contact TO me
-          // personId = 0 is "Me", skip it
-          // My share is an expense, rest is loans receivable
-          const meResult = splitResults.find(r => r.personId === 0);
-          const myExpense = meResult?.total || 0;
+          if (!result.personName || !Number.isFinite(result.total) || result.total < 0) {
+            throw new Error("Each split result needs a finite non-negative total");
+          }
+          return { personId: result.personId, personName: result.personName, total: result.total };
+        });
+        if (new Set(rawRows.map((row) => row.personId)).size !== rawRows.length) {
+          reply.code(400).send({ error: "Duplicate people in split results" });
+          return;
+        }
+        const targetTotal = receiptTotal == null
+          ? Math.round(rawRows.reduce((sum, row) => sum + row.total, 0))
+          : receiptTotal;
+        if (!Number.isSafeInteger(targetTotal) || targetTotal <= 0) {
+          reply.code(400).send({ error: "receiptTotal must be a positive integer" });
+          return;
+        }
+        const normalizedRows = normalizeLargestRemainder(rawRows, targetTotal);
+        if (normalizedRows.reduce((sum, row) => sum + row.total, 0) !== targetTotal) {
+          reply.code(400).send({ error: "Split totals must equal the receipt total" });
+          return;
+        }
 
-          for (const result of splitResults) {
-            if (result.total <= 0) continue;
-            if (result.personId === 0) continue; // Skip "me"
+        const categoryName = expenseCategory || "Food & Dining";
+        const meResult = normalizedRows.find((row) => row.personId === 0);
+        if (!meResult || meResult.total <= 0) {
+          reply.code(400).send({ error: "A positive personal share is required" });
+          return;
+        }
 
-            const loan = await createLoanFromSplit(
-              result.personId,
-              "lent",
-              result.total,
-              `Lent to me for split bill`,
-              walletAccountId!,
-              myExpense, // My expense portion
-              categoryName
-            );
-
-            createdLoans.push(loan);
+        const contactRows = normalizedRows.filter((row) => row.personId !== 0 && row.total > 0);
+        const allContactRows = normalizedRows.filter((row) => row.personId !== 0);
+        const contactIds = allContactRows.map((row) => row.personId);
+        if (isBorrower) {
+          if (!Number.isSafeInteger(payerContactId) || (payerContactId as number) <= 0) {
+            reply.code(400).send({ error: "payerContactId is required when someone else paid" });
+            return;
+          }
+          if (!contactIds.includes(payerContactId as number)) {
+            reply.code(400).send({ error: "payerContactId must be one of the split contacts" });
+            return;
           }
         }
 
-        reply.code(201).send(createdLoans);
+        // Fetch all contacts with a parameterized IN clause; avoid silently
+        // creating loans for synthetic UI ids or inactive contacts.
+        const foundContacts = contactIds.length > 0
+          ? await db.select({ id: contacts.id, name: contacts.name, isActive: contacts.isActive })
+            .from(contacts)
+            .where(sql`${contacts.id} IN (${sql.join(contactIds.map((id) => sql`${id}`), sql`, `)})`)
+          : [];
+        if (foundContacts.length !== new Set(contactIds).size || foundContacts.some((contact) => !contact.isActive)) {
+          reply.code(400).send({ error: "Every split contact must be an active saved contact" });
+          return;
+        }
+        const contactById = new Map(foundContacts.map((contact) => [contact.id, contact]));
+
+        const expenseAccount = await getOrCreateExpenseAccount(categoryName);
+        const loansReceivable = !isBorrower
+          ? await getOrCreateSystemAccount("loans-receivable", "Loans Receivable", "asset")
+          : null;
+        const loansPayable = isBorrower
+          ? await getOrCreateSystemAccount("loans-payable", "Loans Payable", "liability")
+          : null;
+
+        if (!isBorrower) {
+          const [wallet] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+            .from(accounts).where(eq(accounts.id, walletAccountId as number)).limit(1);
+          if (!wallet || !wallet.isActive || wallet.type !== "asset") {
+            reply.code(400).send({ error: "walletAccountId must be an active asset account" });
+            return;
+          }
+        }
+
+        const description = merchantName ? `Split bill - ${merchantName}` : "Split bill";
+        const journalLines = isBorrower
+          ? [
+              { accountId: expenseAccount.id, debit: meResult.total, credit: 0, description: "Personal share" },
+              { accountId: loansPayable!.id, debit: 0, credit: meResult.total, description: "Amount owed to payer" },
+            ]
+          : [
+              ...(meResult.total > 0 ? [{ accountId: expenseAccount.id, debit: meResult.total, credit: 0, description: "Personal share" }] : []),
+              ...contactRows.map((row) => ({ accountId: loansReceivable!.id, debit: row.total, credit: 0, description: `Receivable from ${row.personName}` })),
+              { accountId: walletAccountId as number, debit: 0, credit: targetTotal, description: "Receipt payment" },
+            ];
+        const prepared = await prepareJournalEntry({
+          date: Date.now(),
+          description,
+          txType: isBorrower ? "split_bill_borrowed" : "split_bill_lent",
+          lines: journalLines,
+        }, db);
+
+        const result = db.transaction((tx) => {
+          const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+          const loansToCreate = isBorrower
+            ? [{
+                contactId: payerContactId as number,
+                direction: "borrowed" as const,
+                amountCents: meResult.total,
+                description: `Borrowed from ${contactById.get(payerContactId as number)?.name ?? "payer"} for split bill`,
+                walletAccountId: null,
+              }]
+            : contactRows.map((row) => ({
+                contactId: row.personId,
+                direction: "lent" as const,
+                amountCents: row.total,
+                description: `Lent to ${row.personName} for split bill`,
+                walletAccountId: walletAccountId as number,
+              }));
+          const createdLoans: typeof loans.$inferSelect[] = [];
+          for (const loanInput of loansToCreate) {
+            const inserted = tx.insert(loans).values({
+              ...loanInput,
+              remainingCents: loanInput.amountCents,
+              startDate: new Date(),
+              status: "active",
+              sourceType: "split_bill",
+              sourceTransactionId: transactionId,
+              lendingTransactionId: transactionId,
+            }).returning().all();
+            const loan = inserted[0];
+            if (!loan) throw new Error("Failed to create split-bill loan");
+            createdLoans.push(loan);
+            tx.insert(auditLogs).values({
+              entityType: "loan",
+              entityId: loan.id,
+              action: "create",
+              afterSnapshot: Buffer.from(JSON.stringify({ loan, transactionId })),
+            }).run();
+          }
+          return { transactionId, createdLoans };
+        });
+        await invalidateOnTransactionMutation({
+          transactionId: result.transactionId,
+          affectedAccountIds: prepared.accountIds,
+        });
+        reply.code(201).send(result.createdLoans);
       } catch (err) {
         console.error("Create loans error:", err);
-        reply.code(500).send({ error: "Failed to create loans" });
+        reply.code(400).send({ error: (err as Error).message || "Failed to create loans" });
       }
     }
   );

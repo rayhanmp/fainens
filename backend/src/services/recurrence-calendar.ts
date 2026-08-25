@@ -1,4 +1,4 @@
-function addMonthsClamped(ms: number, months: number): number {
+export function addMonthsClamped(ms: number, months: number): number {
   const source = new Date(ms);
   const day = source.getDate();
   const target = new Date(ms);

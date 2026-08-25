@@ -39,6 +39,22 @@ export type CreateJournalEntryInput = {
   tagIds?: number[];
 };
 
+/**
+ * Normalized journal data ready for insertion.  Validation that needs async
+ * Drizzle reads happens before a domain transaction starts; the actual insert
+ * is deliberately synchronous so it can be used inside better-sqlite3's
+ * transaction callback.
+ */
+export type PreparedJournalEntry = {
+  dateMs: number;
+  validatedLines: JournalLineInput[];
+  totalDebit: number;
+  totalCredit: number;
+  accountIds: number[];
+  tagIds: number[];
+  transactionValues: Record<string, unknown>;
+};
+
 function normalBalanceSign(accountType: string): 1 | -1 {
   if (accountType === "asset") return 1;
   if (accountType === "expense") return 1;
@@ -376,15 +392,15 @@ export async function computeAccountBalanceRolledUp(
   return computeAccountBalance(accountId, dbLike);
 }
 
-export async function createJournalEntry(
+/** Validate all journal references and normalize values before a write. */
+export async function prepareJournalEntry(
   input: CreateJournalEntryInput,
   dbLike: any = defaultDb,
-): Promise<{ transactionId: number; balancesByAccountId: Record<number, number> }> {
+): Promise<PreparedJournalEntry> {
   const dateMs = typeof input.date === "number" ? input.date : input.date.getTime();
   if (!Number.isFinite(dateMs)) throw new Error("Invalid journal entry date");
 
   const { lines: validatedLines, totalDebit, totalCredit } = validateJournalLines(input.lines);
-
   const accountIds = Array.from(new Set(validatedLines.map((l) => l.accountId)));
   for (const accountId of accountIds) {
     const rows = await dbLike
@@ -397,7 +413,6 @@ export async function createJournalEntry(
     if (!account.isActive) throw new Error(`Account is not active: ${accountId}`);
   }
 
-  const uniqueReferencedAccountIds = accountIds;
   const tagIds = [...new Set(input.tagIds ?? [])];
   if (tagIds.some((id) => !Number.isInteger(id) || id <= 0)) {
     throw new Error("tagIds must contain positive integers");
@@ -420,91 +435,121 @@ export async function createJournalEntry(
     throw new Error("Invalid due date");
   }
 
-  const transactionValues = {
-    date: new Date(dateMs),
-    dueDate: dueMs != null ? new Date(dueMs) : null,
-    description: input.description,
-    reference: input.reference ?? null,
-    notes: input.notes ?? null,
-    place: input.place ?? null,
-    txType: input.txType ?? "manual",
-    periodId: input.periodId ?? null,
-    linkedTxId: input.linkedTxId ?? null,
-    categoryId: input.categoryId ?? null,
-    originLat: input.originLat ?? null,
-    originLng: input.originLng ?? null,
-    originName: input.originName ?? null,
-    destLat: input.destLat ?? null,
-    destLng: input.destLng ?? null,
-    destName: input.destName ?? null,
-    distanceKm: input.distanceKm ?? null,
-    subscriptionId: input.subscriptionId ?? null,
+  return {
+    dateMs,
+    validatedLines,
+    totalDebit,
+    totalCredit,
+    accountIds,
+    tagIds,
+    transactionValues: {
+      date: new Date(dateMs),
+      dueDate: dueMs != null ? new Date(dueMs) : null,
+      description: input.description,
+      reference: input.reference ?? null,
+      notes: input.notes ?? null,
+      place: input.place ?? null,
+      txType: input.txType ?? "manual",
+      periodId: input.periodId ?? null,
+      linkedTxId: input.linkedTxId ?? null,
+      categoryId: input.categoryId ?? null,
+      originLat: input.originLat ?? null,
+      originLng: input.originLng ?? null,
+      originName: input.originName ?? null,
+      destLat: input.destLat ?? null,
+      destLng: input.destLng ?? null,
+      destName: input.destName ?? null,
+      distanceKm: input.distanceKm ?? null,
+      subscriptionId: input.subscriptionId ?? null,
+    },
   };
+}
 
-  const lineValues = (transactionId: number) => validatedLines.map((line) => ({
-    transactionId,
+/**
+ * Insert a prepared journal synchronously into an existing better-sqlite3
+ * transaction.  Any thrown constraint or verification error rolls back the
+ * caller's outer transaction.
+ */
+export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJournalEntry): number {
+  const inserted = tx
+    .insert(transactions)
+    .values(prepared.transactionValues)
+    .returning({ id: transactions.id })
+    .all();
+  const id = inserted[0]?.id;
+  if (!id) throw new Error("Failed to create transaction row");
+
+  tx.insert(transactionLines).values(prepared.validatedLines.map((line) => ({
+    transactionId: id,
     accountId: line.accountId,
     debit: line.debit,
     credit: line.credit,
     description: line.description ?? null,
-  }));
+  }))).run();
+  if (prepared.tagIds.length > 0) {
+    tx.insert(transactionTags)
+      .values(prepared.tagIds.map((tagId) => ({ transactionId: id, tagId })))
+      .run();
+  }
 
-  const verifyPersistedLines = (lineSums: Array<{ debitTotal: number; creditTotal: number }>) => {
-    const persistedDebit = lineSums[0]?.debitTotal ?? 0;
-    const persistedCredit = lineSums[0]?.creditTotal ?? 0;
-    if (persistedDebit !== totalDebit || persistedCredit !== totalCredit) {
-      throw new Error(
-        `Persisted journal totals differ from validated totals: debits=${persistedDebit} credits=${persistedCredit}`,
-      );
-    }
-  };
+  const lineSums = tx
+    .select({
+      debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+      creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+    })
+    .from(transactionLines)
+    .where(eq(transactionLines.transactionId, id))
+    .all();
+  const persistedDebit = lineSums[0]?.debitTotal ?? 0;
+  const persistedCredit = lineSums[0]?.creditTotal ?? 0;
+  if (persistedDebit !== prepared.totalDebit || persistedCredit !== prepared.totalCredit) {
+    throw new Error(
+      `Persisted journal totals differ from validated totals: debits=${persistedDebit} credits=${persistedCredit}`,
+    );
+  }
+
+  tx.insert(auditLogs).values({
+    entityType: "transaction",
+    entityId: id,
+    action: "create",
+    afterSnapshot: Buffer.from(JSON.stringify({
+      transaction: prepared.transactionValues,
+      lines: prepared.validatedLines,
+      tagIds: prepared.tagIds,
+    })),
+  }).run();
+  return id;
+}
+
+export async function createJournalEntry(
+  input: CreateJournalEntryInput,
+  dbLike: any = defaultDb,
+): Promise<{ transactionId: number; balancesByAccountId: Record<number, number> }> {
+  const prepared = await prepareJournalEntry(input, dbLike);
 
   let transactionId: number;
   if (dbLike === defaultDb) {
     // better-sqlite3 transactions must be synchronous. Explicit .all()/.run()
     // calls keep the header, lines, and verification inside the same commit.
-    transactionId = defaultDb.transaction((tx) => {
-      const inserted = tx
-        .insert(transactions)
-        .values(transactionValues)
-        .returning({ id: transactions.id })
-        .all();
-      const id = inserted[0]?.id;
-      if (!id) throw new Error("Failed to create transaction row");
-
-      tx.insert(transactionLines).values(lineValues(id)).run();
-      if (tagIds.length > 0) {
-        tx.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: id, tagId }))).run();
-      }
-      const lineSums = tx
-        .select({
-          debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-          creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
-        })
-        .from(transactionLines)
-        .where(eq(transactionLines.transactionId, id))
-        .all();
-      verifyPersistedLines(lineSums);
-      tx.insert(auditLogs).values({
-        entityType: "transaction",
-        entityId: id,
-        action: "create",
-        afterSnapshot: Buffer.from(JSON.stringify({ transaction: transactionValues, lines: validatedLines, tagIds })),
-      }).run();
-      return id;
-    });
+    transactionId = defaultDb.transaction((tx) => insertPreparedJournalEntrySync(tx, prepared));
   } else {
     // A supplied executor is assumed to be an existing domain transaction or
     // a test double; its owner controls the outer commit boundary.
     const inserted = await dbLike
       .insert(transactions)
-      .values(transactionValues)
+      .values(prepared.transactionValues)
       .returning({ id: transactions.id });
     const id = inserted[0]?.id;
     if (!id) throw new Error("Failed to create transaction row");
-    await dbLike.insert(transactionLines).values(lineValues(id));
-    if (tagIds.length > 0) {
-      await dbLike.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: id, tagId })));
+    await dbLike.insert(transactionLines).values(prepared.validatedLines.map((line) => ({
+      transactionId: id,
+      accountId: line.accountId,
+      debit: line.debit,
+      credit: line.credit,
+      description: line.description ?? null,
+    })));
+    if (prepared.tagIds.length > 0) {
+      await dbLike.insert(transactionTags).values(prepared.tagIds.map((tagId) => ({ transactionId: id, tagId })));
     }
     const lineSums = await dbLike
       .select({
@@ -513,18 +558,28 @@ export async function createJournalEntry(
       })
       .from(transactionLines)
       .where(eq(transactionLines.transactionId, id));
-    verifyPersistedLines(lineSums);
+    const persistedDebit = lineSums[0]?.debitTotal ?? 0;
+    const persistedCredit = lineSums[0]?.creditTotal ?? 0;
+    if (persistedDebit !== prepared.totalDebit || persistedCredit !== prepared.totalCredit) {
+      throw new Error(
+        `Persisted journal totals differ from validated totals: debits=${persistedDebit} credits=${persistedCredit}`,
+      );
+    }
     await dbLike.insert(auditLogs).values({
       entityType: "transaction",
       entityId: id,
       action: "create",
-      afterSnapshot: Buffer.from(JSON.stringify({ transaction: transactionValues, lines: validatedLines, tagIds })),
+      afterSnapshot: Buffer.from(JSON.stringify({
+        transaction: prepared.transactionValues,
+        lines: prepared.validatedLines,
+        tagIds: prepared.tagIds,
+      })),
     });
     transactionId = id;
   }
 
   const balancesByAccountId: Record<number, number> = {};
-  for (const accountId of uniqueReferencedAccountIds) {
+  for (const accountId of prepared.accountIds) {
     balancesByAccountId[accountId] = await computeAccountBalance(accountId, dbLike);
   }
 
@@ -536,7 +591,7 @@ export async function createJournalEntry(
   if (dbLike === defaultDb) {
     await invalidateOnTransactionMutation({
       transactionId: result.transactionId,
-      affectedAccountIds: uniqueReferencedAccountIds,
+      affectedAccountIds: prepared.accountIds,
       affectedPeriodIds: input.periodId != null ? [input.periodId] : undefined,
     });
   }

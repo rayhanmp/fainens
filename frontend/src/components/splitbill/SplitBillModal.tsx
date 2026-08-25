@@ -74,6 +74,22 @@ interface SplitBillModalProps {
   accounts: WalletAccount[];
 }
 
+function allocateLargestRemainder(values: number[], target: number): number[] {
+  const rows = values.map((value, index) => ({
+    index,
+    floor: Math.floor(value),
+    fraction: value - Math.floor(value),
+  }));
+  let remainder = target - rows.reduce((sum, row) => sum + row.floor, 0);
+  rows.sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (const row of rows) {
+    if (remainder <= 0) break;
+    row.floor += 1;
+    remainder -= 1;
+  }
+  return rows.sort((a, b) => a.index - b.index).map((row) => row.floor);
+}
+
 type Step = 'upload' | 'split';
 
 export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProps) {
@@ -89,6 +105,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
   const [splitResults, setSplitResults] = useState<PersonSplitResult[]>([]);
   
   const [isBorrower, setIsBorrower] = useState(true);
+  const [payerContactId, setPayerContactId] = useState<number | null>(null);
   const [selectedWalletId, setSelectedWalletId] = useState<number>(accounts[0]?.id || 0);
   
   const [createdLoans, setCreatedLoans] = useState<Array<{ id: number; direction: string; amountCents: number }>>([]);
@@ -131,6 +148,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     setAssignments([]);
     setSplitResults([]);
     setIsBorrower(true);
+    setPayerContactId(null);
     setCreatedLoans([]);
     setContactSearch('');
     setNewPersonName('');
@@ -255,8 +273,13 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
       });
     }
 
-    setSplitResults(results);
-    return results;
+    const roundedTotals = allocateLargestRemainder(
+      results.map((result) => result.total),
+      Math.round(results.reduce((sum, result) => sum + result.total, 0)),
+    );
+    const normalized = results.map((result, index) => ({ ...result, total: roundedTotals[index] }));
+    setSplitResults(normalized);
+    return normalized;
   }, []);
 
   const handleAssignItem = useCallback((
@@ -294,22 +317,20 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     }
   }, [assignments, parsedReceipt, people, calculateResults]);
 
-  const handleAddPerson = useCallback(() => {
+  const handleAddPerson = useCallback(async () => {
     if (!newPersonName.trim()) return;
     
-    const newPerson: SplitBillPerson = {
-      id: people.length > 0 ? Math.max(...people.filter(p => p.id !== undefined).map(p => p.id || 0)) + 1 : 1,
-      name: newPersonName.trim(),
-      isNew: true,
-    };
-    
-    const newPeople = [...people, newPerson];
-    setPeople(newPeople);
-    setNewPersonName('');
-    setShowAddPerson(false);
-    
-    if (parsedReceipt) {
-      calculateResults(parsedReceipt, newPeople, assignments);
+    try {
+      const created = await api.contacts.create({ name: newPersonName.trim() });
+      const newPerson: SplitBillPerson = { id: created.id, name: created.name, isNew: false };
+      const newPeople = [...people, newPerson];
+      setContacts((current) => [...current, created]);
+      setPeople(newPeople);
+      setNewPersonName('');
+      setShowAddPerson(false);
+      if (parsedReceipt) calculateResults(parsedReceipt, newPeople, assignments);
+    } catch (err) {
+      setError((err as Error).message || 'Failed to create contact');
     }
   }, [newPersonName, people, parsedReceipt, assignments, calculateResults]);
 
@@ -349,7 +370,11 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
   }, [people, parsedReceipt, assignments, calculateResults]);
 
   const handleCreateLoans = useCallback(async () => {
-    if (!selectedWalletId || splitResults.length === 0) return;
+    if ((!isBorrower && !selectedWalletId) || splitResults.length === 0) return;
+    if (isBorrower && !payerContactId) {
+      setError('Select the contact who paid the receipt');
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -360,7 +385,10 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
           total: r.total,
         })),
         isBorrower,
-        walletAccountId: selectedWalletId,
+        walletAccountId: isBorrower ? undefined : selectedWalletId,
+        payerContactId: isBorrower ? (payerContactId ?? undefined) : undefined,
+        receiptTotal: parsedReceipt?.total,
+        merchantName: parsedReceipt?.merchantName,
       });
       setCreatedLoans(loans);
       handleClose();
@@ -369,7 +397,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     } finally {
       setIsLoading(false);
     }
-  }, [selectedWalletId, splitResults, isBorrower]);
+  }, [selectedWalletId, splitResults, isBorrower, payerContactId, parsedReceipt, handleClose]);
 
   const getAssignedPeople = (itemIndex: number): number[] => {
     const assignment = assignments.find(a => a.itemIndex === itemIndex);
@@ -385,8 +413,8 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     }
   };
 
-  const totalAllocated = splitResults.reduce((sum, r) => sum + r.subtotal, 0);
-  const unallocated = (parsedReceipt?.subtotal || 0) - totalAllocated;
+  const totalAllocated = splitResults.reduce((sum, r) => sum + r.total, 0);
+  const unallocated = (parsedReceipt?.total || 0) - totalAllocated;
 
   const renderUploadStep = () => (
     <div className="space-y-4">
@@ -651,12 +679,12 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
             <div className="mt-6 pt-6 border-t border-[var(--color-surface-container-high)]">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium text-[var(--color-text-secondary)]">Allocated</span>
-                <span className="font-bold text-sm">{formatCurrency(totalAllocated)} / {formatCurrency(parsedReceipt.subtotal)}</span>
+                <span className="font-bold text-sm">{formatCurrency(totalAllocated)} / {formatCurrency(parsedReceipt.total)}</span>
               </div>
               <div className="w-full bg-[var(--color-surface-container-high)] h-2 rounded-full overflow-hidden">
                 <div 
                   className="bg-[var(--color-primary)] h-full transition-all"
-                  style={{ width: `${parsedReceipt.subtotal > 0 ? (totalAllocated / parsedReceipt.subtotal) * 100 : 0}%` }}
+                  style={{ width: `${parsedReceipt.total > 0 ? Math.min(100, Math.max(0, (totalAllocated / parsedReceipt.total) * 100)) : 0}%` }}
                 ></div>
               </div>
               {unallocated > 0 && (
@@ -688,7 +716,20 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
                 </label>
               </div>
 
-              <select
+              {isBorrower && (
+                <select
+                  value={payerContactId ?? ''}
+                  onChange={(e) => setPayerContactId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="">Who paid the receipt?</option>
+                  {people.filter((person) => person.id !== meId && person.id !== undefined).map((person) => (
+                    <option key={person.id} value={person.id}>{person.name}</option>
+                  ))}
+                </select>
+              )}
+
+              {!isBorrower && <select
                 value={selectedWalletId}
                 onChange={(e) => setSelectedWalletId(parseInt(e.target.value))}
                 className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -696,13 +737,13 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
                 {accounts.filter(a => a.type === 'asset').map(account => (
                   <option key={account.id} value={account.id}>{account.name}</option>
                 ))}
-              </select>
+              </select>}
             </div>
 
             <Button 
               onClick={handleCreateLoans} 
               className="w-full mt-6 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-container)] text-white py-3 rounded-full font-bold shadow-lg hover:opacity-90"
-              disabled={isLoading || unallocated > 0}
+              disabled={isLoading || unallocated !== 0 || (isBorrower && !payerContactId)}
             >
               {isLoading ? 'Creating...' : 'Confirm Split & Create Loans'}
             </Button>
