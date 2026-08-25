@@ -1445,6 +1445,7 @@ export const api = {
       updatedAt: number;
     }>(`/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi<void>(`/contacts/${id}`, { method: 'DELETE' }),
+    restore: (id: number) => fetchApi(`/contacts/${id}/restore`, { method: 'POST' }),
   },
 
   // Loans

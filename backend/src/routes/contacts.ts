@@ -2,7 +2,7 @@ import { eq, like, desc, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { contacts, loans } from "../db/schema";
+import { auditLogs, contacts, loans } from "../db/schema";
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -199,27 +199,70 @@ export default async function (fastify: FastifyInstance) {
   // DELETE /api/contacts/:id - Soft delete contact
   fastify.delete("/api/contacts/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-
-    const [existing] = await db
-      .select()
-      .from(contacts)
-      .where(eq(contacts.id, parseInt(id)))
-      .limit(1);
-
-    if (!existing) {
-      reply.code(404).send({ error: "Contact not found" });
-      return;
+    const contactId = Number(id);
+    if (!Number.isSafeInteger(contactId) || contactId <= 0) {
+      return reply.code(400).send({ error: "Invalid contact ID" });
     }
 
-    // Soft delete - mark as inactive
-    await db
-      .update(contacts)
-      .set({ 
-        isActive: false,
-        updatedAt: sql`(unixepoch('now') * 1000)`,
-      })
-      .where(eq(contacts.id, parseInt(id)));
+    try {
+      db.transaction((tx) => {
+        const existing = tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1).all()[0];
+        if (!existing) throw new Error("Contact not found");
+        if (!existing.isActive) throw new Error("Contact is already archived");
+        const activeLoans = tx.select({ id: loans.id }).from(loans)
+          .where(and(eq(loans.contactId, contactId), eq(loans.isActive, true), eq(loans.status, "active")))
+          .all();
+        if (activeLoans.length > 0) {
+          throw new Error(`Contact has ${activeLoans.length} active loan(s); settle, write off, or transfer them before archiving`);
+        }
+        const updated = tx.update(contacts)
+          .set({ isActive: false, updatedAt: sql`(unixepoch('now') * 1000)` })
+          .where(and(eq(contacts.id, contactId), eq(contacts.isActive, true)))
+          .returning().all()[0];
+        if (!updated) throw new Error("Contact was changed; retry archiving it");
+        tx.insert(auditLogs).values({
+          entityType: "contact",
+          entityId: contactId,
+          action: "archive",
+          beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        }).run();
+      });
+      return reply.code(204).send();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to archive contact";
+      return reply.code(message === "Contact not found" ? 404 : 409).send({ error: message });
+    }
+  });
 
-    reply.code(204).send();
+  fastify.post("/api/contacts/:id/restore", async (request, reply) => {
+    const contactId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(contactId) || contactId <= 0) {
+      return reply.code(400).send({ error: "Invalid contact ID" });
+    }
+    try {
+      const restored = db.transaction((tx) => {
+        const existing = tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1).all()[0];
+        if (!existing) throw new Error("Contact not found");
+        if (existing.isActive) throw new Error("Contact is already active");
+        const updated = tx.update(contacts)
+          .set({ isActive: true, updatedAt: sql`(unixepoch('now') * 1000)` })
+          .where(and(eq(contacts.id, contactId), eq(contacts.isActive, false)))
+          .returning().all()[0];
+        if (!updated) throw new Error("Contact was changed; retry restoring it");
+        tx.insert(auditLogs).values({
+          entityType: "contact",
+          entityId: contactId,
+          action: "restore",
+          beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        }).run();
+        return updated;
+      });
+      return reply.send(restored);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to restore contact";
+      return reply.code(message === "Contact not found" ? 404 : 409).send({ error: message });
+    }
   });
 }
