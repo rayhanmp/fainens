@@ -142,6 +142,17 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Budget-template archival is now audited, idempotently guarded, and reversible through an explicit restore action. Inactive templates can be deliberately retrieved for archive-management views without appearing in ordinary template pickers.
 
+### `69a77fc` and `57b5d8f` — owned correction workflows (recurring and loans)
+
+- Salary and subscription corrections require a reason and atomically create an inverse journal plus a replacement journal, then move the durable recurring occurrence to the replacement. They default to the current accounting period; a closed historical period remains protected unless explicitly reopened.
+- Generic transaction reversal now refuses salary, subscription, PayLater, loan, and split-bill journal types, so it cannot silently desynchronise a domain subledger.
+- Loan payments now carry a durable posted/reversed lifecycle. Reversing a payment creates the linked inverse journal, restores the principal to the loan balance, reopens a fully paid loan when appropriate, and audits both the payment and loan state. Legacy databases gain the fields through migration `0011` without data deletion.
+
+### `8392388` and `6d6912b` — owned correction workflows (PayLater and split bills)
+
+- PayLater settlements now persist exact installment allocations in migration `0012`. Reversal restores each allocated installment amount before it posts the inverse journal; a legacy partial settlement without allocation evidence is deliberately refused instead of guessed. Recognition reversal is allowed only after its posted interest/settlements are unwound, and cancels the untouched schedule. Obligation retrieval now ignores reversed roots and children.
+- A loan's original event can be reversed only before a repayment or status change; it is then archived rather than deleted. A split-bill journal can likewise be reversed only while every derived loan remains untouched; all derived loans are atomically archived with the inverse journal. These dependency rules preserve audit history and prevent orphaned balances.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -162,9 +173,8 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-2. Complete domain-specific correction/reversal workflows for PayLater, loan, and split-bill ownership. Salary and subscription now have atomic correction endpoints: they post an inverse journal plus a replacement and update their durable occurrence in the same SQLite transaction. Generic transaction reversal refuses every domain-owned type so it cannot leave an occurrence or obligation in a false state. Period close/reopen is audited and enforced; corrections default to the current open period and cannot backdate through a closed period.
-3. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
-4. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
+2. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
+3. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
 7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
