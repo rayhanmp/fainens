@@ -1,9 +1,11 @@
 import { FastifyInstance } from "fastify";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db } from "../db/client";
-import { pendingTransactions, transactions, transactionLines, categories, accounts } from "../db/schema";
+import { auditLogs, pendingTransactions, transactions, transactionLines, categories, accounts } from "../db/schema";
 import { parseNaturalLanguageTransaction } from "../services/transaction-parser";
-import { createSimpleTransaction } from "../services/ledger";
+import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "../services/ledger";
+import { findPeriodIdForDate } from "../services/transaction-mutations";
+import { invalidateOnTransactionMutation } from "../cache";
 
 const MAX_PARSE_ATTEMPTS = 3;
 
@@ -88,7 +90,10 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
   // Approve pending transaction - creates actual transaction
   fastify.post("/api/pending-transactions/:id/approve", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const pendingId = parseInt(id);
+    const pendingId = parseInt(id, 10);
+    if (!Number.isInteger(pendingId) || pendingId <= 0) {
+      return reply.code(400).send({ error: "Invalid pending transaction ID" });
+    }
 
     const [pending] = await db
       .select()
@@ -122,11 +127,23 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       .where(eq(categories.name, parsed.category))
       .limit(1);
 
-    // Find default wallet account
+    if (!Number.isSafeInteger(parsed.amount) || parsed.amount <= 0) {
+      return reply.code(400).send({ error: "Parsed amount must be a positive integer rupiah value" });
+    }
+    if (!parsed.description?.trim()) {
+      return reply.code(400).send({ error: "Parsed description is required" });
+    }
+    if (parsed.type === "transfer") {
+      return reply.code(422).send({
+        error: "Transfer approval requires explicit source and destination account IDs",
+      });
+    }
+
+    // Find default active wallet account
     const [account] = await db
       .select()
       .from(accounts)
-      .where(eq(accounts.type, "asset"))
+      .where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true)))
       .limit(1);
 
     if (!account) {
@@ -134,37 +151,82 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     }
 
     const txDate = parsed.date ? new Date(parsed.date).getTime() : Date.now();
+    if (!Number.isFinite(txDate)) {
+      return reply.code(400).send({ error: "Parsed transaction date is invalid" });
+    }
+    const periodId = await findPeriodIdForDate(txDate);
 
     // Determine transaction kind based on type
-    let kind: "expense" | "income" | "transfer" = "expense";
+    let kind: "expense" | "income" = "expense";
     if (parsed.type === "income") kind = "income";
-    else if (parsed.type === "transfer") kind = "transfer";
 
-    // Create the transaction
-    const result = await createSimpleTransaction(
-      {
-        kind,
-        amountCents: parsed.amount * 100,
-        description: parsed.description,
-        notes: parsed.notes || undefined,
-        date: txDate,
-        walletAccountId: account.id,
-        txType: "manual",
-        categoryId: category?.id,
-        place: parsed.place || undefined,
-      },
-      db
-    );
+    const counterparty = kind === "expense"
+      ? await getOrCreateAutoExpenseAccount(db)
+      : await getOrCreateAutoIncomeAccount(db);
+    let transactionId: number;
+    try {
+      transactionId = db.transaction((tx) => {
+      const fresh = tx
+        .select({ status: pendingTransactions.status })
+        .from(pendingTransactions)
+        .where(eq(pendingTransactions.id, pendingId))
+        .limit(1)
+        .all()[0];
+      if (!fresh) throw new Error("Pending transaction not found");
+      if (fresh.status !== "pending") throw new Error("Pending transaction already processed");
 
-    // Update pending status
-    await db
-      .update(pendingTransactions)
-      .set({ status: "approved", updatedAt: new Date() })
-      .where(eq(pendingTransactions.id, pendingId));
+      const inserted = tx
+        .insert(transactions)
+        .values({
+          date: new Date(txDate),
+          description: parsed.description.trim(),
+          notes: parsed.notes || null,
+          place: parsed.place || null,
+          txType: `simple_${kind}`,
+          periodId,
+          categoryId: category?.id ?? null,
+        })
+        .returning({ id: transactions.id })
+        .all()[0];
+      if (!inserted) throw new Error("Failed to create approved transaction");
+      const lines = kind === "expense"
+        ? [
+            { transactionId: inserted.id, accountId: counterparty.id, debit: parsed.amount, credit: 0 },
+            { transactionId: inserted.id, accountId: account.id, debit: 0, credit: parsed.amount },
+          ]
+        : [
+            { transactionId: inserted.id, accountId: account.id, debit: parsed.amount, credit: 0 },
+            { transactionId: inserted.id, accountId: counterparty.id, debit: 0, credit: parsed.amount },
+          ];
+      tx.insert(transactionLines).values(lines).run();
+      tx.update(pendingTransactions)
+        .set({ status: "approved", updatedAt: new Date() })
+        .where(eq(pendingTransactions.id, pendingId))
+        .run();
+      tx.insert(auditLogs).values({
+        entityType: "transaction",
+        entityId: inserted.id,
+        action: "create",
+        afterSnapshot: Buffer.from(JSON.stringify({ source: "pending_approval", pendingId, lines })),
+      }).run();
+        return inserted.id;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Pending transaction already processed") {
+        return reply.code(409).send({ error: error.message });
+      }
+      fastify.log.error(error);
+      return reply.code(500).send({ error: "Failed to approve pending transaction" });
+    }
+    await invalidateOnTransactionMutation({
+      transactionId,
+      affectedAccountIds: [account.id, counterparty.id],
+      affectedPeriodIds: periodId == null ? undefined : [periodId],
+    });
 
     return {
       success: true,
-      transactionId: result.transactionId,
+      transactionId,
       message: `Transaction created: ${formatCurrency(parsed.amount)} ${parsed.description}`,
     };
   });

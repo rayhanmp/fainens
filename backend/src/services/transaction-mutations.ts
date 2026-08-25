@@ -19,6 +19,7 @@ import {
 } from "../db/schema";
 import { validateJournalLines, type ValidatedJournalLine } from "./journal-validation";
 import { getIntrinsicTransactionProtectionReasons } from "./transaction-mutation-policy";
+import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -41,7 +42,7 @@ function inclusivePeriodEnd(end: number): number {
   return end % DAY_MS === 0 ? end + DAY_MS - 1 : end;
 }
 
-async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
+export async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
   const candidates = await db
     .select({ id: salaryPeriods.id, endDate: salaryPeriods.endDate })
     .from(salaryPeriods)
@@ -49,6 +50,16 @@ async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
   const containing = candidates
     .filter((period) => dateMs <= inclusivePeriodEnd(Number(period.endDate)))
     .sort((a, b) => Number(b.endDate) - Number(a.endDate))[0];
+  return containing?.id ?? null;
+}
+
+function findPeriodInCandidates(
+  dateMs: number,
+  candidates: Array<{ id: number; startDate: number; endDate: number }>,
+): number | null {
+  const containing = candidates
+    .filter((period) => dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate)))
+    .sort((a, b) => Number(b.startDate) - Number(a.startDate))[0];
   return containing?.id ?? null;
 }
 
@@ -343,4 +354,123 @@ export async function deleteTransactionsAtomically(ids: number[]): Promise<Delet
     affectedPeriodIds: result.affectedPeriodIds,
   });
   return result;
+}
+
+export interface ImportTransactionRow {
+  date: string;
+  amount: number;
+  description: string;
+}
+
+export async function importTransactionsAtomically(input: {
+  rows: ImportTransactionRow[];
+  accountId: number;
+  defaultDescription: string;
+  tagIds?: number[];
+}): Promise<Array<{ id: number; transactionId: number }>> {
+  if (!Array.isArray(input.rows) || input.rows.length === 0 || input.rows.length > 1000) {
+    throw new TransactionMutationError("Import must contain between 1 and 1000 rows", 400);
+  }
+  const [wallet] = await db
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .from(accounts)
+    .where(eq(accounts.id, input.accountId))
+    .limit(1);
+  if (!wallet || !wallet.isActive || wallet.type !== "asset") {
+    throw new TransactionMutationError("Import account must be an active asset account", 400);
+  }
+
+  const tagIds = [...new Set(input.tagIds ?? [])];
+  if (tagIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new TransactionMutationError("tagIds must contain positive integers", 400);
+  }
+  if (tagIds.length > 0) {
+    const validTags = await db.select({ id: tags.id }).from(tags).where(inArray(tags.id, tagIds));
+    if (validTags.length !== tagIds.length) {
+      throw new TransactionMutationError("One or more tags do not exist", 400);
+    }
+  }
+
+  const periods = await db
+    .select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+    .from(salaryPeriods);
+  const normalizedRows = input.rows.map((row, index) => {
+    const dateMs = new Date(row.date).getTime();
+    if (!Number.isFinite(dateMs)) {
+      throw new TransactionMutationError(`Row ${index + 1} has an invalid date`, 400);
+    }
+    if (!Number.isSafeInteger(row.amount) || row.amount === 0) {
+      throw new TransactionMutationError(`Row ${index + 1} amount must be a non-zero integer rupiah value`, 400);
+    }
+    const description = (row.description || input.defaultDescription).trim();
+    if (!description) {
+      throw new TransactionMutationError(`Row ${index + 1} description is required`, 400);
+    }
+    return {
+      dateMs,
+      amount: Math.abs(row.amount),
+      kind: row.amount >= 0 ? "expense" as const : "income" as const,
+      description,
+      periodId: findPeriodInCandidates(dateMs, periods),
+    };
+  });
+
+  const expenseAccount = normalizedRows.some((row) => row.kind === "expense")
+    ? await getOrCreateAutoExpenseAccount(db)
+    : null;
+  const incomeAccount = normalizedRows.some((row) => row.kind === "income")
+    ? await getOrCreateAutoIncomeAccount(db)
+    : null;
+
+  const imported = db.transaction((tx) => normalizedRows.map((row) => {
+    const inserted = tx
+      .insert(transactions)
+      .values({
+        date: new Date(row.dateMs),
+        description: row.description,
+        txType: `simple_${row.kind}`,
+        periodId: row.periodId,
+      })
+      .returning({ id: transactions.id })
+      .all()[0];
+    if (!inserted) throw new Error("Failed to insert imported transaction");
+    const counterpartyId = row.kind === "expense" ? expenseAccount!.id : incomeAccount!.id;
+    const lines = row.kind === "expense"
+      ? [
+          { transactionId: inserted.id, accountId: counterpartyId, debit: row.amount, credit: 0 },
+          { transactionId: inserted.id, accountId: wallet.id, debit: 0, credit: row.amount },
+        ]
+      : [
+          { transactionId: inserted.id, accountId: wallet.id, debit: row.amount, credit: 0 },
+          { transactionId: inserted.id, accountId: counterpartyId, debit: 0, credit: row.amount },
+        ];
+    tx.insert(transactionLines).values(lines).run();
+    if (tagIds.length > 0) {
+      tx.insert(transactionTags)
+        .values(tagIds.map((tagId) => ({ transactionId: inserted.id, tagId })))
+        .run();
+    }
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: inserted.id,
+      action: "create",
+      afterSnapshot: auditSnapshot({
+        transaction: { id: inserted.id, ...row },
+        lines,
+        tagIds,
+        source: "csv_import",
+      }),
+    }).run();
+    return { id: inserted.id, transactionId: inserted.id };
+  }));
+
+  const affectedAccountIds = [wallet.id, expenseAccount?.id, incomeAccount?.id]
+    .filter((id): id is number => id != null);
+  const affectedPeriodIds = [...new Set(normalizedRows.map((row) => row.periodId).filter((id): id is number => id != null))];
+  await invalidateOnTransactionMutation({
+    transactionId: imported[0].transactionId,
+    affectedAccountIds,
+    affectedPeriodIds,
+  });
+  return imported;
 }

@@ -226,6 +226,7 @@ export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCa
     .where(
       and(
         sql`${transactions.date} >= ${cutoffDate}`,
+        sql`${transactions.date} <= ${Date.now()}`,
         sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
         // Exclude non-operational txTypes (transfers, settlements, etc.)
         sql`${transactions.txType} NOT IN ('paylater_settlement')`,

@@ -180,12 +180,12 @@ function OnboardingPage() {
         setLoading(true);
         try {
           for (const [catId, raw] of entries) {
-            const cents = Math.round(parseFloat(raw.replace(/,/g, '')) * 100);
-            if (!Number.isFinite(cents) || cents <= 0) continue;
+            const rupiah = Math.round(parseFloat(raw.replace(/,/g, '')));
+            if (!Number.isFinite(rupiah) || rupiah <= 0) continue;
             await api.budgets.create({
               periodId: createdPeriodId,
               categoryId: Number(catId),
-              plannedAmount: cents,
+              plannedAmount: rupiah,
             });
           }
         } catch (e) {

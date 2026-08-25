@@ -4,13 +4,14 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client";
 import { transactions, transactionLines, transactionTags, tags, accounts, categories, salaryPeriods } from "../db/schema";
 import { createJournalEntry, createSimpleTransaction } from "../services/ledger";
-import { auditCreate } from "../services/audit";
 import {
   deleteTransactionsAtomically,
+  importTransactionsAtomically,
   TransactionMutationError,
   updateTransactionAtomically,
 } from "../services/transaction-mutations";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
+import { parseIdrInteger } from "../services/money";
 
 // Pagination constants
 const MAX_LIMIT = 100;
@@ -536,14 +537,9 @@ RULES:
             toWalletAccountId,
             linkedTxId,
             subscriptionId,
+            tagIds,
           });
-          
-          // Handle tags separately since createSimpleTransaction doesn't support them
-          if (tagIds && tagIds.length > 0) {
-            await db.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: txResult.transactionId, tagId })));
-          }
-          
-          await auditCreate("transaction", txResult.transactionId, { description, amountCents, kind });
+
           reply.code(201).send({ id: txResult.transactionId, ...txResult });
           return;
         }
@@ -566,14 +562,9 @@ RULES:
           destName,
           distanceKm,
           subscriptionId,
+          tagIds,
         });
-        
-        // Handle tags separately since createSimpleTransaction doesn't support them
-        if (tagIds && tagIds.length > 0) {
-          await db.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: txResult.transactionId, tagId })));
-        }
-        
-        await auditCreate("transaction", txResult.transactionId, { description, amountCents, kind });
+
         reply.code(201).send({ id: txResult.transactionId, ...txResult });
         return;
       }
@@ -594,14 +585,9 @@ RULES:
         periodId: autoPeriodId,
         linkedTxId,
         categoryId,
+        tagIds,
         lines,
       });
-
-      if (tagIds && tagIds.length > 0) {
-        await db.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: txResult.transactionId, tagId })));
-      }
-
-      await auditCreate("transaction", txResult.transactionId, { description, lineCount: lines.length });
       reply.code(201).send({ id: txResult.transactionId, ...txResult });
     } catch (err) {
       fastify.log.error(err);
@@ -738,47 +724,31 @@ RULES:
 
   // Import confirm endpoint
   fastify.post("/api/transactions/import-confirm", async (request, reply) => {
-    const { rows, accountId, defaultDescription, tagIds, periodId } = request.body as {
+    const { rows, accountId, defaultDescription, tagIds } = request.body as {
       rows: Array<{ date: string; amountCents: number; description: string }>;
       accountId: number;
       defaultDescription: string;
       tagIds?: number[];
-      periodId?: number | null;
     };
 
     try {
-      // Use transaction for atomic bulk import
-      const results = await db.transaction(async (tx) => {
-        const imported: Array<{ id: number; transactionId: number; balancesByAccountId: Record<number, number> }> = [];
-        
-        for (const row of rows) {
-          const kind: "expense" | "income" = row.amountCents >= 0 ? "expense" : "income";
-          const absAmount = Math.abs(row.amountCents);
-
-          const txResult = await createSimpleTransaction({
-            kind,
-            amountCents: absAmount,
-            description: row.description || defaultDescription,
-            date: new Date(row.date),
-            periodId,
-            walletAccountId: accountId,
-          });
-          
-          // Handle tags separately
-          if (tagIds && tagIds.length > 0) {
-            await tx.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: txResult.transactionId, tagId })));
-          }
-          
-          imported.push({ id: txResult.transactionId, ...txResult });
-        }
-        
-        return imported;
+      const results = await importTransactionsAtomically({
+        rows: rows.map((row) => ({
+          date: row.date,
+          amount: row.amountCents,
+          description: row.description,
+        })),
+        accountId,
+        defaultDescription,
+        tagIds,
       });
-
-      reply.code(201).send({ imported: results.length, transactions: results });
+      return reply.code(201).send({ imported: results.length, transactions: results });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: "Failed to import transactions" });
+      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      return reply.code(status).send({
+        error: err instanceof Error ? err.message : "Failed to import transactions",
+      });
     }
   });
 }
@@ -834,14 +804,5 @@ function parseDateWithFormat(dateStr: string, format: string): string | null {
 }
 
 function parseRupiah(amountStr: string): number {
-  if (!amountStr) return 0;
-
-  // Remove currency symbols, dots (thousand separators), and spaces
-  const cleaned = amountStr.replace(/[Rp\s\.]/gi, "").replace(",", ".");
-  const amount = parseFloat(cleaned);
-
-  if (isNaN(amount)) return 0;
-
-  // Convert to cents
-  return Math.round(amount * 100);
+  return parseIdrInteger(amountStr) ?? 0;
 }

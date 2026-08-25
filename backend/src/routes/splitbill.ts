@@ -222,8 +222,9 @@ async function createLoanFromSplit(
   expenseAmount: number,
   expenseCategoryName: string
 ) {
-  const amountCents = amount * 100;
-  const expenseAmountCents = expenseAmount * 100;
+  // Receipt parser and all IDR UI inputs use canonical integer rupiah.
+  const amountCents = Math.round(amount);
+  const expenseAmountCents = Math.round(expenseAmount);
   const totalCashOutCents = amountCents + expenseAmountCents;
 
   const loansReceivable = await getOrCreateSystemAccount("loans-receivable", "Loans Receivable", "asset");
@@ -245,12 +246,14 @@ async function createLoanFromSplit(
       ],
     }, db);
   } else if (direction === "borrowed") {
-    // Contact paid → I owe them, no cash impact, just create liability
+    // Contact paid for my consumption: recognize the expense and payable.
+    const expenseAccount = await getOrCreateExpenseAccount(expenseCategoryName);
     await createJournalEntry({
       date: Date.now(),
       description,
       txType: "split_bill_borrowed",
       lines: [
+        { accountId: expenseAccount.id, debit: amountCents, credit: 0 },
         { accountId: loansPayable.id, debit: 0, credit: amountCents },
       ],
     }, db);
@@ -393,14 +396,14 @@ export default async function (fastify: FastifyInstance) {
           }
         } catch (err) {
           console.error("Failed to parse Gemini response:", response);
-          reply.code(500).send({ error: (err as Error).message || "Something went wrong while scanning. Please try again." });
+          reply.code(500).send({ error: "Something went wrong while scanning. Please try again." });
           return;
         }
 
         reply.send({ parsed, r2Key: key });
       } catch (err) {
         console.error("Splitbill scan error:", err);
-        reply.code(500).send({ error: (err as Error).message || "Failed to scan receipt. Please try again." });
+        reply.code(500).send({ error: "Failed to scan receipt. Please try again." });
       }
     }
   );
@@ -419,7 +422,7 @@ export default async function (fastify: FastifyInstance) {
         const results = calculateSplit(items, people, assignments, tax, serviceFee, discount);
         reply.send(results);
       } catch (err) {
-        reply.code(500).send({ error: (err as Error).message });
+        reply.code(500).send({ error: "Failed to calculate split" });
       }
     }
   );
@@ -491,7 +494,7 @@ export default async function (fastify: FastifyInstance) {
         reply.code(201).send(createdLoans);
       } catch (err) {
         console.error("Create loans error:", err);
-        reply.code(500).send({ error: (err as Error).message });
+        reply.code(500).send({ error: "Failed to create loans" });
       }
     }
   );

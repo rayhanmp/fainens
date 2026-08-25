@@ -1,8 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { accounts, transactionLines, transactions } from "../db/schema";
+import { accounts, auditLogs, tags, transactionLines, transactions, transactionTags } from "../db/schema";
 import { db as defaultDb } from "../db/client";
-import { invalidateAndRecomputeOnTransactionMutation } from "../cache/invalidation";
+import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { validateJournalLines } from "./journal-validation";
 
 export type JournalLineInput = {
@@ -36,6 +36,7 @@ export type CreateJournalEntryInput = {
   distanceKm?: number | null;
   /** Optional subscription this transaction pays for (advances subscription renewal) */
   subscriptionId?: number | null;
+  tagIds?: number[];
 };
 
 function normalBalanceSign(accountType: string): 1 | -1 {
@@ -52,63 +53,53 @@ const SYSTEM_KEYS = {
   autoExpense: "auto-expense",
 } as const;
 
-let autoIncomeAccountCache: { id: number } | null = null;
-let autoExpenseAccountCache: { id: number } | null = null;
-
-export async function getOrCreateAutoIncomeAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
-  if (autoIncomeAccountCache) return autoIncomeAccountCache;
-
+async function getOrCreateSystemAccount(
+  systemKey: string,
+  name: string,
+  type: "revenue" | "expense",
+  dbLike: any,
+): Promise<{ id: number }> {
   const [existing] = await dbLike
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
     .from(accounts)
-    .where(eq(accounts.systemKey, SYSTEM_KEYS.autoIncome))
+    .where(eq(accounts.systemKey, systemKey))
     .limit(1);
-
   if (existing) {
-    autoIncomeAccountCache = existing;
-    return existing;
+    if (!existing.isActive || existing.type !== type) {
+      throw new Error(`System account ${systemKey} must be an active ${type} account`);
+    }
+    return { id: existing.id };
   }
 
-  const [created] = await dbLike
-    .insert(accounts)
-    .values({
-      name: "Income (Auto)",
-      type: "revenue",
-      isActive: true,
-      systemKey: SYSTEM_KEYS.autoIncome,
-    })
-    .returning({ id: accounts.id });
+  try {
+    const [created] = await dbLike
+      .insert(accounts)
+      .values({ name, type, isActive: true, systemKey })
+      .returning({ id: accounts.id });
+    if (!created) throw new Error(`Failed to create system account ${systemKey}`);
+    return created;
+  } catch (error) {
+    // Another writer may have won the unique(system_key) race. Re-select in
+    // the current executor instead of retaining an ID from another DB/tx.
+    const [winner] = await dbLike
+      .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+      .from(accounts)
+      .where(eq(accounts.systemKey, systemKey))
+      .limit(1);
+    if (!winner) throw error;
+    if (!winner.isActive || winner.type !== type) {
+      throw new Error(`System account ${systemKey} must be an active ${type} account`);
+    }
+    return { id: winner.id };
+  }
+}
 
-  autoIncomeAccountCache = created;
-  return created;
+export async function getOrCreateAutoIncomeAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
+  return getOrCreateSystemAccount(SYSTEM_KEYS.autoIncome, "Income (Auto)", "revenue", dbLike);
 }
 
 export async function getOrCreateAutoExpenseAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
-  if (autoExpenseAccountCache) return autoExpenseAccountCache;
-
-  const [existing] = await dbLike
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(eq(accounts.systemKey, SYSTEM_KEYS.autoExpense))
-    .limit(1);
-
-  if (existing) {
-    autoExpenseAccountCache = existing;
-    return existing;
-  }
-
-  const [created] = await dbLike
-    .insert(accounts)
-    .values({
-      name: "Expense (Auto)",
-      type: "expense",
-      isActive: true,
-      systemKey: SYSTEM_KEYS.autoExpense,
-    })
-    .returning({ id: accounts.id });
-
-  autoExpenseAccountCache = created;
-  return created;
+  return getOrCreateSystemAccount(SYSTEM_KEYS.autoExpense, "Expense (Auto)", "expense", dbLike);
 }
 
 export type SimpleTransactionKind = "expense" | "income" | "transfer";
@@ -141,6 +132,7 @@ export type CreateSimpleTransactionInput = {
   distanceKm?: number | null;
   /** Optional subscription this transaction pays for (advances subscription renewal) */
   subscriptionId?: number | null;
+  tagIds?: number[];
 };
 
 /**
@@ -222,6 +214,7 @@ export async function createSimpleTransaction(
       distanceKm: input.distanceKm ?? null,
       // Subscription payment
       subscriptionId: input.subscriptionId ?? null,
+      tagIds: input.tagIds,
     },
     dbLike,
   );
@@ -298,12 +291,15 @@ export async function createSubscriptionRenewalExpense(
 }
 
 export async function computeTrialBalanceTotals(dbLike: any = defaultDb) {
+  const now = Date.now();
   const rows = await dbLike
     .select({
       debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
       creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
     })
-    .from(transactionLines);
+    .from(transactionLines)
+    .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+    .where(sql`${transactions.date} <= ${now}`);
 
   const debitTotal = rows[0]?.debitTotal ?? 0;
   const creditTotal = rows[0]?.creditTotal ?? 0;
@@ -327,7 +323,13 @@ export async function computeAccountBalance(
       creditSum: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
     })
     .from(transactionLines)
-    .where(eq(transactionLines.accountId, accountId));
+    .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+    .where(
+      and(
+        eq(transactionLines.accountId, accountId),
+        sql`${transactions.date} <= ${Date.now()}`,
+      ),
+    );
 
   const debitSum = sums?.debitSum ?? 0;
   const creditSum = sums?.creditSum ?? 0;
@@ -396,6 +398,17 @@ export async function createJournalEntry(
   }
 
   const uniqueReferencedAccountIds = accountIds;
+  const tagIds = [...new Set(input.tagIds ?? [])];
+  if (tagIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new Error("tagIds must contain positive integers");
+  }
+  if (tagIds.length > 0) {
+    const existingTags = await dbLike
+      .select({ id: tags.id })
+      .from(tags)
+      .where(sql`${tags.id} IN (${sql.join(tagIds.map((id) => sql`${id}`), sql`, `)})`);
+    if (existingTags.length !== tagIds.length) throw new Error("One or more tags do not exist");
+  }
 
   const dueMs =
     input.dueDate == null || input.dueDate === undefined
@@ -460,6 +473,9 @@ export async function createJournalEntry(
       if (!id) throw new Error("Failed to create transaction row");
 
       tx.insert(transactionLines).values(lineValues(id)).run();
+      if (tagIds.length > 0) {
+        tx.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: id, tagId }))).run();
+      }
       const lineSums = tx
         .select({
           debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
@@ -469,6 +485,12 @@ export async function createJournalEntry(
         .where(eq(transactionLines.transactionId, id))
         .all();
       verifyPersistedLines(lineSums);
+      tx.insert(auditLogs).values({
+        entityType: "transaction",
+        entityId: id,
+        action: "create",
+        afterSnapshot: Buffer.from(JSON.stringify({ transaction: transactionValues, lines: validatedLines, tagIds })),
+      }).run();
       return id;
     });
   } else {
@@ -481,6 +503,9 @@ export async function createJournalEntry(
     const id = inserted[0]?.id;
     if (!id) throw new Error("Failed to create transaction row");
     await dbLike.insert(transactionLines).values(lineValues(id));
+    if (tagIds.length > 0) {
+      await dbLike.insert(transactionTags).values(tagIds.map((tagId) => ({ transactionId: id, tagId })));
+    }
     const lineSums = await dbLike
       .select({
         debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
@@ -489,6 +514,12 @@ export async function createJournalEntry(
       .from(transactionLines)
       .where(eq(transactionLines.transactionId, id));
     verifyPersistedLines(lineSums);
+    await dbLike.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: id,
+      action: "create",
+      afterSnapshot: Buffer.from(JSON.stringify({ transaction: transactionValues, lines: validatedLines, tagIds })),
+    });
     transactionId = id;
   }
 
@@ -499,20 +530,16 @@ export async function createJournalEntry(
 
   const result = { transactionId, balancesByAccountId };
 
-  // Fire-and-forget cache invalidation with proper error handling
-  // This should not block the response but errors should be logged
-  void (async () => {
-    try {
-      await invalidateAndRecomputeOnTransactionMutation({
-        transactionId: result.transactionId,
-        affectedAccountIds: uniqueReferencedAccountIds,
-        affectedPeriodIds: input.periodId ? [input.periodId] : undefined,
-      });
-    } catch (err) {
-      // Log error but don't throw - cache will be recomputed on next request
-      console.error("Cache invalidation failed (non-critical):", err);
-    }
-  })();
+  // Only the public/default executor owns a completed commit here. Compound
+  // commands using a supplied transaction invalidate once after their outer
+  // commit, never while uncommitted data can still roll back.
+  if (dbLike === defaultDb) {
+    await invalidateOnTransactionMutation({
+      transactionId: result.transactionId,
+      affectedAccountIds: uniqueReferencedAccountIds,
+      affectedPeriodIds: input.periodId != null ? [input.periodId] : undefined,
+    });
+  }
 
   return result;
 }

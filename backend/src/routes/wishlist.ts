@@ -2,8 +2,11 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
+import { accounts, auditLogs, wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
+import { getOrCreateAutoExpenseAccount } from "../services/ledger";
+import { findPeriodIdForDate } from "../services/transaction-mutations";
+import { invalidateOnTransactionMutation } from "../cache";
 
 // SSRF Protection: Allowed domains for web scraping
 const ALLOWED_SCRAPE_DOMAINS = [
@@ -337,51 +340,82 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    // Create the actual transaction
-    const [transaction] = await db
-      .insert(transactions)
-      .values({
-        date: sql`${new Date(body.date).getTime()}`,
-        description: body.description || item.name,
-        notes: body.notes || item.description,
-        txType: "simple_expense",
-        categoryId: item.categoryId,
-      })
-      .returning();
+    if (!Number.isSafeInteger(item.amount) || item.amount <= 0) {
+      return reply.code(409).send({ error: "Wishlist amount must be a positive integer rupiah value" });
+    }
+    const dateMs = new Date(body.date).getTime();
+    if (!Number.isFinite(dateMs)) return reply.code(400).send({ error: "Invalid fulfillment date" });
+    const [wallet] = await db
+      .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+      .from(accounts)
+      .where(eq(accounts.id, body.accountId))
+      .limit(1);
+    if (!wallet || wallet.type !== "asset" || !wallet.isActive) {
+      return reply.code(400).send({ error: "accountId must reference an active asset account" });
+    }
+    const expenseAccount = await getOrCreateAutoExpenseAccount(db);
+    const periodId = await findPeriodIdForDate(dateMs);
 
-    // Create transaction line for the expense
-    await db.insert(transactionLines).values({
-      transactionId: transaction.id,
-      accountId: body.accountId,
-      debit: item.amount,
-      credit: 0,
-      description: body.description || item.name,
-    });
-
-    // Update wishlist item as fulfilled
     const fulfilledAt = Date.now();
-    const [updated] = await db
-      .update(wishlist)
-      .set({
-        status: "fulfilled",
-        fulfilledAt: sql`${fulfilledAt}`,
-        fulfilledTransactionId: transaction.id,
-        updatedAt: sql`${fulfilledAt}`,
-      })
-      .where(eq(wishlist.id, parseInt(id)))
-      .returning();
-
-    await auditUpdate("wishlist", parseInt(id), item, updated);
-    await auditCreate("transaction", transaction.id, { 
-      wishlistId: item.id,
-      description: transaction.description,
-      amount: item.amount,
+    const result = db.transaction((tx) => {
+      const fresh = tx.select().from(wishlist).where(eq(wishlist.id, item.id)).limit(1).all()[0];
+      if (!fresh) throw new Error("Wishlist item not found");
+      if (fresh.status === "fulfilled") throw new Error("Wishlist item is already fulfilled");
+      const description = (body.description || fresh.name).trim();
+      const transaction = tx
+        .insert(transactions)
+        .values({
+          date: new Date(dateMs),
+          description,
+          notes: body.notes || fresh.description,
+          txType: "simple_expense",
+          periodId,
+          categoryId: fresh.categoryId,
+        })
+        .returning()
+        .all()[0];
+      if (!transaction) throw new Error("Failed to create wishlist transaction");
+      const lines = [
+        { transactionId: transaction.id, accountId: expenseAccount.id, debit: fresh.amount, credit: 0, description },
+        { transactionId: transaction.id, accountId: wallet.id, debit: 0, credit: fresh.amount, description },
+      ];
+      tx.insert(transactionLines).values(lines).run();
+      const updated = tx
+        .update(wishlist)
+        .set({
+          status: "fulfilled",
+          fulfilledAt: new Date(fulfilledAt),
+          fulfilledTransactionId: transaction.id,
+          updatedAt: new Date(fulfilledAt),
+        })
+        .where(eq(wishlist.id, fresh.id))
+        .returning()
+        .all()[0];
+      if (!updated) throw new Error("Failed to update wishlist item");
+      tx.insert(auditLogs).values([
+        {
+          entityType: "wishlist",
+          entityId: fresh.id,
+          action: "update",
+          beforeSnapshot: Buffer.from(JSON.stringify(fresh)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        },
+        {
+          entityType: "transaction",
+          entityId: transaction.id,
+          action: "create",
+          afterSnapshot: Buffer.from(JSON.stringify({ wishlistId: fresh.id, transaction, lines })),
+        },
+      ]).run();
+      return { wishlist: updated, transaction };
+    });
+    await invalidateOnTransactionMutation({
+      transactionId: result.transaction.id,
+      affectedAccountIds: [wallet.id, expenseAccount.id],
+      affectedPeriodIds: periodId == null ? undefined : [periodId],
     });
 
-    return {
-      wishlist: updated,
-      transaction,
-    };
+    return result;
   });
 
   // Link wishlist item to existing transaction
