@@ -121,7 +121,21 @@ export const api = {
     }>) => fetchApi(`/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/accounts/${id}`, { method: 'DELETE' }),
     reconcile: (balances: Array<{ accountId: number; actualBalance: number }>) => 
-      fetchApi<{ success: boolean; results: Array<{ accountId: number; difference: number; transactionId?: number; error?: string }> }>('/reconciliation', { 
+      fetchApi<{
+        success: boolean;
+        requiresClassification: boolean;
+        message: string;
+        session: { id: number; asOfDate: number; status: string };
+        results: Array<{
+          id: number;
+          accountId: number;
+          accountName: string;
+          ledgerBalance: number;
+          actualBalance: number;
+          difference: number;
+          status: string;
+        }>;
+      }>('/reconciliation', {
         method: 'POST', 
         body: JSON.stringify({ balances }) 
       }),

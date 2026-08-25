@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, blob, real, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, blob, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const categories: any = sqliteTable("category", {
@@ -180,6 +180,36 @@ export const storageDeletionOutbox = sqliteTable("storage_deletion_outbox", {
   processedAt: integer("processed_at", { mode: "timestamp_ms" }),
 }, (table) => ({
   statusIdx: index("idx_storage_deletion_outbox_status").on(table.status),
+}));
+
+/** A dated control snapshot; it never represents an economic transaction. */
+export const reconciliationSessions = sqliteTable("reconciliation_session", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  asOfDate: integer("as_of_date", { mode: "timestamp_ms" }).notNull(),
+  status: text("status").notNull(), // reconciled | needs_classification
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
+export const reconciliationItems = sqliteTable("reconciliation_item", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: integer("session_id")
+    .notNull()
+    .references(() => reconciliationSessions.id, { onDelete: "cascade" }),
+  accountId: integer("account_id")
+    .notNull()
+    .references(() => accounts.id),
+  ledgerBalance: integer("ledger_balance").notNull(),
+  actualBalance: integer("actual_balance").notNull(),
+  difference: integer("difference").notNull(),
+  status: text("status").notNull(), // matched | needs_classification
+  correctionTransactionId: integer("correction_transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
+}, (table) => ({
+  sessionAccountUnique: uniqueIndex("idx_reconciliation_item_session_account")
+    .on(table.sessionId, table.accountId),
+  accountIdx: index("idx_reconciliation_item_account").on(table.accountId),
 }));
 
 export const auditLogs = sqliteTable("audit_log", {

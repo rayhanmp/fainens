@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { api } from '../../lib/api';
-import { formatCurrency, parseIdNominalToInt, cn } from '../../lib/utils';
+import { formatCurrency, parseSignedIdNominalToInt, cn } from '../../lib/utils';
 import { Check, AlertCircle, Wallet, Building2, CreditCard } from 'lucide-react';
 
 type Account = {
@@ -21,6 +21,7 @@ type ReconciliationRow = {
   actualBalance: string;
   difference: number;
   hasChanges: boolean;
+  isValid: boolean;
 };
 
 interface ReconciliationModalProps {
@@ -45,37 +46,42 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [rows, setRows] = useState<ReconciliationRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
 
-  const assetAccounts = useMemo(() => 
-    accounts.filter(a => a.type === 'asset'),
+  const reconcilableAccounts = useMemo(() =>
+    accounts.filter(a => a.type === 'asset' || a.type === 'liability'),
     [accounts]
   );
 
   useEffect(() => {
     if (isOpen) {
-      setRows(assetAccounts.map(a => ({
+      setRows(reconcilableAccounts.map(a => ({
         accountId: a.id,
         accountName: a.name,
         ledgerBalance: a.balance,
         actualBalance: formatCurrency(a.balance),
         difference: 0,
         hasChanges: false,
+        isValid: true,
       })));
       setError(null);
+      setResultMessage(null);
     }
-  }, [isOpen, assetAccounts]);
+  }, [isOpen, reconcilableAccounts]);
 
   const handleActualBalanceChange = (index: number, value: string) => {
-    const actual = parseIdNominalToInt(value);
+    const actual = parseSignedIdNominalToInt(value);
     const ledger = rows[index].ledgerBalance;
-    const diff = actual - ledger;
+    const isValid = Number.isSafeInteger(actual);
+    const diff = isValid ? actual - ledger : Number.NaN;
 
     const newRows = [...rows];
     newRows[index] = {
       ...newRows[index],
       actualBalance: value,
       difference: diff,
-      hasChanges: diff !== 0,
+      hasChanges: isValid && diff !== 0,
+      isValid,
     };
     setRows(newRows);
   };
@@ -88,6 +94,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       actualBalance: formatCurrency(row.ledgerBalance),
       difference: 0,
       hasChanges: false,
+      isValid: true,
     };
     setRows(newRows);
   };
@@ -95,11 +102,11 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const totals = useMemo(() => {
     return rows.reduce(
       (acc, row) => {
-        const actual = parseIdNominalToInt(row.actualBalance);
+        const actual = parseSignedIdNominalToInt(row.actualBalance);
         return {
           ledger: acc.ledger + row.ledgerBalance,
-          actual: acc.actual + actual,
-          diff: acc.diff + row.difference,
+          actual: acc.actual + (Number.isSafeInteger(actual) ? actual : 0),
+          diff: acc.diff + (Number.isFinite(row.difference) ? row.difference : 0),
         };
       },
       { ledger: 0, actual: 0, diff: 0 }
@@ -107,29 +114,33 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   }, [rows]);
 
   const hasChanges = rows.some(r => r.hasChanges);
+  const hasInvalid = rows.some(r => !r.isValid);
 
   const handleSubmit = async () => {
-    if (!hasChanges) return;
+    if (hasInvalid || rows.length === 0) {
+      setError('Enter a valid signed whole-rupiah balance for every account');
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const balances = rows
-        .filter(r => r.hasChanges)
-        .map(r => ({
+      const balances = rows.map(r => ({
           accountId: r.accountId,
-          actualBalance: parseIdNominalToInt(r.actualBalance),
+          actualBalance: parseSignedIdNominalToInt(r.actualBalance),
         }));
-
-      if (balances.length === 0) {
-        setError('No changes to reconcile');
-        return;
+      const response = await api.accounts.reconcile(balances);
+      setResultMessage(response.message);
+      if (response.success) {
+        onSuccess();
+        onClose();
+      } else {
+        setRows(current => current.map(row => {
+          const result = response.results.find(item => item.accountId === row.accountId);
+          return result ? { ...row, difference: result.difference, hasChanges: result.difference !== 0 } : row;
+        }));
       }
-
-      await api.accounts.reconcile(balances);
-      onSuccess();
-      onClose();
     } catch (err) {
       setError((err as Error).message || 'Failed to reconcile');
     } finally {
@@ -142,7 +153,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       isOpen={isOpen}
       onClose={onClose}
       title="Reconciliation"
-      subtitle="Enter actual balance from your bank/e-wallet. Differences create income or expense transactions."
+      subtitle="Record a dated balance check. Differences are flagged for review and never auto-posted as income or expense."
       className="max-w-2xl"
     >
       <div className="space-y-4">
@@ -150,6 +161,12 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
+          </div>
+        )}
+        {resultMessage && !error && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 text-amber-800 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {resultMessage}
           </div>
         )}
 
@@ -182,7 +199,8 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                   onChange={(e) => handleActualBalanceChange(idx, e.target.value)}
                   className={cn(
                     "text-right font-mono text-sm",
-                    row.hasChanges && "font-bold"
+                    row.hasChanges && "font-bold",
+                    !row.isValid && "border-red-500"
                   )}
                 />
               </div>
@@ -247,7 +265,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!hasChanges || isSubmitting}
+            disabled={hasInvalid || rows.length === 0 || isSubmitting}
             className="gap-2"
           >
             {isSubmitting ? (
@@ -255,7 +273,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
             ) : (
               <>
                 <Check className="w-4 h-4" />
-                Reconcile {hasChanges && `(${rows.filter(r => r.hasChanges).length})`}
+                Record check {hasChanges && `(${rows.filter(r => r.hasChanges).length} differences)`}
               </>
             )}
           </Button>

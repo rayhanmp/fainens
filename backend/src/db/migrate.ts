@@ -7,7 +7,7 @@ import { seedDb } from "./seed";
 
 const backendRoot = path.resolve(__dirname, "..", "..");
 
-type MigrationJournal = { entries: Array<{ when: number }> };
+type MigrationJournal = { entries: Array<{ tag: string; when: number }> };
 
 function tableExists(name: string): boolean {
   return Boolean(db.$client.prepare(
@@ -34,7 +34,8 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (row) return;
   }
 
-  const latestWhen = Math.max(...journal.entries.map((entry) => entry.when));
+  const legacyBaseline = journal.entries.find((entry) => entry.tag === "0003_slow_big_bertha");
+  if (!legacyBaseline) throw new Error("Legacy compatibility baseline migration is missing");
   const upgrade = db.$client.transaction(() => {
     db.$client.exec(`
       CREATE TABLE IF NOT EXISTS pending_transaction (
@@ -104,7 +105,7 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     `);
     db.$client
       .prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)")
-      .run("legacy-push-baseline", latestWhen);
+      .run("legacy-push-baseline", legacyBaseline.when);
   });
   upgrade();
 }
@@ -116,6 +117,8 @@ function assertRequiredSchema(): void {
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],
     splitbill_session: ["total_cents", "status"],
+    reconciliation_session: ["as_of_date", "status"],
+    reconciliation_item: ["session_id", "account_id", "difference", "status"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

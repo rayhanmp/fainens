@@ -26,12 +26,28 @@ export function parseIdNominalToInt(formatted: string): number {
   return parseInt(digits, 10);
 }
 
-// Format currency (cents to IDR)
-// Note: 1 IDR = 100 cents in storage, but displayed as whole rupiah
-export function formatCurrency(cents: number, currency = 'Rp'): string {
-  const absolute = Math.abs(cents);
+/** Parse a signed IDR display value such as "-Rp 25.000" without losing its sign. */
+export function parseSignedIdNominalToInt(formatted: string): number {
+  let text = formatted.trim();
+  if (!text) return Number.NaN;
+  let negative = false;
+  if (text.startsWith('(') && text.endsWith(')')) {
+    negative = true;
+    text = text.slice(1, -1);
+  }
+  if (text.trimStart().startsWith('-')) negative = !negative;
+  const digits = text.replace(/\D/g, '');
+  if (!digits) return Number.NaN;
+  const value = Number(digits);
+  if (!Number.isSafeInteger(value)) return Number.NaN;
+  return negative ? -value : value;
+}
+
+// Format the canonical integer-rupiah ledger unit.
+export function formatCurrency(amount: number, currency = 'Rp'): string {
+  const absolute = Math.abs(amount);
   const rupiah = Math.round(absolute); // IDR uses whole numbers, no cents
-  const sign = cents < 0 ? '-' : '';
+  const sign = amount < 0 ? '-' : '';
   
   // Format with Indonesian number format (dots for thousands, no decimals)
   const formatted = rupiah.toLocaleString('id-ID');

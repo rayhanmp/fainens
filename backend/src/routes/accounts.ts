@@ -1,11 +1,11 @@
-import { eq, like, desc, and, sql } from "drizzle-orm";
+import { eq, like, desc, and, inArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { accounts, categories } from "../db/schema";
-import { computeAccountBalance, computeAccountBalanceRolledUp, createSimpleTransaction, getOrCreateAutoIncomeAccount, getOrCreateAutoExpenseAccount } from "../services/ledger";
+import { accounts, auditLogs, reconciliationItems, reconciliationSessions, transactionLines, transactions } from "../db/schema";
+import { computeAccountBalance, computeAccountBalanceRolledUp } from "../services/ledger";
 import { precomputeAccountBalance } from "../cache/precompute";
-import { invalidateOnTransactionMutation } from "../cache";
+import { calculateReconciliationItem } from "../services/reconciliation";
 
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
 
@@ -232,101 +232,119 @@ export default async function (fastify: FastifyInstance) {
 
   // Reconciliation endpoint
   fastify.post("/api/reconciliation", async (request, reply) => {
-    const { balances } = request.body as {
+    const { balances, asOfDate: requestedAsOf } = request.body as {
       balances: Array<{ accountId: number; actualBalance: number }>;
+      asOfDate?: number;
     };
 
     if (!Array.isArray(balances) || balances.length === 0) {
-      reply.code(400).send({ error: "balances array is required" });
-      return;
+      return reply.code(400).send({ error: "balances array is required" });
+    }
+    const asOfDate = requestedAsOf ?? Date.now();
+    if (!Number.isSafeInteger(asOfDate) || asOfDate < 0 || asOfDate > Date.now()) {
+      return reply.code(400).send({ error: "asOfDate must be a current or historical timestamp" });
+    }
+    const accountIds = balances.map((item) => item.accountId);
+    if (
+      accountIds.some((id) => !Number.isInteger(id) || id <= 0) ||
+      new Set(accountIds).size !== accountIds.length ||
+      balances.some((item) => !Number.isSafeInteger(item.actualBalance))
+    ) {
+      return reply.code(400).send({
+        error: "Each account must appear once with a positive integer ID and finite integer-rupiah balance",
+      });
     }
 
     try {
-      // Find or create Reconciliation category
-      let [reconciliationCategory] = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.name, "Reconciliation"))
-        .limit(1);
-
-      if (!reconciliationCategory) {
-        const [created] = await db
-          .insert(categories)
-          .values({
-            name: "Reconciliation",
-            color: "#6366f1",
-            icon: "scale",
-          })
-          .returning();
-        reconciliationCategory = created;
+      const accountRows = await db
+        .select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive })
+        .from(accounts)
+        .where(inArray(accounts.id, accountIds));
+      if (accountRows.length !== accountIds.length) {
+        return reply.code(400).send({ error: "One or more reconciliation accounts do not exist" });
+      }
+      const unsupported = accountRows.find(
+        (account) => !account.isActive || !["asset", "liability"].includes(account.type),
+      );
+      if (unsupported) {
+        return reply.code(400).send({
+          error: `Account ${unsupported.id} must be an active asset or liability account`,
+        });
       }
 
-      const results: Array<{ accountId: number; difference: number; transactionId?: number; error?: string }> = [];
-
-      for (const item of balances) {
-        try {
-          // Get account name for description
-          const [account] = await db
-            .select({ name: accounts.name })
-            .from(accounts)
-            .where(eq(accounts.id, item.accountId))
-            .limit(1);
-          
-          const accountName = account?.name || `Account ${item.accountId}`;
-          const ledgerBalance = await computeAccountBalance(item.accountId, db);
-          const difference = item.actualBalance - ledgerBalance;
-
-          if (difference === 0) {
-            results.push({ accountId: item.accountId, difference: 0 });
-            continue;
-          }
-
-          let transactionId: number | undefined;
-
-          if (difference > 0) {
-            // Found extra money - create income
-            const incomeAccount = await getOrCreateAutoIncomeAccount(db);
-            const result = await createSimpleTransaction({
-              kind: "income",
-              amountCents: difference,
-              description: `Reconciliation: ${accountName}`,
-              date: new Date(),
-              walletAccountId: item.accountId,
-              categoryId: reconciliationCategory.id,
-              txType: "reconciliation_income",
-            });
-            transactionId = result.transactionId;
-          } else if (difference < 0) {
-            // Missing money - create expense
-            const expenseAccount = await getOrCreateAutoExpenseAccount(db);
-            const result = await createSimpleTransaction({
-              kind: "expense",
-              amountCents: Math.abs(difference),
-              description: `Reconciliation: ${accountName}`,
-              date: new Date(),
-              walletAccountId: item.accountId,
-              categoryId: reconciliationCategory.id,
-              txType: "reconciliation_expense",
-            });
-            transactionId = result.transactionId;
-          }
-
-          // Invalidate cache
-          await invalidateOnTransactionMutation({
-            transactionId: transactionId!,
-            affectedAccountIds: [item.accountId, difference > 0 ? (await getOrCreateAutoIncomeAccount(db)).id : (await getOrCreateAutoExpenseAccount(db)).id],
+      const result = db.transaction((tx) => {
+        const items = balances.map((item) => {
+          const account = accountRows.find((row) => row.id === item.accountId)!;
+          const sums = tx
+            .select({
+              debit: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+              credit: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+            })
+            .from(transactionLines)
+            .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+            .where(and(
+              eq(transactionLines.accountId, item.accountId),
+              sql`${transactions.date} <= ${asOfDate}`,
+            ))
+            .all()[0];
+          const calculated = calculateReconciliationItem({
+            accountType: account.type as "asset" | "liability",
+            debit: Number(sums?.debit ?? 0),
+            credit: Number(sums?.credit ?? 0),
+            actualBalance: item.actualBalance,
           });
-
-          results.push({ accountId: item.accountId, difference, transactionId });
-        } catch (itemErr) {
-          results.push({ accountId: item.accountId, difference: 0, error: (itemErr as Error).message });
-        }
-      }
-
-      reply.send({ success: true, results });
+          return {
+            accountId: item.accountId,
+            accountName: account.name,
+            ledgerBalance: calculated.ledgerBalance,
+            actualBalance: item.actualBalance,
+            difference: calculated.difference,
+            status: calculated.status,
+          };
+        });
+        const allMatched = items.every((item) => item.difference === 0);
+        const session = tx
+          .insert(reconciliationSessions)
+          .values({
+            asOfDate: new Date(asOfDate),
+            status: allMatched ? "reconciled" : "needs_classification",
+          })
+          .returning()
+          .all()[0];
+        if (!session) throw new Error("Failed to create reconciliation session");
+        const insertedItems = tx
+          .insert(reconciliationItems)
+          .values(items.map((item) => ({
+            sessionId: session.id,
+            accountId: item.accountId,
+            ledgerBalance: item.ledgerBalance,
+            actualBalance: item.actualBalance,
+            difference: item.difference,
+            status: item.status,
+          })))
+          .returning()
+          .all();
+        tx.insert(auditLogs).values({
+          entityType: "reconciliation_session",
+          entityId: session.id,
+          action: "create",
+          afterSnapshot: Buffer.from(JSON.stringify({ session, items })),
+        }).run();
+        return { session, items: insertedItems.map((row, index) => ({ ...row, accountName: items[index].accountName })) };
+      });
+      const requiresClassification = result.items.some((item) => item.difference !== 0);
+      return reply.code(201).send({
+        success: !requiresClassification,
+        requiresClassification,
+        session: result.session,
+        results: result.items,
+        message: requiresClassification
+          ? "Differences were recorded for review; no income or expense transaction was created"
+          : "Balances matched; reconciliation evidence was recorded",
+      });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(500).send({ error: "Failed to process reconciliation" });
+      return reply.code(500).send({ error: "Failed to record reconciliation" });
     }
   });
 }

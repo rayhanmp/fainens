@@ -29,6 +29,13 @@
       "when": 1787662740050,
       "tag": "0003_slow_big_bertha",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787664380454,
+      "tag": "0004_numerous_living_lightning",
+      "breakpoints": true
     }
   ]
 }

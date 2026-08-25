@@ -13,7 +13,8 @@ export type EntityType =
   | "budget_plan"
   | "attachment"
   | "subscription"
-  | "wishlist";
+  | "wishlist"
+  | "reconciliation_session";
 
 export type AuditAction = "create" | "update" | "delete";
 
