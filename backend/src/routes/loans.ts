@@ -12,26 +12,23 @@ const SYSTEM_KEYS = {
   badDebtExpense: "bad-debt-expense",
 };
 
-// Cache for system accounts
-let systemAccountsCache: Record<string, { id: number }> = {};
-
 async function getOrCreateSystemAccount(
   dbLike: any,
   key: string,
   name: string,
   type: string
 ): Promise<{ id: number }> {
-  if (systemAccountsCache[key]) return systemAccountsCache[key];
-
   const [existing] = await dbLike
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
     .from(accounts)
     .where(eq(accounts.systemKey, key))
     .limit(1);
 
   if (existing) {
-    systemAccountsCache[key] = existing;
-    return existing;
+    if (!existing.isActive || existing.type !== type) {
+      throw new Error(`System account ${key} must be an active ${type} account`);
+    }
+    return { id: existing.id };
   }
 
   const [created] = await dbLike
@@ -44,7 +41,6 @@ async function getOrCreateSystemAccount(
     })
     .returning({ id: accounts.id });
 
-  systemAccountsCache[key] = created;
   return created;
 }
 
@@ -288,7 +284,7 @@ export default async function (fastify: FastifyInstance) {
 
       reply.code(201).send(loan);
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to create loan" });
     }
   });
 
@@ -403,7 +399,7 @@ export default async function (fastify: FastifyInstance) {
         },
       });
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to record payment" });
     }
   });
 
@@ -478,7 +474,7 @@ export default async function (fastify: FastifyInstance) {
 
       return updated;
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to update loan" });
     }
   });
 
@@ -487,54 +483,10 @@ export default async function (fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const loanId = parseInt(id);
 
-    try {
-      await db.transaction(async (tx) => {
-        const [loan] = await tx
-          .select()
-          .from(loans)
-          .where(eq(loans.id, loanId))
-          .limit(1);
-
-        if (!loan) {
-          reply.code(404).send({ error: "Loan not found" });
-          return;
-        }
-
-        // Only allow deletion of loans with no payments
-        const [paymentCount] = await tx
-          .select({ count: sql<number>`COUNT(*)` })
-          .from(loanPayments)
-          .where(eq(loanPayments.loanId, loanId));
-
-        if (paymentCount.count > 0) {
-          throw new Error("Cannot delete loan with recorded payments. Mark it as written off instead.");
-        }
-
-        // Delete the related transaction if it exists
-        if (loan.lendingTransactionId) {
-          await tx.delete(transactionLines).where(eq(transactionLines.transactionId, loan.lendingTransactionId));
-          await tx.delete(transactions).where(eq(transactions.id, loan.lendingTransactionId));
-        }
-
-        // Soft delete the loan
-        await tx
-          .update(loans)
-          .set({ 
-            isActive: false,
-            updatedAt: sql`(unixepoch('now') * 1000)`,
-          })
-          .where(eq(loans.id, loanId));
-      });
-
-      reply.code(204).send();
-    } catch (err) {
-      fastify.log.error(err);
-      const errorMessage = (err as Error).message;
-      if (errorMessage.includes("Cannot delete loan with recorded payments")) {
-        reply.code(400).send({ error: errorMessage });
-      } else {
-        reply.code(500).send({ error: "Failed to delete loan" });
-      }
-    }
+    const [loan] = await db.select({ id: loans.id }).from(loans).where(eq(loans.id, loanId)).limit(1);
+    if (!loan) return reply.code(404).send({ error: "Loan not found" });
+    return reply.code(409).send({
+      error: "Posted loans cannot be deleted; record repayment, write-off, or a dedicated reversal",
+    });
   });
 }

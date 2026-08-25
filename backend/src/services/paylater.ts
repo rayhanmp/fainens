@@ -231,8 +231,8 @@ export async function recognizePaylaterPurchase(
       {
         accountId: input.paylaterLiabilityAccountId,
         debit: 0,
-        credit: totalLiability,
-        description: `Paylater liability (${input.installmentMonths}x installment)`,
+        credit: input.principalAmount,
+        description: `Paylater principal liability (${input.installmentMonths}x installment)`,
       },
     ],
   };
