@@ -34,12 +34,17 @@ export async function invalidateAllAnalytics(): Promise<void> {
   await cacheDeletePattern(Keys.allAnalytics());
 }
 
+export async function invalidateAllInsights(): Promise<void> {
+  await cacheDeletePattern("insights:*");
+}
+
 // Invalidate everything (nuclear option)
 export async function invalidateEverything(): Promise<void> {
   await Promise.all([
     invalidateAllAccountBalances(),
     invalidateAllPeriodSummaries(),
     invalidateAllAnalytics(),
+    invalidateAllInsights(),
   ]);
 }
 
@@ -52,6 +57,7 @@ export async function invalidateAndRecomputeAccountBalance(accountId: number): P
 // Invalidate and recompute all analytics (used after transaction mutations)
 export async function invalidateAndRecomputeAnalytics(): Promise<void> {
   await invalidateAllAnalytics();
+  await invalidateAllInsights();
   await Promise.all([
     precomputeNetWorth(),
     precomputeBurnRate(),

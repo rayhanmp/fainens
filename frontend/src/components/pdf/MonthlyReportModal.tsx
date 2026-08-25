@@ -16,6 +16,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [reportData, setReportData] = useState<any>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   useEffect(() => {
     loadPeriods();
@@ -34,6 +35,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
   };
 
   const handleGenerate = async () => {
+    setReportData(null);
+    setReportError(null);
     try {
       const periodId = parseInt(selectedPeriodId);
       const period = periods.find(p => p.id === periodId);
@@ -132,6 +135,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
       const budgetComparison: any[] = [];
 
       const newReportData = {
+        periodId: selectedPeriodId,
         periodName: period?.name || 'Unknown',
         startDate: period ? formatDate(period.startDate) : '',
         endDate: period ? formatDate(period.endDate) : '',
@@ -150,6 +154,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
       setReportData(newReportData);
     } catch (err) {
       console.error('Error in handleGenerate:', err);
+      setReportData(null);
+      setReportError(err instanceof Error ? err.message : 'Failed to generate report preview');
     }
   };
 
@@ -214,7 +220,11 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
             </label>
             <select
               value={selectedPeriodId}
-              onChange={(e) => setSelectedPeriodId(e.target.value)}
+              onChange={(e) => {
+                setSelectedPeriodId(e.target.value);
+                setReportData(null);
+                setReportError(null);
+              }}
               className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)]"
             >
               {periods.map((p) => (
@@ -239,7 +249,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
           <button
             type="button"
             onClick={() => { console.log('Download clicked'); handleDownload(); }}
-            disabled={!reportData || isGenerating || periods.length === 0}
+            disabled={!reportData || reportData.periodId !== selectedPeriodId || isGenerating || periods.length === 0}
             className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-lg font-medium disabled:opacity-50"
           >
             {isGenerating ? (
@@ -250,6 +260,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
             Download PDF
           </button>
         </div>
+
+        {reportError && <p className="text-sm text-[var(--ref-error)]">{reportError}</p>}
 
         {reportData && (
           <div className="mt-6 p-4 bg-[var(--ref-surface-container-low)] rounded-lg space-y-3">

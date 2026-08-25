@@ -879,7 +879,9 @@ function SpendingReport({ periodId }: { periodId?: number }) {
     );
   }
 
-  const chartData = data.breakdown.slice(0, 8).map((item) => {
+  const visibleBreakdown = data.breakdown.slice(0, 7);
+  const omitted = data.breakdown.slice(7);
+  const chartData = visibleBreakdown.map((item) => {
     const cat = categories.find((c) => c.name === item.category);
     return {
       name: item.category,
@@ -888,6 +890,15 @@ function SpendingReport({ periodId }: { periodId?: number }) {
       color: cat?.color || '#737785',
     };
   });
+  if (omitted.length > 0) {
+    const value = omitted.reduce((sum, item) => sum + item.amount, 0);
+    chartData.push({
+      name: `Other (${omitted.length})`,
+      value,
+      percentage: data.total > 0 ? (value / data.total) * 100 : 0,
+      color: '#9ca3af',
+    });
+  }
 
   return (
     <Card title={`Spending Breakdown - Total: ${formatCurrency(data.total)}`}>

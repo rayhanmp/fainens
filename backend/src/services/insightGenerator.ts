@@ -178,6 +178,21 @@ function formatDashboardPrompt(data: DashboardData): string {
 Budget status: ${data.budget_status.toUpperCase()}
 Day ${data.days_elapsed} of ${data.days_total} (${data.days_remaining} days left in period)
 
+Period: ${data.period_name} (${data.salary_period})
+Income: ${formatCurrency(data.monthly_income)}
+Spent: ${formatCurrency(data.total_spent)}
+Savings rate: ${data.savings_rate.toFixed(1)}%
+Wallet balance (current position, not period flow): ${formatCurrency(data.wallet_balance)}
+Daily burn: ${formatCurrency(data.daily_burn_rate)}
+Expected period-end spend: ${formatCurrency(data.expected_total_spend)}
+Top category: ${data.top_spending_category || 'None'}
+Largest transaction: ${data.largest_transaction.description || 'None'} · ${data.largest_transaction.category || 'Uncategorized'} · ${formatCurrency(data.largest_transaction.amount || 0)}
+
+This week's transactions:
+${data.week_transactions.length > 0
+  ? data.week_transactions.map(tx => `- ${tx.date}: ${tx.description || 'Transaction'} · ${tx.category} · ${formatCurrency(tx.amount)}`).join('\n')
+  : '- None'}
+
 Spending pace: ${velocityNote} than previous weeks
 ${data.previous_weeks.length > 0 ? `Previous: ${data.previous_weeks.map(w => `W${w.week}: ${formatCurrency(w.total)}`).join(', ')}` : ''}
 

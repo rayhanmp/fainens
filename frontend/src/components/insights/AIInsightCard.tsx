@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -16,8 +16,10 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const requestVersion = useRef(0);
 
   const generateInsight = useCallback(async () => {
+    const version = ++requestVersion.current;
     setIsLoading(true);
     setError(null);
     
@@ -29,17 +31,22 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
         response = await api.insights.generateBudget(periodId);
       }
       
-      setInsight(response.insight);
-      setGeneratedAt(new Date(response.generatedAt));
-      setIsCollapsed(false);
+      if (version === requestVersion.current) {
+        setInsight(response.insight);
+        setGeneratedAt(new Date(response.generatedAt));
+        setIsCollapsed(false);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate insight');
+      if (version === requestVersion.current) {
+        setError(err instanceof Error ? err.message : 'Failed to generate insight');
+      }
     } finally {
-      setIsLoading(false);
+      if (version === requestVersion.current) setIsLoading(false);
     }
   }, [type, periodId]);
 
   const loadCachedInsight = useCallback(async () => {
+    const version = ++requestVersion.current;
     try {
       let response;
       if (type === 'dashboard') {
@@ -48,7 +55,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
         response = await api.insights.getBudgetLatest(periodId);
       }
       
-      if (response.insight) {
+      if (version === requestVersion.current) {
         setInsight(response.insight);
         setGeneratedAt(response.generatedAt ? new Date(response.generatedAt) : null);
       }
@@ -58,7 +65,14 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
   }, [type, periodId]);
 
   useEffect(() => {
-    loadCachedInsight();
+    setInsight(null);
+    setGeneratedAt(null);
+    setError(null);
+    setIsLoading(false);
+    void loadCachedInsight();
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [loadCachedInsight]);
 
   if (error) {

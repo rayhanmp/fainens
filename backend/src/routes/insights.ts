@@ -134,12 +134,24 @@ interface BudgetInsightData {
 export default async function insightsRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  async function getCachedInsight(userId: string, type: string, periodId?: string): Promise<string | null> {
+  type CachedInsight = { content: string; generatedAt: string };
+
+  async function getCachedInsight(userId: string, type: string, periodId?: string): Promise<CachedInsight | null> {
     const redis = getRedisClient();
     const cacheKey = periodId 
       ? `insights:${userId}:${type}:${periodId}`
       : `insights:${userId}:${type}`;
-    return redis.get(cacheKey);
+    const raw = await redis.get(cacheKey);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Partial<CachedInsight>;
+      return typeof parsed.content === "string" && typeof parsed.generatedAt === "string"
+        ? { content: parsed.content, generatedAt: parsed.generatedAt }
+        : null;
+    } catch {
+      // Legacy plain-string entries have no trustworthy provenance.
+      return null;
+    }
   }
 
   async function setCachedInsight(userId: string, type: string, content: string, periodId?: string) {
@@ -147,12 +159,14 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
     const cacheKey = periodId 
       ? `insights:${userId}:${type}:${periodId}`
       : `insights:${userId}:${type}`;
-    await redis.setex(cacheKey, CACHE_TTL_SECONDS, content);
+    const value: CachedInsight = { content, generatedAt: new Date().toISOString() };
+    await redis.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(value));
+    return value;
   }
 
   // POST /api/insights/dashboard - Generate dashboard insight
   fastify.post("/api/insights/dashboard", async (request, reply) => {
-    const userId = (request.user as { id?: string })?.id || 'anonymous';
+    const userId = (request.user as { email?: string })?.email || 'anonymous';
     const q = request.query as { periodId?: string };
     const periodId = q.periodId ? parseInt(q.periodId) : undefined;
     
@@ -389,9 +403,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       };
 
       const insight = await generateDashboardInsight(data);
-      await setCachedInsight(userId, 'dashboard', insight, periodId?.toString());
+      const cached = await setCachedInsight(userId, 'dashboard', insight, periodId?.toString());
       
-      reply.send({ insight, generatedAt: new Date().toISOString() });
+      reply.send({ insight, generatedAt: cached.generatedAt });
     } catch (err) {
       fastify.log.error(err);
       reply.code(500).send({ error: "Failed to generate insight" });
@@ -400,7 +414,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
 
   // POST /api/insights/budget - Generate budget insight
   fastify.post("/api/insights/budget", async (request, reply) => {
-    const userId = (request.user as { id?: string })?.id || 'anonymous';
+    const userId = (request.user as { email?: string })?.email || 'anonymous';
     const { periodId } = request.body as { periodId?: number };
     
     try {
@@ -560,9 +574,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       };
 
       const insight = await generateBudgetInsight(data);
-      await setCachedInsight(userId, 'budget', insight, period.id.toString());
+      const cached = await setCachedInsight(userId, 'budget', insight, period.id.toString());
       
-      reply.send({ insight, generatedAt: new Date().toISOString() });
+      reply.send({ insight, generatedAt: cached.generatedAt });
     } catch (err) {
       fastify.log.error(err);
       reply.code(500).send({ error: "Failed to generate insight" });
@@ -571,14 +585,15 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
 
   // GET /api/insights/dashboard/latest - Get cached dashboard insight
   fastify.get("/api/insights/dashboard/latest", async (request, reply) => {
-    const userId = (request.user as { id?: string })?.id || 'anonymous';
+    const userId = (request.user as { email?: string })?.email || 'anonymous';
     const { periodId } = request.query as { periodId?: string };
     
     try {
       const cached = await getCachedInsight(userId, 'dashboard', periodId);
       reply.send({ 
-        insight: cached,
-        generatedAt: cached ? new Date().toISOString() : null 
+        insight: cached?.content ?? null,
+        generatedAt: cached?.generatedAt ?? null,
+        stale: false,
       });
     } catch (err) {
       fastify.log.error(err);
@@ -588,14 +603,15 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
 
   // GET /api/insights/budget/latest - Get cached budget insight
   fastify.get("/api/insights/budget/latest", async (request, reply) => {
-    const userId = (request.user as { id?: string })?.id || 'anonymous';
+    const userId = (request.user as { email?: string })?.email || 'anonymous';
     const { periodId } = request.query as { periodId?: string };
     
     try {
       const cached = await getCachedInsight(userId, 'budget', periodId);
       reply.send({ 
-        insight: cached,
-        generatedAt: cached ? new Date().toISOString() : null 
+        insight: cached?.content ?? null,
+        generatedAt: cached?.generatedAt ?? null,
+        stale: false,
       });
     } catch (err) {
       fastify.log.error(err);

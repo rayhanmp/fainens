@@ -43,6 +43,7 @@ export {
   invalidatePeriodSummary,
   invalidateAllPeriodSummaries,
   invalidateAllAnalytics,
+  invalidateAllInsights,
   invalidateEverything,
   invalidateAndRecomputeAccountBalance,
   invalidateAndRecomputeAnalytics,
