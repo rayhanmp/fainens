@@ -6,6 +6,7 @@ import { subscriptions, accounts, categories } from "../db/schema";
 import { auditCreate, auditUpdate } from "../services/audit";
 import {
   applySubscriptionOccurrences,
+  correctSubscriptionOccurrence,
   previewDueSubscriptionRenewals,
 } from "../services/subscription-renewals";
 
@@ -76,6 +77,32 @@ export default async function (fastify: FastifyInstance) {
     } catch (error) {
       request.log.error(error);
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to process renewals" });
+    }
+  });
+
+  fastify.post("/api/subscriptions/:id/occurrences/:dueAt/correct", async (request, reply) => {
+    const subscriptionId = Number((request.params as { id?: string }).id);
+    const dueAt = Number((request.params as { dueAt?: string }).dueAt);
+    const body = (request.body ?? {}) as {
+      reason?: string;
+      effectiveDate?: number;
+      amount?: number;
+      linkedAccountId?: number;
+      categoryId?: number | null;
+    };
+    try {
+      const result = await correctSubscriptionOccurrence({
+        subscriptionId,
+        dueAt,
+        reason: body.reason ?? "",
+        effectiveDate: body.effectiveDate,
+        amount: body.amount,
+        linkedAccountId: body.linkedAccountId,
+        categoryId: body.categoryId,
+      });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to correct subscription occurrence" });
     }
   });
 

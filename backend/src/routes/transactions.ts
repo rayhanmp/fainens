@@ -642,6 +642,15 @@ RULES:
       const [original] = await db.select().from(transactions)
         .where(eq(transactions.id, transactionId)).limit(1);
       if (!original) return reply.code(404).send({ error: "Transaction not found" });
+      if ([
+        "salary_income", "salary_correction", "subscription_renewal", "subscription_correction",
+        "paylater_recognition", "paylater_interest", "paylater_settlement",
+        "loan_lending", "loan_payment", "loan_writeoff", "split_bill_lent", "split_bill_borrowed",
+      ].includes(original.txType)) {
+        return reply.code(409).send({
+          error: "This domain-owned transaction must use its dedicated correction workflow",
+        });
+      }
       if (original.status !== "posted") {
         return reply.code(409).send({ error: "Only a posted transaction can be reversed" });
       }

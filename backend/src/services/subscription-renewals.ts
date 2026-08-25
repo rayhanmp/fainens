@@ -10,10 +10,11 @@ import {
   transactionLines,
   transactions,
 } from "../db/schema";
-import { getOrCreateAutoExpenseAccount } from "./ledger";
+import { getOrCreateAutoExpenseAccount, insertPreparedJournalEntrySync, prepareJournalEntry } from "./ledger";
 import { findPeriodIdForDate } from "./transaction-mutations";
 import { addOneMonth, addOneYear } from "./recurrence-calendar";
 import { bumpFinancialRevisionSync } from "./financial-revision";
+import { insertDomainReversalSync, prepareDomainReversal } from "./domain-reversal";
 
 export { addOneMonth, addOneYear } from "./recurrence-calendar";
 
@@ -210,4 +211,90 @@ export async function applySubscriptionOccurrences(input: {
     });
   }
   return { posted: result.posted, skipped: result.skipped, transactionIds: result.transactionIds };
+}
+
+/**
+ * Correct one posted renewal as an auditable reversal plus replacement.  The
+ * schedule has already advanced, so this deliberately does not move
+ * nextRenewalAt backward or create a second recurring identity.
+ */
+export async function correctSubscriptionOccurrence(input: {
+  subscriptionId: number;
+  dueAt: number;
+  reason: string;
+  effectiveDate?: number;
+  amount?: number;
+  linkedAccountId?: number;
+  categoryId?: number | null;
+}): Promise<{ reversalTransactionId: number; replacementTransactionId: number }> {
+  if (!Number.isSafeInteger(input.subscriptionId) || input.subscriptionId <= 0) throw new Error("Invalid subscriptionId");
+  if (!Number.isSafeInteger(input.dueAt) || input.dueAt < 0) throw new Error("dueAt must be a valid timestamp");
+  const reason = input.reason.trim();
+  if (!reason || reason.length > 500) throw new Error("reason is required and must be at most 500 characters");
+  const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1);
+  if (!subscription) throw new Error("Subscription not found");
+  const [occurrence] = await db.select().from(recurringOccurrences).where(and(
+    eq(recurringOccurrences.jobType, "subscription"),
+    eq(recurringOccurrences.scheduleId, input.subscriptionId),
+    eq(recurringOccurrences.occurrenceDate, new Date(input.dueAt)),
+  )).limit(1);
+  if (!occurrence?.transactionId || occurrence.status !== "posted") {
+    throw new Error("A posted subscription occurrence is required for correction");
+  }
+  const amount = input.amount ?? subscription.amount;
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("amount must be a positive integer rupiah value");
+  const linkedAccountId = input.linkedAccountId ?? subscription.linkedAccountId;
+  const [paymentAccount] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .from(accounts).where(eq(accounts.id, linkedAccountId)).limit(1);
+  if (!paymentAccount || !paymentAccount.isActive || !["asset", "liability"].includes(paymentAccount.type)) {
+    throw new Error("Replacement payment account must be an active asset or liability account");
+  }
+  const effectiveDate = input.effectiveDate ?? Date.now();
+  if (!Number.isSafeInteger(effectiveDate) || effectiveDate < 0) throw new Error("effectiveDate must be a valid timestamp");
+  const expenseAccount = await getOrCreateAutoExpenseAccount(db);
+  const reversal = await prepareDomainReversal(occurrence.transactionId, reason, db);
+  const replacementPeriodId = await findPeriodIdForDate(effectiveDate);
+  const replacement = await prepareJournalEntry({
+    date: effectiveDate,
+    description: `Subscription correction: ${subscription.name}`,
+    reference: `subscription-correction:${subscription.id}:${input.dueAt}`,
+    notes: `Corrects subscription occurrence ${input.dueAt}. Reason: ${reason}`,
+    txType: "subscription_correction",
+    periodId: replacementPeriodId,
+    categoryId: input.categoryId === undefined ? subscription.categoryId : input.categoryId,
+    subscriptionId: subscription.id,
+    lines: [
+      { accountId: expenseAccount.id, debit: amount, credit: 0 },
+      { accountId: paymentAccount.id, debit: 0, credit: amount },
+    ],
+  }, db);
+  const result = db.transaction((tx) => {
+    const current = tx.select().from(recurringOccurrences).where(eq(recurringOccurrences.id, occurrence.id)).limit(1).all()[0];
+    if (!current || current.status !== "posted" || current.transactionId !== occurrence.transactionId) {
+      throw new Error("Subscription occurrence changed; retry correction");
+    }
+    const reversalTransactionId = insertDomainReversalSync(tx, occurrence.transactionId!, reversal.prepared, reason);
+    const replacementTransactionId = insertPreparedJournalEntrySync(tx, replacement);
+    tx.update(recurringOccurrences).set({
+      status: "corrected",
+      transactionId: replacementTransactionId,
+      lastError: `Corrected from transaction ${occurrence.transactionId}: ${reason}`,
+      updatedAt: new Date(),
+    }).where(eq(recurringOccurrences.id, occurrence.id)).run();
+    tx.insert(auditLogs).values({
+      entityType: "recurring_occurrence",
+      entityId: occurrence.id,
+      action: "correct",
+      beforeSnapshot: Buffer.from(JSON.stringify(current)),
+      afterSnapshot: Buffer.from(JSON.stringify({ ...current, status: "corrected", transactionId: replacementTransactionId, reversalTransactionId, reason })),
+    }).run();
+    return { reversalTransactionId, replacementTransactionId };
+  });
+  await invalidateOnTransactionMutation({
+    transactionId: result.replacementTransactionId,
+    affectedAccountIds: [...new Set([...reversal.prepared.accountIds, ...replacement.accountIds])],
+    affectedPeriodIds: [reversal.periodId, replacementPeriodId].filter((id): id is number => id != null),
+    revisionBumped: true,
+  });
+  return result;
 }

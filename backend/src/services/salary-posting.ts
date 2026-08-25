@@ -11,10 +11,11 @@ import {
   transactions,
 } from "../db/schema";
 import { estimatePayroll, getTERCategory } from "./indonesia-payroll";
-import { getOrCreateAutoIncomeAccount } from "./ledger";
+import { getOrCreateAutoIncomeAccount, insertPreparedJournalEntrySync, prepareJournalEntry } from "./ledger";
 import { monthlyOccurrenceDate } from "./recurrence-calendar";
 import { findPeriodIdForDate } from "./transaction-mutations";
 import { bumpFinancialRevisionSync } from "./financial-revision";
+import { insertDomainReversalSync, prepareDomainReversal } from "./domain-reversal";
 
 const SINGLETON_ID = 1;
 
@@ -72,14 +73,14 @@ export async function postSalaryIfPayrollDay(
   if (payroll.estimatedNetMonthly <= 0) return { posted: false, message: "Net salary must be greater than 0" };
 
   const [existing] = await defaultDb
-    .select({ id: recurringOccurrences.id, transactionId: recurringOccurrences.transactionId })
+    .select({ id: recurringOccurrences.id, status: recurringOccurrences.status, transactionId: recurringOccurrences.transactionId })
     .from(recurringOccurrences)
     .where(and(
       eq(recurringOccurrences.jobType, "salary"),
       eq(recurringOccurrences.scheduleId, SINGLETON_ID),
       eq(recurringOccurrences.occurrenceDate, new Date(occurrenceDate)),
     )).limit(1);
-  if (existing) {
+  if (existing && existing.status !== "reversed") {
     return { posted: false, transactionId: existing.transactionId ?? undefined, occurrenceDate, message: "Salary occurrence already processed" };
   }
   const occurrence = new Date(occurrenceDate);
@@ -111,12 +112,23 @@ export async function postSalaryIfPayrollDay(
   let transactionId: number;
   try {
     transactionId = defaultDb.transaction((tx) => {
-      const occurrence = tx.insert(recurringOccurrences).values({
-        jobType: "salary",
-        scheduleId: SINGLETON_ID,
-        occurrenceDate: new Date(occurrenceDate),
-        status: "pending",
-      }).returning({ id: recurringOccurrences.id }).all()[0];
+      const occurrence = existing?.status === "reversed"
+        ? (() => {
+            const changed = tx.update(recurringOccurrences).set({
+              status: "pending",
+              transactionId: null,
+              lastError: null,
+              updatedAt: new Date(),
+            }).where(and(eq(recurringOccurrences.id, existing.id), eq(recurringOccurrences.status, "reversed"))).run();
+            if (changed.changes !== 1) throw new Error("Salary occurrence changed; retry posting");
+            return { id: existing.id };
+          })()
+        : tx.insert(recurringOccurrences).values({
+            jobType: "salary",
+            scheduleId: SINGLETON_ID,
+            occurrenceDate: new Date(occurrenceDate),
+            status: "pending",
+          }).returning({ id: recurringOccurrences.id }).all()[0];
       if (!occurrence) throw new Error("Failed to claim salary occurrence");
       const transaction = tx.insert(transactions).values({
         date: new Date(occurrenceDate),
@@ -217,7 +229,7 @@ export async function previewSalaryCatchUp(): Promise<{
       .limit(1);
     const monthContext = await salaryContext(now, occurrenceDate);
     const status: SalaryCatchUpOccurrence["status"] = existing
-      ? existing.status === "posted" ? "posted" : "skipped"
+      ? existing.status === "posted" ? "posted" : existing.status === "reversed" ? "due" : "skipped"
       : legacySalary ? "legacy" : "due";
     occurrences.push({
       occurrenceDate,
@@ -229,6 +241,90 @@ export async function previewSalaryCatchUp(): Promise<{
   }
   if (cursor <= currentMonth) truncated = true;
   return { occurrences, truncated };
+}
+
+/**
+ * Correct a posted salary occurrence without erasing it. The original is
+ * reversed and a replacement salary journal is posted atomically; the durable
+ * occurrence follows the replacement, preserving a complete audit chain.
+ */
+export async function correctSalaryOccurrence(input: {
+  occurrenceDate: number;
+  reason: string;
+  effectiveDate?: number;
+  netAmount?: number;
+  depositAccountId?: number;
+}): Promise<{ reversalTransactionId: number; replacementTransactionId: number }> {
+  if (!Number.isSafeInteger(input.occurrenceDate) || input.occurrenceDate < 0) {
+    throw new Error("occurrenceDate must be a valid timestamp");
+  }
+  const reason = input.reason.trim();
+  if (!reason || reason.length > 500) throw new Error("reason is required and must be at most 500 characters");
+  const [occurrence] = await defaultDb.select().from(recurringOccurrences).where(and(
+    eq(recurringOccurrences.jobType, "salary"),
+    eq(recurringOccurrences.scheduleId, SINGLETON_ID),
+    eq(recurringOccurrences.occurrenceDate, new Date(input.occurrenceDate)),
+  )).limit(1);
+  if (!occurrence?.transactionId || occurrence.status !== "posted") {
+    throw new Error("A posted salary occurrence is required for correction");
+  }
+  const context = await salaryContext(new Date(), input.occurrenceDate);
+  if ("error" in context) throw new Error(context.error);
+  const depositAccountId = input.depositAccountId ?? context.account.id;
+  const [depositAccount] = await defaultDb.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .from(accounts).where(eq(accounts.id, depositAccountId)).limit(1);
+  if (!depositAccount || !depositAccount.isActive || depositAccount.type !== "asset") {
+    throw new Error("Replacement deposit account must be an active asset account");
+  }
+  const netAmount = input.netAmount ?? context.payroll.estimatedNetMonthly;
+  if (!Number.isSafeInteger(netAmount) || netAmount <= 0) throw new Error("netAmount must be a positive integer rupiah value");
+  const effectiveDate = input.effectiveDate ?? Date.now();
+  if (!Number.isSafeInteger(effectiveDate) || effectiveDate < 0) throw new Error("effectiveDate must be a valid timestamp");
+
+  const incomeAccount = await getOrCreateAutoIncomeAccount(defaultDb);
+  const reversal = await prepareDomainReversal(occurrence.transactionId, reason, defaultDb);
+  const replacementPeriodId = await findPeriodIdForDate(effectiveDate);
+  const replacement = await prepareJournalEntry({
+    date: effectiveDate,
+    description: `Salary correction - ${new Date(input.occurrenceDate).toLocaleDateString("en-ID", { month: "long", year: "numeric" })}`,
+    reference: `salary-correction:${SINGLETON_ID}:${input.occurrenceDate}`,
+    notes: `Corrects salary occurrence ${input.occurrenceDate}. Reason: ${reason}`,
+    txType: "salary_correction",
+    periodId: replacementPeriodId,
+    lines: [
+      { accountId: depositAccount.id, debit: netAmount, credit: 0 },
+      { accountId: incomeAccount.id, debit: 0, credit: netAmount },
+    ],
+  }, defaultDb);
+  const result = defaultDb.transaction((tx) => {
+    const current = tx.select().from(recurringOccurrences).where(eq(recurringOccurrences.id, occurrence.id)).limit(1).all()[0];
+    if (!current || current.status !== "posted" || current.transactionId !== occurrence.transactionId) {
+      throw new Error("Salary occurrence changed; retry correction");
+    }
+    const reversalTransactionId = insertDomainReversalSync(tx, occurrence.transactionId!, reversal.prepared, reason);
+    const replacementTransactionId = insertPreparedJournalEntrySync(tx, replacement);
+    tx.update(recurringOccurrences).set({
+      status: "corrected",
+      transactionId: replacementTransactionId,
+      lastError: `Corrected from transaction ${occurrence.transactionId}: ${reason}`,
+      updatedAt: new Date(),
+    }).where(eq(recurringOccurrences.id, occurrence.id)).run();
+    tx.insert(auditLogs).values({
+      entityType: "recurring_occurrence",
+      entityId: occurrence.id,
+      action: "correct",
+      beforeSnapshot: Buffer.from(JSON.stringify(current)),
+      afterSnapshot: Buffer.from(JSON.stringify({ ...current, status: "corrected", transactionId: replacementTransactionId, reversalTransactionId, reason })),
+    }).run();
+    return { reversalTransactionId, replacementTransactionId };
+  });
+  await invalidateOnTransactionMutation({
+    transactionId: result.replacementTransactionId,
+    affectedAccountIds: [...new Set([...reversal.prepared.accountIds, ...replacement.accountIds])],
+    affectedPeriodIds: [reversal.periodId, replacementPeriodId].filter((id): id is number => id != null),
+    revisionBumped: true,
+  });
+  return result;
 }
 
 /** Record an explicit skip for a due salary month without creating a journal. */
