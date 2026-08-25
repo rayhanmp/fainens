@@ -90,6 +90,8 @@ export async function getFinancialFacts(input: {
     INNER JOIN account a ON a.id = tl.account_id
     WHERE t.date <= ${asOfMs}
       AND t.status <> 'draft'
+      AND a.type = 'asset'
+      AND (a.system_key IS NULL OR a.system_key <> 'loans-receivable')
   `);
 
   return {

@@ -372,7 +372,10 @@ export async function generateCashFlowStatement(
   const cashAccounts = await db
     .select({ id: accounts.id })
     .from(accounts)
-    .where(eq(accounts.type, "asset"));
+    .where(and(
+      eq(accounts.type, "asset"),
+      sql`(${accounts.systemKey} IS NULL OR ${accounts.systemKey} <> 'loans-receivable')`,
+    ));
   const cashAccountIds = cashAccounts.map((a) => a.id);
 
   if (cashAccountIds.length === 0) {
@@ -423,6 +426,22 @@ export async function generateCashFlowStatement(
         AND tl2.id != ${transactionLines.id} 
         LIMIT 1
       )`,
+      counterpartyAccountType: sql<string>`(
+        SELECT a2.type
+        FROM transaction_line tl2
+        INNER JOIN account a2 ON a2.id = tl2.account_id
+        WHERE tl2.transaction_id = ${transactionLines.transactionId}
+          AND tl2.id != ${transactionLines.id}
+        LIMIT 1
+      )`,
+      counterpartyIsCash: sql<number>`(
+        SELECT CASE WHEN a2.type = 'asset' AND (a2.system_key IS NULL OR a2.system_key <> 'loans-receivable') THEN 1 ELSE 0 END
+        FROM transaction_line tl2
+        INNER JOIN account a2 ON a2.id = tl2.account_id
+        WHERE tl2.transaction_id = ${transactionLines.transactionId}
+          AND tl2.id != ${transactionLines.id}
+        LIMIT 1
+      )`,
     })
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
@@ -455,12 +474,15 @@ export async function generateCashFlowStatement(
     let type: "operating" | "investing" | "financing" = "operating";
     let category = "Operating";
 
-    if (tx.txType?.includes("paylater") || tx.txType?.includes("loan")) {
+    if (tx.txType?.includes("paylater") || tx.txType?.includes("loan") || tx.counterpartyAccountType === "liability" || tx.counterpartyAccountType === "equity") {
       type = "financing";
       category = "Financing";
-    } else if (tx.txType?.includes("investment") || tx.txType?.includes("asset")) {
+    } else if (tx.txType?.includes("investment") || tx.txType?.includes("asset") || (tx.counterpartyAccountType === "asset" && Number(tx.counterpartyIsCash ?? 0) !== 1)) {
       type = "investing";
       category = "Investing";
+    } else if (Number(tx.counterpartyIsCash ?? 0) === 1) {
+      // Internal wallet transfers are not cash inflows/outflows.
+      continue;
     }
 
     const item: CashFlowItem = {

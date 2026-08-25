@@ -263,7 +263,10 @@ export async function calculateRunway(): Promise<RunwayResult> {
   const liquidAccounts = await db
     .select({ id: accounts.id })
     .from(accounts)
-    .where(eq(accounts.type, "asset"));
+    .where(and(
+      eq(accounts.type, "asset"),
+      sql`(${accounts.systemKey} IS NULL OR ${accounts.systemKey} <> 'loans-receivable')`,
+    ));
 
   let liquidAssets = 0;
   for (const account of liquidAccounts) {
