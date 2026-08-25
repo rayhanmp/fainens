@@ -8,6 +8,7 @@ import {
   getAccountBalancesTool,
   getBudgetFactsTool,
   getDueRecurringTool,
+  getSalaryCatchUpTool,
   getLoanBalancesTool,
   getPaylaterObligationsTool,
   parseAgentScopeInput,
@@ -50,6 +51,7 @@ async function composeContext(scopeInput: ReturnType<typeof parseAgentScopeInput
     resolved.periodId == null
       ? Promise.resolve(null)
       : executeAgentTool("get_budget_facts", { periodId: resolved.periodId }),
+    executeAgentTool("get_salary_catch_up", {}),
   ]);
   const revisions = calls.filter((call): call is NonNullable<typeof call> => call != null).map((call) => call.revision);
   const revision = revisions.length > 0 ? Math.max(...revisions) : await getFinancialRevision();
@@ -60,8 +62,9 @@ async function composeContext(scopeInput: ReturnType<typeof parseAgentScopeInput
   const paylaterResult = calls[3]?.data as Awaited<ReturnType<typeof getPaylaterObligationsTool>>;
   const recurringResult = calls[4]?.data as Awaited<ReturnType<typeof getDueRecurringTool>>;
   const budgetResult = calls[5]?.data as Awaited<ReturnType<typeof getBudgetFactsTool>> | undefined;
+  const salaryCatchUpResult = calls[6]?.data as Awaited<ReturnType<typeof getSalaryCatchUpTool>>;
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     revision,
     consistent,
     scope: factsResult.scope,
@@ -74,6 +77,7 @@ async function composeContext(scopeInput: ReturnType<typeof parseAgentScopeInput
       truncated: recurringResult.truncated,
       asOfMs: recurringResult.asOfMs,
     },
+    salaryCatchUp: salaryCatchUpResult,
     paylater: {
       totalOutstandingCents: paylaterResult.totalOutstandingCents,
       obligations: paylaterResult.obligations,

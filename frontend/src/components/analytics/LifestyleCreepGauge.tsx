@@ -16,6 +16,7 @@ import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from 'lucide-rea
 
 interface MPCData {
   period: string;
+  startDate: number;
   mpc: number; // 0-1
   income: number;
   discretionary: number;
@@ -33,12 +34,12 @@ export function LifestyleCreepGauge() {
 
   const loadMPCData = async () => {
     try {
-      // Get period summaries to calculate MPC
-      const summaries = await api.analytics.periodSummaries();
+      // This is an average spending ratio, not marginal propensity to consume.
+      // Sort by the authoritative period start rather than API array position.
+      const summaries = (await api.analytics.periodSummaries())
+        .filter((period) => Number.isFinite(period.startDate) && Number.isFinite(period.income) && Number.isFinite(period.expenses))
+        .sort((a, b) => a.startDate - b.startDate);
       
-      // Calculate MPC for each period
-      // MPC = discretionary spending / income
-      // discretionary = expenses - fixed costs (we approximate with budget data)
       const mpcData: MPCData[] = summaries.map((period) => {
         const income = period.income;
         const expenses = period.expenses;
@@ -49,6 +50,7 @@ export function LifestyleCreepGauge() {
 
         return {
           period: period.periodName,
+          startDate: period.startDate,
           mpc: Math.min(mpc, 2), // Cap at 200% for display
           income,
           discretionary,
@@ -80,10 +82,10 @@ export function LifestyleCreepGauge() {
 
   // Determine status based on MPC
   const getStatus = () => {
-    if (currentMPC > 1) return { label: 'CRITICAL', color: 'text-[var(--color-danger)]', bg: 'bg-[var(--color-danger)]/20' };
-    if (currentMPC > 0.8) return { label: 'WARNING', color: 'text-[var(--color-warning)]', bg: 'bg-[var(--color-warning)]/20' };
+    if (currentMPC > 1) return { label: 'HIGH', color: 'text-[var(--color-danger)]', bg: 'bg-[var(--color-danger)]/20' };
+    if (currentMPC > 0.8) return { label: 'ELEVATED', color: 'text-[var(--color-warning)]', bg: 'bg-[var(--color-warning)]/20' };
     if (currentMPC > 0.5) return { label: 'MODERATE', color: 'text-[var(--color-warning)]', bg: 'bg-[var(--color-warning)]/10' };
-    return { label: 'HEALTHY', color: 'text-[var(--color-success)]', bg: 'bg-[var(--color-success)]/20' };
+    return { label: 'LOW', color: 'text-[var(--color-success)]', bg: 'bg-[var(--color-success)]/20' };
   };
 
   const status = getStatus();
@@ -96,7 +98,7 @@ export function LifestyleCreepGauge() {
 
   if (isLoading) {
     return (
-      <Card title="Lifestyle Creep Index" className="h-96">
+      <Card title="Average spending ratio" className="h-96">
         <div className="h-full flex items-center justify-center">
           <p>Loading...</p>
         </div>
@@ -105,7 +107,7 @@ export function LifestyleCreepGauge() {
   }
 
   return (
-    <Card title="Lifestyle Creep Index" className="h-96">
+    <Card title="Average spending ratio" className="h-96">
       <div className="flex flex-col items-center">
         {/* Gauge Display */}
         <div className="relative w-48 h-32 mt-4">
@@ -170,7 +172,7 @@ export function LifestyleCreepGauge() {
             <p className="font-mono text-3xl font-bold">
               {(currentMPC * 100).toFixed(0)}%
             </p>
-            <p className="text-xs text-[var(--color-text-secondary)]">MPC (Marginal Propensity to Consume)</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">Recorded expenses ÷ recorded income</p>
           </div>
         </div>
 
@@ -202,7 +204,7 @@ export function LifestyleCreepGauge() {
 
         {/* Explanation */}
         <p className="text-xs text-[var(--color-text-secondary)] mt-2 text-center px-4">
-          MPC shows what % of new income goes to spending. &gt;100% means spending exceeds income growth.
+          This compares recorded spending with recorded income for each period; it does not measure marginal consumption or lifestyle change.
         </p>
       </div>
 
@@ -230,7 +232,7 @@ export function LifestyleCreepGauge() {
                       <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
                         <p className="font-mono text-xs font-bold">{label}</p>
                         <p className="font-mono text-sm">
-                          MPC: {((payload[0].value as number) * 100).toFixed(1)}%
+                          Spending ratio: {((payload[0].value as number) * 100).toFixed(1)}%
                         </p>
                       </div>
                     );

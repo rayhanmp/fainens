@@ -79,6 +79,25 @@ function inclusiveEndOfSelectedDay(timestamp: number): number {
   return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
 }
 
+/** Shared scope for the UI's “All Periods” selector: posted history through now. */
+async function allPostedReportRange(): Promise<{ start: number; end: number }> {
+  const now = Date.now();
+  const [range] = await db
+    .select({
+      minDate: sql<number>`min(${transactions.date})`,
+      maxDate: sql<number>`max(${transactions.date})`,
+    })
+    .from(transactions)
+    .where(and(
+      sql`${transactions.status} <> 'draft'`,
+      sql`${transactions.date} <= ${now}`,
+    ));
+  return {
+    start: range?.minDate ?? now,
+    end: Math.min(range?.maxDate ?? now, now),
+  };
+}
+
 // Generate Income Statement (Profit & Loss) for a period
 export async function generateIncomeStatement(
   periodId?: number,
@@ -114,16 +133,9 @@ export async function generateIncomeStatement(
       endDate
     ).toLocaleDateString()}`;
   } else {
-    // All time - get date range from all transactions
-    const [range] = await db
-      .select({
-        minDate: sql<number>`min(${transactions.date})`,
-        maxDate: sql<number>`max(${transactions.date})`,
-      })
-      .from(transactions)
-      .where(sql`${transactions.status} <> 'draft'`);
-    periodStart = range?.minDate || Date.now() - 365 * 24 * 60 * 60 * 1000;
-    periodEnd = range?.maxDate || Date.now();
+    const range = await allPostedReportRange();
+    periodStart = range.start;
+    periodEnd = range.end;
   }
 
   const revenueAccounts = await db
@@ -371,8 +383,9 @@ export async function generateCashFlowStatement(
     periodEnd = inclusiveEndOfSelectedDay(endDate);
     periodName = `${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`;
   } else {
-    periodStart = Date.now() - 365 * 24 * 60 * 60 * 1000;
-    periodEnd = Date.now();
+    const range = await allPostedReportRange();
+    periodStart = range.start;
+    periodEnd = range.end;
   }
 
   const cashAccounts = await db
@@ -432,21 +445,23 @@ export async function generateCashFlowStatement(
         AND tl2.id != ${transactionLines.id} 
         LIMIT 1
       )`,
-      counterpartyAccountType: sql<string>`(
-        SELECT a2.type
+      counterpartyAccountTypes: sql<string>`(
+        SELECT group_concat(DISTINCT a2.type)
         FROM transaction_line tl2
         INNER JOIN account a2 ON a2.id = tl2.account_id
         WHERE tl2.transaction_id = ${transactionLines.transactionId}
           AND tl2.id != ${transactionLines.id}
-        LIMIT 1
       )`,
-      counterpartyIsCash: sql<number>`(
-        SELECT CASE WHEN a2.type = 'asset' AND (a2.system_key IS NULL OR a2.system_key <> 'loans-receivable') THEN 1 ELSE 0 END
-        FROM transaction_line tl2
-        INNER JOIN account a2 ON a2.id = tl2.account_id
-        WHERE tl2.transaction_id = ${transactionLines.transactionId}
-          AND tl2.id != ${transactionLines.id}
-        LIMIT 1
+      counterpartyHasNonCashAsset: sql<number>`(
+        EXISTS (
+          SELECT 1
+          FROM transaction_line tl2
+          INNER JOIN account a2 ON a2.id = tl2.account_id
+          WHERE tl2.transaction_id = ${transactionLines.transactionId}
+            AND tl2.id != ${transactionLines.id}
+            AND a2.type = 'asset'
+            AND a2.system_key = 'loans-receivable'
+        )
       )`,
     })
     .from(transactionLines)
@@ -481,13 +496,18 @@ export async function generateCashFlowStatement(
     let type: "operating" | "investing" | "financing" = "operating";
     let category = "Operating";
 
-    if (tx.txType?.includes("paylater") || tx.txType?.includes("loan") || tx.counterpartyAccountType === "liability" || tx.counterpartyAccountType === "equity") {
+    const counterpartyTypes = new Set(String(tx.counterpartyAccountTypes ?? "").split(",").filter(Boolean));
+    const hasLiabilityOrEquity = counterpartyTypes.has("liability") || counterpartyTypes.has("equity");
+    const hasNonCashAsset = Number(tx.counterpartyHasNonCashAsset ?? 0) === 1;
+    const onlyCashCounterparties = counterpartyTypes.size > 0 && counterpartyTypes.size === 1 && counterpartyTypes.has("asset") && !hasNonCashAsset;
+
+    if (tx.txType?.includes("paylater") || tx.txType?.includes("loan") || hasLiabilityOrEquity) {
       type = "financing";
       category = "Financing";
-    } else if (tx.txType?.includes("investment") || tx.txType?.includes("asset") || (tx.counterpartyAccountType === "asset" && Number(tx.counterpartyIsCash ?? 0) !== 1)) {
+    } else if (tx.txType?.includes("investment") || tx.txType?.includes("asset") || hasNonCashAsset) {
       type = "investing";
       category = "Investing";
-    } else if (Number(tx.counterpartyIsCash ?? 0) === 1) {
+    } else if (onlyCashCounterparties) {
       // Internal wallet transfers are not cash inflows/outflows.
       continue;
     }
@@ -557,8 +577,9 @@ export async function generateSpendingBreakdown(
     periodStart = startDate;
     periodEnd = inclusiveEndOfSelectedDay(endDate);
   } else {
-    periodStart = Date.now() - 30 * 24 * 60 * 60 * 1000; // Last 30 days
-    periodEnd = Date.now();
+    const range = await allPostedReportRange();
+    periodStart = range.start;
+    periodEnd = range.end;
   }
 
   // Get expense accounts with transactions

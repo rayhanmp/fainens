@@ -8,6 +8,8 @@ import { CACHE_TTL, Keys } from "./keys";
 import { ANALYTICS_KEYS } from "./keys";
 import { getFinancialRevision } from "../services/financial-revision";
 
+const DAY_MS = 86_400_000;
+
 // Types for cached data
 export interface AccountBalanceCache {
   accountId: number;
@@ -44,7 +46,8 @@ export interface BurnRateCache {
 }
 
 export interface RunwayCache {
-  runwayMonths: number; // months
+  runwayMonths: number | null; // months; null means no observed burn
+  isUnbounded: boolean;
   liquidAssets: number; // cents
   grossBurnRate: number; // cents per month
   computedAt: number;
@@ -59,19 +62,36 @@ export interface TrialBalanceCache {
   revision: number;
 }
 
+/**
+ * A read can span a concurrent ledger commit. Never publish the result under
+ * the newer revision in that case: callers may use the value for this request,
+ * but the next cache read must recompute against the committed revision.
+ */
+async function cacheIfRevisionUnchanged<T extends { revision: number }>(
+  key: string,
+  data: T,
+  ttlSeconds: number,
+  startedRevision: number,
+): Promise<T> {
+  const currentRevision = await getFinancialRevision();
+  if (currentRevision !== startedRevision) return { ...data, revision: currentRevision };
+  await cacheSet(key, data, ttlSeconds);
+  return data;
+}
+
 // Precompute and cache account balance for a single account
 export async function precomputeAccountBalance(accountId: number): Promise<AccountBalanceCache> {
+  const startedRevision = await getFinancialRevision();
   const balance = await computeAccountBalance(accountId, db);
 
   const data: AccountBalanceCache = {
     accountId,
     balance,
     computedAt: Date.now(),
-    revision: await getFinancialRevision(),
+    revision: startedRevision,
   };
 
-  await cacheSet(Keys.accountBalance(accountId), data, CACHE_TTL.ACCOUNT_BALANCE);
-  return data;
+  return cacheIfRevisionUnchanged(Keys.accountBalance(accountId), data, CACHE_TTL.ACCOUNT_BALANCE, startedRevision);
 }
 
 // Precompute and cache balances for all accounts
@@ -89,6 +109,7 @@ export async function precomputeAllAccountBalances(): Promise<AccountBalanceCach
 
 // Precompute period summary for a salary period
 export async function precomputePeriodSummary(periodId: number): Promise<PeriodSummaryCache> {
+  const startedRevision = await getFinancialRevision();
   // Get period date range
   const [period] = await db
     .select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
@@ -107,7 +128,9 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     .where(
       and(
         sql`${transactions.date} >= ${period.startDate}`,
-        sql`${transactions.date} <= ${period.endDate}`,
+        sql`${transactions.date} <= ${period.endDate + DAY_MS - 1}`,
+        sql`${transactions.status} <> 'draft'`,
+        sql`(${transactions.periodId} = ${periodId} OR ${transactions.periodId} IS NULL)`,
       ),
     );
 
@@ -120,17 +143,19 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     .where(eq(accounts.type, "revenue"));
   const revenueAccountIds = revenueAccounts.map((a) => a.id);
 
-  const incomeResult = await db
-    .select({
-      total: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
-    })
-    .from(transactionLines)
-    .where(
-      and(
-        sql`${transactionLines.transactionId} IN (${sql.join(transactionIds.map(String), sql`, `)})`,
-        sql`${transactionLines.accountId} IN (${sql.join(revenueAccountIds.map(String), sql`, `)})`,
-      ),
-    );
+  const incomeResult = transactionIds.length === 0 || revenueAccountIds.length === 0
+    ? [{ total: 0 }]
+    : await db
+      .select({
+        total: sql<number>`coalesce(sum(${transactionLines.credit} - ${transactionLines.debit}), 0)`,
+      })
+      .from(transactionLines)
+      .where(
+        and(
+          sql`${transactionLines.transactionId} IN (${sql.join(transactionIds.map(String), sql`, `)})`,
+          sql`${transactionLines.accountId} IN (${sql.join(revenueAccountIds.map(String), sql`, `)})`,
+        ),
+      );
 
   // Calculate expenses (expense accounts)
   const expenseAccountsResult = await db
@@ -139,17 +164,19 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     .where(eq(accounts.type, "expense"));
   const expenseAccountIds = expenseAccountsResult.map((a) => a.id);
 
-  const expensesResult = await db
-    .select({
-      total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-    })
-    .from(transactionLines)
-    .where(
-      and(
-        sql`${transactionLines.transactionId} IN (${sql.join(transactionIds.map(String), sql`, `)})`,
-        sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
-      ),
-    );
+  const expensesResult = transactionIds.length === 0 || expenseAccountIds.length === 0
+    ? [{ total: 0 }]
+    : await db
+      .select({
+        total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
+      })
+      .from(transactionLines)
+      .where(
+        and(
+          sql`${transactionLines.transactionId} IN (${sql.join(transactionIds.map(String), sql`, `)})`,
+          sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
+        ),
+      );
 
   const income = incomeResult[0]?.total ?? 0;
   const expenses = expensesResult[0]?.total ?? 0;
@@ -163,18 +190,18 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     net,
     savingsRate: Math.round(savingsRate * 100) / 100, // 2 decimal places
     computedAt: Date.now(),
-    revision: await getFinancialRevision(),
+    revision: startedRevision,
   };
 
-  await cacheSet(Keys.periodSummary(periodId), data, CACHE_TTL.PERIOD_SUMMARY);
-  return data;
+  return cacheIfRevisionUnchanged(Keys.periodSummary(periodId), data, CACHE_TTL.PERIOD_SUMMARY, startedRevision);
 }
 
 // Precompute net worth
 export async function precomputeNetWorth(): Promise<NetWorthCache> {
+  const startedRevision = await getFinancialRevision();
   // Get all asset and liability accounts
   const assetAccounts = await db
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, systemKey: accounts.systemKey })
     .from(accounts)
     .where(eq(accounts.type, "asset"));
 
@@ -189,7 +216,7 @@ export async function precomputeNetWorth(): Promise<NetWorthCache> {
   for (const account of assetAccounts) {
     const balance = await computeAccountBalanceRolledUp(account.id, db);
     totalAssets += balance;
-    liquidAssets += balance;
+    if (account.systemKey !== 'loans-receivable') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
@@ -208,15 +235,15 @@ export async function precomputeNetWorth(): Promise<NetWorthCache> {
     liquidAssets,
     illiquidAssets,
     computedAt: Date.now(),
-    revision: await getFinancialRevision(),
+    revision: startedRevision,
   };
 
-  await cacheSet(Keys.analytics(ANALYTICS_KEYS.NET_WORTH), data, CACHE_TTL.ANALYTICS);
-  return data;
+  return cacheIfRevisionUnchanged(Keys.analytics(ANALYTICS_KEYS.NET_WORTH), data, CACHE_TTL.ANALYTICS, startedRevision);
 }
 
 // Precompute burn rate (average monthly operational expenses)
 export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCache> {
+  const startedRevision = await getFinancialRevision();
   // Get expense accounts
   const expenseAccountsResult = await db
     .select({ id: accounts.id })
@@ -227,21 +254,24 @@ export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCa
   // Get transactions from last N months excluding internal transfers
   const cutoffDate = Date.now() - months * 30 * 24 * 60 * 60 * 1000;
 
-  const burnResult = await db
-    .select({
-      total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-    })
-    .from(transactionLines)
-    .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
-    .where(
-      and(
-        sql`${transactions.date} >= ${cutoffDate}`,
-        sql`${transactions.date} <= ${Date.now()}`,
-        sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
-        // Exclude non-operational txTypes (transfers, settlements, etc.)
-        sql`${transactions.txType} NOT IN ('paylater_settlement')`,
-      ),
-    );
+  const burnResult = expenseAccountIds.length === 0
+    ? [{ total: 0 }]
+    : await db
+      .select({
+        total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
+      })
+      .from(transactionLines)
+      .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+      .where(
+        and(
+          sql`${transactions.date} >= ${cutoffDate}`,
+          sql`${transactions.date} <= ${Date.now()}`,
+          sql`${transactions.status} <> 'draft'`,
+          sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
+          // Exclude non-operational txTypes (transfers, settlements, etc.)
+          sql`${transactions.txType} NOT IN ('paylater_settlement')`,
+        ),
+      );
 
   const totalExpenses = burnResult[0]?.total ?? 0;
   const grossBurnRate = Math.round(totalExpenses / months);
@@ -250,19 +280,22 @@ export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCa
     grossBurnRate,
     period: `Last ${months} months`,
     computedAt: Date.now(),
-    revision: await getFinancialRevision(),
+    revision: startedRevision,
   };
 
-  await cacheSet(Keys.analytics(ANALYTICS_KEYS.BURN_RATE), data, CACHE_TTL.ANALYTICS);
-  return data;
+  return cacheIfRevisionUnchanged(Keys.analytics(ANALYTICS_KEYS.BURN_RATE), data, CACHE_TTL.ANALYTICS, startedRevision);
 }
 
 // Precompute runway (how many months until broke)
 export async function precomputeRunway(): Promise<RunwayCache> {
+  const startedRevision = await getFinancialRevision();
   const liquidAccounts = await db
     .select({ id: accounts.id })
     .from(accounts)
-    .where(eq(accounts.type, "asset"));
+    .where(and(
+      eq(accounts.type, "asset"),
+      sql`(${accounts.systemKey} IS NULL OR ${accounts.systemKey} <> 'loans-receivable')`,
+    ));
 
   let liquidAssets = 0;
   for (const account of liquidAccounts) {
@@ -274,22 +307,24 @@ export async function precomputeRunway(): Promise<RunwayCache> {
   const grossBurnRate = burnRateData.grossBurnRate;
 
   // Calculate runway
-  const runwayMonths = grossBurnRate > 0 ? liquidAssets / grossBurnRate : Infinity;
+  const isUnbounded = grossBurnRate <= 0;
+  const runwayMonths = isUnbounded ? null : liquidAssets / grossBurnRate;
 
   const data: RunwayCache = {
-    runwayMonths: Math.round(runwayMonths * 10) / 10, // 1 decimal place
+    runwayMonths: runwayMonths == null ? null : Math.round(runwayMonths * 10) / 10, // 1 decimal place
+    isUnbounded,
     liquidAssets,
     grossBurnRate,
     computedAt: Date.now(),
-    revision: await getFinancialRevision(),
+    revision: startedRevision,
   };
 
-  await cacheSet(Keys.analytics(ANALYTICS_KEYS.RUNWAY), data, CACHE_TTL.ANALYTICS);
-  return data;
+  return cacheIfRevisionUnchanged(Keys.analytics(ANALYTICS_KEYS.RUNWAY), data, CACHE_TTL.ANALYTICS, startedRevision);
 }
 
 // Precompute trial balance
 export async function precomputeTrialBalance(): Promise<TrialBalanceCache> {
+  const startedRevision = await getFinancialRevision();
   const totals = await computeTrialBalanceTotals(db);
 
   const data: TrialBalanceCache = {
@@ -297,11 +332,10 @@ export async function precomputeTrialBalance(): Promise<TrialBalanceCache> {
     totalCredits: totals.creditTotal,
     isBalanced: totals.isBalanced,
     computedAt: Date.now(),
-    revision: await getFinancialRevision(),
+    revision: startedRevision,
   };
 
-  await cacheSet(Keys.analytics(ANALYTICS_KEYS.TRIAL_BALANCE), data, CACHE_TTL.ANALYTICS);
-  return data;
+  return cacheIfRevisionUnchanged(Keys.analytics(ANALYTICS_KEYS.TRIAL_BALANCE), data, CACHE_TTL.ANALYTICS, startedRevision);
 }
 
 // Precompute all analytics in one go

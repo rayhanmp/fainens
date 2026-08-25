@@ -136,7 +136,7 @@ export default async function (fastify: FastifyInstance) {
       const [facts, incomeStatement, balanceSheet, budgets, revision] = await Promise.all([
         getFinancialFacts({ startMs: period.startDate, endMs: inclusiveEnd(period.endDate), asOfMs: inclusiveEnd(period.endDate), periodId }),
         generateIncomeStatement(periodId),
-        generateBalanceSheet(period.endDate),
+        generateBalanceSheet(inclusiveEnd(period.endDate)),
         getBudgetFacts(periodId),
         getFinancialRevision(),
       ]);

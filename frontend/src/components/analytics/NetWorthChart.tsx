@@ -37,6 +37,7 @@ function compactAxisIdr(v: number): string {
 
 interface Row {
   label: string;
+  asOfMs: number;
   netWorth: number;
   totalAssets: number;
   totalLiabilities: number;
@@ -60,6 +61,7 @@ export function NetWorthChart() {
         setRows(
           res.series.map((p) => ({
             label: p.label,
+            asOfMs: p.asOfMs,
             netWorth: p.netWorth,
             totalAssets: p.totalAssets,
             totalLiabilities: p.totalLiabilities,
@@ -98,15 +100,9 @@ export function NetWorthChart() {
     return 'text-[var(--color-muted)]';
   };
 
-  const compareLabel = (() => {
-    switch (range) {
-      case '7d': return 'vs 7 days ago';
-      case '30d': return 'vs 30 days ago';
-      case '3m': return 'vs 3 months ago';
-      case '6m': return 'vs 6 months ago';
-      case '1y': return 'vs 1 year ago';
-    }
-  })();
+  const compareLabel = rows.length >= 2
+    ? `since ${new Date(rows[0].asOfMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : '';
 
   const xAxisMinTickGap = range === '30d' ? 14 : range === '7d' ? 6 : 10;
 

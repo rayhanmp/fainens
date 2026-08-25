@@ -2,6 +2,8 @@ import { eq, and, sql, isNull, or, gte, lte, desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
+
+const DAY_MS = 86_400_000;
 import { budgetPlans, budgetTemplates, budgetTemplateItems, categories, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
 
 export default async function (fastify: FastifyInstance) {
@@ -62,14 +64,9 @@ export default async function (fastify: FastifyInstance) {
               and(
                 sql`${transactionLines.accountId} IN (${sql.join(revIds.map(String), sql`, `)})`,
                 sql`${transactions.status} <> 'draft'`,
-                or(
-                  eq(transactions.periodId, pid),
-                  and(
-                    isNull(transactions.periodId),
-                    gte(transactions.date, new Date(period.startDate)),
-                    lte(transactions.date, new Date(period.endDate))
-                  )
-                ),
+                gte(transactions.date, period.startDate),
+                lte(transactions.date, period.endDate + DAY_MS - 1),
+                or(eq(transactions.periodId, pid), isNull(transactions.periodId)),
               ),
             );
           totalIncome = incomeRow?.total ?? 0;
@@ -111,14 +108,9 @@ export default async function (fastify: FastifyInstance) {
                     eq(transactions.categoryId, plan.categoryId),
                     sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
                     sql`${transactions.status} <> 'draft'`,
-                    or(
-                      eq(transactions.periodId, plan.periodId),
-                      and(
-                        isNull(transactions.periodId),
-                        gte(transactions.date, new Date(period.startDate)),
-                        lte(transactions.date, new Date(period.endDate))
-                      )
-                    ),
+                    gte(transactions.date, period.startDate),
+                    lte(transactions.date, period.endDate + DAY_MS - 1),
+                    or(eq(transactions.periodId, plan.periodId), isNull(transactions.periodId)),
                   ),
                 );
               actualAmount = row?.total ?? 0;
@@ -493,14 +485,9 @@ export default async function (fastify: FastifyInstance) {
                   eq(transactions.categoryId, budget.categoryId),
                   sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
                   sql`${transactions.status} <> 'draft'`,
-                  or(
-                    eq(transactions.periodId, parseInt(comparePeriodId)),
-                    and(
-                      isNull(transactions.periodId),
-                      gte(transactions.date, new Date(comparePeriod.startDate)),
-                      lte(transactions.date, new Date(comparePeriod.endDate))
-                    )
-                  ),
+                  gte(transactions.date, comparePeriod.startDate),
+                  lte(transactions.date, comparePeriod.endDate + DAY_MS - 1),
+                  or(eq(transactions.periodId, parseInt(comparePeriodId)), isNull(transactions.periodId)),
                 ),
               );
             actualAmount = row?.total ?? 0;

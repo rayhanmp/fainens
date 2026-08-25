@@ -246,16 +246,22 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    console.log(`Deleting account ${accountId}, was isActive: ${existing.isActive}`);
+    if (existing.systemKey) {
+      return reply.code(409).send({ error: "System accounts cannot be archived" });
+    }
+    const balance = await computeAccountBalance(accountId, db);
+    if (balance !== 0) {
+      return reply.code(409).send({ error: "Account has a non-zero balance; transfer or settle it before archiving" });
+    }
+    const [child] = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.parentId, accountId)).limit(1);
+    if (child) {
+      return reply.code(409).send({ error: "Account has child accounts; re-parent or archive them first" });
+    }
 
     db.transaction((tx) => {
       tx.update(accounts).set({ isActive: false }).where(eq(accounts.id, accountId)).run();
       bumpFinancialRevisionSync(tx);
     });
-
-    // Verify it was updated
-    const [updated] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
-    console.log(`Account ${accountId} isActive after delete:`, updated?.isActive);
 
     reply.code(204).send();
   });

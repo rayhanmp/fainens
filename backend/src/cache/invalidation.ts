@@ -190,23 +190,26 @@ export async function getBurnRateCached(): Promise<{
 }
 
 export async function getRunwayCached(): Promise<{
-  runwayMonths: number;
+  runwayMonths: number | null;
+  isUnbounded: boolean;
   liquidAssets: number;
 }> {
   const cached = await cacheGet<{
-    runwayMonths: number;
+    runwayMonths: number | null;
+    isUnbounded: boolean;
     liquidAssets: number;
     revision?: number;
   }>(Keys.analytics(ANALYTICS_KEYS.RUNWAY));
 
   const revision = await getFinancialRevision();
-  if (cached && cached.revision === revision) {
+  if (cached && cached.revision === revision && typeof cached.isUnbounded === "boolean") {
     return cached;
   }
 
   const result = await precomputeRunway();
   return {
     runwayMonths: result.runwayMonths,
+    isUnbounded: result.isUnbounded,
     liquidAssets: result.liquidAssets,
   };
 }

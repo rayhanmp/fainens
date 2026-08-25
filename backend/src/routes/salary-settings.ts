@@ -11,7 +11,7 @@ import {
   getTERCategory,
   type PayrollSettings,
 } from "../services/indonesia-payroll";
-import { postSalaryIfPayrollDay, previewSalaryPosting } from "../services/salary-posting";
+import { postSalaryIfPayrollDay, previewSalaryPosting, previewSalaryCatchUp, skipSalaryOccurrence } from "../services/salary-posting";
 
 const SINGLETON_ID = 1;
 
@@ -146,14 +146,41 @@ export default async function (fastify: FastifyInstance) {
     return preview;
   });
 
+  fastify.get("/api/salary-settings/catch-up-preview", async () => previewSalaryCatchUp());
+
   fastify.post("/api/salary-settings/post-salary", async (request, reply) => {
-    const result = await postSalaryIfPayrollDay(db, true);
+    const body = (request.body ?? {}) as { occurrenceDate?: number };
+    if (body.occurrenceDate !== undefined && (!Number.isSafeInteger(body.occurrenceDate) || body.occurrenceDate < 0)) {
+      reply.code(400).send({ error: "occurrenceDate must be a non-negative safe integer" });
+      return;
+    }
+    const result = await postSalaryIfPayrollDay(db, true, body.occurrenceDate);
     if (result.posted) {
       return result;
     } else {
       reply.code(400).send({ error: result.message });
       return;
     }
+  });
+
+  fastify.post("/api/salary-settings/catch-up", async (request, reply) => {
+    const body = request.body as { mode?: "post" | "skip"; occurrenceDates?: number[] };
+    if (!body || !["post", "skip"].includes(body.mode ?? "") || !Array.isArray(body.occurrenceDates) || body.occurrenceDates.length === 0 || body.occurrenceDates.length > 120) {
+      reply.code(400).send({ error: "mode and 1-120 occurrenceDates are required" });
+      return;
+    }
+    const occurrenceDates = body.occurrenceDates.map(Number);
+    if (occurrenceDates.some((date) => !Number.isSafeInteger(date) || date < 0)) {
+      reply.code(400).send({ error: "occurrenceDates must contain non-negative safe integers" });
+      return;
+    }
+    const results = [];
+    for (const occurrenceDate of occurrenceDates) {
+      results.push(body.mode === "skip"
+        ? { occurrenceDate, ...(await skipSalaryOccurrence(occurrenceDate)) }
+        : { occurrenceDate, ...(await postSalaryIfPayrollDay(db, true, occurrenceDate)) });
+    }
+    return { mode: body.mode, results };
   });
 
   fastify.put("/api/salary-settings", async (request, reply) => {

@@ -17,6 +17,7 @@ import { getBudgetFacts, getFinancialFacts } from "./financial-facts";
 import { getFinancialRevision } from "./financial-revision";
 import { getPaylaterObligations } from "./paylater";
 import { previewDueSubscriptionRenewals } from "./subscription-renewals";
+import { previewSalaryCatchUp } from "./salary-posting";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
@@ -122,6 +123,11 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
       },
       additionalProperties: false,
     },
+  },
+  {
+    name: "get_salary_catch_up",
+    description: "Preview unprocessed salary months after an absence. This is read-only; posting or skipping requires an explicit confirmed write command.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "search_transactions",
@@ -333,6 +339,10 @@ export async function getDueRecurringTool(input: unknown) {
   return { asOfMs, ...preview, writesPerformed: false };
 }
 
+export async function getSalaryCatchUpTool() {
+  return { ...(await previewSalaryCatchUp()), writesPerformed: false };
+}
+
 export async function searchTransactionsTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const scopeInput = parseAgentScopeInput(input);
@@ -354,9 +364,12 @@ export async function searchTransactionsTool(input: unknown) {
       t.category_id AS category_id,
       c.name AS category,
       COALESCE(SUM(tl.debit), 0) AS debit_cents,
-      COALESCE(SUM(tl.credit), 0) AS credit_cents
+      COALESCE(SUM(tl.credit), 0) AS credit_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit - tl.debit ELSE 0 END), 0) AS income_cents
     FROM "transaction" t
     LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
+    LEFT JOIN account a ON a.id = tl.account_id
     LEFT JOIN category c ON c.id = t.category_id
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
@@ -382,6 +395,8 @@ export async function searchTransactionsTool(input: unknown) {
       category: row.category == null ? null : String(row.category),
       debitCents: Number(row.debit_cents ?? 0),
       creditCents: Number(row.credit_cents ?? 0),
+      expenseCents: Number(row.expense_cents ?? 0),
+      incomeCents: Number(row.income_cents ?? 0),
     })),
     limit,
   };
@@ -488,6 +503,9 @@ export async function executeAgentTool(name: unknown, input: unknown): Promise<A
       break;
     case "get_due_recurring":
       data = await getDueRecurringTool(input);
+      break;
+    case "get_salary_catch_up":
+      data = await getSalaryCatchUpTool();
       break;
     case "search_transactions":
       data = await searchTransactionsTool(input);

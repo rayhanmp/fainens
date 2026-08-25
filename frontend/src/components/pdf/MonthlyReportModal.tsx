@@ -15,6 +15,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
   const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number }>>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [reportData, setReportData] = useState<any>(null);
   const [reportError, setReportError] = useState<string | null>(null);
 
@@ -27,7 +28,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
       const data = await api.periods.list();
       setPeriods(data);
       if (data.length > 0) {
-        setSelectedPeriodId(data[data.length - 1].id.toString());
+        // Periods are returned newest first; default to the current/latest one.
+        setSelectedPeriodId(data[0].id.toString());
       }
     } catch (err) {
       console.error('Failed to load periods:', err);
@@ -35,6 +37,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
   };
 
   const handleGenerate = async () => {
+    if (isPreviewing) return;
+    setIsPreviewing(true);
     setReportData(null);
     setReportError(null);
     try {
@@ -68,6 +72,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
         incomeBySource: monthly.incomeBySource,
         expensesByCategory: monthly.expensesByCategory,
         budgetComparison: monthly.budgetComparison,
+        revision: monthly.revision,
+        provenance: monthly.provenance,
         allTransactions,
       };
       
@@ -76,6 +82,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
       console.error('Error in handleGenerate:', err);
       setReportData(null);
       setReportError(err instanceof Error ? err.message : 'Failed to generate report preview');
+    } finally {
+      setIsPreviewing(false);
     }
   };
 
@@ -159,11 +167,11 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
         <div className="flex gap-3 pt-4">
           <button
             type="button"
-            onClick={() => { console.log('Preview clicked'); handleGenerate(); }}
-            disabled={periods.length === 0}
-            className="px-4 py-2 bg-[var(--color-secondary)] text-[var(--color-secondary)] rounded-lg font-medium disabled:opacity-50"
+            onClick={handleGenerate}
+            disabled={periods.length === 0 || isPreviewing}
+            className="px-4 py-2 bg-[var(--color-secondary)] text-white rounded-lg font-medium disabled:opacity-50"
           >
-            <FileText className="w-4 h-4 inline mr-2" />
+            {isPreviewing ? <Loader2 className="w-4 h-4 inline mr-2 animate-spin" /> : <FileText className="w-4 h-4 inline mr-2" />}
             Preview
           </button>
           <button
@@ -208,6 +216,10 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
               <div>
                 <span className="text-[var(--color-text-secondary)]">Net Worth:</span>
                 <span className="ml-2 font-medium">{formatCurrency(reportData.netWorth)}</span>
+              </div>
+              <div>
+                <span className="text-[var(--color-text-secondary)]">Ledger revision:</span>
+                <span className="ml-2 font-medium">{reportData.revision}</span>
               </div>
             </div>
           </div>

@@ -128,6 +128,7 @@ function BudgetPage() {
   const { confirm } = useConfirm();
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const dataRequestVersion = useRef(0);
 
   // Close menus on outside click
   useEffect(() => {
@@ -163,7 +164,12 @@ function BudgetPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    loadData();
+    const version = ++dataRequestVersion.current;
+    setIsLoading(true);
+    setBudgetRows([]);
+    setPeriodIncome(0);
+    setBudgetPercentOfIncome(0);
+    void loadData(version);
   }, [selectedPeriodId]);
 
   useEffect(() => {
@@ -178,13 +184,15 @@ function BudgetPage() {
     loadTemplates();
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (version = dataRequestVersion.current) => {
+    const requestedPeriodId = selectedPeriodId;
     try {
       const [budgetData, periodData, categoryData] = await Promise.all([
-        api.budgets.list(selectedPeriodId || undefined),
+        api.budgets.list(requestedPeriodId || undefined),
         api.periods.list(),
         api.categories.list(),
       ]);
+      if (version !== dataRequestVersion.current) return;
       
       // Handle new API response format - can be array or single object
       const data = budgetData as any;
@@ -201,11 +209,11 @@ function BudgetPage() {
       setPeriods(periodData);
       setCategories(categoryData);
 
-      if (!selectedPeriodId && periodData.length > 0) {
+      if (!requestedPeriodId && periodData.length > 0) {
         setSelectedPeriodId(periodData[0].id.toString());
       }
     } finally {
-      setIsLoading(false);
+      if (version === dataRequestVersion.current) setIsLoading(false);
     }
   };
 
@@ -469,9 +477,9 @@ function BudgetPage() {
 
   const mixRows = useMemo(() => {
     if (totalBudgeted <= 0) return [];
-    return [...budgetRows]
+    const sorted = [...budgetRows]
       .sort((a, b) => b.plannedAmount - a.plannedAmount)
-      .slice(0, 6)
+    const visible = sorted.slice(0, 5)
       .map((row) => {
         const cat = categories.find(c => c.id === row.categoryId);
         return {
@@ -480,7 +488,23 @@ function BudgetPage() {
           color: cat?.color || 'var(--ref-primary)',
         };
       });
-  }, [budgetRows, totalBudgeted, categories]);
+    const omitted = sorted.slice(5).reduce((sum, row) => sum + row.plannedAmount, 0);
+    if (omitted > 0) {
+      visible.push({
+        id: -1,
+        periodId: Number(selectedPeriodId) || -1,
+        categoryId: -1,
+        categoryName: 'Other',
+        plannedAmount: omitted,
+        actualAmount: 0,
+        percentUsed: 0,
+        variance: 0,
+        share: Math.round((omitted / totalBudgeted) * 100),
+        color: '#a0a4b0',
+      });
+    }
+    return visible;
+  }, [budgetRows, totalBudgeted, categories, selectedPeriodId]);
 
   if (isLoading) {
     return (

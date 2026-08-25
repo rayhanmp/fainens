@@ -363,7 +363,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const insight = await generateDashboardInsight(data);
       const cached = await setCachedInsight(userId, 'dashboard', insight, periodId?.toString());
       
-      reply.send({ insight, generatedAt: cached.generatedAt });
+      reply.send({ insight, generatedAt: cached.generatedAt, sourceRevision: cached.revision, stale: false });
     } catch (err) {
       fastify.log.error(err);
       reply.code(500).send({ error: "Failed to generate insight" });
@@ -510,7 +510,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const insight = await generateBudgetInsight(data);
       const cached = await setCachedInsight(userId, 'budget', insight, period.id.toString());
       
-      reply.send({ insight, generatedAt: cached.generatedAt });
+      reply.send({ insight, generatedAt: cached.generatedAt, sourceRevision: cached.revision, stale: false });
     } catch (err) {
       fastify.log.error(err);
       reply.code(500).send({ error: "Failed to generate insight" });
@@ -527,6 +527,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       reply.send({ 
         insight: cached?.content ?? null,
         generatedAt: cached?.generatedAt ?? null,
+        sourceRevision: cached?.revision ?? null,
         stale: cached == null,
       });
     } catch (err) {
@@ -545,6 +546,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       reply.send({ 
         insight: cached?.content ?? null,
         generatedAt: cached?.generatedAt ?? null,
+        sourceRevision: cached?.revision ?? null,
         stale: cached == null,
       });
     } catch (err) {

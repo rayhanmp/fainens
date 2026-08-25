@@ -15,6 +15,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  const [sourceRevision, setSourceRevision] = useState<number | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
   const requestVersion = useRef(0);
 
@@ -34,6 +35,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
       if (version === requestVersion.current) {
         setInsight(response.insight);
         setGeneratedAt(new Date(response.generatedAt));
+        setSourceRevision(response.sourceRevision);
         setIsCollapsed(false);
       }
     } catch (err) {
@@ -58,6 +60,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
       if (version === requestVersion.current) {
         setInsight(response.insight);
         setGeneratedAt(response.generatedAt ? new Date(response.generatedAt) : null);
+        setSourceRevision(response.sourceRevision);
       }
     } catch (err) {
       // Silently fail - no cached insight is okay
@@ -67,6 +70,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
   useEffect(() => {
     setInsight(null);
     setGeneratedAt(null);
+    setSourceRevision(null);
     setError(null);
     setIsLoading(false);
     void loadCachedInsight();
@@ -110,6 +114,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
           {insight && !isCollapsed && (
             <span className="text-xs text-[var(--ref-on-surface-variant)]">
               {generatedAt?.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {sourceRevision != null ? ` · ledger rev ${sourceRevision}` : ''}
             </span>
           )}
         </div>

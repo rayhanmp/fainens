@@ -1,4 +1,4 @@
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 import { invalidateOnTransactionMutation } from "../cache";
 import { db as defaultDb } from "../db/client";
@@ -26,7 +26,7 @@ export type SalaryPostingResult = {
   message?: string;
 };
 
-async function salaryContext(now = new Date()) {
+async function salaryContext(now = new Date(), requestedOccurrenceDate?: number) {
   const [settings] = await defaultDb.select().from(salarySettings)
     .where(eq(salarySettings.id, SINGLETON_ID)).limit(1);
   if (!settings) return { error: "Salary settings not configured" } as const;
@@ -37,7 +37,7 @@ async function salaryContext(now = new Date()) {
   if (!account || !account.isActive || account.type !== "asset") {
     return { error: "Deposit account must be an active asset account" } as const;
   }
-  const occurrenceDate = monthlyOccurrenceDate(now.getFullYear(), now.getMonth(), settings.payrollDay);
+  const occurrenceDate = requestedOccurrenceDate ?? monthlyOccurrenceDate(now.getFullYear(), now.getMonth(), settings.payrollDay);
   const payrollSettings = {
     ptkpCode: settings.ptkpCode,
     terCategory: (settings.terCategory as "A" | "B" | "C") || getTERCategory(settings.ptkpCode),
@@ -48,7 +48,8 @@ async function salaryContext(now = new Date()) {
     bpjsKesWageCap: settings.bpjsKesWageCap,
     jhtWageCap: settings.jhtWageCap,
   };
-  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode, now.getMonth() + 1, payrollSettings);
+  const payrollMonth = requestedOccurrenceDate == null ? now.getMonth() + 1 : new Date(requestedOccurrenceDate).getMonth() + 1;
+  const payroll = estimatePayroll(settings.grossMonthly, settings.ptkpCode, payrollMonth, payrollSettings);
   return { settings, account, occurrenceDate, payroll } as const;
 }
 
@@ -59,9 +60,10 @@ async function salaryContext(now = new Date()) {
 export async function postSalaryIfPayrollDay(
   _dbLike: typeof defaultDb = defaultDb,
   confirmed = false,
+  requestedOccurrenceDate?: number,
 ): Promise<SalaryPostingResult> {
   const now = new Date();
-  const context = await salaryContext(now);
+  const context = await salaryContext(now, requestedOccurrenceDate);
   if ("error" in context) return { posted: false, message: context.error };
   const { settings, account, occurrenceDate, payroll } = context;
   if (Date.now() < occurrenceDate) {
@@ -88,6 +90,7 @@ export async function postSalaryIfPayrollDay(
     .from(transactions)
     .where(and(
       eq(transactions.txType, "salary_income"),
+      sql`${transactions.status} <> 'draft'`,
       gte(transactions.date, monthStart),
       lte(transactions.date, monthEnd),
     )).limit(1);
@@ -162,6 +165,101 @@ export async function postSalaryIfPayrollDay(
     netAmount: payroll.estimatedNetMonthly,
     message: `Salary posted: ${payroll.estimatedNetMonthly}`,
   };
+}
+
+export type SalaryCatchUpOccurrence = {
+  occurrenceDate: number;
+  netAmount: number;
+  status: "due" | "posted" | "skipped" | "legacy";
+  transactionId?: number;
+};
+
+/**
+ * Return the concrete salary months that became due after the last recorded
+ * occurrence. A preview is read-only; it never claims or posts a month.
+ */
+export async function previewSalaryCatchUp(): Promise<{
+  occurrences: SalaryCatchUpOccurrence[];
+  truncated: boolean;
+  message?: string;
+}> {
+  const now = new Date();
+  const context = await salaryContext(now);
+  if ("error" in context) return { occurrences: [], truncated: false, message: context.error };
+
+  const [latest] = await defaultDb.select({ occurrenceDate: recurringOccurrences.occurrenceDate })
+    .from(recurringOccurrences)
+    .where(and(eq(recurringOccurrences.jobType, "salary"), eq(recurringOccurrences.scheduleId, SINGLETON_ID)))
+    .orderBy(desc(recurringOccurrences.occurrenceDate))
+    .limit(1);
+
+  const currentMonth = new Date(context.occurrenceDate);
+  const cursor = latest
+    ? new Date(new Date(latest.occurrenceDate).getFullYear(), new Date(latest.occurrenceDate).getMonth() + 1, 1)
+    : new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const occurrences: SalaryCatchUpOccurrence[] = [];
+  let truncated = false;
+  for (let i = 0; i < 120 && cursor <= currentMonth; i += 1) {
+    const occurrenceDate = monthlyOccurrenceDate(cursor.getFullYear(), cursor.getMonth(), context.settings.payrollDay);
+    if (occurrenceDate > Date.now()) break;
+    const [existing] = await defaultDb.select({ id: recurringOccurrences.id, status: recurringOccurrences.status, transactionId: recurringOccurrences.transactionId })
+      .from(recurringOccurrences)
+      .where(and(
+        eq(recurringOccurrences.jobType, "salary"),
+        eq(recurringOccurrences.scheduleId, SINGLETON_ID),
+        eq(recurringOccurrences.occurrenceDate, new Date(occurrenceDate)),
+      )).limit(1);
+    const monthStart = new Date(new Date(occurrenceDate).getFullYear(), new Date(occurrenceDate).getMonth(), 1);
+    const monthEnd = new Date(new Date(occurrenceDate).getFullYear(), new Date(occurrenceDate).getMonth() + 1, 0, 23, 59, 59, 999);
+    const [legacySalary] = await defaultDb.select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.txType, "salary_income"), sql`${transactions.status} <> 'draft'`, gte(transactions.date, monthStart), lte(transactions.date, monthEnd)))
+      .limit(1);
+    const monthContext = await salaryContext(now, occurrenceDate);
+    const status: SalaryCatchUpOccurrence["status"] = existing
+      ? existing.status === "posted" ? "posted" : "skipped"
+      : legacySalary ? "legacy" : "due";
+    occurrences.push({
+      occurrenceDate,
+      netAmount: monthContext && !('error' in monthContext) ? monthContext.payroll.estimatedNetMonthly : 0,
+      status,
+      transactionId: existing?.transactionId ?? legacySalary?.id ?? undefined,
+    });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  if (cursor <= currentMonth) truncated = true;
+  return { occurrences, truncated };
+}
+
+/** Record an explicit skip for a due salary month without creating a journal. */
+export async function skipSalaryOccurrence(occurrenceDate: number): Promise<{ skipped: boolean; message: string }> {
+  const context = await salaryContext(new Date(), occurrenceDate);
+  if ("error" in context) return { skipped: false, message: context.error ?? "Salary settings not configured" };
+  if (occurrenceDate > Date.now()) return { skipped: false, message: "Salary occurrence is not due yet" };
+  try {
+    defaultDb.transaction((tx) => {
+      const existing = tx.select({ id: recurringOccurrences.id }).from(recurringOccurrences).where(and(
+        eq(recurringOccurrences.jobType, "salary"),
+        eq(recurringOccurrences.scheduleId, SINGLETON_ID),
+        eq(recurringOccurrences.occurrenceDate, new Date(occurrenceDate)),
+      )).limit(1).all()[0];
+      if (existing) return;
+      tx.insert(recurringOccurrences).values({
+        jobType: "salary",
+        scheduleId: SINGLETON_ID,
+        occurrenceDate: new Date(occurrenceDate),
+        status: "skipped",
+        lastError: "Explicitly skipped during salary catch-up",
+      }).run();
+      bumpFinancialRevisionSync(tx);
+    });
+  } catch (error) {
+    if (error instanceof Error && /UNIQUE constraint failed/.test(error.message)) {
+      return { skipped: false, message: "Salary occurrence already processed" };
+    }
+    throw error;
+  }
+  return { skipped: true, message: "Salary occurrence skipped" };
 }
 
 export async function previewSalaryPosting(_dbLike: typeof defaultDb = defaultDb): Promise<{

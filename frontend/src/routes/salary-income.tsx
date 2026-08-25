@@ -36,19 +36,15 @@ interface TxRow {
   date: number;
   description: string;
   txType: string;
-  lines: Array<{ debit: number; credit: number; accountId: number }>;
+  incomeCents: number;
 }
 
 function txAmount(tx: TxRow): number {
-  if (!tx.lines?.length) return 0;
-  return Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)));
+  return Math.max(0, tx.incomeCents);
 }
 
 function isIncomeTx(tx: TxRow): boolean {
-  return (
-    tx.txType === 'simple_income' ||
-    (typeof tx.txType === 'string' && tx.txType.includes('income'))
-  );
+  return tx.incomeCents > 0;
 }
 
 function monthKey(ts: number) {
@@ -120,11 +116,21 @@ function SalaryIncomePage() {
   useEffect(() => {
     (async () => {
       try {
-        const [txData, accData] = await Promise.all([
-          api.transactions.list({ limit: '2000' }),
+        const now = new Date();
+        const start = startOfMonth(new Date(now.getFullYear(), now.getMonth() - 5, 1));
+        const [factsResult, accData] = await Promise.all([
+          api.agent.financialFacts({ startDate: start, endDate: Date.now() }),
           api.accounts.list(),
         ]);
-        setTransactions(txData.data as TxRow[]);
+        setTransactions(factsResult.data.facts.rows
+          .filter((row) => row.incomeCents > 0)
+          .map((row) => ({
+            id: row.id,
+            date: row.date,
+            description: row.description,
+            txType: row.txType,
+            incomeCents: row.incomeCents,
+          })));
         setAccounts(accData as Account[]);
       } finally {
         setIsLoading(false);
@@ -276,13 +282,21 @@ function SalaryIncomePage() {
                           type="button"
                           className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
                           onClick={async () => {
-                            setMenuOpen(false);
-                            if (!window.confirm('Post the currently due monthly salary occurrence using the saved payroll estimate?')) return;
+                          setMenuOpen(false);
                             try {
-                              await api.salarySettings.postSalary();
+                              const preview = await api.salarySettings.catchUpPreview();
+                              const due = preview.occurrences.filter((occurrence) => occurrence.status === 'due');
+                              if (due.length === 0) {
+                                alert(preview.message || 'No unprocessed salary months are due.');
+                                return;
+                              }
+                              const firstMonth = new Date(due[0].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                              const lastMonth = new Date(due[due.length - 1].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                              if (!window.confirm(`Post ${due.length} due salary month${due.length === 1 ? '' : 's'} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`)) return;
+                              await api.salarySettings.catchUp({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
                               const data = await api.salarySettings.get();
                               setSalary(data);
-                              alert('Salary posted!');
+                              alert(`Posted ${due.length} salary month${due.length === 1 ? '' : 's'}.`);
                             } catch (e) {
                               alert(e instanceof Error ? e.message : 'Failed to post salary');
                             }

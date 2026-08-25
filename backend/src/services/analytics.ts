@@ -22,7 +22,8 @@ export interface BurnRateResult {
 }
 
 export interface RunwayResult {
-  runwayMonths: number;
+  runwayMonths: number | null;
+  isUnbounded: boolean;
   liquidAssets: number;
   grossBurnRate: number;
 }
@@ -49,7 +50,7 @@ export interface DashboardAnalytics {
 export async function calculateNetWorth(): Promise<NetWorthResult> {
   // Get all asset and liability accounts
   const assetAccounts = await db
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, systemKey: accounts.systemKey })
     .from(accounts)
     .where(eq(accounts.type, "asset"));
 
@@ -64,7 +65,7 @@ export async function calculateNetWorth(): Promise<NetWorthResult> {
   for (const account of assetAccounts) {
     const balance = await computeAccountBalanceRolledUp(account.id, db);
     totalAssets += balance;
-    liquidAssets += balance;
+    if (account.systemKey !== 'loans-receivable') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
@@ -88,7 +89,7 @@ export async function calculateNetWorth(): Promise<NetWorthResult> {
 /** Net worth (assets − liabilities) using only ledger activity on or before `asOfInclusiveMs`. */
 export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<NetWorthResult> {
   const assetAccounts = await db
-    .select({ id: accounts.id })
+    .select({ id: accounts.id, systemKey: accounts.systemKey })
     .from(accounts)
     .where(eq(accounts.type, "asset"));
 
@@ -103,7 +104,7 @@ export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<Ne
   for (const account of assetAccounts) {
     const balance = await computeAccountBalanceAsOf(account.id, asOfInclusiveMs, db);
     totalAssets += balance;
-    liquidAssets += balance;
+    if (account.systemKey !== 'loans-receivable') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
@@ -277,10 +278,12 @@ export async function calculateRunway(): Promise<RunwayResult> {
   const { grossBurnRate } = await calculateBurnRate();
 
   // Calculate runway
-  const runwayMonths = grossBurnRate > 0 ? liquidAssets / grossBurnRate : Infinity;
+  const isUnbounded = grossBurnRate <= 0;
+  const runwayMonths = isUnbounded ? null : liquidAssets / grossBurnRate;
 
   return {
-    runwayMonths: Math.round(runwayMonths * 10) / 10, // 1 decimal place
+    runwayMonths: runwayMonths == null ? null : Math.round(runwayMonths * 10) / 10, // 1 decimal place
+    isUnbounded,
     liquidAssets,
     grossBurnRate,
   };

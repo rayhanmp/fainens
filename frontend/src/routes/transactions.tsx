@@ -44,6 +44,7 @@ export const Route = createFileRoute('/transactions')({
   validateSearch: (search: Record<string, unknown>) => ({
     periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
     accountId: typeof search.accountId === 'string' ? search.accountId : undefined,
+    categoryId: typeof search.categoryId === 'string' ? search.categoryId : undefined,
     action: typeof search.action === 'string' ? search.action : undefined,
   }),
 
@@ -81,6 +82,10 @@ interface TransactionRow {
   categoryId: number | null;
   periodId: number | null;
   linkedTxId: number | null;
+  debitCents?: number;
+  creditCents?: number;
+  expenseCents?: number;
+  incomeCents?: number;
   lines: Array<{
     id: number;
     accountId: number;
@@ -99,6 +104,25 @@ interface Category {
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const MAX_CLIENT_TRANSACTION_ROWS = 10_000;
+
+async function fetchAllTransactionPages(
+  params: Parameters<typeof api.transactions.list>[0],
+): Promise<{ data: Awaited<ReturnType<typeof api.transactions.list>>['data']; complete: boolean }> {
+  const rows: Awaited<ReturnType<typeof api.transactions.list>>['data'] = [];
+  let offset = 0;
+  while (rows.length < MAX_CLIENT_TRANSACTION_ROWS) {
+    const page = await api.transactions.list({
+      ...(params ?? {}),
+      limit: '100',
+      offset: String(offset),
+    });
+    rows.push(...page.data);
+    if (!page.pagination.hasMore || page.data.length === 0) return { data: rows, complete: true };
+    offset += page.data.length;
+  }
+  return { data: rows, complete: false };
+}
 
 function formatTxTableDate(ts: number) {
   return new Date(ts).toLocaleDateString('en-US', {
@@ -134,14 +158,24 @@ function downloadTransactionsCsv(
   categories: Category[],
 ) {
   const header = 'Date,Description,Category,Amount (IDR),Type\n';
+  const csvText = (value: string) => {
+    const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
   const body = rows
     .map((tx) => {
       const d = getDisplay(tx);
       const cat = tx.categoryId
         ? categories.find((c) => c.id === tx.categoryId)?.name ?? ''
         : '';
-      const desc = tx.description.replace(/"/g, '""');
-      return `${formatTxTableDate(tx.date)},"${desc}","${cat.replace(/"/g, '""')}",${d.amount},${d.kind}`;
+      const signedAmount = tx.expenseCents
+        ? -tx.expenseCents
+        : tx.incomeCents
+          ? tx.incomeCents
+          : d.amount;
+      return [formatTxTableDate(tx.date), tx.description, cat, String(signedAmount), d.kind]
+        .map(csvText)
+        .join(',');
     })
     .join('\n');
   const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
@@ -154,7 +188,7 @@ function downloadTransactionsCsv(
 }
 
 function TransactionsPage() {
-  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; action?: string };
+  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; categoryId?: string; action?: string };
   const navigate = useNavigate({ from: '/transactions' });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { confirm } = useConfirm();
@@ -167,12 +201,14 @@ function TransactionsPage() {
     Array<{ id: number; name: string; startDate: number; endDate: number }>
   >([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [transactionDataComplete, setTransactionDataComplete] = useState(true);
+  const dataRequestVersion = useRef(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<EditingTransaction | null>(null);
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
   const [filterQuery, setFilterQuery] = useState('');
   const [txTypeFilter, setTxTypeFilter] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>(search.categoryId || '');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
@@ -221,8 +257,15 @@ function TransactionsPage() {
   }, [search.action]);
 
   useEffect(() => {
-    loadData();
-  }, [search.periodId, search.accountId]);
+    const version = ++dataRequestVersion.current;
+    setIsLoading(true);
+    setTransactions([]);
+    void loadData(version);
+  }, [search.periodId, search.accountId, search.categoryId]);
+
+  useEffect(() => {
+    setCategoryFilter(search.categoryId || '');
+  }, [search.categoryId]);
 
   useEffect(() => {
     api.pendingTransactions.list().then((txs) => setPendingCount(txs.length)).catch(() => setPendingCount(0));
@@ -272,7 +315,7 @@ function TransactionsPage() {
     }
   }, [navigate]);
 
-  const loadData = async () => {
+  const loadData = async (version = dataRequestVersion.current) => {
     try {
       const periodId =
         search.periodId && search.periodId !== 'undefined' && !isNaN(parseInt(search.periodId, 10))
@@ -284,25 +327,31 @@ function TransactionsPage() {
         search.accountId && search.accountId !== 'undefined' && !isNaN(parseInt(search.accountId, 10))
           ? search.accountId
           : undefined;
+      const categoryId =
+        search.categoryId && !isNaN(parseInt(search.categoryId, 10))
+          ? search.categoryId
+          : undefined;
 
       const [txData, accData, catData, tagData] = await Promise.all([
-        api.transactions.list({
-          limit: '500',
+        fetchAllTransactionPages({
           ...(periodId && { periodId }),
           ...(accountId && { accountId }),
+          ...(categoryId && { categoryId }),
         }),
         api.accounts.list(),
         api.categories.list(),
         api.tags.list(),
       ]);
+      if (version !== dataRequestVersion.current) return;
       setTransactions(txData.data as TransactionRow[]);
+      setTransactionDataComplete(txData.complete);
       setAccounts(accData as WalletAccount[]);
       setCategories(catData);
       setTags(tagData);
       // Clear selection when data is refreshed
       setSelectedTransactions(new Set());
     } finally {
-      setIsLoading(false);
+      if (version === dataRequestVersion.current) setIsLoading(false);
     }
   };
 
@@ -407,10 +456,14 @@ function TransactionsPage() {
 
   const getTransactionDisplay = useCallback(
     (tx: TransactionRow) => {
-      const amount =
-        tx.lines.length > 0
-          ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-          : 0;
+      const expenseEffect = tx.expenseCents ?? 0;
+      const incomeEffect = tx.incomeCents ?? 0;
+      const journalAmount = Math.max(tx.debitCents ?? 0, tx.creditCents ?? 0);
+      const amount = expenseEffect !== 0
+        ? Math.abs(expenseEffect)
+        : incomeEffect !== 0
+          ? Math.abs(incomeEffect)
+          : journalAmount;
 
       // Check for loan-related transactions
       if (tx.txType?.includes('loan')) {
@@ -442,7 +495,19 @@ function TransactionsPage() {
         };
       }
 
-      if (tx.categoryId) {
+      if (tx.txType?.includes('transfer') || tx.txType === 'simple_transfer') {
+        const deb = tx.lines.find((l) => l.debit > 0);
+        const cred = tx.lines.find((l) => l.credit > 0);
+        const from = cred ? accounts.find((a) => a.id === cred.accountId) : undefined;
+        const to = deb ? accounts.find((a) => a.id === deb.accountId) : undefined;
+        return {
+          kind: 'transfer' as const,
+          amount: journalAmount,
+          detail: `${from?.name ?? '?'} → ${to?.name ?? '?'}`,
+        };
+      }
+
+      if (expenseEffect !== 0) {
         const cat = categories.find((c) => c.id === tx.categoryId);
         const walletLine = tx.lines.find((l) => l.credit > 0 && l.debit === 0);
         const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
@@ -453,19 +518,7 @@ function TransactionsPage() {
         };
       }
 
-      if (tx.txType?.includes('transfer') || tx.txType === 'simple_transfer') {
-        const deb = tx.lines.find((l) => l.debit > 0);
-        const cred = tx.lines.find((l) => l.credit > 0);
-        const from = cred ? accounts.find((a) => a.id === cred.accountId) : undefined;
-        const to = deb ? accounts.find((a) => a.id === deb.accountId) : undefined;
-        return {
-          kind: 'transfer' as const,
-          amount,
-          detail: `${from?.name ?? '?'} → ${to?.name ?? '?'}`,
-        };
-      }
-
-      if (tx.txType?.includes('income') || tx.txType === 'simple_income') {
+      if (incomeEffect !== 0) {
         const walletLine = tx.lines.find((l) => l.debit > 0);
         const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
         return {
@@ -509,11 +562,11 @@ function TransactionsPage() {
 
   const monthlyExpenseTotal = useMemo(() => {
     return filtered.reduce((sum, tx) => {
-      const d = getTransactionDisplay(tx);
-      if (d.kind === 'expense') return sum + d.amount;
+      const expenseEffect = tx.expenseCents ?? 0;
+      if (expenseEffect > 0) return sum + expenseEffect;
       return sum;
     }, 0);
-  }, [filtered, getTransactionDisplay]);
+  }, [filtered]);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -536,6 +589,13 @@ function TransactionsPage() {
     return a?.name ?? `Account #${id}`;
   }, [search.accountId, accounts]);
 
+  const categoryFilterLabel = useMemo(() => {
+    if (!search.categoryId) return null;
+    const id = parseInt(search.categoryId, 10);
+    if (isNaN(id)) return null;
+    return categories.find((category) => category.id === id)?.name ?? `Category #${id}`;
+  }, [search.categoryId, categories]);
+
   return (
     <RequireAuth>
       <PageContainer>
@@ -549,7 +609,9 @@ function TransactionsPage() {
                 ? 'Loading activity…'
                 : `Reviewing ${filtered.length} activit${filtered.length === 1 ? 'y' : 'ies'}${
                     periodLabel ? ` · ${periodLabel}` : ''
-                  }${accountFilterLabel ? ` · ${accountFilterLabel}` : ''}`
+                  }${accountFilterLabel ? ` · ${accountFilterLabel}` : ''}${
+                    categoryFilterLabel ? ` · ${categoryFilterLabel}` : ''
+                  }`
             }
           />
           <div className="flex flex-wrap items-center gap-3">
@@ -595,6 +657,11 @@ function TransactionsPage() {
             </Button>
           </div>
         </div>
+        {!transactionDataComplete && (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Showing the first {MAX_CLIENT_TRANSACTION_ROWS.toLocaleString()} matching transactions. Narrow the period or filters to load a complete list and export.
+          </div>
+        )}
 
         {accountFilterLabel && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 sm:px-5">
@@ -750,7 +817,15 @@ function TransactionsPage() {
                 const cat = tx.categoryId ? categories.find((c) => c.id === tx.categoryId) : null;
                 const Icon = pickCategoryIcon(cat?.name, display.kind);
                 const subLine = `${display.detail} · ${formatTxTime(tx.date)}`;
-                const amountSigned = display.kind === 'income' ? display.amount : display.kind === 'expense' ? -display.amount : display.amount;
+                 const amountSigned = tx.expenseCents
+                   ? -tx.expenseCents
+                   : tx.incomeCents
+                     ? tx.incomeCents
+                     : display.kind === 'income'
+                       ? display.amount
+                       : display.kind === 'expense'
+                         ? -display.amount
+                         : display.amount;
 
                 return (
                   <div 
@@ -822,12 +897,15 @@ function TransactionsPage() {
                     const Icon = pickCategoryIcon(cat?.name, display.kind);
                     const subLine = `${display.detail} · ${formatTxTime(tx.date)}`;
 
-                    const amountSigned =
-                      display.kind === 'income'
-                        ? display.amount
-                        : display.kind === 'expense'
-                          ? -display.amount
-                          : display.amount;
+                     const amountSigned = tx.expenseCents
+                       ? -tx.expenseCents
+                       : tx.incomeCents
+                         ? tx.incomeCents
+                         : display.kind === 'income'
+                           ? display.amount
+                           : display.kind === 'expense'
+                             ? -display.amount
+                             : display.amount;
 
                      const categoryPillClass =
                       display.kind === 'loan'

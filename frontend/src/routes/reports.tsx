@@ -5,7 +5,7 @@ import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import { CardSkeleton } from '../components/ui/Skeleton';
@@ -48,10 +48,15 @@ export const Route = createFileRoute('/reports')({
 
 type ReportTab = 'income' | 'balance' | 'cashflow' | 'spending' | 'trends';
 
+function inclusivePeriodEnd(timestamp: number): number {
+  return timestamp % 86_400_000 === 0 ? timestamp + 86_400_000 - 1 : timestamp;
+}
+
 function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('income');
   const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number }>>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const summaryRequestVersion = useRef(0);
 
   useEffect(() => {
     loadPeriods();
@@ -62,7 +67,8 @@ function ReportsPage() {
       const data = await api.periods.list();
       setPeriods(data);
       if (data.length > 0) {
-        setSelectedPeriodId(data[data.length - 1].id.toString());
+        // The API returns periods newest first. Start with the current period.
+        setSelectedPeriodId(data[0].id.toString());
       }
     } catch (err) {
       console.error('Failed to load periods:', err);
@@ -82,9 +88,10 @@ function ReportsPage() {
 
   useEffect(() => {
     loadSummaryData();
-  }, [selectedPeriodId]);
+  }, [selectedPeriodId, periods]);
 
   const loadSummaryData = async () => {
+    const requestVersion = ++summaryRequestVersion.current;
     if (!selectedPeriodId) {
       setSummaryData(null);
       return;
@@ -92,11 +99,12 @@ function ReportsPage() {
     try {
       const periodId = parseInt(selectedPeriodId);
       const currentPeriodIndex = periods.findIndex(p => p.id === periodId);
-      const previousPeriod = currentPeriodIndex > 0 ? periods[currentPeriodIndex - 1] : null;
+      // With newest-first periods, the previous chronological period is index + 1.
+      const previousPeriod = currentPeriodIndex >= 0 ? periods[currentPeriodIndex + 1] : null;
       
       const [incomeData, balanceData] = await Promise.all([
         api.reports.incomeStatement(periodId),
-        api.reports.balanceSheet(selectedPeriod?.endDate),
+        api.reports.balanceSheet(selectedPeriod?.endDate == null ? undefined : inclusivePeriodEnd(selectedPeriod.endDate)),
       ]);
 
       let prevData = undefined;
@@ -112,6 +120,7 @@ function ReportsPage() {
         }
       }
 
+      if (requestVersion !== summaryRequestVersion.current) return;
       setSummaryData({
         totalRevenue: incomeData.totalRevenue,
         totalExpenses: incomeData.totalExpenses,
@@ -121,6 +130,8 @@ function ReportsPage() {
         ...prevData,
       });
     } catch (err) {
+      if (requestVersion !== summaryRequestVersion.current) return;
+      setSummaryData(null);
       console.error('Failed to load summary:', err);
     }
   };
@@ -551,7 +562,7 @@ function BalanceSheetReport({
     setError(null);
     try {
       // Use period end date as the "as of" date for the balance sheet
-      const asOfDate = periodEndDate;
+      const asOfDate = periodEndDate == null ? undefined : inclusivePeriodEnd(periodEndDate);
       const report = await api.reports.balanceSheet(asOfDate);
       setData(report);
     } catch (err) {

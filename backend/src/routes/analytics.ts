@@ -11,6 +11,7 @@ import { cacheGet } from "../cache/redis";
 import { Keys, ANALYTICS_KEYS } from "../cache/keys";
 import { precomputePeriodSummary } from "../cache/precompute";
 import { db } from "../db/client";
+import { asc } from "drizzle-orm";
 import { salaryPeriods } from "../db/schema";
 import { getNetWorthTrend, type NetWorthRange } from "../services/analytics";
 
@@ -138,21 +139,21 @@ export default async function (fastify: FastifyInstance) {
 
   // Get all periods summaries
   fastify.get("/api/analytics/period-summaries", async () => {
-    const periods = await db.select().from(salaryPeriods);
+    const periods = await db.select().from(salaryPeriods).orderBy(asc(salaryPeriods.startDate));
 
     const summaries = await Promise.all(
       periods.map(async (period) => {
         const cached = await cacheGet(Keys.periodSummary(period.id));
         if (cached) {
-          return { periodId: period.id, periodName: period.name, ...cached };
+          return { periodId: period.id, periodName: period.name, startDate: period.startDate, endDate: period.endDate, ...cached };
         }
 
         try {
           const computed = await precomputePeriodSummary(period.id);
           const { periodId: _, ...computedData } = computed as any;
-          return { periodId: period.id, periodName: period.name, ...computedData };
+          return { periodId: period.id, periodName: period.name, startDate: period.startDate, endDate: period.endDate, ...computedData };
         } catch {
-          return { periodId: period.id, periodName: period.name, error: "Failed to compute" };
+          return { periodId: period.id, periodName: period.name, startDate: period.startDate, endDate: period.endDate, error: "Failed to compute" };
         }
       }),
     );

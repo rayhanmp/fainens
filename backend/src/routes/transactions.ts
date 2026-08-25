@@ -105,7 +105,8 @@ function buildBaseConditions(
   startDate?: string,
   endDate?: string,
   txType?: string,
-  periodId?: string
+  periodId?: string,
+  categoryId?: string
 ): { conditions: SQL[]; errors: string[] } {
   const conditions: SQL[] = [];
   const errors: string[] = [];
@@ -135,6 +136,11 @@ function buildBaseConditions(
   const parsedPeriodId = parseIdParam(periodId);
   if (parsedPeriodId !== null) {
     conditions.push(eq(transactions.periodId, parsedPeriodId));
+  }
+
+  const parsedCategoryId = parseIdParam(categoryId);
+  if (parsedCategoryId !== null) {
+    conditions.push(eq(transactions.categoryId, parsedCategoryId));
   }
 
   return { conditions, errors };
@@ -181,6 +187,31 @@ async function fetchTransactionDetails(txIds: number[]) {
   }
 
   return { linesByTxId, tagsByTxId };
+}
+
+// Return accounting effects once per journal, rather than making clients infer
+// an amount from whichever line happens to be largest. These facets are used
+// for display/filtering only; statements still come from the report read model.
+async function fetchTransactionEffects(txIds: number[]) {
+  if (txIds.length === 0) return new Map<number, { debitCents: number; creditCents: number; expenseCents: number; incomeCents: number }>();
+  const rows = await db
+    .select({
+      transactionId: transactionLines.transactionId,
+      debitCents: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+      creditCents: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+      expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
+      incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${transactionLines.credit} - ${transactionLines.debit} else 0 end), 0)`,
+    })
+    .from(transactionLines)
+    .innerJoin(accounts, eq(transactionLines.accountId, accounts.id))
+    .where(inArray(transactionLines.transactionId, txIds))
+    .groupBy(transactionLines.transactionId);
+  return new Map(rows.map((row) => [row.transactionId, {
+    debitCents: Number(row.debitCents ?? 0),
+    creditCents: Number(row.creditCents ?? 0),
+    expenseCents: Number(row.expenseCents ?? 0),
+    incomeCents: Number(row.incomeCents ?? 0),
+  }]));
 }
 
 export default async function (fastify: FastifyInstance) {
@@ -252,6 +283,7 @@ RULES:
       accountId,
       txType,
       periodId,
+      categoryId,
       tagId,
       limit: limitParam = String(DEFAULT_LIMIT),
       offset: offsetParam = "0",
@@ -261,6 +293,7 @@ RULES:
       accountId?: string;
       txType?: string;
       periodId?: string;
+      categoryId?: string;
       tagId?: string;
       limit?: string;
       offset?: string;
@@ -301,7 +334,8 @@ RULES:
       startDate,
       endDate,
       txType,
-      periodIdToUse
+      periodIdToUse,
+      categoryId
     );
 
     if (validationErrors.length > 0) {
@@ -370,7 +404,7 @@ RULES:
         .from(transactions)
         .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
         .where(whereCondition)
-        .orderBy(desc(transactions.date))
+        .orderBy(desc(transactions.date), desc(transactions.id))
         .limit(limit)
         .offset(offset);
     } else if (parsedTagId !== null) {
@@ -394,7 +428,7 @@ RULES:
         .from(transactions)
         .innerJoin(transactionTags, eq(transactions.id, transactionTags.transactionId))
         .where(whereCondition)
-        .orderBy(desc(transactions.date))
+        .orderBy(desc(transactions.date), desc(transactions.id))
         .limit(limit)
         .offset(offset);
     } else {
@@ -413,7 +447,7 @@ RULES:
         .select()
         .from(transactions)
         .where(whereCondition)
-        .orderBy(desc(transactions.date))
+        .orderBy(desc(transactions.date), desc(transactions.id))
         .limit(limit)
         .offset(offset) as unknown as TransactionRow[];
     }
@@ -421,12 +455,14 @@ RULES:
     // Fetch transaction details efficiently (bulk query, no N+1)
     const txIds = txList.map((tx) => tx.id).filter(Boolean);
     const { linesByTxId, tagsByTxId } = await fetchTransactionDetails(txIds);
+    const effectsByTxId = await fetchTransactionEffects(txIds);
 
     // Map transactions with their details
     const transactionsWithDetails = txList.map((tx) => ({
       ...tx,
       lines: linesByTxId.get(tx.id) || [],
       tags: tagsByTxId.get(tx.id) || [],
+      ...(effectsByTxId.get(tx.id) || { debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 }),
     }));
 
     return {
@@ -464,6 +500,12 @@ RULES:
       .select()
       .from(transactionLines)
       .where(eq(transactionLines.transactionId, tx.id));
+    const effects = (await fetchTransactionEffects([tx.id])).get(tx.id) || {
+      debitCents: 0,
+      creditCents: 0,
+      expenseCents: 0,
+      incomeCents: 0,
+    };
 
     const txTagRows = await db
       .select({ tagId: transactionTags.tagId, name: tags.name, color: tags.color })
@@ -475,6 +517,7 @@ RULES:
       ...tx,
       lines,
       tags: txTagRows,
+      ...effects,
     };
   });
 

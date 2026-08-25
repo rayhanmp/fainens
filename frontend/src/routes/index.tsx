@@ -4,7 +4,7 @@ import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { formatCurrency, formatDate, cn } from '../lib/utils';
@@ -37,29 +37,22 @@ export const Route = createFileRoute('/')({
 } as any);
 
 function classifyTx(tx: {
-  categoryId: number | null;
-  txType: string;
+  expenseCents: number;
+  incomeCents: number;
 }): 'expense' | 'income' | 'neutral' {
-  if (tx.categoryId) return 'expense';
-  if (tx.txType?.includes('income') || tx.txType === 'simple_income') return 'income';
+  if (tx.expenseCents > 0 && tx.incomeCents <= 0) return 'expense';
+  if (tx.incomeCents > 0 && tx.expenseCents <= 0) return 'income';
   return 'neutral';
 }
+
+type DashboardRecentTransaction = Awaited<ReturnType<typeof api.agent.searchTransactions>>['data']['transactions'][number];
 
 function DashboardPage() {
   const [walletTotal, setWalletTotal] = useState(0);
   const [analytics, setAnalytics] = useState<{
     netWorth: { totalAssets: number; totalLiabilities: number; netWorth: number };
   } | null>(null);
-  const [recent, setRecent] = useState<
-    Array<{
-      id: number;
-      date: number;
-      description: string;
-      categoryId: number | null;
-      txType: string;
-      lines: Array<{ debit: number; credit: number }>;
-    }>
-  >([]);
+  const [recent, setRecent] = useState<DashboardRecentTransaction[]>([]);
   const [budgetRows, setBudgetRows] = useState<
     Array<{
       id: number;
@@ -103,6 +96,7 @@ function DashboardPage() {
     categoryId: number | null;
     amount: number;
   }>>([]);
+  const periodRequestRef = useRef(0);
 
   const statusLine = useMemo(() => {
     const now = new Date();
@@ -114,308 +108,142 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const periodList = await api.periods.list();
+        if (cancelled) return;
         setPeriods(periodList);
-        
+
         let periodIdToUse = selectedPeriodId;
         if (periodList.length > 0 && !periodIdToUse) {
-          periodIdToUse = periodList[0].id.toString();
+          periodIdToUse = String(periodList[0].id);
           setSelectedPeriodId(periodIdToUse);
         }
-        
-        if (!periodIdToUse) {
-          setIsLoading(false);
-          return;
-        }
-        
-        const periodId = parseInt(periodIdToUse);
-        const period = periodList.find(p => p.id === periodId);
-        if (period) setPeriodLabel(period.name);
-
-        // Fetch transactions by date range to include those without period_id
-        const periodStartDate = period ? new Date(period.startDate).toISOString() : undefined;
-        const periodEndDate = period ? new Date(period.endDate).toISOString() : undefined;
-
-        const [accList, dash, recentTxRes, cats, budgets, periodTxRes, , tagsList] = await Promise.all([
+        const periodId = periodIdToUse && Number.isSafeInteger(Number(periodIdToUse))
+          ? Number(periodIdToUse)
+          : undefined;
+        const [accList, dash, recentResult, cats, tagsList] = await Promise.all([
           api.accounts.list(),
           api.analytics.dashboard(),
-          api.transactions.list({ limit: '8' }),
+          api.agent.searchTransactions({ ...(periodId == null ? {} : { periodId }), limit: 8 }),
           api.categories.list(),
-          periodId ? api.budgets.list(String(periodId)) : Promise.resolve({ plans: [] }),
-          // Fetch all transactions within the period date range (includes those without period_id)
-          periodStartDate && periodEndDate
-            ? api.transactions.list({ startDate: periodStartDate, endDate: periodEndDate, limit: '500' })
-            : Promise.resolve({ data: [] }),
-          api.analytics.periodSummaries(),
           api.tags.list(),
         ]);
-        
-        const recentTxList = recentTxRes.data;
-        const periodTxs = periodTxRes.data;
-
-        // Handle budget API response format (can be array or object with plans)
-        const budgetData = budgets as any;
-        const budgetPlans = Array.isArray(budgetData) 
-          ? budgetData[0]?.plans || [] 
-          : budgetData.plans || [];
-
-        // Calculate period income and expense from actual transactions within date range
-        const periodTxsArray = periodTxs as Array<{
-          id: number;
-          description: string;
-          categoryId: number | null;
-          txType: string;
-          date: number;
-          lines: Array<{ debit: number; credit: number }>;
-        }>;
-        
-        let calculatedIncome = 0;
-        let calculatedExpense = 0;
-        
-        for (const tx of periodTxsArray) {
-          const amt = tx.lines.length > 0
-            ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-            : 0;
-            
-          if (tx.txType?.includes('income')) {
-            calculatedIncome += amt;
-          } else if (tx.txType?.includes('expense') || tx.categoryId) {
-            calculatedExpense += amt;
-          }
-        }
-        
-        setPeriodIncome(calculatedIncome > 0 ? calculatedIncome : null);
-        setPeriodExpense(calculatedExpense > 0 ? calculatedExpense : null);
-
-        // Calculate top 5 most expensive expense transactions
-        const expenseTxs = periodTxsArray
-          .filter((tx) => tx.txType?.includes('expense') || tx.categoryId)
-          .map((tx) => ({
-            id: tx.id,
-            date: tx.date,
-            description: tx.description,
-            categoryId: tx.categoryId,
-            amount: tx.lines.length > 0
-              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-              : 0,
-          }))
-          .filter((tx) => tx.amount > 0)
-          .sort((a, b) => b.amount - a.amount)
-          .slice(0, 5);
-        setTopExpenses(expenseTxs);
-
+        if (cancelled) return;
         const wallets = accList.filter((a) => a.type === 'asset' && !a.systemKey);
-        const walletBal = wallets.reduce((s, a) => s + a.balance, 0);
-        setWalletTotal(walletBal);
-
-        if (period) {
-          const now = new Date();
-          const periodStartMs = period.startDate;
-          const periodEndMs = period.endDate;
-          const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)));
-          const daysElapsed = Math.max(0, Math.floor((now.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)));
-          const daysRemaining = Math.max(0, daysTotal - daysElapsed);
-          
-          const burnRate = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
-          const remainingBudget = calculatedIncome - calculatedExpense;
-          const projectedEndBalance = walletBal + remainingBudget - (burnRate * daysRemaining);
-          const totalBudget = budgetPlans.reduce((sum: number, b: any) => sum + (b.plannedAmount || 0), 0);
-          
-          setPeriodProgress({
-            daysRemaining,
-            daysElapsed,
-            dailyBudget: daysRemaining > 0 ? Math.max(0, remainingBudget / daysRemaining) : 0,
-            projectedEndBalance,
-            avgDailySpend: burnRate,
-            hasIncome: calculatedIncome > 0,
-            income: calculatedIncome,
-            expenses: calculatedExpense,
-            totalBudget,
-          });
-        }
-
+        setWalletTotal(wallets.reduce((sum, account) => sum + account.balance, 0));
         setAnalytics(dash);
-        setRecent(recentTxList);
-        const sortedBudgets = [...budgetPlans].sort((a, b) => b.actualAmount - a.actualAmount);
-        setBudgetRows(sortedBudgets.slice(0, 5));
+        setRecent(recentResult.data.transactions);
         setCategories(cats);
         setAccounts(accList);
         setTags(tagsList);
         setCurrentPeriodId(periodId ?? null);
-
-        // Use all transactions within the date range for the pie chart
-        const txsToAnalyze = periodTxsArray;
-        
-        const spendMap = new Map<number, number>();
-        
-        for (const tx of txsToAnalyze as Array<{
-          categoryId: number | null;
-          txType: string;
-          lines: Array<{ debit: number; credit: number }>;
-        }>) {
-          if (!tx.categoryId) continue;
-          // Count as expense if txType includes 'expense' OR if it has a categoryId
-          const isExpense = tx.txType?.includes('expense') || tx.categoryId !== null;
-          if (!isExpense) continue;
-          const amt =
-            tx.lines.length > 0
-              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-              : 0;
-          if (amt > 0) {
-            spendMap.set(tx.categoryId, (spendMap.get(tx.categoryId) || 0) + amt);
-          }
-        }
-        
-        const pie = [...spendMap.entries()]
-          .map(([cid, value]) => {
-            const c = cats.find((x) => x.id === cid);
-            return { name: c?.name ?? `Category ${cid}`, value, color: c?.color || '#737785' };
-          })
-          .filter((x) => x.value > 0)
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 6);
-        setCategorySpend(pie);
+        setPeriodLabel(periodList.find((period) => period.id === periodId)?.name ?? '');
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     if (!selectedPeriodId || periods.length === 0) return;
-    if (categories.length === 0) return; // Wait for categories to load
-    
+    const periodId = Number(selectedPeriodId);
+    const period = periods.find((candidate) => candidate.id === periodId);
+    if (!period) return;
+
+    const requestId = ++periodRequestRef.current;
+    let cancelled = false;
+    setIsPeriodLoading(true);
+    setPeriodLabel(period.name);
+    setPeriodIncome(null);
+    setPeriodExpense(null);
+    setTopExpenses([]);
+    setCategorySpend([]);
+    setBudgetRows([]);
+
     (async () => {
       try {
-        const periodId = parseInt(selectedPeriodId);
-        const period = periods.find(p => p.id === periodId);
-        if (!period) return;
-        
-        setIsPeriodLoading(true);
-        setPeriodLabel(period.name);
-
-        const periodStartDate = new Date(period.startDate).toISOString();
-        const periodEndDate = new Date(period.endDate).toISOString();
-
-        const [budgets, periodTxRes] = await Promise.all([
+        const [budgets, factsResult, recentResult] = await Promise.all([
           api.budgets.list(String(periodId)),
-          api.transactions.list({ startDate: periodStartDate, endDate: periodEndDate, limit: '500' }),
+          api.agent.financialFacts({ periodId }),
+          api.agent.searchTransactions({ periodId, limit: 8 }),
         ]);
-        
-        const periodTxs = periodTxRes.data;
-        const budgetData2 = budgets as any;
-        const budgetPlans2 = Array.isArray(budgetData2) 
-          ? budgetData2[0]?.plans || [] 
-          : budgetData2.plans || [];
-        const periodTxsArray = periodTxs as Array<{
-          id: number;
-          description: string;
-          categoryId: number | null;
-          txType: string;
-          date: number;
-          lines: Array<{ debit: number; credit: number }>;
-        }>;
-        
-        let calculatedIncome = 0;
-        let calculatedExpense = 0;
-        
-        for (const tx of periodTxsArray) {
-          const amt = tx.lines.length > 0
-            ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-            : 0;
-            
-          if (tx.txType?.includes('income')) {
-            calculatedIncome += amt;
-          } else if (tx.txType?.includes('expense') || tx.categoryId) {
-            calculatedExpense += amt;
-          }
-        }
-        
+        if (cancelled || requestId !== periodRequestRef.current) return;
+
+        const facts = factsResult.data.facts;
+        const calculatedIncome = facts.totalIncomeCents;
+        const calculatedExpense = facts.totalSpentCents;
         setPeriodIncome(calculatedIncome > 0 ? calculatedIncome : null);
         setPeriodExpense(calculatedExpense > 0 ? calculatedExpense : null);
+        setRecent(recentResult.data.transactions);
 
-        const now = new Date();
-        const periodStartMs = period.startDate;
-        const periodEndMs = period.endDate;
-        const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)));
-        const daysElapsed = Math.max(0, Math.floor((now.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)));
+        const budgetData = budgets as any;
+        const budgetPlans = Array.isArray(budgetData)
+          ? budgetData[0]?.plans || []
+          : budgetData.plans || [];
+        const totalBudget = budgetPlans.reduce((sum: number, row: any) => sum + (row.plannedAmount || 0), 0);
+        const sortedBudgets = [...budgetPlans].sort((a: any, b: any) => b.actualAmount - a.actualAmount);
+        setBudgetRows(sortedBudgets.slice(0, 5));
+
+        const now = Date.now();
+        const daysTotal = Math.max(1, Math.ceil((period.endDate - period.startDate) / 86_400_000));
+        const effectiveNow = Math.min(Math.max(now, period.startDate), period.endDate);
+        const daysElapsed = Math.min(daysTotal, Math.max(0, Math.ceil((effectiveNow - period.startDate) / 86_400_000)));
         const daysRemaining = Math.max(0, daysTotal - daysElapsed);
-        
         const burnRate = daysElapsed > 0 ? calculatedExpense / daysElapsed : 0;
-        const remainingBudget = calculatedIncome - calculatedExpense;
-        const projectedEndBalance = walletTotal + remainingBudget - (burnRate * daysRemaining);
-        const totalBudget2 = budgetPlans2.reduce((sum: number, b: any) => sum + (b.plannedAmount || 0), 0);
-        
+        const remainingBudget = Math.max(0, totalBudget > 0 ? totalBudget - calculatedExpense : calculatedIncome - calculatedExpense);
         setPeriodProgress({
           daysRemaining,
           daysElapsed,
-          dailyBudget: daysRemaining > 0 ? Math.max(0, remainingBudget / daysRemaining) : 0,
-          projectedEndBalance,
+          dailyBudget: daysRemaining > 0 ? remainingBudget / daysRemaining : 0,
+          projectedEndBalance: walletTotal + (calculatedIncome - calculatedExpense),
           avgDailySpend: burnRate,
           hasIncome: calculatedIncome > 0,
           income: calculatedIncome,
           expenses: calculatedExpense,
-          totalBudget: totalBudget2,
+          totalBudget,
         });
 
-        const expenseTxs = periodTxsArray
-          .filter((tx) => tx.txType?.includes('expense') || tx.categoryId)
-          .map((tx) => ({
-            id: tx.id,
-            date: tx.date,
-            description: tx.description,
-            categoryId: tx.categoryId,
-            amount: tx.lines.length > 0
-              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-              : 0,
+        setTopExpenses(facts.rows
+          .filter((row) => row.expenseCents > 0)
+          .map((row) => ({
+            id: row.id,
+            date: row.date,
+            description: row.description,
+            categoryId: row.categoryId,
+            amount: row.expenseCents,
           }))
-          .filter((tx) => tx.amount > 0)
           .sort((a, b) => b.amount - a.amount)
-          .slice(0, 5);
-        setTopExpenses(expenseTxs);
+          .slice(0, 5));
 
-        const sortedBudgets2 = [...budgetPlans2].sort((a, b) => b.actualAmount - a.actualAmount);
-        setBudgetRows(sortedBudgets2.slice(0, 5));
+        const categoryRows = facts.byCategory.filter((row) => row.spentCents > 0);
+        const visibleCategories = categoryRows.slice(0, 5).map((row) => {
+          const category = row.categoryId == null ? undefined : categories.find((candidate) => candidate.id === row.categoryId);
+          return { name: row.category, value: row.spentCents, color: category?.color || '#737785' };
+        });
+        const omittedValue = categoryRows.slice(5).reduce((sum, row) => sum + row.spentCents, 0);
+        if (omittedValue > 0) visibleCategories.push({ name: 'Other', value: omittedValue, color: '#a0a4b0' });
+        setCategorySpend(visibleCategories);
         setCurrentPeriodId(periodId);
-
-        const spendMap = new Map<number, number>();
-        
-        for (const tx of periodTxsArray as Array<{
-          categoryId: number | null;
-          txType: string;
-          lines: Array<{ debit: number; credit: number }>;
-        }>) {
-          if (!tx.categoryId) continue;
-          const isExpense = tx.txType?.includes('expense') || tx.categoryId !== null;
-          if (!isExpense) continue;
-          const amt =
-            tx.lines.length > 0
-              ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit)))
-              : 0;
-          if (amt > 0) {
-            spendMap.set(tx.categoryId, (spendMap.get(tx.categoryId) || 0) + amt);
-          }
+      } catch {
+        if (!cancelled && requestId === periodRequestRef.current) {
+          setPeriodProgress(null);
+          setRecent([]);
         }
-        
-        const pie = [...spendMap.entries()]
-          .map(([cid, value]) => {
-            const c = categories.find((x) => x.id === cid);
-            return { name: c?.name ?? `Category ${cid}`, value, color: c?.color || '#737785' };
-          })
-          .filter((x) => x.value > 0)
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 6);
-        setCategorySpend(pie);
       } finally {
-        setIsPeriodLoading(false);
+        if (!cancelled && requestId === periodRequestRef.current) setIsPeriodLoading(false);
       }
     })();
-  }, [selectedPeriodId]);
+    return () => { cancelled = true; };
+  }, [selectedPeriodId, periods, categories, walletTotal]);
 
-  const txAmount = (tx: (typeof recent)[0]) =>
-    tx.lines?.length ? Math.max(...tx.lines.map((l) => Math.max(l.debit, l.credit))) : 0;
+  const txAmount = (tx: (typeof recent)[0]) => {
+    if (tx.expenseCents !== 0) return Math.abs(tx.expenseCents);
+    if (tx.incomeCents !== 0) return Math.abs(tx.incomeCents);
+    return Math.max(tx.debitCents, tx.creditCents);
+  };
 
   const txSubtitle = (tx: (typeof recent)[0]) => {
     if (tx.categoryId) {
@@ -537,7 +365,7 @@ function DashboardPage() {
             </div>
             <div className="mt-4 flex items-center gap-2 text-[var(--ref-secondary)] text-xs font-semibold">
               <TrendingUp className="w-4 h-4 shrink-0" />
-              Latest period in summaries
+              Canonical posted ledger facts
             </div>
           </div>
 
@@ -557,7 +385,7 @@ function DashboardPage() {
             </div>
             <div className="mt-4 flex items-center gap-2 text-[var(--ref-error)] text-xs font-semibold">
               <span className="inline-block rotate-0">↓</span>
-              From analytics period summaries
+              Canonical posted expense facts
             </div>
           </div>
 
@@ -578,7 +406,7 @@ function DashboardPage() {
               ) : (
                 <div className="space-y-3 mt-4">
                   <div className="flex justify-between text-xs">
-                    <span className="text-[var(--ref-outline)]">Daily budget</span>
+                    <span className="text-[var(--ref-outline)]">Daily headroom</span>
                     <span className="font-bold text-[var(--ref-on-surface)]">{formatCurrency(periodProgress.dailyBudget)}</span>
                   </div>
                   <div className="flex justify-between text-xs">

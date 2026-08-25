@@ -39,6 +39,65 @@ async function fetchApi<T>(
   return response.json();
 }
 
+export type AgentFinancialFacts = {
+  tool: 'get_financial_facts';
+  revision: number;
+  readOnly: true;
+  data: {
+    scope: {
+      periodId: number | null;
+      startMs: number;
+      endMs: number;
+      periodName: string | null;
+    };
+    facts: {
+      startMs: number;
+      endMs: number;
+      asOfMs: number;
+      rows: Array<{
+        id: number;
+        date: number;
+        description: string;
+        categoryId: number | null;
+        category: string | null;
+        txType: string;
+        expenseCents: number;
+        incomeCents: number;
+      }>;
+      totalSpentCents: number;
+      totalIncomeCents: number;
+      walletBalanceCents: number;
+      byCategory: Array<{ categoryId: number | null; category: string; spentCents: number }>;
+    };
+  };
+};
+
+export type AgentTransactionSearch = {
+  tool: 'search_transactions';
+  revision: number;
+  readOnly: true;
+  data: {
+    scope: { periodId: number | null; startMs: number; endMs: number; periodName: string | null };
+    transactions: Array<{
+      id: number;
+      date: number;
+      description: string;
+      reference: string | null;
+      notes: string | null;
+      txType: string;
+      status: string;
+      periodId: number | null;
+      categoryId: number | null;
+      category: string | null;
+      debitCents: number;
+      creditCents: number;
+      expenseCents: number;
+      incomeCents: number;
+    }>;
+    limit: number;
+  };
+};
+
 // API client object
 export const api = {
   // Auth
@@ -149,6 +208,7 @@ export const api = {
       accountId?: string;
       txType?: string;
       periodId?: string;
+      categoryId?: string;
       tagId?: string;
       limit?: string;
       offset?: string;
@@ -167,6 +227,10 @@ export const api = {
           categoryId: number | null;
           periodId: number | null;
           linkedTxId: number | null;
+          debitCents: number;
+          creditCents: number;
+          expenseCents: number;
+          incomeCents: number;
           lines: Array<{
             id: number;
             accountId: number;
@@ -472,7 +536,7 @@ export const api = {
         netWorth: number;
       };
       burnRate: { grossBurnRate: number; period: string };
-      runway: { runwayMonths: number; liquidAssets: number };
+      runway: { runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number };
       trialBalance: { totalDebits: number; totalCredits: number; isBalanced: boolean };
     }>('/analytics/dashboard'),
     netWorth: () => fetchApi('/analytics/net-worth'),
@@ -493,11 +557,13 @@ export const api = {
       }>(`/analytics/net-worth-trend${qs ? `?${qs}` : ''}`);
     },
     burnRate: () => fetchApi('/analytics/burn-rate'),
-    runway: () => fetchApi('/analytics/runway'),
+    runway: () => fetchApi<{ runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number }>('/analytics/runway'),
     accountBalance: (accountId: number) => fetchApi<{ accountId: number; balance: number }>(`/analytics/account-balance/${accountId}`),
     periodSummaries: () => fetchApi<Array<{
       periodId: number;
       periodName: string;
+      startDate: number;
+      endDate: number;
       income: number;
       expenses: number;
       net: number;
@@ -646,13 +712,22 @@ export const api = {
         depositAccountName: string | null;
         message: string;
       }>('/salary-settings/posting-preview'),
-    postSalary: () =>
+    catchUpPreview: () => fetchApi<{
+      occurrences: Array<{ occurrenceDate: number; netAmount: number; status: 'due' | 'posted' | 'skipped' | 'legacy'; transactionId?: number }>;
+      truncated: boolean;
+      message?: string;
+    }>('/salary-settings/catch-up-preview'),
+    catchUp: (data: { mode: 'post' | 'skip'; occurrenceDates: number[] }) => fetchApi<{
+      mode: 'post' | 'skip';
+      results: Array<{ occurrenceDate: number; posted?: boolean; skipped?: boolean; transactionId?: number; message?: string }>;
+    }>('/salary-settings/catch-up', { method: 'POST', body: JSON.stringify(data) }),
+    postSalary: (occurrenceDate?: number) =>
       fetchApi<{
         posted: boolean;
         transactionId?: number;
         netAmount?: number;
         message?: string;
-      }>('/salary-settings/post-salary', { method: 'POST' }),
+      }>('/salary-settings/post-salary', { method: 'POST', body: JSON.stringify(occurrenceDate == null ? {} : { occurrenceDate }) }),
     update: (data: Partial<{
       grossMonthly: number;
       payrollDay: number;
@@ -1460,13 +1535,13 @@ export const api = {
   },
 
   insights: {
-    generateDashboard: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string }>(`/insights/dashboard${periodId ? `?periodId=${periodId}` : ''}`, { method: 'POST' }),
-    generateBudget: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string }>(`/insights/budget`, { 
+    generateDashboard: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string; sourceRevision: number; stale: false }>(`/insights/dashboard${periodId ? `?periodId=${periodId}` : ''}`, { method: 'POST' }),
+    generateBudget: (periodId?: number) => fetchApi<{ insight: string; generatedAt: string; sourceRevision: number; stale: false }>(`/insights/budget`, {
       method: 'POST', 
       body: JSON.stringify({ periodId }) 
     }),
-    getDashboardLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/dashboard/latest${periodId ? `?periodId=${periodId}` : ''}`),
-    getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
+    getDashboardLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null; sourceRevision: number | null; stale: boolean }>(`/insights/dashboard/latest${periodId ? `?periodId=${periodId}` : ''}`),
+    getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null; sourceRevision: number | null; stale: boolean }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
   },
 
   agent: {
@@ -1483,6 +1558,14 @@ export const api = {
     toolCall: (data: { name: string; input?: Record<string, unknown> }) =>
       fetchApi<{ tool: string; revision: number; readOnly: true; data: unknown }>('/agent/tool-call', {
         method: 'POST', body: JSON.stringify(data),
+      }),
+    financialFacts: (input: { periodId?: number; startDate?: number; endDate?: number } = {}) =>
+      fetchApi<AgentFinancialFacts>('/agent/tool-call', {
+        method: 'POST', body: JSON.stringify({ name: 'get_financial_facts', input }),
+      }),
+    searchTransactions: (input: { periodId?: number; startDate?: number; endDate?: number; text?: string; limit?: number } = {}) =>
+      fetchApi<AgentTransactionSearch>('/agent/tool-call', {
+        method: 'POST', body: JSON.stringify({ name: 'search_transactions', input }),
       }),
     context: (params?: { periodId?: number; startDate?: number; endDate?: number }) => {
       const query = new URLSearchParams();
