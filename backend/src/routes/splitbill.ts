@@ -1,8 +1,8 @@
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { splitbillSessions, contacts, loans, accounts, auditLogs } from "../db/schema";
+import { splitbillSessions, contacts, loans, loanPayments, accounts, auditLogs, transactions } from "../db/schema";
 import { uploadFile, generatePresignedDownloadUrl } from "../services/r2";
 import { callOpenRouterVision } from "../services/openrouter";
 import { env } from "../lib/env";
@@ -11,6 +11,7 @@ import {
   prepareJournalEntry,
 } from "../services/ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
+import { insertDomainReversalSync, prepareDomainReversal } from "../services/domain-reversal";
 
 const GEMINI_MODEL = "google/gemini-3.1-flash-lite-preview";
 
@@ -567,6 +568,60 @@ export default async function (fastify: FastifyInstance) {
       }
     }
   );
+
+  /** Reverse a split-bill journal and archive every untouched derived loan. */
+  fastify.post("/api/splitbill/transactions/:transactionId/reverse", async (request, reply) => {
+    const transactionId = Number((request.params as { transactionId?: string }).transactionId);
+    const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
+    if (!Number.isSafeInteger(transactionId) || transactionId <= 0) return reply.code(400).send({ error: "Invalid transaction id" });
+    if (!reason || reason.length > 500) return reply.code(400).send({ error: "reason is required and must be at most 500 characters" });
+    try {
+      const [original] = await db.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+      if (!original || !["split_bill_lent", "split_bill_borrowed"].includes(original.txType)) {
+        return reply.code(409).send({ error: "A split-bill transaction is required" });
+      }
+      const reversal = await prepareDomainReversal(transactionId, reason, db);
+      const result = db.transaction((tx) => {
+        const current = tx.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1).all()[0];
+        if (!current || current.status !== "posted" || !["split_bill_lent", "split_bill_borrowed"].includes(current.txType)) {
+          throw new Error("Split-bill transaction changed; retry reversal");
+        }
+        const derivedLoans = tx.select().from(loans).where(eq(loans.sourceTransactionId, transactionId)).all();
+        if (derivedLoans.length === 0) throw new Error("No derived loans found for this split-bill transaction");
+        for (const loan of derivedLoans) {
+          if (!loan.isActive || loan.status !== "active" || loan.remainingCents !== loan.amountCents) {
+            throw new Error("Only split-bill loans with no repayment or status change can be reversed");
+          }
+          const payments = tx.select({ id: loanPayments.id }).from(loanPayments).where(and(
+            eq(loanPayments.loanId, loan.id), eq(loanPayments.status, "posted"),
+          )).all();
+          if (payments.length > 0) throw new Error("Reverse derived loan payments before reversing this split bill");
+        }
+        const reversalTransactionId = insertDomainReversalSync(tx, transactionId, reversal.prepared, reason);
+        for (const loan of derivedLoans) {
+          tx.update(loans).set({ isActive: false, status: "cancelled", updatedAt: new Date() })
+            .where(eq(loans.id, loan.id)).run();
+          tx.insert(auditLogs).values({
+            entityType: "loan",
+            entityId: loan.id,
+            action: "reverse",
+            beforeSnapshot: Buffer.from(JSON.stringify(loan)),
+            afterSnapshot: Buffer.from(JSON.stringify({ ...loan, isActive: false, status: "cancelled", reversalTransactionId, reason })),
+          }).run();
+        }
+        return { reversalTransactionId, reversedLoanIds: derivedLoans.map((loan) => loan.id) };
+      });
+      await invalidateOnTransactionMutation({
+        transactionId: result.reversalTransactionId,
+        affectedAccountIds: reversal.prepared.accountIds,
+        affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+        revisionBumped: true,
+      });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to reverse split bill" });
+    }
+  });
 
   fastify.get("/api/splitbill/history", async (request) => {
     const sessions = await db

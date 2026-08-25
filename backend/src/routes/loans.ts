@@ -552,6 +552,62 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
+  /** Reverse the original lending/borrowing event before any repayment exists. */
+  fastify.post("/api/loans/:id/reverse-origin", async (request, reply) => {
+    const loanId = Number((request.params as { id?: string }).id);
+    const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
+    if (!Number.isSafeInteger(loanId) || loanId <= 0) return reply.code(400).send({ error: "Invalid loan id" });
+    if (!reason || reason.length > 500) return reply.code(400).send({ error: "reason is required and must be at most 500 characters" });
+    try {
+      const [loan] = await db.select().from(loans).where(eq(loans.id, loanId)).limit(1);
+      if (!loan?.lendingTransactionId || !loan.isActive || loan.status !== "active" || loan.remainingCents !== loan.amountCents) {
+        return reply.code(409).send({ error: "Only an untouched active loan can have its original event reversed" });
+      }
+      if (loan.sourceType === "split_bill") {
+        return reply.code(409).send({ error: "Split-bill loans must be reversed through the split-bill workflow" });
+      }
+      const [payment] = await db.select({ id: loanPayments.id }).from(loanPayments).where(and(
+        eq(loanPayments.loanId, loanId),
+        eq(loanPayments.status, "posted"),
+      )).limit(1);
+      if (payment) return reply.code(409).send({ error: "Reverse posted loan payments before reversing the original loan" });
+      const reversal = await prepareDomainReversal(loan.lendingTransactionId, reason, db);
+      const result = db.transaction((tx) => {
+        const current = tx.select().from(loans).where(eq(loans.id, loanId)).limit(1).all()[0];
+        if (!current || !current.isActive || current.status !== "active" || current.remainingCents !== current.amountCents) {
+          throw new Error("Loan changed; retry reversal");
+        }
+        const payments = tx.select({ id: loanPayments.id }).from(loanPayments).where(and(
+          eq(loanPayments.loanId, loanId), eq(loanPayments.status, "posted"),
+        )).all();
+        if (payments.length > 0) throw new Error("Reverse posted loan payments before reversing the original loan");
+        const reversalTransactionId = insertDomainReversalSync(tx, current.lendingTransactionId!, reversal.prepared, reason);
+        tx.update(loans).set({
+          isActive: false,
+          status: "cancelled",
+          updatedAt: new Date(),
+        }).where(eq(loans.id, loanId)).run();
+        tx.insert(auditLogs).values({
+          entityType: "loan",
+          entityId: loanId,
+          action: "reverse",
+          beforeSnapshot: Buffer.from(JSON.stringify(current)),
+          afterSnapshot: Buffer.from(JSON.stringify({ ...current, isActive: false, status: "cancelled", reversalTransactionId, reason })),
+        }).run();
+        return { reversalTransactionId };
+      });
+      await invalidateOnTransactionMutation({
+        transactionId: result.reversalTransactionId,
+        affectedAccountIds: reversal.prepared.accountIds,
+        affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+        revisionBumped: true,
+      });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to reverse loan origin" });
+    }
+  });
+
   // PATCH /api/loans/:id - Update loan status (mark as defaulted, written off, etc.)
   fastify.patch("/api/loans/:id", async (request, reply) => {
     try {
