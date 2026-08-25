@@ -134,6 +134,10 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - A mistaken check is voided through an audited endpoint; it is not deleted and no journal reversal is created. History and agent retrieval retain the original outcome, void state, reason, and item-level evidence.
 - The reconciliation dialog exposes recent checks and supports an explicit reasoned void action.
 
+### `ab25abe` — contact archive integrity
+
+- Contact archive is now an atomic, audited operation that refuses to hide a contact with active outstanding loans. A contact can be restored explicitly without deleting historical loan records.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -159,7 +163,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 4. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
-7. Finish safe account/category/contact/template archive dependency previews and restore flows.
+7. Finish safe account/category/template archive dependency previews and restore flows. Contacts now reject archival with active loans and support restore.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
