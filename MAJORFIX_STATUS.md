@@ -119,6 +119,14 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Salary now has a read-only catch-up preview plus explicit post/skip occurrence actions, including a requested historical occurrence date, so a user returning after months away can recover missing payroll without page-load side effects.
 - Account deletion now blocks system accounts, non-zero balances, and parents with children. Budget and period queries use the same assigned-or-date scope and full-day semantics.
 
+### `73dda39` — period close/reopen and historical-write locks
+
+- Added migration `0009`: salary periods have `open`/`closed` state and close/reopen timestamps. Legacy pushed-schema databases receive the new columns safely during baseline.
+- Closing and reopening a period are explicit, revision-bumping, audited actions. A period cannot be renamed, retimed, or deleted while closed; closing also requires resolving drafts in its date range.
+- The ledger resolves the actual period from a journal date and rechecks it inside the SQLite posting transaction, so a supplied period ID cannot bypass a closed historical range.
+- SQLite triggers block every direct insert or date/period reassignment into a closed period, covering CSV imports and domain workflows that do not use the generic ledger helper.
+- Budget create/update/delete/template-apply paths reject closed periods. The Periods and Budget screens expose the closed state and make history visibly read-only until an explicit reopen.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -132,13 +140,14 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Backend TypeScript build passes using the bundled runtime.
 - Frontend TypeScript project build passes.
+- Drizzle migration journal/schema integrity check passes, including migration `0009`.
 - Focused recurrence/reconciliation suite passes 8 tests after the latest wave; an earlier broader pure run passed 49 tests across journal validation, mutation policy, IDR parsing, report CSV behavior, and storage path confinement.
 - The complete DB-backed suite is still blocked locally because installed `better-sqlite3` targets Node ABI 127 while the bundled Node runtime requires ABI 137. Do not treat this environment failure as a test pass.
 
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-2. Add period close/reopen and domain-specific correction/reversal workflows for salary, subscription, PayLater, loan, and split-bill ownership where a correction needs more than a generic journal reversal. Salary catch-up posting/skip is now available, but correction is not.
+2. Add domain-specific correction/reversal workflows for salary, subscription, PayLater, loan, and split-bill ownership where a correction needs more than a generic journal reversal. Period close/reopen is now audited and enforced; salary catch-up posting/skip is available, but correction is not.
 3. Complete period `period_id` foreign-key migration, archive/restore policy, and one shared membership function across reports, budgets, and insights.
 4. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
