@@ -479,7 +479,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Scrape product data from URL
-  fastify.post("/api/wishlist/scrape", async (request, reply) => {
+  fastify.post("/api/wishlist/scrape", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "wishlist-scrape" } },
+  }, async (request, reply) => {
     const { url } = request.body as { url: string };
 
     if (!url || typeof url !== 'string') {
@@ -525,7 +527,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Advanced scraping with Puppeteer
-  fastify.post("/api/wishlist/scrape-advanced", async (request, reply) => {
+  fastify.post("/api/wishlist/scrape-advanced", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "wishlist-scrape" } },
+  }, async (request, reply) => {
     const { url } = request.body as { url: string };
 
     if (!url || typeof url !== 'string') {

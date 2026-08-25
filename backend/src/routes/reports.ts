@@ -43,7 +43,9 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   // Income Statement (Profit & Loss)
-  fastify.get("/api/reports/income-statement", async (request, reply) => {
+  fastify.get("/api/reports/income-statement", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
     try {
       const query = periodQuerySchema.parse(request.query);
 
@@ -60,7 +62,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Balance Sheet
-  fastify.get("/api/reports/balance-sheet", async (request, reply) => {
+  fastify.get("/api/reports/balance-sheet", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
     try {
       const { asOfDate } = asOfQuerySchema.parse(request.query);
 
@@ -72,7 +76,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Cash Flow Statement
-  fastify.get("/api/reports/cash-flow", async (request, reply) => {
+  fastify.get("/api/reports/cash-flow", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
     try {
       const query = periodQuerySchema.parse(request.query);
 
@@ -89,7 +95,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Spending Breakdown
-  fastify.get("/api/reports/spending", async (request, reply) => {
+  fastify.get("/api/reports/spending", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
     try {
       const query = periodQuerySchema.parse(request.query);
 
@@ -106,7 +114,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Export reports to CSV
-  fastify.get("/api/reports/export/:reportType", async (request, reply) => {
+  fastify.get("/api/reports/export/:reportType", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
     try {
       const { reportType } = z.object({ reportType: z.string() }).parse(request.params);
       const query = periodQuerySchema.parse(request.query);
@@ -158,7 +168,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Trend analysis (income/expenses over multiple periods)
-  fastify.get("/api/reports/trends", async (request, reply) => {
+  fastify.get("/api/reports/trends", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute", groupId: "reports" } },
+  }, async (request, reply) => {
     try {
       const { periodCount = 6 } = z.object({
         periodCount: z.coerce.number().int().min(1).max(24).optional(),

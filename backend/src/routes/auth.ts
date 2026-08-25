@@ -19,7 +19,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Google OAuth callback
-  fastify.get("/api/auth/google/callback", async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get("/api/auth/google/callback", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes", groupId: "auth" } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // @fastify/oauth2 may return either { token: { access_token } } or a flat shape depending on version
       const flowResult = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);

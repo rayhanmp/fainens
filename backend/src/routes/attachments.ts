@@ -95,7 +95,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Upload attachment
-  fastify.post("/api/attachments/upload", async (request, reply) => {
+  fastify.post("/api/attachments/upload", {
+    config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "attachment-upload" } },
+  }, async (request, reply) => {
     const body = request.body as {
       transactionId: number;
       filename: string;

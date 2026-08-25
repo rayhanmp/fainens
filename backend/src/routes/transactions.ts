@@ -753,7 +753,9 @@ RULES:
   });
 
   // Import preview endpoint
-  fastify.post("/api/transactions/import-preview", async (request, reply) => {
+  fastify.post("/api/transactions/import-preview", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "transaction-import" } },
+  }, async (request, reply) => {
     const { csvText, mappings, hasHeader, accountId, dateFormat } = request.body as {
       csvText: string;
       mappings: Record<string, string>;
@@ -806,7 +808,9 @@ RULES:
   });
 
   // Import confirm endpoint
-  fastify.post("/api/transactions/import-confirm", async (request, reply) => {
+  fastify.post("/api/transactions/import-confirm", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "transaction-import" } },
+  }, async (request, reply) => {
     const { rows, accountId, defaultDescription, tagIds } = request.body as {
       rows: Array<{ date: string; amountCents: number; description: string }>;
       accountId: number;
