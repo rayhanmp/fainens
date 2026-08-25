@@ -184,7 +184,7 @@ export const api = {
         success: boolean;
         requiresClassification: boolean;
         message: string;
-        session: { id: number; asOfDate: number; status: string };
+        session: { id: number; asOfDate: number; status: string; lifecycleStatus: 'active' | 'voided' };
         results: Array<{
           id: number;
           accountId: number;
@@ -198,6 +198,27 @@ export const api = {
         method: 'POST', 
         body: JSON.stringify({ balances }) 
       }),
+    voidReconciliation: (id: number, reason: string) =>
+      fetchApi(`/reconciliation/${id}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    reconciliationHistory: (limit = 10) => fetchApi<{
+      sessions: Array<{
+        id: number;
+        asOfDate: number;
+        status: 'reconciled' | 'needs_classification';
+        lifecycleStatus: 'active' | 'voided';
+        voidedAt: number | null;
+        voidReason: string | null;
+        items: Array<{
+          id: number;
+          accountId: number;
+          accountName: string;
+          ledgerBalance: number;
+          actualBalance: number;
+          difference: number;
+          status: 'matched' | 'needs_classification';
+        }>;
+      }>;
+    }>(`/reconciliation?limit=${limit}`),
   },
 
   // Transactions

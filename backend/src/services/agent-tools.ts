@@ -440,7 +440,15 @@ export async function listPeriodsTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 }) ?? 24;
   const limit = Math.min(requestedLimit, 100);
-  const periods = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+  const periods = await db.select({
+    id: salaryPeriods.id,
+    name: salaryPeriods.name,
+    startDate: salaryPeriods.startDate,
+    endDate: salaryPeriods.endDate,
+    status: salaryPeriods.status,
+    closedAt: salaryPeriods.closedAt,
+    reopenedAt: salaryPeriods.reopenedAt,
+  })
     .from(salaryPeriods).orderBy(desc(salaryPeriods.endDate)).limit(limit);
   const periodIds = periods.map((period) => period.id);
   const budgets = periodIds.length === 0 ? [] : await db.select({ periodId: budgetPlans.periodId, plannedCents: sql<number>`coalesce(sum(${budgetPlans.plannedAmount}), 0)` })

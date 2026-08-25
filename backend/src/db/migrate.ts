@@ -117,6 +117,15 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (!columnExists("salary_period", "reopened_at")) {
       db.$client.exec("ALTER TABLE salary_period ADD COLUMN reopened_at integer");
     }
+    if (!columnExists("reconciliation_session", "lifecycle_status")) {
+      db.$client.exec("ALTER TABLE reconciliation_session ADD COLUMN lifecycle_status text DEFAULT 'active' NOT NULL");
+    }
+    if (!columnExists("reconciliation_session", "voided_at")) {
+      db.$client.exec("ALTER TABLE reconciliation_session ADD COLUMN voided_at integer");
+    }
+    if (!columnExists("reconciliation_session", "void_reason")) {
+      db.$client.exec("ALTER TABLE reconciliation_session ADD COLUMN void_reason text");
+    }
     db.$client.exec(`
       CREATE TABLE IF NOT EXISTS __drizzle_migrations (
         id SERIAL PRIMARY KEY,
@@ -138,7 +147,7 @@ function assertRequiredSchema(): void {
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],
     splitbill_session: ["total_cents", "status"],
-    reconciliation_session: ["as_of_date", "status"],
+    reconciliation_session: ["as_of_date", "status", "lifecycle_status", "voided_at", "void_reason"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
     salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],

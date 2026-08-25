@@ -266,6 +266,38 @@ export default async function (fastify: FastifyInstance) {
     reply.code(204).send();
   });
 
+  // Reconciliation history is read-only evidence. It is intentionally
+  // separate from transactions and includes voided entries for auditability.
+  fastify.get("/api/reconciliation", async (request, reply) => {
+    const requestedLimit = Number((request.query as { limit?: string }).limit ?? 20);
+    if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1) {
+      return reply.code(400).send({ error: "limit must be a positive integer" });
+    }
+    const sessions = await db.select().from(reconciliationSessions)
+      .orderBy(desc(reconciliationSessions.asOfDate))
+      .limit(Math.min(requestedLimit, 100));
+    const sessionIds = sessions.map((session) => session.id);
+    const items = sessionIds.length === 0 ? [] : await db.select({
+      id: reconciliationItems.id,
+      sessionId: reconciliationItems.sessionId,
+      accountId: reconciliationItems.accountId,
+      accountName: accounts.name,
+      ledgerBalance: reconciliationItems.ledgerBalance,
+      actualBalance: reconciliationItems.actualBalance,
+      difference: reconciliationItems.difference,
+      status: reconciliationItems.status,
+    }).from(reconciliationItems)
+      .innerJoin(accounts, eq(reconciliationItems.accountId, accounts.id))
+      .where(inArray(reconciliationItems.sessionId, sessionIds));
+    const itemsBySession = new Map<number, typeof items>();
+    for (const item of items) {
+      const current = itemsBySession.get(item.sessionId) ?? [];
+      current.push(item);
+      itemsBySession.set(item.sessionId, current);
+    }
+    return { sessions: sessions.map((session) => ({ ...session, items: itemsBySession.get(session.id) ?? [] })) };
+  });
+
   // Reconciliation endpoint
   fastify.post("/api/reconciliation", async (request, reply) => {
     const { balances, asOfDate: requestedAsOf } = request.body as {
@@ -367,7 +399,6 @@ export default async function (fastify: FastifyInstance) {
           action: "create",
           afterSnapshot: Buffer.from(JSON.stringify({ session, items })),
         }).run();
-        bumpFinancialRevisionSync(tx);
         return { session, items: insertedItems.map((row, index) => ({ ...row, accountName: items[index].accountName })) };
       });
       const requiresClassification = result.items.some((item) => item.difference !== 0);
@@ -383,6 +414,49 @@ export default async function (fastify: FastifyInstance) {
     } catch (err) {
       fastify.log.error(err);
       return reply.code(500).send({ error: "Failed to record reconciliation" });
+    }
+  });
+
+  // A reconciliation is control evidence, not a journal. If an entered bank
+  // balance was wrong, retain that evidence and explicitly void it rather than
+  // deleting it or manufacturing an accounting reversal.
+  fastify.post("/api/reconciliation/:id/void", async (request, reply) => {
+    const sessionId = Number((request.params as { id: string }).id);
+    const rawReason = (request.body as { reason?: unknown } | undefined)?.reason;
+    const reason = typeof rawReason === "string" ? rawReason.trim() : "";
+    if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
+      return reply.code(400).send({ error: "Invalid reconciliation session ID" });
+    }
+    if (!reason || reason.length > 500) {
+      return reply.code(400).send({ error: "A void reason of at most 500 characters is required" });
+    }
+    try {
+      const voided = db.transaction((tx) => {
+        const session = tx.select().from(reconciliationSessions)
+          .where(eq(reconciliationSessions.id, sessionId)).limit(1).all()[0];
+        if (!session) throw new Error("Reconciliation session not found");
+        if (session.lifecycleStatus !== "active") throw new Error("Reconciliation session is already voided");
+        const updated = tx.update(reconciliationSessions)
+          .set({ lifecycleStatus: "voided", voidedAt: new Date(), voidReason: reason })
+          .where(and(
+            eq(reconciliationSessions.id, sessionId),
+            eq(reconciliationSessions.lifecycleStatus, "active"),
+          ))
+          .returning().all()[0];
+        if (!updated) throw new Error("Reconciliation session was changed; retry voiding it");
+        tx.insert(auditLogs).values({
+          entityType: "reconciliation_session",
+          entityId: sessionId,
+          action: "void",
+          beforeSnapshot: Buffer.from(JSON.stringify(session)),
+          afterSnapshot: Buffer.from(JSON.stringify(updated)),
+        }).run();
+        return updated;
+      });
+      return reply.send(voided);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to void reconciliation session";
+      return reply.code(message === "Reconciliation session not found" ? 404 : 409).send({ error: message });
     }
   });
 }

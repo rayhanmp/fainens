@@ -24,6 +24,16 @@ type ReconciliationRow = {
   isValid: boolean;
 };
 
+type ReconciliationSession = {
+  id: number;
+  asOfDate: number;
+  status: 'reconciled' | 'needs_classification';
+  lifecycleStatus: 'active' | 'voided';
+  voidedAt: number | null;
+  voidReason: string | null;
+  items: Array<{ id: number; accountId: number; accountName: string; difference: number }>;
+};
+
 interface ReconciliationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -47,6 +57,8 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [history, setHistory] = useState<ReconciliationSession[]>([]);
+  const [voidingSessionId, setVoidingSessionId] = useState<number | null>(null);
 
   const reconcilableAccounts = useMemo(() =>
     accounts.filter(a => a.type === 'asset' || a.type === 'liability'),
@@ -66,8 +78,29 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       })));
       setError(null);
       setResultMessage(null);
+      void api.accounts.reconciliationHistory().then(({ sessions }) => setHistory(sessions)).catch(() => setHistory([]));
     }
   }, [isOpen, reconcilableAccounts]);
+
+  const handleVoid = async (session: ReconciliationSession) => {
+    const reason = window.prompt(`Why should reconciliation #${session.id} be voided?`);
+    if (reason == null) return;
+    if (!reason.trim()) {
+      setError('A reason is required to void a reconciliation check');
+      return;
+    }
+    setVoidingSessionId(session.id);
+    setError(null);
+    try {
+      await api.accounts.voidReconciliation(session.id, reason.trim());
+      const { sessions } = await api.accounts.reconciliationHistory();
+      setHistory(sessions);
+    } catch (err) {
+      setError((err as Error).message || 'Failed to void reconciliation');
+    } finally {
+      setVoidingSessionId(null);
+    }
+  };
 
   const handleActualBalanceChange = (index: number, value: string) => {
     const actual = parseSignedIdNominalToInt(value);
@@ -258,6 +291,32 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
             {totals.diff !== 0 ? (totals.diff > 0 ? '+' : '') + formatCurrency(totals.diff) : 'Balanced'}
           </div>
         </div>
+
+        {history.length > 0 && (
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--ref-on-surface-variant)]">Recent balance checks</p>
+            <div className="space-y-2">
+              {history.slice(0, 5).map((session) => (
+                <div key={session.id} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="min-w-0 text-[var(--ref-on-surface-variant)]">
+                    {new Date(session.asOfDate).toLocaleDateString('en-ID')} · {session.items.length} accounts · {session.status.replace('_', ' ')}
+                    {session.lifecycleStatus === 'voided' && ' · VOIDED'}
+                  </span>
+                  {session.lifecycleStatus === 'active' && (
+                    <button
+                      type="button"
+                      onClick={() => handleVoid(session)}
+                      disabled={voidingSessionId !== null}
+                      className="shrink-0 text-[var(--color-danger)] underline disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {voidingSessionId === session.id ? 'Voiding…' : 'Void'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" onClick={onClose}>

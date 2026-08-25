@@ -195,6 +195,10 @@ export const reconciliationSessions = sqliteTable("reconciliation_session", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   asOfDate: integer("as_of_date", { mode: "timestamp_ms" }).notNull(),
   status: text("status").notNull(), // reconciled | needs_classification
+  /** Control-evidence lifecycle; a void never alters the ledger. */
+  lifecycleStatus: text("lifecycle_status").notNull().default("active"), // active | voided
+  voidedAt: integer("voided_at", { mode: "timestamp_ms" }),
+  voidReason: text("void_reason"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
