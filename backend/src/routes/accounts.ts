@@ -172,6 +172,29 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
+    if (body.type !== undefined && !accountTypeEnum.includes(body.type)) {
+      reply.code(400).send({ error: `Invalid account type. Must be one of: ${accountTypeEnum.join(", ")}` });
+      return;
+    }
+    if (body.name !== undefined && !body.name.trim()) {
+      reply.code(400).send({ error: "name cannot be empty" });
+      return;
+    }
+    if (body.type !== undefined && body.type !== existing.type) {
+      const [historicalLine] = await db
+        .select({ id: transactionLines.id })
+        .from(transactionLines)
+        .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+        .where(and(
+          eq(transactionLines.accountId, parseInt(id)),
+          sql`${transactions.status} <> 'draft'`,
+        ))
+        .limit(1);
+      if (historicalLine) {
+        return reply.code(409).send({ error: "Account type cannot change after posted journal history exists; archive it and create a new account" });
+      }
+    }
+
     // Validate liability-specific fields
     if (body.creditLimit !== undefined && (typeof body.creditLimit !== "number" || body.creditLimit < 0)) {
       reply.code(400).send({ error: "creditLimit must be a non-negative number" });
@@ -188,7 +211,7 @@ export default async function (fastify: FastifyInstance) {
 
     const updated = db.transaction((tx) => {
       const row = (tx.update(accounts).set({
-        ...(body.name !== undefined && { name: body.name }),
+        ...(body.name !== undefined && { name: body.name.trim() }),
         ...(body.type && { type: body.type }),
         ...(body.icon !== undefined && { icon: body.icon }),
         ...(body.color !== undefined && { color: body.color }),

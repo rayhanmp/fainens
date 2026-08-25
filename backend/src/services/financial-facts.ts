@@ -47,8 +47,8 @@ export async function getFinancialFacts(input: {
       t.category_id AS category_id,
       c.name AS category,
       t.tx_type AS tx_type,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit ELSE 0 END), 0) AS expense_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit ELSE 0 END), 0) AS income_cents
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit - tl.debit ELSE 0 END), 0) AS income_cents
     FROM "transaction" t
     LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
@@ -116,8 +116,8 @@ export async function getBudgetFacts(periodId: number): Promise<Array<{
       bp.category_id AS category_id,
       c.name AS category,
       bp.planned_amount AS planned_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit ELSE 0 END), 0) AS spent_cents,
-      COUNT(DISTINCT CASE WHEN a.type = 'expense' AND tl.debit > 0 THEN t.id END) AS transaction_count
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS spent_cents,
+      COUNT(DISTINCT CASE WHEN a.type = 'expense' AND tl.debit - tl.credit > 0 THEN t.id END) AS transaction_count
     FROM budget_plan bp
     INNER JOIN category c ON c.id = bp.category_id
     LEFT JOIN "transaction" t ON t.period_id = bp.period_id AND t.category_id = bp.category_id

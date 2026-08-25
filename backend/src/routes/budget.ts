@@ -54,7 +54,7 @@ export default async function (fastify: FastifyInstance) {
         if (revIds.length > 0) {
           const [incomeRow] = await db
             .select({
-              total: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+              total: sql<number>`coalesce(sum(${transactionLines.credit} - ${transactionLines.debit}), 0)`,
             })
             .from(transactions)
             .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
@@ -102,7 +102,7 @@ export default async function (fastify: FastifyInstance) {
             if (expIds.length > 0) {
               const [row] = await db
                 .select({
-                  total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+                  total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
                 })
                 .from(transactions)
                 .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
@@ -484,7 +484,7 @@ export default async function (fastify: FastifyInstance) {
           if (expIds.length > 0) {
             const [row] = await db
               .select({
-                total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+                total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
               })
               .from(transactions)
               .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))

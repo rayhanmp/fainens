@@ -234,7 +234,7 @@ export async function calculateBurnRate(months: number = 3): Promise<BurnRateRes
 
   const burnResult = await db
     .select({
-      total: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+      total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
     })
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))

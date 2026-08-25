@@ -3,8 +3,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { categories } from "../db/schema";
-import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
+import { auditLogs, budgetPlans, budgetTemplateItems, categories, transactions } from "../db/schema";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -70,17 +70,22 @@ export default async function (fastify: FastifyInstance) {
     const body = parseResult.data;
 
     try {
-      const [category] = await db
-        .insert(categories)
-        .values({
+      const category = db.transaction((tx) => {
+        const inserted = (tx.insert(categories).values({
           name: body.name.trim(),
           icon: body.icon ?? null,
           color: body.color ?? null,
-        })
-        .returning();
-
-      await auditCreate("category", category.id, { name: category.name, icon: category.icon, color: category.color });
-
+        }).returning().all() as any[])[0];
+        if (!inserted) throw new Error("Failed to create category");
+        tx.insert(auditLogs).values({
+          entityType: "category",
+          entityId: inserted.id,
+          action: "create",
+          afterSnapshot: Buffer.from(JSON.stringify(inserted)),
+        }).run();
+        bumpFinancialRevisionSync(tx);
+        return inserted;
+      });
       reply.code(201).send(category);
     } catch (error) {
       fastify.log.error(error);
@@ -109,17 +114,23 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    const [updated] = await db
-      .update(categories)
-      .set({
-        ...(body.name !== undefined && { name: body.name }),
+    const updated = db.transaction((tx) => {
+      const row = (tx.update(categories).set({
+        ...(body.name !== undefined && { name: body.name.trim() }),
         ...(body.icon !== undefined && { icon: body.icon }),
         ...(body.color !== undefined && { color: body.color }),
-      })
-      .where(eq(categories.id, parseInt(id)))
-      .returning();
-
-    await auditUpdate("category", parseInt(id), existing, updated);
+      }).where(eq(categories.id, parseInt(id))).returning().all() as any[])[0];
+      if (!row) throw new Error("Category update failed");
+      tx.insert(auditLogs).values({
+        entityType: "category",
+        entityId: parseInt(id),
+        action: "update",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify(row)),
+      }).run();
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
 
     return updated;
   });
@@ -134,9 +145,27 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    await db.delete(categories).where(eq(categories.id, parseInt(id)));
+    const categoryId = parseInt(id);
+    const [transactionReference] = await db.select({ id: transactions.id }).from(transactions)
+      .where(eq(transactions.categoryId, categoryId)).limit(1);
+    const [budgetReference] = await db.select({ id: budgetPlans.id }).from(budgetPlans)
+      .where(eq(budgetPlans.categoryId, categoryId)).limit(1);
+    const [templateReference] = await db.select({ id: budgetTemplateItems.id }).from(budgetTemplateItems)
+      .where(eq(budgetTemplateItems.categoryId, categoryId)).limit(1);
+    if (transactionReference || budgetReference || templateReference) {
+      return reply.code(409).send({ error: "Category is referenced by financial history or a budget template; rename it or create a replacement instead" });
+    }
 
-    await auditDelete("category", parseInt(id), existing);
+    db.transaction((tx) => {
+      tx.delete(categories).where(eq(categories.id, categoryId)).run();
+      tx.insert(auditLogs).values({
+        entityType: "category",
+        entityId: categoryId,
+        action: "delete",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+      }).run();
+      bumpFinancialRevisionSync(tx);
+    });
 
     reply.code(204).send();
   });

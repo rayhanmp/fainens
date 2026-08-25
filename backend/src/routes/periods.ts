@@ -129,7 +129,13 @@ export default async function (fastify: FastifyInstance) {
 
     const updates: any = {};
 
-    if (body.name) updates.name = body.name;
+    if (body.name !== undefined) {
+      if (!body.name.trim()) {
+        reply.code(400).send({ error: "name cannot be empty" });
+        return;
+      }
+      updates.name = body.name.trim();
+    }
     if (body.startDate) updates.startDate = new Date(body.startDate).getTime();
     if (body.endDate) updates.endDate = new Date(body.endDate).getTime();
 
@@ -176,7 +182,7 @@ export default async function (fastify: FastifyInstance) {
     }
 
     const [linkedTransaction] = await db.select({ id: transactions.id }).from(transactions)
-      .where(eq(transactions.periodId, parseInt(id))).limit(1);
+      .where(and(eq(transactions.periodId, parseInt(id)), sql`${transactions.status} <> 'draft'`)).limit(1);
     if (linkedTransaction) {
       reply.code(409).send({ error: "A period with posted transactions cannot be deleted; keep it for audit history" });
       return;
@@ -280,14 +286,21 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    const [period] = await db
-      .insert(salaryPeriods)
-      .values({
+    try {
+      await assertNoPeriodOverlap(startMs, endDate.getTime());
+    } catch (error) {
+      return reply.code(409).send({ error: (error as Error).message });
+    }
+    const period = db.transaction((tx) => {
+      const inserted = (tx.insert(salaryPeriods).values({
         name,
         startDate: startMs,
         endDate: endDate.getTime(),
-      })
-      .returning();
+      }).returning().all() as any[])[0];
+      if (!inserted) throw new Error("Failed to create period");
+      bumpFinancialRevisionSync(tx);
+      return inserted;
+    });
 
     reply.code(201).send(period);
   });
