@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 
-import { auditLogs, transactionLines, transactions } from "../db/schema";
-import { insertPreparedJournalEntrySync, prepareJournalEntry, type PreparedJournalEntry } from "./ledger";
+import { auditLogs, transactionCategoryAllocations, transactionLines, transactions } from "../db/schema";
+import { insertPreparedJournalEntrySync, prepareJournalEntry, type CategoryAllocationInput, type PreparedJournalEntry } from "./ledger";
 import { findPeriodIdForDate } from "./transaction-mutations";
 
 /**
@@ -25,6 +25,11 @@ export async function prepareDomainReversal(
   const lines = await dbLike.select().from(transactionLines)
     .where(eq(transactionLines.transactionId, originalTransactionId));
   if (lines.length < 2) throw new Error("Cannot reverse an incomplete journal");
+  const allocations = await dbLike.select({
+    categoryId: transactionCategoryAllocations.categoryId,
+    amount: transactionCategoryAllocations.amount,
+  }).from(transactionCategoryAllocations)
+    .where(eq(transactionCategoryAllocations.transactionId, originalTransactionId));
 
   const reversalDate = Date.now();
   const periodId = await findPeriodIdForDate(reversalDate);
@@ -36,6 +41,13 @@ export async function prepareDomainReversal(
     txType: "domain_reversal",
     periodId,
     reversalOfTxId: original.id,
+    categoryId: original.categoryId,
+    ...(allocations.length > 0 ? {
+      categoryAllocations: allocations.map((allocation: CategoryAllocationInput) => ({
+        categoryId: allocation.categoryId,
+        amount: -allocation.amount,
+      })),
+    } : {}),
     lines: lines.map((line: typeof transactionLines.$inferSelect) => ({
       accountId: line.accountId,
       debit: line.credit,

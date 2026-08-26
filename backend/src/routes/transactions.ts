@@ -2,7 +2,7 @@ import { eq, and, desc, sql, inArray, count, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, tags, accounts, categories, auditLogs } from "../db/schema";
+import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs } from "../db/schema";
 import {
   createJournalEntry,
   createSimpleTransaction,
@@ -669,6 +669,11 @@ RULES:
       const originalLines = await db.select().from(transactionLines)
         .where(eq(transactionLines.transactionId, transactionId));
       if (originalLines.length < 2) return reply.code(409).send({ error: "Cannot reverse an incomplete journal" });
+      const originalAllocations = await db.select({
+        categoryId: transactionCategoryAllocations.categoryId,
+        amount: transactionCategoryAllocations.amount,
+      }).from(transactionCategoryAllocations)
+        .where(eq(transactionCategoryAllocations.transactionId, transactionId));
       const reversalDate = Date.now();
       const reversalPeriodId = await findPeriodIdForDate(reversalDate);
       const prepared = await prepareJournalEntry({
@@ -679,6 +684,13 @@ RULES:
         txType: "reversal",
         periodId: reversalPeriodId,
         reversalOfTxId: original.id,
+        categoryId: original.categoryId,
+        ...(originalAllocations.length > 0 ? {
+          categoryAllocations: originalAllocations.map((allocation) => ({
+            categoryId: allocation.categoryId,
+            amount: -allocation.amount,
+          })),
+        } : {}),
         lines: originalLines.map((line) => ({
           accountId: line.accountId,
           debit: line.credit,

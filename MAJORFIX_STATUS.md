@@ -146,6 +146,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Salary and subscription corrections require a reason and atomically create an inverse journal plus a replacement journal, then move the durable recurring occurrence to the replacement. They default to the current accounting period; a closed historical period remains protected unless explicitly reopened.
 - Generic transaction reversal now refuses salary, subscription, PayLater, loan, and split-bill journal types, so it cannot silently desynchronise a domain subledger.
+- Generic and domain-owned reversal paths now invert persisted category allocations together with the journal lines, so the inverse journal's allocations still equal its net expense; legacy category-only rows retain the ledger's category fallback.
 - Loan payments now carry a durable posted/reversed lifecycle. Reversing a payment creates the linked inverse journal, restores the principal to the loan balance, reopens a fully paid loan when appropriate, and audits both the payment and loan state. Legacy databases gain the fields through migration `0011` without data deletion.
 
 ### `8392388` and `6d6912b` — owned correction workflows (PayLater and split bills)
