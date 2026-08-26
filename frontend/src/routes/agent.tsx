@@ -155,6 +155,24 @@ type TransactionEditDraft = {
   notes: string;
 };
 
+type TransactionProposalStatus = 'pending' | 'editing' | 'saving' | 'executing' | 'executed' | 'rejected' | 'expired' | 'superseded' | 'error';
+
+function initialTransactionProposalStatus(status: string): TransactionProposalStatus {
+  if (status === 'pending' || status === 'rejected' || status === 'expired' || status === 'superseded' || status === 'executed') return status;
+  return 'error';
+}
+
+function transactionProposalStatusLabel(status: TransactionProposalStatus): string {
+  if (status === 'pending') return 'Needs your review';
+  if (status === 'executing') return 'Working…';
+  if (status === 'executed') return 'Posted';
+  if (status === 'rejected') return 'Dismissed';
+  if (status === 'expired') return 'Expired';
+  if (status === 'superseded') return 'Replaced';
+  if (status === 'editing' || status === 'saving') return 'Editing';
+  return 'Could not post';
+}
+
 function localDateTimeInput(timestamp: number): string {
   const date = new Date(timestamp);
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -226,7 +244,7 @@ function TransactionProposalCard({
   conversationId?: number | null;
 }) {
   const [currentProposal, setCurrentProposal] = useState(proposal);
-  const [status, setStatus] = useState<'pending' | 'editing' | 'saving' | 'executing' | 'executed' | 'rejected' | 'error'>(proposal.status === 'pending' ? 'pending' : 'error');
+  const [status, setStatus] = useState<TransactionProposalStatus>(initialTransactionProposalStatus(proposal.status));
   const [message, setMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<TransactionEditDraft>(() => draftFromProposal(proposal));
   const details = currentProposal.details;
@@ -342,7 +360,7 @@ function TransactionProposalCard({
           <p className="text-sm font-semibold">Transaction ready for review</p>
           <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">Nothing is posted until you confirm it.</p>
         </div>
-        <span className={cn('rounded-full bg-[var(--color-surface)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide', status === 'executed' && 'text-[var(--color-success)]')}>{status === 'pending' ? 'Needs your review' : status}</span>
+        <span className={cn('rounded-full bg-[var(--color-surface)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide', (status === 'executed' || status === 'rejected') && 'text-[var(--color-success)]')}>{transactionProposalStatusLabel(status)}</span>
       </div>
       {status === 'editing' || status === 'saving' ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -376,6 +394,10 @@ function TransactionProposalCard({
       </details>
       {currentProposal.approvalToken && status === 'pending' && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={beginEdit}><Pencil className="h-4 w-4" /> Edit details</Button><Button size="sm" onClick={() => void execute()}><Check className="h-4 w-4" /> Confirm &amp; post</Button><Button size="sm" variant="secondary" onClick={() => void reject()}>Dismiss</Button></div>}
       {!currentProposal.approvalToken && status === 'pending' && <p className="mt-3 text-xs text-[var(--color-danger)]">This proposal is from an earlier session. Ask the agent to prepare it again before posting.</p>}
+      {status === 'rejected' && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">This proposal was dismissed; nothing was posted.</p>}
+      {status === 'expired' && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">This proposal expired before confirmation; ask the agent to prepare it again.</p>}
+      {status === 'superseded' && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">This proposal was replaced by a newer proposal; nothing was posted from this one.</p>}
+      {status === 'executed' && !message && <p className="mt-3 text-xs text-[var(--color-success)]">This transaction has already been posted.</p>}
       {message && <p className={cn('mt-3 text-xs', (status === 'executed' || status === 'rejected' || message.startsWith('Updated.')) ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{message}</p>}
     </div>
   );
