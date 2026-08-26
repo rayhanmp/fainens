@@ -29,18 +29,28 @@ function foreignKeyExists(table: string, fromColumn: string, toTable: string): b
 
 function applyTransactionPeriodForeignKeyMigration(): void {
   if (foreignKeyExists("transaction", "period_id", "salary_period")) return;
+  if (db.$client.inTransaction) {
+    throw new Error("Transaction period foreign-key repair must run outside a SQLite transaction");
+  }
   // Reuse the checked-in 0013 migration rather than inventing a second table
-  // shape. The migration repairs dangling period IDs before rebuilding the
-  // transaction table inside SQLite's transactional DDL semantics.
+  // shape. This table rebuild drops the parent table, so foreign keys must be
+  // disabled *before* it begins. SQLite ignores PRAGMA foreign_keys changes
+  // inside a transaction; if left enabled, DROP TABLE cascades into every
+  // transaction_line, tag, and attachment row.
   const migrationPath = path.join(backendRoot, "drizzle", "0013_dapper_titania.sql");
   const migrationSql = fs.readFileSync(migrationPath, "utf8").replace(/--> statement-breakpoint/g, "");
-  db.$client.exec(`
-    DROP INDEX IF EXISTS idx_transactions_date;
-    DROP INDEX IF EXISTS idx_transactions_period_id;
-    DROP INDEX IF EXISTS idx_transactions_category_id;
-    DROP INDEX IF EXISTS idx_transactions_tx_type;
-  `);
-  db.$client.exec(migrationSql);
+  db.$client.pragma("foreign_keys = OFF");
+  try {
+    db.$client.exec(`
+      DROP INDEX IF EXISTS idx_transactions_date;
+      DROP INDEX IF EXISTS idx_transactions_period_id;
+      DROP INDEX IF EXISTS idx_transactions_category_id;
+      DROP INDEX IF EXISTS idx_transactions_tx_type;
+    `);
+    db.$client.exec(migrationSql);
+  } finally {
+    db.$client.pragma("foreign_keys = ON");
+  }
   if (!foreignKeyExists("transaction", "period_id", "salary_period")) {
     throw new Error("Legacy transaction rebuild did not create the period foreign key");
   }
@@ -236,9 +246,15 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (tableExists("paylater_installment") && !columnExists("paylater_installment", "paid_cents")) {
       db.$client.exec("ALTER TABLE paylater_installment ADD COLUMN paid_cents integer DEFAULT 0 NOT NULL");
     }
-    if (tableExists("transaction") && tableExists("salary_period")) {
-      applyTransactionPeriodForeignKeyMigration();
-    }
+  });
+  upgrade();
+  // PRAGMA foreign_keys cannot take effect within the transaction above. Run
+  // the destructive table rebuild only after the core compatibility changes
+  // have committed, and do not mark the schema baseline until it succeeds.
+  if (tableExists("transaction") && tableExists("salary_period")) {
+    applyTransactionPeriodForeignKeyMigration();
+  }
+  db.$client.transaction(() => {
     db.$client.exec(`
       CREATE TABLE IF NOT EXISTS __drizzle_migrations (
         id SERIAL PRIMARY KEY,
@@ -249,8 +265,7 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     db.$client
       .prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)")
       .run("legacy-push-baseline-0016", compatibilityFloor.when);
-  });
-  upgrade();
+  })();
 }
 
 function assertRequiredSchema(): void {
