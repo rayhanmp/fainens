@@ -5,7 +5,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import { AccountModal } from '../components/accounts/AccountModal';
@@ -19,12 +19,12 @@ import {
   Search,
   X,
   Download,
-  ArrowUp,
-  Sparkles,
-  NotebookPen,
   Scale,
   WalletCards,
   Banknote,
+  Clock3,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/accounts')({
@@ -41,13 +41,19 @@ type AccountRow = {
   systemKey: string | null;
   isActive: boolean;
   balance: number;
+  parentId: number | null;
+  liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
+  description: string | null;
+  creditLimit: number | null;
+  accountNumber: string | null;
+  provider: string | null;
 };
 
 /** Buckets aligned with Stitch Financial Command Center columns */
-type LedgerBucket = 'cash' | 'ewallet' | 'creditcard' | 'paylater';
+type LedgerBucket = 'cash' | 'ewallet' | 'investment' | 'receivable' | 'creditcard' | 'paylater';
 
 function bucketAccount(a: AccountRow): LedgerBucket {
-  const n = a.name.toLowerCase();
+  const n = `${a.name} ${a.provider ?? ''}`.toLowerCase();
   if (a.type === 'liability') {
     if (/pay\s*later|traveloka|kredivo|akulaku|split|defer|humm|afterpay|shopee\s*pay\s*later/.test(n)) {
       return 'paylater';
@@ -56,18 +62,32 @@ function bucketAccount(a: AccountRow): LedgerBucket {
   }
   if (/pay\s*later|traveloka|kredivo|akulaku/.test(n)) return 'paylater';
   if (/credit|visa|mastercard|jcb|amex|kartu|precious|signature|platinum/.test(n)) return 'creditcard';
+  if (a.liquidityClass === 'investment') return 'investment';
+  if (a.liquidityClass === 'receivable') return 'receivable';
   if (/gopay|ovo|dana|shopee|linkaja|grabpay|gopay|e-?wallet|ewallet|tokopedia\s*pay/.test(n)) {
     return 'ewallet';
   }
   return 'cash';
 }
 
+function maskAccountNumber(accountNumber: string | null | undefined) {
+  if (!accountNumber) return null;
+  const compact = accountNumber.replace(/\s/g, '');
+  return compact ? `•••• ${compact.slice(-4)}` : null;
+}
+
+function formatShortDate(value: number | null | undefined) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat('en-ID', { day: 'numeric', month: 'short' }).format(new Date(value));
+}
+
 function downloadAccountsCsv(rows: AccountRow[]) {
-  const header = 'Name,Type,Balance (IDR)\n';
+  const header = 'Name,Type,Liquidity,Identifier,Balance (IDR)\n';
   const body = rows
     .map((a) => {
       const name = a.name.replace(/"/g, '""');
-      return `"${name}",${a.type},${a.balance}`;
+      const identifier = maskAccountNumber(a.accountNumber) ?? '';
+      return `"${name}",${a.type},${a.liquidityClass},"${identifier}",${a.balance}`;
     })
     .join('\n');
   const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
@@ -81,20 +101,26 @@ function downloadAccountsCsv(rows: AccountRow[]) {
 
 function AccountsPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [allAccounts, setAllAccounts] = useState<AccountRow[]>([]);
   const [summary, setSummary] = useState<{
     totalAssets: number;
     totalLiabilities: number;
     netWorth: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
+  const [reconciliationSessions, setReconciliationSessions] = useState<Awaited<ReturnType<typeof api.accounts.reconciliationHistory>>['sessions']>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountRow | null>(null);
   const { confirm } = useConfirm();
 
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'asset' | 'liability'>('all');
+  const requestVersion = useRef(0);
 
 
 
@@ -104,17 +130,31 @@ function AccountsPage() {
   }, [searchInput]);
 
   const loadAccounts = useCallback(async () => {
+    const requestId = ++requestVersion.current;
     setIsLoading(true);
     try {
-      const params: { type?: string; search?: string } = {};
+      const params: { type?: string; search?: string; includeInactive?: boolean } = {};
       if (typeFilter !== 'all') params.type = typeFilter;
       if (debouncedSearch) params.search = debouncedSearch;
+      if (showArchived) params.includeInactive = true;
 
-      const [list, dash] = await Promise.all([
-        api.accounts.list(Object.keys(params).length ? params : undefined),
+      const filtered = Object.keys(params).length > 0;
+      const listPromise = api.accounts.list(filtered ? params : undefined);
+      const allPromise = filtered ? api.accounts.list() : listPromise;
+      const [list, all, dash, history] = await Promise.all([
+        listPromise,
+        allPromise,
         api.analytics.dashboard().catch(() => null),
+        api.accounts.reconciliationHistory(25).catch(() => ({ sessions: [] })),
       ]);
-      setAccounts(list as AccountRow[]);
+      if (requestId !== requestVersion.current) return;
+      const currentAccounts = list as AccountRow[];
+      const completeAccounts = all as AccountRow[];
+      setAccounts(currentAccounts);
+      setAllAccounts(completeAccounts);
+      setReconciliationSessions(history.sessions);
+      setLoadError(null);
+      setLastLoadedAt(Date.now());
 
       if (dash?.netWorth) {
         setSummary({
@@ -123,8 +163,7 @@ function AccountsPage() {
           netWorth: dash.netWorth.netWorth,
         });
       } else {
-        const full = (await api.accounts.list()) as AccountRow[];
-        const ua = full.filter((a) => !a.systemKey);
+        const ua = completeAccounts.filter((a) => !a.systemKey);
         let totalAssets = 0;
         let totalLiabilities = 0;
         for (const a of ua) {
@@ -139,11 +178,13 @@ function AccountsPage() {
       }
     } catch (e) {
       console.error(e);
-      setSummary({ totalAssets: 0, totalLiabilities: 0, netWorth: 0 });
+      if (requestId === requestVersion.current) {
+        setLoadError(e instanceof Error ? e.message : 'Unable to load account balances');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestVersion.current) setIsLoading(false);
     }
-  }, [debouncedSearch, typeFilter]);
+  }, [debouncedSearch, showArchived, typeFilter]);
 
   useEffect(() => {
     void loadAccounts();
@@ -157,10 +198,39 @@ function AccountsPage() {
   const isFilteredQuery =
     debouncedSearch.length > 0 || typeFilter !== 'all';
 
+  const latestReconciliationByAccount = useMemo(() => {
+    const result = new Map<number, { asOfDate: number; status: string; difference: number }>();
+    for (const session of reconciliationSessions) {
+      if (session.lifecycleStatus === 'voided') continue;
+      for (const item of session.items) {
+        if (!result.has(item.accountId)) {
+          result.set(item.accountId, {
+            asOfDate: session.asOfDate,
+            status: item.status,
+            difference: item.difference,
+          });
+        }
+      }
+    }
+    return result;
+  }, [reconciliationSessions]);
+
+  const reconciliationSummary = useMemo(() => {
+    const checked = userAccounts.filter((account) => latestReconciliationByAccount.has(account.id));
+    const issues = checked.filter((account) => latestReconciliationByAccount.get(account.id)?.difference !== 0);
+    const latest = checked
+      .map((account) => latestReconciliationByAccount.get(account.id)?.asOfDate ?? 0)
+      .filter(Boolean)
+      .sort((a, b) => b - a)[0] ?? null;
+    return { checked: checked.length, issues: issues.length, total: userAccounts.length, latest };
+  }, [latestReconciliationByAccount, userAccounts]);
+
   const buckets = useMemo(() => {
     const m: Record<LedgerBucket, AccountRow[]> = {
       cash: [],
       ewallet: [],
+      investment: [],
+      receivable: [],
       creditcard: [],
       paylater: [],
     };
@@ -172,9 +242,9 @@ function AccountsPage() {
 
   const handleDelete = async (id: number) => {
     const confirmed = await confirm({
-      title: 'Delete Account',
-      message: 'Delete this account? It will be hidden from the ledger.',
-      confirmLabel: 'Delete',
+      title: 'Archive account',
+      message: 'Archive this account? Its history will be kept, but it will no longer be available for new entries.',
+      confirmLabel: 'Archive',
       variant: 'danger',
     });
     if (!confirmed) return;
@@ -184,6 +254,15 @@ function AccountsPage() {
       await loadAccounts();
     } catch (err) {
       console.error('Delete error:', err);
+      alert((err as Error).message);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      await api.accounts.restore(id);
+      await loadAccounts();
+    } catch (err) {
       alert((err as Error).message);
     }
   };
@@ -206,6 +285,7 @@ function AccountsPage() {
     () => buckets.paylater.reduce((s, a) => s + Math.abs(a.balance), 0),
     [buckets.paylater],
   );
+  const isInitialLoading = isLoading && allAccounts.length === 0;
 
   return (
     <RequireAuth>
@@ -215,6 +295,7 @@ function AccountsPage() {
           <PageHeader
             subtext="Account overview"
             title="Accounts"
+            description="See what you have, what you owe, and how recently each balance was checked."
           />
           <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <div className="hidden min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]/80 px-3 py-1.5 sm:flex sm:max-w-xs md:max-w-sm">
@@ -278,6 +359,25 @@ function AccountsPage() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-[var(--ref-error)]/30 bg-[var(--ref-error-container)]/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-error)]" aria-hidden />
+              <div>
+                <p className="text-sm font-semibold text-[var(--ref-on-surface)]">Couldn’t refresh account balances</p>
+                <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">
+                  {lastLoadedAt
+                    ? `Showing the last successful snapshot from ${new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })}. Your balances were not replaced with zeroes.`
+                    : 'No account snapshot is available yet. Your balances were not replaced with zeroes.'}
+                </p>
+              </div>
+            </div>
+            <Button type="button" variant="secondary" size="sm" className="rounded-full self-start sm:self-auto" onClick={() => void loadAccounts()}>
+              Try again
+            </Button>
+          </div>
+        )}
+
         {/* Mobile / sm search */}
         <div className="flex min-h-[40px] items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-3 py-2 sm:hidden">
           <Search className="h-4 w-4 shrink-0 text-[var(--ref-outline)]" aria-hidden />
@@ -291,10 +391,10 @@ function AccountsPage() {
         </div>
 
         {/* Slim metrics bar — Stitch */}
-        {isLoading ? (
+        {isInitialLoading ? (
           <div className="h-24 animate-pulse rounded-xl bg-[var(--ref-surface-container-highest)]/50" />
         ) : summary ? (
-          <section className="flex flex-wrap items-center justify-between gap-6 rounded-xl bg-[var(--ref-surface-container-lowest)] p-4 editorial-shadow">
+          <section className="rounded-2xl bg-[var(--ref-surface-container-lowest)] p-5 editorial-shadow">
             <div className="flex flex-wrap items-center gap-6 md:gap-8">
               <div>
                 <p className="mb-1 font-body text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
@@ -304,9 +404,9 @@ function AccountsPage() {
                   <span className="font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">
                     {formatCurrency(summary.netWorth)}
                   </span>
-                  <span className="inline-flex items-center gap-0.5 rounded bg-[var(--ref-secondary-container)]/30 px-1.5 py-0.5 text-[10px] font-bold text-[var(--ref-secondary)]">
-                    <ArrowUp className="h-3 w-3" aria-hidden />
-                    ledger
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ref-surface-container)] px-2 py-1 text-[10px] font-semibold text-[var(--ref-on-surface-variant)]">
+                    <Clock3 className="h-3 w-3" aria-hidden />
+                    {lastLoadedAt ? `Updated ${new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Ledger balance'}
                   </span>
                 </div>
               </div>
@@ -329,11 +429,16 @@ function AccountsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 rounded-full border border-[var(--ref-outline-variant)]/30 bg-[var(--ref-surface-container)] px-3 py-1.5">
-              <NotebookPen className="h-3.5 w-3.5 text-[var(--ref-primary)]" aria-hidden />
-              <span className="text-[10px] font-medium uppercase tracking-tighter text-[var(--ref-on-surface-variant)]">
-                Manual ledger mode
-              </span>
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--ref-outline-variant)]/20 pt-4 text-xs text-[var(--ref-on-surface-variant)]">
+              <CheckCircle2 className="h-4 w-4 text-[var(--ref-secondary)]" aria-hidden />
+              <span>{reconciliationSummary.checked}/{reconciliationSummary.total || 0} {isFilteredQuery ? 'shown accounts' : 'accounts'} checked</span>
+              {reconciliationSummary.issues > 0 ? (
+                <span className="font-semibold text-[var(--ref-error)]">· {reconciliationSummary.issues} need attention</span>
+              ) : reconciliationSummary.checked === reconciliationSummary.total && reconciliationSummary.total > 0 ? (
+                <span className="font-semibold text-[var(--ref-secondary)]">· All matched</span>
+              ) : (
+                <span>· Reconcile to verify today’s balances</span>
+              )}
             </div>
           </section>
         ) : null}
@@ -354,13 +459,17 @@ function AccountsPage() {
             className="min-w-[168px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-low)] text-xs font-semibold"
           />
           <p className="text-xs text-[var(--ref-on-surface-variant)]">
-            Accounts are grouped automatically (name hints).{' '}
+            Grouped by account type and liquidity treatment.{' '}
             <span className="font-bold text-[var(--ref-on-surface)]">{userAccounts.length}</span> shown
           </p>
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--ref-on-surface-variant)]">
+            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+            Show archived
+          </label>
         </div>
 
-        {/* 4-column ledger grid — Stitch */}
-        {isLoading ? (
+        {/* Account groups */}
+        {isInitialLoading ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="space-y-4">
@@ -369,6 +478,12 @@ function AccountsPage() {
                 <div className="h-28 animate-pulse rounded-xl bg-[var(--ref-surface-container-highest)]/40" />
               </div>
             ))}
+          </div>
+        ) : userAccounts.length === 0 && loadError ? (
+          <div className="rounded-2xl border border-dashed border-[var(--ref-error)]/30 bg-[var(--ref-surface-container-lowest)] px-6 py-14 text-center">
+            <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-[var(--ref-error)] opacity-70" aria-hidden />
+            <p className="font-headline text-base font-semibold text-[var(--ref-on-surface)]">Account data is unavailable</p>
+            <p className="mt-2 text-sm text-[var(--ref-on-surface-variant)]">Try refreshing once the backend is reachable.</p>
           </div>
         ) : userAccounts.length === 0 && !isFilteredQuery ? (
           <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-6 py-14 text-center editorial-shadow">
@@ -396,7 +511,9 @@ function AccountsPage() {
               emptyHint="Bank, cash, savings"
               onEdit={openModal}
               onDelete={handleDelete}
+              onRestore={handleRestore}
               cardVariant="cash"
+              reconciliationByAccount={latestReconciliationByAccount}
             />
             <LedgerColumn
               title="E-wallets"
@@ -404,15 +521,43 @@ function AccountsPage() {
               emptyHint="GoPay, OVO, DANA…"
               onEdit={openModal}
               onDelete={handleDelete}
+              onRestore={handleRestore}
               cardVariant="ewallet"
+              reconciliationByAccount={latestReconciliationByAccount}
             />
+            {buckets.investment.length > 0 && (
+              <LedgerColumn
+                title="Investments"
+                accounts={buckets.investment}
+                emptyHint="Funds, stocks, crypto…"
+                onEdit={openModal}
+                onDelete={handleDelete}
+                onRestore={handleRestore}
+                cardVariant="investment"
+                reconciliationByAccount={latestReconciliationByAccount}
+              />
+            )}
+            {buckets.receivable.length > 0 && (
+              <LedgerColumn
+                title="Receivables"
+                accounts={buckets.receivable}
+                emptyHint="Money owed to you"
+                onEdit={openModal}
+                onDelete={handleDelete}
+                onRestore={handleRestore}
+                cardVariant="receivable"
+                reconciliationByAccount={latestReconciliationByAccount}
+              />
+            )}
             <LedgerColumn
               title="Credit cards"
               accounts={buckets.creditcard}
               emptyHint="Cards & loans"
               onEdit={openModal}
               onDelete={handleDelete}
+              onRestore={handleRestore}
               cardVariant="credit"
+              reconciliationByAccount={latestReconciliationByAccount}
             />
             <LedgerColumn
               title="PayLater"
@@ -420,54 +565,18 @@ function AccountsPage() {
               emptyHint="Deferred liabilities"
               onEdit={openModal}
               onDelete={handleDelete}
+              onRestore={handleRestore}
               cardVariant="paylater"
               footerSummary={payLaterTotal > 0 ? payLaterTotal : undefined}
+              reconciliationByAccount={latestReconciliationByAccount}
             />
-          </section>
-        )}
-
-        {/* Market velocity + insights — Stitch footer strip */}
-        {!isLoading && userAccounts.length > 0 && (
-          <section className="grid grid-cols-1 gap-6 md:grid-cols-4">
-            <div className="flex flex-col justify-between gap-4 rounded-xl border border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-lowest)] p-6 md:col-span-3 md:flex-row md:items-center editorial-shadow">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <h3 className="font-headline text-xs font-extrabold uppercase tracking-widest text-[var(--ref-on-surface)]">
-                    Market velocity
-                  </h3>
-                  <span className="rounded bg-[var(--ref-secondary-container)]/25 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[var(--ref-secondary)]">
-                    Ledger benchmark
-                  </span>
-                </div>
-                <p className="max-w-lg text-[10px] text-[var(--ref-on-surface-variant)]">
-                  Net position and account mix update as you post manual entries. Use transactions to keep balances in
-                  sync with reality.
-                </p>
-              </div>
-              <div className="flex h-16 shrink-0 items-end gap-1 px-2 md:w-1/3">
-                {[40, 55, 70, 60, 85, 75, 95, 100].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t-sm bg-[var(--ref-primary-container)]"
-                    style={{ height: `${h}%`, opacity: 0.12 + i * 0.1 }}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="relative flex flex-col justify-center overflow-hidden rounded-xl bg-[var(--ref-primary)] p-6 text-white editorial-shadow">
-              <Sparkles className="absolute right-2 top-2 h-10 w-10 opacity-20" aria-hidden />
-              <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Insights</p>
-              <p className="mt-1 text-xs font-semibold leading-relaxed">
-                Review low-activity wallets and consolidate idle balances into your primary account.
-              </p>
-            </div>
           </section>
         )}
 
         <footer className="flex flex-col gap-2 border-t border-[var(--ref-outline-variant)]/20 pt-4 text-[10px] font-medium text-[var(--ref-outline)] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-4">
-            <span className="uppercase tracking-tighter">Manual ledger: active</span>
-            <span className="uppercase tracking-tighter">Data integrity: verified</span>
+            <span className="uppercase tracking-tighter">Balances are ledger-based</span>
+            <span className="uppercase tracking-tighter">Reconcile against your real statements</span>
           </div>
           <div className="flex flex-wrap gap-4 uppercase tracking-tighter">
             <span>Fainens · command center</span>
@@ -484,7 +593,7 @@ function AccountsPage() {
         <ReconciliationModal
           isOpen={isReconciliationOpen}
           onClose={() => setIsReconciliationOpen(false)}
-          accounts={accounts}
+          accounts={allAccounts.length > 0 ? allAccounts : accounts}
           onSuccess={loadAccounts}
         />
       </PageContainer>
@@ -498,16 +607,20 @@ function LedgerColumn({
   emptyHint,
   onEdit,
   onDelete,
+  onRestore,
   cardVariant,
   footerSummary,
+  reconciliationByAccount,
 }: {
   title: string;
   accounts: AccountRow[];
   emptyHint: string;
   onEdit: (a: AccountRow) => void;
   onDelete: (id: number) => void;
-  cardVariant: 'cash' | 'ewallet' | 'credit' | 'paylater';
+  onRestore: (id: number) => void;
+  cardVariant: 'cash' | 'ewallet' | 'investment' | 'receivable' | 'credit' | 'paylater';
   footerSummary?: number;
+  reconciliationByAccount: Map<number, { asOfDate: number; status: string; difference: number }>;
 }) {
   const countLabel =
     cardVariant === 'credit' && accounts.some((a) => a.type === 'liability')
@@ -535,6 +648,8 @@ function LedgerColumn({
             darkCard={cardVariant === 'credit' && a.type === 'liability' && idx === 0}
             onEdit={() => onEdit(a)}
             onDelete={() => onDelete(a.id)}
+            onRestore={() => onRestore(a.id)}
+            reconciliation={reconciliationByAccount.get(a.id)}
           />
         ))
       )}
@@ -558,15 +673,34 @@ function AccountTile({
   darkCard,
   onEdit,
   onDelete,
+  onRestore,
+  reconciliation,
 }: {
   account: AccountRow;
-  variant: 'cash' | 'ewallet' | 'credit' | 'paylater';
+  variant: 'cash' | 'ewallet' | 'investment' | 'receivable' | 'credit' | 'paylater';
   darkCard?: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onRestore: () => void;
+  reconciliation?: { asOfDate: number; status: string; difference: number };
 }) {
   const accent = a.color || 'var(--ref-primary-container)';
-  const maskHint = `···${String(a.id).slice(-4).padStart(4, '0')}`;
+  const identifier = maskAccountNumber(a.accountNumber);
+
+  const reconciliationLabel = reconciliation
+    ? reconciliation.difference === 0
+      ? `Checked ${formatShortDate(reconciliation.asOfDate)}`
+      : `Review difference ${formatCurrency(Math.abs(reconciliation.difference))}`
+    : 'Not checked yet';
+  const reconciliationClass = reconciliation
+    ? reconciliation.difference === 0
+      ? 'text-[var(--ref-secondary)]'
+      : 'text-[var(--ref-error)]'
+    : 'text-[var(--ref-outline)]';
+
+  const accountIdentifier = identifier ? `Account ${identifier}` : 'No account number added';
+  const lifecycleAction = a.isActive ? onDelete : onRestore;
+  const lifecycleLabel = a.isActive ? 'Archive' : 'Restore';
 
   if (darkCard) {
     return (
@@ -583,18 +717,20 @@ function AccountTile({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="rounded p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-[var(--color-text-primary)] group-hover:opacity-100"
+                className="rounded p-1 text-[var(--color-text-secondary)] opacity-70 transition-opacity hover:text-[var(--color-text-primary)] md:opacity-0 md:group-hover:opacity-100"
                 onClick={onEdit}
+                aria-label={`Edit ${a.name}`}
+                title="Edit account"
               >
                 <Edit2 className="h-4 w-4" />
               </button>
               <CreditCard className="h-5 w-5 text-amber-400" aria-hidden />
             </div>
           </div>
-          <p className="text-[10px] text-[var(--color-text-secondary)]">Ledger balance</p>
+          <p className="text-[10px] text-[var(--color-text-secondary)]">Amount owed</p>
           <p className="font-headline text-xl font-extrabold tracking-tight">{formatCurrency(a.balance)}</p>
           <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-3 text-[10px]">
-            <span className="text-[var(--color-muted)]">Ref: {maskHint}</span>
+            <span className={cn('truncate pr-2', reconciliationClass)}>{reconciliationLabel}</span>
             <Link
               to="/transactions"
               search={{ accountId: String(a.id) }}
@@ -603,12 +739,13 @@ function AccountTile({
               Ledger
             </Link>
           </div>
+          <p className="mt-2 truncate text-[10px] text-[var(--color-muted)]">{accountIdentifier}</p>
           <button
             type="button"
-            onClick={onDelete}
+            onClick={lifecycleAction}
             className="mt-2 text-[10px] text-[var(--color-danger)] hover:opacity-80"
           >
-            Remove
+            {lifecycleLabel}
           </button>
         </div>
       </article>
@@ -635,8 +772,10 @@ function AccountTile({
           </div>
           <button
             type="button"
-            className="rounded p-1 text-[var(--ref-outline)] opacity-0 hover:text-[var(--ref-primary)] group-hover:opacity-100"
+            className="rounded p-1 text-[var(--ref-outline)] opacity-70 hover:text-[var(--ref-primary)] md:opacity-0 md:group-hover:opacity-100"
             onClick={onEdit}
+            aria-label={`Edit ${a.name}`}
+            title="Edit account"
           >
             <Edit2 className="h-4 w-4" />
           </button>
@@ -645,11 +784,12 @@ function AccountTile({
           <p className="font-headline text-lg font-bold tracking-tight text-[var(--ref-on-surface)]">
             {formatCurrency(a.balance)}
           </p>
-          <span className="rounded bg-[var(--ref-surface-container)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ref-on-surface-variant)]">
-            WALLET
+          <span className={cn('rounded bg-[var(--ref-surface-container)] px-2 py-0.5 text-[10px] font-semibold', reconciliationClass)}>
+            {reconciliationLabel}
           </span>
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-[var(--ref-outline-variant)]/15 pt-2">
+          <span className="truncate pr-2 text-[10px] text-[var(--ref-on-surface-variant)]">{accountIdentifier}</span>
           <Link
             to="/transactions"
             search={{ accountId: String(a.id) }}
@@ -657,9 +797,36 @@ function AccountTile({
           >
             Activity
           </Link>
-          <button type="button" onClick={onDelete} className="text-[10px] text-[var(--ref-error)] hover:underline cursor-pointer">
-            Remove
+          <button type="button" onClick={lifecycleAction} className="text-[10px] text-[var(--ref-error)] hover:underline cursor-pointer">
+            {lifecycleLabel}
           </button>
+        </div>
+      </article>
+    );
+  }
+
+  if (variant === 'investment' || variant === 'receivable') {
+    const label = variant === 'investment' ? 'Investment' : 'Receivable';
+    return (
+      <article className="group rounded-xl border border-[var(--ref-outline-variant)]/25 bg-[var(--ref-surface-container-lowest)] p-4 transition-all hover:-translate-y-0.5 hover:shadow-[0px_16px_32px_rgba(25,27,35,0.08)]">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">{label}</p>
+            <h4 className="truncate font-headline text-sm font-bold text-[var(--ref-on-surface)]">{a.name}</h4>
+          </div>
+          <button type="button" className="rounded p-1 text-[var(--ref-outline)] opacity-70 hover:text-[var(--ref-primary)] md:opacity-0 md:group-hover:opacity-100" onClick={onEdit} aria-label={`Edit ${a.name}`} title="Edit account">
+            <Edit2 className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="text-[10px] text-[var(--ref-on-surface-variant)]">{variant === 'investment' ? 'Current value' : 'Amount owed to you'}</p>
+        <p className="font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(a.balance)}</p>
+        <div className="mt-3 flex items-center justify-between border-t border-[var(--ref-outline-variant)]/15 pt-3 text-[10px]">
+          <span className={cn('truncate pr-2', reconciliationClass)}>{reconciliationLabel}</span>
+          <Link to="/transactions" search={{ accountId: String(a.id) }} className="font-bold text-[var(--ref-primary)] hover:underline">Activity</Link>
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          <span className="truncate text-[10px] text-[var(--ref-on-surface-variant)]">{accountIdentifier}</span>
+          <button type="button" onClick={lifecycleAction} className="text-[10px] text-[var(--ref-error)] hover:underline">{lifecycleLabel}</button>
         </div>
       </article>
     );
@@ -668,25 +835,32 @@ function AccountTile({
   if (variant === 'paylater') {
     return (
       <article className="group rounded-xl border border-[var(--ref-outline-variant)]/30 bg-[var(--ref-surface-container)] p-4 transition-all hover:shadow-[0px_10px_25px_rgba(25,27,35,0.05)]">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[10px] font-bold uppercase text-[var(--ref-on-surface-variant)]">PayLater</p>
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase text-[var(--ref-on-surface-variant)]">PayLater</p>
+            <h4 className="truncate font-headline text-sm font-bold text-[var(--ref-on-surface)]">{a.name}</h4>
+          </div>
           <button
             type="button"
-            className="rounded p-0.5 text-[var(--ref-outline)] opacity-0 hover:text-[var(--ref-primary)] group-hover:opacity-100 cursor-pointer"
+            className="rounded p-0.5 text-[var(--ref-outline)] opacity-70 hover:text-[var(--ref-primary)] md:opacity-0 md:group-hover:opacity-100 cursor-pointer"
             onClick={onEdit}
+            aria-label={`Edit ${a.name}`}
+            title="Edit account"
           >
             <Edit2 className="h-4 w-4" />
           </button>
         </div>
+        <p className="text-[10px] text-[var(--ref-on-surface-variant)]">Amount owed</p>
         <p className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">{formatCurrency(a.balance)}</p>
+        {a.creditLimit != null && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}
         <div className="mt-3 flex items-center justify-between text-[9px] font-semibold">
-          <span className="uppercase text-[var(--ref-error)]">Ledger liability</span>
+          <span className={cn('uppercase', reconciliationClass)}>{reconciliationLabel}</span>
           <Link to="/transactions" search={{ accountId: String(a.id) }} className="text-[var(--ref-primary)] hover:underline">
             Entries
           </Link>
         </div>
-        <button type="button" onClick={onDelete} className="mt-2 text-[10px] text-[var(--ref-error)] hover:underline cursor-pointer">
-          Remove
+        <button type="button" onClick={lifecycleAction} className="mt-2 text-[var(--ref-error)] hover:underline cursor-pointer">
+          {lifecycleLabel}
         </button>
       </article>
     );
@@ -713,30 +887,35 @@ function AccountTile({
         </div>
         <button
           type="button"
-          className="rounded p-1 text-[var(--ref-outline)] opacity-0 hover:text-[var(--ref-primary)] group-hover:opacity-100"
+          className="rounded p-1 text-[var(--ref-outline)] opacity-70 hover:text-[var(--ref-primary)] md:opacity-0 md:group-hover:opacity-100"
           onClick={onEdit}
+          aria-label={`Edit ${a.name}`}
+          title="Edit account"
         >
           <Edit2 className="h-4 w-4" />
         </button>
       </div>
+      <p className="text-[10px] text-[var(--ref-on-surface-variant)]">{a.type === 'liability' ? 'Amount owed' : 'Available balance'}</p>
       <p className="font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">
         {formatCurrency(a.balance)}
       </p>
+      {isCreditLight && a.creditLimit != null && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}
       <div className="mt-4 flex items-center justify-between border-t border-[var(--ref-outline-variant)]/15 pt-4 text-[10px] font-medium text-[var(--ref-on-surface-variant)]">
         <span className="flex items-center gap-1">
           <Banknote className="h-3 w-3" aria-hidden />
-          Acc: {maskHint}
+          {accountIdentifier}
         </span>
         <Link to="/transactions" search={{ accountId: String(a.id) }} className="font-bold text-[var(--ref-primary)] hover:underline">
           Ledger
         </Link>
       </div>
+      <p className={cn('mt-2 text-[10px] font-semibold', reconciliationClass)}>{reconciliationLabel}</p>
       <button
         type="button"
-        onClick={onDelete}
+        onClick={lifecycleAction}
         className="mt-2 text-[10px] font-medium text-[var(--ref-error)] hover:underline"
       >
-        Remove account
+        {a.isActive ? 'Archive account' : 'Restore account'}
       </button>
     </article>
   );

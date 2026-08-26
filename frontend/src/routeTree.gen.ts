@@ -25,6 +25,7 @@ import { Route as LoansRouteImport } from './routes/loans'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as BudgetRouteImport } from './routes/budget'
 import { Route as AuditLogRouteImport } from './routes/audit-log'
+import { Route as AnomaliesRouteImport } from './routes/anomalies'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as IndexRouteImport } from './routes/index'
@@ -109,6 +110,11 @@ const AuditLogRoute = AuditLogRouteImport.update({
   path: '/audit-log',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnomaliesRoute = AnomaliesRouteImport.update({
+  id: '/anomalies',
+  path: '/anomalies',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentRoute = AgentRouteImport.update({
   id: '/agent',
   path: '/agent',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
   '/agent': typeof AgentRoute
+  '/anomalies': typeof AnomaliesRoute
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
   '/agent': typeof AgentRoute
+  '/anomalies': typeof AnomaliesRoute
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
   '/agent': typeof AgentRoute
+  '/anomalies': typeof AnomaliesRoute
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/accounts'
     | '/agent'
+    | '/anomalies'
     | '/audit-log'
     | '/budget'
     | '/categories'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/'
     | '/accounts'
     | '/agent'
+    | '/anomalies'
     | '/audit-log'
     | '/budget'
     | '/categories'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/'
     | '/accounts'
     | '/agent'
+    | '/anomalies'
     | '/audit-log'
     | '/budget'
     | '/categories'
@@ -259,6 +271,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountsRoute: typeof AccountsRoute
   AgentRoute: typeof AgentRoute
+  AnomaliesRoute: typeof AnomaliesRoute
   AuditLogRoute: typeof AuditLogRoute
   BudgetRoute: typeof BudgetRoute
   CategoriesRoute: typeof CategoriesRoute
@@ -391,6 +404,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuditLogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/anomalies': {
+      id: '/anomalies'
+      path: '/anomalies'
+      fullPath: '/anomalies'
+      preLoaderRoute: typeof AnomaliesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agent': {
       id: '/agent'
       path: '/agent'
@@ -419,6 +439,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountsRoute: AccountsRoute,
   AgentRoute: AgentRoute,
+  AnomaliesRoute: AnomaliesRoute,
   AuditLogRoute: AuditLogRoute,
   BudgetRoute: BudgetRoute,
   CategoriesRoute: CategoriesRoute,

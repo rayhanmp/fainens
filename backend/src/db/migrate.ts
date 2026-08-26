@@ -21,6 +21,12 @@ function columnExists(table: string, column: string): boolean {
   return rows.some((row) => row.name === column);
 }
 
+function triggerExists(name: string): boolean {
+  return Boolean(db.$client.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ? LIMIT 1",
+  ).get(name));
+}
+
 function foreignKeyExists(table: string, fromColumn: string, toTable: string): boolean {
   const safeTable = table.replace(/[^a-zA-Z0-9_]/g, "");
   const rows = db.$client.prepare(`PRAGMA foreign_key_list('${safeTable}')`).all() as Array<{ from: string; table: string }>;
@@ -268,11 +274,69 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
   })();
 }
 
+/**
+ * A few early deployments used `db push` and later switched to checked-in
+ * migrations. Those databases can have the post-migration schema but an
+ * incomplete __drizzle_migrations history. Drizzle only compares the latest
+ * timestamp, so it would replay CREATE/ALTER statements and fail with
+ * "already exists". When every object owned by a migration is already
+ * present, record a synthetic history row and let the normal migrator continue
+ * from the first genuinely missing schema change. This is additive and never
+ * removes user data.
+ */
+function repairMigrationHistory(journal: MigrationJournal): void {
+  db.$client.exec(`
+    CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at numeric
+    )
+  `);
+
+  const has = (table: string, ...columns: string[]) =>
+    tableExists(table) && columns.every((column) => columnExists(table, column));
+  const satisfied: Record<string, boolean> = {
+    "0006_flowery_lester": has("financial_state", "id", "revision", "updated_at"),
+    "0010_rich_blackheart": has("reconciliation_session", "lifecycle_status", "voided_at", "void_reason"),
+    "0012_dashing_jack_power": has("paylater_settlement_allocation", "settlement_tx_id", "installment_id", "amount_cents"),
+    "0014_flawless_iron_patriot": has("account", "liquidity_class"),
+    "0015_aromatic_mentallo": has("transaction_category_allocation", "transaction_id", "category_id", "amount") && has("category", "reporting_account_id"),
+    "0016_ancient_the_executioner": has("salary_period", "is_active", "archived_at"),
+    "0017_premium_strong_guy": has("money_anomaly_review", "fingerprint", "kind", "transaction_id", "detected_amount", "reason", "status") && has("transaction_line", "cash_flow_class"),
+    "0018_sharp_patch": has("reconciliation_session", "kind", "note") && has("salary_period", "coverage_status", "coverage_reason"),
+    "0019_agent_conversation_state": has("agent_conversation", "id", "owner_email", "title") && has("agent_message", "id", "conversation_id", "role", "content"),
+    "0020_agent_conversation_lifecycle": has("agent_conversation", "is_pinned", "archived_at"),
+    "0021_agent_action_approval": has("agent_pending_action", "id", "owner_email", "kind", "status") && has("agent_approval", "id", "pending_action_id", "token_hash", "status"),
+    "0022_cache_invalidation_outbox": has("cache_invalidation_outbox", "id", "operation", "revision", "status", "attempts", "created_at"),
+    "0023_revision_cache_outbox_trigger": triggerExists("cache_invalidation_on_revision"),
+    "0024_category_archive_lifecycle": has("category", "is_active"),
+  };
+  const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
+  let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
+  const repairRows: Array<{ tag: string; when: number }> = [];
+  for (const entry of journal.entries) {
+    if (!satisfied[entry.tag] || entry.when <= latest) continue;
+    // Do not jump over a missing migration. A later schema object may have
+    // been created manually, but earlier migrations still need to run.
+    const prior = journal.entries.filter((candidate) => candidate.when < entry.when);
+    if (prior.some((candidate) => satisfied[candidate.tag] === false)) continue;
+    repairRows.push(entry);
+    latest = entry.when;
+  }
+  if (repairRows.length === 0) return;
+  const insert = db.$client.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)");
+  db.$client.transaction(() => {
+    for (const entry of repairRows) {
+      insert.run(`schema-repair-${entry.tag}`, entry.when);
+    }
+  })();
+}
+
 function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
     transaction: ["id", "date", "tx_type", "subscription_id", "status", "reversal_of_tx_id"],
     account: ["id", "type", "liquidity_class"],
-    category: ["id", "name", "reporting_account_id"],
+    category: ["id", "name", "is_active", "reporting_account_id"],
     transaction_line: ["transaction_id", "account_id", "debit", "credit", "cash_flow_class"],
     money_anomaly_review: ["fingerprint", "kind", "transaction_id", "detected_amount", "reason", "status"],
     transaction_category_allocation: ["transaction_id", "category_id", "amount"],
@@ -286,6 +350,7 @@ function assertRequiredSchema(): void {
     loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
     paylater_settlement_allocation: ["settlement_tx_id", "installment_id", "amount_cents"],
     financial_state: ["id", "revision", "updated_at"],
+    cache_invalidation_outbox: ["id", "operation", "revision", "status", "attempts", "created_at"],
     agent_conversation: ["id", "owner_email", "title", "created_at", "updated_at", "is_pinned", "archived_at"],
     agent_message: ["id", "conversation_id", "role", "content", "created_at"],
     agent_pending_action: ["id", "owner_email", "conversation_id", "kind", "normalized_input", "base_financial_revision", "status", "expires_at", "created_at", "updated_at"],
@@ -364,6 +429,7 @@ export async function bootstrapDb() {
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as MigrationJournal;
   if (journal.entries.length === 0) throw new Error("Migration journal is empty");
   baselineLegacyPushDatabase(journal);
+  repairMigrationHistory(journal);
 
   // The better-sqlite3 migrator is synchronous and records every applied
   // migration in __drizzle_migrations. Startup must fail closed if the schema

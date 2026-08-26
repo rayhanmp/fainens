@@ -45,6 +45,7 @@ export const Route = createFileRoute('/transactions')({
     periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
     accountId: typeof search.accountId === 'string' ? search.accountId : undefined,
     categoryId: typeof search.categoryId === 'string' ? search.categoryId : undefined,
+    transactionId: typeof search.transactionId === 'string' ? search.transactionId : undefined,
     action: typeof search.action === 'string' ? search.action : undefined,
   }),
 
@@ -93,7 +94,11 @@ interface TransactionRow {
     credit: number;
     description?: string;
     cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
+    accountName?: string | null;
+    accountType?: string | null;
+    accountSystemKey?: string | null;
   }>;
+  categoryAllocations?: Array<{ categoryId: number; amount: number; categoryName?: string | null }>;
   tags: Array<{ tagId: number; name: string; color: string }>;
 }
 
@@ -189,7 +194,7 @@ function downloadTransactionsCsv(
 }
 
 function TransactionsPage() {
-  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; categoryId?: string; action?: string };
+  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; categoryId?: string; transactionId?: string; action?: string };
   const navigate = useNavigate({ from: '/transactions' });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { confirm } = useConfirm();
@@ -204,6 +209,7 @@ function TransactionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [transactionDataComplete, setTransactionDataComplete] = useState(true);
   const dataRequestVersion = useRef(0);
+  const openedDeepLinkId = useRef<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<EditingTransaction | null>(null);
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
@@ -256,6 +262,28 @@ function TransactionsPage() {
       });
     }
   }, [search.action]);
+
+  useEffect(() => {
+    if (!search.transactionId || openedDeepLinkId.current === search.transactionId) return;
+    const id = Number(search.transactionId);
+    if (!Number.isSafeInteger(id) || id <= 0) return;
+    openedDeepLinkId.current = search.transactionId;
+    void api.transactions.get(id).then((transaction) => {
+      openModal({
+        ...transaction,
+        status: 'posted',
+        reference: undefined,
+        periodId: null,
+        linkedTxId: null,
+        debitCents: undefined,
+        creditCents: undefined,
+        expenseCents: undefined,
+        incomeCents: undefined,
+      } as unknown as TransactionRow, 'view');
+    }).catch(() => {
+      openedDeepLinkId.current = null;
+    });
+  }, [search.transactionId]);
 
   useEffect(() => {
     const version = ++dataRequestVersion.current;
@@ -441,6 +469,7 @@ function TransactionsPage() {
         categoryId: transaction.categoryId,
         txType: transaction.txType,
         lines: transaction.lines,
+        categoryAllocations: transaction.categoryAllocations,
         tags: transaction.tags,
       });
     } else {
@@ -474,9 +503,10 @@ function TransactionsPage() {
         const walletLine = tx.lines.find((l) => {
           const acc = accounts.find((a) => a.id === l.accountId);
           // Wallet account is an asset that is NOT a system loan account
-          return acc && acc.type === 'asset' && !acc.systemKey?.includes('loan');
+          return (acc ? acc.type === 'asset' && !acc.systemKey?.includes('loan') : l.accountType === 'asset' && !l.accountSystemKey?.includes('loan'));
         });
         const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
+        const walletName = walletLine?.accountName ?? acc?.name;
         // For loans: if wallet has credit, money left your wallet (negative)
         // if wallet has debit, money entered your wallet (positive)
         const signedAmount = walletLine
@@ -488,9 +518,9 @@ function TransactionsPage() {
           kind: 'loan' as const,
           amount: signedAmount,
           detail: isLoanCreation
-            ? `Loan created · ${acc?.name ?? 'Wallet'}`
+            ? `Loan created · ${walletName ?? 'Wallet'}`
             : isLoanPayment
-            ? `Payment · ${acc?.name ?? 'Wallet'}`
+            ? `Payment · ${walletName ?? 'Wallet'}`
             : tx.description,
           loanType: isLoanCreation ? 'creation' : isLoanPayment ? 'payment' : 'other',
         };
@@ -504,7 +534,7 @@ function TransactionsPage() {
         return {
           kind: 'transfer' as const,
           amount: journalAmount,
-          detail: `${from?.name ?? '?'} → ${to?.name ?? '?'}`,
+          detail: `${cred?.accountName ?? from?.name ?? '?'} → ${deb?.accountName ?? to?.name ?? '?'}`,
         };
       }
 
@@ -515,7 +545,7 @@ function TransactionsPage() {
         return {
           kind: 'expense' as const,
           amount,
-          detail: cat ? `${cat.name} · ${acc?.name ?? 'Wallet'}` : tx.description,
+          detail: cat ? `${cat.name} · ${walletLine?.accountName ?? acc?.name ?? 'Wallet'}` : tx.description,
         };
       }
 
@@ -525,7 +555,7 @@ function TransactionsPage() {
         return {
           kind: 'income' as const,
           amount,
-          detail: acc?.name ?? tx.description,
+          detail: walletLine?.accountName ?? acc?.name ?? tx.description,
         };
       }
 

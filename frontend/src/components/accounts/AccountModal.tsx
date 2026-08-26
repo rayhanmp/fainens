@@ -7,6 +7,7 @@ import { cn, parseIdNominalToInt } from '../../lib/utils';
 import { Wallet, CreditCard } from 'lucide-react';
 
 type AccountType = 'asset' | 'liability';
+type LiquidityClass = 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface AccountModalProps {
     interestRate?: number | null;
     billingDate?: number | null;
     provider?: string | null;
+    liquidityClass?: LiquidityClass | null;
   } | null;
 }
 
@@ -45,6 +47,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
     interestRate: '',
     billingDate: '',
     provider: '',
+    liquidityClass: 'cash_equivalent' as LiquidityClass,
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,6 +65,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
           interestRate: editingAccount.interestRate ? String(editingAccount.interestRate) : '',
           billingDate: editingAccount.billingDate ? String(editingAccount.billingDate) : '',
           provider: editingAccount.provider || '',
+          liquidityClass: editingAccount.liquidityClass || (editingAccount.type === 'asset' ? 'cash_equivalent' : 'non_cash'),
         });
       } else {
         setFormData({
@@ -73,6 +77,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
           interestRate: '',
           billingDate: '',
           provider: '',
+          liquidityClass: 'cash_equivalent',
         });
       }
       setFormError('');
@@ -90,13 +95,27 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
     setFormError('');
 
     try {
-      const payload: any = {
+      const payload: {
+        name: string;
+        type: AccountType;
+        description: string | null;
+        accountNumber: string | null;
+        provider: string | null;
+        liquidityClass?: LiquidityClass;
+        creditLimit?: number;
+        interestRate?: number;
+        billingDate?: number;
+      } = {
         name: formData.name.trim(),
         type: formData.type,
         description: formData.description || null,
         accountNumber: formData.accountNumber || null,
         provider: formData.provider || null,
       };
+
+      if (formData.type === 'asset') {
+        payload.liquidityClass = formData.liquidityClass;
+      }
 
       // Add liability-specific fields
       if (formData.type === 'liability') {
@@ -211,6 +230,28 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
                 ▾
               </span>
             </div>
+          </div>
+        )}
+
+        {/* Asset treatment */}
+        {formData.type === 'asset' && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+              How should this asset be counted?
+            </label>
+            <select
+              value={formData.liquidityClass}
+              onChange={(e) => setFormData({ ...formData, liquidityClass: e.target.value as LiquidityClass })}
+              className="w-full appearance-none bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
+            >
+              <option value="cash_equivalent">Available cash (bank, wallet, physical cash)</option>
+              <option value="receivable">Money owed to me (receivable)</option>
+              <option value="investment">Investment or long-term asset</option>
+              <option value="non_cash">Other non-cash asset</option>
+            </select>
+            <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+              This controls available cash, runway, and cash-flow reporting. Choose carefully.
+            </p>
           </div>
         )}
 

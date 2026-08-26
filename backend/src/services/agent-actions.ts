@@ -220,7 +220,8 @@ function actionView(
 
 async function loadBudgetDetails(input: BudgetActionInput) {
   const ids = input.plans.map((plan) => plan.categoryId);
-  const rows = await db.select({ id: categories.id, name: categories.name }).from(categories).where(inArray(categories.id, ids));
+  const rows = await db.select({ id: categories.id, name: categories.name }).from(categories)
+    .where(and(inArray(categories.id, ids), eq(categories.isActive, true)));
   const byId = new Map(rows.map((row) => [row.id, row.name]));
   const missing = ids.filter((id) => !byId.has(id));
   if (missing.length > 0) throw new AgentActionError(404, `Category not found: ${missing.join(", ")}`);
@@ -574,7 +575,7 @@ export async function executeAgentApproval(args: { ownerEmail: string; approvalI
     const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, input.periodId)).limit(1).all()[0];
     if (!period || period.status !== "open" || !period.isActive) return { error: new AgentActionError(409, "The target period is no longer open and active") } as const;
     const categoryRows = tx.select({ id: categories.id, name: categories.name }).from(categories)
-      .where(inArray(categories.id, input.plans.map((plan) => plan.categoryId))).all();
+      .where(and(inArray(categories.id, input.plans.map((plan) => plan.categoryId)), eq(categories.isActive, true))).all();
     const categoryIds = new Set(categoryRows.map((row) => row.id));
     const missing = input.plans.map((plan) => plan.categoryId).filter((id) => !categoryIds.has(id));
     if (missing.length > 0) return { error: new AgentActionError(409, `A proposed category no longer exists: ${missing.join(", ")}`) } as const;

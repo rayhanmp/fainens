@@ -80,6 +80,7 @@ export type EditingTransaction = {
   categoryId?: number | null;
   txType?: string;
   lines: TxLine[];
+  categoryAllocations?: Array<{ categoryId: number; amount: number; categoryName?: string | null }>;
   tags: Array<{ tagId: number; name: string; color: string }>;
 };
 
@@ -289,6 +290,7 @@ export function TransactionModal({
       { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
       { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
     ] as JournalFormLine[],
+    categoryAllocations: [] as Array<{ categoryId: string; amount: string }>,
   });
 
   // AI mode state
@@ -466,6 +468,10 @@ export function TransactionModal({
           description: l.description || '',
           cashFlowClass: l.cashFlowClass === 'operating' || l.cashFlowClass === 'investing' || l.cashFlowClass === 'financing' || l.cashFlowClass === 'transfer' ? l.cashFlowClass : '',
         })),
+        categoryAllocations: (editingTransaction.categoryAllocations ?? []).map((allocation) => ({
+          categoryId: allocation.categoryId.toString(),
+          amount: allocation.amount.toString(),
+        })),
       });
       // Load attachments for editing transaction
       api.attachments.list(editingTransaction.id.toString())
@@ -523,6 +529,7 @@ export function TransactionModal({
           { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
           { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
         ],
+        categoryAllocations: [],
       });
     }
     setFormError('');
@@ -925,6 +932,29 @@ export function TransactionModal({
     return { totalDebit, totalCredit, isBalanced: totalDebit === totalCredit && totalDebit > 0 };
   };
 
+  const calculateJournalNetExpense = () => journalForm.lines.reduce((sum, line) => {
+    const account = accounts.find((item) => item.id.toString() === line.accountId);
+    if (account?.type !== 'expense') return sum;
+    return sum + (parseInt(line.debit, 10) || 0) - (parseInt(line.credit, 10) || 0);
+  }, 0);
+
+  const updateCategoryAllocation = (index: number, field: 'categoryId' | 'amount', value: string) => {
+    setJournalForm({
+      ...journalForm,
+      categoryAllocations: journalForm.categoryAllocations.map((allocation, allocationIndex) =>
+        allocationIndex === index ? { ...allocation, [field]: value } : allocation,
+      ),
+    });
+  };
+
+  const addCategoryAllocation = () => {
+    setJournalForm({ ...journalForm, categoryAllocations: [...journalForm.categoryAllocations, { categoryId: '', amount: '' }] });
+  };
+
+  const removeCategoryAllocation = (index: number) => {
+    setJournalForm({ ...journalForm, categoryAllocations: journalForm.categoryAllocations.filter((_, allocationIndex) => allocationIndex !== index) });
+  };
+
   const handleJournalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -954,6 +984,26 @@ export function TransactionModal({
       return;
     }
 
+    const netExpense = calculateJournalNetExpense();
+    const allocationRows = journalForm.categoryAllocations.filter((allocation) => allocation.categoryId || allocation.amount);
+    const parsedAllocations = allocationRows.map((allocation) => ({
+      categoryId: parseInt(allocation.categoryId, 10),
+      amount: parseInt(allocation.amount, 10),
+    }));
+    if (parsedAllocations.some((allocation) => !Number.isSafeInteger(allocation.categoryId) || allocation.categoryId <= 0 || !Number.isSafeInteger(allocation.amount) || allocation.amount === 0)) {
+      setFormError('Each category allocation needs a category and a non-zero whole-rupiah amount');
+      return;
+    }
+    if (new Set(parsedAllocations.map((allocation) => allocation.categoryId)).size !== parsedAllocations.length) {
+      setFormError('A category can appear only once in the allocation list');
+      return;
+    }
+    const allocationTotal = parsedAllocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+    if (netExpense !== 0 && allocationTotal !== netExpense) {
+      setFormError(`Category allocations must equal the journal's net expense (${formatCurrency(netExpense)}). Current total: ${formatCurrency(allocationTotal)}.`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const dateIso = new Date(journalForm.dateTime).toISOString();
@@ -970,6 +1020,7 @@ export function TransactionModal({
           description: line.description || undefined,
           cashFlowClass: line.cashFlowClass || undefined,
         })),
+        categoryAllocations: parsedAllocations,
       });
       onSaved();
       onClose();
@@ -1769,6 +1820,47 @@ export function TransactionModal({
                 <Plus className="w-4 h-4 mr-1" />
                 Add line
               </Button>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <label className="text-sm font-semibold text-[var(--color-text-primary)]">Category allocations</label>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">Split the journal's net expense across categories. Refunds can use negative amounts.</p>
+                </div>
+                <Button type="button" variant="secondary" onClick={addCategoryAllocation} size="sm" className="shrink-0 rounded-full">
+                  <Plus className="mr-1 h-4 w-4" /> Add category
+                </Button>
+              </div>
+              {journalForm.categoryAllocations.length === 0 ? (
+                <p className="text-xs text-[var(--color-muted)]">No split added. Expense journals must add allocations before recording.</p>
+              ) : journalForm.categoryAllocations.map((allocation, index) => (
+                <div key={index} className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={allocation.categoryId}
+                    onChange={(e) => updateCategoryAllocation(index, 'categoryId', e.target.value)}
+                    options={[{ value: '', label: 'Category...' }, ...categories.map((category) => ({ value: category.id.toString(), label: category.name }))]}
+                    className={cn('min-w-[180px] flex-1', stitchSelect)}
+                  />
+                  <Input
+                    type="number"
+                    value={allocation.amount}
+                    onChange={(e) => updateCategoryAllocation(index, 'amount', e.target.value)}
+                    placeholder="Amount"
+                    className="w-32 rounded-xl"
+                  />
+                  <button type="button" onClick={() => removeCategoryAllocation(index)} className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10" aria-label="Remove category allocation">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              {(() => {
+                const netExpense = calculateJournalNetExpense();
+                const allocated = journalForm.categoryAllocations.reduce((sum, allocation) => sum + (parseInt(allocation.amount, 10) || 0), 0);
+                return <p className={cn('text-xs font-semibold', netExpense === allocated ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]')}>
+                  Allocated {formatCurrency(allocated)} · Net expense {formatCurrency(netExpense)}
+                </p>;
+              })()}
             </div>
 
             {(() => {

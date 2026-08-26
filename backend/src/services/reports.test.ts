@@ -11,7 +11,7 @@ beforeAll(async () => {
 describe("exportReportToCSV", () => {
   it("exports cash-flow statements instead of returning an empty file", () => {
     const csv = exportReportToCSV({
-      operating: [{ category: "Operating", description: "Salary, net", amount: 10_000, type: "operating" }],
+      operating: [{ category: "Operating", description: "Salary, net", amount: 10_000, type: "operating", classificationSource: "legacy_inference" }],
       investing: [],
       financing: [],
       netOperating: 10_000,

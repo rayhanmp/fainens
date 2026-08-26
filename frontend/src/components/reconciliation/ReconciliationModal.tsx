@@ -12,11 +12,13 @@ type Account = {
   type: string;
   balance: number;
   icon?: string | null;
+  systemKey?: string | null;
 };
 
 type ReconciliationRow = {
   accountId: number;
   accountName: string;
+  accountType: 'asset' | 'liability';
   ledgerBalance: number;
   actualBalance: string;
   difference: number;
@@ -53,10 +55,11 @@ function AccountIcon({ name }: { name: string }) {
   return <Wallet className="w-4 h-4" />;
 }
 
-function rowsFor(accounts: Account[]): ReconciliationRow[] {
-  return accounts.filter(a => a.type === 'asset' || a.type === 'liability').map(a => ({
+function rowsFor(accounts: Account[], includeSystemAccounts = false): ReconciliationRow[] {
+  return accounts.filter(a => (a.type === 'asset' || a.type === 'liability') && (includeSystemAccounts || !a.systemKey)).map(a => ({
     accountId: a.id,
     accountName: a.name,
+    accountType: a.type as 'asset' | 'liability',
     ledgerBalance: a.balance,
     actualBalance: formatCurrency(a.balance),
     difference: 0,
@@ -78,7 +81,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [asOfDate, setAsOfDate] = useState(() => toLocalDateInputValue());
 
   const reconcilableAccounts = useMemo(() =>
-    accounts.filter(a => a.type === 'asset' || a.type === 'liability'),
+    accounts.filter(a => (a.type === 'asset' || a.type === 'liability') && !a.systemKey),
     [accounts]
   );
 
@@ -103,7 +106,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       // A recovery snapshot must include all active assets/liabilities even if
       // the Accounts page is currently searched or filtered.
       const allAccounts = await api.accounts.list();
-      setRows(rowsFor(allAccounts));
+      setRows(rowsFor(allAccounts, true));
     } catch (err) {
       setRecoveryMode(false);
       setError((err as Error).message || 'Failed to load the complete recovery snapshot');
@@ -167,10 +170,16 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
         return {
           ledger: acc.ledger + row.ledgerBalance,
           actual: acc.actual + (Number.isSafeInteger(actual) ? actual : 0),
+          ledgerAssets: acc.ledgerAssets + (row.accountType === 'asset' ? row.ledgerBalance : 0),
+          actualAssets: acc.actualAssets + (row.accountType === 'asset' && Number.isSafeInteger(actual) ? actual : 0),
+          ledgerLiabilities: acc.ledgerLiabilities + (row.accountType === 'liability' ? row.ledgerBalance : 0),
+          actualLiabilities: acc.actualLiabilities + (row.accountType === 'liability' && Number.isSafeInteger(actual) ? actual : 0),
           diff: acc.diff + (Number.isFinite(row.difference) ? row.difference : 0),
+          absoluteDiff: acc.absoluteDiff + (Number.isFinite(row.difference) ? Math.abs(row.difference) : 0),
+          differentAccounts: acc.differentAccounts + (row.hasChanges ? 1 : 0),
         };
       },
-      { ledger: 0, actual: 0, diff: 0 }
+      { ledger: 0, actual: 0, ledgerAssets: 0, actualAssets: 0, ledgerLiabilities: 0, actualLiabilities: 0, diff: 0, absoluteDiff: 0, differentAccounts: 0 }
     );
   }, [rows]);
 
@@ -360,28 +369,30 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
 
         {/* Summary */}
         <div className={cn(
-          "flex items-center justify-between p-4 rounded-lg border",
-          hasChanges 
-            ? "bg-[var(--ref-secondary-container)] border-[var(--ref-secondary)]/30" 
+          "rounded-lg border p-4",
+          hasChanges
+            ? "bg-[var(--ref-secondary-container)]/60 border-[var(--ref-secondary)]/30"
             : "bg-[var(--ref-surface-container-lowest)] border-[var(--color-border)]"
         )}>
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-[var(--ref-on-surface)]">Summary</span>
-            <span className="text-xs text-[var(--ref-on-surface-variant)]">
-              Ledger Total: <span className="font-mono font-semibold">{formatCurrency(totals.ledger)}</span>
-            </span>
-            <span className="text-xs text-[var(--ref-on-surface-variant)]">
-              Actual Total: <span className="font-mono font-semibold">{formatCurrency(totals.actual)}</span>
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-[var(--ref-on-surface)]">Check summary</span>
+            <span className="text-xs text-[var(--ref-on-surface-variant)]">{rows.length} account{rows.length === 1 ? '' : 's'} in this check</span>
           </div>
-          <div className={cn(
-            "font-mono font-bold",
-            totals.diff > 0 && "text-green-600",
-            totals.diff < 0 && "text-red-600",
-            totals.diff === 0 && "text-[var(--ref-on-surface)]"
-          )}>
-            {totals.diff !== 0 ? (totals.diff > 0 ? '+' : '') + formatCurrency(totals.diff) : 'Balanced'}
+          <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+            <div className="rounded-md bg-[var(--ref-surface-container-lowest)]/70 p-2.5">
+              <p className="text-[var(--ref-on-surface-variant)]">Assets</p>
+              <p className="mt-1 font-mono font-semibold text-[var(--ref-on-surface)]">{formatCurrency(totals.actualAssets)} actual <span className="font-normal text-[var(--ref-outline)]">vs {formatCurrency(totals.ledgerAssets)} ledger</span></p>
+            </div>
+            <div className="rounded-md bg-[var(--ref-surface-container-lowest)]/70 p-2.5">
+              <p className="text-[var(--ref-on-surface-variant)]">Liabilities</p>
+              <p className="mt-1 font-mono font-semibold text-[var(--ref-on-surface)]">{formatCurrency(totals.actualLiabilities)} actual <span className="font-normal text-[var(--ref-outline)]">vs {formatCurrency(totals.ledgerLiabilities)} ledger</span></p>
+            </div>
           </div>
+          <p className={cn('mt-3 text-xs font-semibold', totals.differentAccounts > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]')}>
+            {totals.differentAccounts > 0
+              ? `${totals.differentAccounts} account${totals.differentAccounts === 1 ? '' : 's'} differ · ${formatCurrency(totals.absoluteDiff)} total discrepancy`
+              : 'Every account in this check matches'}
+          </p>
         </div>
 
         {history.length > 0 && (

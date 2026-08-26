@@ -61,6 +61,8 @@ interface Period {
   startDate: number;
   endDate: number;
   status: 'open' | 'closed';
+  coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
+  coverageReason: string | null;
 }
 
 interface Category {
@@ -238,6 +240,7 @@ function BudgetPage() {
 
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
   const isPeriodClosed = selectedPeriod?.status === 'closed';
+  const isPeriodTracked = selectedPeriod?.coverageStatus === 'complete' || selectedPeriod?.coverageStatus === 'partial';
 
   const handleCreateBudget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -661,7 +664,7 @@ function BudgetPage() {
               <div>
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Income</p>
                 <p className="text-2xl sm:text-3xl font-bold font-headline tracking-tight text-[var(--ref-on-surface)]">
-                  {formatCurrency(periodIncome)}
+                  {isPeriodTracked ? formatCurrency(periodIncome) : 'Not tracked'}
                 </p>
               </div>
               <div className="mt-4 text-sm font-semibold text-[var(--ref-secondary)]">
@@ -673,7 +676,7 @@ function BudgetPage() {
               <div>
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Spent</p>
                 <p className="text-2xl sm:text-3xl font-bold font-headline tracking-tight text-[var(--ref-on-surface)]">
-                  {formatCurrency(totalSpent)}
+                  {isPeriodTracked ? formatCurrency(totalSpent) : 'Not tracked'}
                 </p>
               </div>
               <div className="mt-4 text-sm font-semibold text-[var(--ref-error)]">
@@ -690,11 +693,11 @@ function BudgetPage() {
                     totalRemaining < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]',
                   )}
                 >
-                  {formatCurrency(totalRemaining)}
+                  {isPeriodTracked ? formatCurrency(totalRemaining) : 'Not tracked'}
                 </p>
               </div>
               <div className="mt-4 text-sm font-semibold text-[var(--ref-secondary)]">
-                {totalRemaining >= 0 ? 'Headroom this period' : 'Over budget'}
+                {!isPeriodTracked ? 'Coverage incomplete' : totalRemaining >= 0 ? 'Headroom this period' : 'Over budget'}
               </div>
             </div>
           </div>
@@ -703,6 +706,13 @@ function BudgetPage() {
         {isPeriodClosed && (
           <div className="rounded-xl border border-[var(--color-warning)] bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-[var(--color-text-primary)]">
             This accounting period is closed. Budget history is read-only until it is reopened from Salary Periods.
+          </div>
+        )}
+        {selectedPeriod && !isPeriodTracked && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            This period is marked <strong>{selectedPeriod.coverageStatus}</strong>. Budget actuals are not tracked, so empty totals are not zero activity or an under-budget result.
+            {selectedPeriod.coverageReason ? ` Reason: ${selectedPeriod.coverageReason}.` : ''}
+            <Link to="/periods" className="ml-2 font-semibold underline">Review coverage</Link>
           </div>
         )}
 
@@ -898,19 +908,19 @@ function BudgetPage() {
                                 <p className="font-medium text-sm text-[var(--color-text-primary)] truncate hover:text-[var(--color-accent)] transition-colors">
                                   {row.categoryName}
                                 </p>
-                                {pct > 100 && (
+                                {isPeriodTracked && pct > 100 && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--ref-error)]/10 text-[var(--ref-error)]">
                                     Over
                                   </span>
                                 )}
-                                {pct >= 75 && pct <= 100 && (
+                                {isPeriodTracked && pct >= 75 && pct <= 100 && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600">
                                     Near
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
-                                <span>{formatCurrency(row.actualAmount)} of {formatCurrency(row.plannedAmount)}</span>
+                                <span>{isPeriodTracked ? `${formatCurrency(row.actualAmount)} of ${formatCurrency(row.plannedAmount)}` : 'Actuals not tracked'}</span>
                                 {comparison && (
                                   <span className="flex items-center gap-1">
                                     vs
@@ -932,10 +942,10 @@ function BudgetPage() {
                               <span
                                 className={cn(
                                   'text-sm font-bold text-right min-w-[40px]',
-                                  pct > 100 ? 'text-[var(--ref-error)]' : 'text-[var(--color-text-primary)]',
+                                  isPeriodTracked && pct > 100 ? 'text-[var(--ref-error)]' : 'text-[var(--color-text-primary)]',
                                 )}
                               >
-                                {Math.min(pct, 999).toFixed(0)}%
+                                {isPeriodTracked ? `${Math.min(pct, 999).toFixed(0)}%` : '—'}
                               </span>
                               {!isPeriodClosed && <div className="relative">
                                 <button

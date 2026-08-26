@@ -1,9 +1,9 @@
-import { eq, like, and } from "drizzle-orm";
+import { eq, like, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { accounts, auditLogs, budgetPlans, budgetTemplateItems, categories, transactions } from "../db/schema";
+import { accounts, auditLogs, budgetPlans, budgetTemplateItems, categories, transactionCategoryAllocations, transactions } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 // Sanitize search input to prevent SQL injection
@@ -26,9 +26,9 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   fastify.get("/api/categories", async (request) => {
-    const { search } = request.query as { search?: string };
+    const { search, includeInactive } = request.query as { search?: string; includeInactive?: string };
 
-    const conditions = [];
+    const conditions = includeInactive === "true" ? [] : [eq(categories.isActive, true)];
     if (search) {
       const sanitized = sanitizeSearchInput(search);
       if (sanitized) {
@@ -84,6 +84,7 @@ export default async function (fastify: FastifyInstance) {
           name: body.name.trim(),
           icon: body.icon ?? null,
           color: body.color ?? null,
+          isActive: true,
           reportingAccountId: body.reportingAccountId ?? null,
         }).returning().all() as any[])[0];
         if (!inserted) throw new Error("Failed to create category");
@@ -163,29 +164,71 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "Category not found" });
       return;
     }
-
-    const categoryId = parseInt(id);
-    const [transactionReference] = await db.select({ id: transactions.id }).from(transactions)
-      .where(eq(transactions.categoryId, categoryId)).limit(1);
-    const [budgetReference] = await db.select({ id: budgetPlans.id }).from(budgetPlans)
-      .where(eq(budgetPlans.categoryId, categoryId)).limit(1);
-    const [templateReference] = await db.select({ id: budgetTemplateItems.id }).from(budgetTemplateItems)
-      .where(eq(budgetTemplateItems.categoryId, categoryId)).limit(1);
-    if (transactionReference || budgetReference || templateReference) {
-      return reply.code(409).send({ error: "Category is referenced by financial history or a budget template; rename it or create a replacement instead" });
+    if (!existing.isActive) {
+      reply.code(204).send();
+      return;
     }
 
+    const categoryId = parseInt(id);
     db.transaction((tx) => {
-      tx.delete(categories).where(eq(categories.id, categoryId)).run();
+      tx.update(categories).set({ isActive: false }).where(eq(categories.id, categoryId)).run();
       tx.insert(auditLogs).values({
         entityType: "category",
         entityId: categoryId,
-        action: "delete",
+        action: "archive",
         beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify({ ...existing, isActive: false })),
       }).run();
       bumpFinancialRevisionSync(tx);
     });
 
     reply.code(204).send();
+  });
+
+  fastify.get("/api/categories/:id/dependency-preview", async (request, reply) => {
+    const categoryId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return reply.code(400).send({ error: "Invalid category id" });
+    const [category] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1);
+    if (!category) return reply.code(404).send({ error: "Category not found" });
+    const [transactionRefs, allocationRefs, budgetRefs, templateRefs] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(transactions).where(eq(transactions.categoryId, categoryId)),
+      db.select({ count: sql<number>`count(*)` }).from(transactionCategoryAllocations).where(eq(transactionCategoryAllocations.categoryId, categoryId)),
+      db.select({ count: sql<number>`count(*)` }).from(budgetPlans).where(eq(budgetPlans.categoryId, categoryId)),
+      db.select({ count: sql<number>`count(*)` }).from(budgetTemplateItems).where(eq(budgetTemplateItems.categoryId, categoryId)),
+    ]);
+    return {
+      category,
+      canArchive: category.isActive,
+      canRestore: !category.isActive,
+      dependencies: {
+        transactions: Number(transactionRefs[0]?.count ?? 0),
+        allocations: Number(allocationRefs[0]?.count ?? 0),
+        budgetPlans: Number(budgetRefs[0]?.count ?? 0),
+        budgetTemplates: Number(templateRefs[0]?.count ?? 0),
+      },
+      consequence: "Archiving hides the category from new entries but preserves historical allocations, budgets, and reports.",
+    };
+  });
+
+  fastify.post("/api/categories/:id/restore", async (request, reply) => {
+    const categoryId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return reply.code(400).send({ error: "Invalid category id" });
+    const [existing] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1);
+    if (!existing) return reply.code(404).send({ error: "Category not found" });
+    if (existing.isActive) return existing;
+    const restored = db.transaction((tx) => {
+      const [row] = tx.update(categories).set({ isActive: true }).where(eq(categories.id, categoryId)).returning().all() as any[];
+      if (!row) throw new Error("Category restore failed");
+      tx.insert(auditLogs).values({
+        entityType: "category",
+        entityId: categoryId,
+        action: "restore",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify(row)),
+      }).run();
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
+    return restored;
   });
 }

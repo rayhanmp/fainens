@@ -187,6 +187,16 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Asset-to-asset movements distinguish cash-to-cash transfers from cash-to-investment movements, so the latter are investing flows rather than silently disappearing as wallet transfers. Loan receivable origin/collection is investing; borrowing and debt repayment are financing.
 - Migration `0017` also adds a durable, audited money-anomaly review queue. An authenticated scan only flags likely 100× pairs with the same account/direction/type/normalized description and reconciliation-related historical journals. A reviewer must explicitly resolve or dismiss a candidate with a note; scanning never rescales, deletes, or reverses ledger data.
 
+### Current high-priority completion wave (working tree)
+
+- Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
+- Cash-flow reports and CSV exports disclose whether each line was explicitly classified or retained bounded legacy inference. Recovery bridges remain outside CFO/CFI/CFF and are disclosed separately.
+- Manual journals can now edit signed category allocations with exact net-expense reconciliation. Persisted allocations flow through transaction lists/details, budgets, spending reports, PDFs, dashboard cards, and agent facts.
+- Categories now map to optional active expense reporting accounts in the UI. Account and category archive operations preserve history, expose dependency previews, support explicit restore, and keep archived records available only through an opt-in view.
+- Money anomaly review has an authenticated scan/review screen, and legacy reconciliation-plug detection excludes already-labelled historical recovery adjustments.
+- The cache path now has a durable SQLite invalidation outbox, a revision-update trigger that queues a full invalidation in the same write transaction, a retrying worker, and Redis success/failure results. A Redis outage cannot turn a committed mutation into a stale forever-cache; revision checks still force DB recomputation.
+- Migration bootstrap now repairs incomplete pushed-schema migration history when the schema is already present, and the new migrations are safe around previously-created cache tables. No user data is deleted or rescaled.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -198,20 +208,21 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Verification completed
 
-- Backend TypeScript build passes using the bundled runtime.
+- Backend TypeScript checks pass for the changed code; the only remaining diagnostic is the pre-existing optional `puppeteer` module declaration in `scraper-enhanced.ts`.
 - Frontend TypeScript project build passes.
-- Drizzle migration journal/schema integrity check passes, including migrations `0009` and `0010`.
-- Focused recurrence/reconciliation suite passes 8 tests after the latest wave; an earlier broader pure run passed 49 tests across journal validation, mutation policy, IDR parsing, report CSV behavior, and storage path confinement.
+- Drizzle migration journal/schema integrity check passes with migrations `0009`–`0024`, including the cache trigger and category archive lifecycle.
+- Focused report/reconciliation/journal suite passes 9 tests after this wave; an earlier broader pure run passed 49 tests across journal validation, mutation policy, IDR parsing, report CSV behavior, and storage path confinement.
 - The complete DB-backed suite is still blocked locally because installed `better-sqlite3` targets Node ABI 127 while the bundled Node runtime requires ABI 137. Do not treat this environment failure as a test pass.
+- The direct Vite production build is currently blocked by Windows `Access is denied` while loading existing pnpm-linked dependencies; this is an environment/module-store issue, not a TypeScript diagnostic.
 
 ## High-risk work still open
 
-1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
+1. **Implemented durable cache invalidation locally.** Revision updates enqueue a full invalidation in SQLite; the startup/periodic worker retries Redis failures indefinitely. A production outage rehearsal and metrics/alerting are still required.
+7. **Implemented account/category archive dependency previews and restore flows.** The API and Accounts/Categories screens preserve history and require an explicit opt-in to view archived records. A richer cross-domain dependency graph remains an enhancement.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
-9. **Implemented guarded agent write paths for budgets and transactions.** Budget-plan upserts and explicit journal transaction creation now use durable pending actions and one-time approval tokens. Each action stores a normalized payload, owner, optional conversation, assumptions, expiry, and base financial revision; execution revalidates domain state and revision atomically, writes audited data through the existing domain services, invalidates affected caches, and returns an idempotent execution receipt. Transaction creation is now the priority area for natural-language clarification and correction/reversal flows; recurring occurrence decisions and recovery/reconciliation still need their own contracts.
+9. **Implemented guarded agent write paths for budgets and transactions plus high-value retrieval/planning tools.** Budget-plan upserts and explicit journal transaction creation use durable pending actions and one-time approval tokens. Deterministic similar-transaction, cash-flow, category-variance, period-comparison, cash-forecast, account-health, and anomaly tools are available. Recurring occurrence decisions, recovery/reconciliation commands, and domain correction/reversal proposals still need their own contracts.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
-11. **Implemented core return-after-absence recovery.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Financial-facts agent retrieval and income/cash-flow reports now return coverage warnings. Remaining propagation work is budget/dashboard/PDF/trend presentation and richer guided import/catch-up steps.
+11. **Implemented return-after-absence recovery and propagation.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Budget/dashboard/PDF/trend/agent reads disclose gaps and exclude skipped/unknown periods from averages and comparisons. Guided statement import/catch-up orchestration remains a follow-up.
 
 ## Return-after-absence period coverage policy
 
@@ -296,14 +307,14 @@ Every period-aware read model must return coverage metadata and gaps:
 
 The backend integrity work is not equivalent to complete user workflows. The following capabilities are still backend-only or only partially surfaced in the current frontend.
 
-1. **Manual-journal cash-flow classification.** The journal editor must expose `operating`, `investing`, `financing`, and `transfer` for cash-equivalent lines. It currently omits the field, so those manual journals are rejected by the new validation.
-2. **Manual-journal category allocations.** Add a multi-category allocation editor with signed whole-rupiah amounts, exact net-expense reconciliation, and a visible allocation summary.
-3. **Account liquidity class.** Account create/edit must expose and explain `cash_equivalent`, `receivable`, `investment`, and `non_cash`.
-4. **Category reporting-account mapping.** Category create/edit must choose and display its optional active expense reporting account.
-5. **Cash-flow provenance.** Cash-flow reports should distinguish explicitly classified lines from historic rows still using bounded legacy counterpart inference.
-6. **Money-anomaly review.** Build an authenticated client wrapper and a review screen for scan, candidate list/filtering, paired-transaction comparison, reason display, reviewed note, resolve/dismiss, and audit links.
-7. **Historic 100x remediation.** From an anomaly candidate, guide the user to the appropriate safe domain correction/reversal. Never offer automatic rescaling.
-8. **Legacy reconciliation-plug remediation.** Provide an explicit review/correction path for historic reconciliation-related journals; the current reconciliation dialog only handles new control evidence.
+1. **Manual-journal cash-flow classification.** Implemented in the transaction journal editor; each cash-equivalent line requires an explicit operating/investing/financing/transfer/recovery treatment where appropriate.
+2. **Manual-journal category allocations.** Implemented with a multi-category editor, signed whole-rupiah amounts, exact net-expense reconciliation, and a visible allocation summary.
+3. **Account liquidity class.** Implemented in account create/edit with explanations for `cash_equivalent`, `receivable`, `investment`, and `non_cash`.
+4. **Category reporting-account mapping.** Implemented in category create/edit and displayed on category cards; inactive mappings are rejected for new proposals.
+5. **Cash-flow provenance.** Implemented in report UI and CSV export; explicit classifications are separated from bounded legacy inference.
+6. **Money-anomaly review.** Implemented with an authenticated client, scan/list/filter tabs, paired-transaction comparison, reason/note display, and resolve/dismiss audit actions.
+7. **Historic 100x remediation.** The anomaly screen now links directly to each flagged/comparison journal and keeps resolution separate from mutation; a dedicated guided replacement/reversal wizard is still pending. Automatic rescaling remains prohibited.
+8. **Legacy reconciliation-plug remediation.** Legacy plugs are now surfaced in the anomaly queue with direct journal links and review notes; a dedicated guided correction wizard is still pending.
 9. **Salary occurrence correction.** Add a reasoned correction UI for posted salary occurrences, with replacement amount/account/date and an original-to-reversal-to-replacement timeline.
 10. **Subscription occurrence correction.** Add the equivalent correction UI for posted renewal occurrences, including replacement amount/payment account/date and reason.
 11. **Loan payment reversal.** Add an eligibility-aware, reasoned reversal action and show the restored loan balance, inverse journal, and payment status.
@@ -313,7 +324,7 @@ The backend integrity work is not equivalent to complete user workflows. The fol
 15. **Contact archive/restore.** Add inactive-contact management, restore actions, and a dependency preview for active outstanding loans.
 16. **Budget-template archive/restore.** Add an inactive-template management view and restore controls rather than hiding archived templates permanently.
 17. **Period archive/restore.** Add archived-history browsing and archive/restore actions alongside the already-surfaced close/reopen controls.
-18. **Account/category archive dependency previews.** Before archive/restore, show blocking balances, children, linked categories, budgets, and the safe next action.
+18. **Account/category archive dependency previews.** Implemented with API previews showing balances, children, posted history, linked categories, budgets, blockers, and safe archive/restore consequences.
 19. **Agent workspace.** Implemented `/agent`: period scope selection, durable server-side multi-conversation history scoped to the authenticated user, bounded conversational context, tool-call trace with linked domain surfaces, source/result inspection, financial revision labels, budget-plan preview, conversation lifecycle controls (editable titles, pin/unpin, archive/restore, and confirmed deletion), and multimodal image questions with click/drop upload, inline/lightbox previews, and safe size/type limits. Image pixels are sent only for the current turn and are not retained in chat history. Budget proposals now have a durable pending-action state; contextual entry points and other domain write commands remain pending.
 20. **Agent write approval UX.** Implemented for budget-plan upserts and explicit journal transaction proposals: the UI shows the normalized budget diff or journal lines, bound financial revision, expiry, and explicit confirmation/dismissal controls. Replays return the original receipt without repeating the write; stale revisions fail closed and require a fresh proposal. Future correction commands still need their domain-specific diff surfaces.
 21. **Cross-domain correction timelines.** Transaction, loan, PayLater, subscription, and split-bill views need a consistent original → inverse → replacement chain with audit links.

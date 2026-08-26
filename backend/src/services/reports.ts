@@ -50,6 +50,7 @@ export interface CashFlowItem {
   description: string;
   amount: number;
   type: "operating" | "investing" | "financing";
+  classificationSource: "explicit" | "legacy_inference";
 }
 
 export interface CashFlowStatement {
@@ -506,6 +507,7 @@ export async function generateCashFlowStatement(
     // counterpart inference below is retained solely for pre-migration data.
     let type: "operating" | "investing" | "financing" = "operating";
     let category = "Operating";
+    let classificationSource: "explicit" | "legacy_inference" = "legacy_inference";
 
     if (tx.cashFlowClass === "transfer") continue;
     // A recovery adjustment reconciles an untracked historical balance. It is
@@ -518,6 +520,7 @@ export async function generateCashFlowStatement(
     if (tx.cashFlowClass === "operating" || tx.cashFlowClass === "investing" || tx.cashFlowClass === "financing") {
       type = tx.cashFlowClass;
       category = type[0].toUpperCase() + type.slice(1);
+      classificationSource = "explicit";
     } else {
 
     const counterpartyTypes = new Set(String(tx.counterpartyAccountTypes ?? "").split(",").filter(Boolean));
@@ -542,6 +545,7 @@ export async function generateCashFlowStatement(
       description: tx.description || "Transaction",
       amount,
       type,
+      classificationSource,
     };
 
     if (type === "operating") {
@@ -684,7 +688,7 @@ export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashF
       ["FINANCING ACTIVITIES", report.financing, report.netFinancing],
     ] as const) {
       row(title);
-      for (const item of items) row(item.description, item.category, item.amount);
+      for (const item of items) row(item.description, item.category, item.amount, item.classificationSource);
       row(`NET ${title}`, total);
       lines.push("");
     }

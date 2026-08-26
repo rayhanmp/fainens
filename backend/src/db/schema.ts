@@ -6,6 +6,7 @@ export const categories: any = sqliteTable("category", {
   name: text("name").notNull(),
   icon: text("icon"),
   color: text("color"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   /** Optional expense/revenue account used for new categorized journal lines. */
   reportingAccountId: integer("reporting_account_id").references(() => accounts.id, { onDelete: "set null" }),
 });
@@ -303,6 +304,24 @@ export const financialState = sqliteTable("financial_state", {
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
 });
+
+/** Durable cache invalidation work. Redis is an optimization; committed
+ * ledger mutations enqueue rebuild work so a Redis outage cannot leave stale
+ * values around after the connection returns. */
+export const cacheInvalidationOutbox = sqliteTable("cache_invalidation_outbox", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  operation: text("operation").notNull(), // account | period | analytics | insights | all
+  accountId: integer("account_id"),
+  periodId: integer("period_id"),
+  revision: integer("revision").notNull(),
+  status: text("status").notNull().default("pending"), // pending | failed | processed
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  processedAt: integer("processed_at", { mode: "timestamp_ms" }),
+}, (table) => ({
+  statusIdx: index("idx_cache_invalidation_outbox_status").on(table.status, table.createdAt),
+}));
 
 export const auditLogs = sqliteTable("audit_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),

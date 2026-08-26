@@ -75,6 +75,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
         revision: monthly.revision,
         provenance: monthly.provenance,
         allTransactions,
+        coverage: monthly.coverage,
       };
       
       setReportData(newReportData);
@@ -107,6 +108,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
           expensesByCategory={reportData.expensesByCategory}
           budgetComparison={reportData.budgetComparison}
           allTransactions={reportData.allTransactions}
+          coverage={reportData.coverage}
         />
       );
       const blob = await pdf(doc).toBlob();
@@ -222,6 +224,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
                 <span className="ml-2 font-medium">{reportData.revision}</span>
               </div>
             </div>
+            {reportData.coverage && !reportData.coverage.isComparable && <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">Coverage warning: {reportData.coverage.warnings.join(' ')}</p>}
           </div>
         )}
       </div>

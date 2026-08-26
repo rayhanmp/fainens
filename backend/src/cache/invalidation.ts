@@ -12,42 +12,43 @@ import {
 } from "./precompute";
 
 // Invalidate a single account balance and trigger recomputation
-export async function invalidateAccountBalance(accountId: number): Promise<void> {
-  await cacheDelete(Keys.accountBalance(accountId));
+export async function invalidateAccountBalance(accountId: number): Promise<boolean> {
+  return cacheDelete(Keys.accountBalance(accountId));
 }
 
 // Invalidate all account balances
-export async function invalidateAllAccountBalances(): Promise<void> {
-  await cacheDeletePattern(Keys.allAccountBalances());
+export async function invalidateAllAccountBalances(): Promise<boolean> {
+  return cacheDeletePattern(Keys.allAccountBalances());
 }
 
 // Invalidate period summary
-export async function invalidatePeriodSummary(periodId: number): Promise<void> {
-  await cacheDelete(Keys.periodSummary(periodId));
+export async function invalidatePeriodSummary(periodId: number): Promise<boolean> {
+  return cacheDelete(Keys.periodSummary(periodId));
 }
 
 // Invalidate all period summaries
-export async function invalidateAllPeriodSummaries(): Promise<void> {
-  await cacheDeletePattern(Keys.allPeriodSummaries());
+export async function invalidateAllPeriodSummaries(): Promise<boolean> {
+  return cacheDeletePattern(Keys.allPeriodSummaries());
 }
 
 // Invalidate all analytics
-export async function invalidateAllAnalytics(): Promise<void> {
-  await cacheDeletePattern(Keys.allAnalytics());
+export async function invalidateAllAnalytics(): Promise<boolean> {
+  return cacheDeletePattern(Keys.allAnalytics());
 }
 
-export async function invalidateAllInsights(): Promise<void> {
-  await cacheDeletePattern("insights:*");
+export async function invalidateAllInsights(): Promise<boolean> {
+  return cacheDeletePattern("insights:*");
 }
 
 // Invalidate everything (nuclear option)
-export async function invalidateEverything(): Promise<void> {
-  await Promise.all([
+export async function invalidateEverything(): Promise<boolean> {
+  const results = await Promise.all([
     invalidateAllAccountBalances(),
     invalidateAllPeriodSummaries(),
     invalidateAllAnalytics(),
     invalidateAllInsights(),
   ]);
+  return results.every(Boolean);
 }
 
 // Invalidate and recompute a single account balance (synchronous recomputation)

@@ -84,25 +84,29 @@ export async function cacheSet<T>(
   key: string,
   value: T,
   ttlSeconds: number = 3600,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const redis = getRedisClient();
     await redis.setex(key, ttlSeconds, JSON.stringify(value));
+    return true;
   } catch (err) {
     logRedisOnce(`SET ${key} skipped`, err);
+    return false;
   }
 }
 
-export async function cacheDelete(key: string): Promise<void> {
+export async function cacheDelete(key: string): Promise<boolean> {
   try {
     const redis = getRedisClient();
     await redis.del(key);
+    return true;
   } catch (err) {
     logRedisOnce(`DEL ${key} skipped`, err);
+    return false;
   }
 }
 
-export async function cacheDeletePattern(pattern: string): Promise<void> {
+export async function cacheDeletePattern(pattern: string): Promise<boolean> {
   try {
     const redis = getRedisClient();
     let cursor = "0";
@@ -111,16 +115,20 @@ export async function cacheDeletePattern(pattern: string): Promise<void> {
       cursor = nextCursor;
       if (keys.length > 0) await redis.del(...keys);
     } while (cursor !== "0");
+    return true;
   } catch (err) {
     logRedisOnce(`DEL pattern ${pattern} skipped`, err);
+    return false;
   }
 }
 
-export async function cacheFlushAll(): Promise<void> {
+export async function cacheFlushAll(): Promise<boolean> {
   try {
     const redis = getRedisClient();
     await redis.flushall();
+    return true;
   } catch (err) {
     logRedisOnce("FLUSHALL skipped", err);
+    return false;
   }
 }

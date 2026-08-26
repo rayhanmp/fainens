@@ -27,7 +27,16 @@ interface Category {
   name: string;
   icon: string | null;
   color: string | null;
+  reportingAccountId: number | null;
+  isActive: boolean;
 }
+
+type ExpenseAccount = {
+  id: number;
+  name: string;
+  type: string;
+  isActive: boolean;
+};
 
 interface TagRow {
   id: number;
@@ -56,6 +65,7 @@ function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<TagRow[]>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { confirm } = useConfirm();
 
@@ -64,26 +74,29 @@ function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editingTag, setEditingTag] = useState<TagRow | null>(null);
 
-  const [categoryForm, setCategoryForm] = useState({ name: '', icon: '📌', color: PRESET_COLORS[0] });
+  const [categoryForm, setCategoryForm] = useState({ name: '', icon: '📌', color: PRESET_COLORS[0], reportingAccountId: '' });
   const [tagForm, setTagForm] = useState({ name: '', color: PRESET_COLORS[0] });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [showArchived]);
 
   const loadData = async () => {
     try {
-      const [catData, tagData, txRes] = await Promise.all([
-        api.categories.list(),
+      const [catData, tagData, txRes, accountList] = await Promise.all([
+        api.categories.list(showArchived ? { includeInactive: true } : undefined),
         api.tags.list(),
         api.transactions.list({ limit: '2000' }),
+        api.accounts.list({ type: 'expense' }),
       ]);
       setCategories(catData);
       setTags(tagData);
       setTransactions(txRes.data as TxRow[]);
+      setExpenseAccounts(accountList.filter((account) => account.type === 'expense' && account.isActive));
     } finally {
       setIsLoading(false);
     }
@@ -125,12 +138,14 @@ function CategoriesPage() {
           name: categoryForm.name,
           icon: categoryForm.icon || null,
           color: categoryForm.color || null,
+          reportingAccountId: categoryForm.reportingAccountId ? Number(categoryForm.reportingAccountId) : null,
         });
       } else {
         await api.categories.create({
           name: categoryForm.name,
           icon: categoryForm.icon || null,
           color: categoryForm.color || null,
+          reportingAccountId: categoryForm.reportingAccountId ? Number(categoryForm.reportingAccountId) : null,
         });
       }
       await loadData();
@@ -163,9 +178,9 @@ function CategoriesPage() {
 
   const handleDeleteCategory = async (id: number) => {
     const confirmed = await confirm({
-      title: 'Delete Category',
-      message: 'Are you sure you want to delete this category?',
-      confirmLabel: 'Delete',
+      title: 'Archive category',
+      message: 'Archive this category? Historical transactions and budgets will remain available, but new entries will no longer offer it.',
+      confirmLabel: 'Archive',
       variant: 'danger',
     });
     if (!confirmed) return;
@@ -177,16 +192,9 @@ function CategoriesPage() {
     }
   };
 
-  const handleDeleteTag = async (id: number) => {
-    const confirmed = await confirm({
-      title: 'Delete Tag',
-      message: 'Are you sure you want to delete this tag?',
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+  const handleRestoreCategory = async (id: number) => {
     try {
-      await api.tags.delete(id);
+      await api.categories.restore(id);
       await loadData();
     } catch (err) {
       alert((err as Error).message);
@@ -200,10 +208,11 @@ function CategoriesPage() {
         name: category.name,
         icon: category.icon || '📌',
         color: category.color || PRESET_COLORS[0],
+        reportingAccountId: category.reportingAccountId?.toString() || '',
       });
     } else {
       setEditingCategory(null);
-      setCategoryForm({ name: '', icon: '📌', color: PRESET_COLORS[0] });
+      setCategoryForm({ name: '', icon: '📌', color: PRESET_COLORS[0], reportingAccountId: '' });
     }
     setFormError('');
     setIsCategoryModalOpen(true);
@@ -244,8 +253,12 @@ function CategoriesPage() {
               title="Ledger classification"
               description="Manage how spending is categorized and tagged across every transaction."
             />
-            <div className="flex flex-wrap gap-3">
-              <button
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]">
+              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+              Show archived
+            </label>
+                          <button
                 type="button"
                 onClick={() => openCategoryModal()}
                 className="inline-flex items-center gap-2 rounded-full bg-[var(--ref-secondary-container)] px-6 py-3 text-sm font-bold text-[var(--ref-on-secondary-container)] shadow-sm transition-all hover:shadow-md"
@@ -316,7 +329,7 @@ function CategoriesPage() {
                           {c.name}
                         </h3>
                         <p className="text-xs text-[var(--color-text-secondary)]">
-                          {count} txns
+                          {count} txns{c.reportingAccountId ? ` · ${expenseAccounts.find((a) => a.id === c.reportingAccountId)?.name ?? 'Mapped expense account'}` : ' · Unmapped'}
                         </p>
                       </div>
                       <div className="relative">
@@ -354,10 +367,11 @@ function CategoriesPage() {
                                 className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
                                 onClick={() => {
                                   setMenuCategoryId(null);
-                                  handleDeleteCategory(c.id);
+                                  if (c.isActive) void handleDeleteCategory(c.id);
+                                  else void handleRestoreCategory(c.id);
                                 }}
                               >
-                                Delete
+                                {c.isActive ? 'Archive' : 'Restore'}
                               </button>
                             </div>
                           </>
@@ -523,6 +537,18 @@ function CategoriesPage() {
                   />
                 ))}
               </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium">Reporting expense account</label>
+              <select
+                value={categoryForm.reportingAccountId}
+                onChange={(e) => setCategoryForm({ ...categoryForm, reportingAccountId: e.target.value })}
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
+              >
+                <option value="">Use default expense account</option>
+                {expenseAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">New simple expenses use this account; category totals still come from allocations.</p>
             </div>
             {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
             <div className="flex gap-3 pt-4">

@@ -54,7 +54,7 @@ function inclusivePeriodEnd(timestamp: number): number {
 
 function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('income');
-  const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number }>>([]);
+  const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number; coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown'; coverageReason: string | null }>>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const summaryRequestVersion = useRef(0);
 
@@ -192,6 +192,12 @@ function ReportsPage() {
             className="w-48"
           />
         </div>
+        {selectedPeriod && selectedPeriod.coverageStatus !== 'complete' && (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span><strong>{selectedPeriod.coverageStatus} coverage.</strong> {selectedPeriod.coverageReason ?? 'Recorded figures do not establish complete activity for this period; empty totals are not zero activity.'}</span>
+          </div>
+        )}
 
         {/* Report Tabs — scroll on small screens */}
         <div className="reports-tabs-scroll flex gap-1 sm:gap-2 border-b border-[var(--color-border)] overflow-x-auto pb-px">
@@ -677,9 +683,9 @@ function CashFlowReport({
   onExport: () => void;
 }) {
   const [data, setData] = useState<{
-    operating: Array<{ description: string; amount: number }>;
-    investing: Array<{ description: string; amount: number }>;
-    financing: Array<{ description: string; amount: number }>;
+    operating: Array<{ description: string; amount: number; classificationSource: 'explicit' | 'legacy_inference' }>;
+    investing: Array<{ description: string; amount: number; classificationSource: 'explicit' | 'legacy_inference' }>;
+    financing: Array<{ description: string; amount: number; classificationSource: 'explicit' | 'legacy_inference' }>;
     netOperating: number;
     netInvesting: number;
     netFinancing: number;
@@ -763,7 +769,7 @@ function CashFlowReport({
         <h3 className="font-mono font-bold border-b-2 border-[var(--color-border)] pb-2 mb-2">{title}</h3>
         {displayItems.map((item, i) => (
           <div key={i} className="flex justify-between py-1 text-sm">
-            <span className="truncate max-w-[70%]">{item.description}</span>
+            <span className="flex min-w-0 max-w-[70%] items-center gap-2 truncate"><span className="truncate">{item.description}</span><span className="shrink-0 rounded bg-[var(--ref-surface-container-low)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--ref-on-surface-variant)]">{item.classificationSource === 'explicit' ? 'classified' : 'legacy inference'}</span></span>
             <span className={cn('font-mono', item.amount >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
               {item.amount >= 0 ? '+' : ''}
               {formatCurrency(item.amount)}
@@ -851,6 +857,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
   const [data, setData] = useState<{
     breakdown: Array<{ category: string; amount: number; percentage: number }>;
     total: number;
+    coverage?: { isComparable: boolean; warnings: string[] };
   } | null>(null);
   const [categories, setCategories] = useState<Array<{ id: number; name: string; color: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -893,7 +900,8 @@ function SpendingReport({ periodId }: { periodId?: number }) {
     return (
       <Card className="p-8 text-center">
         <PieChart className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
-        <p className="text-[var(--color-text-secondary)] mb-4">No spending data available for this period</p>
+        <p className="text-[var(--color-text-secondary)] mb-4">{data?.coverage && !data.coverage.isComparable ? 'Spending coverage is incomplete; no recorded rows does not mean zero activity.' : 'No spending data available for this period'}</p>
+        {data?.coverage && !data.coverage.isComparable && <p className="mb-4 text-xs text-[var(--color-warning)]">{data.coverage.warnings.join(' ')}</p>}
         <Link to="/transactions">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
@@ -927,6 +935,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
 
   return (
     <Card title={`Spending Breakdown - Total: ${formatCurrency(data.total)}`}>
+      {data.coverage && !data.coverage.isComparable && <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">{data.coverage.warnings.join(' ')}</div>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Pie Chart */}
         <div className="h-64">
@@ -996,6 +1005,7 @@ function TrendsReport() {
     revenue: number;
     expenses: number;
     netIncome: number;
+    coverage?: { isComparable: boolean; warnings: string[] };
   }> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -1028,6 +1038,7 @@ function TrendsReport() {
 
   return (
     <Card title="Trend Analysis - Last 6 Periods">
+      {data.some((period) => period.coverage && !period.coverage.isComparable) && <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">Some trend periods have incomplete coverage. Comparisons and averages should not treat those periods as zero activity.</div>}
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>

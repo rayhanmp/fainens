@@ -208,6 +208,7 @@ interface MonthlyReportProps {
   expensesByCategory: Array<{ name: string; amount: number; color: string }>;
   budgetComparison: Array<{ category: string; budget: number; actual: number; variance: number }>;
   allTransactions: Array<{ date: string; description: string; category: string; amount: number; type: string }>;
+  coverage?: { isComparable: boolean; warnings: string[] };
 }
 
 export function MonthlyReportPDF({
@@ -224,6 +225,7 @@ export function MonthlyReportPDF({
   expensesByCategory,
   budgetComparison,
   allTransactions,
+  coverage,
 }: MonthlyReportProps) {
   const savingsRate = totalIncome > 0 ? (netIncome / totalIncome) * 100 : 0;
 
@@ -243,6 +245,13 @@ export function MonthlyReportPDF({
             </View>
           </View>
         </View>
+
+        {coverage && !coverage.isComparable && (
+          <View style={[styles.section, { backgroundColor: '#fff7ed', padding: 10, borderRadius: 4 }]}>
+            <Text style={[styles.bold, { color: '#9a3412' }]}>Coverage warning</Text>
+            <Text style={{ marginTop: 4, color: '#9a3412' }}>{coverage.warnings.join(' ')}</Text>
+          </View>
+        )}
 
         {/* Executive Summary */}
         <View style={styles.section}>

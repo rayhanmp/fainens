@@ -140,13 +140,27 @@ function buildBaseConditions(
 // Fetch transaction details (lines and tags) in bulk to avoid N+1
 async function fetchTransactionDetails(txIds: number[]) {
   if (txIds.length === 0) {
-    return { linesByTxId: new Map(), tagsByTxId: new Map() };
+    return { linesByTxId: new Map(), tagsByTxId: new Map(), allocationsByTxId: new Map() };
   }
 
   // Fetch all lines for these transactions in one query
   const allLines = await db
-    .select()
+    .select({
+      id: transactionLines.id,
+      transactionId: transactionLines.transactionId,
+      accountId: transactionLines.accountId,
+      debit: transactionLines.debit,
+      credit: transactionLines.credit,
+      description: transactionLines.description,
+      cashFlowClass: transactionLines.cashFlowClass,
+      // Keep account labels available for historical journals even after an
+      // account is archived and omitted from the active account list.
+      accountName: accounts.name,
+      accountType: accounts.type,
+      accountSystemKey: accounts.systemKey,
+    })
     .from(transactionLines)
+    .leftJoin(accounts, eq(transactionLines.accountId, accounts.id))
     .where(inArray(transactionLines.transactionId, txIds));
 
   // Fetch all tags for these transactions in one query
@@ -161,9 +175,21 @@ async function fetchTransactionDetails(txIds: number[]) {
     .innerJoin(tags, eq(transactionTags.tagId, tags.id))
     .where(inArray(transactionTags.transactionId, txIds));
 
+  const allAllocations = await db
+    .select({
+      transactionId: transactionCategoryAllocations.transactionId,
+      categoryId: transactionCategoryAllocations.categoryId,
+      amount: transactionCategoryAllocations.amount,
+      categoryName: categories.name,
+    })
+    .from(transactionCategoryAllocations)
+    .innerJoin(categories, eq(transactionCategoryAllocations.categoryId, categories.id))
+    .where(inArray(transactionCategoryAllocations.transactionId, txIds));
+
   // Group by transaction ID
   const linesByTxId = new Map<number, typeof allLines>();
   const tagsByTxId = new Map<number, typeof allTags>();
+  const allocationsByTxId = new Map<number, typeof allAllocations>();
 
   for (const line of allLines) {
     const existing = linesByTxId.get(line.transactionId) || [];
@@ -177,7 +203,13 @@ async function fetchTransactionDetails(txIds: number[]) {
     tagsByTxId.set(tag.transactionId, existing);
   }
 
-  return { linesByTxId, tagsByTxId };
+  for (const allocation of allAllocations) {
+    const existing = allocationsByTxId.get(allocation.transactionId) || [];
+    existing.push(allocation);
+    allocationsByTxId.set(allocation.transactionId, existing);
+  }
+
+  return { linesByTxId, tagsByTxId, allocationsByTxId };
 }
 
 // Return accounting effects once per journal, rather than making clients infer
@@ -450,7 +482,7 @@ RULES:
 
     // Fetch transaction details efficiently (bulk query, no N+1)
     const txIds = txList.map((tx) => tx.id).filter(Boolean);
-    const { linesByTxId, tagsByTxId } = await fetchTransactionDetails(txIds);
+    const { linesByTxId, tagsByTxId, allocationsByTxId } = await fetchTransactionDetails(txIds);
     const effectsByTxId = await fetchTransactionEffects(txIds);
 
     // Map transactions with their details
@@ -458,6 +490,7 @@ RULES:
       ...tx,
       lines: linesByTxId.get(tx.id) || [],
       tags: tagsByTxId.get(tx.id) || [],
+      categoryAllocations: allocationsByTxId.get(tx.id) || [],
       ...(effectsByTxId.get(tx.id) || { debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 }),
     }));
 
@@ -509,10 +542,21 @@ RULES:
       .innerJoin(tags, eq(transactionTags.tagId, tags.id))
       .where(eq(transactionTags.transactionId, tx.id));
 
+    const categoryAllocationRows = await db
+      .select({
+        categoryId: transactionCategoryAllocations.categoryId,
+        amount: transactionCategoryAllocations.amount,
+        categoryName: categories.name,
+      })
+      .from(transactionCategoryAllocations)
+      .innerJoin(categories, eq(transactionCategoryAllocations.categoryId, categories.id))
+      .where(eq(transactionCategoryAllocations.transactionId, tx.id));
+
     return {
       ...tx,
       lines,
       tags: txTagRows,
+      categoryAllocations: categoryAllocationRows,
       ...effects,
     };
   });

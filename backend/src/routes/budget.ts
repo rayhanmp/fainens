@@ -7,6 +7,8 @@ const DAY_MS = 86_400_000;
 import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary } from "../cache/invalidation";
+import { getBudgetFacts } from "../services/financial-facts";
+import { getPeriodCoverage } from "../services/period-coverage";
 
 async function invalidateBudgetMutation(periodIds: number[]): Promise<void> {
   // The caller bumps the revision in the same SQLite transaction as the plan
@@ -39,6 +41,9 @@ export default async function (fastify: FastifyInstance) {
       income: number;
       totalPlanned: number;
       percentOfIncome: number;
+      coverageStatus: "complete" | "partial" | "skipped" | "unknown";
+      coverageReason: string | null;
+      coverage: Awaited<ReturnType<typeof getPeriodCoverage>>;
       plans: Array<{
         id: number;
         periodId: number;
@@ -59,6 +64,10 @@ export default async function (fastify: FastifyInstance) {
         .limit(1);
 
       let totalIncome = 0;
+      const coverage = period
+        ? await getPeriodCoverage(period.startDate, period.endDate + DAY_MS - 1)
+        : { complete: [], partial: [], skipped: [], unknown: [], isComparable: false, warnings: ["Period not found"] };
+      const budgetFacts = period ? await getBudgetFacts(pid) : [];
       if (period) {
         const revenueAccounts = await db
           .select({ id: accounts.id })
@@ -103,35 +112,9 @@ export default async function (fastify: FastifyInstance) {
 
       const plans = await plansQuery;
 
-      const plansWithActual = await Promise.all(
-        plans.map(async (plan: typeof plans[number]) => {
-          let actualAmount = 0;
-          if (period) {
-            const expenseAccounts = await db
-              .select({ id: accounts.id })
-              .from(accounts)
-              .where(eq(accounts.type, "expense"));
-            const expIds = expenseAccounts.map((a) => a.id);
-            if (expIds.length > 0) {
-              const [row] = await db
-                .select({
-                  total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
-                })
-                .from(transactions)
-                .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
-                .where(
-                  and(
-                    eq(transactions.categoryId, plan.categoryId),
-                    sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
-                    sql`${transactions.status} <> 'draft'`,
-                    gte(transactions.date, new Date(period.startDate)),
-                    lte(transactions.date, new Date(period.endDate + DAY_MS - 1)),
-                    or(eq(transactions.periodId, plan.periodId), isNull(transactions.periodId)),
-                  ),
-                );
-              actualAmount = row?.total ?? 0;
-            }
-          }
+      const factsByCategory = new Map(budgetFacts.map((fact) => [fact.categoryId, fact.spentCents]));
+      const plansWithActual = plans.map((plan: typeof plans[number]) => {
+          const actualAmount = factsByCategory.get(plan.categoryId) ?? 0;
 
           const variance = plan.plannedAmount - actualAmount;
           const percentUsed =
@@ -143,8 +126,7 @@ export default async function (fastify: FastifyInstance) {
             variance,
             percentUsed,
           };
-        }),
-      );
+        });
 
       const totalPlanned = plans.reduce((sum: number, p: typeof plans[number]) => sum + p.plannedAmount, 0);
       const percentOfIncome = totalIncome > 0 ? Math.round((totalPlanned / totalIncome) * 10000) / 100 : 0;
@@ -154,6 +136,9 @@ export default async function (fastify: FastifyInstance) {
         income: totalIncome,
         totalPlanned,
         percentOfIncome,
+        coverageStatus: (period?.coverageStatus as "complete" | "partial" | "skipped" | "unknown" | undefined) ?? "unknown",
+        coverageReason: period?.coverageReason ?? null,
+        coverage,
         plans: plansWithActual,
       });
     }
@@ -560,39 +545,15 @@ export default async function (fastify: FastifyInstance) {
       .where(eq(salaryPeriods.id, parseInt(comparePeriodId)))
       .limit(1);
 
-    // Calculate actual amounts for comparison period
-    const compareBudgetsWithActual = await Promise.all(
-      compareBudgets.map(async (budget) => {
-        let actualAmount = 0;
-        if (comparePeriod) {
-          const expenseAccounts = await db
-            .select({ id: accounts.id })
-            .from(accounts)
-            .where(eq(accounts.type, "expense"));
-          const expIds = expenseAccounts.map((a) => a.id);
-          if (expIds.length > 0) {
-            const [row] = await db
-              .select({
-                total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
-              })
-              .from(transactions)
-              .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
-              .where(
-                and(
-                  eq(transactions.categoryId, budget.categoryId),
-                  sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
-                  sql`${transactions.status} <> 'draft'`,
-                  gte(transactions.date, comparePeriod.startDate),
-                  lte(transactions.date, comparePeriod.endDate + DAY_MS - 1),
-                  or(eq(transactions.periodId, parseInt(comparePeriodId)), isNull(transactions.periodId)),
-                ),
-              );
-            actualAmount = row?.total ?? 0;
-          }
-        }
-        return { ...budget, actualAmount };
-      })
-    );
+    // Compare against the same allocation-aware canonical facts used by the
+    // selected-period budget endpoint; raw transaction.category_id is only a
+    // legacy fallback and must not hide multi-category journal allocations.
+    const compareFacts = comparePeriod ? await getBudgetFacts(parseInt(comparePeriodId)) : [];
+    const compareSpent = new Map(compareFacts.map((fact) => [fact.categoryId, fact.spentCents]));
+    const compareBudgetsWithActual = compareBudgets.map((budget) => ({
+      ...budget,
+      actualAmount: compareSpent.get(budget.categoryId) ?? 0,
+    }));
 
     // Create a map for easy lookup
     const compareMap = new Map(

@@ -7,12 +7,14 @@ config({ path: resolve(__dirname, "../../.env") });
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import helmet from "@fastify/helmet";
 
 import { bootstrapDb } from "./db/migrate";
 import { getRedisClient, closeRedisConnection } from "./cache/redis";
 import { precomputeEverything } from "./cache/precompute";
 import { env } from "./lib/env";
 import { processDueSubscriptionRenewals } from "./services/subscription-renewals";
+import { processCacheInvalidationOutbox } from "./services/cache-invalidation-outbox";
 import { db } from "./db/client";
 
 // Import routes
@@ -49,9 +51,26 @@ const fastify = Fastify({
 });
 
 // Register CORS
+const ALLOWED_ORIGINS = env.NODE_ENV === "production"
+  ? ["https://fins.rayhan.id"]
+  : ["http://localhost:8080", "http://localhost:3000"];
+
 fastify.register(cors, {
-  origin: env.NODE_ENV === "production" ? false : ["http://localhost:8080", "http://localhost:3000"],
+  origin: ALLOWED_ORIGINS,
   credentials: true,
+});
+
+// Register security headers
+fastify.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'", "https://openrouter.ai"],
+    },
+  },
 });
 
 // Register rate limiting
@@ -60,8 +79,8 @@ fastify.register(rateLimit, {
   timeWindow: '1 minute',
   redis: getRedisClient(),
   keyGenerator: (req) => {
-    // Use user ID if authenticated, otherwise IP address
-    return (req.user as { id?: string })?.id || req.ip;
+    // Use email if authenticated, otherwise IP address
+    return (req.user as { email?: string })?.email || req.ip;
   },
   errorResponseBuilder: (req, context) => {
     return {
@@ -98,7 +117,7 @@ fastify.register(async function (fastify) {
     timeWindow: '1 minute',
     redis: getRedisClient(),
     keyGenerator: (req) => {
-      return (req.user as { id?: string })?.id || req.ip;
+      return (req.user as { email?: string })?.email || req.ip;
     },
     errorResponseBuilder: (req, context) => {
       return {
@@ -118,7 +137,7 @@ fastify.register(async function (fastify) {
     timeWindow: '1 minute',
     redis: getRedisClient(),
     keyGenerator: (req) => {
-      return (req.user as { id?: string })?.id || req.ip;
+      return (req.user as { email?: string })?.email || req.ip;
     },
     errorResponseBuilder: (req, context) => {
       return {
@@ -138,7 +157,7 @@ fastify.register(async function (fastify) {
     timeWindow: '1 minute',
     redis: getRedisClient(),
     keyGenerator: (req) => {
-      return (req.user as { id?: string })?.id || req.ip;
+      return (req.user as { email?: string })?.email || req.ip;
     },
     errorResponseBuilder: (req, context) => {
       return {
@@ -158,7 +177,7 @@ fastify.register(async function (fastify) {
     timeWindow: '1 minute',
     redis: getRedisClient(),
     keyGenerator: (req) => {
-      return (req.user as { id?: string })?.id || req.ip;
+      return (req.user as { email?: string })?.email || req.ip;
     },
     errorResponseBuilder: (req, context) => {
       return {
@@ -171,14 +190,14 @@ fastify.register(async function (fastify) {
   });
 }, { prefix: '/wishlist' });
 
-// Health check (public)
+// Health check (public) - minimal info
 fastify.get("/health", async () => {
-  return { status: "ok" };
+  return { status: "ok", timestamp: Date.now() };
 });
 
-// Public root
+// Public root - minimal info
 fastify.get("/", async () => {
-  return { message: "Fainens backend running" };
+  return { ok: true };
 });
 
 // Graceful shutdown
@@ -212,6 +231,24 @@ const start = async () => {
     } catch (err) {
       fastify.log.warn({ err }, "Analytics precompute skipped (Redis or DB); API will compute on demand");
     }
+
+    // Replay durable cache invalidation intents after startup and periodically
+    // thereafter. Redis is an optimization; committed writes remain correct
+    // when it is down because these rows are retried without data loss.
+    const runCacheInvalidationOutbox = async () => {
+      try {
+        const result = await processCacheInvalidationOutbox();
+        if (result.processed > 0 || result.failed > 0) {
+          fastify.log.info({ cacheInvalidations: result }, "cache invalidation outbox processed");
+        }
+      } catch (err) {
+        fastify.log.warn({ err }, "cache invalidation outbox failed");
+      }
+    };
+    await runCacheInvalidationOutbox();
+    setInterval(() => {
+      void runCacheInvalidationOutbox();
+    }, 60_000);
 
     // Register auth plugin (provides JWT and OAuth2)
     await fastify.register(authPlugin);
@@ -281,4 +318,3 @@ const start = async () => {
 };
 
 start();
-

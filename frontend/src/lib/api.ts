@@ -122,6 +122,16 @@ export type BudgetSummary = {
   income: number;
   totalPlanned: number;
   percentOfIncome: number;
+  coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
+  coverageReason: string | null;
+  coverage: {
+    complete: number[];
+    partial: number[];
+    skipped: number[];
+    unknown: number[];
+    isComparable: boolean;
+    warnings: string[];
+  };
   plans: BudgetPlan[];
 };
 
@@ -249,8 +259,8 @@ export const api = {
 
   // Accounts (wallets / GL — no user-facing codes)
   accounts: {
-    list: (params?: { type?: string; search?: string }) => {
-      const query = params ? new URLSearchParams(params).toString() : '';
+    list: (params?: { type?: string; search?: string; includeInactive?: boolean }) => {
+      const query = params ? new URLSearchParams(Object.entries(params).reduce<Record<string, string>>((out, [key, value]) => { if (value !== undefined) out[key] = String(value); return out; }, {})).toString() : '';
       return fetchApi<Array<{
         id: number;
         name: string;
@@ -268,6 +278,7 @@ export const api = {
         billingDate: number | null;
         provider: string | null;
         parentId: number | null;
+        liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
       }>>(`/accounts${query ? `?${query}` : ''}`);
     },
     get: (id: number) => fetchApi<{
@@ -287,6 +298,7 @@ export const api = {
       billingDate: number | null;
       provider: string | null;
       parentId: number | null;
+      liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
     }>(`/accounts/${id}`),
     create: (data: {
       name: string;
@@ -301,6 +313,7 @@ export const api = {
       billingDate?: number | null;
       provider?: string | null;
       parentId?: number | null;
+      liquidityClass?: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
     }) => fetchApi('/accounts', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<{
       name: string;
@@ -316,8 +329,17 @@ export const api = {
       billingDate: number | null;
       provider: string | null;
       parentId: number | null;
+      liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
     }>) => fetchApi(`/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/accounts/${id}`, { method: 'DELETE' }),
+    restore: (id: number) => fetchApi(`/accounts/${id}/restore`, { method: 'POST' }),
+    dependencyPreview: (id: number) => fetchApi<{
+      account: unknown;
+      canArchive: boolean;
+      canRestore: boolean;
+      blockers: string[];
+      dependencies: { postedTransactions: number; budgetPlans: number; childAccounts: number; linkedCategories: number };
+    }>(`/accounts/${id}/dependency-preview`),
     reconcile: (balances: Array<{ accountId: number; actualBalance: number }>) => 
       fetchApi<{
         success: boolean;
@@ -414,7 +436,11 @@ export const api = {
             debit: number;
             credit: number;
             cashFlowClass: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
+            accountName: string | null;
+            accountType: string | null;
+            accountSystemKey: string | null;
           }>;
+          categoryAllocations: Array<{ categoryId: number; amount: number; categoryName: string | null }>;
           tags: Array<{ tagId: number; name: string; color: string }>;
         }>;
         pagination: {
@@ -425,7 +451,18 @@ export const api = {
         };
       }>(`/transactions${query ? `?${query}` : ''}`);
     },
-    get: (id: number) => fetchApi(`/transactions/${id}`),
+    get: (id: number) => fetchApi<{
+      id: number;
+      date: number;
+      description: string;
+      notes: string | null;
+      place: string | null;
+      categoryId: number | null;
+      txType: string;
+      lines: Array<{ id: number; accountId: number; debit: number; credit: number; description: string | null; cashFlowClass: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null }>;
+      tags: Array<{ tagId: number; name: string; color: string }>;
+      categoryAllocations: Array<{ categoryId: number; amount: number; categoryName: string | null }>;
+    }>(`/transactions/${id}`),
     reverse: (id: number) => fetchApi<{ id: number; reversalOfTxId: number }>(`/transactions/${id}/reverse`, { method: 'POST' }),
     create: (
       data:
@@ -440,6 +477,7 @@ export const api = {
             linkedTxId?: number | null;
             tagIds?: number[];
             categoryId?: number | null;
+            categoryAllocations?: Array<{ categoryId: number; amount: number }>;
             lines: Array<{
               accountId: number;
               debit: number;
@@ -580,20 +618,24 @@ export const api = {
 
   // Categories
   categories: {
-    list: (params?: { search?: string }) => {
-      const query = params ? new URLSearchParams(params).toString() : '';
+    list: (params?: { search?: string; includeInactive?: boolean }) => {
+      const query = params ? new URLSearchParams(Object.entries(params).reduce<Record<string, string>>((out, [key, value]) => { if (value !== undefined) out[key] = String(value); return out; }, {})).toString() : '';
       return fetchApi<Array<{
         id: number;
         name: string;
         icon: string | null;
         color: string | null;
+        reportingAccountId: number | null;
+        isActive: boolean;
       }>>(`/categories${query ? `?${query}` : ''}`);
     },
-    create: (data: { name: string; icon?: string | null; color?: string | null }) =>
+    create: (data: { name: string; icon?: string | null; color?: string | null; reportingAccountId?: number | null }) =>
       fetchApi('/categories', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: number, data: Partial<{ name: string; icon: string | null; color: string | null }>) =>
+    update: (id: number, data: Partial<{ name: string; icon: string | null; color: string | null; reportingAccountId: number | null }>) =>
       fetchApi(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/categories/${id}`, { method: 'DELETE' }),
+    restore: (id: number) => fetchApi(`/categories/${id}/restore`, { method: 'POST' }),
+    dependencyPreview: (id: number) => fetchApi(`/categories/${id}/dependency-preview`),
   },
 
   // Tags
@@ -787,6 +829,26 @@ export const api = {
       expenses: number;
       net: number;
     }>>('/analytics/period-summaries'),
+  },
+
+  // Audit Log
+  anomalies: {
+    money: (status?: 'open' | 'resolved' | 'dismissed') => fetchApi<{
+      reviews: Array<{
+        id: number;
+        kind: 'possible_100x_pair' | 'legacy_reconciliation_plug';
+        transactionId: number;
+        relatedTransactionId: number | null;
+        detectedAmount: number;
+        reason: string;
+        status: 'open' | 'resolved' | 'dismissed';
+        reviewNote: string | null;
+        transaction: { id: number; date: number; description: string; txType: string; status: string } | null;
+        relatedTransaction: { id: number; date: number; description: string; txType: string; status: string } | null;
+      }>;
+    }>(`/anomalies/money${status ? `?status=${status}` : ''}`),
+    scanMoney: () => fetchApi<{ created: number; candidates: number }>('/anomalies/money/scan', { method: 'POST' }),
+    reviewMoney: (id: number, status: 'resolved' | 'dismissed', reviewNote: string) => fetchApi(`/anomalies/money/${id}/review`, { method: 'POST', body: JSON.stringify({ status, reviewNote }) }),
   },
 
   // Audit Log
@@ -1244,9 +1306,9 @@ export const api = {
       if (startDate) params.append('startDate', startDate.toString());
       if (endDate) params.append('endDate', endDate.toString());
       return fetchApi<{
-        operating: Array<{ category: string; description: string; amount: number; type: string }>;
-        investing: Array<{ category: string; description: string; amount: number; type: string }>;
-        financing: Array<{ category: string; description: string; amount: number; type: string }>;
+        operating: Array<{ category: string; description: string; amount: number; type: string; classificationSource: 'explicit' | 'legacy_inference' }>;
+        investing: Array<{ category: string; description: string; amount: number; type: string; classificationSource: 'explicit' | 'legacy_inference' }>;
+        financing: Array<{ category: string; description: string; amount: number; type: string; classificationSource: 'explicit' | 'legacy_inference' }>;
         netOperating: number;
         netInvesting: number;
         netFinancing: number;
@@ -1266,6 +1328,7 @@ export const api = {
       return fetchApi<{
         breakdown: Array<{ category: string; accountId: number; amount: number; percentage: number }>;
         total: number;
+        coverage: { complete: number[]; partial: number[]; skipped: number[]; unknown: number[]; isComparable: boolean; warnings: string[] };
       }>(`/reports/spending?${params.toString()}`);
     },
     monthly: (periodId: number) => fetchApi<{
@@ -1277,6 +1340,7 @@ export const api = {
       expensesByCategory: Array<{ name: string; amount: number }>;
       budgetComparison: Array<{ category: string; budget: number; actual: number; variance: number }>;
       transactions: Array<{ id: number; date: number; description: string; category: string; amountCents: number; type: string }>;
+      coverage: { complete: number[]; partial: number[]; skipped: number[]; unknown: number[]; isComparable: boolean; warnings: string[] };
       provenance: { source: string; asOfMs: number; includesDrafts: boolean };
     }>(`/reports/monthly?periodId=${periodId}`),
     trends: (periodCount?: number) => {
@@ -1289,6 +1353,7 @@ export const api = {
         revenue: number;
         expenses: number;
         netIncome: number;
+        coverage: { complete: number[]; partial: number[]; skipped: number[]; unknown: number[]; isComparable: boolean; warnings: string[] };
       }>>(`/reports/trends${params}`);
     },
     export: (reportType: 'income-statement' | 'balance-sheet' | 'cash-flow', periodId?: number, startDate?: number, endDate?: number, asOfDate?: number) => {

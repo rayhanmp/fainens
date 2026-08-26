@@ -127,11 +127,14 @@ export async function getSpendingTrend(dayCount: number = 30): Promise<{
     point.transactionCount = transactionIdsByPoint[index]?.size ?? point.transactionCount;
   }
   const totalSpent = points.reduce((sum, point) => sum + point.spent, 0);
+  const comparablePoints = points.filter((point) => point.coverageStatus === "complete" || point.coverageStatus === "partial");
   return {
     range: "30d",
     bucketCount: points.length,
     totalSpent,
-    averageDailySpend: Math.round(totalSpent / points.length),
+    // Skipped/unknown coverage is not zero activity. Exclude those buckets
+    // from the denominator so the average cannot be diluted by an absence gap.
+    averageDailySpend: Math.round(totalSpent / Math.max(1, comparablePoints.length)),
     hasIncompleteCoverage: points.some((point) => point.coverageStatus !== "complete"),
     series: points,
   };

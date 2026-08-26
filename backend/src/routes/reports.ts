@@ -13,6 +13,7 @@ import {
 } from "../services/reports";
 import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
+import { getPeriodCoverage } from "../services/period-coverage";
 
 // Query parameter schemas
 const periodQuerySchema = z.object({
@@ -113,8 +114,18 @@ export default async function (fastify: FastifyInstance) {
         query.startDate,
         query.endDate
       );
-
-      return { breakdown, total: breakdown.reduce((sum, b) => sum + b.amount, 0) };
+      let coverageStart = query.startDate ?? 0;
+      let coverageEnd = query.endDate ?? Date.now();
+      if (query.periodId != null) {
+        const [period] = await db.select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+          .from(salaryPeriods).where(eq(salaryPeriods.id, query.periodId)).limit(1);
+        if (period) {
+          coverageStart = period.startDate;
+          coverageEnd = inclusiveEnd(period.endDate);
+        }
+      }
+      const coverage = await getPeriodCoverage(coverageStart, coverageEnd);
+      return { breakdown, total: breakdown.reduce((sum, b) => sum + b.amount, 0), coverage };
     } catch (err) {
       return reportError(fastify, reply, err, "Failed to generate spending breakdown");
     }
@@ -133,12 +144,13 @@ export default async function (fastify: FastifyInstance) {
       const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
         .from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1);
       if (!period) return reply.code(404).send({ error: "Period not found" });
-      const [facts, incomeStatement, balanceSheet, budgets, revision] = await Promise.all([
+      const [facts, incomeStatement, balanceSheet, budgets, revision, coverage] = await Promise.all([
         getFinancialFacts({ startMs: period.startDate, endMs: inclusiveEnd(period.endDate), asOfMs: inclusiveEnd(period.endDate), periodId }),
         generateIncomeStatement(periodId),
         generateBalanceSheet(inclusiveEnd(period.endDate)),
         getBudgetFacts(periodId),
         getFinancialRevision(),
+        getPeriodCoverage(period.startDate, inclusiveEnd(period.endDate)),
       ]);
       const transactionRows = facts.rows
         .map((row) => {
@@ -167,6 +179,7 @@ export default async function (fastify: FastifyInstance) {
           variance: row.plannedCents - row.spentCents,
         })),
         transactions: transactionRows,
+        coverage,
         provenance: { source: "canonical-financial-facts", asOfMs: inclusiveEnd(period.endDate), includesDrafts: false },
       };
     } catch (err) {
@@ -261,6 +274,7 @@ export default async function (fastify: FastifyInstance) {
             revenue: stmt.totalRevenue,
             expenses: stmt.totalExpenses,
             netIncome: stmt.netIncome,
+            coverage: stmt.coverage,
           };
         })
       );

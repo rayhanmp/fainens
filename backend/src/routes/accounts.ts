@@ -2,7 +2,7 @@ import { eq, like, desc, and, inArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
-import { accounts, auditLogs, reconciliationItems, reconciliationSessions, transactionLines, transactions } from "../db/schema";
+import { accounts, auditLogs, budgetPlans, categories, reconciliationItems, reconciliationSessions, transactionLines, transactions } from "../db/schema";
 import { computeAccountBalance, computeAccountBalanceRolledUp } from "../services/ledger";
 import { precomputeAccountBalance } from "../cache/precompute";
 import { calculateReconciliationItem } from "../services/reconciliation";
@@ -22,12 +22,13 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   fastify.get("/api/accounts", async (request) => {
-    const { type, search } = request.query as {
+    const { type, search, includeInactive } = request.query as {
       type?: string;
       search?: string;
+      includeInactive?: string;
     };
 
-    const conditions = [eq(accounts.isActive, true)];
+    const conditions = includeInactive === "true" ? [] : [eq(accounts.isActive, true)];
     if (type && accountTypeEnum.includes(type as (typeof accountTypeEnum)[number])) {
       conditions.push(eq(accounts.type, type));
     }
@@ -276,10 +277,78 @@ export default async function (fastify: FastifyInstance) {
 
     db.transaction((tx) => {
       tx.update(accounts).set({ isActive: false }).where(eq(accounts.id, accountId)).run();
+      tx.insert(auditLogs).values({
+        entityType: "account",
+        entityId: accountId,
+        action: "archive",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify({ ...existing, isActive: false })),
+      }).run();
       bumpFinancialRevisionSync(tx);
     });
 
     reply.code(204).send();
+  });
+
+  fastify.get("/api/accounts/:id/dependency-preview", async (request, reply) => {
+    const accountId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) return reply.code(400).send({ error: "Invalid account id" });
+    const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+    if (!account) return reply.code(404).send({ error: "Account not found" });
+    const [balance, childRows, txRows, budgetRows, categoryRows] = await Promise.all([
+      computeAccountBalance(accountId, db),
+      db.select({ count: sql<number>`count(*)` }).from(accounts).where(eq(accounts.parentId, accountId)),
+      db.select({ count: sql<number>`count(*)` }).from(transactionLines)
+        .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+        .where(and(eq(transactionLines.accountId, accountId), sql`${transactions.status} <> 'draft'`)),
+      db.select({ count: sql<number>`count(*)` }).from(budgetPlans)
+        .innerJoin(categories, eq(budgetPlans.categoryId, categories.id))
+        .where(eq(categories.reportingAccountId, accountId)),
+      db.select({ count: sql<number>`count(*)` }).from(categories).where(eq(categories.reportingAccountId, accountId)),
+    ]);
+    const blockers: string[] = [];
+    if (account.systemKey) blockers.push("System accounts cannot be archived");
+    if (balance !== 0) blockers.push("Account has a non-zero balance");
+    if (Number(childRows[0]?.count ?? 0) > 0) blockers.push("Account has child accounts");
+    return {
+      account,
+      canArchive: account.isActive && blockers.length === 0,
+      canRestore: !account.isActive,
+      blockers,
+      dependencies: {
+        postedTransactions: Number(txRows[0]?.count ?? 0),
+        budgetPlans: Number(budgetRows[0]?.count ?? 0),
+        childAccounts: Number(childRows[0]?.count ?? 0),
+        linkedCategories: Number(categoryRows[0]?.count ?? 0),
+      },
+      consequence: "Archiving hides the account from new entries but preserves its journal history, budgets, and category mappings.",
+    };
+  });
+
+  fastify.post("/api/accounts/:id/restore", async (request, reply) => {
+    const accountId = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) return reply.code(400).send({ error: "Invalid account id" });
+    const [existing] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+    if (!existing) return reply.code(404).send({ error: "Account not found" });
+    if (existing.isActive) return existing;
+    if (existing.parentId != null) {
+      const [parent] = await db.select({ isActive: accounts.isActive }).from(accounts).where(eq(accounts.id, existing.parentId)).limit(1);
+      if (!parent?.isActive) return reply.code(409).send({ error: "Restore the parent account first" });
+    }
+    const restored = db.transaction((tx) => {
+      const [row] = tx.update(accounts).set({ isActive: true }).where(eq(accounts.id, accountId)).returning().all() as any[];
+      if (!row) throw new Error("Account restore failed");
+      tx.insert(auditLogs).values({
+        entityType: "account",
+        entityId: accountId,
+        action: "restore",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify(row)),
+      }).run();
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
+    return restored;
   });
 
   // Reconciliation history is read-only evidence. It is intentionally

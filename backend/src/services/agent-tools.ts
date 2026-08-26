@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, like, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import {
@@ -21,9 +21,12 @@ import { getFinancialRevision } from "./financial-revision";
 import { getPaylaterObligations } from "./paylater";
 import { previewDueSubscriptionRenewals } from "./subscription-renewals";
 import { previewSalaryCatchUp } from "./salary-posting";
+import { generateCashFlowStatement } from "./reports";
+import { calculateBurnRate } from "./analytics";
 import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getPeriodCoverage } from "./period-coverage";
 import { prepareAgentAction } from "./agent-actions";
+import { listMoneyAnomalyReviews } from "./money-anomaly-review";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
@@ -209,6 +212,73 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     name: "get_category_spending",
     description: "Read canonical posted spending by category, sorted by amount with percentage shares and period-coverage disclosure.",
     inputSchema: scopeSchema(),
+  },
+  {
+    name: "find_similar_transactions",
+    description: "Find deterministic historical transaction candidates using merchant text and optional amount/category signals. Similarity is evidence for review, not an accounting conclusion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", maxLength: 200 },
+        transactionId: { type: "integer", minimum: 1 },
+        amountCents: { type: "integer", minimum: 1 },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_cash_flow",
+    description: "Read the canonical cash-flow statement with operating, investing, financing, recovery-bridge, and coverage disclosures.",
+    inputSchema: scopeSchema(),
+  },
+  {
+    name: "get_category_variance",
+    description: "Compare planned budget amounts with allocation-aware posted spending for a period; skipped and unknown coverage is disclosed rather than treated as under budget.",
+    inputSchema: {
+      type: "object",
+      properties: { periodId: scopeProperties.periodId, categoryId: { type: "integer", minimum: 1 } },
+      required: ["periodId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "compare_periods",
+    description: "Compare canonical income, spending, net cash result, and coverage between two salary periods.",
+    inputSchema: {
+      type: "object",
+      properties: { periodIds: { type: "array", minItems: 2, maxItems: 6, items: { type: "integer", minimum: 1 } } },
+      required: ["periodIds"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "forecast_cash_position",
+    description: "Project cash-equivalent balance using the current canonical balance and recorded operating burn. This is a disclosed forecast, not a ledger mutation.",
+    inputSchema: {
+      type: "object",
+      properties: { horizonMonths: { type: "integer", minimum: 1, maximum: 60 } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_account_health",
+    description: "Read one account's current balance, liquidity treatment, and latest reconciliation evidence.",
+    inputSchema: {
+      type: "object",
+      properties: { accountId: { type: "integer", minimum: 1 }, asOfDate: { type: "integer", minimum: 0 } },
+      required: ["accountId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_money_anomalies",
+    description: "Read human-reviewable money anomaly candidates. Scanning and review never change ledger data.",
+    inputSchema: {
+      type: "object",
+      properties: { status: { type: "string", enum: ["open", "resolved", "dismissed"] }, limit: { type: "integer", minimum: 1, maximum: 100 } },
+      additionalProperties: false,
+    },
   },
   {
     name: "get_transaction_details",
@@ -816,6 +886,110 @@ export async function getCategorySpendingTool(input: unknown) {
   };
 }
 
+export async function findSimilarTransactionsTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("query or transactionId is required");
+  const transactionId = optionalInteger(input.transactionId, "transactionId", { min: 1 });
+  let query = optionalText(input.query, "query", 200);
+  let amountCents = optionalInteger(input.amountCents, "amountCents", { min: 1 });
+  let seedCategoryId: number | null = null;
+  if (transactionId != null) {
+    const [seed] = await db.select({ description: transactions.description, categoryId: transactions.categoryId })
+      .from(transactions).where(and(eq(transactions.id, transactionId), ne(transactions.status, "draft"))).limit(1);
+    if (!seed) throw new Error("Seed transaction not found");
+    query = query ?? seed.description;
+    seedCategoryId = seed.categoryId;
+    const [amount] = await db.select({ amount: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)` })
+      .from(transactionLines).innerJoin(accounts, eq(transactionLines.accountId, accounts.id)).where(eq(transactionLines.transactionId, transactionId));
+    amountCents = amountCents ?? Math.abs(Number(amount?.amount ?? 0));
+  }
+  if (!query && amountCents == null) throw new Error("query or transactionId is required");
+  const tokens = (query ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 2).slice(0, 8);
+  const rows = await db.all(sql`
+    SELECT t.id, t.date, t.description, t.category_id AS category_id, c.name AS category,
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents
+    FROM "transaction" t
+    LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
+    LEFT JOIN account a ON a.id = tl.account_id
+    LEFT JOIN category c ON c.id = t.category_id
+    WHERE t.status <> 'draft' AND t.status <> 'reversed'
+    GROUP BY t.id, t.date, t.description, t.category_id, c.name
+    ORDER BY t.date DESC, t.id DESC
+    LIMIT 500
+  `) as unknown as Array<Record<string, unknown>>;
+  const limit = Math.min(optionalInteger(input.limit, "limit", { min: 1 }) ?? 20, 50);
+  const candidates = rows.map((row) => {
+    const description = String(row.description ?? "");
+    const haystack = description.toLowerCase();
+    const matchingTokens = tokens.filter((token) => haystack.includes(token));
+    const candidateAmount = Math.abs(Number(row.expense_cents ?? 0));
+    const amountDelta = amountCents && candidateAmount ? Math.abs(candidateAmount - amountCents) / Math.max(amountCents, candidateAmount) : null;
+    const categoryMatch = seedCategoryId != null && Number(row.category_id ?? 0) === seedCategoryId;
+    const score = matchingTokens.length * 3 + (categoryMatch ? 2 : 0) + (amountDelta != null && amountDelta <= 0.1 ? 1 : 0);
+    return { id: Number(row.id), date: Number(row.date), description, categoryId: row.category_id == null ? null : Number(row.category_id), category: row.category == null ? null : String(row.category), amountCents: candidateAmount, score, matchReasons: [...(matchingTokens.length ? [`description matched: ${matchingTokens.join(", ")}`] : []), ...(categoryMatch ? ["same category"] : []), ...(amountDelta != null && amountDelta <= 0.1 ? ["amount within 10%"] : [])] };
+  }).filter((row) => row.id !== transactionId && row.score > 0).sort((a, b) => b.score - a.score || b.date - a.date).slice(0, limit);
+  return { seed: { transactionId: transactionId ?? null, query: query ?? null, amountCents: amountCents ?? null }, candidates, deterministic: true };
+}
+
+export async function getCashFlowTool(input: unknown) {
+  const scope = await resolveAgentScope(parseAgentScopeInput(input));
+  const statement = await generateCashFlowStatement(scope.periodId ?? undefined, scope.periodId == null ? scope.startMs : undefined, scope.periodId == null ? scope.endMs : undefined);
+  return { scope, statement, coverage: statement.coverage, provenance: { source: "canonical-cash-flow-statement", includesLegacyInference: true } };
+}
+
+export async function getCategoryVarianceTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("periodId is required");
+  const periodId = optionalInteger(input.periodId, "periodId", { min: 1 });
+  if (periodId == null) throw new Error("periodId is required");
+  const categoryId = optionalInteger(input.categoryId, "categoryId", { min: 1 });
+  const period = (await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus, coverageReason: salaryPeriods.coverageReason }).from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1))[0];
+  if (!period) throw new Error("Period not found");
+  const facts = await getBudgetFacts(periodId);
+  const rows = categoryId == null ? facts : facts.filter((row) => row.categoryId === categoryId);
+  return { period, rows: rows.map((row) => ({ ...row, varianceCents: row.plannedCents - row.spentCents, isTracked: period.coverageStatus === "complete" || period.coverageStatus === "partial" })), coverage: await getPeriodCoverage(period.startDate, inclusivePeriodEnd(period.endDate)) };
+}
+
+export async function comparePeriodsTool(input: unknown) {
+  if (!isRecord(input) || !Array.isArray(input.periodIds) || input.periodIds.length < 2) throw new Error("periodIds must contain at least two period IDs");
+  const periodIds = input.periodIds.map((value, index) => optionalInteger(value, `periodIds[${index}]`, { min: 1 })).filter((value): value is number => value != null).slice(0, 6);
+  const periods = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus, coverageReason: salaryPeriods.coverageReason }).from(salaryPeriods).where(inArray(salaryPeriods.id, periodIds));
+  if (periods.length !== periodIds.length) throw new Error("One or more periods not found");
+  const results = await Promise.all(periods.map(async (period) => {
+    const facts = await getFinancialFacts({ startMs: period.startDate, endMs: inclusivePeriodEnd(period.endDate), periodId: period.id });
+    return { period, incomeCents: facts.totalIncomeCents, spentCents: facts.totalSpentCents, netCents: facts.totalIncomeCents - facts.totalSpentCents, byCategory: facts.byCategory, coverage: await getPeriodCoverage(period.startDate, inclusivePeriodEnd(period.endDate)) };
+  }));
+  return { periods: results, comparable: results.every((result) => result.coverage.isComparable), warnings: results.flatMap((result) => result.coverage.warnings) };
+}
+
+export async function forecastCashPositionTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const horizonMonths = Math.min(optionalInteger(input.horizonMonths, "horizonMonths", { min: 1 }) ?? 6, 60);
+  const liquidAccounts = await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true), eq(accounts.liquidityClass, "cash_equivalent")));
+  const liquidBalanceCents = (await Promise.all(liquidAccounts.map((account) => computeAccountBalanceAsOf(account.id, Date.now())))).reduce((sum, balance) => sum + balance, 0);
+  const burn = await calculateBurnRate();
+  return { horizonMonths, currentCashCents: liquidBalanceCents, monthlyBurnCents: burn.grossBurnRate, projectedCashCents: liquidBalanceCents - burn.grossBurnRate * horizonMonths, assumptions: ["Uses active asset account balances as cash; use the runway/account-health tools for liquidity-class detail.", "Assumes recorded average operating burn continues; skipped/unknown periods are not treated as zero activity."], writesPerformed: false };
+}
+
+export async function getAccountHealthTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("accountId is required");
+  const accountId = optionalInteger(input.accountId, "accountId", { min: 1 });
+  if (accountId == null) throw new Error("accountId is required");
+  const asOfMs = parseAsOfDate(input.asOfDate);
+  const [account] = await db.select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass, systemKey: accounts.systemKey }).from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  if (!account) throw new Error("Account not found");
+  const balanceCents = await computeAccountBalanceAsOf(accountId, asOfMs);
+  const [latest] = await db.select({ id: reconciliationSessions.id, asOfDate: reconciliationSessions.asOfDate, status: reconciliationSessions.status, lifecycleStatus: reconciliationSessions.lifecycleStatus }).from(reconciliationSessions).innerJoin(reconciliationItems, eq(reconciliationItems.sessionId, reconciliationSessions.id)).where(and(eq(reconciliationItems.accountId, accountId), eq(reconciliationSessions.lifecycleStatus, "active"))).orderBy(desc(reconciliationSessions.asOfDate)).limit(1);
+  return { account, asOfMs, balanceCents, latestReconciliation: latest ?? null, warnings: latest ? [] : ["No active reconciliation evidence found for this account"] };
+}
+
+export async function getMoneyAnomaliesTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const status = input.status == null ? "open" : input.status;
+  if (status !== "open" && status !== "resolved" && status !== "dismissed") throw new Error("status must be open, resolved, or dismissed");
+  const limit = Math.min(optionalInteger(input.limit, "limit", { min: 1 }) ?? 50, 100);
+  const reviews = await listMoneyAnomalyReviews(status);
+  return { status, reviews: reviews.slice(0, limit), writesPerformed: false };
+}
+
 export async function getCategoriesTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const search = optionalText(input.search, "search", 100);
@@ -824,7 +998,7 @@ export async function getCategoriesTool(input: unknown) {
   const pattern = search ? `%${search.toLowerCase().replace(/[%_]/g, "\\$&")}%` : null;
   const rows = await db.select({ id: categories.id, name: categories.name, reportingAccountId: categories.reportingAccountId })
     .from(categories)
-    .where(pattern == null ? undefined : like(sql`lower(${categories.name})`, pattern))
+    .where(pattern == null ? eq(categories.isActive, true) : and(eq(categories.isActive, true), like(sql`lower(${categories.name})`, pattern)))
     .orderBy(categories.name)
     .limit(limit);
   return { search: search ?? null, categories: rows, limit };
@@ -1006,6 +1180,27 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       break;
     case "get_category_spending":
       data = await getCategorySpendingTool(input);
+      break;
+    case "find_similar_transactions":
+      data = await findSimilarTransactionsTool(input);
+      break;
+    case "get_cash_flow":
+      data = await getCashFlowTool(input);
+      break;
+    case "get_category_variance":
+      data = await getCategoryVarianceTool(input);
+      break;
+    case "compare_periods":
+      data = await comparePeriodsTool(input);
+      break;
+    case "forecast_cash_position":
+      data = await forecastCashPositionTool(input);
+      break;
+    case "get_account_health":
+      data = await getAccountHealthTool(input);
+      break;
+    case "get_money_anomalies":
+      data = await getMoneyAnomaliesTool(input);
       break;
     case "get_categories":
       data = await getCategoriesTool(input);

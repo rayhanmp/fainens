@@ -13,6 +13,7 @@ import {
   Users,
   Calculator,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
@@ -42,6 +43,7 @@ const restNav: NavItem[] = [
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/anomalies', label: 'Data quality', icon: AlertTriangle },
   { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
 ];
 
