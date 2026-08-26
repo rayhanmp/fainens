@@ -39,6 +39,7 @@ export type WalletAccount = {
   type: string;
   balance: number;
   systemKey?: string | null;
+  liquidityClass?: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
 };
 
 export type CategoryRow = {
@@ -58,6 +59,16 @@ type TxLine = {
   debit: number;
   credit: number;
   description?: string;
+  cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
+};
+
+type CashFlowClass = 'operating' | 'investing' | 'financing' | 'transfer';
+type JournalFormLine = {
+  accountId: string;
+  debit: string;
+  credit: string;
+  description: string;
+  cashFlowClass: CashFlowClass | '';
 };
 
 export type EditingTransaction = {
@@ -275,9 +286,9 @@ export function TransactionModal({
     place: '',
     tagIds: [] as number[],
     lines: [
-      { accountId: '', debit: '', credit: '', description: '' },
-      { accountId: '', debit: '', credit: '', description: '' },
-    ] as Array<{ accountId: string; debit: string; credit: string; description: string }>,
+      { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
+      { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
+    ] as JournalFormLine[],
   });
 
   // AI mode state
@@ -453,6 +464,7 @@ export function TransactionModal({
           debit: l.debit.toString(),
           credit: l.credit.toString(),
           description: l.description || '',
+          cashFlowClass: l.cashFlowClass === 'operating' || l.cashFlowClass === 'investing' || l.cashFlowClass === 'financing' || l.cashFlowClass === 'transfer' ? l.cashFlowClass : '',
         })),
       });
       // Load attachments for editing transaction
@@ -508,8 +520,8 @@ export function TransactionModal({
         place: '',
         tagIds: [],
         lines: [
-          { accountId: '', debit: '', credit: '', description: '' },
-          { accountId: '', debit: '', credit: '', description: '' },
+          { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
+          { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
         ],
       });
     }
@@ -870,7 +882,7 @@ export function TransactionModal({
   const addJournalLine = () => {
     setJournalForm({
       ...journalForm,
-      lines: [...journalForm.lines, { accountId: '', debit: '', credit: '', description: '' }],
+      lines: [...journalForm.lines, { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' }],
     });
   };
 
@@ -885,9 +897,19 @@ export function TransactionModal({
     });
   };
 
-  const updateJournalLine = (index: number, field: string, value: string) => {
+  const updateJournalLine = (index: number, field: keyof JournalFormLine, value: string) => {
     const newLines = [...journalForm.lines];
-    newLines[index] = { ...newLines[index], [field]: value };
+    const line = newLines[index];
+    if (field === 'accountId') {
+      const account = accounts.find((item) => item.id.toString() === value);
+      newLines[index] = {
+        ...line,
+        accountId: value,
+        cashFlowClass: account?.liquidityClass === 'cash_equivalent' ? line.cashFlowClass : '',
+      };
+    } else {
+      newLines[index] = { ...line, [field]: value };
+    }
     setJournalForm({ ...journalForm, lines: newLines });
   };
 
@@ -923,6 +945,14 @@ export function TransactionModal({
       setFormError('At least 2 accounts must have non-zero amounts');
       return;
     }
+    const unclassifiedCashLine = validLines.find((line) => {
+      const account = accounts.find((item) => item.id.toString() === line.accountId);
+      return account?.liquidityClass === 'cash_equivalent' && !line.cashFlowClass;
+    });
+    if (unclassifiedCashLine) {
+      setFormError('Choose a cash-flow class for every cash-equivalent journal line');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -938,6 +968,7 @@ export function TransactionModal({
           debit: parseInt(line.debit, 10) || 0,
           credit: parseInt(line.credit, 10) || 0,
           description: line.description || undefined,
+          cashFlowClass: line.cashFlowClass || undefined,
         })),
       });
       onSaved();
@@ -1680,6 +1711,9 @@ export function TransactionModal({
               </label>
               {journalForm.lines.map((line, index) => (
                 <div key={index} className="flex gap-2 items-start flex-wrap">
+                  {(() => {
+                    const selectedAccount = allAccountsForJournal.find((account) => account.id.toString() === line.accountId);
+                    return <>
                   <Select
                     value={line.accountId}
                     onChange={(e) => updateJournalLine(index, 'accountId', e.target.value)}
@@ -1692,6 +1726,20 @@ export function TransactionModal({
                     ]}
                     className={cn('flex-1 min-w-[140px]', stitchSelect)}
                   />
+                  {selectedAccount?.liquidityClass === 'cash_equivalent' && (
+                    <Select
+                      value={line.cashFlowClass}
+                      onChange={(e) => updateJournalLine(index, 'cashFlowClass', e.target.value)}
+                      options={[
+                        { value: '', label: 'Cash flow…' },
+                        { value: 'operating', label: 'Operating' },
+                        { value: 'investing', label: 'Investing' },
+                        { value: 'financing', label: 'Financing' },
+                        { value: 'transfer', label: 'Internal transfer' },
+                      ]}
+                      className={cn('w-40', stitchSelect)}
+                    />
+                  )}
                   <Input
                     type="number"
                     placeholder="Debit"
@@ -1713,6 +1761,8 @@ export function TransactionModal({
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                    </>;
+                  })()}
                 </div>
               ))}
               <Button type="button" variant="secondary" onClick={addJournalLine} size="sm" className="rounded-full">

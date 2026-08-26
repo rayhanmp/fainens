@@ -195,7 +195,7 @@ export async function createSimpleTransaction(
   }
 
   const [wallet] = await dbLike
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.id, input.walletAccountId))
     .limit(1);

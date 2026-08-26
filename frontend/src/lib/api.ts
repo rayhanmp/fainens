@@ -272,6 +272,7 @@ export const api = {
             accountId: number;
             debit: number;
             credit: number;
+            cashFlowClass: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
           }>;
           tags: Array<{ tagId: number; name: string; color: string }>;
         }>;
@@ -303,6 +304,7 @@ export const api = {
               debit: number;
               credit: number;
               description?: string;
+              cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
             }>;
           }
         | {
@@ -344,6 +346,7 @@ export const api = {
         accountId: number;
         debit: number;
         credit: number;
+        cashFlowClass: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
       }>;
       balancesByAccountId: Record<number, number>;
     }>('/transactions', { method: 'POST', body: JSON.stringify(data) }),
