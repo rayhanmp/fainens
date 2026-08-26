@@ -203,6 +203,64 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
+11. Add durable period-coverage backfill for return-after-absence: create explicitly skipped period shells and propagate coverage gaps through facts, reports, budgets, dashboard, and agent retrieval rather than treating absent tracking as zero activity.
+
+## Return-after-absence period coverage policy
+
+Missing calendar/accounting periods must be represented, not silently omitted and not treated as empty. A period created because the user was absent is a **skipped-coverage period**: it records that the ledger did not capture ordinary activity for that interval. It does not assert zero income, spending, cash movement, budget actuals, or account balance change.
+
+### Required model
+
+Keep `salary_period.status` for the accounting lock lifecycle (`open`/`closed`) and `is_active` for archive lifecycle. Add a separate durable `coverage_status` so those meanings are never conflated:
+
+```text
+complete  — user has tracked/reviewed this period sufficiently for comparisons
+partial   — some historical events were added, but the period remains incomplete
+skipped   — user intentionally did not track this period while absent
+unknown   — legacy/imported history whose coverage cannot be asserted
+```
+
+New normal periods should begin as `complete` only when the product has an explicit tracking/review policy; otherwise use `unknown` or a separate current-period state until the period is closed. Existing periods must be migrated conservatively to `unknown`, never retroactively declared complete merely because they contain transactions.
+
+### Backfill flow
+
+On return, the app presents a read-only backfill preview using the configured salary-period cadence. It identifies every non-overlapping period between the latest existing period and the current period. The user explicitly confirms **Create skipped period shells**; page view, startup, and scheduler jobs must not create them implicitly.
+
+For every confirmed shell:
+
+- create the normal period header with deterministic start/end dates and name;
+- set `coverage_status = skipped` and store an audited reason such as `return_after_absence`;
+- create no transactions, opening balances, budget rows, reconciliation, or fabricated recurring entries;
+- leave it open initially only if the user intends to backfill activity; otherwise close it after review according to the normal period-close policy.
+
+If the user later posts selected catch-up salary/subscription events or imports a partial statement into such a period, transition it to `partial`; do not silently promote it to `complete`. A deliberate period review/reconciliation workflow may later mark it `complete` only with an audited user decision.
+
+### Read and insight semantics
+
+Every period-aware read model must return coverage metadata and gaps:
+
+```ts
+{
+  actuals: { income: number; expense: number; cashFlow: number },
+  coverage: { complete: number[]; partial: number[]; skipped: number[]; unknown: number[] },
+  isComparable: boolean,
+  warnings: string[]
+}
+```
+
+- A report whose selected range includes `skipped`, `partial`, or `unknown` coverage is labelled incomplete; it may show recorded actuals, but never calls a gap “zero activity.”
+- Trend averages, savings rates, burn rates, forecasts, and period comparisons exclude skipped/unknown periods by default and disclose the exclusion. Partial periods require an explicit include decision.
+- Budgets for skipped coverage are `not tracked`, never `under budget` because actuals happen to be zero. Do not clone a normal budget into a skipped shell without a user request.
+- Dashboard cards must show a coverage-gap badge for selected/all-period scopes.
+- Agent tools return coverage state and require the LLM to state the gap in answers. “No transactions” is valid only for a `complete` period with zero posted transactions.
+- Cash/account balances are always shown as recorded facts, with no invented movement across skipped periods.
+
+### Frontend requirements
+
+- Add a return-after-absence wizard combining missing-period preview, skipped-shell confirmation, subscription/salary occurrence decisions, and optional statement-import/reconciliation next steps.
+- Period cards/list views show coverage badges distinct from `OPEN`, `CLOSED`, and `ARCHIVED`.
+- Reports, budget, dashboard, and agent cards disclose affected period gaps with links to the skipped periods.
+- A user can open a skipped period, import/backfill activity, mark it partial, and only mark it complete through an explicit reviewed action.
 
 ## Frontend and operational-flow gaps
 
