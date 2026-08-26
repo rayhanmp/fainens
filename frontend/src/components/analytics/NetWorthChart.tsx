@@ -124,7 +124,7 @@ export function NetWorthChart({ className = '' }: { className?: string } = {}) {
   }
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 sm:p-6 lg:p-8">
+    <div className={cn('flex h-full min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 sm:p-6 lg:p-8', className)}>
       <div className="mb-5 flex flex-col gap-4 lg:mb-6">
         <div className="min-w-0">
           <h3 className="font-headline text-base font-bold text-[var(--ref-on-surface)] sm:text-lg">
