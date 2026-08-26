@@ -61,9 +61,9 @@ function scopeLabel(scope: unknown, periods: Period[]): string {
 }
 
 function resultLink(toolName: string): { href: string; label: string } | null {
-  if (toolName === 'search_transactions' || toolName === 'get_financial_facts') return { href: '/transactions', label: 'Open transactions' };
+  if (toolName === 'search_transactions' || toolName === 'get_financial_facts' || toolName === 'get_transaction_details') return { href: '/transactions', label: 'Open transactions' };
   if (toolName === 'get_account_balances' || toolName === 'get_reconciliation_status') return { href: '/accounts', label: 'Open accounts' };
-  if (toolName === 'get_budget_facts' || toolName === 'preview_budget_plan') return { href: '/budget', label: 'Open budget' };
+  if (toolName === 'get_budget_facts' || toolName === 'preview_budget_plan' || toolName === 'get_category_spending') return { href: '/budget', label: 'Open budget' };
   if (toolName === 'get_loan_balances') return { href: '/loans', label: 'Open loans' };
   if (toolName === 'get_paylater_obligations') return { href: '/paylater', label: 'Open PayLater' };
   if (toolName === 'get_due_recurring') return { href: '/subscriptions', label: 'Open subscriptions' };

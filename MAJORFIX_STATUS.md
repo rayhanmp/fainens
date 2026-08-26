@@ -105,7 +105,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Posted journals are immutable through generic edit/delete routes. The transaction UI offers an explicit equal-and-opposite reversal, preserves the original, and links both entries for auditability.
 - Period creation/update rejects overlapping ranges; period deletion preserves periods with posted transactions or budget plans instead of cascading away history.
 - Canonical facts, account balances, trial balance, reports, budgets, analytics, reconciliation, and PayLater summaries exclude draft journals.
-- Added an authenticated read-only agent registry with independent tools for facts, budgets, account balances, loans, PayLater, recurring previews, transaction search, reconciliation status, period listing, and budget-plan previews.
+- Added an authenticated read-only agent registry with independent tools for facts, budgets, account balances, loans, PayLater, recurring previews, transaction search, reconciliation status, period listing, budget-plan previews, safe arithmetic, date/time calculations, category spending, and exact journal provenance.
 - The LLM query route uses OpenRouter function/tool calls, executes only the allow-listed read-only tools, returns tool calls/results and financial revision, caps calls/rounds, and never mutates data. The compatibility context endpoint is composed from those same tools.
 - Added frontend API access to discover tools and call a single tool directly. Budget planning remains a preview and explicitly reports that no write occurred.
 

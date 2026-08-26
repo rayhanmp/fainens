@@ -11,6 +11,9 @@ import {
   reconciliationSessions,
   salaryPeriods,
   subscriptions,
+  transactionCategoryAllocations,
+  transactionLines,
+  transactions,
 } from "../db/schema";
 import { computeAccountBalanceAsOf } from "./ledger";
 import { getBudgetFacts, getFinancialFacts } from "./financial-facts";
@@ -75,6 +78,34 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     name: "get_financial_facts",
     description: "Read canonical posted income, expense, transaction rows, category totals, and wallet balance for a period or date range.",
     inputSchema: scopeSchema(),
+  },
+  {
+    name: "calculate",
+    description: "Evaluate a basic arithmetic expression deterministically. Supports numbers, parentheses, +, -, *, /, %, and ^. It never accesses financial data.",
+    inputSchema: {
+      type: "object",
+      properties: { expression: { type: "string", minLength: 1, maxLength: 500 } },
+      required: ["expression"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_current_datetime",
+    description: "Read the current timestamp in UTC and Asia/Jakarta for date-sensitive planning. It never accesses financial data.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "calculate_date_difference",
+    description: "Calculate the exact signed elapsed time between two UTC millisecond timestamps. Useful for due-date and planning arithmetic.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        startDate: { type: "integer", minimum: 0, description: "Start UTC timestamp in milliseconds." },
+        endDate: { type: "integer", minimum: 0, description: "End UTC timestamp in milliseconds." },
+      },
+      required: ["startDate", "endDate"],
+      additionalProperties: false,
+    },
   },
   {
     name: "get_budget_facts",
@@ -143,6 +174,21 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     },
   },
   {
+    name: "get_category_spending",
+    description: "Read canonical posted spending by category, sorted by amount with percentage shares and period-coverage disclosure.",
+    inputSchema: scopeSchema(),
+  },
+  {
+    name: "get_transaction_details",
+    description: "Read one exact journal's immutable header, debit/credit lines, cash-flow classifications, and category allocations for audit/provenance.",
+    inputSchema: {
+      type: "object",
+      properties: { transactionId: { type: "integer", minimum: 1 } },
+      required: ["transactionId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "get_reconciliation_status",
     description: "Read durable reconciliation sessions and account-level differences. Reconciliation is control evidence, not income or expense.",
     inputSchema: {
@@ -196,6 +242,86 @@ function optionalText(value: unknown, field: string, maxLength: number): string 
   if (typeof value !== "string" || value.length > maxLength) throw new Error(`${field} must be a string of at most ${maxLength} characters`);
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+class ArithmeticParser {
+  private index = 0;
+
+  constructor(private readonly expression: string) {}
+
+  parse(): number {
+    const value = this.parseSum();
+    this.skipWhitespace();
+    if (this.index !== this.expression.length) throw new Error("Invalid arithmetic expression");
+    return this.assertFinite(value);
+  }
+
+  private parseSum(): number {
+    let value = this.parseProduct();
+    while (true) {
+      this.skipWhitespace();
+      if (this.consume("+")) value = this.assertFinite(value + this.parseProduct());
+      else if (this.consume("-")) value = this.assertFinite(value - this.parseProduct());
+      else return value;
+    }
+  }
+
+  private parseProduct(): number {
+    let value = this.parsePower();
+    while (true) {
+      this.skipWhitespace();
+      if (this.consume("*")) value = this.assertFinite(value * this.parsePower());
+      else if (this.consume("/")) {
+        const divisor = this.parsePower();
+        if (divisor === 0) throw new Error("Division by zero");
+        value = this.assertFinite(value / divisor);
+      } else if (this.consume("%")) {
+        const divisor = this.parsePower();
+        if (divisor === 0) throw new Error("Division by zero");
+        value = this.assertFinite(value % divisor);
+      } else return value;
+    }
+  }
+
+  private parsePower(): number {
+    let value = this.parseUnary();
+    this.skipWhitespace();
+    if (this.consume("^")) value = this.assertFinite(value ** this.parsePower());
+    return value;
+  }
+
+  private parseUnary(): number {
+    this.skipWhitespace();
+    if (this.consume("+")) return this.parseUnary();
+    if (this.consume("-")) return this.assertFinite(-this.parseUnary());
+    if (this.consume("(")) {
+      const value = this.parseSum();
+      this.skipWhitespace();
+      if (!this.consume(")")) throw new Error("Missing closing parenthesis");
+      return value;
+    }
+    const start = this.index;
+    while (/[0-9.]/.test(this.expression[this.index] ?? "")) this.index += 1;
+    if (start === this.index) throw new Error("Expected a number");
+    const value = Number(this.expression.slice(start, this.index));
+    if (!Number.isFinite(value)) throw new Error("Invalid number");
+    return value;
+  }
+
+  private consume(token: string): boolean {
+    if (!this.expression.startsWith(token, this.index)) return false;
+    this.index += token.length;
+    return true;
+  }
+
+  private skipWhitespace(): void {
+    while (/\s/.test(this.expression[this.index] ?? "")) this.index += 1;
+  }
+
+  private assertFinite(value: number): number {
+    if (!Number.isFinite(value) || Math.abs(value) > 1e15) throw new Error("Result is outside the supported range");
+    return value;
+  }
 }
 
 export function parseAgentScopeInput(value: unknown): AgentScopeInput {
@@ -269,6 +395,39 @@ export async function getFinancialFactsTool(input: AgentScopeInput): Promise<{ s
     periodId: scope.periodId ?? undefined,
   });
   return { scope, facts, coverage: await getPeriodCoverage(scope.startMs, scope.endMs) };
+}
+
+export function calculateTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const expression = optionalText(input.expression, "expression", 500);
+  if (!expression) throw new Error("expression is required");
+  return { expression, result: new ArithmeticParser(expression).parse() };
+}
+
+export function getCurrentDatetimeTool() {
+  const nowMs = Date.now();
+  return {
+    nowMs,
+    utcIso: new Date(nowMs).toISOString(),
+    asiaJakarta: new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jakarta", dateStyle: "full", timeStyle: "long",
+    }).format(new Date(nowMs)),
+  };
+}
+
+export function calculateDateDifferenceTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const startDate = optionalInteger(input.startDate, "startDate", { min: 0 });
+  const endDate = optionalInteger(input.endDate, "endDate", { min: 0 });
+  if (startDate == null || endDate == null) throw new Error("startDate and endDate are required");
+  const milliseconds = endDate - startDate;
+  return {
+    startDate,
+    endDate,
+    milliseconds,
+    hours: milliseconds / (60 * 60 * 1000),
+    days: milliseconds / DAY_MS,
+  };
 }
 
 export async function getBudgetFactsTool(input: unknown) {
@@ -403,6 +562,67 @@ export async function searchTransactionsTool(input: unknown) {
   };
 }
 
+export async function getCategorySpendingTool(input: unknown) {
+  const { scope, facts, coverage } = await getFinancialFactsTool(parseAgentScopeInput(input));
+  const totalSpentCents = facts.totalSpentCents;
+  return {
+    scope,
+    totalSpentCents,
+    categories: facts.byCategory
+      .filter((row) => row.spentCents !== 0)
+      .sort((left, right) => right.spentCents - left.spentCents)
+      .map((row) => ({
+        ...row,
+        sharePercent: totalSpentCents === 0 ? 0 : Math.round((row.spentCents / totalSpentCents) * 10_000) / 100,
+      })),
+    coverage,
+  };
+}
+
+export async function getTransactionDetailsTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const transactionId = optionalInteger(input.transactionId, "transactionId", { min: 1 });
+  if (transactionId == null) throw new Error("transactionId is required");
+  const [transaction] = await db.select({
+    id: transactions.id,
+    date: transactions.date,
+    dueDate: transactions.dueDate,
+    description: transactions.description,
+    reference: transactions.reference,
+    notes: transactions.notes,
+    place: transactions.place,
+    txType: transactions.txType,
+    status: transactions.status,
+    periodId: transactions.periodId,
+    categoryId: transactions.categoryId,
+    category: categories.name,
+    linkedTxId: transactions.linkedTxId,
+    reversalOfTxId: transactions.reversalOfTxId,
+  }).from(transactions).leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(and(eq(transactions.id, transactionId), eq(transactions.status, "posted"))).limit(1);
+  if (!transaction) throw new Error("Posted transaction not found");
+  const [lines, allocations] = await Promise.all([
+    db.select({
+      id: transactionLines.id,
+      accountId: transactionLines.accountId,
+      accountName: accounts.name,
+      accountType: accounts.type,
+      debitCents: transactionLines.debit,
+      creditCents: transactionLines.credit,
+      description: transactionLines.description,
+      cashFlowClass: transactionLines.cashFlowClass,
+    }).from(transactionLines).innerJoin(accounts, eq(transactionLines.accountId, accounts.id))
+      .where(eq(transactionLines.transactionId, transactionId)).orderBy(transactionLines.id),
+    db.select({
+      categoryId: transactionCategoryAllocations.categoryId,
+      category: categories.name,
+      amountCents: transactionCategoryAllocations.amount,
+    }).from(transactionCategoryAllocations).innerJoin(categories, eq(transactionCategoryAllocations.categoryId, categories.id))
+      .where(eq(transactionCategoryAllocations.transactionId, transactionId)),
+  ]);
+  return { transaction, lines, categoryAllocations: allocations };
+}
+
 export async function getReconciliationStatusTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const accountId = optionalInteger(input.accountId, "accountId", { min: 1 });
@@ -500,6 +720,15 @@ export async function executeAgentTool(name: unknown, input: unknown): Promise<A
     case "get_financial_facts":
       data = await getFinancialFactsTool(parseAgentScopeInput(input));
       break;
+    case "calculate":
+      data = calculateTool(input);
+      break;
+    case "get_current_datetime":
+      data = getCurrentDatetimeTool();
+      break;
+    case "calculate_date_difference":
+      data = calculateDateDifferenceTool(input);
+      break;
     case "get_budget_facts":
       data = await getBudgetFactsTool(input);
       break;
@@ -520,6 +749,12 @@ export async function executeAgentTool(name: unknown, input: unknown): Promise<A
       break;
     case "search_transactions":
       data = await searchTransactionsTool(input);
+      break;
+    case "get_category_spending":
+      data = await getCategorySpendingTool(input);
+      break;
+    case "get_transaction_details":
+      data = await getTransactionDetailsTool(input);
       break;
     case "get_reconciliation_status":
       data = await getReconciliationStatusTool(input);
