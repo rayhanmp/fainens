@@ -193,9 +193,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-2. Period archive/restore policy is implemented. No remaining period-lifecycle work is known beyond migration rehearsal.
 3. Complete line-level cash-flow classification for every multi-line journal. Account-level cash-equivalent/receivable/investment metadata is now persisted, but individual mixed journals still need explicit allocation/classification instead of counterpart inference.
-5. Category reporting accounts and allocations now feed spending, budgets, PDFs, dashboard, and agent facts; historic unknown splits are disclosed as Unallocated rather than guessed.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
 7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
