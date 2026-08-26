@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lte, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import {
@@ -27,6 +27,7 @@ import { prepareAgentAction } from "./agent-actions";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
+const MAX_CATEGORIES = 200;
 const MAX_RECONCILIATION_SESSIONS = 50;
 const CURRENCY_RATE_API = "https://api.frankfurter.app";
 const CURRENCY_RATE_CACHE_TTL_MS = 5 * 60_000;
@@ -255,8 +256,20 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     },
   },
   {
+    name: "get_categories",
+    description: "Read the small active category list (IDs, names, and reporting-account links) for transaction classification. Call without search when preparing a transaction so the model can choose the closest category locally.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        search: { type: "string", maxLength: 100, description: "Optional case-insensitive category-name search." },
+        limit: { type: "integer", minimum: 1, maximum: MAX_CATEGORIES, description: "Maximum categories; defaults to all up to 200." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "prepare_transaction",
-    description: "Prepare an explicit balanced manual journal proposal for user review. This never posts or changes financial data. First retrieve account IDs when needed; ask a clarification instead of guessing missing date, amount, account, or category details.",
+    description: "Prepare an explicit balanced manual journal proposal for user review. This never posts or changes financial data. First retrieve account IDs and the local category list when needed; ask a clarification only for missing date, amount, or account facts, while a clear merchant/category may be reasonably inferred.",
     inputSchema: {
       type: "object",
       properties: {
@@ -295,6 +308,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
           },
         },
         tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 } },
+        assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 } },
       },
       required: ["dateMs", "description", "lines"],
       additionalProperties: false,
@@ -349,6 +363,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
                 },
               },
               tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 } },
+              assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 } },
             },
             required: ["dateMs", "description", "lines"],
             additionalProperties: false,
@@ -801,6 +816,20 @@ export async function getCategorySpendingTool(input: unknown) {
   };
 }
 
+export async function getCategoriesTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const search = optionalText(input.search, "search", 100);
+  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 }) ?? MAX_CATEGORIES;
+  const limit = Math.min(requestedLimit, MAX_CATEGORIES);
+  const pattern = search ? `%${search.toLowerCase().replace(/[%_]/g, "\\$&")}%` : null;
+  const rows = await db.select({ id: categories.id, name: categories.name, reportingAccountId: categories.reportingAccountId })
+    .from(categories)
+    .where(pattern == null ? undefined : like(sql`lower(${categories.name})`, pattern))
+    .orderBy(categories.name)
+    .limit(limit);
+  return { search: search ?? null, categories: rows, limit };
+}
+
 export async function getTransactionDetailsTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const transactionId = optionalInteger(input.transactionId, "transactionId", { min: 1 });
@@ -978,6 +1007,9 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
     case "get_category_spending":
       data = await getCategorySpendingTool(input);
       break;
+    case "get_categories":
+      data = await getCategoriesTool(input);
+      break;
     case "get_transaction_details":
       data = await getTransactionDetailsTool(input);
       break;
@@ -997,6 +1029,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
         conversationId: executionContext.conversationId,
         kind: "transaction_journal_create",
         input,
+        assumptions: isRecord(input) ? input.assumptions : undefined,
       });
       break;
     case "prepare_transactions": {
@@ -1013,6 +1046,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
             conversationId: executionContext.conversationId,
             kind: "transaction_journal_create",
             input: transaction,
+            assumptions: isRecord(transaction) ? transaction.assumptions : undefined,
           }));
         } catch (error) {
           errors.push({ index, error: error instanceof Error ? error.message : "Transaction proposal failed" });

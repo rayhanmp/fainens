@@ -329,8 +329,11 @@ User message
 
 Existing page UI remains the transparent inspection and fallback surface. A chat action must link to the same transaction, account, budget, obligation, or reconciliation record that a normal user can inspect.
 
-The modular tool set now includes `prepare_transaction` and
-`prepare_transactions`. During an authenticated conversation they may create
+The modular tool set now includes `get_categories`, `prepare_transaction`, and
+`prepare_transactions`. `get_categories` returns the small complete local
+category list (including IDs and reporting-account links), so classification
+does not depend on external search or a category-spending result. During an
+authenticated conversation the preparation tools may create
 one or more pending journal proposals after retrieval and validation, but their
 bearer tokens are redacted before the model sees them and before assistant
 response JSON is persisted. The live browser response carries each token only
@@ -354,6 +357,14 @@ balance, period-lock, audit, financial-revision, and transaction-cache rules
 remain centralized. A transaction proposal cannot be executed twice: its
 receipt carries the created transaction ID and audit ID, and replay returns that
 receipt without another journal.
+
+Category handling is confidence-calibrated: obvious merchant cues such as
+“burger” or “cendol” may be mapped to the closest available Food & Dining
+category after fetching `get_categories`, with the inference recorded as a
+proposal assumption. The agent should ask only when materially different
+categories remain equally plausible. Preparation itself is non-mutating, so it
+should happen immediately once required facts are present; user confirmation
+belongs to the review card and posting step.
 
 1. `POST /api/agent/actions/prepare` validates the action kind, period, category
    IDs, non-negative integer IDR amounts, assumptions, and optional conversation
@@ -444,6 +455,7 @@ Planning tools (automatically callable, non-mutating)
   build_budget_proposal(input)
 
 Preparation tools (non-mutating, create durable proposal)
+  get_categories()
   prepare_transaction(input)
   prepare_transactions({ transactions: input[] })
   prepare_budget_application(proposalId)
