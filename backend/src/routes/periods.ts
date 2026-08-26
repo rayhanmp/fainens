@@ -20,10 +20,12 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   // List all salary periods
-  fastify.get("/api/periods", async () => {
+  fastify.get("/api/periods", async (request) => {
+    const includeInactive = (request.query as { includeInactive?: string }).includeInactive === "true";
     const periods = await db
       .select()
       .from(salaryPeriods)
+      .where(includeInactive ? undefined : eq(salaryPeriods.isActive, true))
       .orderBy(desc(salaryPeriods.startDate));
 
     return periods;
@@ -245,6 +247,43 @@ export default async function (fastify: FastifyInstance) {
       const message = error instanceof Error ? error.message : "Failed to reopen period";
       return reply.code(message === "Period not found" ? 404 : 409).send({ error: message });
     }
+  });
+
+  fastify.post("/api/periods/:id/archive", async (request, reply) => {
+    const periodId = Number((request.params as { id?: string }).id);
+    if (!Number.isSafeInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "Invalid period ID" });
+    try {
+      const archived = db.transaction((tx) => {
+        const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).all()[0];
+        if (!period) throw new Error("Period not found");
+        if (!period.isActive) throw new Error("Period is already archived");
+        if (period.status !== "closed") throw new Error("Close a period before archiving it");
+        const updated = tx.update(salaryPeriods).set({ isActive: false, archivedAt: new Date() })
+          .where(and(eq(salaryPeriods.id, periodId), eq(salaryPeriods.isActive, true))).returning().all()[0];
+        if (!updated) throw new Error("Period changed; retry archive");
+        tx.insert(auditLogs).values({ entityType: "salary_period", entityId: periodId, action: "archive", beforeSnapshot: Buffer.from(JSON.stringify(period)), afterSnapshot: Buffer.from(JSON.stringify(updated)) }).run();
+        bumpFinancialRevisionSync(tx); return updated;
+      });
+      return reply.send(archived);
+    } catch (error) { const message = error instanceof Error ? error.message : "Failed to archive period"; return reply.code(message === "Period not found" ? 404 : 409).send({ error: message }); }
+  });
+
+  fastify.post("/api/periods/:id/restore", async (request, reply) => {
+    const periodId = Number((request.params as { id?: string }).id);
+    if (!Number.isSafeInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "Invalid period ID" });
+    try {
+      const restored = db.transaction((tx) => {
+        const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).all()[0];
+        if (!period) throw new Error("Period not found");
+        if (period.isActive) throw new Error("Period is already active");
+        const updated = tx.update(salaryPeriods).set({ isActive: true, archivedAt: null })
+          .where(and(eq(salaryPeriods.id, periodId), eq(salaryPeriods.isActive, false))).returning().all()[0];
+        if (!updated) throw new Error("Period changed; retry restore");
+        tx.insert(auditLogs).values({ entityType: "salary_period", entityId: periodId, action: "restore", beforeSnapshot: Buffer.from(JSON.stringify(period)), afterSnapshot: Buffer.from(JSON.stringify(updated)) }).run();
+        bumpFinancialRevisionSync(tx); return updated;
+      });
+      return reply.send(restored);
+    } catch (error) { const message = error instanceof Error ? error.message : "Failed to restore period"; return reply.code(message === "Period not found" ? 404 : 409).send({ error: message }); }
   });
 
   // Delete salary period

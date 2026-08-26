@@ -77,14 +77,40 @@ export async function getFinancialFacts(input: {
     incomeCents: Number(row.income_cents ?? 0),
   }));
 
+  const allocationRows = normalizedRows.length === 0 ? [] : await db.all(sql`
+    SELECT tca.transaction_id AS transaction_id, tca.category_id AS category_id, c.name AS category, tca.amount AS amount
+    FROM transaction_category_allocation tca
+    INNER JOIN category c ON c.id = tca.category_id
+    WHERE tca.transaction_id IN (${sql.join(normalizedRows.map((row) => sql`${row.id}`), sql`, `)})
+  `) as unknown as Array<Record<string, unknown>>;
+  const allocationsByTransaction = new Map<number, Array<{ categoryId: number; category: string; amount: number }>>();
+  for (const allocation of allocationRows) {
+    const transactionId = Number(allocation.transaction_id);
+    const current = allocationsByTransaction.get(transactionId) ?? [];
+    current.push({
+      categoryId: Number(allocation.category_id),
+      category: String(allocation.category ?? "Uncategorized"),
+      amount: Number(allocation.amount ?? 0),
+    });
+    allocationsByTransaction.set(transactionId, current);
+  }
   const byCategoryMap = new Map<string, { categoryId: number | null; category: string; spentCents: number }>();
   for (const row of normalizedRows) {
-    if (row.expenseCents <= 0) continue;
-    const category = row.category ?? "Uncategorized";
-    const key = `${row.categoryId ?? "null"}:${category}`;
-    const current = byCategoryMap.get(key) ?? { categoryId: row.categoryId, category, spentCents: 0 };
-    current.spentCents += row.expenseCents;
-    byCategoryMap.set(key, current);
+    const allocations = allocationsByTransaction.get(row.id);
+    if (allocations?.length) {
+      for (const allocation of allocations) {
+        const key = `${allocation.categoryId}:${allocation.category}`;
+        const current = byCategoryMap.get(key) ?? { categoryId: allocation.categoryId, category: allocation.category, spentCents: 0 };
+        current.spentCents += allocation.amount;
+        byCategoryMap.set(key, current);
+      }
+    } else if (row.expenseCents !== 0) {
+      const category = row.category ?? "Unallocated";
+      const key = `${row.categoryId ?? "null"}:${category}`;
+      const current = byCategoryMap.get(key) ?? { categoryId: row.categoryId, category, spentCents: 0 };
+      current.spentCents += row.expenseCents;
+      byCategoryMap.set(key, current);
+    }
   }
 
   const walletResult = await db.all(sql`
@@ -106,7 +132,7 @@ export async function getFinancialFacts(input: {
     totalSpentCents: normalizedRows.reduce((sum, row) => sum + row.expenseCents, 0),
     totalIncomeCents: normalizedRows.reduce((sum, row) => sum + row.incomeCents, 0),
     walletBalanceCents: Number((walletResult[0] as { balance?: number } | undefined)?.balance ?? 0),
-    byCategory: Array.from(byCategoryMap.values()).sort((a, b) => b.spentCents - a.spentCents),
+    byCategory: Array.from(byCategoryMap.values()).filter((row) => row.spentCents !== 0).sort((a, b) => b.spentCents - a.spentCents),
   };
 }
 
@@ -117,32 +143,21 @@ export async function getBudgetFacts(periodId: number): Promise<Array<{
   spentCents: number;
   transactionCount: number;
 }>> {
-  const rows = await db.all(sql`
-    SELECT
-      bp.category_id AS category_id,
-      c.name AS category,
-      bp.planned_amount AS planned_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS spent_cents,
-      COUNT(DISTINCT CASE WHEN a.type = 'expense' AND tl.debit - tl.credit > 0 THEN t.id END) AS transaction_count
-    FROM budget_plan bp
-    INNER JOIN category c ON c.id = bp.category_id
-    INNER JOIN salary_period sp ON sp.id = bp.period_id
-    LEFT JOIN "transaction" t ON t.category_id = bp.category_id
-      AND t.date >= sp.start_date
-      AND t.date <= sp.end_date + ${DAY_MS - 1}
-      AND ${assignedOrLegacyPeriodMembership(periodId, sql`t.period_id`)}
-    LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
-    LEFT JOIN account a ON a.id = tl.account_id
-    WHERE bp.period_id = ${periodId}
-      AND (t.id IS NULL OR t.status <> 'draft')
-    GROUP BY bp.id, bp.category_id, c.name, bp.planned_amount
+  const plans = await db.all(sql`
+    SELECT bp.category_id AS category_id, c.name AS category, bp.planned_amount AS planned_cents,
+      sp.start_date AS start_ms, sp.end_date AS end_ms
+    FROM budget_plan bp INNER JOIN category c ON c.id = bp.category_id
+    INNER JOIN salary_period sp ON sp.id = bp.period_id WHERE bp.period_id = ${periodId}
     ORDER BY c.name ASC
   `) as unknown as Array<Record<string, unknown>>;
-  return rows.map((row) => ({
-    categoryId: Number(row.category_id),
-    category: String(row.category ?? "Uncategorized"),
-    plannedCents: Number(row.planned_cents ?? 0),
-    spentCents: Number(row.spent_cents ?? 0),
-    transactionCount: Number(row.transaction_count ?? 0),
+  if (plans.length === 0) return [];
+  const facts = await getFinancialFacts({
+    startMs: Number(plans[0].start_ms), endMs: Number(plans[0].end_ms) + DAY_MS - 1, periodId,
+  });
+  const spentByCategory = new Map(facts.byCategory.map((row) => [row.categoryId, row.spentCents]));
+  return plans.map((plan) => ({
+    categoryId: Number(plan.category_id), category: String(plan.category), plannedCents: Number(plan.planned_cents),
+    spentCents: spentByCategory.get(Number(plan.category_id)) ?? 0,
+    transactionCount: 0,
   }));
 }

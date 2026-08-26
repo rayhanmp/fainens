@@ -135,6 +135,12 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (!columnExists("salary_period", "reopened_at")) {
       db.$client.exec("ALTER TABLE salary_period ADD COLUMN reopened_at integer");
     }
+    if (!columnExists("salary_period", "is_active")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN is_active integer DEFAULT 1 NOT NULL");
+    }
+    if (!columnExists("salary_period", "archived_at")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN archived_at integer");
+    }
     if (!columnExists("reconciliation_session", "lifecycle_status")) {
       db.$client.exec("ALTER TABLE reconciliation_session ADD COLUMN lifecycle_status text DEFAULT 'active' NOT NULL");
     }
@@ -187,7 +193,7 @@ function assertRequiredSchema(): void {
     splitbill_session: ["total_cents", "status"],
     reconciliation_session: ["as_of_date", "status", "lifecycle_status", "voided_at", "void_reason"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
-    salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at"],
+    salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at", "is_active", "archived_at"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
     loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
     paylater_settlement_allocation: ["settlement_tx_id", "installment_id", "amount_cents"],

@@ -517,6 +517,7 @@ RULES:
           linkedTxId?: number | null;
           tagIds?: number[];
           categoryId?: number | null;
+          categoryAllocations?: Array<{ categoryId: number; amount: number }>;
           lines: Array<{
             accountId: number;
             debit: number;
@@ -608,7 +609,7 @@ RULES:
         return;
       }
 
-      const { date, description, reference, notes, place, txType, linkedTxId, tagIds, categoryId, lines } = body;
+      const { date, description, reference, notes, place, txType, linkedTxId, tagIds, categoryId, categoryAllocations, lines } = body;
       
       // Auto-detect period based on transaction date
       const dateMs = new Date(date).getTime();
@@ -624,6 +625,7 @@ RULES:
         periodId: autoPeriodId,
         linkedTxId,
         categoryId,
+        categoryAllocations,
         tagIds,
         lines,
       });

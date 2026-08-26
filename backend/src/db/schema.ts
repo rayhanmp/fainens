@@ -162,6 +162,8 @@ export const salaryPeriods = sqliteTable("salary_period", {
   status: text("status").notNull().default("open"), // open | closed
   closedAt: integer("closed_at", { mode: "timestamp_ms" }),
   reopenedAt: integer("reopened_at", { mode: "timestamp_ms" }),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
 });
 
 export const budgetPlans = sqliteTable("budget_plan", {

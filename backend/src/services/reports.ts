@@ -3,6 +3,7 @@ import { db } from "../db/client";
 import { accounts, transactions, transactionLines, salaryPeriods } from "../db/schema";
 import { computeAccountBalanceRolledUp, computeTrialBalanceTotals } from "./ledger";
 import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
+import { getFinancialFacts } from "./financial-facts";
 
 // Report types
 export interface IncomeStatementItem {
@@ -579,44 +580,15 @@ export async function generateSpendingBreakdown(
     periodEnd = range.end;
   }
 
-  // Get expense accounts with transactions
-  const expenses = await db
-    .select({
-      accountId: accounts.id,
-      accountName: accounts.name,
-      total: sql<number>`coalesce(sum(${transactionLines.debit}), 0) - coalesce(sum(${transactionLines.credit}), 0)`,
-    })
-    .from(accounts)
-    .leftJoin(
-      transactionLines,
-      eq(accounts.id, transactionLines.accountId)
-    )
-    .leftJoin(
-      transactions,
-      eq(transactionLines.transactionId, transactions.id)
-    )
-    .where(
-      and(
-        eq(accounts.type, "expense"),
-        sql`${transactions.date} >= ${periodStart} OR ${transactions.date} IS NULL`,
-        sql`${transactions.date} <= ${periodEnd} OR ${transactions.date} IS NULL`,
-        sql`(${transactions.id} IS NULL OR ${transactions.status} <> 'draft')`,
-        periodMembership(periodId),
-      )
-    )
-    .groupBy(accounts.id, accounts.name)
-    .orderBy(sql`sum(${transactionLines.debit}) DESC`);
-
-  const positiveExpenses = expenses.filter((expense) => expense.total > 0);
-  const totalExpenses = positiveExpenses.reduce((sum, expense) => sum + expense.total, 0);
-
-  return positiveExpenses
-    .map((e) => ({
-      category: e.accountName,
-      accountId: e.accountId,
-      amount: e.total,
-      percentage: totalExpenses > 0 ? (e.total / totalExpenses) * 100 : 0,
-    }));
+  const facts = await getFinancialFacts({ startMs: periodStart, endMs: periodEnd, periodId });
+  const categories = facts.byCategory.filter((row) => row.spentCents > 0);
+  const totalExpenses = categories.reduce((sum, row) => sum + row.spentCents, 0);
+  return categories.map((row) => ({
+    category: row.category,
+    accountId: row.categoryId ?? 0,
+    amount: row.spentCents,
+    percentage: totalExpenses > 0 ? (row.spentCents / totalExpenses) * 100 : 0,
+  }));
 }
 
 // Export report as CSV
