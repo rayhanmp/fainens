@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { and, asc, desc, eq } from "drizzle-orm";
 
 import { env } from "../lib/env";
+import { db } from "../db/client";
+import { agentConversations, agentMessages } from "../db/schema";
 import {
   agentToolDefinitions,
   executeAgentTool,
@@ -19,6 +22,7 @@ import { getFinancialRevision } from "../services/financial-revision";
 
 const MAX_TOOL_CALLS_PER_QUERY = 8;
 const MAX_TOOL_ROUNDS = 4;
+const HISTORY_MESSAGE_LIMIT = 12;
 
 const toolDefinitionMap = new Map(agentToolDefinitions.map((definition) => [definition.name, definition]));
 const modelTools: AgentChatTool[] = agentToolDefinitions.map((definition) => ({
@@ -32,6 +36,74 @@ const modelTools: AgentChatTool[] = agentToolDefinitions.map((definition) => ({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function timestampMs(value: unknown): number {
+  return value instanceof Date ? value.getTime() : Number(value);
+}
+
+function currentOwnerEmail(request: { user?: unknown }): string {
+  const email = isRecord(request.user) ? request.user.email : undefined;
+  if (typeof email !== "string" || email.trim() === "") {
+    throw new Error("Authenticated user email is unavailable");
+  }
+  return email;
+}
+
+function conversationSummary(row: typeof agentConversations.$inferSelect) {
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: timestampMs(row.createdAt),
+    updatedAt: timestampMs(row.updatedAt),
+  };
+}
+
+function parseStoredResponse(value: string | null): unknown {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function conversationMessage(row: typeof agentMessages.$inferSelect) {
+  return {
+    id: row.id,
+    role: row.role,
+    content: row.content,
+    response: parseStoredResponse(row.responseJson),
+    createdAt: timestampMs(row.createdAt),
+  };
+}
+
+function conversationTitle(question: string): string {
+  const compact = question.replace(/\s+/g, " ").trim();
+  return compact.length > 72 ? `${compact.slice(0, 69)}…` : compact || "New conversation";
+}
+
+async function ownedConversation(conversationId: number, ownerEmail: string) {
+  const [conversation] = await db
+    .select()
+    .from(agentConversations)
+    .where(and(eq(agentConversations.id, conversationId), eq(agentConversations.ownerEmail, ownerEmail)))
+    .limit(1);
+  return conversation;
+}
+
+async function conversationHistory(conversationId: number): Promise<AgentChatMessage[]> {
+  const newestFirst = await db
+    .select({ role: agentMessages.role, content: agentMessages.content })
+    .from(agentMessages)
+    .where(eq(agentMessages.conversationId, conversationId))
+    .orderBy(desc(agentMessages.createdAt), desc(agentMessages.id))
+    .limit(HISTORY_MESSAGE_LIMIT);
+  return newestFirst.reverse().flatMap((message): AgentChatMessage[] =>
+    message.role === "user" || message.role === "assistant"
+      ? [{ role: message.role, content: message.content }]
+      : [],
+  );
 }
 
 /**
@@ -122,7 +194,11 @@ const AGENT_SYSTEM_PROMPT = [
   "State the scope, as-of date, and data revision when relevant. Mention an inconsistent revision if tools changed during retrieval.",
 ].join(" ");
 
-async function answerWithTools(question: string, scopeInput: ReturnType<typeof parseAgentScopeInput>) {
+async function answerWithTools(
+  question: string,
+  scopeInput: ReturnType<typeof parseAgentScopeInput>,
+  history: AgentChatMessage[] = [],
+) {
   if (!env.OPENROUTER_API_KEY) {
     const context = await composeContext(scopeInput);
     return {
@@ -138,6 +214,7 @@ async function answerWithTools(question: string, scopeInput: ReturnType<typeof p
   const scope = await resolveAgentScope(scopeInput);
   const messages: AgentChatMessage[] = [
     { role: "system", content: AGENT_SYSTEM_PROMPT },
+    ...history,
     {
       role: "user",
       content: `Question: ${question}\nRequested scope (the tools may refine this): ${JSON.stringify(scope)}`,
@@ -230,6 +307,69 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     policy: { readOnly: true, writesRequireExplicitConfirmation: true },
   }));
 
+  fastify.get("/api/agent/conversations", async (request, reply) => {
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      const conversations = await db
+        .select()
+        .from(agentConversations)
+        .where(eq(agentConversations.ownerEmail, ownerEmail))
+        .orderBy(desc(agentConversations.updatedAt), desc(agentConversations.id))
+        .limit(100);
+      return { conversations: conversations.map(conversationSummary) };
+    } catch (error) {
+      return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not list conversations" });
+    }
+  });
+
+  fastify.post("/api/agent/conversations", async (request, reply) => {
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      const body = request.body as { title?: unknown };
+      const title = typeof body?.title === "string" && body.title.trim()
+        ? conversationTitle(body.title)
+        : "New conversation";
+      const [created] = await db.insert(agentConversations).values({ ownerEmail, title }).returning();
+      return reply.code(201).send({ conversation: conversationSummary(created) });
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : "Could not create conversation" });
+    }
+  });
+
+  fastify.get("/api/agent/conversations/:id", async (request, reply) => {
+    const conversationId = Number((request.params as { id?: string }).id);
+    if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
+      return reply.code(400).send({ error: "Invalid conversation ID" });
+    }
+    try {
+      const conversation = await ownedConversation(conversationId, currentOwnerEmail(request));
+      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+      const messages = await db
+        .select()
+        .from(agentMessages)
+        .where(eq(agentMessages.conversationId, conversationId))
+        .orderBy(asc(agentMessages.createdAt), asc(agentMessages.id));
+      return { conversation: conversationSummary(conversation), messages: messages.map(conversationMessage) };
+    } catch (error) {
+      return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not load conversation" });
+    }
+  });
+
+  fastify.delete("/api/agent/conversations/:id", async (request, reply) => {
+    const conversationId = Number((request.params as { id?: string }).id);
+    if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
+      return reply.code(400).send({ error: "Invalid conversation ID" });
+    }
+    try {
+      const conversation = await ownedConversation(conversationId, currentOwnerEmail(request));
+      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+      await db.delete(agentConversations).where(eq(agentConversations.id, conversationId));
+      return reply.code(204).send();
+    } catch (error) {
+      return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not delete conversation" });
+    }
+  });
+
   fastify.post("/api/agent/tool-call", async (request, reply) => {
     const body = request.body as { name?: unknown; input?: unknown };
     if (typeof body?.name !== "string") return reply.code(400).send({ error: "name is required" });
@@ -255,16 +395,46 @@ export default async function agentRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/api/agent/query", async (request, reply) => {
-    const body = request.body as { question?: unknown; periodId?: unknown; startDate?: unknown; endDate?: unknown };
+    const body = request.body as { question?: unknown; periodId?: unknown; startDate?: unknown; endDate?: unknown; conversationId?: unknown };
     if (typeof body?.question !== "string" || body.question.trim().length < 2 || body.question.length > 2000) {
       return reply.code(400).send({ error: "question must be between 2 and 2000 characters" });
     }
     try {
-      return await answerWithTools(body.question.trim(), parseAgentScopeInput({
+      const question = body.question.trim();
+      const scopeInput = parseAgentScopeInput({
         periodId: body.periodId,
         startDate: body.startDate,
         endDate: body.endDate,
-      }));
+      });
+      const conversationId = body.conversationId == null ? null : Number(body.conversationId);
+      if (conversationId != null && (!Number.isSafeInteger(conversationId) || conversationId <= 0)) {
+        return reply.code(400).send({ error: "Invalid conversation ID" });
+      }
+
+      let history: AgentChatMessage[] = [];
+      let conversation: typeof agentConversations.$inferSelect | undefined;
+      if (conversationId != null) {
+        conversation = await ownedConversation(conversationId, currentOwnerEmail(request));
+        if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+        history = await conversationHistory(conversationId);
+        await db.insert(agentMessages).values({ conversationId, role: "user", content: question });
+        await db.update(agentConversations)
+          .set({ title: conversation.title === "New conversation" ? conversationTitle(question) : conversation.title, updatedAt: new Date() })
+          .where(eq(agentConversations.id, conversationId));
+      }
+
+      const result = await answerWithTools(question, scopeInput, history);
+      if (conversationId != null) {
+        const displayText = result.answer ?? result.message ?? "I could not complete the analysis from the available ledger tools.";
+        await db.insert(agentMessages).values({
+          conversationId,
+          role: "assistant",
+          content: displayText,
+          responseJson: JSON.stringify(result),
+        });
+        await db.update(agentConversations).set({ updatedAt: new Date() }).where(eq(agentConversations.id, conversationId));
+      }
+      return { ...result, conversationId: conversation?.id ?? null };
     } catch (error) {
       fastify.log.error(error);
       return reply.code(500).send({ error: "Failed to answer agent query" });

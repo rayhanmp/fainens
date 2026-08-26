@@ -10,7 +10,6 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  Trash2,
   User,
 } from 'lucide-react';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -36,12 +35,12 @@ type Period = {
 
 type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
 type BudgetPreview = Awaited<ReturnType<typeof api.agent.planBudget>>;
+type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
 
 type ChatMessage =
   | { id: string; role: 'user'; text: string; createdAt: number }
   | { id: string; role: 'assistant'; text: string; createdAt: number; response?: AgentResponse };
 
-const STORAGE_KEY = 'fainens.agent-workspace.v1';
 const SUGGESTIONS = [
   'What were my top 10 expenses recently?',
   'Find spending similar to my latest transaction.',
@@ -51,22 +50,6 @@ const SUGGESTIONS = [
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readSavedMessages(): ChatMessage[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((item): item is ChatMessage =>
-      isRecord(item)
-      && (item.role === 'user' || item.role === 'assistant')
-      && typeof item.id === 'string'
-      && typeof item.text === 'string'
-      && typeof item.createdAt === 'number',
-    ) : [];
-  } catch {
-    return [];
-  }
 }
 
 function scopeLabel(scope: unknown, periods: Period[]): string {
@@ -141,12 +124,39 @@ function ToolTrace({ response }: { response: AgentResponse }) {
 function AgentPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>(readSavedMessages);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
+
+  const refreshConversations = async () => {
+    const result = await api.agent.conversations.list();
+    setConversations(result.conversations);
+    return result.conversations;
+  };
+
+  const selectConversation = async (conversationId: number) => {
+    if (conversationId === activeConversationId || isLoadingConversation) return;
+    setIsLoadingConversation(true);
+    setError(null);
+    try {
+      const detail = await api.agent.conversations.get(conversationId);
+      setActiveConversationId(detail.conversation.id);
+      setMessages(detail.messages.map((message) => message.role === 'assistant'
+        ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
+        : { id: String(message.id), role: 'user', text: message.content, createdAt: message.createdAt },
+      ));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not load that conversation.');
+    } finally {
+      setIsLoadingConversation(false);
+    }
+  };
 
   useEffect(() => {
     void api.periods.list()
@@ -160,15 +170,12 @@ function AgentPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-30)));
-      } catch {
-        // Keeping the active conversation in memory is preferable to failing
-        // the chat just because a browser has a restrictive storage quota.
-      }
-    }
-  }, [messages]);
+    void refreshConversations()
+      .then((available) => {
+        if (available[0]) void selectConversation(available[0].id);
+      })
+      .catch(() => setError('Could not load saved conversations.'));
+  }, []);
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId),
@@ -184,9 +191,17 @@ function AgentPage() {
     setMessages((current) => [...current, { id: `user-${createdAt}`, role: 'user', text, createdAt }]);
     setIsSending(true);
     try {
+      let conversationId = activeConversationId;
+      if (conversationId == null) {
+        const created = await api.agent.conversations.create();
+        conversationId = created.conversation.id;
+        setActiveConversationId(conversationId);
+        setConversations((current) => [created.conversation, ...current]);
+      }
       const response = await api.agent.query({
         question: text,
         ...(selectedPeriodId ? { periodId: Number(selectedPeriodId) } : {}),
+        conversationId,
       });
       const fallback = response.llmAvailable
         ? 'I could not produce a written answer from the available evidence.'
@@ -198,11 +213,20 @@ function AgentPage() {
         createdAt: Date.now(),
         response,
       }]);
+      void refreshConversations().catch(() => undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The agent query failed. Please try again.');
     } finally {
       setIsSending(false);
     }
+  };
+
+  const startNewConversation = () => {
+    setActiveConversationId(null);
+    setMessages([]);
+    setDraft('');
+    setError(null);
+    setBudgetPreview(null);
   };
 
   const previewBudget = async () => {
@@ -251,15 +275,13 @@ function AgentPage() {
                     <p className="text-xs text-[var(--color-text-secondary)]">Retrieves current ledger facts for each answer</p>
                   </div>
                 </div>
-                {messages.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setMessages([])}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-danger)]"
-                  >
-                    <Trash2 className="h-4 w-4" /> Clear
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={startNewConversation}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--ref-primary)] hover:underline"
+                >
+                  <Sparkles className="h-4 w-4" /> New chat
+                </button>
               </div>
 
               <div className="space-y-5 p-4 sm:p-6">
@@ -322,6 +344,32 @@ function AgentPage() {
             </Card>
 
             <div className="space-y-4">
+              <Card
+                title="Conversations"
+                action={<span className="text-xs text-[var(--color-text-secondary)]">{conversations.length}</span>}
+              >
+                <div className="max-h-56 space-y-1 overflow-y-auto">
+                  {conversations.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">Your conversations will appear here.</p>}
+                  {conversations.map((conversation) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      onClick={() => void selectConversation(conversation.id)}
+                      className={cn(
+                        'w-full rounded-lg px-3 py-2 text-left transition-colors',
+                        conversation.id === activeConversationId
+                          ? 'bg-[var(--ref-primary-container)] text-white'
+                          : 'hover:bg-[var(--ref-surface-container-low)]',
+                      )}
+                    >
+                      <span className="block truncate text-sm font-medium">{conversation.title}</span>
+                      <span className={cn('mt-0.5 block text-xs', conversation.id === activeConversationId ? 'text-white/80' : 'text-[var(--color-text-secondary)]')}>{formatDate(conversation.updatedAt)}</span>
+                    </button>
+                  ))}
+                </div>
+                {isLoadingConversation && <p className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Loading conversation…</p>}
+              </Card>
+
               <Card title="Trust boundary">
                 <div className="space-y-3 text-sm text-[var(--color-text-secondary)]">
                   <p className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" /> This workspace cannot create, edit, delete, or reconcile data.</p>

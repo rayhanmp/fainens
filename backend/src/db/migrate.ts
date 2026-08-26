@@ -286,6 +286,8 @@ function assertRequiredSchema(): void {
     loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
     paylater_settlement_allocation: ["settlement_tx_id", "installment_id", "amount_cents"],
     financial_state: ["id", "revision", "updated_at"],
+    agent_conversation: ["id", "owner_email", "title", "created_at", "updated_at"],
+    agent_message: ["id", "conversation_id", "role", "content", "created_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

@@ -1610,6 +1610,17 @@ export const api = {
   },
 
   agent: {
+    conversations: {
+      list: () => fetchApi<{ conversations: Array<{ id: number; title: string; createdAt: number; updatedAt: number }> }>('/agent/conversations'),
+      create: (data: { title?: string } = {}) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number } }>('/agent/conversations', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
+      get: (id: number) => fetchApi<{
+        conversation: { id: number; title: string; createdAt: number; updatedAt: number };
+        messages: Array<{ id: number; role: 'user' | 'assistant'; content: string; response?: unknown; createdAt: number }>;
+      }>(`/agent/conversations/${id}`),
+      delete: (id: number) => fetchApi<void>(`/agent/conversations/${id}`, { method: 'DELETE' }),
+    },
     tools: () => fetchApi<{
       schemaVersion: number;
       revision: number;
@@ -1639,8 +1650,8 @@ export const api = {
       if (params?.endDate) query.set('endDate', String(params.endDate));
       return fetchApi(`/agent/context${query.toString() ? `?${query.toString()}` : ''}`);
     },
-    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number }) =>
-      fetchApi<{ answer: string | null; llmAvailable: boolean; context: unknown; scope?: unknown; revision?: number; toolCalls: Array<{ id: string; name: string; input: unknown }>; toolResults: Array<{ id: string; name: string; result: unknown }>; message?: string }>('/agent/query', {
+    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number }) =>
+      fetchApi<{ answer: string | null; llmAvailable: boolean; context: unknown; scope?: unknown; revision?: number; conversationId?: number | null; toolCalls: Array<{ id: string; name: string; input: unknown }>; toolResults: Array<{ id: string; name: string; result: unknown }>; message?: string }>('/agent/query', {
         method: 'POST', body: JSON.stringify(data),
       }),
     planBudget: (data: { periodId?: number; targetSavingsRate?: number }) =>

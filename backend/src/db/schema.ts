@@ -542,6 +542,41 @@ export const loanPaymentAttachments = sqliteTable("loan_payment_attachment", {
 export const contactsNameIdx = index("idx_contacts_name").on(contacts.name);
 export const contactsIsActiveIdx = index("idx_contacts_is_active").on(contacts.isActive);
 
+/** Durable user-owned conversation metadata for the finance agent. */
+export const agentConversations = sqliteTable("agent_conversation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerEmail: text("owner_email").notNull(),
+  title: text("title").notNull().default("New conversation"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  ownerUpdatedIdx: index("idx_agent_conversation_owner_updated").on(table.ownerEmail, table.updatedAt),
+}));
+
+/**
+ * Persist only the user-visible exchange and structured response receipt.
+ * Tool results are retained as evidence for that answer, not supplied as a
+ * stale substitute for the next turn's fresh retrieval.
+ */
+export const agentMessages = sqliteTable("agent_message", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => agentConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // user | assistant
+  content: text("content").notNull(),
+  responseJson: text("response_json"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  conversationCreatedIdx: index("idx_agent_message_conversation_created").on(table.conversationId, table.createdAt),
+}));
+
 /** Pending transactions from WhatsApp/other sources - waiting for user approval */
 export const pendingTransactions = sqliteTable("pending_transaction", {
   id: integer("id").primaryKey({ autoIncrement: true }),
