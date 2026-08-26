@@ -92,6 +92,7 @@ interface TransactionRow {
     debit: number;
     credit: number;
     description?: string;
+    cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
   }>;
   tags: Array<{ tagId: number; name: string; color: string }>;
 }
@@ -1028,19 +1029,21 @@ function TransactionsPage() {
                                 <ArrowLeftRight className="h-4 w-4" />
                               </button>
                             )}
-                            {tx.status === 'draft' ? (
+                            {tx.status !== 'reversed' ? (
                               <>
-                                <button type="button" onClick={() => openModal(tx, 'view')} className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] cursor-pointer" title="Edit">
+                                <button type="button" onClick={() => openModal(tx, 'view')} className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] cursor-pointer" title="View or edit record details">
                                   <Edit2 className="h-4 w-4" />
                                 </button>
+                                {tx.status === 'draft' ? (
                                 <button type="button" onClick={() => handleDelete(tx.id)} className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer" title="Delete">
                                   <Trash2 className="h-4 w-4" />
                                 </button>
+                                ) : (
+                                  <button type="button" onClick={() => handleReverse(tx.id)} className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 cursor-pointer" title="Reverse posted journal">
+                                    <RotateCcw className="h-4 w-4" />
+                                  </button>
+                                )}
                               </>
-                            ) : tx.status !== 'reversed' ? (
-                              <button type="button" onClick={() => handleReverse(tx.id)} className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 cursor-pointer" title="Reverse posted journal">
-                                <RotateCcw className="h-4 w-4" />
-                              </button>
                             ) : null}
                             <span className="hidden sm:inline">
                               <MoreHorizontal className="h-4 w-4 text-[var(--color-muted)] opacity-50" />

@@ -45,7 +45,7 @@ function classifyTx(tx: {
   return 'neutral';
 }
 
-type DashboardRecentTransaction = Awaited<ReturnType<typeof api.agent.searchTransactions>>['data']['transactions'][number];
+type DashboardRecentTransaction = Awaited<ReturnType<typeof api.transactions.list>>['data'][number];
 
 function DashboardPage() {
   const [walletTotal, setWalletTotal] = useState(0);
@@ -126,7 +126,7 @@ function DashboardPage() {
         const [accList, dash, recentResult, cats, tagsList] = await Promise.all([
           api.accounts.list(),
           api.analytics.dashboard(),
-          api.agent.searchTransactions({ ...(periodId == null ? {} : { periodId }), limit: 8 }),
+          api.transactions.list({ ...(periodId == null ? {} : { periodId: String(periodId) }), limit: '8' }),
           api.categories.list(),
           api.tags.list(),
         ]);
@@ -134,7 +134,7 @@ function DashboardPage() {
         const wallets = accList.filter((a) => a.type === 'asset' && !a.systemKey);
         setWalletTotal(wallets.reduce((sum, account) => sum + account.balance, 0));
         setAnalytics(dash);
-        setRecent(recentResult.data.transactions);
+        setRecent(recentResult.data);
         setCategories(cats);
         setAccounts(accList);
         setTags(tagsList);
@@ -168,7 +168,7 @@ function DashboardPage() {
         const [budgets, factsResult, recentResult] = await Promise.all([
           api.budgets.list(String(periodId)),
           api.agent.financialFacts({ periodId }),
-          api.agent.searchTransactions({ periodId, limit: 8 }),
+          api.transactions.list({ periodId: String(periodId), limit: '8' }),
         ]);
         if (cancelled || requestId !== periodRequestRef.current) return;
 
@@ -177,7 +177,7 @@ function DashboardPage() {
         const calculatedExpense = facts.totalSpentCents;
         setPeriodIncome(calculatedIncome > 0 ? calculatedIncome : null);
         setPeriodExpense(calculatedExpense > 0 ? calculatedExpense : null);
-        setRecent(recentResult.data.transactions);
+        setRecent(recentResult.data);
 
         const budgetData = budgets as any;
         const budgetPlans = Array.isArray(budgetData)

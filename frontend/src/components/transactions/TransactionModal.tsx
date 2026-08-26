@@ -1501,7 +1501,7 @@ export function TransactionModal({
         <div className="bg-[var(--ref-surface-container-low)] rounded-2xl p-4 mb-6">
           <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
             <StickyNote className="w-4 h-4 text-[var(--color-warning)]" />
-            <span>Amounts and accounts can't be changed here — delete this entry and add a new one to adjust those.</span>
+            <span>Posted amounts and accounts are immutable. To correct them, reverse the posted journal and create its replacement.</span>
           </div>
         </div>
         <form onSubmit={handleEditMetaSubmit}>
