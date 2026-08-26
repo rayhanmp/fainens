@@ -158,6 +158,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Migration `0013` makes `transaction.period_id` a restrictive foreign key to `salary_period`. It retains all journals and converts only dangling legacy IDs to the existing unassigned (`NULL`) fallback before rebuilding the table; required transaction indexes are explicitly restored. Startup fails closed if the FK is absent.
 - Reports, canonical financial facts, budget facts, cached period summaries, and agent transaction search use the same assigned-or-legacy membership predicate. An assigned journal in another period can no longer leak into a selected period merely because its date overlaps; legacy null assignments remain eligible only through each consumer's date range.
 
+### `4bfed71` — explicit liquidity classification
+
+- Migration `0014` adds an explicit `liquidity_class` to accounts. Legacy asset accounts become `cash_equivalent` for compatibility, while the Loans Receivable system account becomes `receivable`; non-assets remain `non_cash`.
+- Account create/update validates the class. Cash flow, liquid net worth, runway, and canonical wallet facts now use that metadata instead of inferring cash from an account type or system-account name. Investment and other non-cash assets no longer inflate immediately available cash once classified.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -179,7 +184,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
 2. Complete a formal period archive/restore policy for metadata itself. Transaction identity and shared read-side membership are now enforced; closed periods are already immutable, but a separate archival lifecycle is not yet needed or modeled.
-3. Replace remaining cash-flow inference: persist cash-equivalent/receivable/investment subtype metadata and classify every line of multi-line journals. Loan receivables are excluded from liquidity now, but other non-cash asset subtypes remain to be modeled.
+3. Complete line-level cash-flow classification for every multi-line journal. Account-level cash-equivalent/receivable/investment metadata is now persisted, but individual mixed journals still need explicit allocation/classification instead of counterpart inference.
 5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
 7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
