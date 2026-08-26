@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { auditLogs, budgetPlans, budgetTemplateItems, categories, transactions } from "../db/schema";
+import { accounts, auditLogs, budgetPlans, budgetTemplateItems, categories, transactions } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 // Sanitize search input to prevent SQL injection
@@ -17,6 +17,7 @@ const categorySchema = z.object({
   name: z.string().min(1).max(100),
   icon: z.string().max(10).nullable().optional(),
   color: z.string().max(20).nullable().optional(),
+  reportingAccountId: z.number().int().positive().nullable().optional(),
 });
 
 const categoryUpdateSchema = categorySchema.partial();
@@ -69,12 +70,21 @@ export default async function (fastify: FastifyInstance) {
 
     const body = parseResult.data;
 
+    if (body.reportingAccountId != null) {
+      const [account] = await db.select({ type: accounts.type, isActive: accounts.isActive }).from(accounts)
+        .where(eq(accounts.id, body.reportingAccountId)).limit(1);
+      if (!account || !account.isActive || account.type !== "expense") {
+        return reply.code(400).send({ error: "reportingAccountId must reference an active expense account" });
+      }
+    }
+
     try {
       const category = db.transaction((tx) => {
         const inserted = (tx.insert(categories).values({
           name: body.name.trim(),
           icon: body.icon ?? null,
           color: body.color ?? null,
+          reportingAccountId: body.reportingAccountId ?? null,
         }).returning().all() as any[])[0];
         if (!inserted) throw new Error("Failed to create category");
         tx.insert(auditLogs).values({
@@ -107,6 +117,14 @@ export default async function (fastify: FastifyInstance) {
     
     const body = parseResult.data;
 
+    if (body.reportingAccountId != null) {
+      const [account] = await db.select({ type: accounts.type, isActive: accounts.isActive }).from(accounts)
+        .where(eq(accounts.id, body.reportingAccountId)).limit(1);
+      if (!account || !account.isActive || account.type !== "expense") {
+        return reply.code(400).send({ error: "reportingAccountId must reference an active expense account" });
+      }
+    }
+
     const [existing] = await db.select().from(categories).where(eq(categories.id, parseInt(id))).limit(1);
 
     if (!existing) {
@@ -119,6 +137,7 @@ export default async function (fastify: FastifyInstance) {
         ...(body.name !== undefined && { name: body.name.trim() }),
         ...(body.icon !== undefined && { icon: body.icon }),
         ...(body.color !== undefined && { color: body.color }),
+        ...(body.reportingAccountId !== undefined && { reportingAccountId: body.reportingAccountId }),
       }).where(eq(categories.id, parseInt(id))).returning().all() as any[])[0];
       if (!row) throw new Error("Category update failed");
       tx.insert(auditLogs).values({

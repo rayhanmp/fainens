@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { accounts, auditLogs, tags, transactionLines, transactions, transactionTags } from "../db/schema";
+import { accounts, auditLogs, categories, tags, transactionCategoryAllocations, transactionLines, transactions, transactionTags } from "../db/schema";
 import { db as defaultDb } from "../db/client";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { validateJournalLines } from "./journal-validation";
@@ -17,6 +17,8 @@ export type JournalLineInput = {
   description?: string;
 };
 
+export type CategoryAllocationInput = { categoryId: number; amount: number };
+
 export type CreateJournalEntryInput = {
   date: Date | number;
   /** Optional due date (ms epoch), e.g. next installment for paylater flows */
@@ -31,6 +33,8 @@ export type CreateJournalEntryInput = {
   periodId?: number | null;
   linkedTxId?: number | null;
   categoryId?: number | null;
+  /** Signed net-expense amounts. Required for new multi-category expense journals. */
+  categoryAllocations?: CategoryAllocationInput[];
   lines: JournalLineInput[];
   /** Transport location tracking (for GoRide, Grab, etc.) */
   originLat?: number | null;
@@ -59,6 +63,7 @@ export type PreparedJournalEntry = {
   totalCredit: number;
   accountIds: number[];
   tagIds: number[];
+  categoryAllocations: CategoryAllocationInput[];
   transactionValues: Record<string, unknown>;
 };
 
@@ -138,6 +143,7 @@ export type CreateSimpleTransactionInput = {
   periodId?: number | null;
   txType?: string;
   categoryId?: number | null;
+  categoryAllocations?: CategoryAllocationInput[];
   reference?: string | null;
   /** Primary wallet for expense/income */
   walletAccountId: number;
@@ -185,7 +191,20 @@ export async function createSimpleTransaction(
   const lines: JournalLineInput[] = [];
 
   if (input.kind === "expense") {
-    const exp = await getOrCreateAutoExpenseAccount(dbLike);
+    let exp = await getOrCreateAutoExpenseAccount(dbLike);
+    if (input.categoryId != null) {
+      const [category] = await dbLike.select({ reportingAccountId: categories.reportingAccountId })
+        .from(categories).where(eq(categories.id, input.categoryId)).limit(1);
+      if (!category) throw new Error(`Category not found: ${input.categoryId}`);
+      if (category.reportingAccountId != null) {
+        const [reportingAccount] = await dbLike.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+          .from(accounts).where(eq(accounts.id, category.reportingAccountId)).limit(1);
+        if (!reportingAccount || !reportingAccount.isActive || reportingAccount.type !== "expense") {
+          throw new Error("Category reporting account must be an active expense account");
+        }
+        exp = { id: reportingAccount.id };
+      }
+    }
     lines.push(
       { accountId: exp.id, debit: input.amountCents, credit: 0, description: input.description },
       { accountId: wallet.id, debit: 0, credit: input.amountCents, description: input.description },
@@ -225,6 +244,7 @@ export async function createSimpleTransaction(
       txType: input.txType ?? `simple_${input.kind}`,
       periodId: input.periodId ?? null,
       categoryId: input.categoryId ?? null,
+      categoryAllocations: input.categoryAllocations,
       linkedTxId: input.linkedTxId ?? null,
       lines,
       // Transport location fields
@@ -416,13 +436,41 @@ export async function prepareJournalEntry(
   const accountIds = Array.from(new Set(validatedLines.map((l) => l.accountId)));
   for (const accountId of accountIds) {
     const rows = await dbLike
-      .select({ isActive: accounts.isActive })
+    .select({ id: accounts.id, isActive: accounts.isActive, type: accounts.type })
       .from(accounts)
       .where(eq(accounts.id, accountId))
       .limit(1);
     const account = rows[0];
     if (!account) throw new Error(`Account not found: ${accountId}`);
     if (!account.isActive) throw new Error(`Account is not active: ${accountId}`);
+  }
+
+  const accountTypeById = new Map<number, string>();
+  for (const accountId of accountIds) {
+    const [account] = await dbLike.select({ id: accounts.id, type: accounts.type }).from(accounts)
+      .where(eq(accounts.id, accountId)).limit(1);
+    if (account) accountTypeById.set(account.id, account.type);
+  }
+  const netExpense = validatedLines.reduce((sum, line) =>
+    accountTypeById.get(line.accountId) === "expense" ? sum + line.debit - line.credit : sum, 0);
+  const suppliedAllocations = input.categoryAllocations ?? (input.categoryId != null && netExpense !== 0
+    ? [{ categoryId: input.categoryId, amount: netExpense }] : []);
+  const categoryAllocations = suppliedAllocations.map((allocation) => ({
+    categoryId: Number(allocation.categoryId), amount: Number(allocation.amount),
+  }));
+  if (categoryAllocations.some((allocation) => !Number.isInteger(allocation.categoryId) || allocation.categoryId <= 0 || !Number.isSafeInteger(allocation.amount) || allocation.amount === 0)) {
+    throw new Error("categoryAllocations must contain positive category IDs and non-zero integer amounts");
+  }
+  if (new Set(categoryAllocations.map((allocation) => allocation.categoryId)).size !== categoryAllocations.length) {
+    throw new Error("A category may appear only once per journal allocation");
+  }
+  if (categoryAllocations.reduce((sum, allocation) => sum + allocation.amount, 0) !== netExpense) {
+    throw new Error("category allocations must equal the journal's net expense amount");
+  }
+  if (categoryAllocations.length > 0) {
+    const validCategories = await dbLike.select({ id: categories.id }).from(categories)
+      .where(sql`${categories.id} IN (${sql.join(categoryAllocations.map((allocation) => sql`${allocation.categoryId}`), sql`, `)})`);
+    if (validCategories.length !== categoryAllocations.length) throw new Error("One or more allocation categories do not exist");
   }
 
   const tagIds = [...new Set(input.tagIds ?? [])];
@@ -456,6 +504,7 @@ export async function prepareJournalEntry(
     totalCredit,
     accountIds,
     tagIds,
+    categoryAllocations,
     transactionValues: {
       date: new Date(dateMs),
       dueDate: dueMs != null ? new Date(dueMs) : null,
@@ -507,6 +556,13 @@ export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJourna
     tx.insert(transactionTags)
       .values(prepared.tagIds.map((tagId) => ({ transactionId: id, tagId })))
       .run();
+  }
+  if (prepared.categoryAllocations.length > 0) {
+    tx.insert(transactionCategoryAllocations).values(prepared.categoryAllocations.map((allocation) => ({
+      transactionId: id,
+      categoryId: allocation.categoryId,
+      amount: allocation.amount,
+    }))).run();
   }
 
   const lineSums = tx

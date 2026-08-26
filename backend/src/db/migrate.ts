@@ -179,7 +179,9 @@ function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
     transaction: ["id", "date", "tx_type", "subscription_id", "status", "reversal_of_tx_id"],
     account: ["id", "type", "liquidity_class"],
+    category: ["id", "name", "reporting_account_id"],
     transaction_line: ["transaction_id", "account_id", "debit", "credit"],
+    transaction_category_allocation: ["transaction_id", "category_id", "amount"],
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],
     splitbill_session: ["total_cents", "status"],

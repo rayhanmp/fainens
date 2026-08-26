@@ -6,6 +6,8 @@ export const categories: any = sqliteTable("category", {
   name: text("name").notNull(),
   icon: text("icon"),
   color: text("color"),
+  /** Optional expense/revenue account used for new categorized journal lines. */
+  reportingAccountId: integer("reporting_account_id").references(() => accounts.id, { onDelete: "set null" }),
 });
 
 /** Wallet / ledger accounts — optional systemKey for internal GL accounts */
@@ -80,6 +82,20 @@ export const transactionLines = sqliteTable("transaction_line", {
   credit: integer("credit").notNull().default(0), // cents
   description: text("description"),
 });
+
+/** Explicit category amounts for a journal; supports multi-category journals. */
+export const transactionCategoryAllocations = sqliteTable("transaction_category_allocation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  transactionId: integer("transaction_id").notNull()
+    .references(() => transactions.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id").notNull()
+    .references(() => categories.id),
+  amount: integer("amount").notNull(), // signed net expense (refunds are negative)
+}, (table) => ({
+  transactionIdx: index("idx_transaction_category_allocation_tx").on(table.transactionId),
+  categoryIdx: index("idx_transaction_category_allocation_category").on(table.categoryId),
+  uniqueAllocation: uniqueIndex("idx_transaction_category_allocation_unique").on(table.transactionId, table.categoryId),
+}));
 
 export const tags = sqliteTable("tag", {
   id: integer("id").primaryKey({ autoIncrement: true }),
