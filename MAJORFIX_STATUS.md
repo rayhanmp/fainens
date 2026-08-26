@@ -204,6 +204,36 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
 
+## Frontend and operational-flow gaps
+
+The backend integrity work is not equivalent to complete user workflows. The following capabilities are still backend-only or only partially surfaced in the current frontend.
+
+1. **Manual-journal cash-flow classification.** The journal editor must expose `operating`, `investing`, `financing`, and `transfer` for cash-equivalent lines. It currently omits the field, so those manual journals are rejected by the new validation.
+2. **Manual-journal category allocations.** Add a multi-category allocation editor with signed whole-rupiah amounts, exact net-expense reconciliation, and a visible allocation summary.
+3. **Account liquidity class.** Account create/edit must expose and explain `cash_equivalent`, `receivable`, `investment`, and `non_cash`.
+4. **Category reporting-account mapping.** Category create/edit must choose and display its optional active expense reporting account.
+5. **Cash-flow provenance.** Cash-flow reports should distinguish explicitly classified lines from historic rows still using bounded legacy counterpart inference.
+6. **Money-anomaly review.** Build an authenticated client wrapper and a review screen for scan, candidate list/filtering, paired-transaction comparison, reason display, reviewed note, resolve/dismiss, and audit links.
+7. **Historic 100x remediation.** From an anomaly candidate, guide the user to the appropriate safe domain correction/reversal. Never offer automatic rescaling.
+8. **Legacy reconciliation-plug remediation.** Provide an explicit review/correction path for historic reconciliation-related journals; the current reconciliation dialog only handles new control evidence.
+9. **Salary occurrence correction.** Add a reasoned correction UI for posted salary occurrences, with replacement amount/account/date and an original-to-reversal-to-replacement timeline.
+10. **Subscription occurrence correction.** Add the equivalent correction UI for posted renewal occurrences, including replacement amount/payment account/date and reason.
+11. **Loan payment reversal.** Add an eligibility-aware, reasoned reversal action and show the restored loan balance, inverse journal, and payment status.
+12. **Loan-origin reversal.** Add a guarded action for untouched loan origins and explain why repayments, write-offs, or split-bill origins make it unavailable.
+13. **PayLater reversal.** Add protected reversal controls with reason capture, dependency explanation, and installment-allocation history.
+14. **Split-bill reversal.** Add a guarded reversal action that explains derived-loan eligibility and reports which loans were archived with the inverse journal.
+15. **Contact archive/restore.** Add inactive-contact management, restore actions, and a dependency preview for active outstanding loans.
+16. **Budget-template archive/restore.** Add an inactive-template management view and restore controls rather than hiding archived templates permanently.
+17. **Period archive/restore.** Add archived-history browsing and archive/restore actions alongside the already-surfaced close/reopen controls.
+18. **Account/category archive dependency previews.** Before archive/restore, show blocking balances, children, linked categories, budgets, and the safe next action.
+19. **Agent workspace.** Add a conversational agent page with scope selection, tool-call trace, source/result display, financial revision, and budget-plan preview.
+20. **Agent write approval UX.** When guarded write previews/approval tokens are implemented, add diff review, confirmation, idempotency status, and audit outcome UI.
+21. **Cross-domain correction timelines.** Transaction, loan, PayLater, subscription, and split-bill views need a consistent original → inverse → replacement chain with audit links.
+22. **Attachment capability alignment.** Drive client file-size/type validation and error copy from backend capabilities; verify this against the separately modified attachment frontend before altering it.
+23. **Operational visibility.** Consider an admin/support view for migration health, financial revision/cache freshness, cleanup-outbox failures, and anomaly-scan state.
+
+Already surfaced in the frontend: reconciliation session evidence and voiding, generic transaction reversal, reports, period close/reopen, subscription catch-up, and salary catch-up. This list therefore targets the remaining gaps rather than duplicating completed UI work.
+
 ## Merge policy
 
 Do not merge `majorfix` while the high-risk loan/PayLater/split-bill flows still bypass compound accounting invariants. No migration in this branch requires wiping the database, but a backup and migration rehearsal on a copy are mandatory before production deployment.
