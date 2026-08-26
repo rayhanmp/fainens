@@ -173,7 +173,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Periods now have an explicit, audited archive/restore lifecycle in migration `0016`. Only closed periods can be archived; default period lists omit archived history while `includeInactive=true` retains it for audit views. No period, budget, or journal history is deleted.
 - Canonical facts, budget facts, reports/PDF spending breakdowns, dashboard consumers, and agent retrieval now consume journal category allocations. They fall back to legacy transaction categories and then disclose `Unallocated` for historic expense journals without an evidence-based split. This makes category totals reconcile to scoped net expense rather than hiding the gap.
 
-### Pending commit — explicit cash-flow lines and money-anomaly review
+### `b77a7e2` — explicit cash-flow lines and money-anomaly review
 
 - Migration `0017` adds `transaction_line.cash_flow_class`. Cash-equivalent lines produced by simple transactions, transfers, loans, PayLater settlements, subscriptions, salary, imports, wishlist fulfilment, pending approval, generic edits, and reversals now retain an explicit `operating`, `investing`, `financing`, or `transfer` treatment. Cash-flow reports use it first; bounded counterpart inference is retained only for historic unclassified lines.
 - Asset-to-asset movements distinguish cash-to-cash transfers from cash-to-investment movements, so the latter are investing flows rather than silently disappearing as wallet transfers. Loan receivable origin/collection is investing; borrowing and debt repayment are financing.
