@@ -145,6 +145,7 @@ function AgentPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [pendingImages, setPendingImages] = useState<ChatImage[]>([]);
+  const [previewImage, setPreviewImage] = useState<ChatImage | null>(null);
   const [isDraggingImages, setIsDraggingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -208,6 +209,15 @@ function AgentPage() {
     () => periods.find((period) => String(period.id) === selectedPeriodId),
     [periods, selectedPeriodId],
   );
+
+  useEffect(() => {
+    if (!previewImage) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewImage(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [previewImage]);
 
   const addImageFiles = async (files: File[]) => {
     if (files.length === 0) return;
@@ -458,7 +468,9 @@ function AgentPage() {
                       {message.role === 'user' && message.images && message.images.length > 0 && (
                         <div className="mb-3 flex flex-wrap gap-2">
                           {message.images.map((image) => (
-                            <img key={image.id} src={image.dataUrl} alt={`Attached ${image.filename}`} className="max-h-40 max-w-48 rounded-lg border border-white/30 object-contain" />
+                            <button key={image.id} type="button" onClick={() => setPreviewImage(image)} className="cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-white/80" title={`Preview ${image.filename}`}>
+                              <img src={image.dataUrl} alt={`Attached ${image.filename}`} className="max-h-40 max-w-48 rounded-lg border border-white/30 object-contain" />
+                            </button>
                           ))}
                         </div>
                       )}
@@ -505,7 +517,9 @@ function AgentPage() {
                   <div className="mb-3 flex flex-wrap gap-2">
                     {pendingImages.map((image) => (
                       <div key={image.id} className="group relative">
-                        <img src={image.dataUrl} alt={image.filename} className="h-16 w-16 rounded-lg border border-[var(--color-border)] object-cover" />
+                        <button type="button" onClick={() => setPreviewImage(image)} className="cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]" title={`Preview ${image.filename}`}>
+                          <img src={image.dataUrl} alt={image.filename} className="h-16 w-16 rounded-lg border border-[var(--color-border)] object-cover" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setPendingImages((current) => current.filter((candidate) => candidate.id !== image.id))}
@@ -541,6 +555,28 @@ function AgentPage() {
                 <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Drop images here or use the image button · JPEG, PNG, WebP, GIF up to 4MB each. Images are sent for this turn and not retained as pixels in chat history.</p>
               </form>
             </Card>
+
+            {previewImage && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Preview ${previewImage.filename}`}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+                onClick={() => setPreviewImage(null)}
+              >
+                <div className="relative flex max-h-full max-w-5xl flex-col items-center gap-3 rounded-xl bg-[var(--color-surface)] p-3 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImage(null)}
+                    className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
+                    aria-label="Close image preview"
+                    title="Close preview"
+                  ><X className="h-5 w-5" /></button>
+                  <img src={previewImage.dataUrl} alt={previewImage.filename} className="max-h-[80vh] max-w-[min(90vw,80rem)] rounded-lg object-contain" />
+                  <p className="max-w-full truncate px-8 text-xs text-[var(--color-text-secondary)]">{previewImage.filename}</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               <Card
