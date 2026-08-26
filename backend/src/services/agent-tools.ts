@@ -23,6 +23,7 @@ import { previewDueSubscriptionRenewals } from "./subscription-renewals";
 import { previewSalaryCatchUp } from "./salary-posting";
 import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getPeriodCoverage } from "./period-coverage";
+import { prepareAgentAction } from "./agent-actions";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
@@ -60,8 +61,13 @@ export interface AgentToolDefinition {
 export interface AgentToolResult<T = unknown> {
   tool: string;
   revision: number;
-  readOnly: true;
+  readOnly: boolean;
   data: T;
+}
+
+export interface AgentToolExecutionContext {
+  ownerEmail: string;
+  conversationId?: number | null;
 }
 
 interface CurrencyRatePayload {
@@ -245,6 +251,111 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
         periodId: scopeProperties.periodId,
         targetSavingsRate: { type: "number", minimum: 0, maximum: 100, description: "Desired savings percentage of canonical income; defaults to 20." },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "prepare_transaction",
+    description: "Prepare an explicit balanced manual journal proposal for user review. This never posts or changes financial data. First retrieve account IDs when needed; ask a clarification instead of guessing missing date, amount, account, or category details.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dateMs: { type: "integer", minimum: 0, description: "Transaction date as a UTC timestamp in milliseconds." },
+        description: { type: "string", minLength: 1, maxLength: 500 },
+        reference: { type: ["string", "null"], maxLength: 500 },
+        notes: { type: ["string", "null"], maxLength: 2000 },
+        place: { type: ["string", "null"], maxLength: 500 },
+        periodId: { type: ["integer", "null"], minimum: 1 },
+        categoryId: { type: ["integer", "null"], minimum: 1 },
+        categoryAllocations: {
+          type: "array",
+          maxItems: 100,
+          items: {
+            type: "object",
+            properties: { categoryId: { type: "integer", minimum: 1 }, amount: { type: "integer" } },
+            required: ["categoryId", "amount"],
+            additionalProperties: false,
+          },
+        },
+        lines: {
+          type: "array",
+          minItems: 2,
+          maxItems: 100,
+          items: {
+            type: "object",
+            properties: {
+              accountId: { type: "integer", minimum: 1 },
+              debit: { type: "integer", minimum: 0 },
+              credit: { type: "integer", minimum: 0 },
+              description: { type: ["string", "null"], maxLength: 500 },
+              cashFlowClass: { type: ["string", "null"], enum: ["operating", "investing", "financing", "transfer", "recovery", null] },
+            },
+            required: ["accountId", "debit", "credit"],
+            additionalProperties: false,
+          },
+        },
+        tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 } },
+      },
+      required: ["dateMs", "description", "lines"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "prepare_transactions",
+    description: "Prepare several independent explicit balanced manual journal proposals from one user message. Each item becomes its own review card and nothing is posted. Do not merge unrelated transactions; ask for clarification when a required item is ambiguous.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        transactions: {
+          type: "array",
+          minItems: 1,
+          maxItems: 20,
+          description: "One explicit transaction payload per independent transaction.",
+          items: {
+            type: "object",
+            properties: {
+              dateMs: { type: "integer", minimum: 0, description: "Transaction date as a UTC timestamp in milliseconds." },
+              description: { type: "string", minLength: 1, maxLength: 500 },
+              reference: { type: ["string", "null"], maxLength: 500 },
+              notes: { type: ["string", "null"], maxLength: 2000 },
+              place: { type: ["string", "null"], maxLength: 500 },
+              periodId: { type: ["integer", "null"], minimum: 1 },
+              categoryId: { type: ["integer", "null"], minimum: 1 },
+              categoryAllocations: {
+                type: "array",
+                maxItems: 100,
+                items: {
+                  type: "object",
+                  properties: { categoryId: { type: "integer", minimum: 1 }, amount: { type: "integer" } },
+                  required: ["categoryId", "amount"],
+                  additionalProperties: false,
+                },
+              },
+              lines: {
+                type: "array",
+                minItems: 2,
+                maxItems: 100,
+                items: {
+                  type: "object",
+                  properties: {
+                    accountId: { type: "integer", minimum: 1 },
+                    debit: { type: "integer", minimum: 0 },
+                    credit: { type: "integer", minimum: 0 },
+                    description: { type: ["string", "null"], maxLength: 500 },
+                    cashFlowClass: { type: ["string", "null"], enum: ["operating", "investing", "financing", "transfer", "recovery", null] },
+                  },
+                  required: ["accountId", "debit", "credit"],
+                  additionalProperties: false,
+                },
+              },
+              tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 } },
+            },
+            required: ["dateMs", "description", "lines"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["transactions"],
       additionalProperties: false,
     },
   },
@@ -822,7 +933,7 @@ export async function previewBudgetPlanTool(input: unknown) {
   };
 }
 
-export async function executeAgentTool(name: unknown, input: unknown): Promise<AgentToolResult> {
+export async function executeAgentTool(name: unknown, input: unknown, executionContext?: AgentToolExecutionContext): Promise<AgentToolResult> {
   if (typeof name !== "string" || !agentToolDefinitions.some((definition) => definition.name === name)) {
     throw new Error("Unknown or unavailable agent tool");
   }
@@ -879,8 +990,42 @@ export async function executeAgentTool(name: unknown, input: unknown): Promise<A
     case "preview_budget_plan":
       data = await previewBudgetPlanTool(input);
       break;
+    case "prepare_transaction":
+      if (!executionContext?.ownerEmail) throw new Error("Transaction proposals require an authenticated conversation");
+      data = await prepareAgentAction({
+        ownerEmail: executionContext.ownerEmail,
+        conversationId: executionContext.conversationId,
+        kind: "transaction_journal_create",
+        input,
+      });
+      break;
+    case "prepare_transactions": {
+      if (!executionContext?.ownerEmail) throw new Error("Transaction proposals require an authenticated conversation");
+      if (!isRecord(input) || !Array.isArray(input.transactions) || input.transactions.length < 1 || input.transactions.length > 20) {
+        throw new Error("transactions must contain 1-20 transaction payloads");
+      }
+      const proposals: unknown[] = [];
+      const errors: Array<{ index: number; error: string }> = [];
+      for (const [index, transaction] of input.transactions.entries()) {
+        try {
+          proposals.push(await prepareAgentAction({
+            ownerEmail: executionContext.ownerEmail,
+            conversationId: executionContext.conversationId,
+            kind: "transaction_journal_create",
+            input: transaction,
+          }));
+        } catch (error) {
+          errors.push({ index, error: error instanceof Error ? error.message : "Transaction proposal failed" });
+        }
+      }
+      if (proposals.length === 0 && errors.length > 0) {
+        throw new Error(`No transaction proposals could be prepared: ${errors.map((item) => `#${item.index + 1} ${item.error}`).join("; ")}`);
+      }
+      data = { proposals: proposals.map((proposal) => isRecord(proposal) && "data" in proposal ? proposal.data : proposal), errors };
+      break;
+    }
     default:
       throw new Error("Unknown or unavailable agent tool");
   }
-  return { tool: name, revision: await getFinancialRevision(), readOnly: true, data };
+  return { tool: name, revision: await getFinancialRevision(), readOnly: name !== "prepare_transaction" && name !== "prepare_transactions", data };
 }

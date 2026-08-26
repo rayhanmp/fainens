@@ -30,7 +30,8 @@ import { Select } from '../components/ui/Select';
 import { MarkdownMessage } from '../components/agent/MarkdownMessage';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import { cn, formatCurrency, formatDate } from '../lib/utils';
+import type { AgentTransactionActionProposal } from '../lib/api';
+import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 
 export const Route = createFileRoute('/agent')({
   component: AgentPage,
@@ -46,7 +47,8 @@ type Period = {
 
 type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
 type BudgetPreview = Awaited<ReturnType<typeof api.agent.planBudget>>;
-type AgentActionProposal = Awaited<ReturnType<typeof api.agent.actions.prepare>>;
+type AgentActionProposal = Awaited<ReturnType<typeof api.agent.actions.prepareBudget>>;
+type AgentTransactionProposal = AgentTransactionActionProposal;
 type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
 type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
 
@@ -138,8 +140,250 @@ function ToolTrace({ response }: { response: AgentResponse }) {
   );
 }
 
+function isTransactionProposal(value: unknown): value is AgentTransactionProposal {
+  if (!isRecord(value) || value.kind !== 'transaction_journal_create' || typeof value.approvalId !== 'number') return false;
+  return isRecord(value.details) && Array.isArray(value.details.lines) && typeof value.details.totalDebit === 'number';
+}
+
+type TransactionEditDraft = {
+  name: string;
+  amount: string;
+  dateTime: string;
+  categoryId: string;
+  place: string;
+  reference: string;
+  notes: string;
+};
+
+function localDateTimeInput(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function allocationForAmount(
+  allocations: AgentTransactionProposal['input']['categoryAllocations'],
+  oldAmount: number,
+  nextAmount: number,
+): AgentTransactionProposal['input']['categoryAllocations'] {
+  if (allocations.length === 0 || oldAmount === 0) return allocations;
+  const sign = allocations.reduce((sum, allocation) => sum + allocation.amount, 0) < 0 ? -1 : 1;
+  const target = sign * nextAmount;
+  const scaled = allocations.map((allocation) => ({
+    categoryId: allocation.categoryId,
+    amount: Math.trunc((allocation.amount * target) / oldAmount),
+  }));
+  const remainder = target - scaled.reduce((sum, allocation) => sum + allocation.amount, 0);
+  if (scaled[0]) scaled[0].amount += remainder;
+  return scaled;
+}
+
+function journalLinesForAmount(
+  lines: AgentTransactionProposal['input']['lines'],
+  nextAmount: number,
+): AgentTransactionProposal['input']['lines'] {
+  const oldDebit = lines.reduce((sum, line) => sum + line.debit, 0);
+  const oldCredit = lines.reduce((sum, line) => sum + line.credit, 0);
+  if (oldDebit <= 0 || oldCredit <= 0) return lines.map((line) => ({ ...line }));
+  const scaled = lines.map((line) => ({ ...line,
+    debit: Math.floor((line.debit * nextAmount) / oldDebit),
+    credit: Math.floor((line.credit * nextAmount) / oldCredit),
+  }));
+  const addRemainder = (side: 'debit' | 'credit') => {
+    let remainder = nextAmount - scaled.reduce((sum, line) => sum + line[side], 0);
+    for (let index = 0; index < scaled.length && remainder > 0; index += 1) {
+      if (lines[index][side] > 0) {
+        scaled[index][side] += 1;
+        remainder -= 1;
+      }
+    }
+  };
+  addRemainder('debit');
+  addRemainder('credit');
+  return scaled;
+}
+
+function draftFromProposal(proposal: AgentTransactionProposal): TransactionEditDraft {
+  const categoryId = proposal.input.categoryId ?? proposal.input.categoryAllocations[0]?.categoryId ?? null;
+  return {
+    name: proposal.input.description,
+    amount: String(proposal.details.totalDebit),
+    dateTime: localDateTimeInput(proposal.input.dateMs),
+    categoryId: categoryId == null ? '' : String(categoryId),
+    place: proposal.input.place ?? '',
+    reference: proposal.input.reference ?? '',
+    notes: proposal.input.notes ?? '',
+  };
+}
+
+function TransactionProposalCard({
+  proposal,
+  categories,
+  conversationId,
+}: {
+  proposal: AgentTransactionProposal;
+  categories: Array<{ id: number; name: string }>;
+  conversationId?: number | null;
+}) {
+  const [currentProposal, setCurrentProposal] = useState(proposal);
+  const [status, setStatus] = useState<'pending' | 'editing' | 'saving' | 'executing' | 'executed' | 'rejected' | 'error'>(proposal.status === 'pending' ? 'pending' : 'error');
+  const [message, setMessage] = useState<string | null>(null);
+  const [draft, setDraft] = useState<TransactionEditDraft>(() => draftFromProposal(proposal));
+  const details = currentProposal.details;
+  const input = currentProposal.input;
+  const categoryName = input.categoryId == null
+    ? (input.categoryAllocations[0] ? categories.find((category) => category.id === input.categoryAllocations[0].categoryId)?.name ?? details.categoryAllocations[0]?.category : null)
+    : categories.find((category) => category.id === input.categoryId)?.name ?? details.categoryAllocations.find((allocation) => allocation.categoryId === input.categoryId)?.category;
+
+  const beginEdit = () => {
+    setDraft(draftFromProposal(currentProposal));
+    setMessage(null);
+    setStatus('editing');
+  };
+
+  const cancelEdit = () => {
+    setDraft(draftFromProposal(currentProposal));
+    setStatus('pending');
+    setMessage(null);
+  };
+
+  const saveEdit = async () => {
+    const amount = Number(draft.amount.replace(/[^0-9]/g, ''));
+    const dateMs = new Date(draft.dateTime).getTime();
+    if (!draft.name.trim()) {
+      setMessage('Add a transaction name before saving.');
+      return;
+    }
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      setMessage('Amount must be a positive whole IDR amount.');
+      return;
+    }
+    if (!Number.isFinite(dateMs)) {
+      setMessage('Choose a valid date and time.');
+      return;
+    }
+    setStatus('saving');
+    setMessage(null);
+    try {
+      const nextCategoryId = draft.categoryId ? Number(draft.categoryId) : null;
+      const originalCategoryId = input.categoryId ?? input.categoryAllocations[0]?.categoryId ?? null;
+      const nextInput = {
+        ...input,
+        dateMs,
+        description: draft.name.trim(),
+        place: draft.place.trim() || null,
+        reference: draft.reference.trim() || null,
+        notes: draft.notes.trim() || null,
+        categoryId: nextCategoryId,
+        lines: journalLinesForAmount(input.lines, amount),
+        categoryAllocations: allocationForAmount(input.categoryAllocations, details.totalDebit, amount),
+      };
+      if (nextCategoryId !== originalCategoryId) {
+        if (nextCategoryId == null) {
+          nextInput.categoryAllocations = [];
+        } else if (nextInput.categoryAllocations.length > 0) {
+          const allocatedAmount = nextInput.categoryAllocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+          nextInput.categoryAllocations = [{ categoryId: nextCategoryId, amount: allocatedAmount }];
+        }
+      }
+      const refreshed = await api.agent.actions.prepareTransaction({
+        conversationId,
+        input: nextInput,
+        assumptions: currentProposal.assumptions,
+      });
+      // A changed proposal must not leave the old bearer token usable. The
+      // replacement is prepared first so a transient network failure does not
+      // strand the user without a valid review option.
+      if (currentProposal.approvalToken) {
+        await api.agent.actions.reject(currentProposal.approvalId, currentProposal.approvalToken).catch(() => undefined);
+      }
+      setCurrentProposal(refreshed);
+      setDraft(draftFromProposal(refreshed));
+      setStatus('pending');
+      setMessage('Updated. Review the new proposal, then confirm when ready.');
+    } catch (caught) {
+      setStatus('editing');
+      setMessage(caught instanceof Error ? caught.message : 'Could not update this proposal.');
+    }
+  };
+
+  const execute = async () => {
+    if (!currentProposal.approvalToken || status !== 'pending') return;
+    setStatus('executing');
+    setMessage(null);
+    try {
+      const result = await api.agent.actions.execute(currentProposal.approvalId, currentProposal.approvalToken);
+      setStatus('executed');
+      setMessage(`Posted successfully as transaction #${result.receipt.transactionId ?? '—'}.`);
+    } catch (caught) {
+      setStatus('error');
+      setMessage(caught instanceof Error ? caught.message : 'Could not post this transaction.');
+    }
+  };
+
+  const reject = async () => {
+    if (!currentProposal.approvalToken || status !== 'pending') return;
+    setStatus('executing');
+    setMessage(null);
+    try {
+      await api.agent.actions.reject(currentProposal.approvalId, currentProposal.approvalToken);
+      setStatus('rejected');
+      setMessage('Transaction proposal dismissed; nothing was posted.');
+    } catch (caught) {
+      setStatus('error');
+      setMessage(caught instanceof Error ? caught.message : 'Could not dismiss this proposal.');
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Transaction ready for review</p>
+          <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">Nothing is posted until you confirm it.</p>
+        </div>
+        <span className={cn('rounded-full bg-[var(--color-surface)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide', status === 'executed' && 'text-[var(--color-success)]')}>{status === 'pending' ? 'Needs your review' : status}</span>
+      </div>
+      {status === 'editing' || status === 'saving' ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold sm:col-span-2">Transaction name<input value={draft.name} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))} className="brutalist-input mt-1" maxLength={500} /></label>
+          <label className="text-xs font-semibold">Amount (IDR)<input inputMode="numeric" value={draft.amount} onChange={(event) => setDraft((value) => ({ ...value, amount: event.target.value }))} className="brutalist-input mt-1" /></label>
+          <label className="text-xs font-semibold">Date &amp; time<input type="datetime-local" value={draft.dateTime} onChange={(event) => setDraft((value) => ({ ...value, dateTime: event.target.value }))} className="brutalist-input mt-1" /></label>
+          <label className="text-xs font-semibold">Category<select value={draft.categoryId} onChange={(event) => setDraft((value) => ({ ...value, categoryId: event.target.value }))} className="brutalist-input mt-1"><option value="">Uncategorized</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+          <label className="text-xs font-semibold">Place<input value={draft.place} onChange={(event) => setDraft((value) => ({ ...value, place: event.target.value }))} className="brutalist-input mt-1" maxLength={500} placeholder="Optional" /></label>
+          <label className="text-xs font-semibold">Reference<input value={draft.reference} onChange={(event) => setDraft((value) => ({ ...value, reference: event.target.value }))} className="brutalist-input mt-1" maxLength={500} placeholder="Optional" /></label>
+          <label className="text-xs font-semibold sm:col-span-2">Notes / description<textarea value={draft.notes} onChange={(event) => setDraft((value) => ({ ...value, notes: event.target.value }))} className="brutalist-input mt-1 min-h-20 resize-y" maxLength={2000} placeholder="Optional details" /></label>
+          <div className="flex flex-wrap gap-2 sm:col-span-2"><Button size="sm" onClick={() => void saveEdit()} isLoading={status === 'saving'}>Save changes</Button><Button size="sm" variant="secondary" onClick={cancelEdit} disabled={status === 'saving'}>Cancel</Button></div>
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Transaction name</p><p className="mt-0.5 font-semibold">{input.description}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Amount</p><p className="mt-0.5 font-semibold">{formatCurrency(details.totalDebit)}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Category</p><p className="mt-0.5">{categoryName ?? 'Uncategorized'}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Date &amp; time</p><p className="mt-0.5">{formatDateTime(details.dateMs)}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Period</p><p className="mt-0.5">{details.periodId == null ? 'Unassigned' : `Period #${details.periodId}`}</p></div>
+          {input.place && <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Place</p><p className="mt-0.5">{input.place}</p></div>}
+          {input.reference && <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Reference</p><p className="mt-0.5">{input.reference}</p></div>}
+          {input.notes && <div className="sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Notes / description</p><p className="mt-0.5 whitespace-pre-wrap">{input.notes}</p></div>}
+        </div>
+      )}
+      <details className="mt-4 rounded-lg border border-[var(--color-border)]/70 bg-[var(--color-surface)]/60 p-3">
+        <summary className="cursor-pointer text-xs font-semibold text-[var(--color-text-secondary)]">Ledger details</summary>
+        <div className="mt-3 space-y-1 text-xs">
+          {details.lines.map((line, index) => <div key={`${line.accountId}-${index}`} className="flex items-center justify-between gap-3"><span>{line.account}</span><span className="font-mono">{line.debit > 0 ? `Dr ${formatCurrency(line.debit)}` : `Cr ${formatCurrency(line.credit)}`}</span></div>)}
+        </div>
+        <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">Balanced total {formatCurrency(details.totalDebit)} · proposal revision {currentProposal.baseFinancialRevision} · expires {formatDate(currentProposal.expiresAt)}</p>
+      </details>
+      {currentProposal.approvalToken && status === 'pending' && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={beginEdit}><Pencil className="h-4 w-4" /> Edit details</Button><Button size="sm" onClick={() => void execute()}><Check className="h-4 w-4" /> Confirm &amp; post</Button><Button size="sm" variant="secondary" onClick={() => void reject()}>Dismiss</Button></div>}
+      {!currentProposal.approvalToken && status === 'pending' && <p className="mt-3 text-xs text-[var(--color-danger)]">This proposal is from an earlier session. Ask the agent to prepare it again before posting.</p>}
+      {message && <p className={cn('mt-3 text-xs', (status === 'executed' || status === 'rejected' || message.startsWith('Updated.')) ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{message}</p>}
+    </div>
+  );
+}
+
 function AgentPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
@@ -201,6 +445,9 @@ function AgentPage() {
         if (active) setSelectedPeriodId(String(active.id));
       })
       .catch(() => setError('Could not load accounting periods. You can still ask across recorded history.'));
+    void api.categories.list()
+      .then((data) => setCategories(data.map((category) => ({ id: category.id, name: category.name }))))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -422,9 +669,8 @@ function AgentPage() {
     setIsPreparingAction(true);
     setError(null);
     try {
-      const proposal = await api.agent.actions.prepare({
+      const proposal = await api.agent.actions.prepareBudget({
         conversationId: activeConversationId,
-        kind: 'budget_plan_upsert',
         input: { periodId: Number(selectedPeriodId), plans },
         assumptions: [
           'Only the categories shown in this proposal will be created or updated.',
@@ -557,6 +803,7 @@ function AgentPage() {
                             {!message.response.llmAvailable && <span className="rounded-full bg-[var(--color-warning)]/10 px-2 py-1 text-[var(--color-warning)]">LLM setup required for written analysis</span>}
                           </div>
                           <ToolTrace response={message.response} />
+                          {message.response.pendingActions?.map((action, index) => isTransactionProposal(action) && <TransactionProposalCard key={`${action.approvalId}-${index}`} proposal={action} categories={categories} conversationId={message.response.conversationId ?? activeConversationId} />)}
                         </>
                       )}
                     </div>

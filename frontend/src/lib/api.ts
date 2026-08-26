@@ -107,6 +107,7 @@ export type AgentQueryResponse = {
   conversationId?: number | null;
   toolCalls: Array<{ id: string; name: string; input: unknown }>;
   toolResults: Array<{ id: string; name: string; result: unknown }>;
+  pendingActions?: AgentActionProposal[];
   message?: string;
 };
 
@@ -119,17 +120,48 @@ export type AgentStreamEvent =
 export type AgentActionProposal = {
   pendingActionId: number;
   approvalId: number;
-  kind: 'budget_plan_upsert';
+  kind: 'budget_plan_upsert' | 'transaction_journal_create';
   status: string;
-  input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
+  input: unknown;
   assumptions: string[];
   missingFields: string[];
-  details: Array<{ categoryId: number; category: string; plannedAmountCents: number }>;
+  details: unknown;
   baseFinancialRevision: number;
   createdAt: number;
   expiresAt: number;
   approvalToken: string | null;
   tokenAlreadyIssued: boolean;
+};
+
+export type AgentBudgetActionProposal = AgentActionProposal & {
+  kind: 'budget_plan_upsert';
+  input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
+  details: Array<{ categoryId: number; category: string; plannedAmountCents: number }>;
+};
+
+export type AgentTransactionActionProposal = AgentActionProposal & {
+  kind: 'transaction_journal_create';
+  input: {
+    dateMs: number;
+    description: string;
+    reference: string | null;
+    notes: string | null;
+    place: string | null;
+    periodId: number | null;
+    categoryId: number | null;
+    categoryAllocations: Array<{ categoryId: number; amount: number }>;
+    lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null }>;
+    tagIds: number[];
+  };
+  details: {
+    dateMs: number;
+    periodId: number | null;
+    description: string;
+    totalDebit: number;
+    totalCredit: number;
+    lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null; account: string }>;
+    categoryAllocations: Array<{ categoryId: number; amount: number; category: string }>;
+  };
 };
 
 async function streamAgentQuery(
@@ -1757,19 +1789,45 @@ export const api = {
       }> }>(`/agent/actions${conversationId ? `?conversationId=${conversationId}` : ''}`),
       prepare: (data: {
         conversationId?: number | null;
-        kind: 'budget_plan_upsert';
-        input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
+        kind: 'budget_plan_upsert' | 'transaction_journal_create';
+        input: unknown;
         assumptions?: string[];
         missingFields?: string[];
         idempotencyKey?: string;
       }) => fetchApi<AgentActionProposal>('/agent/actions/prepare', { method: 'POST', body: JSON.stringify(data) }),
+      prepareBudget: (data: {
+        conversationId?: number | null;
+        input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
+        assumptions?: string[];
+        missingFields?: string[];
+        idempotencyKey?: string;
+      }) => fetchApi<AgentBudgetActionProposal>('/agent/actions/prepare', { method: 'POST', body: JSON.stringify({ ...data, kind: 'budget_plan_upsert' }) }),
+      prepareTransaction: (data: {
+        conversationId?: number | null;
+        input: {
+          dateMs: number;
+          description: string;
+          reference?: string | null;
+          notes?: string | null;
+          place?: string | null;
+          periodId?: number | null;
+          categoryId?: number | null;
+          categoryAllocations?: Array<{ categoryId: number; amount: number }>;
+          lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null }>;
+          tagIds?: number[];
+        };
+        assumptions?: string[];
+        missingFields?: string[];
+        idempotencyKey?: string;
+      }) => fetchApi<AgentTransactionActionProposal>('/agent/actions/prepare', { method: 'POST', body: JSON.stringify({ ...data, kind: 'transaction_journal_create' }) }),
       execute: (approvalId: number, token: string) => fetchApi<{ receipt: {
         actionId: number;
         approvalId: number;
-        kind: 'budget_plan_upsert';
-        periodId: number;
-        changed: Array<{ planId: number; categoryId: number; plannedAmountCents: number; operation: 'created' | 'updated' }>;
-        changedCount: number;
+        kind: 'budget_plan_upsert' | 'transaction_journal_create';
+        periodId?: number | null;
+        transactionId?: number;
+        changed?: Array<{ planId: number; categoryId: number; plannedAmountCents: number; operation: 'created' | 'updated' }>;
+        changedCount?: number;
         auditLogIds: number[];
         financialRevision: number;
         executedAt: number;

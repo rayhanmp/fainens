@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { agentApprovals, agentConversations, agentPendingActions, auditLogs, budgetPlans, categories, salaryPeriods } from "../db/schema";
-import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary } from "../cache/invalidation";
+import { accounts, agentApprovals, agentConversations, agentPendingActions, auditLogs, budgetPlans, categories, salaryPeriods } from "../db/schema";
+import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary, invalidateOnTransactionMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync, getFinancialRevision, getFinancialRevisionSync } from "./financial-revision";
+import { insertPreparedJournalEntrySync, prepareJournalEntry, type JournalLineInput, type PreparedJournalEntry } from "./ledger";
 
 export const AGENT_BUDGET_ACTION_KIND = "budget_plan_upsert" as const;
+export const AGENT_TRANSACTION_ACTION_KIND = "transaction_journal_create" as const;
 const ACTION_TTL_MS = 15 * 60 * 1000;
 const MAX_PLAN_ITEMS = 100;
 const MAX_ASSUMPTIONS = 20;
@@ -14,6 +16,18 @@ const MAX_ASSUMPTION_LENGTH = 500;
 
 type BudgetPlanItem = { categoryId: number; plannedAmountCents: number };
 type BudgetActionInput = { periodId: number; plans: BudgetPlanItem[] };
+type TransactionActionInput = {
+  dateMs: number;
+  description: string;
+  reference: string | null;
+  notes: string | null;
+  place: string | null;
+  periodId: number | null;
+  categoryId: number | null;
+  categoryAllocations: Array<{ categoryId: number; amount: number }>;
+  lines: JournalLineInput[];
+  tagIds: number[];
+};
 
 export class AgentActionError extends Error {
   constructor(public readonly statusCode: number, message: string) {
@@ -75,9 +89,96 @@ function parseBudgetActionInput(value: unknown): BudgetActionInput {
   return { periodId, plans };
 }
 
+function optionalNullableText(value: unknown, field: string, maxLength: number): string | null {
+  if (value == null) return null;
+  if (typeof value !== "string" || value.length > maxLength) {
+    throw new AgentActionError(400, `${field} must be a string of at most ${maxLength} characters`);
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseTransactionActionInput(value: unknown): TransactionActionInput {
+  if (!isRecord(value)) throw new AgentActionError(400, "input must be an object");
+  const dateMs = value.dateMs;
+  if (typeof dateMs !== "number" || !Number.isSafeInteger(dateMs) || dateMs < 0) {
+    throw new AgentActionError(400, "input.dateMs must be a non-negative integer timestamp");
+  }
+  const description = value.description;
+  if (typeof description !== "string" || description.trim().length === 0 || description.length > 500) {
+    throw new AgentActionError(400, "input.description must be a non-empty string of at most 500 characters");
+  }
+  if (!Array.isArray(value.lines) || value.lines.length < 2 || value.lines.length > 100) {
+    throw new AgentActionError(400, "input.lines must contain 2-100 journal lines");
+  }
+  const allowedCashFlowClasses = new Set(["operating", "investing", "financing", "transfer", "recovery"]);
+  const lines = value.lines.map((candidate, index): JournalLineInput => {
+    if (!isRecord(candidate)) throw new AgentActionError(400, `input.lines[${index}] must be an object`);
+    const accountId = candidate.accountId;
+    const debit = candidate.debit;
+    const credit = candidate.credit;
+    if (typeof accountId !== "number" || !Number.isSafeInteger(accountId) || accountId <= 0) {
+      throw new AgentActionError(400, `input.lines[${index}].accountId must be a positive integer`);
+    }
+    if (typeof debit !== "number" || !Number.isSafeInteger(debit) || debit < 0 || typeof credit !== "number" || !Number.isSafeInteger(credit) || credit < 0) {
+      throw new AgentActionError(400, `input.lines[${index}] debit and credit must be non-negative integers`);
+    }
+    const cashFlowClass = candidate.cashFlowClass == null ? null : candidate.cashFlowClass;
+    if (cashFlowClass != null && (typeof cashFlowClass !== "string" || !allowedCashFlowClasses.has(cashFlowClass))) {
+      throw new AgentActionError(400, `input.lines[${index}].cashFlowClass is invalid`);
+    }
+    return {
+      accountId,
+      debit,
+      credit,
+      description: optionalNullableText(candidate.description, `input.lines[${index}].description`, 500) ?? undefined,
+      cashFlowClass: cashFlowClass as JournalLineInput["cashFlowClass"],
+    };
+  });
+  const categoryId = value.categoryId == null ? null : value.categoryId;
+  if (categoryId != null && (typeof categoryId !== "number" || !Number.isSafeInteger(categoryId) || categoryId <= 0)) {
+    throw new AgentActionError(400, "input.categoryId must be a positive integer or null");
+  }
+  const periodId = value.periodId == null ? null : value.periodId;
+  if (periodId != null && (typeof periodId !== "number" || !Number.isSafeInteger(periodId) || periodId <= 0)) {
+    throw new AgentActionError(400, "input.periodId must be a positive integer or null");
+  }
+  const categoryAllocations = value.categoryAllocations == null ? [] : value.categoryAllocations;
+  if (!Array.isArray(categoryAllocations) || categoryAllocations.length > 100) {
+    throw new AgentActionError(400, "input.categoryAllocations must be an array of at most 100 items");
+  }
+  const seenCategories = new Set<number>();
+  const parsedAllocations = categoryAllocations.map((candidate, index) => {
+    if (!isRecord(candidate) || typeof candidate.categoryId !== "number" || !Number.isSafeInteger(candidate.categoryId) || candidate.categoryId <= 0 || typeof candidate.amount !== "number" || !Number.isSafeInteger(candidate.amount) || candidate.amount === 0) {
+      throw new AgentActionError(400, `input.categoryAllocations[${index}] must contain a positive categoryId and non-zero integer amount`);
+    }
+    if (seenCategories.has(candidate.categoryId)) throw new AgentActionError(400, `input.categoryAllocations contains duplicate category ${candidate.categoryId}`);
+    seenCategories.add(candidate.categoryId);
+    return { categoryId: candidate.categoryId, amount: candidate.amount };
+  });
+  const tagIdsValue = value.tagIds == null ? [] : value.tagIds;
+  if (!Array.isArray(tagIdsValue) || tagIdsValue.length > 100 || tagIdsValue.some((id) => typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0)) {
+    throw new AgentActionError(400, "input.tagIds must contain at most 100 positive integer IDs");
+  }
+  const tagIds = [...new Set(tagIdsValue as number[])].sort((a, b) => a - b);
+  return {
+    dateMs,
+    description: description.trim(),
+    reference: optionalNullableText(value.reference, "input.reference", 500),
+    notes: optionalNullableText(value.notes, "input.notes", 2000),
+    place: optionalNullableText(value.place, "input.place", 500),
+    periodId,
+    categoryId,
+    categoryAllocations: parsedAllocations,
+    lines,
+    tagIds,
+  };
+}
+
 function normalizeInput(kind: string, input: unknown): string {
-  if (kind !== AGENT_BUDGET_ACTION_KIND) throw new AgentActionError(400, `Unsupported agent action kind: ${kind}`);
-  return JSON.stringify(parseBudgetActionInput(input));
+  if (kind === AGENT_BUDGET_ACTION_KIND) return JSON.stringify(parseBudgetActionInput(input));
+  if (kind === AGENT_TRANSACTION_ACTION_KIND) return JSON.stringify(parseTransactionActionInput(input));
+  throw new AgentActionError(400, `Unsupported agent action kind: ${kind}`);
 }
 
 function tokenHash(token: string): string {
@@ -97,7 +198,7 @@ function idempotencyKey(ownerEmail: string, kind: string, normalizedInput: strin
 function actionView(
   action: typeof agentPendingActions.$inferSelect,
   approval: typeof agentApprovals.$inferSelect,
-  details: Array<{ categoryId: number; category: string; plannedAmountCents: number }>,
+  details: unknown,
   approvalToken: string | null,
 ) {
   return {
@@ -126,6 +227,47 @@ async function loadBudgetDetails(input: BudgetActionInput) {
   return input.plans.map((plan) => ({ categoryId: plan.categoryId, category: byId.get(plan.categoryId) as string, plannedAmountCents: plan.plannedAmountCents }));
 }
 
+async function prepareTransactionAction(input: TransactionActionInput): Promise<PreparedJournalEntry> {
+  try {
+    return await prepareJournalEntry({
+      date: input.dateMs,
+      description: input.description,
+      reference: input.reference,
+      notes: input.notes,
+      place: input.place,
+      periodId: input.periodId,
+      categoryId: input.categoryId,
+      categoryAllocations: input.categoryAllocations,
+      lines: input.lines,
+      tagIds: input.tagIds,
+      txType: "manual",
+    }, db);
+  } catch (error) {
+    throw new AgentActionError(409, error instanceof Error ? error.message : "Transaction proposal failed ledger validation");
+  }
+}
+
+async function loadTransactionDetails(input: TransactionActionInput, prepared: PreparedJournalEntry) {
+  const accountRows = await db.select({ id: accounts.id, name: accounts.name, type: accounts.type, liquidityClass: accounts.liquidityClass })
+    .from(accounts).where(inArray(accounts.id, prepared.accountIds));
+  const accountsById = new Map(accountRows.map((account) => [account.id, account]));
+  const categoryIds = [...new Set([
+    ...(input.categoryId == null ? [] : [input.categoryId]),
+    ...input.categoryAllocations.map((allocation) => allocation.categoryId),
+  ])];
+  const categoryRows = categoryIds.length === 0 ? [] : await db.select({ id: categories.id, name: categories.name })
+    .from(categories).where(inArray(categories.id, categoryIds));
+  return {
+    dateMs: prepared.dateMs,
+    periodId: prepared.periodId,
+    description: input.description,
+    totalDebit: prepared.totalDebit,
+    totalCredit: prepared.totalCredit,
+    lines: prepared.validatedLines.map((line) => ({ ...line, account: accountsById.get(line.accountId)?.name ?? `Account #${line.accountId}` })),
+    categoryAllocations: prepared.categoryAllocations.map((allocation) => ({ ...allocation, category: categoryRows.find((category) => category.id === allocation.categoryId)?.name ?? `Category #${allocation.categoryId}` })),
+  };
+}
+
 async function ownedConversation(conversationId: number | null | undefined, ownerEmail: string) {
   if (conversationId == null) return null;
   if (!Number.isSafeInteger(conversationId) || conversationId <= 0) throw new AgentActionError(400, "conversationId must be a positive integer");
@@ -147,17 +289,24 @@ export async function prepareAgentAction(args: {
   if (!args.ownerEmail.trim()) throw new AgentActionError(401, "Authenticated user email is unavailable");
   if (typeof args.kind !== "string") throw new AgentActionError(400, "kind is required");
   const kind = args.kind;
-  const input = parseBudgetActionInput(args.input);
-  const normalizedInput = normalizeInput(kind, input);
+  const budgetInput = kind === AGENT_BUDGET_ACTION_KIND ? parseBudgetActionInput(args.input) : null;
+  const transactionInput = kind === AGENT_TRANSACTION_ACTION_KIND ? parseTransactionActionInput(args.input) : null;
+  const normalizedInput = normalizeInput(kind, args.input);
   const assumptions = parseAssumptions(args.assumptions);
   const missingFields = parseAssumptions(args.missingFields);
   const conversationId = await ownedConversation(args.conversationId, args.ownerEmail);
 
-  const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, status: salaryPeriods.status, isActive: salaryPeriods.isActive })
-    .from(salaryPeriods).where(eq(salaryPeriods.id, input.periodId)).limit(1);
-  if (!period) throw new AgentActionError(404, "Salary period not found");
-  if (period.status !== "open" || !period.isActive) throw new AgentActionError(409, "Budget proposals can only target an active open period");
-  const details = await loadBudgetDetails(input);
+  let details: unknown;
+  if (budgetInput) {
+    const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, status: salaryPeriods.status, isActive: salaryPeriods.isActive })
+      .from(salaryPeriods).where(eq(salaryPeriods.id, budgetInput.periodId)).limit(1);
+    if (!period) throw new AgentActionError(404, "Salary period not found");
+    if (period.status !== "open" || !period.isActive) throw new AgentActionError(409, "Budget proposals can only target an active open period");
+    details = await loadBudgetDetails(budgetInput);
+  } else if (transactionInput) {
+    const prepared = await prepareTransactionAction(transactionInput);
+    details = await loadTransactionDetails(transactionInput, prepared);
+  }
   const revision = await getFinancialRevision();
   const key = idempotencyKey(args.ownerEmail, kind, normalizedInput, revision, args.idempotencyKey);
   const [existingApproval] = await db.select().from(agentApprovals).where(eq(agentApprovals.idempotencyKey, key)).limit(1);
@@ -168,8 +317,12 @@ export async function prepareAgentAction(args: {
     if (existingAction.kind !== kind || existingAction.normalizedInput !== normalizedInput) {
       throw new AgentActionError(409, "That idempotency key is already bound to a different proposal");
     }
-    const existingInput = parseBudgetActionInput(parseJson(existingAction.normalizedInput, {}));
-    const existingDetails = await loadBudgetDetails(existingInput);
+    const existingDetails = existingAction.kind === AGENT_BUDGET_ACTION_KIND
+      ? await loadBudgetDetails(parseBudgetActionInput(parseJson(existingAction.normalizedInput, {})))
+      : await loadTransactionDetails(
+        parseTransactionActionInput(parseJson(existingAction.normalizedInput, {})),
+        await prepareTransactionAction(parseTransactionActionInput(parseJson(existingAction.normalizedInput, {}))),
+      );
     return actionView(existingAction, existingApproval, existingDetails, null);
   }
 
@@ -206,7 +359,7 @@ export async function prepareAgentAction(args: {
   return actionView(created.action, created.approval, details, rawToken);
 }
 
-type ExecutionReceipt = {
+type BudgetExecutionReceipt = {
   actionId: number;
   approvalId: number;
   kind: typeof AGENT_BUDGET_ACTION_KIND;
@@ -218,15 +371,106 @@ type ExecutionReceipt = {
   executedAt: number;
 };
 
+type TransactionExecutionReceipt = {
+  actionId: number;
+  approvalId: number;
+  kind: typeof AGENT_TRANSACTION_ACTION_KIND;
+  transactionId: number;
+  periodId: number | null;
+  auditLogIds: number[];
+  financialRevision: number;
+  executedAt: number;
+};
+
+type ExecutionReceipt = BudgetExecutionReceipt | TransactionExecutionReceipt;
+
 function parseStoredBudgetInput(action: typeof agentPendingActions.$inferSelect): BudgetActionInput {
   try { return parseBudgetActionInput(JSON.parse(action.normalizedInput)); }
   catch (error) { throw new AgentActionError(409, error instanceof Error ? error.message : "Pending action payload is invalid"); }
+}
+
+function parseStoredTransactionInput(action: typeof agentPendingActions.$inferSelect): TransactionActionInput {
+  try { return parseTransactionActionInput(JSON.parse(action.normalizedInput)); }
+  catch (error) { throw new AgentActionError(409, error instanceof Error ? error.message : "Pending transaction payload is invalid"); }
+}
+
+async function executeTransactionApproval(args: {
+  ownerEmail: string;
+  approvalId: number;
+  suppliedHash: string;
+  approvalHint: typeof agentApprovals.$inferSelect;
+  actionHint: typeof agentPendingActions.$inferSelect;
+}) {
+  if (args.approvalHint.status === "executed" && args.approvalHint.executionReceipt) {
+    return { receipt: JSON.parse(args.approvalHint.executionReceipt) as TransactionExecutionReceipt, replay: true };
+  }
+  const transactionInput = parseStoredTransactionInput(args.actionHint);
+  const prepared = await prepareTransactionAction(transactionInput);
+  const result = db.transaction((tx) => {
+    const approval = tx.select().from(agentApprovals)
+      .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail), eq(agentApprovals.tokenHash, args.suppliedHash))).limit(1).all()[0];
+    if (!approval) return { error: new AgentActionError(404, "Approval not found") } as const;
+    if (approval.status === "executed" && approval.executionReceipt) {
+      return { receipt: JSON.parse(approval.executionReceipt) as TransactionExecutionReceipt, replay: true } as const;
+    }
+    if (approval.status !== "pending") return { error: new AgentActionError(409, `Approval is ${approval.status}; it cannot be executed`) } as const;
+    const nowMs = Date.now();
+    if (nowMs >= timestampMs(approval.expiresAt)) {
+      tx.update(agentApprovals).set({ status: "expired" }).where(eq(agentApprovals.id, approval.id)).run();
+      tx.update(agentPendingActions).set({ status: "expired", updatedAt: new Date(nowMs) }).where(eq(agentPendingActions.id, approval.pendingActionId)).run();
+      return { error: new AgentActionError(410, "Approval expired; prepare a fresh proposal") } as const;
+    }
+    const action = tx.select().from(agentPendingActions).where(eq(agentPendingActions.id, approval.pendingActionId)).limit(1).all()[0];
+    if (!action || action.status !== "pending" || action.kind !== AGENT_TRANSACTION_ACTION_KIND) return { error: new AgentActionError(409, "Pending transaction action is no longer executable") } as const;
+    const currentRevision = getFinancialRevisionSync(tx);
+    if (currentRevision !== action.baseFinancialRevision) {
+      tx.update(agentApprovals).set({ status: "superseded" }).where(eq(agentApprovals.id, approval.id)).run();
+      tx.update(agentPendingActions).set({ status: "superseded", updatedAt: new Date(nowMs) }).where(eq(agentPendingActions.id, action.id)).run();
+      return { error: new AgentActionError(409, "Financial data changed since this proposal; review a fresh proposal") } as const;
+    }
+    const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    const audit = tx.select({ id: auditLogs.id }).from(auditLogs)
+      .where(and(eq(auditLogs.entityType, "transaction"), eq(auditLogs.entityId, transactionId), eq(auditLogs.action, "create")))
+      .orderBy(desc(auditLogs.id)).limit(1).all()[0];
+    const financialRevision = getFinancialRevisionSync(tx);
+    const receipt: TransactionExecutionReceipt = {
+      actionId: action.id,
+      approvalId: approval.id,
+      kind: AGENT_TRANSACTION_ACTION_KIND,
+      transactionId,
+      periodId: prepared.periodId,
+      auditLogIds: audit ? [audit.id] : [],
+      financialRevision,
+      executedAt: nowMs,
+    };
+    tx.update(agentApprovals).set({ status: "executed", approvedAt: new Date(nowMs), executedAt: new Date(nowMs), executionReceipt: JSON.stringify(receipt) }).where(and(eq(agentApprovals.id, approval.id), eq(agentApprovals.status, "pending"))).run();
+    tx.update(agentPendingActions).set({ status: "executed", updatedAt: new Date(nowMs) }).where(and(eq(agentPendingActions.id, action.id), eq(agentPendingActions.status, "pending"))).run();
+    return { receipt, replay: false, affectedAccountIds: prepared.accountIds } as const;
+  });
+  if ("error" in result) throw result.error;
+  if (!result.replay) {
+    await invalidateOnTransactionMutation({
+      transactionId: result.receipt.transactionId,
+      affectedAccountIds: result.affectedAccountIds,
+      affectedPeriodIds: result.receipt.periodId == null ? undefined : [result.receipt.periodId],
+      revisionBumped: true,
+    });
+  }
+  return { receipt: result.receipt, replay: result.replay };
 }
 
 export async function executeAgentApproval(args: { ownerEmail: string; approvalId: number; token: unknown }) {
   if (!Number.isSafeInteger(args.approvalId) || args.approvalId <= 0) throw new AgentActionError(400, "Invalid approval ID");
   if (typeof args.token !== "string" || args.token.length < 20 || args.token.length > 200) throw new AgentActionError(401, "A valid approval token is required");
   const suppliedHash = tokenHash(args.token);
+  const approvalHint = await db.select().from(agentApprovals)
+    .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail), eq(agentApprovals.tokenHash, suppliedHash))).limit(1);
+  if (approvalHint[0]) {
+    const actionHint = await db.select().from(agentPendingActions).where(eq(agentPendingActions.id, approvalHint[0].pendingActionId)).limit(1);
+    if (actionHint[0]?.kind === AGENT_TRANSACTION_ACTION_KIND) {
+      return executeTransactionApproval({ ownerEmail: args.ownerEmail, approvalId: args.approvalId, suppliedHash, approvalHint: approvalHint[0], actionHint: actionHint[0] });
+    }
+  }
   const result = db.transaction((tx) => {
     const approval = tx.select().from(agentApprovals)
       .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail), eq(agentApprovals.tokenHash, suppliedHash))).limit(1).all()[0];
@@ -259,7 +503,7 @@ export async function executeAgentApproval(args: { ownerEmail: string; approvalI
     const missing = input.plans.map((plan) => plan.categoryId).filter((id) => !categoryIds.has(id));
     if (missing.length > 0) return { error: new AgentActionError(409, `A proposed category no longer exists: ${missing.join(", ")}`) } as const;
 
-    const changed: ExecutionReceipt["changed"] = [];
+    const changed: BudgetExecutionReceipt["changed"] = [];
     const auditLogIds: number[] = [];
     for (const plan of input.plans) {
       const existing = tx.select().from(budgetPlans)
@@ -287,7 +531,7 @@ export async function executeAgentApproval(args: { ownerEmail: string; approvalI
     return { receipt, replay: false } as const;
   });
   if ("error" in result) throw result.error;
-  if (!result.replay && result.receipt.changedCount > 0) {
+  if (!result.replay && result.receipt.kind === AGENT_BUDGET_ACTION_KIND && result.receipt.changedCount > 0) {
     await invalidatePeriodSummary(result.receipt.periodId);
     await invalidateAllAnalytics();
     await invalidateAllInsights();
