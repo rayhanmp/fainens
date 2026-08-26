@@ -234,6 +234,202 @@ The backend integrity work is not equivalent to complete user workflows. The fol
 
 Already surfaced in the frontend: reconciliation session evidence and voiding, generic transaction reversal, reports, period close/reopen, subscription catch-up, and salary catch-up. This list therefore targets the remaining gaps rather than duplicating completed UI work.
 
+## Agentic control-surface design
+
+### Product intent
+
+Chat is a first-class way to inspect and operate Fainens. It is not a second, opaque finance system and it must not automate the browser UI. The agent chooses modular domain tools, asks focused follow-up questions where information is missing, presents evidence and proposed effects, and invokes the same audited domain services used by the ordinary frontend only after explicit user approval.
+
+```text
+User message
+  → agent chooses retrieval / planning / preparation tools
+  → answer, clarification, or non-mutating proposal
+  → user explicitly approves an exact effect
+  → domain command revalidates and commits atomically
+  → durable receipt with journal/domain/audit links
+```
+
+Existing page UI remains the transparent inspection and fallback surface. A chat action must link to the same transaction, account, budget, obligation, or reconciliation record that a normal user can inspect.
+
+### Agent response contract
+
+The orchestration endpoint must return a structured response in addition to human-readable text. It must never hide a pending decision in prose.
+
+```ts
+type AgentResponse =
+  | { kind: "answer"; text: string; evidence: Evidence[]; scope: Scope; revision: number; followUps: SuggestedAction[] }
+  | { kind: "clarification"; text: string; pendingActionId: string | null; fields: RequiredField[] }
+  | { kind: "proposal"; text: string; action: PreparedAction; assumptions: Assumption[]; approvalRequired: true }
+  | { kind: "receipt"; text: string; execution: ExecutedAction; auditLinks: ResourceLink[] };
+```
+
+- **Answer** gives an evidence-backed response with the exact accounting scope/as-of date, financial revision, source record IDs, and any truncation or legacy-fallback disclosure.
+- **Clarification** asks only for information that cannot be safely determined. The pending action survives the next user message rather than relying on raw chat history.
+- **Proposal** is non-mutating and contains exact normalized command inputs plus assumptions. It cannot be executed merely because the model described it.
+- **Receipt** exists only after a successful domain command and links to created/reversed journals, owning records, and audit history.
+
+### Inference and clarification policy
+
+The agent may make a clearly disclosed, user-approvable suggestion for category, merchant normalization, likely account, likely date, recurring subscription match, or potential duplicate/similar transaction. Every inference carries a confidence, reason, alternatives when meaningful, and an `acceptedByUser` field on the prepared action.
+
+The agent must ask a clarification rather than infer: amount, debt/payment allocation, reconciliation balance, correction or reversal target, personal-versus-business treatment, an account choice that materially changes balances, or whether a missed recurring occurrence should be posted/skipped. It must never silently post, skip, reconcile, reverse, archive, delete, or change an existing journal.
+
+### Tool model
+
+Do not expose arbitrary SQL, generic CRUD, browser automation, or a universal database-write tool. Tools are domain functions with strict schemas, bounded results, input/output validation, explicit ownership checks, and deterministic accounting calculations.
+
+```text
+Read tools (automatically callable)
+  get_financial_facts(scope)
+  search_transactions(filters)
+  find_similar_transactions(seed | query, filters)
+  get_cash_flow(scope)
+  get_category_variance(periodId, categoryId?)
+  get_account_health(accountId, asOfDate)
+  get_journal_provenance(transactionId)
+  get_money_anomalies(filters)
+  get_due_recurring(asOfDate)
+  get_salary_catch_up()
+  get_loan_balances(filters)
+  get_paylater_obligations(filters)
+  get_reconciliation_status(filters)
+
+Planning tools (automatically callable, non-mutating)
+  simulate_budget_scenarios(input)
+  forecast_cash_position(input)
+  compare_periods(input)
+  build_budget_proposal(input)
+
+Preparation tools (non-mutating, create durable proposal)
+  prepare_transaction_draft(input)
+  prepare_budget_application(proposalId)
+  prepare_recurring_decision(input)
+  prepare_wishlist_fulfilment(input)
+  prepare_domain_correction(input)
+
+Execution tools (never auto-run; explicit user approval required)
+  execute_approved_action(approvalToken)
+```
+
+The current read-only tool registry is the starting point. New tools should be added only when an evaluation task proves a high-value gap; do not create overlapping one-off tools such as `get_food_spending_this_month`.
+
+`find_similar_transactions` must use deterministic candidate retrieval—normalized merchant/description, category, amount band, account, recurrence signals, date history, and optional OCR/receipt metadata—then let the LLM explain the candidates. Semantic similarity alone is not accounting evidence.
+
+### Evidence contract
+
+Every read tool result used in an answer or proposal should include:
+
+```ts
+{
+  data: unknown,
+  scope: { periodId: number | null; startMs: number; endMs: number; asOfMs: number },
+  financialRevision: number,
+  sourceIds: { transactions: number[]; accounts: number[]; periods: number[] },
+  completeness: { truncated: boolean; legacyFallbackUsed: boolean },
+}
+```
+
+Retrieved transaction descriptions, notes, receipt OCR, contact names, and attachment text are untrusted data. The system prompt and rendering layer must treat them as evidence only, never as executable instructions. Answers must label actuals, forecasts, recommendations, drafts, and reconciliation evidence distinctly.
+
+### Durable conversation and approval state
+
+Add durable records rather than retaining all state only in model context:
+
+```text
+agent_conversation
+  id, user_id, title, created_at, updated_at, archived_at
+
+agent_message
+  id, conversation_id, role, content, structured_response, created_at
+
+agent_run
+  id, conversation_id, status, started_at, completed_at,
+  base_financial_revision, final_financial_revision, trace_json, error
+
+agent_pending_action
+  id, conversation_id, kind, normalized_input, missing_fields,
+  assumptions, base_financial_revision, status, expires_at, created_at
+
+agent_approval
+  id, pending_action_id, token_hash, user_id, status,
+  approved_at, executed_at, idempotency_key, execution_receipt, expires_at
+```
+
+The approval token binds the user, normalized payload, allowed action type, base financial revision, expiry, and idempotency key. Execution reloads relevant rows and revalidates every domain invariant. If a relevant revision/state changes, execution fails closed and produces a fresh proposal request. A financial approval is not reusable across conversations or users.
+
+### Approval policy
+
+| Capability | Model may call automatically | User approval | Notes |
+|---|---:|---:|---|
+| Read facts/search/compare | Yes | No | Return bounded evidence and revision. |
+| Budget simulation | Yes | No | No plans are written. |
+| Prepare any write | Yes | No | Creates no financial mutation. |
+| Add expense/income/transfer | No | Always | Show balanced journal preview. |
+| Post/skip recurring occurrence | No | Always | Show exact dated occurrences. |
+| Apply budget proposal | No | Always | Show all category deltas and assumptions. |
+| Fulfil wishlist | No | Always | Show generated journal and linked item. |
+| Loan, PayLater, split-bill, salary, subscription correction | No | Always + reason | Route only to dedicated domain service. |
+| Reconciliation, reversal, archive/restore, delete | No | Always + reason where applicable | Never hide the audit consequence. |
+
+There is no generic “undo” for posted finance data. A receipt may offer the appropriate dedicated correction/reversal preparation flow only when eligibility checks pass.
+
+### Chat UX
+
+Build a persistent Agent workspace plus contextual entry points on Dashboard, Transactions, Budget, Accounts, Loans, PayLater, Subscriptions, and Reports. The user still sees one assistant, not a visible multi-agent graph.
+
+- **Answer cards:** scope, as-of date, source links, revision, and disclosed assumptions.
+- **Clarification cards:** one focused question at a time with typed controls (account/category selectors, dates, amount input, chips) instead of forcing free-text answers.
+- **Proposal cards:** debit/credit journal preview or domain effect, assumption badges, alternatives, expiry, and `Edit`/`Confirm` actions.
+- **Receipt cards:** execution status, record links, audit link, current revision, and eligible correction path.
+- **Trace drawer:** collapsed by default; shows called tools, inputs, returned record counts, errors, and timing. Do not expose private model reasoning.
+- **Plan cards:** scenario comparisons, assumptions, recurring commitments, debt effects, category deltas, and explicit “does not write” versus “ready for approval” state.
+
+Examples:
+
+```text
+“What are my top 10 recent spendings?”
+  → factual card with ten linked posted journals and a defined time range.
+
+“Have I spent similarly before?”
+  → deterministic similar-transaction candidates, match reasons, and links;
+    the agent does not claim a match without evidence.
+
+“I paid 55k for lunch.”
+  → inferred category disclosed; asks for a wallet if ambiguous; shows balanced
+    journal preview; posts only after Confirm.
+```
+
+### Orchestration and scope
+
+Keep a single finance-manager agent initially. It may dynamically choose multiple modular tools in a bounded loop, but do not add a multi-agent graph until tool traces/evals demonstrate a real specialization boundary. Candidate later boundaries are complex retrieval, deterministic planning, and anomaly analysis—not separate chat personalities.
+
+Tool visibility should be contextual and risk-tiered: read/planning tools are available in normal chat; preparation tools appear only for relevant user requests; execution is represented by a pending approval, not as a model-selectable unrestricted capability. Retain maximum rounds/calls, per-tool timeouts, pagination caps, cancellation, and model-visible recoverable errors.
+
+Use context curation rather than one giant “finance context” prompt. Re-retrieve ledger facts for every financial claim. Persist only user-controlled preferences and planning context (planning horizon, target savings rate, approved category rules), never stale balances as memory. Tool results should be compacted after their evidence has been incorporated into a structured trace/note.
+
+### Rollout
+
+1. Ship a read-only Agent workspace with current tools, source links, revision/scope labels, tool trace, and conversation persistence.
+2. Add missing high-value retrieval: cash flow, category variance, account health, journal provenance, anomalies, and deterministic similar-transaction search.
+3. Add deterministic scenario/planning outputs and revision-bound budget proposals.
+4. Build the generic pending-action/approval/receipt infrastructure.
+5. Enable one command at a time: budget proposal application, explicit recurring post/skip, then normal transaction drafts.
+6. Add wishlist fulfilment and only then protected loan/PayLater/split-bill/correction capabilities after their ordinary frontend flows and previews exist.
+7. Expose the same modular read tools through MCP only after application-level authorization, consent UI, rate limits, and audit boundaries are in place.
+
+### Evaluation and launch gates
+
+Do not add financial write tools until trace-based, multi-turn evaluation passes against fixture ledgers. Grade both tool trajectories and resulting domain state, not pleasant-sounding prose.
+
+- Correct tool selection, scopes, as-of dates, and result completeness.
+- Exact reconciliation of reported amounts to canonical financial facts.
+- Correct treatment of drafts, reversals, receivables, investments, and reconciliation evidence.
+- Similar-spending results must include a deterministic match rationale and source IDs.
+- Prompt-injection strings in descriptions/notes/OCR cannot alter tool policy or execution.
+- Repeated trials, equivalent phrasings, malformed tool arguments, timeouts, rate limits, partial results, and stale-revision approval attempts fail safely.
+- No mutation claim is allowed without a successful execution receipt from the domain service.
+- Every financial mutation is idempotent, audited, and testable as a final database/domain state.
+
 ## Merge policy
 
 Do not merge `majorfix` while the high-risk loan/PayLater/split-bill flows still bypass compound accounting invariants. No migration in this branch requires wiping the database, but a backup and migration rehearsal on a copy are mandatory before production deployment.
