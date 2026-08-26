@@ -394,6 +394,82 @@ function parseStoredTransactionInput(action: typeof agentPendingActions.$inferSe
   catch (error) { throw new AgentActionError(409, error instanceof Error ? error.message : "Pending transaction payload is invalid"); }
 }
 
+async function loadStoredActionDetails(action: typeof agentPendingActions.$inferSelect): Promise<unknown> {
+  if (action.kind === AGENT_BUDGET_ACTION_KIND) {
+    const input = parseStoredBudgetInput(action);
+    const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, status: salaryPeriods.status, isActive: salaryPeriods.isActive })
+      .from(salaryPeriods).where(eq(salaryPeriods.id, input.periodId)).limit(1);
+    if (!period) throw new AgentActionError(404, "Salary period not found");
+    if (period.status !== "open" || !period.isActive) throw new AgentActionError(409, "Budget proposals can only target an active open period");
+    return loadBudgetDetails(input);
+  }
+  if (action.kind === AGENT_TRANSACTION_ACTION_KIND) {
+    const input = parseStoredTransactionInput(action);
+    const prepared = await prepareTransactionAction(input);
+    return loadTransactionDetails(input, prepared);
+  }
+  throw new AgentActionError(409, `Unsupported agent action kind: ${action.kind}`);
+}
+
+export async function reissueAgentApproval(args: { ownerEmail: string; approvalId: number }) {
+  if (!Number.isSafeInteger(args.approvalId) || args.approvalId <= 0) throw new AgentActionError(400, "Invalid approval ID");
+  if (!args.ownerEmail.trim()) throw new AgentActionError(401, "Authenticated user email is unavailable");
+
+  const [approval] = await db.select().from(agentApprovals)
+    .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail))).limit(1);
+  if (!approval) throw new AgentActionError(404, "Approval not found");
+  const [action] = await db.select().from(agentPendingActions)
+    .where(and(eq(agentPendingActions.id, approval.pendingActionId), eq(agentPendingActions.ownerEmail, args.ownerEmail))).limit(1);
+  if (!action) throw new AgentActionError(404, "Pending action not found");
+
+  // Re-read and validate the stored payload before issuing a new credential.
+  // This also lets a stale card converge to an already-executed/rejected state
+  // after a reload instead of presenting a misleading pending draft.
+  const details = await loadStoredActionDetails(action);
+  const terminal = new Set(["executed", "rejected", "superseded", "failed"]);
+  if (terminal.has(action.status) || terminal.has(approval.status)) {
+    return actionView(action, approval, details, null);
+  }
+  if (action.status !== "pending" && action.status !== "expired") {
+    throw new AgentActionError(409, `Pending action is ${action.status}; it cannot be restored`);
+  }
+  if (approval.status !== "pending" && approval.status !== "expired") {
+    throw new AgentActionError(409, `Approval is ${approval.status}; it cannot be restored`);
+  }
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ACTION_TTL_MS);
+  const rawToken = randomBytes(32).toString("base64url");
+  const refreshed = db.transaction((tx) => {
+    const latestApproval = tx.select().from(agentApprovals)
+      .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail))).limit(1).all()[0];
+    const latestAction = latestApproval
+      ? tx.select().from(agentPendingActions)
+        .where(and(eq(agentPendingActions.id, latestApproval.pendingActionId), eq(agentPendingActions.ownerEmail, args.ownerEmail))).limit(1).all()[0]
+      : undefined;
+    if (!latestApproval || !latestAction) throw new AgentActionError(404, "Approval not found");
+    if (terminal.has(latestApproval.status) || terminal.has(latestAction.status)) {
+      return { approval: latestApproval, action: latestAction, restored: false } as const;
+    }
+    if ((latestApproval.status !== "pending" && latestApproval.status !== "expired") || (latestAction.status !== "pending" && latestAction.status !== "expired")) {
+      throw new AgentActionError(409, "Approval is no longer restorable");
+    }
+    const updatedApproval = tx.update(agentApprovals).set({
+      tokenHash: tokenHash(rawToken),
+      status: "pending",
+      approvedAt: null,
+      executedAt: null,
+      executionReceipt: null,
+      expiresAt,
+    }).where(and(eq(agentApprovals.id, latestApproval.id), eq(agentApprovals.ownerEmail, args.ownerEmail))).returning().all()[0];
+    const updatedAction = tx.update(agentPendingActions).set({ status: "pending", expiresAt, updatedAt: now })
+      .where(and(eq(agentPendingActions.id, latestAction.id), eq(agentPendingActions.ownerEmail, args.ownerEmail))).returning().all()[0];
+    if (!updatedApproval || !updatedAction) throw new AgentActionError(409, "Approval changed while it was being restored");
+    return { approval: updatedApproval, action: updatedAction, restored: true } as const;
+  });
+  return actionView(refreshed.action, refreshed.approval, details, refreshed.restored ? rawToken : null);
+}
+
 async function executeTransactionApproval(args: {
   ownerEmail: string;
   approvalId: number;

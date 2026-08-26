@@ -25,6 +25,7 @@ import {
   executeAgentApproval,
   listAgentActions,
   prepareAgentAction,
+  reissueAgentApproval,
   rejectAgentApproval,
 } from "../services/agent-actions";
 
@@ -751,6 +752,17 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     } catch (error) {
       const status = error instanceof AgentActionError ? error.statusCode : 409;
       return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not execute agent approval" });
+    }
+  });
+
+  fastify.post("/api/agent/approvals/:id/reissue", async (request, reply) => {
+    const approvalId = Number((request.params as { id?: string }).id);
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      return reply.send(await reissueAgentApproval({ ownerEmail, approvalId }));
+    } catch (error) {
+      const status = error instanceof AgentActionError ? error.statusCode : 409;
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not restore agent approval" });
     }
   });
 

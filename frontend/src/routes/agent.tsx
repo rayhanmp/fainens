@@ -155,7 +155,7 @@ type TransactionEditDraft = {
   notes: string;
 };
 
-type TransactionProposalStatus = 'pending' | 'editing' | 'saving' | 'executing' | 'executed' | 'rejected' | 'expired' | 'superseded' | 'error';
+type TransactionProposalStatus = 'pending' | 'restoring' | 'editing' | 'saving' | 'executing' | 'executed' | 'rejected' | 'expired' | 'superseded' | 'error';
 
 function initialTransactionProposalStatus(status: string): TransactionProposalStatus {
   if (status === 'pending' || status === 'rejected' || status === 'expired' || status === 'superseded' || status === 'executed') return status;
@@ -164,6 +164,7 @@ function initialTransactionProposalStatus(status: string): TransactionProposalSt
 
 function transactionProposalStatusLabel(status: TransactionProposalStatus): string {
   if (status === 'pending') return 'Needs your review';
+  if (status === 'restoring') return 'Restoring review…';
   if (status === 'executing') return 'Working…';
   if (status === 'executed') return 'Posted';
   if (status === 'rejected') return 'Dismissed';
@@ -247,11 +248,32 @@ function TransactionProposalCard({
   const [status, setStatus] = useState<TransactionProposalStatus>(initialTransactionProposalStatus(proposal.status));
   const [message, setMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<TransactionEditDraft>(() => draftFromProposal(proposal));
+  const restorationAttempted = useRef(false);
   const details = currentProposal.details;
   const input = currentProposal.input;
   const categoryName = input.categoryId == null
     ? (input.categoryAllocations[0] ? categories.find((category) => category.id === input.categoryAllocations[0].categoryId)?.name ?? details.categoryAllocations[0]?.category : null)
     : categories.find((category) => category.id === input.categoryId)?.name ?? details.categoryAllocations.find((allocation) => allocation.categoryId === input.categoryId)?.category;
+
+  useEffect(() => {
+    if (restorationAttempted.current || currentProposal.approvalToken || (proposal.status !== 'pending' && proposal.status !== 'expired')) return;
+    restorationAttempted.current = true;
+    setStatus('restoring');
+    setMessage(null);
+    void api.agent.actions.reissue(proposal.approvalId)
+      .then((refreshed) => {
+        if (!isTransactionProposal(refreshed)) throw new Error('The restored approval was not a transaction proposal.');
+        setCurrentProposal(refreshed);
+        setDraft(draftFromProposal(refreshed));
+        const refreshedStatus = initialTransactionProposalStatus(refreshed.status);
+        setStatus(refreshedStatus);
+        setMessage(refreshedStatus === 'pending' ? 'Review restored after reload.' : null);
+      })
+      .catch((caught) => {
+        setStatus(initialTransactionProposalStatus(proposal.status));
+        setMessage(caught instanceof Error ? caught.message : 'Could not restore this proposal.');
+      });
+  }, [currentProposal.approvalToken, proposal.approvalId, proposal.status]);
 
   const beginEdit = () => {
     setDraft(draftFromProposal(currentProposal));
@@ -393,7 +415,7 @@ function TransactionProposalCard({
         <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">Balanced total {formatCurrency(details.totalDebit)} · proposal revision {currentProposal.baseFinancialRevision} · expires {formatDate(currentProposal.expiresAt)}</p>
       </details>
       {currentProposal.approvalToken && status === 'pending' && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={beginEdit}><Pencil className="h-4 w-4" /> Edit details</Button><Button size="sm" onClick={() => void execute()}><Check className="h-4 w-4" /> Confirm &amp; post</Button><Button size="sm" variant="secondary" onClick={() => void reject()}>Dismiss</Button></div>}
-      {!currentProposal.approvalToken && status === 'pending' && <p className="mt-3 text-xs text-[var(--color-danger)]">This proposal is from an earlier session. Ask the agent to prepare it again before posting.</p>}
+      {!currentProposal.approvalToken && status === 'pending' && <p className="mt-3 text-xs text-[var(--color-danger)]">The approval could not be restored. Refresh the page or ask the agent to prepare a fresh proposal before posting.</p>}
       {status === 'rejected' && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">This proposal was dismissed; nothing was posted.</p>}
       {status === 'expired' && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">This proposal expired before confirmation; ask the agent to prepare it again.</p>}
       {status === 'superseded' && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">This proposal was replaced by a newer proposal; nothing was posted from this one.</p>}

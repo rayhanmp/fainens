@@ -1832,6 +1832,7 @@ export const api = {
         financialRevision: number;
         executedAt: number;
       }; replay: boolean }>(`/agent/approvals/${approvalId}/execute`, { method: 'POST', body: JSON.stringify({ token }) }),
+      reissue: (approvalId: number) => fetchApi<AgentActionProposal>(`/agent/approvals/${approvalId}/reissue`, { method: 'POST', body: JSON.stringify({}) }),
       reject: (approvalId: number, token: string) => fetchApi<{ status: 'rejected'; approvalId: number }>(`/agent/approvals/${approvalId}/reject`, { method: 'POST', body: JSON.stringify({ token }) }),
     },
   },

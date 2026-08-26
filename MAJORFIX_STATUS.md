@@ -372,8 +372,11 @@ belongs to the review card and posting step.
    debit/credit line, cash-flow class, category allocation, account, tag, and
    period through the ledger preparation service. It canonicalizes and sorts the payload, captures the current
    `financial_state.revision`, and creates `agent_pending_action` plus
-   `agent_approval` rows. A random approval token is returned once; only its
-   SHA-256 hash is stored. The proposal expires after 15 minutes.
+   `agent_approval` rows. A random approval token is returned to the browser;
+   only its SHA-256 hash is stored. The proposal expires after 15 minutes.
+   An authenticated `POST /api/agent/approvals/:id/reissue` can rotate a fresh
+   token for a still-pending or expired proposal after a reload; old tokens are
+   invalidated and the financial revision guard still applies at execution.
 2. The UI renders a practical review card first: transaction name, IDR amount,
    category, local date/time, place, reference, and notes. Ledger lines and
    revision/expiry evidence are available under a collapsed Ledger details
@@ -381,8 +384,8 @@ belongs to the review card and posting step.
    proposal and rejects the old token before it can be accidentally posted.
    Several cards can be reviewed independently when one message contains
    multiple transactions. No financial row changes during preparation. The
-   one-time token is held in browser memory only and is never written to chat
-   history.
+   token is held in browser memory only and is never written to chat history;
+   the card automatically reissues it when a saved conversation is reopened.
 3. `POST /api/agent/approvals/:id/execute` requires the authenticated owner and
    token. In one SQLite transaction it checks expiry/status, re-reads the
    pending payload, verifies the financial revision has not changed, rechecks
