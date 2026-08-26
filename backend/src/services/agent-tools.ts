@@ -27,6 +27,9 @@ import { getPeriodCoverage } from "./period-coverage";
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
 const MAX_RECONCILIATION_SESSIONS = 50;
+const CURRENCY_RATE_API = "https://api.frankfurter.app";
+const CURRENCY_RATE_CACHE_TTL_MS = 5 * 60_000;
+const currencyRateCache = new Map<string, { expiresAt: number; payload: CurrencyRatePayload }>();
 
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
 
@@ -59,6 +62,13 @@ export interface AgentToolResult<T = unknown> {
   revision: number;
   readOnly: true;
   data: T;
+}
+
+interface CurrencyRatePayload {
+  amount: number;
+  base: string;
+  date: string;
+  rates: Record<string, number>;
 }
 
 const scopeProperties: Record<string, unknown> = {
@@ -104,6 +114,21 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
         endDate: { type: "integer", minimum: 0, description: "End UTC timestamp in milliseconds." },
       },
       required: ["startDate", "endDate"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_currency_exchange_rate",
+    description: "Fetch a current or historical reference exchange rate between two ISO-4217 currencies from Frankfurter/ECB. Returns the source date, rate, and converted amount; this is market reference data, not a transaction or accounting valuation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", pattern: "^[A-Za-z]{3}$", description: "Base ISO-4217 currency code, for example IDR." },
+        to: { type: "string", pattern: "^[A-Za-z]{3}$", description: "Quote ISO-4217 currency code, for example USD." },
+        amount: { type: "number", minimum: -1000000000000000, maximum: 1000000000000000, description: "Optional amount in the base currency; defaults to 1." },
+        date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Optional UTC date for a historical reference rate; omit for the latest available rate." },
+      },
+      required: ["from", "to"],
       additionalProperties: false,
     },
   },
@@ -430,6 +455,92 @@ export function calculateDateDifferenceTool(input: unknown) {
   };
 }
 
+function requiredCurrencyCode(value: unknown, field: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z]{3}$/.test(value.trim())) {
+    throw new Error(`${field} must be a three-letter ISO-4217 currency code`);
+  }
+  return value.trim().toUpperCase();
+}
+
+function optionalCurrencyDate(value: unknown): string | undefined {
+  const date = optionalText(value, "date", 10);
+  if (date == null) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("date must use YYYY-MM-DD");
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error("date must be a valid calendar date");
+  }
+  return date;
+}
+
+async function fetchCurrencyRate(base: string, quote: string, date?: string): Promise<CurrencyRatePayload> {
+  const endpoint = date == null ? `${CURRENCY_RATE_API}/latest` : `${CURRENCY_RATE_API}/${date}`;
+  const url = `${endpoint}?from=${encodeURIComponent(base)}&to=${encodeURIComponent(quote)}`;
+  const cacheKey = `${base}:${quote}:${date ?? "latest"}`;
+  const cached = currencyRateCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.payload;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const response = await fetch(url, { headers: { accept: "application/json" }, signal: controller.signal });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 200).replace(/\s+/g, " ").trim();
+      throw new Error(`Currency provider returned HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+    }
+    const payload = await response.json() as Partial<CurrencyRatePayload>;
+    const rate = payload.rates?.[quote];
+    if (payload.base !== base || typeof payload.date !== "string" || typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
+      throw new Error("Currency provider returned an invalid exchange-rate payload");
+    }
+    const normalized: CurrencyRatePayload = { amount: 1, base, date: payload.date, rates: { [quote]: rate } };
+    currencyRateCache.set(cacheKey, { expiresAt: Date.now() + CURRENCY_RATE_CACHE_TTL_MS, payload: normalized });
+    return normalized;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw new Error("Currency provider timed out after 8 seconds");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function getCurrencyExchangeRateTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("from and to are required");
+  const from = requiredCurrencyCode(input.from, "from");
+  const to = requiredCurrencyCode(input.to, "to");
+  const date = optionalCurrencyDate(input.date);
+  const amount = input.amount == null ? 1 : input.amount;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || Math.abs(amount) > 1e15) {
+    throw new Error("amount must be a finite number between -1e15 and 1e15");
+  }
+  if (from === to) {
+    return {
+      from,
+      to,
+      amount,
+      rate: 1,
+      convertedAmount: amount,
+      rateDate: date ?? new Date().toISOString().slice(0, 10),
+      source: "identity rate (same currency)",
+      isReferenceRate: true,
+    };
+  }
+  const payload = await fetchCurrencyRate(from, to, date);
+  const rate = payload.rates[to];
+  return {
+    from,
+    to,
+    amount,
+    rate,
+    convertedAmount: amount * rate,
+    rateDate: payload.date,
+    source: "Frankfurter / European Central Bank reference rates",
+    sourceUrl: CURRENCY_RATE_API,
+    isReferenceRate: true,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
 export async function getBudgetFactsTool(input: unknown) {
   if (!isRecord(input)) throw new Error("periodId is required");
   const periodId = optionalInteger(input.periodId, "periodId", { min: 1 });
@@ -728,6 +839,9 @@ export async function executeAgentTool(name: unknown, input: unknown): Promise<A
       break;
     case "calculate_date_difference":
       data = calculateDateDifferenceTool(input);
+      break;
+    case "get_currency_exchange_rate":
+      data = await getCurrencyExchangeRateTool(input);
       break;
     case "get_budget_facts":
       data = await getBudgetFactsTool(input);
