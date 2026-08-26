@@ -23,7 +23,7 @@ export interface AgentChatResponse {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
-const DEFAULT_MODEL = "google/gemini-3.1-flash-lite-preview";
+const DEFAULT_MODEL = "google/gemini-3.7-flash";
 
 /**
  * Small OpenRouter adapter for the agent loop. The normal insight adapter only
