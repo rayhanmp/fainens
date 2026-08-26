@@ -7,9 +7,13 @@ export interface AgentChatTool {
   };
 }
 
+export type AgentChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface AgentChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
+  content?: string | AgentChatContentPart[] | null;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;

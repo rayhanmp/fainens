@@ -117,7 +117,7 @@ export type AgentStreamEvent =
   | { type: 'error'; error: string };
 
 async function streamAgentQuery(
-  data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number },
+  data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> },
   onEvent: (event: AgentStreamEvent) => void,
 ): Promise<AgentQueryResponse> {
   const response = await fetch(`${API_BASE}/agent/query/stream`, {
@@ -1717,7 +1717,7 @@ export const api = {
       if (params?.endDate) query.set('endDate', String(params.endDate));
       return fetchApi(`/agent/context${query.toString() ? `?${query.toString()}` : ''}`);
     },
-    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number }) =>
+    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> }) =>
       fetchApi<AgentQueryResponse>('/agent/query', {
         method: 'POST', body: JSON.stringify(data),
       }),

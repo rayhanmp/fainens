@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   ArchiveRestore,
@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  ImagePlus,
   LoaderCircle,
   MoreHorizontal,
   Pencil,
@@ -46,10 +47,15 @@ type Period = {
 type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
 type BudgetPreview = Awaited<ReturnType<typeof api.agent.planBudget>>;
 type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
+type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
 
 type ChatMessage =
-  | { id: string; role: 'user'; text: string; createdAt: number }
+  | { id: string; role: 'user'; text: string; createdAt: number; images?: ChatImage[] }
   | { id: string; role: 'assistant'; text: string; createdAt: number; response?: AgentResponse };
+
+const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_AGENT_IMAGE_SIZE = 4 * 1024 * 1024;
+const MAX_AGENT_IMAGE_COUNT = 3;
 
 const SUGGESTIONS = [
   'What were my top 10 expenses recently?',
@@ -138,6 +144,9 @@ function AgentPage() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [pendingImages, setPendingImages] = useState<ChatImage[]>([]);
+  const [isDraggingImages, setIsDraggingImages] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
@@ -148,6 +157,7 @@ function AgentPage() {
   const [error, setError] = useState<string | null>(null);
   const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const refreshConversations = async () => {
     const result = await api.agent.conversations.list({ includeArchived: true });
@@ -166,6 +176,8 @@ function AgentPage() {
         ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
         : { id: String(message.id), role: 'user', text: message.content, createdAt: message.createdAt },
       ));
+      setPendingImages([]);
+      setImageError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load that conversation.');
     } finally {
@@ -197,13 +209,57 @@ function AgentPage() {
     [periods, selectedPeriodId],
   );
 
+  const addImageFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const errors: string[] = [];
+    const available = MAX_AGENT_IMAGE_COUNT - pendingImages.length;
+    if (available <= 0) {
+      setImageError(`You can attach at most ${MAX_AGENT_IMAGE_COUNT} images per message.`);
+      return;
+    }
+    const acceptedFiles = files.slice(0, available);
+    if (files.length > available) errors.push(`Only ${MAX_AGENT_IMAGE_COUNT} images can be attached per message.`);
+    const newImages: ChatImage[] = [];
+    for (const file of acceptedFiles) {
+      if (!AGENT_IMAGE_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: use JPEG, PNG, WebP, or GIF.`);
+        continue;
+      }
+      if (file.size === 0 || file.size > MAX_AGENT_IMAGE_SIZE) {
+        errors.push(`${file.name}: image must be smaller than ${MAX_AGENT_IMAGE_SIZE / (1024 * 1024)}MB.`);
+        continue;
+      }
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read image'));
+          reader.onerror = () => reject(new Error('Could not read image'));
+          reader.readAsDataURL(file);
+        });
+        newImages.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          filename: file.name,
+          mimeType: file.type,
+          dataUrl,
+          fileSize: file.size,
+        });
+      } catch {
+        errors.push(`${file.name}: could not read image.`);
+      }
+    }
+    if (newImages.length > 0) setPendingImages((current) => [...current, ...newImages]);
+    setImageError(errors.length > 0 ? errors.join('\n') : null);
+  };
+
   const submitQuestion = async (question = draft) => {
     const text = question.trim();
     if (text.length < 2 || isSending) return;
+    const attachedImages = pendingImages;
     const createdAt = Date.now();
     setDraft('');
     setError(null);
-    setMessages((current) => [...current, { id: `user-${createdAt}`, role: 'user', text, createdAt }]);
+    setImageError(null);
+    setMessages((current) => [...current, { id: `user-${createdAt}`, role: 'user', text, createdAt, images: attachedImages }]);
     setIsSending(true);
     setStreamActivity('Thinking…');
     let streamedAssistantId: string | null = null;
@@ -227,6 +283,7 @@ function AgentPage() {
         question: text,
         ...(selectedPeriodId ? { periodId: Number(selectedPeriodId) } : {}),
         conversationId,
+        ...(attachedImages.length > 0 ? { images: attachedImages.map((image) => ({ filename: image.filename, mimeType: image.mimeType, data: image.dataUrl })) } : {}),
       }, (event) => {
         if (event.type === 'delta') {
           setStreamActivity('Writing…');
@@ -255,6 +312,7 @@ function AgentPage() {
           ? { ...message, response }
           : message,
       ));
+      setPendingImages([]);
       void refreshConversations().catch(() => undefined);
     } catch (caught) {
       setMessages((current) => current.filter((message) => message.id !== streamedAssistantId));
@@ -269,6 +327,8 @@ function AgentPage() {
     setActiveConversationId(null);
     setMessages([]);
     setDraft('');
+    setPendingImages([]);
+    setImageError(null);
     setError(null);
     setBudgetPreview(null);
   };
@@ -395,6 +455,13 @@ function AgentPage() {
                   <div key={message.id} className={cn('flex gap-3', message.role === 'user' && 'justify-end')}>
                     {message.role === 'assistant' && <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><Bot className="h-4 w-4" /></span>}
                     <div className={cn('max-w-[90%] rounded-xl px-4 py-3 text-sm', message.role === 'user' ? 'bg-[var(--ref-primary-container)] text-white' : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)]')}>
+                      {message.role === 'user' && message.images && message.images.length > 0 && (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {message.images.map((image) => (
+                            <img key={image.id} src={image.dataUrl} alt={`Attached ${image.filename}`} className="max-h-40 max-w-48 rounded-lg border border-white/30 object-contain" />
+                          ))}
+                        </div>
+                      )}
                       {message.role === 'assistant'
                         ? <MarkdownMessage>{message.text || '…'}</MarkdownMessage>
                         : <p className="whitespace-pre-wrap leading-6">{message.text}</p>}
@@ -417,9 +484,48 @@ function AgentPage() {
                 {error && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
               </div>
 
-              <form onSubmit={(event) => { event.preventDefault(); void submitQuestion(); }} className="border-t border-[var(--color-border)] bg-[var(--color-background)] p-4">
+              <form
+                onSubmit={(event) => { event.preventDefault(); void submitQuestion(); }}
+                onDragOver={(event) => { event.preventDefault(); if (!isSending) setIsDraggingImages(true); }}
+                onDragLeave={() => setIsDraggingImages(false)}
+                onDrop={(event) => { event.preventDefault(); setIsDraggingImages(false); if (!isSending) void addImageFiles(Array.from(event.dataTransfer.files)); }}
+                className={cn('border-t border-[var(--color-border)] bg-[var(--color-background)] p-4', isDraggingImages && 'bg-[var(--ref-primary)]/5')}
+              >
                 <label htmlFor="agent-question" className="sr-only">Ask Fainens Agent</label>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept={AGENT_IMAGE_TYPES.join(',')}
+                  multiple
+                  disabled={isSending}
+                  onChange={(event) => { void addImageFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ''; }}
+                  className="hidden"
+                />
+                {pendingImages.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {pendingImages.map((image) => (
+                      <div key={image.id} className="group relative">
+                        <img src={image.dataUrl} alt={image.filename} className="h-16 w-16 rounded-lg border border-[var(--color-border)] object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setPendingImages((current) => current.filter((candidate) => candidate.id !== image.id))}
+                          className="absolute -right-1.5 -top-1.5 rounded-full bg-[var(--color-danger)] p-0.5 text-white shadow"
+                          aria-label={`Remove ${image.filename}`}
+                        ><X className="h-3 w-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {imageError && <p role="alert" className="mb-2 whitespace-pre-line text-xs text-[var(--color-danger)]">{imageError}</p>}
                 <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT}
+                    className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)] hover:text-[var(--ref-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Attach images"
+                    aria-label="Attach images"
+                  ><ImagePlus className="h-5 w-5" /></button>
                   <textarea
                     id="agent-question"
                     value={draft}
@@ -432,7 +538,7 @@ function AgentPage() {
                   />
                   <Button type="submit" disabled={draft.trim().length < 2} isLoading={isSending} className="h-12 px-4" aria-label="Send question"><Send className="h-4 w-4" /></Button>
                 </div>
-                <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Answers are based on live read-only tools. Changes will require a future explicit approval flow.</p>
+                <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Drop images here or use the image button · JPEG, PNG, WebP, GIF up to 4MB each. Images are sent for this turn and not retained as pixels in chat history.</p>
               </form>
             </Card>
 
