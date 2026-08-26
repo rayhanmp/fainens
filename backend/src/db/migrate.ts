@@ -293,6 +293,21 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     )
   `);
 
+  // Some pushed databases already contain the outbox table but predate the
+  // trigger migration. Installing this idempotently before history repair
+  // lets us safely baseline both objects without replaying a later ALTER.
+  if (tableExists("financial_state") && tableExists("cache_invalidation_outbox") && !triggerExists("cache_invalidation_on_revision")) {
+    db.$client.exec(`
+      CREATE TRIGGER IF NOT EXISTS cache_invalidation_on_revision
+      AFTER UPDATE OF revision ON financial_state
+      WHEN NEW.revision <> OLD.revision
+      BEGIN
+        INSERT INTO cache_invalidation_outbox (operation, revision, status, attempts)
+        VALUES ('all', NEW.revision, 'pending', 0);
+      END;
+    `);
+  }
+
   const has = (table: string, ...columns: string[]) =>
     tableExists(table) && columns.every((column) => columnExists(table, column));
   const satisfied: Record<string, boolean> = {
