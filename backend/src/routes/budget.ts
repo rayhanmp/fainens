@@ -64,8 +64,11 @@ export default async function (fastify: FastifyInstance) {
               and(
                 sql`${transactionLines.accountId} IN (${sql.join(revIds.map(String), sql`, `)})`,
                 sql`${transactions.status} <> 'draft'`,
-                gte(transactions.date, period.startDate),
-                lte(transactions.date, period.endDate + DAY_MS - 1),
+                // `transactions.date` uses Drizzle's timestamp_ms mode, whose
+                // query encoder expects Date objects. Salary-period boundaries
+                // are intentionally stored as numeric milliseconds.
+                gte(transactions.date, new Date(period.startDate)),
+                lte(transactions.date, new Date(period.endDate + DAY_MS - 1)),
                 or(eq(transactions.periodId, pid), isNull(transactions.periodId)),
               ),
             );
@@ -108,8 +111,8 @@ export default async function (fastify: FastifyInstance) {
                     eq(transactions.categoryId, plan.categoryId),
                     sql`${transactionLines.accountId} IN (${sql.join(expIds.map(String), sql`, `)})`,
                     sql`${transactions.status} <> 'draft'`,
-                    gte(transactions.date, period.startDate),
-                    lte(transactions.date, period.endDate + DAY_MS - 1),
+                    gte(transactions.date, new Date(period.startDate)),
+                    lte(transactions.date, new Date(period.endDate + DAY_MS - 1)),
                     or(eq(transactions.periodId, plan.periodId), isNull(transactions.periodId)),
                   ),
                 );

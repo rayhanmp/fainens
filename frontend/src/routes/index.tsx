@@ -164,11 +164,24 @@ function DashboardPage() {
     setBudgetRows([]);
 
     (async () => {
+      // Recent activity is useful even if a secondary dashboard card (such as
+      // budgets) fails. Do not couple it to the period-insight request below.
+      void api.transactions.list({ periodId: String(periodId), limit: '8' })
+        .then((recentResult) => {
+          if (!cancelled && requestId === periodRequestRef.current) {
+            setRecent(recentResult.data);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && requestId === periodRequestRef.current) {
+            setRecent([]);
+          }
+        });
+
       try {
-        const [budgets, factsResult, recentResult] = await Promise.all([
+        const [budgets, factsResult] = await Promise.all([
           api.budgets.list(String(periodId)),
           api.agent.financialFacts({ periodId }),
-          api.transactions.list({ periodId: String(periodId), limit: '8' }),
         ]);
         if (cancelled || requestId !== periodRequestRef.current) return;
 
@@ -177,7 +190,6 @@ function DashboardPage() {
         const calculatedExpense = facts.totalSpentCents;
         setPeriodIncome(calculatedIncome > 0 ? calculatedIncome : null);
         setPeriodExpense(calculatedExpense > 0 ? calculatedExpense : null);
-        setRecent(recentResult.data);
 
         const budgetData = budgets as any;
         const budgetPlans = Array.isArray(budgetData)
@@ -230,7 +242,6 @@ function DashboardPage() {
       } catch {
         if (!cancelled && requestId === periodRequestRef.current) {
           setPeriodProgress(null);
-          setRecent([]);
         }
       } finally {
         if (!cancelled && requestId === periodRequestRef.current) setIsPeriodLoading(false);
