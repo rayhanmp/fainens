@@ -1,16 +1,25 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Archive,
+  ArchiveRestore,
   Bot,
+  Check,
   ChevronDown,
   ChevronUp,
   Database,
   LoaderCircle,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
   RefreshCw,
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   User,
+  X,
 } from 'lucide-react';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -132,12 +141,16 @@ function AgentPage() {
   const [isSending, setIsSending] = useState(false);
   const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+  const [conversationActionId, setConversationActionId] = useState<number | null>(null);
+  const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
+  const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
+  const [conversationTitleDraft, setConversationTitleDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
 
   const refreshConversations = async () => {
-    const result = await api.agent.conversations.list();
+    const result = await api.agent.conversations.list({ includeArchived: true });
     setConversations(result.conversations);
     return result.conversations;
   };
@@ -260,6 +273,50 @@ function AgentPage() {
     setBudgetPreview(null);
   };
 
+  const updateConversation = async (conversationId: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => {
+    setConversationActionId(conversationId);
+    setError(null);
+    try {
+      const result = await api.agent.conversations.update(conversationId, data);
+      setConversations((current) => current.map((conversation) => conversation.id === conversationId ? result.conversation : conversation));
+      return result.conversation;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not update that conversation.');
+      return null;
+    } finally {
+      setConversationActionId(null);
+    }
+  };
+
+  const saveConversationTitle = async (conversationId: number) => {
+    const title = conversationTitleDraft.trim();
+    if (!title) {
+      setError('Conversation title cannot be empty.');
+      return;
+    }
+    const updated = await updateConversation(conversationId, { title });
+    if (updated) {
+      setEditingConversationId(null);
+      setConversationTitleDraft('');
+    }
+  };
+
+  const deleteConversation = async (conversation: Conversation) => {
+    if (!window.confirm(`Delete “${conversation.title}”? This permanently removes the conversation and its messages.`)) return;
+    setConversationActionId(conversation.id);
+    setError(null);
+    try {
+      await api.agent.conversations.delete(conversation.id);
+      setConversations((current) => current.filter((candidate) => candidate.id !== conversation.id));
+      setOpenConversationMenuId(null);
+      if (activeConversationId === conversation.id) startNewConversation();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not delete that conversation.');
+    } finally {
+      setConversationActionId(null);
+    }
+  };
+
   const previewBudget = async () => {
     if (!selectedPeriodId || isPlanning) return;
     setIsPlanning(true);
@@ -272,6 +329,9 @@ function AgentPage() {
       setIsPlanning(false);
     }
   };
+
+  const activeConversations = conversations.filter((conversation) => conversation.archivedAt == null);
+  const archivedConversations = conversations.filter((conversation) => conversation.archivedAt != null);
 
   return (
     <RequireAuth>
@@ -379,33 +439,105 @@ function AgentPage() {
             <div className="space-y-4">
               <Card
                 title="Conversations"
-                action={<span className="text-xs text-[var(--color-text-secondary)]">{conversations.length}</span>}
+                action={<span className="text-xs text-[var(--color-text-secondary)]">{activeConversations.length} active · {archivedConversations.length} archived</span>}
               >
                 <div className="max-h-56 space-y-1 overflow-y-auto">
                   {conversations.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">Your conversations will appear here.</p>}
-                  {conversations.map((conversation) => (
-                    <button
-                      key={conversation.id}
-                      type="button"
-                      onClick={() => void selectConversation(conversation.id)}
-                      className={cn(
-                        'w-full rounded-lg px-3 py-2 text-left transition-colors',
-                        conversation.id === activeConversationId
-                          ? 'bg-[var(--ref-primary-container)] text-white'
-                          : 'hover:bg-[var(--ref-surface-container-low)]',
-                      )}
-                    >
-                      <span className="block truncate text-sm font-medium">{conversation.title}</span>
-                      <span className={cn('mt-0.5 block text-xs', conversation.id === activeConversationId ? 'text-white/80' : 'text-[var(--color-text-secondary)]')}>{formatDate(conversation.updatedAt)}</span>
-                    </button>
-                  ))}
+                  {conversations.map((conversation) => {
+                    const isActive = conversation.id === activeConversationId;
+                    const isArchived = conversation.archivedAt != null;
+                    const isBusy = conversationActionId === conversation.id;
+                    return (
+                      <div
+                        key={conversation.id}
+                        className={cn(
+                          'rounded-lg px-2 py-2 transition-colors',
+                          isActive ? 'bg-[var(--ref-primary-container)] text-white' : 'hover:bg-[var(--ref-surface-container-low)]',
+                        )}
+                      >
+                        {editingConversationId === conversation.id ? (
+                          <form
+                            className="flex items-center gap-1"
+                            onSubmit={(event) => { event.preventDefault(); void saveConversationTitle(conversation.id); }}
+                          >
+                            <input
+                              autoFocus
+                              value={conversationTitleDraft}
+                              onChange={(event) => setConversationTitleDraft(event.target.value)}
+                              onKeyDown={(event) => { if (event.key === 'Escape') { setEditingConversationId(null); setConversationTitleDraft(''); } }}
+                              maxLength={72}
+                              aria-label="Conversation title"
+                              className="min-w-0 flex-1 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1 text-sm text-[var(--color-text-primary)]"
+                            />
+                            <button type="submit" className="rounded p-1 text-[var(--color-success)] hover:bg-black/10" title="Save title" aria-label="Save title"><Check className="h-4 w-4" /></button>
+                            <button type="button" onClick={() => { setEditingConversationId(null); setConversationTitleDraft(''); }} className="rounded p-1 hover:bg-black/10" title="Cancel rename" aria-label="Cancel rename"><X className="h-4 w-4" /></button>
+                          </form>
+                        ) : (
+                          <div className="flex items-start gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void selectConversation(conversation.id)}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <span className="flex items-center gap-1 truncate text-sm font-medium">
+                                {conversation.isPinned && <Pin className="h-3 w-3 shrink-0" aria-label="Pinned" />}
+                                <span className="truncate">{conversation.title}</span>
+                              </span>
+                              <span className={cn('mt-0.5 block text-xs', isActive ? 'text-white/80' : 'text-[var(--color-text-secondary)]')}>
+                                {isArchived ? `Archived · ${formatDate(conversation.archivedAt ?? conversation.updatedAt)}` : formatDate(conversation.updatedAt)}
+                              </span>
+                            </button>
+                            <div className="relative shrink-0">
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => setOpenConversationMenuId((current) => current === conversation.id ? null : conversation.id)}
+                                className={cn('rounded p-1 hover:bg-black/10', isActive ? 'text-white' : 'text-[var(--color-text-secondary)]')}
+                                title="Conversation actions"
+                                aria-label={`Actions for ${conversation.title}`}
+                                aria-expanded={openConversationMenuId === conversation.id}
+                              ><MoreHorizontal className="h-4 w-4" /></button>
+                              {openConversationMenuId === conversation.id && (
+                                <div role="menu" className="absolute right-0 top-8 z-20 min-w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1 text-[var(--color-text-primary)] shadow-lg">
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setEditingConversationId(conversation.id); setConversationTitleDraft(conversation.title); setOpenConversationMenuId(null); setError(null); }}
+                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--ref-surface-container-low)]"
+                                  ><Pencil className="h-3.5 w-3.5" /> Edit title</button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); }}
+                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--ref-surface-container-low)]"
+                                  >{conversation.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />} {conversation.isPinned ? 'Unpin conversation' : 'Pin conversation'}</button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { archived: !isArchived }); }}
+                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--ref-surface-container-low)]"
+                                  >{isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />} {isArchived ? 'Restore conversation' : 'Archive conversation'}</button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => void deleteConversation(conversation)}
+                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                  ><Trash2 className="h-3.5 w-3.5" /> Delete conversation</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 {isLoadingConversation && <p className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Loading conversation…</p>}
               </Card>
 
               <Card title="Trust boundary">
                 <div className="space-y-3 text-sm text-[var(--color-text-secondary)]">
-                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" /> This workspace cannot create, edit, delete, or reconcile data.</p>
+                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" /> This workspace cannot create, edit, delete, or reconcile financial ledger data. Conversation titles and chat history have separate lifecycle controls.</p>
                   <p className="flex gap-2"><RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ref-primary)]" /> Every question retrieves fresh financial facts instead of relying on chat memory.</p>
                 </div>
               </Card>

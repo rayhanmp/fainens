@@ -1675,14 +1675,17 @@ export const api = {
 
   agent: {
     conversations: {
-      list: () => fetchApi<{ conversations: Array<{ id: number; title: string; createdAt: number; updatedAt: number }> }>('/agent/conversations'),
-      create: (data: { title?: string } = {}) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number } }>('/agent/conversations', {
+      list: (options: { includeArchived?: boolean } = {}) => fetchApi<{ conversations: Array<{ id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null }>; includeArchived: boolean }>(`/agent/conversations${options.includeArchived ? '?includeArchived=true' : ''}`),
+      create: (data: { title?: string } = {}) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>('/agent/conversations', {
         method: 'POST', body: JSON.stringify(data),
       }),
       get: (id: number) => fetchApi<{
-        conversation: { id: number; title: string; createdAt: number; updatedAt: number };
+        conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null };
         messages: Array<{ id: number; role: 'user' | 'assistant'; content: string; response?: unknown; createdAt: number }>;
       }>(`/agent/conversations/${id}`),
+      update: (id: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>(`/agent/conversations/${id}`, {
+        method: 'PATCH', body: JSON.stringify(data),
+      }),
       delete: (id: number) => fetchApi<void>(`/agent/conversations/${id}`, { method: 'DELETE' }),
     },
     tools: () => fetchApi<{

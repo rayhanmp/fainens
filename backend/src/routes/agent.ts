@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
 import { env } from "../lib/env";
 import { db } from "../db/client";
@@ -56,6 +56,8 @@ function conversationSummary(row: typeof agentConversations.$inferSelect) {
     title: row.title,
     createdAt: timestampMs(row.createdAt),
     updatedAt: timestampMs(row.updatedAt),
+    isPinned: Boolean(row.isPinned),
+    archivedAt: row.archivedAt == null ? null : timestampMs(row.archivedAt),
   };
 }
 
@@ -458,13 +460,17 @@ export default async function agentRoutes(fastify: FastifyInstance) {
   fastify.get("/api/agent/conversations", async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
+      const query = request.query as { includeArchived?: string };
+      const includeArchived = String(query?.includeArchived ?? "").toLowerCase() === "true";
       const conversations = await db
         .select()
         .from(agentConversations)
-        .where(eq(agentConversations.ownerEmail, ownerEmail))
-        .orderBy(desc(agentConversations.updatedAt), desc(agentConversations.id))
+        .where(includeArchived
+          ? eq(agentConversations.ownerEmail, ownerEmail)
+          : and(eq(agentConversations.ownerEmail, ownerEmail), isNull(agentConversations.archivedAt)))
+        .orderBy(asc(agentConversations.archivedAt), desc(agentConversations.isPinned), desc(agentConversations.updatedAt), desc(agentConversations.id))
         .limit(100);
-      return { conversations: conversations.map(conversationSummary) };
+      return { conversations: conversations.map(conversationSummary), includeArchived };
     } catch (error) {
       return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not list conversations" });
     }
@@ -500,6 +506,51 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       return { conversation: conversationSummary(conversation), messages: messages.map(conversationMessage) };
     } catch (error) {
       return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not load conversation" });
+    }
+  });
+
+  fastify.patch("/api/agent/conversations/:id", async (request, reply) => {
+    const conversationId = Number((request.params as { id?: string }).id);
+    if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
+      return reply.code(400).send({ error: "Invalid conversation ID" });
+    }
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      const conversation = await ownedConversation(conversationId, ownerEmail);
+      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+      const body = request.body as { title?: unknown; isPinned?: unknown; archived?: unknown };
+      const hasTitle = Object.prototype.hasOwnProperty.call(body ?? {}, "title");
+      const hasPinned = Object.prototype.hasOwnProperty.call(body ?? {}, "isPinned");
+      const hasArchived = Object.prototype.hasOwnProperty.call(body ?? {}, "archived");
+      if (!hasTitle && !hasPinned && !hasArchived) return reply.code(400).send({ error: "Provide title, isPinned, or archived" });
+
+      const updates: {
+        title?: string;
+        isPinned?: boolean;
+        archivedAt?: Date | null;
+        updatedAt: Date;
+      } = { updatedAt: new Date() };
+      if (hasTitle) {
+        if (typeof body?.title !== "string" || body.title.trim().length === 0) {
+          return reply.code(400).send({ error: "title must not be empty" });
+        }
+        updates.title = conversationTitle(body.title);
+      }
+      if (hasPinned) {
+        if (typeof body?.isPinned !== "boolean") return reply.code(400).send({ error: "isPinned must be a boolean" });
+        updates.isPinned = body.isPinned;
+      }
+      if (hasArchived) {
+        if (typeof body?.archived !== "boolean") return reply.code(400).send({ error: "archived must be a boolean" });
+        updates.archivedAt = body.archived ? new Date() : null;
+      }
+      const [updated] = await db.update(agentConversations)
+        .set(updates)
+        .where(and(eq(agentConversations.id, conversationId), eq(agentConversations.ownerEmail, ownerEmail)))
+        .returning();
+      return { conversation: conversationSummary(updated) };
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : "Could not update conversation" });
     }
   });
 
