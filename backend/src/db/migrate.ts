@@ -54,7 +54,7 @@ function applyTransactionPeriodForeignKeyMigration(): void {
  */
 function baselineLegacyPushDatabase(journal: MigrationJournal): void {
   if (!tableExists("transaction")) return;
-  const compatibilityFloor = journal.entries.find((entry) => entry.tag === "0014_flawless_iron_patriot");
+  const compatibilityFloor = journal.entries.find((entry) => entry.tag === "0016_ancient_the_executioner");
   if (!compatibilityFloor) throw new Error("Legacy compatibility floor migration is missing");
   if (tableExists("__drizzle_migrations")) {
     const rows = db.$client.prepare("SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at").all() as Array<{ hash: string; created_at: number }>;
@@ -142,6 +142,15 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
         UNIQUE(job_type, schedule_id, occurrence_date)
       );
       CREATE INDEX IF NOT EXISTS idx_recurring_occurrence_status ON recurring_occurrence(status);
+      CREATE TABLE IF NOT EXISTS transaction_category_allocation (
+        id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+        transaction_id integer NOT NULL REFERENCES "transaction"(id) ON DELETE CASCADE,
+        category_id integer NOT NULL REFERENCES category(id),
+        amount integer NOT NULL,
+        UNIQUE(transaction_id, category_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_transaction_category_allocation_tx ON transaction_category_allocation(transaction_id);
+      CREATE INDEX IF NOT EXISTS idx_transaction_category_allocation_category ON transaction_category_allocation(category_id);
       CREATE TABLE IF NOT EXISTS paylater_settlement_allocation (
         id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
         settlement_tx_id integer NOT NULL REFERENCES "transaction"(id) ON DELETE CASCADE,
@@ -212,6 +221,9 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
       db.$client.exec("UPDATE account SET liquidity_class = 'cash_equivalent' WHERE type = 'asset'");
       db.$client.exec("UPDATE account SET liquidity_class = 'receivable' WHERE system_key = 'loans-receivable'");
     }
+    if (tableExists("category") && !columnExists("category", "reporting_account_id")) {
+      db.$client.exec("ALTER TABLE category ADD COLUMN reporting_account_id integer REFERENCES account(id)");
+    }
     if (tableExists("loan_payment") && !columnExists("loan_payment", "reversal_transaction_id")) {
       db.$client.exec("ALTER TABLE loan_payment ADD COLUMN reversal_transaction_id integer REFERENCES \"transaction\"(id)");
     }
@@ -236,7 +248,7 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     `);
     db.$client
       .prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)")
-      .run("legacy-push-baseline-0014", compatibilityFloor.when);
+      .run("legacy-push-baseline-0016", compatibilityFloor.when);
   });
   upgrade();
 }
