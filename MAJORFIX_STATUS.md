@@ -391,6 +391,8 @@ Execution tools (never auto-run; explicit user approval required)
 
 The current read-only tool registry is the starting point. New tools should be added only when an evaluation task proves a high-value gap; do not create overlapping one-off tools such as `get_food_spending_this_month`.
 
+The live agent prompt keeps a stable policy/profile prefix for provider prompt caching, then appends a request-scoped runtime footer containing one captured UTC and Asia/Jakarta timestamp. It addresses Ray by nickname, defaults user-facing amounts to IDR, and uses Bekasi/Asia-Jakarta for local date interpretation. The footer is captured once per request so streamed/tool-loop turns agree on what “today” means.
+
 `find_similar_transactions` must use deterministic candidate retrieval—normalized merchant/description, category, amount band, account, recurrence signals, date history, and optional OCR/receipt metadata—then let the LLM explain the candidates. Semantic similarity alone is not accounting evidence.
 
 ### Evidence contract
