@@ -303,6 +303,56 @@ function assertRequiredSchema(): void {
   }
 }
 
+/**
+ * Version 0018 introduced coverage after some return shells had already been
+ * created. The original return flow accidentally labelled its active current
+ * shell as skipped along with historical gaps. Correct that known semantic bug
+ * in place, preserving a coverage warning and an audit record rather than
+ * pretending the period is fully complete.
+ */
+function repairActiveReturnPeriodCoverage(): void {
+  if (!tableExists("salary_period") || !tableExists("audit_log") || !tableExists("financial_state")) return;
+  const rows = db.$client.prepare(`
+    SELECT id, name, start_date, end_date, status, is_active, coverage_status, coverage_reason
+    FROM salary_period
+    WHERE status = 'open'
+      AND is_active = 1
+      AND coverage_status = 'skipped'
+      AND coverage_reason = 'return_after_absence'
+  `).all() as Array<Record<string, unknown>>;
+  if (rows.length === 0) return;
+  const now = Date.now();
+  db.$client.transaction(() => {
+    const update = db.$client.prepare(`
+      UPDATE salary_period
+      SET coverage_status = 'partial', coverage_reason = 'return_started_current_period'
+      WHERE id = ? AND status = 'open' AND is_active = 1
+        AND coverage_status = 'skipped' AND coverage_reason = 'return_after_absence'
+    `);
+    const audit = db.$client.prepare(`
+      INSERT INTO audit_log (entity_type, entity_id, action, before_snapshot, after_snapshot, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    let repaired = 0;
+    for (const row of rows) {
+      const result = update.run(row.id);
+      if (result.changes !== 1) continue;
+      repaired += 1;
+      audit.run(
+        "salary_period",
+        row.id,
+        "repair_return_current_period_coverage",
+        Buffer.from(JSON.stringify(row)),
+        Buffer.from(JSON.stringify({ ...row, coverage_status: "partial", coverage_reason: "return_started_current_period" })),
+        now,
+      );
+    }
+    if (repaired > 0) {
+      db.$client.prepare("UPDATE financial_state SET revision = revision + 1, updated_at = ? WHERE id = 1").run(now);
+    }
+  })();
+}
+
 export async function bootstrapDb() {
   const migrationsFolder = path.join(backendRoot, "drizzle");
   const journalPath = path.join(migrationsFolder, "meta", "_journal.json");
@@ -320,6 +370,7 @@ export async function bootstrapDb() {
   // cannot be brought to the checked-in version.
   migrate(db, { migrationsFolder });
   assertRequiredSchema();
+  repairActiveReturnPeriodCoverage();
   await seedDb(db);
 }
 

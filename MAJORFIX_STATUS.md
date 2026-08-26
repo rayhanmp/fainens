@@ -234,12 +234,14 @@ New normal periods should begin as `complete` only when the product has an expli
 
 On return, the app presents a read-only backfill preview using the configured salary-period cadence. It identifies every non-overlapping period between the latest existing period and the current period. The user explicitly confirms **Create skipped period shells**; page view, startup, and scheduler jobs must not create them implicitly.
 
-For every confirmed shell:
+For every confirmed historical shell:
 
 - create the normal period header with deterministic start/end dates and name;
 - set `coverage_status = skipped` and store an audited reason such as `return_after_absence`;
 - create no transactions, opening balances, budget rows, reconciliation, or fabricated recurring entries;
 - leave it open initially only if the user intends to backfill activity; otherwise close it after review according to the normal period-close policy.
+
+If the preview also creates the active current period, that row is **not** a skipped absence. It starts `partial` with reason `return_started_current_period`: the user has resumed tracking, but any earlier slice of the period still needs explicit review before it can be marked `complete`. Startup repairs the earlier implementation bug that marked such open current return rows as skipped, retaining an audit record and coverage warning rather than silently declaring them complete.
 
 If the user later posts selected catch-up salary/subscription events or imports a partial statement into such a period, transition it to `partial`; do not silently promote it to `complete`. A deliberate period review/reconciliation workflow may later mark it `complete` only with an audited user decision.
 

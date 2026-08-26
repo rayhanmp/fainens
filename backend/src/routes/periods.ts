@@ -120,9 +120,10 @@ export default async function (fastify: FastifyInstance) {
     return buildReturnBackfillPreview(asOfDate);
   });
 
-  // Explicitly create the missing period headers as skipped coverage. Older
-  // shells are closed because the user chose not to backfill activity; the
-  // current shell stays open for a recovery reconciliation or selective import.
+  // Explicitly create missing historical period headers as skipped coverage.
+  // The active return period is not a skipped absence: the user is starting to
+  // record it now, but any earlier slice still needs review, so it begins
+  // partial until they explicitly mark coverage complete.
   fastify.post("/api/periods/return-backfill", async (request, reply) => {
     const body = request.body as { asOfDate?: number; confirmed?: boolean };
     if (body.confirmed !== true) {
@@ -146,20 +147,22 @@ export default async function (fastify: FastifyInstance) {
         const now = new Date();
         const inserted = preview.candidates.map((candidate) => {
           const status = candidate.isCurrent ? "open" : "closed";
+          const coverageStatus = candidate.isCurrent ? "partial" : "skipped";
+          const coverageReason = candidate.isCurrent ? "return_started_current_period" : "return_after_absence";
           const row = tx.insert(salaryPeriods).values({
             name: candidate.name,
             startDate: candidate.startDate,
             endDate: candidate.endDate,
             status,
             closedAt: candidate.isCurrent ? null : now,
-            coverageStatus: "skipped",
-            coverageReason: "return_after_absence",
+            coverageStatus,
+            coverageReason,
           }).returning().all()[0];
-          if (!row) throw new Error("Failed to create skipped period shell");
+          if (!row) throw new Error("Failed to create return period shell");
           tx.insert(auditLogs).values({
             entityType: "salary_period",
             entityId: row.id,
-            action: "create_skipped_return_period",
+            action: candidate.isCurrent ? "create_return_current_period" : "create_skipped_return_period",
             afterSnapshot: Buffer.from(JSON.stringify(row)),
           }).run();
           return row;
@@ -167,7 +170,7 @@ export default async function (fastify: FastifyInstance) {
         bumpFinancialRevisionSync(tx);
         return inserted;
       });
-      return reply.code(201).send({ periods: created, message: "Skipped coverage periods were created; no transactions or budgets were fabricated" });
+      return reply.code(201).send({ periods: created, message: "Historical gaps were created as skipped; the active return period is partial until reviewed. No transactions or budgets were fabricated." });
     } catch (error) {
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to create skipped period shells" });
     }
