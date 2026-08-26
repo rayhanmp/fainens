@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { api } from '../../lib/api';
-import { formatCurrency, parseSignedIdNominalToInt, cn } from '../../lib/utils';
+import { formatCurrency, parseSignedIdNominalToInt, cn, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../../lib/utils';
 import { Check, AlertCircle, Wallet, Building2, CreditCard } from 'lucide-react';
 
 type Account = {
@@ -75,7 +75,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [acknowledgement, setAcknowledgement] = useState('');
   const [recoveryNote, setRecoveryNote] = useState('');
-  const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [asOfDate, setAsOfDate] = useState(() => toLocalDateInputValue());
 
   const reconcilableAccounts = useMemo(() =>
     accounts.filter(a => a.type === 'asset' || a.type === 'liability'),
@@ -90,7 +90,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       setRecoveryMode(false);
       setAcknowledgement('');
       setRecoveryNote('');
-      setAsOfDate(new Date().toISOString().slice(0, 10));
+      setAsOfDate(toLocalDateInputValue());
       void api.accounts.reconciliationHistory().then(({ sessions }) => setHistory(sessions)).catch(() => setHistory([]));
     }
   }, [isOpen, reconcilableAccounts]);
@@ -198,8 +198,8 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           actualBalance: parseSignedIdNominalToInt(r.actualBalance),
         }));
       if (recoveryMode) {
-        const snapshotAt = new Date(`${asOfDate}T23:59:59.999`).getTime();
-        if (!Number.isSafeInteger(snapshotAt) || snapshotAt > Date.now()) {
+        const snapshotAt = snapshotTimestampForLocalDate(asOfDate);
+        if (snapshotAt == null) {
           throw new Error('Choose a current or historical snapshot date');
         }
         const response = await api.accounts.recoveryReconcile({
@@ -273,7 +273,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           </label>
           {recoveryMode && (
             <div className="mt-3 space-y-3 border-t border-[var(--color-border)] pt-3">
-              <Input label="Balance snapshot date" type="date" value={asOfDate} max={new Date().toISOString().slice(0, 10)} onChange={(event) => setAsOfDate(event.target.value)} />
+              <Input label="Balance snapshot date" type="date" value={asOfDate} max={toLocalDateInputValue()} onChange={(event) => setAsOfDate(event.target.value)} />
               <Input
                 label="Acknowledgement"
                 value={acknowledgement}

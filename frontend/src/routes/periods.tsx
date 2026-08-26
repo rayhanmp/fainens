@@ -8,7 +8,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { formatDate } from '../lib/utils';
+import { formatDate, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../lib/utils';
 import { Plus, Calendar, ChevronRight, Edit2, Trash2, TrendingUp, Wallet, Lock, LockOpen, History } from 'lucide-react';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 
@@ -49,7 +49,7 @@ function PeriodsPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
-  const [returnDate, setReturnDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [returnDate, setReturnDate] = useState(() => toLocalDateInputValue());
   const [returnPreview, setReturnPreview] = useState<Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>>([]);
   const [returnError, setReturnError] = useState('');
 
@@ -210,7 +210,12 @@ function PeriodsPage() {
 
   const loadReturnPreview = async (date = returnDate) => {
     setReturnError('');
-    const asOfDate = new Date(`${date}T23:59:59.999`).getTime();
+    const asOfDate = snapshotTimestampForLocalDate(date);
+    if (asOfDate == null) {
+      setReturnPreview([]);
+      setReturnError('Choose a current or historical return date');
+      return;
+    }
     try {
       const result = await api.periods.returnPreview(asOfDate);
       if (result.reason) {
@@ -226,7 +231,7 @@ function PeriodsPage() {
   };
 
   const openReturnModal = () => {
-    const date = new Date().toISOString().slice(0, 10);
+    const date = toLocalDateInputValue();
     setReturnDate(date);
     setReturnPreview([]);
     setReturnError('');
@@ -235,7 +240,11 @@ function PeriodsPage() {
   };
 
   const createReturnBackfill = async () => {
-    const asOfDate = new Date(`${returnDate}T23:59:59.999`).getTime();
+    const asOfDate = snapshotTimestampForLocalDate(returnDate);
+    if (asOfDate == null) {
+      setReturnError('Choose a current or historical return date');
+      return;
+    }
     setIsSubmitting(true);
     setReturnError('');
     try {
@@ -391,7 +400,7 @@ function PeriodsPage() {
               label="Return / balance snapshot date"
               type="date"
               value={returnDate}
-              max={new Date().toISOString().slice(0, 10)}
+              max={toLocalDateInputValue()}
               onChange={(event) => {
                 setReturnDate(event.target.value);
                 void loadReturnPreview(event.target.value);

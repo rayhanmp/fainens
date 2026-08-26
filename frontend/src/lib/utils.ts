@@ -75,6 +75,39 @@ export function formatDateTime(timestamp: number): string {
   });
 }
 
+/** A local calendar date suitable for a native `<input type="date">`. */
+export function toLocalDateInputValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Turns a user-selected local calendar date into a snapshot instant. Historical
+ * dates mean the end of that date; today means now, because tonight is not yet
+ * a valid balance snapshot.
+ */
+export function snapshotTimestampForLocalDate(dateValue: string, now = Date.now()): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  if (!match || !Number.isSafeInteger(now)) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const selected = new Date(year, month - 1, day);
+  if (
+    selected.getFullYear() !== year ||
+    selected.getMonth() !== month - 1 ||
+    selected.getDate() !== day
+  ) return null;
+
+  const today = toLocalDateInputValue(new Date(now));
+  if (dateValue > today) return null;
+  if (dateValue === today) return now;
+  selected.setHours(23, 59, 59, 999);
+  return selected.getTime();
+}
+
 // Format percentage
 export function formatPercentage(value: number, decimals = 2): string {
   return `${value.toFixed(decimals)}%`;
