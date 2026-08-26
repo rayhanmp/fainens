@@ -193,7 +193,7 @@ export function NetWorthChart({ className = '' }: { className?: string } = {}) {
       )}
 
       {rows.length > 0 ? (
-        <div className="min-h-[220px] w-full flex-1">
+        <div className="h-[min(55vh,22rem)] min-h-[220px] w-full sm:h-72 sm:min-h-[260px] lg:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={rows}
