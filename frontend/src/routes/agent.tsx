@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
@@ -34,6 +34,9 @@ import type { AgentTransactionActionProposal } from '../lib/api';
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 
 export const Route = createFileRoute('/agent')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    prompt: typeof search.prompt === 'string' ? search.prompt : undefined,
+  }),
   component: AgentPage,
 } as any);
 
@@ -426,6 +429,7 @@ function TransactionProposalCard({
 }
 
 function AgentPage() {
+  const search = useSearch({ from: '/agent' }) as { prompt?: string };
   const [periods, setPeriods] = useState<Period[]>([]);
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
@@ -495,12 +499,21 @@ function AgentPage() {
   }, []);
 
   useEffect(() => {
+    if (search.prompt?.trim()) {
+      setActiveConversationId(null);
+      setMessages([]);
+      setPendingImages([]);
+    }
     void refreshConversations()
       .then((available) => {
+        if (search.prompt?.trim()) {
+          setDraft(search.prompt.trim());
+          return;
+        }
         if (available[0]) void selectConversation(available[0].id);
       })
       .catch(() => setError('Could not load saved conversations.'));
-  }, []);
+  }, [search.prompt]);
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId),
