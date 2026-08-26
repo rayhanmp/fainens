@@ -98,6 +98,70 @@ export type AgentTransactionSearch = {
   };
 };
 
+export type AgentQueryResponse = {
+  answer: string | null;
+  llmAvailable: boolean;
+  context: unknown;
+  scope?: unknown;
+  revision?: number;
+  conversationId?: number | null;
+  toolCalls: Array<{ id: string; name: string; input: unknown }>;
+  toolResults: Array<{ id: string; name: string; result: unknown }>;
+  message?: string;
+};
+
+export type AgentStreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'tool'; name: string }
+  | { type: 'complete'; response: AgentQueryResponse }
+  | { type: 'error'; error: string };
+
+async function streamAgentQuery(
+  data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number },
+  onEvent: (event: AgentStreamEvent) => void,
+): Promise<AgentQueryResponse> {
+  const response = await fetch(`${API_BASE}/agent/query/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+  if (!response.ok || !response.body) {
+    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(error.message || error.error || `HTTP ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let completed: AgentQueryResponse | null = null;
+  const consume = (event: string) => {
+    const dataLine = event.split(/\r?\n/).find((line) => line.startsWith('data:'));
+    if (!dataLine) return;
+    try {
+      const parsed = JSON.parse(dataLine.slice(5).trimStart()) as AgentStreamEvent;
+      onEvent(parsed);
+      if (parsed.type === 'complete') completed = parsed.response;
+      if (parsed.type === 'error') throw new Error(parsed.error);
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error('Could not read agent stream');
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop() ?? '';
+    for (const event of events) consume(event);
+    if (done) break;
+  }
+  if (buffer) consume(buffer);
+  if (!completed) throw new Error('Agent stream ended before a final response');
+  return completed;
+}
+
 // API client object
 export const api = {
   // Auth
@@ -1651,9 +1715,10 @@ export const api = {
       return fetchApi(`/agent/context${query.toString() ? `?${query.toString()}` : ''}`);
     },
     query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number }) =>
-      fetchApi<{ answer: string | null; llmAvailable: boolean; context: unknown; scope?: unknown; revision?: number; conversationId?: number | null; toolCalls: Array<{ id: string; name: string; input: unknown }>; toolResults: Array<{ id: string; name: string; result: unknown }>; message?: string }>('/agent/query', {
+      fetchApi<AgentQueryResponse>('/agent/query', {
         method: 'POST', body: JSON.stringify(data),
       }),
+    streamQuery: streamAgentQuery,
     planBudget: (data: { periodId?: number; targetSavingsRate?: number }) =>
       fetchApi<{ revision: number; targetSavingsRate: number; incomeCents: number; targetSpendCents: number; recommendations: Array<{ categoryId: number | null; category: string; suggestedAmountCents: number; basis: string }>; requiresConfirmation: boolean; writesPerformed: boolean }>('/agent/plan-budget', {
         method: 'POST', body: JSON.stringify(data),

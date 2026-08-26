@@ -17,7 +17,7 @@ import {
   parseAgentScopeInput,
   resolveAgentScope,
 } from "../services/agent-tools";
-import { callOpenRouterAgent, type AgentChatMessage, type AgentChatTool } from "../services/agent-llm";
+import { callOpenRouterAgent, streamOpenRouterAgent, type AgentChatMessage, type AgentChatTool } from "../services/agent-llm";
 import { getFinancialRevision } from "../services/financial-revision";
 
 const MAX_TOOL_CALLS_PER_QUERY = 8;
@@ -299,6 +299,128 @@ async function answerWithTools(
   };
 }
 
+async function answerWithToolsStreaming(
+  question: string,
+  scopeInput: ReturnType<typeof parseAgentScopeInput>,
+  history: AgentChatMessage[],
+  onTextDelta: (text: string) => void,
+  onTool: (name: string) => void,
+) {
+  if (!env.OPENROUTER_API_KEY) {
+    const result = await answerWithTools(question, scopeInput, history);
+    const text = result.answer ?? result.message ?? "I could not complete the analysis from the available ledger tools.";
+    onTextDelta(text);
+    return result;
+  }
+
+  const scope = await resolveAgentScope(scopeInput);
+  const messages: AgentChatMessage[] = [
+    { role: "system", content: AGENT_SYSTEM_PROMPT },
+    ...history,
+    { role: "user", content: `Question: ${question}\nRequested scope (the tools may refine this): ${JSON.stringify(scope)}` },
+  ];
+  const toolCalls: Array<{ id: string; name: string; input: unknown }> = [];
+  const toolResults: Array<{ id: string; name: string; result: unknown }> = [];
+  let lastContent = "";
+  let callsUsed = 0;
+  let completedWithAnswer = false;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    const response = await streamOpenRouterAgent({
+      apiKey: env.OPENROUTER_API_KEY,
+      messages,
+      tools: modelTools,
+      onTextDelta: (text) => { lastContent += text; onTextDelta(text); },
+    });
+    const assistantMessage = response.message;
+    const requestedCalls = assistantMessage.tool_calls ?? [];
+    if (requestedCalls.length === 0) {
+      completedWithAnswer = true;
+      break;
+    }
+    if (callsUsed + requestedCalls.length > MAX_TOOL_CALLS_PER_QUERY) {
+      throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
+    }
+
+    messages.push(assistantMessage);
+    for (const requested of requestedCalls) {
+      const definition = toolDefinitionMap.get(requested.function.name);
+      const input = parseToolArguments(requested.function.arguments);
+      toolCalls.push({ id: requested.id, name: requested.function.name, input });
+      onTool(requested.function.name);
+      let result: unknown;
+      if (!definition) {
+        result = { error: "Unknown or unavailable agent tool" };
+      } else {
+        try {
+          result = await executeAgentTool(requested.function.name, input);
+        } catch (error) {
+          result = { error: error instanceof Error ? error.message : "Tool execution failed" };
+        }
+      }
+      toolResults.push({ id: requested.id, name: requested.function.name, result });
+      messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(result) });
+      callsUsed += 1;
+    }
+  }
+
+  if (!completedWithAnswer) {
+    const finalResponse = await streamOpenRouterAgent({
+      apiKey: env.OPENROUTER_API_KEY,
+      messages: [...messages, { role: "user", content: "Synthesize the answer from the tool results already provided. Do not request another tool." }],
+      tools: [],
+      onTextDelta: (text) => { lastContent += text; onTextDelta(text); },
+    });
+    if (typeof finalResponse.message.content === "string" && !lastContent) lastContent = finalResponse.message.content;
+  }
+
+  return {
+    answer: lastContent || "I could not complete the analysis from the available ledger tools.",
+    llmAvailable: true,
+    context: null,
+    scope,
+    toolCalls,
+    toolResults,
+    revision: await getFinancialRevision(),
+  };
+}
+
+type AgentQueryBody = { question?: unknown; periodId?: unknown; startDate?: unknown; endDate?: unknown; conversationId?: unknown };
+type AgentQueryResult = Awaited<ReturnType<typeof answerWithTools>>;
+
+async function executeAgentQuery(
+  request: { user?: unknown },
+  body: AgentQueryBody,
+  answer: (question: string, scopeInput: ReturnType<typeof parseAgentScopeInput>, history: AgentChatMessage[]) => Promise<AgentQueryResult>,
+) {
+  const question = (body.question as string).trim();
+  const scopeInput = parseAgentScopeInput({ periodId: body.periodId, startDate: body.startDate, endDate: body.endDate });
+  const conversationId = body.conversationId == null ? null : Number(body.conversationId);
+  if (conversationId != null && (!Number.isSafeInteger(conversationId) || conversationId <= 0)) {
+    throw new Error("Invalid conversation ID");
+  }
+
+  let history: AgentChatMessage[] = [];
+  let conversation: typeof agentConversations.$inferSelect | undefined;
+  if (conversationId != null) {
+    conversation = await ownedConversation(conversationId, currentOwnerEmail(request));
+    if (!conversation) throw new Error("Conversation not found");
+    history = await conversationHistory(conversationId);
+    await db.insert(agentMessages).values({ conversationId, role: "user", content: question });
+    await db.update(agentConversations)
+      .set({ title: conversation.title === "New conversation" ? conversationTitle(question) : conversation.title, updatedAt: new Date() })
+      .where(eq(agentConversations.id, conversationId));
+  }
+
+  const result = await answer(question, scopeInput, history);
+  if (conversationId != null) {
+    const displayText = result.answer ?? result.message ?? "I could not complete the analysis from the available ledger tools.";
+    await db.insert(agentMessages).values({ conversationId, role: "assistant", content: displayText, responseJson: JSON.stringify(result) });
+    await db.update(agentConversations).set({ updatedAt: new Date() }).where(eq(agentConversations.id, conversationId));
+  }
+  return { ...result, conversationId: conversation?.id ?? null };
+}
+
 export default async function agentRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
@@ -397,49 +519,50 @@ export default async function agentRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/api/agent/query", async (request, reply) => {
-    const body = request.body as { question?: unknown; periodId?: unknown; startDate?: unknown; endDate?: unknown; conversationId?: unknown };
+    const body = request.body as AgentQueryBody;
     if (typeof body?.question !== "string" || body.question.trim().length < 2 || body.question.length > 2000) {
       return reply.code(400).send({ error: "question must be between 2 and 2000 characters" });
     }
     try {
-      const question = body.question.trim();
-      const scopeInput = parseAgentScopeInput({
-        periodId: body.periodId,
-        startDate: body.startDate,
-        endDate: body.endDate,
-      });
-      const conversationId = body.conversationId == null ? null : Number(body.conversationId);
-      if (conversationId != null && (!Number.isSafeInteger(conversationId) || conversationId <= 0)) {
-        return reply.code(400).send({ error: "Invalid conversation ID" });
-      }
-
-      let history: AgentChatMessage[] = [];
-      let conversation: typeof agentConversations.$inferSelect | undefined;
-      if (conversationId != null) {
-        conversation = await ownedConversation(conversationId, currentOwnerEmail(request));
-        if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
-        history = await conversationHistory(conversationId);
-        await db.insert(agentMessages).values({ conversationId, role: "user", content: question });
-        await db.update(agentConversations)
-          .set({ title: conversation.title === "New conversation" ? conversationTitle(question) : conversation.title, updatedAt: new Date() })
-          .where(eq(agentConversations.id, conversationId));
-      }
-
-      const result = await answerWithTools(question, scopeInput, history);
-      if (conversationId != null) {
-        const displayText = result.answer ?? result.message ?? "I could not complete the analysis from the available ledger tools.";
-        await db.insert(agentMessages).values({
-          conversationId,
-          role: "assistant",
-          content: displayText,
-          responseJson: JSON.stringify(result),
-        });
-        await db.update(agentConversations).set({ updatedAt: new Date() }).where(eq(agentConversations.id, conversationId));
-      }
-      return { ...result, conversationId: conversation?.id ?? null };
+      return await executeAgentQuery(request, body, answerWithTools);
     } catch (error) {
       fastify.log.error(error);
       return reply.code(500).send({ error: "Failed to answer agent query" });
+    }
+  });
+
+  fastify.post("/api/agent/query/stream", async (request, reply) => {
+    const body = request.body as AgentQueryBody;
+    if (typeof body?.question !== "string" || body.question.trim().length < 2 || body.question.length > 2000) {
+      return reply.code(400).send({ error: "question must be between 2 and 2000 characters" });
+    }
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    const send = (event: unknown) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    try {
+      const result = await executeAgentQuery(
+        request,
+        body,
+        (question, scopeInput, history) => answerWithToolsStreaming(
+          question,
+          scopeInput,
+          history,
+          (text) => send({ type: "delta", text }),
+          (name) => send({ type: "tool", name }),
+        ),
+      );
+      send({ type: "complete", response: result });
+    } catch (error) {
+      fastify.log.error(error);
+      send({ type: "error", error: error instanceof Error ? error.message : "Failed to answer agent query" });
+    } finally {
+      reply.raw.end();
     }
   });
 

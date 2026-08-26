@@ -129,6 +129,7 @@ function AgentPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
@@ -190,6 +191,8 @@ function AgentPage() {
     setError(null);
     setMessages((current) => [...current, { id: `user-${createdAt}`, role: 'user', text, createdAt }]);
     setIsSending(true);
+    setStreamActivity('Thinking…');
+    let streamedAssistantId: string | null = null;
     try {
       let conversationId = activeConversationId;
       if (conversationId == null) {
@@ -198,26 +201,53 @@ function AgentPage() {
         setActiveConversationId(conversationId);
         setConversations((current) => [created.conversation, ...current]);
       }
-      const response = await api.agent.query({
+      const assistantId = `assistant-${Date.now()}`;
+      streamedAssistantId = assistantId;
+      setMessages((current) => [...current, {
+        id: assistantId,
+        role: 'assistant',
+        text: '',
+        createdAt: Date.now(),
+      }]);
+      const response = await api.agent.streamQuery({
         question: text,
         ...(selectedPeriodId ? { periodId: Number(selectedPeriodId) } : {}),
         conversationId,
+      }, (event) => {
+        if (event.type === 'delta') {
+          setStreamActivity('Writing…');
+          setMessages((current) => current.map((message) =>
+            message.id === assistantId && message.role === 'assistant'
+              ? { ...message, text: message.text + event.text }
+              : message,
+          ));
+        }
+        if (event.type === 'tool') setStreamActivity(`Checking ${event.name.replaceAll('_', ' ')}…`);
+        if (event.type === 'complete') {
+          const fallback = event.response.llmAvailable
+            ? 'I could not produce a written answer from the available evidence.'
+            : 'The LLM is not configured yet, but the structured ledger context was retrieved below.';
+          setMessages((current) => current.map((message) =>
+            message.id === assistantId && message.role === 'assistant'
+              ? { ...message, text: message.text || (event.response.answer ?? event.response.message ?? fallback), response: event.response }
+              : message,
+          ));
+        }
       });
-      const fallback = response.llmAvailable
-        ? 'I could not produce a written answer from the available evidence.'
-        : 'The LLM is not configured yet, but the structured ledger context was retrieved below.';
-      setMessages((current) => [...current, {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        text: response.answer ?? response.message ?? fallback,
-        createdAt: Date.now(),
-        response,
-      }]);
+      // Keep the complete receipt even if the final SSE event was processed
+      // immediately before React applied its state update.
+      setMessages((current) => current.map((message) =>
+        message.id === assistantId && message.role === 'assistant'
+          ? { ...message, response }
+          : message,
+      ));
       void refreshConversations().catch(() => undefined);
     } catch (caught) {
+      setMessages((current) => current.filter((message) => message.id !== streamedAssistantId));
       setError(caught instanceof Error ? caught.message : 'The agent query failed. Please try again.');
     } finally {
       setIsSending(false);
+      setStreamActivity(null);
     }
   };
 
@@ -304,7 +334,7 @@ function AgentPage() {
                   <div key={message.id} className={cn('flex gap-3', message.role === 'user' && 'justify-end')}>
                     {message.role === 'assistant' && <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><Bot className="h-4 w-4" /></span>}
                     <div className={cn('max-w-[90%] rounded-xl px-4 py-3 text-sm', message.role === 'user' ? 'bg-[var(--ref-primary-container)] text-white' : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)]')}>
-                      <p className="whitespace-pre-wrap leading-6">{message.text}</p>
+                      <p className="whitespace-pre-wrap leading-6">{message.text || (message.role === 'assistant' ? '…' : '')}</p>
                       {message.response && (
                         <>
                           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--color-text-secondary)]">
@@ -320,7 +350,7 @@ function AgentPage() {
                   </div>
                 ))}
 
-                {isSending && <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]"><LoaderCircle className="h-4 w-4 animate-spin" /> Reading your ledger…</div>}
+                {isSending && <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]"><LoaderCircle className="h-4 w-4 animate-spin" /> {streamActivity ?? 'Reading your ledger…'}</div>}
                 {error && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
               </div>
 
