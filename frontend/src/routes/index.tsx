@@ -77,12 +77,6 @@ function coverageLabel(status: Period['coverageStatus'] | undefined): string {
   return 'Coverage needs review';
 }
 
-function coverageTone(status: Period['coverageStatus'] | undefined): string {
-  if (status === 'complete') return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
-  if (status === 'partial') return 'bg-amber-500/10 text-amber-800 dark:text-amber-200';
-  return 'bg-rose-500/10 text-rose-800 dark:text-rose-200';
-}
-
 function formatAsOf(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
@@ -303,7 +297,6 @@ function DashboardPage() {
         </div>
 
         {loadError && <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{loadError}</div>}
-        {selectedPeriod && <div className="mt-5 flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-1.5 font-semibold text-[var(--ref-on-surface-variant)]">Period facts through {formatAsOf(selectedPeriodAsOf)}</span><span className={cn('rounded-full px-3 py-1.5 font-semibold', coverageTone(selectedPeriod.coverageStatus))}>{coverageLabel(selectedPeriod.coverageStatus)}</span><span className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-1.5 font-semibold text-[var(--ref-on-surface-variant)]">Position cards are current balances</span></div>}
         {coverageWarnings.length > 0 && <Link to="/periods" className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Read this period carefully.</strong> {coverageWarnings[0]} <span className="ml-1 font-semibold underline">Review coverage</span></span></Link>}
         {notificationItems.length > 0 && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm"><AlertTriangle className={cn('mt-0.5 h-5 w-5 shrink-0', notificationItems[0].tone === 'danger' ? 'text-rose-600' : notificationItems[0].tone === 'warning' ? 'text-amber-600' : 'text-sky-600')} /><div className="min-w-0 flex-1"><span className="font-bold">{notificationItems.length} item{notificationItems.length === 1 ? '' : 's'} may need your attention.</span> <span className="text-[var(--ref-on-surface-variant)]">{notificationItems[0].title}: {notificationItems[0].detail}</span></div><Link to={notificationItems[0].to} className="shrink-0 font-semibold text-[var(--ref-primary)] hover:underline">{notificationItems[0].action}</Link></div>}
 
