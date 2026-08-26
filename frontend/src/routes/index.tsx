@@ -19,7 +19,7 @@ import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { api, type AgentFinancialFacts } from '../lib/api';
+import { api, type AgentFinancialFacts, type BudgetPlan, type BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { NetWorthChart } from '../components/analytics';
@@ -42,7 +42,7 @@ type Category = Awaited<ReturnType<typeof api.categories.list>>[number];
 type Tag = Awaited<ReturnType<typeof api.tags.list>>[number];
 type DashboardAnalytics = Awaited<ReturnType<typeof api.analytics.dashboard>>;
 type RecentTransaction = Awaited<ReturnType<typeof api.transactions.list>>['data'][number];
-type BudgetRow = Awaited<ReturnType<typeof api.budgets.list>>[number];
+type BudgetRow = BudgetPlan;
 type Facts = AgentFinancialFacts['data'];
 type ReconciliationHistory = Awaited<ReturnType<typeof api.accounts.reconciliationHistory>>;
 type Loan = Awaited<ReturnType<typeof api.loans.list>>[number];
@@ -87,6 +87,11 @@ function formatAsOf(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   });
+}
+
+function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[]): BudgetPlan[] {
+  const summary = Array.isArray(payload) ? payload[0] : payload;
+  return Array.isArray(summary?.plans) ? summary.plans : [];
 }
 
 function DashboardPage() {
@@ -170,7 +175,7 @@ function DashboardPage() {
         ]);
         if (cancelled) return;
         setFacts(financialFacts.data);
-        setBudgetRows(budgets);
+        setBudgetRows(budgetPlansFromPayload(budgets));
         setRecent(recentResult.data);
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load selected-period data.');

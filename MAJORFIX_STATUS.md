@@ -122,6 +122,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The dashboard now separates current position from selected-period activity: available cash is the canonical `cash_equivalent` balance, net worth remains all assets less liabilities, and each period metric discloses its as-of timestamp and coverage state.
 - A decision queue highlights ledger imbalance, stale or missing reconciliation, skipped/partial/unknown period coverage, overdue loans/PayLater, upcoming subscriptions, budget overruns/projections, and unallocated spending, with direct links to the appropriate workflow.
 - Duplicate expense widgets were consolidated into a plan-versus-actual category view with pace-based end-of-period projections. Recent user-facing activity, net-worth trend, data-confidence notes, and the agent entry point remain distinct surfaces.
+- The typed budget client now reflects the backend's actual `BudgetSummary` response (one summary for a selected period, or a list for all periods); dashboard consumers explicitly extract `plans` instead of treating the summary itself as an array.
 - Salary now has a read-only catch-up preview plus explicit post/skip occurrence actions, including a requested historical occurrence date, so a user returning after months away can recover missing payroll without page-load side effects.
 - Account deletion now blocks system accounts, non-zero balances, and parents with children. Budget and period queries use the same assigned-or-date scope and full-day semantics.
 

@@ -106,6 +106,25 @@ export type AgentTransactionSearch = {
   };
 };
 
+export type BudgetPlan = {
+  id: number;
+  periodId: number;
+  categoryId: number;
+  plannedAmount: number;
+  actualAmount: number;
+  variance: number;
+  percentUsed: number;
+  categoryName: string;
+};
+
+export type BudgetSummary = {
+  periodId: number;
+  income: number;
+  totalPlanned: number;
+  percentOfIncome: number;
+  plans: BudgetPlan[];
+};
+
 export type AgentQueryResponse = {
   answer: string | null;
   llmAvailable: boolean;
@@ -629,16 +648,7 @@ export const api = {
   budgets: {
     list: (periodId?: string) => {
       const query = periodId ? `?periodId=${periodId}` : '';
-      return fetchApi<Array<{
-        id: number;
-        periodId: number;
-        categoryId: number;
-        plannedAmount: number;
-        actualAmount: number;
-        variance: number;
-        percentUsed: number;
-        categoryName: string;
-      }>>(`/budgets${query}`);
+      return fetchApi<BudgetSummary | BudgetSummary[]>(`/budgets${query}`);
     },
     create: (data: { periodId: number; categoryId: number; plannedAmount: number }) =>
       fetchApi('/budgets', { method: 'POST', body: JSON.stringify(data) }),
