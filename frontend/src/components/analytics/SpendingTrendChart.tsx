@@ -87,7 +87,7 @@ export function SpendingTrendChart() {
           </ResponsiveContainer>
         </div>
       )}
-      {hasIncompleteCoverage && <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-200">Some days have incomplete period coverage; empty bars are not proof that no spending occurred.</p>}
+      {hasIncompleteCoverage && <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-medium leading-relaxed text-[var(--ref-on-surface)]">Some days have incomplete period coverage; empty bars are not proof that no spending occurred.</p>}
     </div>
   );
 }
