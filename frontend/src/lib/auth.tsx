@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from './api';
 
-// DEMO MODE - Set to true to bypass authentication for preview
-const DEMO_MODE = false;
+// The backend separately refuses this bypass in production. Keep the switch
+// explicit so an OAuth callback configured for production never blocks local
+// inspection of the app.
+const DEMO_MODE = import.meta.env.VITE_AUTH_BYPASS === 'true';
 
 interface AuthContextType {
   isAuthenticated: boolean;

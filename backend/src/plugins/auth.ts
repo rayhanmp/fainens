@@ -37,6 +37,10 @@ declare module "fastify" {
 }
 
 export default fp(async function (fastify: FastifyInstance) {
+  const localAuthBypass = env.NODE_ENV !== "production" && env.LOCAL_AUTH_BYPASS;
+  if (localAuthBypass) {
+    fastify.log.warn("LOCAL_AUTH_BYPASS is enabled: development requests are unauthenticated");
+  }
   // Register cookie plugin
   await fastify.register(cookie);
 
@@ -66,6 +70,10 @@ export default fp(async function (fastify: FastifyInstance) {
 
   // Auth middleware decorator
   fastify.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
+    if (localAuthBypass) {
+      request.user = { email: "local-dev@fainens.test" };
+      return;
+    }
     try {
       await request.jwtVerify();
       const payload = request.user as { email?: string };

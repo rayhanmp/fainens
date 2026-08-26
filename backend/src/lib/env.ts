@@ -1,4 +1,11 @@
 import { z } from "zod";
+import { config } from "dotenv";
+import { resolve } from "path";
+
+// This file is also imported by route/plugin tests, which may not execute the
+// server bootstrap that loads .env. Apply ignored developer overrides here so
+// LOCAL_AUTH_BYPASS works consistently in the local process only.
+config({ path: resolve(__dirname, "../../../.env.local"), override: true });
 
 const envSchema = z.object({
   // Google OAuth
@@ -25,6 +32,13 @@ const envSchema = z.object({
 
   // App
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+
+  /**
+   * Explicit local-only escape hatch for inspecting a dev database when OAuth
+   * is configured for a production callback. The auth plugin refuses it in
+   * production regardless of this value.
+   */
+  LOCAL_AUTH_BYPASS: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 
   /**
    * Where to send the browser after successful Google OAuth (must match the origin you use in the browser).
