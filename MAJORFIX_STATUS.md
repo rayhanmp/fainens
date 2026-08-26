@@ -163,6 +163,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Migration `0014` adds an explicit `liquidity_class` to accounts. Legacy asset accounts become `cash_equivalent` for compatibility, while the Loans Receivable system account becomes `receivable`; non-assets remain `non_cash`.
 - Account create/update validates the class. Cash flow, liquid net worth, runway, and canonical wallet facts now use that metadata instead of inferring cash from an account type or system-account name. Investment and other non-cash assets no longer inflate immediately available cash once classified.
 
+### `6c532e5` — category reporting-account and allocation foundation
+
+- Migration `0015` adds an optional category reporting-account FK and a durable, unique per-journal category-allocation table. Allocation amounts are signed net expenses, so a refund can reduce a category without mutating original history.
+- Category create/update validates that a selected reporting account is active and an expense account. New simple categorized expenses post to that account; journals can carry multiple validated allocations whose sum must exactly equal their net expense. Entries without a reliable split remain deliberately unallocated.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -185,7 +190,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
 2. Complete a formal period archive/restore policy for metadata itself. Transaction identity and shared read-side membership are now enforced; closed periods are already immutable, but a separate archival lifecycle is not yet needed or modeled.
 3. Complete line-level cash-flow classification for every multi-line journal. Account-level cash-equivalent/receivable/investment metadata is now persisted, but individual mixed journals still need explicit allocation/classification instead of counterpart inference.
-5. Add category-to-reporting-account/allocation semantics so P&L, category spending, budgets, PDFs, dashboard, and agent queries reconcile explicitly.
+5. Route category allocations through spending/budget reports, PDFs, dashboard, and agent facts, including a disclosed Unallocated amount for historic journals. The durable model and new-write accounting semantics are now present; read models must transition without inventing historical splits.
 6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
 7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
