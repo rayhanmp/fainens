@@ -684,8 +684,10 @@ function CashFlowReport({
     netInvesting: number;
     netFinancing: number;
     netChange: number;
+    historicalRecoveryBridge?: number;
     beginningCash: number;
     endingCash: number;
+    coverage?: { isComparable: boolean; warnings: string[] };
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -811,6 +813,12 @@ function CashFlowReport({
       <Section title="Investing Activities" items={data.investing} total={data.netInvesting} sectionKey="investing" />
       <Section title="Financing Activities" items={data.financing} total={data.netFinancing} sectionKey="financing" />
 
+      {data.coverage && !data.coverage.isComparable && (
+        <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">
+          {data.coverage.warnings.join(' ')}
+        </div>
+      )}
+
       <div className="border-t-4 border-[var(--color-border)] pt-4 space-y-2">
         <div className="flex justify-between font-bold">
           <span>Net Change in Cash</span>
@@ -823,6 +831,12 @@ function CashFlowReport({
           <span>Beginning Cash</span>
           <span className="font-mono">{formatCurrency(data.beginningCash)}</span>
         </div>
+        {data.historicalRecoveryBridge ? (
+          <div className="flex justify-between text-[var(--color-warning)]" title="Not operating, investing, or financing cash flow">
+            <span>Historical recovery bridge</span>
+            <span className="font-mono">{data.historicalRecoveryBridge > 0 ? '+' : ''}{formatCurrency(data.historicalRecoveryBridge)}</span>
+          </div>
+        ) : null}
         <div className="flex justify-between font-bold text-lg">
           <span>Ending Cash</span>
           <span className="font-mono">{formatCurrency(data.endingCash)}</span>

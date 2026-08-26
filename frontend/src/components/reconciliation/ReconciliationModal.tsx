@@ -27,7 +27,8 @@ type ReconciliationRow = {
 type ReconciliationSession = {
   id: number;
   asOfDate: number;
-  status: 'reconciled' | 'needs_classification';
+  status: 'reconciled' | 'needs_classification' | 'recovered';
+  kind?: 'control' | 'recovery';
   lifecycleStatus: 'active' | 'voided';
   voidedAt: number | null;
   voidReason: string | null;
@@ -52,6 +53,18 @@ function AccountIcon({ name }: { name: string }) {
   return <Wallet className="w-4 h-4" />;
 }
 
+function rowsFor(accounts: Account[]): ReconciliationRow[] {
+  return accounts.filter(a => a.type === 'asset' || a.type === 'liability').map(a => ({
+    accountId: a.id,
+    accountName: a.name,
+    ledgerBalance: a.balance,
+    actualBalance: formatCurrency(a.balance),
+    difference: 0,
+    hasChanges: false,
+    isValid: true,
+  }));
+}
+
 export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: ReconciliationModalProps) {
   const [rows, setRows] = useState<ReconciliationRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,6 +72,10 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<ReconciliationSession[]>([]);
   const [voidingSessionId, setVoidingSessionId] = useState<number | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [acknowledgement, setAcknowledgement] = useState('');
+  const [recoveryNote, setRecoveryNote] = useState('');
+  const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const reconcilableAccounts = useMemo(() =>
     accounts.filter(a => a.type === 'asset' || a.type === 'liability'),
@@ -67,20 +84,31 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
 
   useEffect(() => {
     if (isOpen) {
-      setRows(reconcilableAccounts.map(a => ({
-        accountId: a.id,
-        accountName: a.name,
-        ledgerBalance: a.balance,
-        actualBalance: formatCurrency(a.balance),
-        difference: 0,
-        hasChanges: false,
-        isValid: true,
-      })));
+      setRows(rowsFor(reconcilableAccounts));
       setError(null);
       setResultMessage(null);
+      setRecoveryMode(false);
+      setAcknowledgement('');
+      setRecoveryNote('');
+      setAsOfDate(new Date().toISOString().slice(0, 10));
       void api.accounts.reconciliationHistory().then(({ sessions }) => setHistory(sessions)).catch(() => setHistory([]));
     }
   }, [isOpen, reconcilableAccounts]);
+
+  const handleRecoveryModeChange = async (enabled: boolean) => {
+    setRecoveryMode(enabled);
+    setError(null);
+    if (!enabled) return;
+    try {
+      // A recovery snapshot must include all active assets/liabilities even if
+      // the Accounts page is currently searched or filtered.
+      const allAccounts = await api.accounts.list();
+      setRows(rowsFor(allAccounts));
+    } catch (err) {
+      setRecoveryMode(false);
+      setError((err as Error).message || 'Failed to load the complete recovery snapshot');
+    }
+  };
 
   const handleVoid = async (session: ReconciliationSession) => {
     const reason = window.prompt(`Why should reconciliation #${session.id} be voided?`);
@@ -105,7 +133,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const handleActualBalanceChange = (index: number, value: string) => {
     const actual = parseSignedIdNominalToInt(value);
     const ledger = rows[index].ledgerBalance;
-    const isValid = Number.isSafeInteger(actual);
+    const isValid = Number.isSafeInteger(actual) && (!recoveryMode || actual >= 0);
     const diff = isValid ? actual - ledger : Number.NaN;
 
     const newRows = [...rows];
@@ -151,7 +179,13 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
 
   const handleSubmit = async () => {
     if (hasInvalid || rows.length === 0) {
-      setError('Enter a valid signed whole-rupiah balance for every account');
+      setError(recoveryMode
+        ? 'Enter a valid non-negative whole-rupiah balance for every account'
+        : 'Enter a valid signed whole-rupiah balance for every account');
+      return;
+    }
+    if (recoveryMode && acknowledgement.trim().length < 12) {
+      setError('Acknowledge that the historical gap is untracked before posting a recovery bridge');
       return;
     }
 
@@ -163,6 +197,23 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           accountId: r.accountId,
           actualBalance: parseSignedIdNominalToInt(r.actualBalance),
         }));
+      if (recoveryMode) {
+        const snapshotAt = new Date(`${asOfDate}T23:59:59.999`).getTime();
+        if (!Number.isSafeInteger(snapshotAt) || snapshotAt > Date.now()) {
+          throw new Error('Choose a current or historical snapshot date');
+        }
+        const response = await api.accounts.recoveryReconcile({
+          balances,
+          asOfDate: snapshotAt,
+          acknowledgement: acknowledgement.trim(),
+          note: recoveryNote.trim() || null,
+          confirmed: true,
+        });
+        setResultMessage(response.message);
+        onSuccess();
+        onClose();
+        return;
+      }
       const response = await api.accounts.reconcile(balances);
       setResultMessage(response.message);
       if (response.success) {
@@ -186,7 +237,9 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       isOpen={isOpen}
       onClose={onClose}
       title="Reconciliation"
-      subtitle="Record a dated balance check. Differences are flagged for review and never auto-posted as income or expense."
+      subtitle={recoveryMode
+        ? "Record your return snapshot. Every asset and liability is required; differences post once to a disclosed historical-recovery equity bridge."
+        : "Record a dated balance check. Differences are flagged for review and never auto-posted as income or expense."}
       className="max-w-2xl"
     >
       <div className="space-y-4">
@@ -202,6 +255,45 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
             {resultMessage}
           </div>
         )}
+
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3">
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-[var(--ref-on-surface)]">
+            <input
+              type="checkbox"
+              checked={recoveryMode}
+              onChange={(event) => void handleRecoveryModeChange(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="font-semibold">I am returning after an untracked period</span>
+              <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">
+                Use this only when you will not backfill the gap. It updates balances through an auditable equity bridge, never income or spending.
+              </span>
+            </span>
+          </label>
+          {recoveryMode && (
+            <div className="mt-3 space-y-3 border-t border-[var(--color-border)] pt-3">
+              <Input label="Balance snapshot date" type="date" value={asOfDate} max={new Date().toISOString().slice(0, 10)} onChange={(event) => setAsOfDate(event.target.value)} />
+              <Input
+                label="Acknowledgement"
+                value={acknowledgement}
+                onChange={(event) => setAcknowledgement(event.target.value)}
+                placeholder="I understand this gap is historically untracked"
+              />
+              <label className="block text-sm font-medium text-[var(--ref-on-surface)]">
+                Optional note
+                <textarea
+                  value={recoveryNote}
+                  onChange={(event) => setRecoveryNote(event.target.value)}
+                  maxLength={1000}
+                  rows={2}
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-transparent p-2 text-sm"
+                  placeholder="For example: Returned after May–August break; statements not being imported."
+                />
+              </label>
+            </div>
+          )}
+        </div>
 
         <div className="space-y-2">
           {rows.map((row, idx) => (
@@ -302,7 +394,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                     {new Date(session.asOfDate).toLocaleDateString('en-ID')} · {session.items.length} accounts · {session.status.replace('_', ' ')}
                     {session.lifecycleStatus === 'voided' && ' · VOIDED'}
                   </span>
-                  {session.lifecycleStatus === 'active' && (
+                  {session.lifecycleStatus === 'active' && session.kind !== 'recovery' && (
                     <button
                       type="button"
                       onClick={() => handleVoid(session)}
@@ -329,6 +421,11 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           >
             {isSubmitting ? (
               'Processing...'
+            ) : recoveryMode ? (
+              <>
+                <Check className="w-4 h-4" />
+                Post recovery bridge {hasChanges && `(${rows.filter(r => r.hasChanges).length} differences)`}
+              </>
             ) : (
               <>
                 <Check className="w-4 h-4" />

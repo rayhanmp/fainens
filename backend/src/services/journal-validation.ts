@@ -3,7 +3,7 @@ export type ValidatedJournalLine = {
   debit: number;
   credit: number;
   description?: string;
-  cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | null;
+  cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | "recovery" | null;
 };
 
 function assertNonNegativeInteger(value: unknown, fieldName: string): asserts value is number {
@@ -28,8 +28,8 @@ export function validateJournalLines(lines: ValidatedJournalLine[]): {
     if ((line.debit === 0 && line.credit === 0) || (line.debit > 0 && line.credit > 0)) {
       throw new Error("Each journal line must contain exactly one positive debit or credit");
     }
-    if (line.cashFlowClass != null && !["operating", "investing", "financing", "transfer"].includes(line.cashFlowClass)) {
-      throw new Error("cashFlowClass must be operating, investing, financing, or transfer");
+    if (line.cashFlowClass != null && !["operating", "investing", "financing", "transfer", "recovery"].includes(line.cashFlowClass)) {
+      throw new Error("cashFlowClass must be operating, investing, financing, transfer, or recovery");
     }
     return { ...line };
   });

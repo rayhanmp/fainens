@@ -19,6 +19,7 @@ import { getPaylaterObligations } from "./paylater";
 import { previewDueSubscriptionRenewals } from "./subscription-renewals";
 import { previewSalaryCatchUp } from "./salary-posting";
 import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
+import { getPeriodCoverage } from "./period-coverage";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
@@ -258,7 +259,7 @@ function parseAsOfDate(value: unknown): number {
   return parsed;
 }
 
-export async function getFinancialFactsTool(input: AgentScopeInput): Promise<{ scope: AgentScope; facts: Awaited<ReturnType<typeof getFinancialFacts>> }> {
+export async function getFinancialFactsTool(input: AgentScopeInput): Promise<{ scope: AgentScope; facts: Awaited<ReturnType<typeof getFinancialFacts>>; coverage: Awaited<ReturnType<typeof getPeriodCoverage>> }> {
   const scope = await resolveAgentScope(input);
   const asOfMs = Math.min(Date.now(), scope.endMs);
   const facts = await getFinancialFacts({
@@ -267,7 +268,7 @@ export async function getFinancialFactsTool(input: AgentScopeInput): Promise<{ s
     asOfMs,
     periodId: scope.periodId ?? undefined,
   });
-  return { scope, facts };
+  return { scope, facts, coverage: await getPeriodCoverage(scope.startMs, scope.endMs) };
 }
 
 export async function getBudgetFactsTool(input: unknown) {
@@ -280,6 +281,7 @@ export async function getBudgetFactsTool(input: unknown) {
   return {
     period: { periodId: period.id, name: period.name, startMs: period.startDate, endMs: period.endDate },
     budgets: await getBudgetFacts(periodId),
+    coverage: await getPeriodCoverage(period.startDate, inclusiveEndOfSelectedDay(period.endDate)),
   };
 }
 
@@ -445,6 +447,8 @@ export async function listPeriodsTool(input: unknown) {
     startDate: salaryPeriods.startDate,
     endDate: salaryPeriods.endDate,
     status: salaryPeriods.status,
+    coverageStatus: salaryPeriods.coverageStatus,
+    coverageReason: salaryPeriods.coverageReason,
     closedAt: salaryPeriods.closedAt,
     reopenedAt: salaryPeriods.reopenedAt,
   })

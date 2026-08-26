@@ -82,7 +82,7 @@ export const transactionLines = sqliteTable("transaction_line", {
   credit: integer("credit").notNull().default(0), // cents
   description: text("description"),
   /** Explicit cash-flow treatment for a cash-equivalent line. */
-  cashFlowClass: text("cash_flow_class"), // operating | investing | financing | transfer
+  cashFlowClass: text("cash_flow_class"), // operating | investing | financing | transfer | recovery
 });
 
 /** Explicit category amounts for a journal; supports multi-category journals. */
@@ -166,6 +166,9 @@ export const salaryPeriods = sqliteTable("salary_period", {
   reopenedAt: integer("reopened_at", { mode: "timestamp_ms" }),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+  /** Completeness of captured activity; independent from open/closed/archive lifecycle. */
+  coverageStatus: text("coverage_status").notNull().default("unknown"), // complete | partial | skipped | unknown
+  coverageReason: text("coverage_reason"),
 });
 
 export const budgetPlans = sqliteTable("budget_plan", {
@@ -242,6 +245,9 @@ export const reconciliationSessions = sqliteTable("reconciliation_session", {
   lifecycleStatus: text("lifecycle_status").notNull().default("active"), // active | voided
   voidedAt: integer("voided_at", { mode: "timestamp_ms" }),
   voidReason: text("void_reason"),
+  /** A control snapshot never posts; recovery snapshots may post one disclosed bridge journal. */
+  kind: text("kind").notNull().default("control"), // control | recovery
+  note: text("note"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),

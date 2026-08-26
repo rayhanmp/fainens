@@ -4,6 +4,7 @@ import { accounts, transactions, transactionLines, salaryPeriods } from "../db/s
 import { computeAccountBalanceRolledUp, computeTrialBalanceTotals } from "./ledger";
 import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getFinancialFacts } from "./financial-facts";
+import { getPeriodCoverage, type PeriodCoverage } from "./period-coverage";
 
 // Report types
 export interface IncomeStatementItem {
@@ -23,6 +24,7 @@ export interface IncomeStatement {
   periodName?: string;
   startDate?: number;
   endDate?: number;
+  coverage?: PeriodCoverage;
 }
 
 export interface BalanceSheetItem {
@@ -58,9 +60,12 @@ export interface CashFlowStatement {
   netInvesting: number;
   netFinancing: number;
   netChange: number;
+  /** Disclosed balance bridge from an intentionally untracked historical span. */
+  historicalRecoveryBridge?: number;
   beginningCash: number;
   endingCash: number;
   periodName?: string;
+  coverage?: PeriodCoverage;
 }
 
 export interface SpendingBreakdown {
@@ -232,6 +237,7 @@ export async function generateIncomeStatement(
     totalExpenses += amount;
   }
 
+  const coverage = await getPeriodCoverage(periodStart, periodEnd);
   return {
     revenue: revenueItems,
     expenses: expenseItems,
@@ -241,6 +247,7 @@ export async function generateIncomeStatement(
     periodName,
     startDate: periodStart,
     endDate: periodEnd,
+    coverage,
   };
 }
 
@@ -394,6 +401,7 @@ export async function generateCashFlowStatement(
       eq(accounts.liquidityClass, "cash_equivalent"),
     ));
   const cashAccountIds = cashAccounts.map((a) => a.id);
+  const coverage = await getPeriodCoverage(periodStart, periodEnd);
 
   if (cashAccountIds.length === 0) {
     return {
@@ -404,9 +412,11 @@ export async function generateCashFlowStatement(
       netInvesting: 0,
       netFinancing: 0,
       netChange: 0,
+      historicalRecoveryBridge: 0,
       beginningCash: 0,
       endingCash: 0,
       periodName,
+      coverage,
     };
   }
 
@@ -486,6 +496,7 @@ export async function generateCashFlowStatement(
   let netOperating = 0;
   let netInvesting = 0;
   let netFinancing = 0;
+  let historicalRecoveryBridge = 0;
 
   for (const tx of cashTxs) {
     const amount = (tx.debit || 0) - (tx.credit || 0);
@@ -497,6 +508,13 @@ export async function generateCashFlowStatement(
     let category = "Operating";
 
     if (tx.cashFlowClass === "transfer") continue;
+    // A recovery adjustment reconciles an untracked historical balance. It is
+    // deliberately excluded from operating/investing/financing cash flow, but
+    // disclosed separately so the reported ending cash still reconciles.
+    if (tx.cashFlowClass === "recovery") {
+      historicalRecoveryBridge += amount;
+      continue;
+    }
     if (tx.cashFlowClass === "operating" || tx.cashFlowClass === "investing" || tx.cashFlowClass === "financing") {
       type = tx.cashFlowClass;
       category = type[0].toUpperCase() + type.slice(1);
@@ -539,7 +557,7 @@ export async function generateCashFlowStatement(
   }
 
   const netChange = netOperating + netInvesting + netFinancing;
-  const endingCash = beginningCash + netChange;
+  const endingCash = beginningCash + netChange + historicalRecoveryBridge;
 
   return {
     operating,
@@ -549,9 +567,11 @@ export async function generateCashFlowStatement(
     netInvesting,
     netFinancing,
     netChange,
+    historicalRecoveryBridge,
     beginningCash,
     endingCash,
     periodName,
+    coverage,
   };
 }
 
@@ -670,7 +690,11 @@ export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashF
     }
     row("BEGINNING CASH", report.beginningCash);
     row("NET CHANGE", report.netChange);
+    if (report.historicalRecoveryBridge) {
+      row("HISTORICAL RECOVERY BRIDGE (NOT CFO/CFI/CFF)", report.historicalRecoveryBridge);
+    }
     row("ENDING CASH", report.endingCash);
+    for (const warning of report.coverage?.warnings ?? []) row("COVERAGE WARNING", warning);
   } else {
     throw new Error("Unsupported report shape");
   }

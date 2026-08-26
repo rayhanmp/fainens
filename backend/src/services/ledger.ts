@@ -15,7 +15,7 @@ export type JournalLineInput = {
   debit: number; // cents
   credit: number; // cents
   description?: string;
-  cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | null;
+  cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | "recovery" | null;
 };
 
 export type CategoryAllocationInput = { categoryId: number; amount: number };
@@ -80,12 +80,13 @@ function normalBalanceSign(accountType: string): 1 | -1 {
 const SYSTEM_KEYS = {
   autoIncome: "auto-income",
   autoExpense: "auto-expense",
+  historicalRecoveryEquity: "historical-recovery-equity",
 } as const;
 
 async function getOrCreateSystemAccount(
   systemKey: string,
   name: string,
-  type: "revenue" | "expense",
+  type: "revenue" | "expense" | "equity",
   dbLike: any,
 ): Promise<{ id: number }> {
   const [existing] = await dbLike
@@ -129,6 +130,20 @@ export async function getOrCreateAutoIncomeAccount(dbLike: any = defaultDb): Pro
 
 export async function getOrCreateAutoExpenseAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
   return getOrCreateSystemAccount(SYSTEM_KEYS.autoExpense, "Expense (Auto)", "expense", dbLike);
+}
+
+/**
+ * Counterpart for a user-approved return-after-absence balance bridge. It is
+ * equity deliberately: unknown historical movement is neither income nor an
+ * expense and must not contaminate cash-flow or budget reporting.
+ */
+export async function getOrCreateHistoricalRecoveryEquityAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
+  return getOrCreateSystemAccount(
+    SYSTEM_KEYS.historicalRecoveryEquity,
+    "Historical recovery adjustment",
+    "equity",
+    dbLike,
+  );
 }
 
 export type SimpleTransactionKind = "expense" | "income" | "transfer";
@@ -457,6 +472,9 @@ export async function prepareJournalEntry(
     }
     if (account?.liquidityClass !== "cash_equivalent" && line.cashFlowClass != null) {
       throw new Error(`cashFlowClass may be set only on cash-equivalent account lines (account ${line.accountId})`);
+    }
+    if (line.cashFlowClass === "recovery" && input.txType !== "historical_recovery_adjustment") {
+      throw new Error("cashFlowClass recovery is reserved for the recovery reconciliation workflow");
     }
   }
   const accountTypeById = new Map([...accountById].map(([id, account]) => [id, account.type]));

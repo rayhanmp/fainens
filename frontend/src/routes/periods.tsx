@@ -9,7 +9,7 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/utils';
-import { Plus, Calendar, ChevronRight, Edit2, Trash2, TrendingUp, Wallet, Lock, LockOpen } from 'lucide-react';
+import { Plus, Calendar, ChevronRight, Edit2, Trash2, TrendingUp, Wallet, Lock, LockOpen, History } from 'lucide-react';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 
 export const Route = createFileRoute('/periods')({
@@ -24,6 +24,8 @@ interface Period {
   status: 'open' | 'closed';
   closedAt: number | null;
   reopenedAt: number | null;
+  coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
+  coverageReason: string | null;
 }
 
 function PeriodsPage() {
@@ -46,6 +48,10 @@ function PeriodsPage() {
   });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returnDate, setReturnDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [returnPreview, setReturnPreview] = useState<Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>>([]);
+  const [returnError, setReturnError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -202,6 +208,47 @@ function PeriodsPage() {
     setFormError('');
   };
 
+  const loadReturnPreview = async (date = returnDate) => {
+    setReturnError('');
+    const asOfDate = new Date(`${date}T23:59:59.999`).getTime();
+    try {
+      const result = await api.periods.returnPreview(asOfDate);
+      if (result.reason) {
+        setReturnPreview([]);
+        setReturnError(result.reason);
+      } else {
+        setReturnPreview(result.candidates);
+      }
+    } catch (err) {
+      setReturnPreview([]);
+      setReturnError((err as Error).message);
+    }
+  };
+
+  const openReturnModal = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    setReturnDate(date);
+    setReturnPreview([]);
+    setReturnError('');
+    setIsReturnModalOpen(true);
+    void loadReturnPreview(date);
+  };
+
+  const createReturnBackfill = async () => {
+    const asOfDate = new Date(`${returnDate}T23:59:59.999`).getTime();
+    setIsSubmitting(true);
+    setReturnError('');
+    try {
+      await api.periods.createReturnBackfill(asOfDate);
+      await loadData();
+      setIsReturnModalOpen(false);
+    } catch (err) {
+      setReturnError((err as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <RequireAuth>
       <PageContainer>
@@ -211,6 +258,10 @@ function PeriodsPage() {
             title="Salary Periods"
           />
           <div className="flex gap-2">
+            <Button onClick={openReturnModal} variant="secondary">
+              <History className="w-4 h-4 mr-2" />
+              Returning After a Break
+            </Button>
             <Button onClick={handleAutoCreate} isLoading={isSubmitting} variant="secondary">
               <Plus className="w-4 h-4 mr-2" />
               Auto-Create Next
@@ -256,6 +307,13 @@ function PeriodsPage() {
                       ? 'border-[var(--color-warning)] text-[var(--color-warning)]'
                       : 'border-[var(--color-success)] text-[var(--color-success)]'}`}>
                       {period.status === 'closed' ? 'CLOSED' : 'OPEN'}
+                    </span>
+                    <span className={`ml-2 inline-flex mt-2 px-2 py-0.5 text-xs font-mono border ${period.coverageStatus === 'complete'
+                      ? 'border-[var(--color-success)] text-[var(--color-success)]'
+                      : period.coverageStatus === 'partial'
+                        ? 'border-[var(--color-warning)] text-[var(--color-warning)]'
+                        : 'border-[var(--ref-outline)] text-[var(--ref-on-surface-variant)]'}`} title={period.coverageReason ?? undefined}>
+                      {period.coverageStatus.toUpperCase()} COVERAGE
                     </span>
                   </div>
                   <div className="flex gap-1">
@@ -322,6 +380,45 @@ function PeriodsPage() {
         )}
 
         {/* Modal */}
+        <Modal
+          isOpen={isReturnModalOpen}
+          onClose={() => setIsReturnModalOpen(false)}
+          title="Return after an untracked break"
+          subtitle="Create period headers that explicitly say activity was not tracked. This creates no transactions, budgets, or opening balances."
+        >
+          <div className="space-y-4">
+            <Input
+              label="Return / balance snapshot date"
+              type="date"
+              value={returnDate}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(event) => {
+                setReturnDate(event.target.value);
+                void loadReturnPreview(event.target.value);
+              }}
+            />
+            {returnError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{returnError}</p>}
+            {!returnError && (
+              <div className="rounded-md border border-[var(--color-border)] p-3 text-sm">
+                {returnPreview.length === 0 ? (
+                  <p className="text-[var(--color-text-secondary)]">No missing periods were found before this date.</p>
+                ) : (
+                  <>
+                    <p className="mb-2 font-semibold">{returnPreview.length} periods will be created as skipped coverage</p>
+                    <ul className="max-h-48 space-y-1 overflow-auto text-[var(--color-text-secondary)]">
+                      {returnPreview.map((period) => <li key={period.startDate}>{period.name}{period.isCurrent ? ' · current period remains open' : ' · closed skipped period'}</li>)}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-[var(--color-text-secondary)]">After this, use Accounts → Reconciliation and select “I am returning after an untracked period” to record your actual balances.</p>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setIsReturnModalOpen(false)}>Cancel</Button>
+              <Button onClick={createReturnBackfill} isLoading={isSubmitting} disabled={returnPreview.length === 0 || !!returnError}>Create skipped periods</Button>
+            </div>
+          </div>
+        </Modal>
         <Modal
           isOpen={isModalOpen}
           onClose={closeModal}

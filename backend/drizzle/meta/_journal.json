@@ -127,6 +127,13 @@
       "when": 1787705739152,
       "tag": "0017_premium_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1787709244075,
+      "tag": "0018_sharp_patch",
+      "breakpoints": true
     }
   ]
 }

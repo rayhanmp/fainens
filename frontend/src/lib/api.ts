@@ -200,11 +200,26 @@ export const api = {
       }),
     voidReconciliation: (id: number, reason: string) =>
       fetchApi(`/reconciliation/${id}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    recoveryReconcile: (data: {
+      balances: Array<{ accountId: number; actualBalance: number }>;
+      asOfDate: number;
+      acknowledgement: string;
+      note?: string | null;
+      confirmed: true;
+    }) => fetchApi<{
+      success: boolean;
+      message: string;
+      session: { id: number; asOfDate: number; status: string; kind: 'recovery' };
+      results: Array<{ accountId: number; ledgerBalance: number; actualBalance: number; difference: number }>;
+      recoveryTransactionId: number | null;
+    }>('/reconciliation/recovery', { method: 'POST', body: JSON.stringify(data) }),
     reconciliationHistory: (limit = 10) => fetchApi<{
       sessions: Array<{
         id: number;
         asOfDate: number;
-        status: 'reconciled' | 'needs_classification';
+        status: 'reconciled' | 'needs_classification' | 'recovered';
+        kind: 'control' | 'recovery';
+        note: string | null;
         lifecycleStatus: 'active' | 'voided';
         voidedAt: number | null;
         voidReason: string | null;
@@ -457,6 +472,8 @@ export const api = {
       status: 'open' | 'closed';
       closedAt: number | null;
       reopenedAt: number | null;
+      coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
+      coverageReason: string | null;
     }>>('/periods'),
     get: (id: number) => fetchApi(`/periods/${id}`),
     create: (data: { name: string; startDate: string; endDate: string }) =>
@@ -466,6 +483,16 @@ export const api = {
     delete: (id: number) => fetchApi(`/periods/${id}`, { method: 'DELETE' }),
     close: (id: number) => fetchApi(`/periods/${id}/close`, { method: 'POST' }),
     reopen: (id: number) => fetchApi(`/periods/${id}/reopen`, { method: 'POST' }),
+    returnPreview: (asOfDate: number) => fetchApi<{
+      candidates: Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>;
+      reason?: string;
+    }>(`/periods/return-preview?asOfDate=${asOfDate}`),
+    createReturnBackfill: (asOfDate: number) => fetchApi<{
+      periods: Array<{ id: number; name: string; startDate: number; endDate: number; coverageStatus: 'skipped' }>;
+      message: string;
+    }>('/periods/return-backfill', { method: 'POST', body: JSON.stringify({ asOfDate, confirmed: true }) }),
+    setCoverage: (id: number, data: { coverageStatus: 'partial' | 'complete'; reason: string; reviewed?: boolean }) =>
+      fetchApi(`/periods/${id}/coverage`, { method: 'POST', body: JSON.stringify(data) }),
     suggestNext: () => fetchApi<{
       suggestedName: string;
       suggestedStartDate: string;
@@ -1064,9 +1091,11 @@ export const api = {
         netInvesting: number;
         netFinancing: number;
         netChange: number;
+        historicalRecoveryBridge?: number;
         beginningCash: number;
         endingCash: number;
         periodName?: string;
+        coverage?: { isComparable: boolean; warnings: string[] };
       }>(`/reports/cash-flow?${params.toString()}`);
     },
     spending: (periodId?: number, startDate?: number, endDate?: number) => {

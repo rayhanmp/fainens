@@ -7,6 +7,7 @@ import { computeAccountBalance, computeAccountBalanceRolledUp } from "../service
 import { precomputeAccountBalance } from "../cache/precompute";
 import { calculateReconciliationItem } from "../services/reconciliation";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
+import { createRecoveryReconciliation } from "../services/recovery-reconciliation";
 
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
 const liquidityClassEnum = ["cash_equivalent", "receivable", "investment", "non_cash"] as const;
@@ -301,6 +302,7 @@ export default async function (fastify: FastifyInstance) {
       actualBalance: reconciliationItems.actualBalance,
       difference: reconciliationItems.difference,
       status: reconciliationItems.status,
+      correctionTransactionId: reconciliationItems.correctionTransactionId,
     }).from(reconciliationItems)
       .innerJoin(accounts, eq(reconciliationItems.accountId, accounts.id))
       .where(inArray(reconciliationItems.sessionId, sessionIds));
@@ -432,6 +434,43 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
+  // Return-after-absence recovery is intentionally separate from an ordinary
+  // reconciliation. It requires a full asset/liability snapshot and posts an
+  // approved equity bridge rather than inventing historical income or spend.
+  fastify.post("/api/reconciliation/recovery", async (request, reply) => {
+    const body = request.body as {
+      balances?: Array<{ accountId: number; actualBalance: number }>;
+      asOfDate?: number;
+      acknowledgement?: string;
+      note?: string | null;
+      confirmed?: boolean;
+    };
+    if (body.confirmed !== true) {
+      return reply.code(400).send({ error: "confirmed: true is required to post a historical recovery adjustment" });
+    }
+    try {
+      const result = await createRecoveryReconciliation({
+        balances: body.balances ?? [],
+        asOfDate: body.asOfDate ?? Date.now(),
+        acknowledgement: typeof body.acknowledgement === "string" ? body.acknowledgement : "",
+        note: typeof body.note === "string" ? body.note : null,
+      });
+      return reply.code(201).send({
+        success: true,
+        session: result.session,
+        results: result.items,
+        recoveryTransactionId: result.recoveryTransactionId,
+        message: result.recoveryTransactionId == null
+          ? "Balances already matched; recovery evidence was recorded without an adjustment journal"
+          : "A historical recovery bridge was posted. It is not income, expense, budget actual, or classified cash flow.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create recovery reconciliation";
+      const retryable = message.includes("changed while preparing");
+      return reply.code(retryable ? 409 : 400).send({ error: message });
+    }
+  });
+
   // A reconciliation is control evidence, not a journal. If an entered bank
   // balance was wrong, retain that evidence and explicitly void it rather than
   // deleting it or manufacturing an accounting reversal.
@@ -450,6 +489,9 @@ export default async function (fastify: FastifyInstance) {
         const session = tx.select().from(reconciliationSessions)
           .where(eq(reconciliationSessions.id, sessionId)).limit(1).all()[0];
         if (!session) throw new Error("Reconciliation session not found");
+        if (session.kind === "recovery") {
+          throw new Error("Recovery reconciliations cannot be voided; create a later recovery correction so the ledger remains auditable");
+        }
         if (session.lifecycleStatus !== "active") throw new Error("Reconciliation session is already voided");
         const updated = tx.update(reconciliationSessions)
           .set({ lifecycleStatus: "voided", voidedAt: new Date(), voidReason: reason })

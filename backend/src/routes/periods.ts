@@ -7,6 +7,42 @@ import { precomputePeriodSummary } from "../cache/precompute";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { inclusivePeriodEnd } from "../services/period-locking";
 
+const MAX_RETURN_BACKFILL_PERIODS = 120;
+
+type ReturnPeriodCandidate = { name: string; startDate: number; endDate: number; isCurrent: boolean };
+
+function followingPeriod(startDate: number, asOfDate: number): ReturnPeriodCandidate {
+  const end = new Date(startDate);
+  end.setMonth(end.getMonth() + 1);
+  end.setDate(end.getDate() - 1);
+  return {
+    name: `${end.toLocaleString("default", { month: "long" })} ${end.getFullYear()}`,
+    startDate,
+    endDate: end.getTime(),
+    isCurrent: asOfDate <= inclusivePeriodEnd(end.getTime()),
+  };
+}
+
+async function buildReturnBackfillPreview(asOfDate: number): Promise<{ candidates: ReturnPeriodCandidate[]; reason?: string }> {
+  const [latest] = await db.select({ endDate: salaryPeriods.endDate })
+    .from(salaryPeriods).orderBy(desc(salaryPeriods.endDate)).limit(1);
+  if (!latest) {
+    return { candidates: [], reason: "No prior accounting period exists, so the product cannot infer a safe missing-period cadence." };
+  }
+  let nextStart = inclusivePeriodEnd(Number(latest.endDate)) + 1;
+  if (nextStart > asOfDate) return { candidates: [] };
+  const candidates: ReturnPeriodCandidate[] = [];
+  while (nextStart <= asOfDate && candidates.length < MAX_RETURN_BACKFILL_PERIODS) {
+    const candidate = followingPeriod(nextStart, asOfDate);
+    candidates.push(candidate);
+    nextStart = inclusivePeriodEnd(candidate.endDate) + 1;
+  }
+  if (nextStart <= asOfDate) {
+    return { candidates: [], reason: `Refusing to infer more than ${MAX_RETURN_BACKFILL_PERIODS} periods at once.` };
+  }
+  return { candidates };
+}
+
 async function assertNoPeriodOverlap(startMs: number, endMs: number, excludeId?: number): Promise<void> {
   const periods = await db.select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
     .from(salaryPeriods);
@@ -71,6 +107,70 @@ export default async function (fastify: FastifyInstance) {
       summary,
       budgets,
     };
+  });
+
+  // Read-only first step of the return-after-absence workflow. Nothing is
+  // created merely by opening a screen or calling this endpoint.
+  fastify.get("/api/periods/return-preview", async (request, reply) => {
+    const rawAsOf = (request.query as { asOfDate?: string }).asOfDate;
+    const asOfDate = rawAsOf == null ? Date.now() : Number(rawAsOf);
+    if (!Number.isSafeInteger(asOfDate) || asOfDate < 0 || asOfDate > Date.now()) {
+      return reply.code(400).send({ error: "asOfDate must be a current or historical timestamp" });
+    }
+    return buildReturnBackfillPreview(asOfDate);
+  });
+
+  // Explicitly create the missing period headers as skipped coverage. Older
+  // shells are closed because the user chose not to backfill activity; the
+  // current shell stays open for a recovery reconciliation or selective import.
+  fastify.post("/api/periods/return-backfill", async (request, reply) => {
+    const body = request.body as { asOfDate?: number; confirmed?: boolean };
+    if (body.confirmed !== true) {
+      return reply.code(400).send({ error: "confirmed: true is required to create skipped period shells" });
+    }
+    const asOfDate = body.asOfDate ?? Date.now();
+    if (!Number.isSafeInteger(asOfDate) || asOfDate < 0 || asOfDate > Date.now()) {
+      return reply.code(400).send({ error: "asOfDate must be a current or historical timestamp" });
+    }
+    const preview = await buildReturnBackfillPreview(asOfDate);
+    if (preview.reason) return reply.code(409).send({ error: preview.reason });
+    if (preview.candidates.length === 0) return reply.send({ periods: [], message: "No missing periods to create" });
+    try {
+      const created = db.transaction((tx) => {
+        const existing = tx.select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+          .from(salaryPeriods).all();
+        for (const candidate of preview.candidates) {
+          const overlap = existing.some((period: any) => candidate.startDate <= inclusivePeriodEnd(Number(period.endDate)) && Number(period.startDate) <= inclusivePeriodEnd(candidate.endDate));
+          if (overlap) throw new Error("Accounting periods changed while preparing return backfill; review and retry");
+        }
+        const now = new Date();
+        const inserted = preview.candidates.map((candidate) => {
+          const status = candidate.isCurrent ? "open" : "closed";
+          const row = tx.insert(salaryPeriods).values({
+            name: candidate.name,
+            startDate: candidate.startDate,
+            endDate: candidate.endDate,
+            status,
+            closedAt: candidate.isCurrent ? null : now,
+            coverageStatus: "skipped",
+            coverageReason: "return_after_absence",
+          }).returning().all()[0];
+          if (!row) throw new Error("Failed to create skipped period shell");
+          tx.insert(auditLogs).values({
+            entityType: "salary_period",
+            entityId: row.id,
+            action: "create_skipped_return_period",
+            afterSnapshot: Buffer.from(JSON.stringify(row)),
+          }).run();
+          return row;
+        });
+        bumpFinancialRevisionSync(tx);
+        return inserted;
+      });
+      return reply.code(201).send({ periods: created, message: "Skipped coverage periods were created; no transactions or budgets were fabricated" });
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to create skipped period shells" });
+    }
   });
 
   // Create salary period
@@ -166,6 +266,38 @@ export default async function (fastify: FastifyInstance) {
     await precomputePeriodSummary(parseInt(id));
 
     return updated;
+  });
+
+  // Coverage is a separate, deliberately reviewed assertion. It must never be
+  // inferred from an empty transaction list or from closing a period.
+  fastify.post("/api/periods/:id/coverage", async (request, reply) => {
+    const periodId = Number((request.params as { id: string }).id);
+    const body = request.body as { coverageStatus?: string; reason?: string; reviewed?: boolean };
+    const coverageStatus = body.coverageStatus;
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (!Number.isSafeInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "Invalid period ID" });
+    if (coverageStatus !== "partial" && coverageStatus !== "complete") {
+      return reply.code(400).send({ error: "coverageStatus must be partial or complete" });
+    }
+    if (reason.length < 3 || reason.length > 500) return reply.code(400).send({ error: "A coverage review reason of 3-500 characters is required" });
+    if (coverageStatus === "complete" && body.reviewed !== true) {
+      return reply.code(400).send({ error: "reviewed: true is required before marking coverage complete" });
+    }
+    try {
+      const updated = db.transaction((tx) => {
+        const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).all()[0];
+        if (!period) throw new Error("Period not found");
+        const row = tx.update(salaryPeriods).set({ coverageStatus, coverageReason: reason })
+          .where(eq(salaryPeriods.id, periodId)).returning().all()[0];
+        tx.insert(auditLogs).values({ entityType: "salary_period", entityId: periodId, action: "set_coverage", beforeSnapshot: Buffer.from(JSON.stringify(period)), afterSnapshot: Buffer.from(JSON.stringify(row)) }).run();
+        bumpFinancialRevisionSync(tx);
+        return row;
+      });
+      return reply.send(updated);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update period coverage";
+      return reply.code(message === "Period not found" ? 404 : 409).send({ error: message });
+    }
   });
 
   // Close a completed accounting period. Closing is deliberate, audited, and

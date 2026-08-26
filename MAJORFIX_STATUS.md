@@ -203,7 +203,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
-11. Add durable period-coverage backfill for return-after-absence: create explicitly skipped period shells and propagate coverage gaps through facts, reports, budgets, dashboard, and agent retrieval rather than treating absent tracking as zero activity.
+11. **Implemented core return-after-absence recovery.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Financial-facts agent retrieval and income/cash-flow reports now return coverage warnings. Remaining propagation work is budget/dashboard/PDF/trend presentation and richer guided import/catch-up steps.
 
 ## Return-after-absence period coverage policy
 
@@ -234,6 +234,26 @@ For every confirmed shell:
 - leave it open initially only if the user intends to backfill activity; otherwise close it after review according to the normal period-close policy.
 
 If the user later posts selected catch-up salary/subscription events or imports a partial statement into such a period, transition it to `partial`; do not silently promote it to `complete`. A deliberate period review/reconciliation workflow may later mark it `complete` only with an audited user decision.
+
+### Recovery reconciliation on return
+
+A conventional reconciliation remains **control evidence only**: it records an entered balance and the ledger difference, but does not manufacture an accounting entry. A user returning after an intentionally untracked span needs a separate, explicit **recovery reconciliation**. It is the opt-in recovery path for “my real balances are now these; I am not backfilling the gap.”
+
+The recovery session is one dated, auditable balance snapshot across every active material asset and liability account. It must reject a partial snapshot, because a change in one bank account could simply be a transfer from another omitted account. For each account, the service compares its normal-balance ledger amount at the selected `as_of_date` to the user-confirmed actual amount, then posts a single balanced `historical_recovery_adjustment` journal:
+
+```text
+BNI ledger balance at 31 Aug:   Rp7m
+BNI actual balance at 31 Aug:  Rp29m
+
+Dr BNI cash                                      Rp22m
+Cr Historical recovery adjustment (equity)       Rp22m
+```
+
+Liability differences use their normal balance in the opposite direction. The dedicated equity account is a disclosed bridge, not revenue, expense, a budget actual, or an operating/investing/financing cash flow. A cash-equivalent adjustment line is marked `recovery`, so cash-flow reports exclude it from CFO/CFI/CFF while still allowing beginning cash plus disclosed recovery bridge to reconcile to the actual ending cash.
+
+The API must require an explicit confirmation and a non-empty acknowledgement that the historical source of every residual is unknown. It stores the session kind, note, original ledger balance, actual balance, difference, generated transaction ID, and audit snapshot atomically. Repeating a recovery later is safe: it uses the updated ledger and creates only the remaining difference. A recovery session cannot be normally voided, because voiding evidence without reversing its journal would corrupt the ledger; a later approved recovery/correction is the audit-preserving remedy.
+
+If the as-of date falls in a skipped period, the posted recovery journal changes that period’s coverage to `partial`: it now contains a real current-balance bridge, but still does not claim complete activity. The user can subsequently import/classify transactions and explicitly review the period; no automatic action marks it complete.
 
 ### Read and insight semantics
 

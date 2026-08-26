@@ -523,7 +523,7 @@ RULES:
             debit: number;
             credit: number;
             description?: string;
-            cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | null;
+            cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | "recovery" | null;
           }>;
         }
       | {
@@ -611,6 +611,9 @@ RULES:
       }
 
       const { date, description, reference, notes, place, txType, linkedTxId, tagIds, categoryId, categoryAllocations, lines } = body;
+      if (txType != null && txType !== "manual") {
+        return reply.code(400).send({ error: "Manual journal creation cannot choose a system transaction type" });
+      }
       
       // Auto-detect period based on transaction date
       const dateMs = new Date(date).getTime();
@@ -649,6 +652,7 @@ RULES:
         "salary_income", "salary_correction", "subscription_renewal", "subscription_correction",
         "paylater_recognition", "paylater_interest", "paylater_settlement",
         "loan_lending", "loan_payment", "loan_writeoff", "split_bill_lent", "split_bill_borrowed",
+        "historical_recovery_adjustment",
       ].includes(original.txType)) {
         return reply.code(409).send({
           error: "This domain-owned transaction must use its dedicated correction workflow",
@@ -680,7 +684,7 @@ RULES:
           debit: line.credit,
           credit: line.debit,
           description: `Reversal of ${line.description ?? original.description}`,
-          cashFlowClass: line.cashFlowClass as "operating" | "investing" | "financing" | "transfer" | null,
+          cashFlowClass: line.cashFlowClass as "operating" | "investing" | "financing" | "transfer" | "recovery" | null,
         })),
       }, db);
 
