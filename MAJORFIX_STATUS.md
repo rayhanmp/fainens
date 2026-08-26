@@ -116,6 +116,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Reports use the newest period by default, inclusive selected-day boundaries, canonical all-period posted history, and guarded preview/download state. Cash-flow classification considers all counterparties and excludes loan receivables from liquidity.
 - Insight payloads carry their source revision; AI cards display provenance. Net-worth comparisons use the exact as-of date, and the lifestyle metric is labeled as an average spending ratio rather than marginal propensity to consume.
 - Cache precomputation refuses to publish a result if the financial revision changes mid-read. Empty queries and old runway cache shapes are handled safely; zero burn is represented as `runwayMonths: null` with `isUnbounded: true` instead of an ambiguous JSON infinity/null.
+
+### Dashboard decision-surface revamp
+
+- The dashboard now separates current position from selected-period activity: available cash is the canonical `cash_equivalent` balance, net worth remains all assets less liabilities, and each period metric discloses its as-of timestamp and coverage state.
+- A decision queue highlights ledger imbalance, stale or missing reconciliation, skipped/partial/unknown period coverage, overdue loans/PayLater, upcoming subscriptions, budget overruns/projections, and unallocated spending, with direct links to the appropriate workflow.
+- Duplicate expense widgets were consolidated into a plan-versus-actual category view with pace-based end-of-period projections. Recent user-facing activity, net-worth trend, data-confidence notes, and the agent entry point remain distinct surfaces.
 - Salary now has a read-only catch-up preview plus explicit post/skip occurrence actions, including a requested historical occurrence date, so a user returning after months away can recover missing payroll without page-load side effects.
 - Account deletion now blocks system accounts, non-zero balances, and parents with children. Budget and period queries use the same assigned-or-date scope and full-day semantics.
 

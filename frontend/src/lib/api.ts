@@ -69,6 +69,14 @@ export type AgentFinancialFacts = {
       walletBalanceCents: number;
       byCategory: Array<{ categoryId: number | null; category: string; spentCents: number }>;
     };
+    coverage: {
+      complete: number[];
+      partial: number[];
+      skipped: number[];
+      unknown: number[];
+      isComparable: boolean;
+      warnings: string[];
+    };
   };
 };
 
@@ -710,9 +718,11 @@ export const api = {
         totalAssets: number;
         totalLiabilities: number;
         netWorth: number;
+        liquidAssets: number;
+        illiquidAssets: number;
       };
       burnRate: { grossBurnRate: number; period: string };
-      runway: { runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number };
+      runway: { runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number; grossBurnRate: number };
       trialBalance: { totalDebits: number; totalCredits: number; isBalanced: boolean };
     }>('/analytics/dashboard'),
     netWorth: () => fetchApi('/analytics/net-worth'),
