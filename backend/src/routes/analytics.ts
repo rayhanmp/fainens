@@ -13,7 +13,7 @@ import { precomputePeriodSummary } from "../cache/precompute";
 import { db } from "../db/client";
 import { asc } from "drizzle-orm";
 import { salaryPeriods } from "../db/schema";
-import { getNetWorthTrend, type NetWorthRange } from "../services/analytics";
+import { getNetWorthTrend, getSpendingTrend, type NetWorthRange } from "../services/analytics";
 
 export default async function (fastify: FastifyInstance) {
   // All routes require authentication
@@ -35,6 +35,16 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
     return getNetWorthTrend(r as NetWorthRange);
+  });
+
+  /** Rolling daily posted expense activity. */
+  fastify.get("/api/analytics/spending-trend", async (_request, reply) => {
+    try {
+      return await getSpendingTrend(30);
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: "Failed to load spending trend" });
+    }
   });
 
   // Get burn rate

@@ -1,4 +1,4 @@
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, ne, notInArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactionLines, transactions, salaryPeriods, budgetPlans } from "../db/schema";
 import {
@@ -6,6 +6,8 @@ import {
   computeAccountBalanceAsOf,
   computeAccountBalanceRolledUp,
 } from "./ledger";
+
+const DAY_MS = 86_400_000;
 
 // Types for analytics results
 export interface NetWorthResult {
@@ -44,6 +46,95 @@ export interface DashboardAnalytics {
   burnRate: BurnRateResult;
   runway: RunwayResult;
   trialBalance: { isBalanced: boolean };
+}
+
+export interface SpendingTrendPoint {
+  label: string;
+  startMs: number;
+  endMs: number;
+  spent: number;
+  transactionCount: number;
+  coverageStatus: "complete" | "partial" | "skipped" | "unknown";
+}
+
+/** Daily posted expense activity for a rolling window. Values are canonical
+ * expense-account effects, not inferred from transaction types or balances. */
+export async function getSpendingTrend(dayCount: number = 30): Promise<{
+  range: "30d";
+  bucketCount: number;
+  totalSpent: number;
+  averageDailySpend: number;
+  hasIncompleteCoverage: boolean;
+  series: SpendingTrendPoint[];
+}> {
+  const count = Math.max(1, Math.min(90, Math.trunc(dayCount)));
+  const now = Date.now();
+  const firstDay = new Date();
+  firstDay.setHours(0, 0, 0, 0);
+  firstDay.setDate(firstDay.getDate() - (count - 1));
+  const firstStartMs = firstDay.getTime();
+
+  const expenseAccounts = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.type, "expense"));
+  const expenseAccountIds = expenseAccounts.map((account) => account.id);
+
+  const rows = expenseAccountIds.length === 0
+    ? []
+    : await db
+      .select({
+        date: transactions.date,
+        transactionId: transactions.id,
+        amount: sql<number>`max(0, ${transactionLines.debit} - ${transactionLines.credit})`,
+      })
+      .from(transactionLines)
+      .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+      .where(and(
+        sql`${transactions.date} >= ${firstStartMs}`,
+        sql`${transactions.date} <= ${now}`,
+        ne(transactions.status, "draft"),
+        ne(transactions.status, "reversed"),
+        notInArray(transactions.txType, ["paylater_settlement", "simple_transfer", "reversal", "domain_reversal"]),
+        sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
+      ));
+
+  const periods = await db
+    .select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus })
+    .from(salaryPeriods)
+      .where(sql`${salaryPeriods.endDate} >= ${firstStartMs} AND ${salaryPeriods.startDate} <= ${now}`);
+  const transactionIdsByPoint = Array.from({ length: count }, () => new Set<number>());
+  const points: SpendingTrendPoint[] = Array.from({ length: count }, (_, index) => {
+    const startMs = firstStartMs + index * DAY_MS;
+    const endMs = Math.min(now, startMs + DAY_MS - 1);
+    const period = periods.find((candidate) => Number(candidate.startDate) <= startMs && Number(candidate.endDate) + DAY_MS - 1 >= startMs);
+    return {
+      label: new Date(startMs).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      startMs,
+      endMs,
+      spent: 0,
+      transactionCount: 0,
+      coverageStatus: (period?.coverageStatus as SpendingTrendPoint["coverageStatus"] | undefined) ?? "unknown",
+    };
+  });
+  for (const row of rows) {
+    const timestamp = row.date instanceof Date ? row.date.getTime() : Number(row.date);
+    const index = Math.floor((timestamp - firstStartMs) / DAY_MS);
+    const point = points[index];
+    if (!point) continue;
+    point.spent += Math.max(0, Number(row.amount) || 0);
+    transactionIdsByPoint[index]?.add(Number(row.transactionId));
+    point.transactionCount = transactionIdsByPoint[index]?.size ?? point.transactionCount;
+  }
+  const totalSpent = points.reduce((sum, point) => sum + point.spent, 0);
+  return {
+    range: "30d",
+    bucketCount: points.length,
+    totalSpent,
+    averageDailySpend: Math.round(totalSpent / points.length),
+    hasIncompleteCoverage: points.some((point) => point.coverageStatus !== "complete"),
+    series: points,
+  };
 }
 
 // Calculate net worth: Assets - Liabilities

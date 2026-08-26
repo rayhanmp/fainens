@@ -760,6 +760,21 @@ export const api = {
         }>;
       }>(`/analytics/net-worth-trend${qs ? `?${qs}` : ''}`);
     },
+    spendingTrend: () => fetchApi<{
+      range: '30d';
+      bucketCount: number;
+      totalSpent: number;
+      averageDailySpend: number;
+      hasIncompleteCoverage: boolean;
+      series: Array<{
+        label: string;
+        startMs: number;
+        endMs: number;
+        spent: number;
+        transactionCount: number;
+        coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
+      }>;
+    }>('/analytics/spending-trend'),
     burnRate: () => fetchApi('/analytics/burn-rate'),
     runway: () => fetchApi<{ runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number }>('/analytics/runway'),
     accountBalance: (accountId: number) => fetchApi<{ accountId: number; balance: number }>(`/analytics/account-balance/${accountId}`),
