@@ -13,6 +13,7 @@ import {
   X,
   Settings,
   LogOut,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../lib/auth';
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/loans', label: 'Loans', icon: Users },
   { to: '/salary-income', label: 'Salary & Income', icon: Banknote },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
+  { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
 ] as const;

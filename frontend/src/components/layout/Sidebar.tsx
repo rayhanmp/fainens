@@ -12,6 +12,7 @@ import {
   Banknote,
   Users,
   Calculator,
+  Sparkles,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useAuth } from '../../lib/auth';
@@ -37,6 +38,7 @@ const topNav: NavItem[] = [
 
 /** Everything after the divider */
 const restNav: NavItem[] = [
+  { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
