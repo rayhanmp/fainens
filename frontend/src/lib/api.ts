@@ -631,10 +631,18 @@ export const api = {
       candidates: Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>;
       reason?: string;
     }>(`/periods/return-preview?asOfDate=${asOfDate}`),
-    createReturnBackfill: (asOfDate: number) => fetchApi<{
-      periods: Array<{ id: number; name: string; startDate: number; endDate: number; coverageStatus: 'skipped' }>;
+    createReturnBackfill: (asOfDate: number, currentPeriodCoverage: 'partial' | 'complete' = 'partial') => fetchApi<{
+      periods: Array<{ id: number; name: string; startDate: number; endDate: number; coverageStatus: 'complete' | 'partial' | 'skipped' }>;
       message: string;
-    }>('/periods/return-backfill', { method: 'POST', body: JSON.stringify({ asOfDate, confirmed: true }) }),
+    }>('/periods/return-backfill', {
+      method: 'POST',
+      body: JSON.stringify({
+        asOfDate,
+        confirmed: true,
+        currentPeriodCoverage,
+        reviewedCurrentPeriod: currentPeriodCoverage === 'complete',
+      }),
+    }),
     setCoverage: (id: number, data: { coverageStatus: 'partial' | 'complete'; reason: string; reviewed?: boolean }) =>
       fetchApi(`/periods/${id}/coverage`, { method: 'POST', body: JSON.stringify(data) }),
     suggestNext: () => fetchApi<{

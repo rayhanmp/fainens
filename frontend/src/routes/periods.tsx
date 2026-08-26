@@ -52,6 +52,7 @@ function PeriodsPage() {
   const [returnDate, setReturnDate] = useState(() => toLocalDateInputValue());
   const [returnPreview, setReturnPreview] = useState<Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>>([]);
   const [returnError, setReturnError] = useState('');
+  const [returnStartedAtPeriodStart, setReturnStartedAtPeriodStart] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -235,6 +236,7 @@ function PeriodsPage() {
     setReturnDate(date);
     setReturnPreview([]);
     setReturnError('');
+    setReturnStartedAtPeriodStart(false);
     setIsReturnModalOpen(true);
     void loadReturnPreview(date);
   };
@@ -248,7 +250,7 @@ function PeriodsPage() {
     setIsSubmitting(true);
     setReturnError('');
     try {
-      await api.periods.createReturnBackfill(asOfDate);
+      await api.periods.createReturnBackfill(asOfDate, returnStartedAtPeriodStart ? 'complete' : 'partial');
       await loadData();
       setIsReturnModalOpen(false);
     } catch (err) {
@@ -421,10 +423,24 @@ function PeriodsPage() {
                 )}
               </div>
             )}
+            {returnPreview.some((period) => period.isCurrent) && !returnError && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--color-border)] p-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={returnStartedAtPeriodStart}
+                  onChange={(event) => setReturnStartedAtPeriodStart(event.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block font-semibold">I resumed tracking at the start of this current period</span>
+                  <span className="block text-[var(--color-text-secondary)]">Mark only the current period as complete. Use this only if all its activity is being tracked; earlier missing periods remain skipped.</span>
+                </span>
+              </label>
+            )}
             <p className="text-xs text-[var(--color-text-secondary)]">After this, use Accounts → Reconciliation and select “I am returning after an untracked period” to record your actual balances.</p>
             <div className="flex justify-end gap-3">
               <Button variant="secondary" onClick={() => setIsReturnModalOpen(false)}>Cancel</Button>
-              <Button onClick={createReturnBackfill} isLoading={isSubmitting} disabled={returnPreview.length === 0 || !!returnError}>Create skipped periods</Button>
+              <Button onClick={createReturnBackfill} isLoading={isSubmitting} disabled={returnPreview.length === 0 || !!returnError}>{returnStartedAtPeriodStart ? 'Create periods and mark current complete' : 'Create skipped periods'}</Button>
             </div>
           </div>
         </Modal>

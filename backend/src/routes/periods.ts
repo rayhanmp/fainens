@@ -121,17 +121,29 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Explicitly create missing historical period headers as skipped coverage.
-  // The active return period is not a skipped absence: the user is starting to
-  // record it now, but any earlier slice still needs review, so it begins
-  // partial until they explicitly mark coverage complete.
+  // The active return period is normally partial. A user who resumed at its
+  // start can explicitly attest that the whole period is captured and mark
+  // that one current period complete while creating the return shells.
   fastify.post("/api/periods/return-backfill", async (request, reply) => {
-    const body = request.body as { asOfDate?: number; confirmed?: boolean };
+    const body = request.body as {
+      asOfDate?: number;
+      confirmed?: boolean;
+      currentPeriodCoverage?: "partial" | "complete";
+      reviewedCurrentPeriod?: boolean;
+    };
     if (body.confirmed !== true) {
       return reply.code(400).send({ error: "confirmed: true is required to create skipped period shells" });
     }
     const asOfDate = body.asOfDate ?? Date.now();
     if (!Number.isSafeInteger(asOfDate) || asOfDate < 0 || asOfDate > Date.now()) {
       return reply.code(400).send({ error: "asOfDate must be a current or historical timestamp" });
+    }
+    const currentPeriodCoverage = body.currentPeriodCoverage ?? "partial";
+    if (currentPeriodCoverage !== "partial" && currentPeriodCoverage !== "complete") {
+      return reply.code(400).send({ error: "currentPeriodCoverage must be partial or complete" });
+    }
+    if (currentPeriodCoverage === "complete" && body.reviewedCurrentPeriod !== true) {
+      return reply.code(400).send({ error: "reviewedCurrentPeriod: true is required to mark the current return period complete" });
     }
     const preview = await buildReturnBackfillPreview(asOfDate);
     if (preview.reason) return reply.code(409).send({ error: preview.reason });
@@ -147,8 +159,10 @@ export default async function (fastify: FastifyInstance) {
         const now = new Date();
         const inserted = preview.candidates.map((candidate) => {
           const status = candidate.isCurrent ? "open" : "closed";
-          const coverageStatus = candidate.isCurrent ? "partial" : "skipped";
-          const coverageReason = candidate.isCurrent ? "return_started_current_period" : "return_after_absence";
+          const coverageStatus = candidate.isCurrent ? currentPeriodCoverage : "skipped";
+          const coverageReason = candidate.isCurrent
+            ? currentPeriodCoverage === "complete" ? "return_started_at_period_start" : "return_started_current_period"
+            : "return_after_absence";
           const row = tx.insert(salaryPeriods).values({
             name: candidate.name,
             startDate: candidate.startDate,
@@ -162,7 +176,9 @@ export default async function (fastify: FastifyInstance) {
           tx.insert(auditLogs).values({
             entityType: "salary_period",
             entityId: row.id,
-            action: candidate.isCurrent ? "create_return_current_period" : "create_skipped_return_period",
+            action: candidate.isCurrent
+              ? currentPeriodCoverage === "complete" ? "create_complete_return_current_period" : "create_return_current_period"
+              : "create_skipped_return_period",
             afterSnapshot: Buffer.from(JSON.stringify(row)),
           }).run();
           return row;
@@ -170,7 +186,10 @@ export default async function (fastify: FastifyInstance) {
         bumpFinancialRevisionSync(tx);
         return inserted;
       });
-      return reply.code(201).send({ periods: created, message: "Historical gaps were created as skipped; the active return period is partial until reviewed. No transactions or budgets were fabricated." });
+      const currentPeriodMessage = currentPeriodCoverage === "complete"
+        ? "the current period was marked complete based on your reviewed start-of-period return"
+        : "the active return period is partial until reviewed";
+      return reply.code(201).send({ periods: created, message: `Historical gaps were created as skipped; ${currentPeriodMessage}. No transactions or budgets were fabricated.` });
     } catch (error) {
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to create skipped period shells" });
     }
