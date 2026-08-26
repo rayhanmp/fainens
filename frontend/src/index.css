@@ -269,6 +269,115 @@ h6 {
   animation: focusRingGlow 0.3s ease-out;
 }
 
+/* Agent answers: safe Markdown, GFM tables, and KaTeX math. */
+.agent-markdown {
+  line-height: 1.55;
+}
+
+.agent-markdown > :first-child {
+  margin-top: 0;
+}
+
+.agent-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-markdown p,
+.agent-markdown ul,
+.agent-markdown ol,
+.agent-markdown blockquote,
+.agent-markdown pre,
+.agent-markdown table {
+  margin: 0.7rem 0;
+}
+
+.agent-markdown h1,
+.agent-markdown h2,
+.agent-markdown h3,
+.agent-markdown h4 {
+  margin: 1rem 0 0.45rem;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.agent-markdown h1 { font-size: 1.25rem; }
+.agent-markdown h2 { font-size: 1.125rem; }
+.agent-markdown h3,
+.agent-markdown h4 { font-size: 1rem; }
+
+.agent-markdown ul,
+.agent-markdown ol {
+  padding-left: 1.35rem;
+}
+
+.agent-markdown ul { list-style: disc; }
+.agent-markdown ol { list-style: decimal; }
+.agent-markdown li + li { margin-top: 0.25rem; }
+
+.agent-markdown a {
+  color: var(--ref-primary);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.agent-markdown blockquote {
+  border-left: 3px solid var(--ref-outline-variant);
+  color: var(--color-text-secondary);
+  padding-left: 0.85rem;
+}
+
+.agent-markdown :not(pre) > code {
+  border-radius: 0.25rem;
+  background: var(--ref-surface-container-low);
+  padding: 0.1rem 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.agent-markdown pre {
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  padding: 0.75rem;
+}
+
+.agent-markdown pre code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.agent-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.agent-markdown th,
+.agent-markdown td {
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+
+.agent-markdown th {
+  background: var(--ref-surface-container-low);
+  font-weight: 700;
+}
+
+.agent-markdown tr:last-child td { border-bottom: 0; }
+
+.agent-markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0.8rem 0;
+  padding: 0.25rem 0;
+}
+
 /* Focus ring animation for all interactive elements */
 @keyframes focusRingGlow {
   0% {

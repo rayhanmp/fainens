@@ -17,6 +17,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Select } from '../components/ui/Select';
+import { MarkdownMessage } from '../components/agent/MarkdownMessage';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
@@ -334,7 +335,9 @@ function AgentPage() {
                   <div key={message.id} className={cn('flex gap-3', message.role === 'user' && 'justify-end')}>
                     {message.role === 'assistant' && <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><Bot className="h-4 w-4" /></span>}
                     <div className={cn('max-w-[90%] rounded-xl px-4 py-3 text-sm', message.role === 'user' ? 'bg-[var(--ref-primary-container)] text-white' : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)]')}>
-                      <p className="whitespace-pre-wrap leading-6">{message.text || (message.role === 'assistant' ? '…' : '')}</p>
+                      {message.role === 'assistant'
+                        ? <MarkdownMessage>{message.text || '…'}</MarkdownMessage>
+                        : <p className="whitespace-pre-wrap leading-6">{message.text}</p>}
                       {message.response && (
                         <>
                           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--color-text-secondary)]">
