@@ -120,6 +120,13 @@
       "when": 1787704445505,
       "tag": "0016_ancient_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1787705739152,
+      "tag": "0017_premium_strong_guy",
+      "breakpoints": true
     }
   ]
 }

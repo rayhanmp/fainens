@@ -81,6 +81,8 @@ export const transactionLines = sqliteTable("transaction_line", {
   debit: integer("debit").notNull().default(0), // cents
   credit: integer("credit").notNull().default(0), // cents
   description: text("description"),
+  /** Explicit cash-flow treatment for a cash-equivalent line. */
+  cashFlowClass: text("cash_flow_class"), // operating | investing | financing | transfer
 });
 
 /** Explicit category amounts for a journal; supports multi-category journals. */
@@ -307,6 +309,31 @@ export const auditLogs = sqliteTable("audit_log", {
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
 });
+
+/**
+ * Human-reviewed data-quality flags. Scanning is deliberately separate from
+ * correction: a candidate never changes a journal or account balance.
+ */
+export const moneyAnomalyReviews = sqliteTable("money_anomaly_review", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fingerprint: text("fingerprint").notNull().unique(),
+  kind: text("kind").notNull(), // possible_100x_pair | legacy_reconciliation_plug
+  transactionId: integer("transaction_id").notNull()
+    .references(() => transactions.id, { onDelete: "restrict" }),
+  relatedTransactionId: integer("related_transaction_id")
+    .references(() => transactions.id, { onDelete: "restrict" }),
+  detectedAmount: integer("detected_amount").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("open"), // open | resolved | dismissed
+  reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
+  reviewNote: text("review_note"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  statusIdx: index("idx_money_anomaly_review_status").on(table.status),
+  transactionIdx: index("idx_money_anomaly_review_transaction").on(table.transactionId),
+}));
 
 /** Singleton salary profile for payroll estimates (gross, PTKP, payday). */
 export const salarySettings = sqliteTable("salary_settings", {

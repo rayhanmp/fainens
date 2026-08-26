@@ -96,7 +96,7 @@ export async function applySubscriptionOccurrences(input: {
   if (subscriptionRows.length !== subscriptionIds.length) throw new Error("Subscription not found");
   const accountIds = [...new Set(subscriptionRows.map((row) => row.linkedAccountId))];
   const accountRows = await db
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(inArray(accounts.id, accountIds));
   const invalidAccount = accountRows.find(
@@ -163,7 +163,7 @@ export async function applySubscriptionOccurrences(input: {
             if (!transaction) throw new Error("Failed to post subscription renewal");
             const lines = [
               { transactionId: transaction.id, accountId: expenseAccount!.id, debit: subscription.amount, credit: 0 },
-              { transactionId: transaction.id, accountId: paymentAccount.id, debit: 0, credit: subscription.amount },
+              { transactionId: transaction.id, accountId: paymentAccount.id, debit: 0, credit: subscription.amount, cashFlowClass: paymentAccount.liquidityClass === "cash_equivalent" ? "operating" : null },
             ];
             tx.insert(transactionLines).values(lines).run();
             tx.update(recurringOccurrences)
@@ -244,7 +244,7 @@ export async function correctSubscriptionOccurrence(input: {
   const amount = input.amount ?? subscription.amount;
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("amount must be a positive integer rupiah value");
   const linkedAccountId = input.linkedAccountId ?? subscription.linkedAccountId;
-  const [paymentAccount] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+  const [paymentAccount] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts).where(eq(accounts.id, linkedAccountId)).limit(1);
   if (!paymentAccount || !paymentAccount.isActive || !["asset", "liability"].includes(paymentAccount.type)) {
     throw new Error("Replacement payment account must be an active asset or liability account");
@@ -265,7 +265,7 @@ export async function correctSubscriptionOccurrence(input: {
     subscriptionId: subscription.id,
     lines: [
       { accountId: expenseAccount.id, debit: amount, credit: 0 },
-      { accountId: paymentAccount.id, debit: 0, credit: amount },
+      { accountId: paymentAccount.id, debit: 0, credit: amount, cashFlowClass: paymentAccount.liquidityClass === "cash_equivalent" ? "operating" : undefined },
     ],
   }, db);
   const result = db.transaction((tx) => {

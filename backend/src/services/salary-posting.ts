@@ -33,7 +33,7 @@ async function salaryContext(now = new Date(), requestedOccurrenceDate?: number)
   if (!settings) return { error: "Salary settings not configured" } as const;
   if (!settings.depositAccountId) return { error: "No deposit account configured" } as const;
   const [account] = await defaultDb
-    .select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts).where(eq(accounts.id, settings.depositAccountId)).limit(1);
   if (!account || !account.isActive || account.type !== "asset") {
     return { error: "Deposit account must be an active asset account" } as const;
@@ -140,7 +140,7 @@ export async function postSalaryIfPayrollDay(
       }).returning({ id: transactions.id }).all()[0];
       if (!transaction) throw new Error("Failed to post salary transaction");
       const lines = [
-        { transactionId: transaction.id, accountId: account.id, debit: payroll.estimatedNetMonthly, credit: 0 },
+        { transactionId: transaction.id, accountId: account.id, debit: payroll.estimatedNetMonthly, credit: 0, cashFlowClass: account.liquidityClass === "cash_equivalent" ? "operating" : null },
         { transactionId: transaction.id, accountId: incomeAccount.id, debit: 0, credit: payroll.estimatedNetMonthly },
       ];
       tx.insert(transactionLines).values(lines).run();
@@ -271,7 +271,7 @@ export async function correctSalaryOccurrence(input: {
   const context = await salaryContext(new Date(), input.occurrenceDate);
   if ("error" in context) throw new Error(context.error);
   const depositAccountId = input.depositAccountId ?? context.account.id;
-  const [depositAccount] = await defaultDb.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+  const [depositAccount] = await defaultDb.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts).where(eq(accounts.id, depositAccountId)).limit(1);
   if (!depositAccount || !depositAccount.isActive || depositAccount.type !== "asset") {
     throw new Error("Replacement deposit account must be an active asset account");
@@ -292,7 +292,7 @@ export async function correctSalaryOccurrence(input: {
     txType: "salary_correction",
     periodId: replacementPeriodId,
     lines: [
-      { accountId: depositAccount.id, debit: netAmount, credit: 0 },
+      { accountId: depositAccount.id, debit: netAmount, credit: 0, cashFlowClass: depositAccount.liquidityClass === "cash_equivalent" ? "operating" : undefined },
       { accountId: incomeAccount.id, debit: 0, credit: netAmount },
     ],
   }, defaultDb);

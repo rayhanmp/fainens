@@ -37,6 +37,7 @@ import insightsRoutes from "./routes/insights";
 import pendingTransactionsRoutes from "./routes/pending-transactions";
 import splitbillRoutes from "./routes/splitbill";
 import agentRoutes from "./routes/agent";
+import moneyAnomalyRoutes from "./routes/money-anomalies";
 
 // Import plugins
 import authPlugin from "./plugins/auth";
@@ -237,6 +238,7 @@ const start = async () => {
     await fastify.register(pendingTransactionsRoutes);
     await fastify.register(splitbillRoutes);
     await fastify.register(agentRoutes);
+    await fastify.register(moneyAnomalyRoutes);
 
     await fastify.listen({ port: 3000, host: "0.0.0.0" });
 

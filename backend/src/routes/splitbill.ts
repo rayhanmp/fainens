@@ -489,8 +489,9 @@ export default async function (fastify: FastifyInstance) {
           ? await getOrCreateSystemAccount("loans-payable", "Loans Payable", "liability")
           : null;
 
+        let wallet: { id: number; type: string; isActive: boolean; liquidityClass: string } | null = null;
         if (!isBorrower) {
-          const [wallet] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+          [wallet] = await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
             .from(accounts).where(eq(accounts.id, walletAccountId as number)).limit(1);
           if (!wallet || !wallet.isActive || wallet.type !== "asset") {
             reply.code(400).send({ error: "walletAccountId must be an active asset account" });
@@ -507,7 +508,7 @@ export default async function (fastify: FastifyInstance) {
           : [
               ...(meResult.total > 0 ? [{ accountId: expenseAccount.id, debit: meResult.total, credit: 0, description: "Personal share" }] : []),
               ...contactRows.map((row) => ({ accountId: loansReceivable!.id, debit: row.total, credit: 0, description: `Receivable from ${row.personName}` })),
-              { accountId: walletAccountId as number, debit: 0, credit: targetTotal, description: "Receipt payment" },
+              { accountId: walletAccountId as number, debit: 0, credit: targetTotal, description: "Receipt payment", cashFlowClass: wallet!.liquidityClass === "cash_equivalent" ? "operating" as const : undefined },
             ];
         const prepared = await prepareJournalEntry({
           date: Date.now(),

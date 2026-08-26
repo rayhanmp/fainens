@@ -26,7 +26,7 @@ async function getOrCreateSystemAccount(
   type: string
 ): Promise<{ id: number }> {
   const [existing] = await dbLike
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.systemKey, key))
     .limit(1);
@@ -75,7 +75,7 @@ function assertPositiveSafeInteger(value: unknown, fieldName: string): asserts v
 
 async function getActiveWalletAccount(accountId: number) {
   const [account] = await db
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.id, accountId))
     .limit(1);
@@ -274,7 +274,7 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      await getActiveWalletAccount(body.walletAccountId);
+      const wallet = await getActiveWalletAccount(body.walletAccountId);
 
       // Get system accounts
       const [loansReceivable, loansPayable] = await Promise.all([
@@ -290,10 +290,10 @@ export default async function (fastify: FastifyInstance) {
         lines: body.direction === 'lent'
           ? [
               { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
-              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents },
+              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "investing" as const : undefined },
             ]
           : [
-              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
+              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "financing" as const : undefined },
               { accountId: loanAccountId, debit: 0, credit: body.amountCents },
             ],
       };
@@ -370,7 +370,7 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      await getActiveWalletAccount(body.walletAccountId);
+      const wallet = await getActiveWalletAccount(body.walletAccountId);
 
       const [loanSnapshot] = await db
         .select()
@@ -406,12 +406,12 @@ export default async function (fastify: FastifyInstance) {
         txType: "loan_payment",
         lines: loanSnapshot.direction === "lent"
           ? [
-              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0 },
+              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "investing" as const : undefined },
               { accountId: loanAccountId, debit: 0, credit: body.amountCents },
             ]
           : [
               { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
-              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents },
+              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "financing" as const : undefined },
             ],
       };
       const prepared = await prepareJournalEntry(journalInput, db);

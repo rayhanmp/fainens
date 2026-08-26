@@ -523,6 +523,7 @@ RULES:
             debit: number;
             credit: number;
             description?: string;
+            cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | null;
           }>;
         }
       | {
@@ -679,6 +680,7 @@ RULES:
           debit: line.credit,
           credit: line.debit,
           description: `Reversal of ${line.description ?? original.description}`,
+          cashFlowClass: line.cashFlowClass as "operating" | "investing" | "financing" | "transfer" | null,
         })),
       }, db);
 

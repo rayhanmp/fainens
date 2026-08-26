@@ -223,7 +223,7 @@ export async function recognizePaylaterPurchase(
   const expenseAccount = await getOrCreateAutoExpenseAccount(db);
 
   const [liabilityAccount] = await db
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.id, input.paylaterLiabilityAccountId))
     .limit(1);
@@ -436,7 +436,7 @@ export async function settlePaylaterPayment(
   if (liabilityAccount.type !== "liability") throw new Error("Account must be a liability account");
 
   const [bankAccount] = await db
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.id, input.bankAccountId))
     .limit(1);
@@ -476,6 +476,7 @@ export async function settlePaylaterPayment(
         debit: 0,
         credit: input.paymentAmount,
         description: "Payment from bank",
+        cashFlowClass: bankAccount.liquidityClass === "cash_equivalent" ? "financing" as const : undefined,
       },
     ],
   };

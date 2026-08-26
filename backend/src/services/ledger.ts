@@ -15,6 +15,7 @@ export type JournalLineInput = {
   debit: number; // cents
   credit: number; // cents
   description?: string;
+  cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | null;
 };
 
 export type CategoryAllocationInput = { categoryId: number; amount: number };
@@ -88,7 +89,7 @@ async function getOrCreateSystemAccount(
   dbLike: any,
 ): Promise<{ id: number }> {
   const [existing] = await dbLike
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.systemKey, systemKey))
     .limit(1);
@@ -207,19 +208,19 @@ export async function createSimpleTransaction(
     }
     lines.push(
       { accountId: exp.id, debit: input.amountCents, credit: 0, description: input.description },
-      { accountId: wallet.id, debit: 0, credit: input.amountCents, description: input.description },
+      { accountId: wallet.id, debit: 0, credit: input.amountCents, description: input.description, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : undefined },
     );
   } else if (input.kind === "income") {
     const inc = await getOrCreateAutoIncomeAccount(dbLike);
     lines.push(
-      { accountId: wallet.id, debit: input.amountCents, credit: 0, description: input.description },
+      { accountId: wallet.id, debit: input.amountCents, credit: 0, description: input.description, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : undefined },
       { accountId: inc.id, debit: 0, credit: input.amountCents, description: input.description },
     );
   } else {
     const toId = input.toWalletAccountId;
     if (!toId) throw new Error("toWalletAccountId is required for transfer");
     const [toWallet] = await dbLike
-      .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+      .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
       .from(accounts)
       .where(eq(accounts.id, toId))
       .limit(1);
@@ -228,9 +229,11 @@ export async function createSimpleTransaction(
     if (toWallet.type !== "asset") throw new Error("Destination must be an asset account");
     if (toWallet.id === wallet.id) throw new Error("Cannot transfer to the same wallet");
 
+    const sourceIsCash = wallet.liquidityClass === "cash_equivalent";
+    const destinationIsCash = toWallet.liquidityClass === "cash_equivalent";
     lines.push(
-      { accountId: toWallet.id, debit: input.amountCents, credit: 0, description: input.description },
-      { accountId: wallet.id, debit: 0, credit: input.amountCents, description: input.description },
+      { accountId: toWallet.id, debit: input.amountCents, credit: 0, description: input.description, cashFlowClass: destinationIsCash ? (sourceIsCash ? "transfer" : "investing") : undefined },
+      { accountId: wallet.id, debit: 0, credit: input.amountCents, description: input.description, cashFlowClass: sourceIsCash ? (destinationIsCash ? "transfer" : "investing") : undefined },
     );
   }
 
@@ -434,23 +437,29 @@ export async function prepareJournalEntry(
 
   const { lines: validatedLines, totalDebit, totalCredit } = validateJournalLines(input.lines);
   const accountIds = Array.from(new Set(validatedLines.map((l) => l.accountId)));
+  const accountById = new Map<number, { type: string; liquidityClass: string }>();
   for (const accountId of accountIds) {
     const rows = await dbLike
-    .select({ id: accounts.id, isActive: accounts.isActive, type: accounts.type })
+    .select({ id: accounts.id, isActive: accounts.isActive, type: accounts.type, liquidityClass: accounts.liquidityClass })
       .from(accounts)
       .where(eq(accounts.id, accountId))
       .limit(1);
     const account = rows[0];
     if (!account) throw new Error(`Account not found: ${accountId}`);
     if (!account.isActive) throw new Error(`Account is not active: ${accountId}`);
+    accountById.set(account.id, { type: account.type, liquidityClass: account.liquidityClass });
   }
 
-  const accountTypeById = new Map<number, string>();
-  for (const accountId of accountIds) {
-    const [account] = await dbLike.select({ id: accounts.id, type: accounts.type }).from(accounts)
-      .where(eq(accounts.id, accountId)).limit(1);
-    if (account) accountTypeById.set(account.id, account.type);
+  for (const line of validatedLines) {
+    const account = accountById.get(line.accountId);
+    if (account?.liquidityClass === "cash_equivalent" && line.cashFlowClass == null) {
+      throw new Error(`Cash-equivalent account line ${line.accountId} requires cashFlowClass`);
+    }
+    if (account?.liquidityClass !== "cash_equivalent" && line.cashFlowClass != null) {
+      throw new Error(`cashFlowClass may be set only on cash-equivalent account lines (account ${line.accountId})`);
+    }
   }
+  const accountTypeById = new Map([...accountById].map(([id, account]) => [id, account.type]));
   const netExpense = validatedLines.reduce((sum, line) =>
     accountTypeById.get(line.accountId) === "expense" ? sum + line.debit - line.credit : sum, 0);
   const suppliedAllocations = input.categoryAllocations ?? (input.categoryId != null && netExpense !== 0
@@ -551,6 +560,7 @@ export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJourna
     debit: line.debit,
     credit: line.credit,
     description: line.description ?? null,
+    cashFlowClass: line.cashFlowClass ?? null,
   }))).run();
   if (prepared.tagIds.length > 0) {
     tx.insert(transactionTags)
@@ -621,6 +631,7 @@ export async function createJournalEntry(
       debit: line.debit,
       credit: line.credit,
       description: line.description ?? null,
+      cashFlowClass: line.cashFlowClass ?? null,
     })));
     if (prepared.tagIds.length > 0) {
       await dbLike.insert(transactionTags).values(prepared.tagIds.map((tagId) => ({ transactionId: id, tagId })));

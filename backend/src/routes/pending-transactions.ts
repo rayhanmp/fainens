@@ -193,10 +193,10 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       const lines = kind === "expense"
         ? [
             { transactionId: inserted.id, accountId: counterparty.id, debit: parsed.amount, credit: 0 },
-            { transactionId: inserted.id, accountId: account.id, debit: 0, credit: parsed.amount },
+            { transactionId: inserted.id, accountId: account.id, debit: 0, credit: parsed.amount, cashFlowClass: account.liquidityClass === "cash_equivalent" ? "operating" : null },
           ]
         : [
-            { transactionId: inserted.id, accountId: account.id, debit: parsed.amount, credit: 0 },
+            { transactionId: inserted.id, accountId: account.id, debit: parsed.amount, credit: 0, cashFlowClass: account.liquidityClass === "cash_equivalent" ? "operating" : null },
             { transactionId: inserted.id, accountId: counterparty.id, debit: 0, credit: parsed.amount },
           ];
       tx.insert(transactionLines).values(lines).run();

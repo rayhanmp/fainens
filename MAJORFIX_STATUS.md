@@ -173,6 +173,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Periods now have an explicit, audited archive/restore lifecycle in migration `0016`. Only closed periods can be archived; default period lists omit archived history while `includeInactive=true` retains it for audit views. No period, budget, or journal history is deleted.
 - Canonical facts, budget facts, reports/PDF spending breakdowns, dashboard consumers, and agent retrieval now consume journal category allocations. They fall back to legacy transaction categories and then disclose `Unallocated` for historic expense journals without an evidence-based split. This makes category totals reconcile to scoped net expense rather than hiding the gap.
 
+### Pending commit — explicit cash-flow lines and money-anomaly review
+
+- Migration `0017` adds `transaction_line.cash_flow_class`. Cash-equivalent lines produced by simple transactions, transfers, loans, PayLater settlements, subscriptions, salary, imports, wishlist fulfilment, pending approval, generic edits, and reversals now retain an explicit `operating`, `investing`, `financing`, or `transfer` treatment. Cash-flow reports use it first; bounded counterpart inference is retained only for historic unclassified lines.
+- Asset-to-asset movements distinguish cash-to-cash transfers from cash-to-investment movements, so the latter are investing flows rather than silently disappearing as wallet transfers. Loan receivable origin/collection is investing; borrowing and debt repayment are financing.
+- Migration `0017` also adds a durable, audited money-anomaly review queue. An authenticated scan only flags likely 100× pairs with the same account/direction/type/normalized description and reconciliation-related historical journals. A reviewer must explicitly resolve or dismiss a candidate with a note; scanning never rescales, deletes, or reverses ledger data.
+
 ## Data compatibility
 
 - Existing data is not intentionally deleted or globally rescaled.
@@ -193,8 +199,6 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ## High-risk work still open
 
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
-3. Complete line-level cash-flow classification for every multi-line journal. Account-level cash-equivalent/receivable/investment metadata is now persisted, but individual mixed journals still need explicit allocation/classification instead of counterpart inference.
-6. Add a money-anomaly review endpoint/migration for likely historic 100× records and old reconciliation plugs.
 7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.

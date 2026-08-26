@@ -347,7 +347,7 @@ export default async function (fastify: FastifyInstance) {
     const dateMs = new Date(body.date).getTime();
     if (!Number.isFinite(dateMs)) return reply.code(400).send({ error: "Invalid fulfillment date" });
     const [wallet] = await db
-      .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+      .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
       .from(accounts)
       .where(eq(accounts.id, body.accountId))
       .limit(1);
@@ -378,7 +378,7 @@ export default async function (fastify: FastifyInstance) {
       if (!transaction) throw new Error("Failed to create wishlist transaction");
       const lines = [
         { transactionId: transaction.id, accountId: expenseAccount.id, debit: fresh.amount, credit: 0, description },
-        { transactionId: transaction.id, accountId: wallet.id, debit: 0, credit: fresh.amount, description },
+        { transactionId: transaction.id, accountId: wallet.id, debit: 0, credit: fresh.amount, description, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
       ];
       tx.insert(transactionLines).values(lines).run();
       const updated = tx

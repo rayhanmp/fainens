@@ -41,6 +41,7 @@ export async function prepareDomainReversal(
       debit: line.credit,
       credit: line.debit,
       description: `Correction reversal of ${line.description ?? original.description}`,
+      cashFlowClass: line.cashFlowClass,
     })),
   }, dbLike);
   return { original, prepared, periodId };

@@ -436,6 +436,7 @@ export async function generateCashFlowStatement(
       txType: transactions.txType,
       debit: transactionLines.debit,
       credit: transactionLines.credit,
+      cashFlowClass: transactionLines.cashFlowClass,
       counterpartyAccountId: sql<number>`(
         SELECT tl2.account_id 
         FROM transaction_line tl2 
@@ -490,9 +491,16 @@ export async function generateCashFlowStatement(
     const amount = (tx.debit || 0) - (tx.credit || 0);
     if (amount === 0) continue;
 
-    // Determine category based on transaction type and counterparty
+    // New journals persist their treatment on the affected cash line. The
+    // counterpart inference below is retained solely for pre-migration data.
     let type: "operating" | "investing" | "financing" = "operating";
     let category = "Operating";
+
+    if (tx.cashFlowClass === "transfer") continue;
+    if (tx.cashFlowClass === "operating" || tx.cashFlowClass === "investing" || tx.cashFlowClass === "financing") {
+      type = tx.cashFlowClass;
+      category = type[0].toUpperCase() + type.slice(1);
+    } else {
 
     const counterpartyTypes = new Set(String(tx.counterpartyAccountTypes ?? "").split(",").filter(Boolean));
     const hasLiabilityOrEquity = counterpartyTypes.has("liability") || counterpartyTypes.has("equity");
@@ -508,6 +516,7 @@ export async function generateCashFlowStatement(
     } else if (onlyCashCounterparties) {
       // Internal wallet transfers are not cash inflows/outflows.
       continue;
+    }
     }
 
     const item: CashFlowItem = {

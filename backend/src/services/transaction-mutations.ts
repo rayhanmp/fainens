@@ -160,11 +160,15 @@ export async function updateTransactionAtomically(
   if (validatedLines) {
     const accountIds = [...new Set(validatedLines.map((line) => line.accountId))];
     const validAccounts = await db
-      .select({ id: accounts.id })
+      .select({ id: accounts.id, liquidityClass: accounts.liquidityClass })
       .from(accounts)
       .where(and(inArray(accounts.id, accountIds), eq(accounts.isActive, true)));
     if (validAccounts.length !== accountIds.length) {
       throw new TransactionMutationError("Every journal line must reference an active account", 400);
+    }
+    const liquidityByAccountId = new Map(validAccounts.map((account) => [account.id, account.liquidityClass]));
+    if (validatedLines.some((line) => liquidityByAccountId.get(line.accountId) === "cash_equivalent" && line.cashFlowClass == null)) {
+      throw new TransactionMutationError("Every cash-equivalent journal line requires cashFlowClass", 400);
     }
   }
 
@@ -209,6 +213,7 @@ export async function updateTransactionAtomically(
           debit: line.debit,
           credit: line.credit,
           description: line.description ?? null,
+          cashFlowClass: line.cashFlowClass ?? null,
         })))
         .run();
     }
@@ -365,7 +370,7 @@ export async function importTransactionsAtomically(input: {
     throw new TransactionMutationError("Import must contain between 1 and 1000 rows", 400);
   }
   const [wallet] = await db
-    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+    .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.id, input.accountId))
     .limit(1);
@@ -436,10 +441,10 @@ export async function importTransactionsAtomically(input: {
     const lines = row.kind === "expense"
       ? [
           { transactionId: inserted.id, accountId: counterpartyId, debit: row.amount, credit: 0 },
-          { transactionId: inserted.id, accountId: wallet.id, debit: 0, credit: row.amount },
+          { transactionId: inserted.id, accountId: wallet.id, debit: 0, credit: row.amount, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
         ]
       : [
-          { transactionId: inserted.id, accountId: wallet.id, debit: row.amount, credit: 0 },
+          { transactionId: inserted.id, accountId: wallet.id, debit: row.amount, credit: 0, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
           { transactionId: inserted.id, accountId: counterpartyId, debit: 0, credit: row.amount },
         ];
     tx.insert(transactionLines).values(lines).run();
