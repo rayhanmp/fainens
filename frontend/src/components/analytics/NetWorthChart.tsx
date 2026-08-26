@@ -43,7 +43,7 @@ interface Row {
   totalLiabilities: number;
 }
 
-export function NetWorthChart() {
+export function NetWorthChart({ className = '' }: { className?: string } = {}) {
   const gradientId = useId().replace(/:/g, '');
   const [range, setRange] = useState<NetWorthRange>('30d');
   const [rows, setRows] = useState<Row[]>([]);
@@ -108,7 +108,7 @@ export function NetWorthChart() {
 
   if (isLoading && rows.length === 0) {
     return (
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 sm:p-6 lg:p-8">
+      <div className={cn('flex h-full flex-col rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 sm:p-6 lg:p-8', className)}>
         <div className="mb-4 h-8 w-48 max-w-full animate-pulse rounded bg-[var(--ref-surface-container-highest)]" />
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           {RANGE_OPTIONS.map((o) => (
@@ -193,7 +193,7 @@ export function NetWorthChart() {
       )}
 
       {rows.length > 0 ? (
-        <div className="w-full min-h-[220px] h-[min(55vh,22rem)] sm:min-h-[260px] sm:h-72 lg:h-80">
+        <div className="min-h-[220px] h-[min(55vh,22rem)] w-full flex-1 sm:min-h-[260px] sm:h-72 lg:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={rows}
