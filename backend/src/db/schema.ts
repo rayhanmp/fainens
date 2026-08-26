@@ -580,6 +580,60 @@ export const agentMessages = sqliteTable("agent_message", {
   conversationCreatedIdx: index("idx_agent_message_conversation_created").on(table.conversationId, table.createdAt),
 }));
 
+/**
+ * Durable, owner-scoped mutation proposals created by the finance agent.
+ * The normalized payload and financial revision are immutable evidence for
+ * the approval boundary; execution must revalidate both before writing.
+ */
+export const agentPendingActions = sqliteTable("agent_pending_action", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerEmail: text("owner_email").notNull(),
+  conversationId: integer("conversation_id")
+    .references(() => agentConversations.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(),
+  normalizedInput: text("normalized_input").notNull(),
+  assumptions: text("assumptions"),
+  missingFields: text("missing_fields"),
+  baseFinancialRevision: integer("base_financial_revision").notNull(),
+  status: text("status").notNull().default("pending"), // pending | executed | rejected | expired | superseded | failed
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  ownerStatusIdx: index("idx_agent_pending_action_owner_status").on(table.ownerEmail, table.status, table.createdAt),
+  conversationIdx: index("idx_agent_pending_action_conversation").on(table.conversationId, table.createdAt),
+}));
+
+/**
+ * One-time approval credentials for a pending action. Only a SHA-256 hash of
+ * the bearer token is stored, and the idempotency key makes retries return a
+ * single execution receipt instead of repeating the mutation.
+ */
+export const agentApprovals = sqliteTable("agent_approval", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  pendingActionId: integer("pending_action_id")
+    .notNull()
+    .references(() => agentPendingActions.id, { onDelete: "cascade" }),
+  ownerEmail: text("owner_email").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  status: text("status").notNull().default("pending"), // pending | executed | rejected | expired | superseded | failed
+  approvedAt: integer("approved_at", { mode: "timestamp_ms" }),
+  executedAt: integer("executed_at", { mode: "timestamp_ms" }),
+  executionReceipt: text("execution_receipt"),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  ownerStatusIdx: index("idx_agent_approval_owner_status").on(table.ownerEmail, table.status, table.createdAt),
+  pendingActionIdx: index("idx_agent_approval_pending_action").on(table.pendingActionId),
+}));
+
 /** Pending transactions from WhatsApp/other sources - waiting for user approval */
 export const pendingTransactions = sqliteTable("pending_transaction", {
   id: integer("id").primaryKey({ autoIncrement: true }),

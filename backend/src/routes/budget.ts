@@ -5,6 +5,19 @@ import { db } from "../db/client";
 
 const DAY_MS = 86_400_000;
 import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
+import { bumpFinancialRevisionSync } from "../services/financial-revision";
+import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary } from "../cache/invalidation";
+
+async function invalidateBudgetMutation(periodIds: number[]): Promise<void> {
+  // The caller bumps the revision in the same SQLite transaction as the plan
+  // mutation. Cache invalidation remains best-effort like the transaction
+  // pipeline, so Redis outages never turn a committed write into a 500.
+  await Promise.all([
+    ...periodIds.map((periodId) => invalidatePeriodSummary(periodId)),
+    invalidateAllAnalytics(),
+    invalidateAllInsights(),
+  ]);
+}
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
@@ -195,14 +208,20 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    const [plan] = await db
-      .insert(budgetPlans)
-      .values({
-        periodId: body.periodId,
-        categoryId: body.categoryId,
-        plannedAmount: body.plannedAmount,
-      })
-      .returning();
+    const plan = db.transaction((tx) => {
+      const inserted = tx.insert(budgetPlans)
+        .values({
+          periodId: body.periodId,
+          categoryId: body.categoryId,
+          plannedAmount: body.plannedAmount,
+        })
+        .returning().all()[0];
+      if (!inserted) throw new Error("Failed to create budget plan");
+      bumpFinancialRevisionSync(tx);
+      return inserted;
+    });
+
+    await invalidateBudgetMutation([body.periodId]);
 
     reply.code(201).send(plan);
   });
@@ -230,13 +249,19 @@ export default async function (fastify: FastifyInstance) {
       return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
     }
 
-    const [updated] = await db
-      .update(budgetPlans)
-      .set({
-        ...(body.plannedAmount !== undefined && { plannedAmount: body.plannedAmount }),
-      })
-      .where(eq(budgetPlans.id, parseInt(id)))
-      .returning();
+    const updated = db.transaction((tx) => {
+      const row = tx.update(budgetPlans)
+        .set({
+          ...(body.plannedAmount !== undefined && { plannedAmount: body.plannedAmount }),
+        })
+        .where(eq(budgetPlans.id, parseInt(id)))
+        .returning().all()[0];
+      if (!row) throw new Error("Budget plan was changed; retry the update");
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
+
+    await invalidateBudgetMutation([existing.periodId]);
 
     return updated;
   });
@@ -261,7 +286,13 @@ export default async function (fastify: FastifyInstance) {
       return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
     }
 
-    await db.delete(budgetPlans).where(eq(budgetPlans.id, parseInt(id)));
+    db.transaction((tx) => {
+      const deleted = tx.delete(budgetPlans).where(eq(budgetPlans.id, parseInt(id))).run();
+      if (deleted.changes !== 1) throw new Error("Budget plan was changed; retry the delete");
+      bumpFinancialRevisionSync(tx);
+    });
+
+    await invalidateBudgetMutation([existing.periodId]);
 
     reply.code(204).send();
   });
@@ -393,35 +424,33 @@ export default async function (fastify: FastifyInstance) {
       .from(budgetTemplateItems)
       .where(eq(budgetTemplateItems.templateId, parseInt(id)));
 
-    if (body.replaceExisting) {
-      // Delete existing budgets for this period
-      await db.delete(budgetPlans).where(eq(budgetPlans.periodId, body.periodId));
-    }
-
-    // Get existing budgets to avoid duplicates
-    const existingBudgets = await db
-      .select({ categoryId: budgetPlans.categoryId })
-      .from(budgetPlans)
-      .where(eq(budgetPlans.periodId, body.periodId));
-
-    const existingCategoryIds = new Set(existingBudgets.map((b) => b.categoryId));
-
-    // Create new budgets from template items (only for categories that don't exist)
-    const newItems = items.filter((item) => !existingCategoryIds.has(item.categoryId));
-
-    if (newItems.length > 0) {
-      await db.insert(budgetPlans).values(
-        newItems.map((item) => ({
+    const applied = db.transaction((tx) => {
+      let deletedCount = 0;
+      if (body.replaceExisting) {
+        deletedCount = tx.delete(budgetPlans).where(eq(budgetPlans.periodId, body.periodId)).run().changes;
+      }
+      const existingBudgets = tx.select({ categoryId: budgetPlans.categoryId })
+        .from(budgetPlans)
+        .where(eq(budgetPlans.periodId, body.periodId)).all();
+      const existingCategoryIds = new Set(existingBudgets.map((budget) => budget.categoryId));
+      const newItems = items.filter((item) => !existingCategoryIds.has(item.categoryId));
+      if (newItems.length > 0) {
+        tx.insert(budgetPlans).values(newItems.map((item) => ({
           periodId: body.periodId,
           categoryId: item.categoryId,
           plannedAmount: item.plannedAmount,
-        }))
-      );
-    }
+        }))).run();
+      }
+      const changedCount = deletedCount + newItems.length;
+      if (changedCount > 0) bumpFinancialRevisionSync(tx);
+      return { applied: newItems.length, skipped: items.length - newItems.length, changedCount };
+    });
+
+    if (applied.changedCount > 0) await invalidateBudgetMutation([body.periodId]);
 
     reply.code(200).send({
-      applied: newItems.length,
-      skipped: items.length - newItems.length,
+      applied: applied.applied,
+      skipped: applied.skipped,
     });
   });
 

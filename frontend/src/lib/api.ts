@@ -116,6 +116,22 @@ export type AgentStreamEvent =
   | { type: 'complete'; response: AgentQueryResponse }
   | { type: 'error'; error: string };
 
+export type AgentActionProposal = {
+  pendingActionId: number;
+  approvalId: number;
+  kind: 'budget_plan_upsert';
+  status: string;
+  input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
+  assumptions: string[];
+  missingFields: string[];
+  details: Array<{ categoryId: number; category: string; plannedAmountCents: number }>;
+  baseFinancialRevision: number;
+  createdAt: number;
+  expiresAt: number;
+  approvalToken: string | null;
+  tokenAlreadyIssued: boolean;
+};
+
 async function streamAgentQuery(
   data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> },
   onEvent: (event: AgentStreamEvent) => void,
@@ -1726,6 +1742,40 @@ export const api = {
       fetchApi<{ revision: number; targetSavingsRate: number; incomeCents: number; targetSpendCents: number; recommendations: Array<{ categoryId: number | null; category: string; suggestedAmountCents: number; basis: string }>; requiresConfirmation: boolean; writesPerformed: boolean }>('/agent/plan-budget', {
         method: 'POST', body: JSON.stringify(data),
       }),
+    actions: {
+      list: (conversationId?: number) => fetchApi<{ actions: Array<{
+        pendingActionId: number;
+        conversationId: number | null;
+        kind: string;
+        status: string;
+        input: unknown;
+        assumptions: string[];
+        missingFields: string[];
+        baseFinancialRevision: number;
+        createdAt: number;
+        expiresAt: number;
+      }> }>(`/agent/actions${conversationId ? `?conversationId=${conversationId}` : ''}`),
+      prepare: (data: {
+        conversationId?: number | null;
+        kind: 'budget_plan_upsert';
+        input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
+        assumptions?: string[];
+        missingFields?: string[];
+        idempotencyKey?: string;
+      }) => fetchApi<AgentActionProposal>('/agent/actions/prepare', { method: 'POST', body: JSON.stringify(data) }),
+      execute: (approvalId: number, token: string) => fetchApi<{ receipt: {
+        actionId: number;
+        approvalId: number;
+        kind: 'budget_plan_upsert';
+        periodId: number;
+        changed: Array<{ planId: number; categoryId: number; plannedAmountCents: number; operation: 'created' | 'updated' }>;
+        changedCount: number;
+        auditLogIds: number[];
+        financialRevision: number;
+        executedAt: number;
+      }; replay: boolean }>(`/agent/approvals/${approvalId}/execute`, { method: 'POST', body: JSON.stringify({ token }) }),
+      reject: (approvalId: number, token: string) => fetchApi<{ status: 'rejected'; approvalId: number }>(`/agent/approvals/${approvalId}/reject`, { method: 'POST', body: JSON.stringify({ token }) }),
+    },
   },
 
   pendingTransactions: {

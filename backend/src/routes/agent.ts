@@ -19,6 +19,13 @@ import {
 } from "../services/agent-tools";
 import { callOpenRouterAgent, streamOpenRouterAgent, type AgentChatContentPart, type AgentChatMessage, type AgentChatTool } from "../services/agent-llm";
 import { getFinancialRevision } from "../services/financial-revision";
+import {
+  AgentActionError,
+  executeAgentApproval,
+  listAgentActions,
+  prepareAgentAction,
+  rejectAgentApproval,
+} from "../services/agent-actions";
 
 const MAX_TOOL_CALLS_PER_QUERY = 8;
 const MAX_TOOL_ROUNDS = 4;
@@ -504,7 +511,11 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     schemaVersion: 2,
     revision: await getFinancialRevision(),
     tools: agentToolDefinitions,
-    policy: { readOnly: true, writesRequireExplicitConfirmation: true },
+    policy: {
+      readOnly: true,
+      writesRequireExplicitConfirmation: true,
+      guardedActions: ["budget_plan_upsert"],
+    },
   }));
 
   fastify.get("/api/agent/conversations", async (request, reply) => {
@@ -626,6 +637,77 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       return await executeAgentTool(body.name, body.input ?? {});
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Tool execution failed" });
+    }
+  });
+
+  /**
+   * Prepare a mutation without changing financial data. The response contains
+   * a one-time bearer token; the UI must show the normalized proposal and send
+   * that token back only after the user explicitly confirms it.
+   */
+  fastify.post("/api/agent/actions/prepare", async (request, reply) => {
+    const body = request.body as {
+      conversationId?: unknown;
+      kind?: unknown;
+      input?: unknown;
+      assumptions?: unknown;
+      missingFields?: unknown;
+      idempotencyKey?: unknown;
+    };
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      const conversationId = body?.conversationId == null ? null : Number(body.conversationId);
+      return reply.code(201).send(await prepareAgentAction({
+        ownerEmail,
+        conversationId,
+        kind: body?.kind,
+        input: body?.input,
+        assumptions: body?.assumptions,
+        missingFields: body?.missingFields,
+        idempotencyKey: body?.idempotencyKey,
+      }));
+    } catch (error) {
+      const status = error instanceof AgentActionError ? error.statusCode : 400;
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not prepare agent action" });
+    }
+  });
+
+  fastify.get("/api/agent/actions", async (request, reply) => {
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      const query = request.query as { conversationId?: string };
+      const conversationId = query?.conversationId == null ? undefined : Number(query.conversationId);
+      if (conversationId != null && (!Number.isSafeInteger(conversationId) || conversationId <= 0)) {
+        return reply.code(400).send({ error: "Invalid conversation ID" });
+      }
+      return { actions: await listAgentActions(ownerEmail, conversationId) };
+    } catch (error) {
+      const status = error instanceof AgentActionError ? error.statusCode : 400;
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not list agent actions" });
+    }
+  });
+
+  fastify.post("/api/agent/approvals/:id/execute", async (request, reply) => {
+    const approvalId = Number((request.params as { id?: string }).id);
+    const body = request.body as { token?: unknown };
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      return reply.send(await executeAgentApproval({ ownerEmail, approvalId, token: body?.token }));
+    } catch (error) {
+      const status = error instanceof AgentActionError ? error.statusCode : 409;
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not execute agent approval" });
+    }
+  });
+
+  fastify.post("/api/agent/approvals/:id/reject", async (request, reply) => {
+    const approvalId = Number((request.params as { id?: string }).id);
+    const body = request.body as { token?: unknown };
+    try {
+      const ownerEmail = currentOwnerEmail(request);
+      return reply.send(await rejectAgentApproval({ ownerEmail, approvalId, token: body?.token }));
+    } catch (error) {
+      const status = error instanceof AgentActionError ? error.statusCode : 409;
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not reject agent approval" });
     }
   });
 

@@ -288,6 +288,8 @@ function assertRequiredSchema(): void {
     financial_state: ["id", "revision", "updated_at"],
     agent_conversation: ["id", "owner_email", "title", "created_at", "updated_at", "is_pinned", "archived_at"],
     agent_message: ["id", "conversation_id", "role", "content", "created_at"],
+    agent_pending_action: ["id", "owner_email", "conversation_id", "kind", "normalized_input", "base_financial_revision", "status", "expires_at", "created_at", "updated_at"],
+    agent_approval: ["id", "pending_action_id", "owner_email", "token_hash", "idempotency_key", "status", "approved_at", "executed_at", "execution_receipt", "expires_at", "created_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

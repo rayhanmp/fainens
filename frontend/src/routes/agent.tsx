@@ -46,6 +46,7 @@ type Period = {
 
 type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
 type BudgetPreview = Awaited<ReturnType<typeof api.agent.planBudget>>;
+type AgentActionProposal = Awaited<ReturnType<typeof api.agent.actions.prepare>>;
 type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
 type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
 
@@ -158,6 +159,10 @@ function AgentPage() {
   const [error, setError] = useState<string | null>(null);
   const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
+  const [budgetAction, setBudgetAction] = useState<AgentActionProposal | null>(null);
+  const [isPreparingAction, setIsPreparingAction] = useState(false);
+  const [isExecutingAction, setIsExecutingAction] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const refreshConversations = async () => {
@@ -170,6 +175,7 @@ function AgentPage() {
     if (conversationId === activeConversationId || isLoadingConversation) return;
     setIsLoadingConversation(true);
     setError(null);
+    setNotice(null);
     try {
       const detail = await api.agent.conversations.get(conversationId);
       setActiveConversationId(detail.conversation.id);
@@ -268,6 +274,7 @@ function AgentPage() {
     const createdAt = Date.now();
     setDraft('');
     setError(null);
+    setNotice(null);
     setImageError(null);
     setMessages((current) => [...current, { id: `user-${createdAt}`, role: 'user', text, createdAt, images: attachedImages }]);
     setIsSending(true);
@@ -340,7 +347,9 @@ function AgentPage() {
     setPendingImages([]);
     setImageError(null);
     setError(null);
+    setNotice(null);
     setBudgetPreview(null);
+    setBudgetAction(null);
   };
 
   const updateConversation = async (conversationId: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => {
@@ -393,10 +402,73 @@ function AgentPage() {
     setError(null);
     try {
       setBudgetPreview(await api.agent.planBudget({ periodId: Number(selectedPeriodId) }));
+      setBudgetAction(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not prepare the budget plan.');
     } finally {
       setIsPlanning(false);
+    }
+  };
+
+  const prepareBudgetAction = async () => {
+    if (!budgetPreview || !selectedPeriodId || isPreparingAction) return;
+    const plans = budgetPreview.recommendations
+      .filter((recommendation): recommendation is typeof recommendation & { categoryId: number } => recommendation.categoryId != null)
+      .map((recommendation) => ({ categoryId: recommendation.categoryId, plannedAmountCents: recommendation.suggestedAmountCents }));
+    if (plans.length === 0) {
+      setError('This preview has no categorized recommendations to apply.');
+      return;
+    }
+    setIsPreparingAction(true);
+    setError(null);
+    try {
+      const proposal = await api.agent.actions.prepare({
+        conversationId: activeConversationId,
+        kind: 'budget_plan_upsert',
+        input: { periodId: Number(selectedPeriodId), plans },
+        assumptions: [
+          'Only the categories shown in this proposal will be created or updated.',
+          'Existing budget categories not shown will be left unchanged.',
+          'This proposal is bound to the displayed ledger revision and expires shortly.',
+        ],
+      });
+      setBudgetAction(proposal);
+      if (!proposal.approvalToken) setError('This proposal was already prepared. Use the existing confirmation card or prepare again after it expires.');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not prepare the budget change.');
+    } finally {
+      setIsPreparingAction(false);
+    }
+  };
+
+  const executeBudgetAction = async () => {
+    if (!budgetAction?.approvalToken || isExecutingAction) return;
+    setIsExecutingAction(true);
+    setError(null);
+    try {
+      const result = await api.agent.actions.execute(budgetAction.approvalId, budgetAction.approvalToken);
+      setBudgetAction(null);
+      setBudgetPreview(null);
+      setNotice(`Budget updated: ${result.receipt.changedCount} plan${result.receipt.changedCount === 1 ? '' : 's'} changed (revision ${result.receipt.financialRevision}; audit ${result.receipt.auditLogIds.join(', ')}).`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not apply the approved budget change.');
+    } finally {
+      setIsExecutingAction(false);
+    }
+  };
+
+  const rejectBudgetAction = async () => {
+    if (!budgetAction?.approvalToken || isExecutingAction) return;
+    setIsExecutingAction(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.agent.actions.reject(budgetAction.approvalId, budgetAction.approvalToken);
+      setBudgetAction(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not dismiss the proposal.');
+    } finally {
+      setIsExecutingAction(false);
     }
   };
 
@@ -411,7 +483,7 @@ function AgentPage() {
             <PageHeader
               subtext="Evidence-first finance chat"
               title="Fainens Agent"
-              description="Ask about recorded finances, investigate patterns, and preview a budget plan. This first release is read-only."
+              description="Ask about recorded finances, investigate patterns, and prepare budget changes for explicit confirmation."
             />
             <div className="w-full sm:w-72">
               <Select
@@ -494,6 +566,7 @@ function AgentPage() {
 
                 {isSending && <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]"><LoaderCircle className="h-4 w-4 animate-spin" /> {streamActivity ?? 'Reading your ledger…'}</div>}
                 {error && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+                {notice && <p role="status" className="rounded-lg border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 p-3 text-sm text-[var(--color-success)]">{notice}</p>}
               </div>
 
               <form
@@ -679,7 +752,7 @@ function AgentPage() {
 
               <Card title="Trust boundary">
                 <div className="space-y-3 text-sm text-[var(--color-text-secondary)]">
-                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" /> This workspace cannot create, edit, delete, or reconcile financial ledger data. Conversation titles and chat history have separate lifecycle controls.</p>
+                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" /> Retrieval stays read-only. Any budget change is shown as a normalized proposal and requires your explicit confirmation before execution.</p>
                   <p className="flex gap-2"><RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ref-primary)]" /> Every question retrieves fresh financial facts instead of relying on chat memory.</p>
                 </div>
               </Card>
@@ -701,6 +774,24 @@ function AgentPage() {
                       ))}
                     </div>
                     <p className="mt-3 text-xs text-[var(--color-text-secondary)]">Revision {budgetPreview.revision} · Preview only</p>
+                    <Button variant="secondary" className="mt-4 w-full" onClick={() => void prepareBudgetAction()} isLoading={isPreparingAction} disabled={!!budgetAction}>
+                      <ShieldCheck className="h-4 w-4" /> Prepare for confirmation
+                    </Button>
+                  </div>
+                )}
+                {budgetAction && (
+                  <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+                    <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3">
+                      <p className="text-sm font-semibold">Review before applying</p>
+                      <p className="mt-1 text-xs text-[var(--color-text-secondary)]">This will upsert {budgetAction.details.length} category plan{budgetAction.details.length === 1 ? '' : 's'} for {selectedPeriod?.name ?? 'the selected period'}. Existing categories not listed stay unchanged.</p>
+                      <div className="mt-3 max-h-40 space-y-1 overflow-y-auto">
+                        {budgetAction.details.map((detail) => <div key={detail.categoryId} className="flex items-center justify-between gap-2 text-xs"><span>{detail.category}</span><span className="font-semibold">{formatCurrency(detail.plannedAmountCents)}</span></div>)}
+                      </div>
+                      <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">Bound to revision {budgetAction.baseFinancialRevision} · expires {formatDate(budgetAction.expiresAt)}</p>
+                      {budgetAction.approvalToken ? (
+                        <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void executeBudgetAction()} isLoading={isExecutingAction}><Check className="h-4 w-4" /> Confirm &amp; apply</Button><Button size="sm" variant="secondary" onClick={() => void rejectBudgetAction()} disabled={isExecutingAction}>Dismiss</Button></div>
+                      ) : <p className="mt-3 text-xs text-[var(--color-danger)]">The one-time approval token is no longer available in this browser. Prepare a fresh proposal.</p>}
+                    </div>
                   </div>
                 )}
               </Card>

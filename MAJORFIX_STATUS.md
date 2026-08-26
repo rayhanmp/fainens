@@ -201,7 +201,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 1. Make the revision/cache path durable across Redis outages with an outbox/rebuild worker; revision-aware values now prevent silent stale reads when the database is reachable.
 7. Finish safe account/category archive dependency previews and restore flows. Contacts and budget templates now have audited restore paths.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
-9. Extend the agent layer with guarded, idempotent write previews/approval tokens; current tools are intentionally read-only.
+9. **Implemented first guarded agent write path.** Budget-plan upserts now use durable pending actions and one-time approval tokens. The action stores a normalized payload, owner, optional conversation, assumptions, expiry, and base financial revision; execution revalidates period/category state and revision inside one SQLite transaction, writes audited budget rows, bumps the revision, invalidates budget/analytics/insight caches, and returns an idempotent execution receipt. Remaining write commands (transaction drafts, recurring occurrence decisions, recovery/reconciliation) still need their own domain-specific preparation/execution contracts.
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
 11. **Implemented core return-after-absence recovery.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Financial-facts agent retrieval and income/cash-flow reports now return coverage warnings. Remaining propagation work is budget/dashboard/PDF/trend presentation and richer guided import/catch-up steps.
 
@@ -304,8 +304,8 @@ The backend integrity work is not equivalent to complete user workflows. The fol
 16. **Budget-template archive/restore.** Add an inactive-template management view and restore controls rather than hiding archived templates permanently.
 17. **Period archive/restore.** Add archived-history browsing and archive/restore actions alongside the already-surfaced close/reopen controls.
 18. **Account/category archive dependency previews.** Before archive/restore, show blocking balances, children, linked categories, budgets, and the safe next action.
-19. **Agent workspace.** Implemented the first read-only workspace at `/agent`: period scope selection, durable server-side multi-conversation history scoped to the authenticated user, bounded conversational context, tool-call trace with linked domain surfaces, source/result inspection, financial revision labels, budget-plan preview, conversation lifecycle controls (editable titles, pin/unpin, archive/restore, and confirmed deletion), and multimodal image questions with click/drop upload, inline/lightbox previews, and safe size/type limits. Image pixels are sent only for the current turn and are not retained in chat history. Contextual entry points and durable pending-action state remain pending.
-20. **Agent write approval UX.** When guarded write previews/approval tokens are implemented, add diff review, confirmation, idempotency status, and audit outcome UI.
+19. **Agent workspace.** Implemented `/agent`: period scope selection, durable server-side multi-conversation history scoped to the authenticated user, bounded conversational context, tool-call trace with linked domain surfaces, source/result inspection, financial revision labels, budget-plan preview, conversation lifecycle controls (editable titles, pin/unpin, archive/restore, and confirmed deletion), and multimodal image questions with click/drop upload, inline/lightbox previews, and safe size/type limits. Image pixels are sent only for the current turn and are not retained in chat history. Budget proposals now have a durable pending-action state; contextual entry points and other domain write commands remain pending.
+20. **Agent write approval UX.** Implemented for budget-plan upserts: the UI shows the exact normalized category/amount diff, assumptions, bound financial revision, expiry, and explicit Confirm & apply / Dismiss controls. Replays return the original receipt without repeating the write; stale revisions fail closed and require a fresh proposal. Extend the same review surface to transaction, recurring, and recovery commands as those domain services are added.
 21. **Cross-domain correction timelines.** Transaction, loan, PayLater, subscription, and split-bill views need a consistent original → inverse → replacement chain with audit links.
 22. **Attachment capability alignment.** Drive client file-size/type validation and error copy from backend capabilities; verify this against the separately modified attachment frontend before altering it.
 23. **Operational visibility.** Consider an admin/support view for migration health, financial revision/cache freshness, cleanup-outbox failures, and anomaly-scan state.
@@ -328,6 +328,42 @@ User message
 ```
 
 Existing page UI remains the transparent inspection and fallback surface. A chat action must link to the same transaction, account, budget, obligation, or reconciliation record that a normal user can inspect.
+
+### Guarded write implementation (current milestone)
+
+The first executable command is `budget_plan_upsert`. It intentionally does not
+replace or delete unmentioned budget rows: it only creates or updates the
+category plans displayed in the proposal. This makes the initial agent write
+surface additive/explicit and avoids turning a model omission into a deletion.
+
+1. `POST /api/agent/actions/prepare` validates the action kind, period, category
+   IDs, non-negative integer IDR amounts, assumptions, and optional conversation
+   ownership. It canonicalizes and sorts the payload, captures the current
+   `financial_state.revision`, and creates `agent_pending_action` plus
+   `agent_approval` rows. A random approval token is returned once; only its
+   SHA-256 hash is stored. The proposal expires after 15 minutes.
+2. The UI renders the exact category/amount effect, assumptions, revision, and
+   expiry. No financial row changes during preparation. The one-time token is
+   held in browser memory only and is never written to chat history.
+3. `POST /api/agent/approvals/:id/execute` requires the authenticated owner and
+   token. In one SQLite transaction it checks expiry/status, re-reads the
+   pending payload, verifies the financial revision has not changed, rechecks
+   the target period and categories, upserts only the proposed rows, writes
+   audit snapshots, bumps the revision once, and stores a receipt. A repeated
+   request returns that stored receipt with `replay: true`; it cannot repeat
+   the mutation. Revision changes, deleted categories, closed periods, and
+   expired tokens fail closed.
+4. `POST /api/agent/approvals/:id/reject` marks a pending proposal rejected
+   without touching financial data. `GET /api/agent/actions` provides durable
+   status for recovery after a page refresh, but cannot recover the raw token.
+
+The approval tables are owner-scoped and conversation-linked with restrictive
+input limits. This is an approval boundary, not authorization to bypass domain
+rules: each future command must have its own normalized payload, domain
+validator, atomic mutation, audit evidence, cache invalidation, and receipt.
+Current remaining work is to add transaction-draft preparation, recurring
+post/skip decisions, and recovery/reconciliation commands rather than widening
+the budget command into a generic arbitrary-write endpoint.
 
 ### Agent response contract
 
