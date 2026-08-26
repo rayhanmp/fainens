@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, inArray, count, SQL } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, count, ne, notInArray, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
@@ -276,6 +276,7 @@ RULES:
       periodId,
       categoryId,
       tagId,
+      includeReversals: includeReversalsParam,
       limit: limitParam = String(DEFAULT_LIMIT),
       offset: offsetParam = "0",
     } = request.query as {
@@ -286,6 +287,7 @@ RULES:
       periodId?: string;
       categoryId?: string;
       tagId?: string;
+      includeReversals?: string;
       limit?: string;
       offset?: string;
     };
@@ -320,6 +322,17 @@ RULES:
       periodIdToUse,
       categoryId
     );
+
+    // The regular Transactions surface represents user activity, not the
+    // internal bookkeeping mechanics of correcting a posted journal. Keep
+    // inverse journals and their superseded originals out of the default
+    // feed, while allowing audit/history consumers to opt in explicitly.
+    if (includeReversalsParam !== "true") {
+      baseConditions.push(
+        notInArray(transactions.txType, ["reversal", "domain_reversal"]),
+        ne(transactions.status, "reversed"),
+      );
+    }
 
     if (validationErrors.length > 0) {
       reply.code(400).send({ errors: validationErrors });

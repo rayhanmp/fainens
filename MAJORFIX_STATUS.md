@@ -311,7 +311,7 @@ The backend integrity work is not equivalent to complete user workflows. The fol
 22. **Attachment capability alignment.** Drive client file-size/type validation and error copy from backend capabilities; verify this against the separately modified attachment frontend before altering it.
 23. **Operational visibility.** Consider an admin/support view for migration health, financial revision/cache freshness, cleanup-outbox failures, and anomaly-scan state.
 
-Already surfaced in the frontend: reconciliation session evidence and voiding, generic transaction reversal, reports, period close/reopen, subscription catch-up, and salary catch-up. This list therefore targets the remaining gaps rather than duplicating completed UI work.
+Already surfaced in the frontend: reconciliation session evidence and voiding, generic transaction reversal, reports, period close/reopen, subscription catch-up, and salary catch-up. The regular Transactions feed now presents user-facing activity by default: superseded originals and inverse bookkeeping journals are omitted, while `includeReversals=true` remains available to audit/history consumers. This list therefore targets the remaining gaps rather than duplicating completed UI work.
 
 ## Agentic control-surface design
 

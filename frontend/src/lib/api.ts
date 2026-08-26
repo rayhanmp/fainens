@@ -358,6 +358,8 @@ export const api = {
       periodId?: string;
       categoryId?: string;
       tagId?: string;
+      /** Include internal inverse journals and superseded originals for audit views. */
+      includeReversals?: string;
       limit?: string;
       offset?: string;
     }) => {
