@@ -50,7 +50,7 @@ export interface DashboardAnalytics {
 export async function calculateNetWorth(): Promise<NetWorthResult> {
   // Get all asset and liability accounts
   const assetAccounts = await db
-    .select({ id: accounts.id, systemKey: accounts.systemKey })
+    .select({ id: accounts.id, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.type, "asset"));
 
@@ -65,7 +65,7 @@ export async function calculateNetWorth(): Promise<NetWorthResult> {
   for (const account of assetAccounts) {
     const balance = await computeAccountBalanceRolledUp(account.id, db);
     totalAssets += balance;
-    if (account.systemKey !== 'loans-receivable') liquidAssets += balance;
+    if (account.liquidityClass === 'cash_equivalent') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
@@ -89,7 +89,7 @@ export async function calculateNetWorth(): Promise<NetWorthResult> {
 /** Net worth (assets − liabilities) using only ledger activity on or before `asOfInclusiveMs`. */
 export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<NetWorthResult> {
   const assetAccounts = await db
-    .select({ id: accounts.id, systemKey: accounts.systemKey })
+    .select({ id: accounts.id, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.type, "asset"));
 
@@ -104,7 +104,7 @@ export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<Ne
   for (const account of assetAccounts) {
     const balance = await computeAccountBalanceAsOf(account.id, asOfInclusiveMs, db);
     totalAssets += balance;
-    if (account.systemKey !== 'loans-receivable') liquidAssets += balance;
+    if (account.liquidityClass === 'cash_equivalent') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
@@ -266,7 +266,7 @@ export async function calculateRunway(): Promise<RunwayResult> {
     .from(accounts)
     .where(and(
       eq(accounts.type, "asset"),
-      sql`(${accounts.systemKey} IS NULL OR ${accounts.systemKey} <> 'loans-receivable')`,
+      eq(accounts.liquidityClass, "cash_equivalent"),
     ));
 
   let liquidAssets = 0;

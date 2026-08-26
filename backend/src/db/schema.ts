@@ -26,6 +26,8 @@ export const accounts: any = sqliteTable("account", {
   billingDate: integer("billing_date"), // Day of month (1-31)
   provider: text("provider"), // For PayLater: Kredivo, SPayLater, etc.
   parentId: integer("parent_id").references(() => accounts.id, { onDelete: "set null" }),
+  /** Cash-flow/liquidity treatment for asset accounts; non-assets are non_cash. */
+  liquidityClass: text("liquidity_class").notNull().default("non_cash"), // cash_equivalent | receivable | investment | non_cash
 });
 
 export const transactions: any = sqliteTable("transaction", {

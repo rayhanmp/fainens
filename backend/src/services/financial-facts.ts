@@ -95,7 +95,7 @@ export async function getFinancialFacts(input: {
     WHERE t.date <= ${asOfMs}
       AND t.status <> 'draft'
       AND a.type = 'asset'
-      AND (a.system_key IS NULL OR a.system_key <> 'loans-receivable')
+      AND a.liquidity_class = 'cash_equivalent'
   `);
 
   return {

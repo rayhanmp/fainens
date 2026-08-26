@@ -9,6 +9,7 @@ import { calculateReconciliationItem } from "../services/reconciliation";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
+const liquidityClassEnum = ["cash_equivalent", "receivable", "investment", "non_cash"] as const;
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -93,6 +94,7 @@ export default async function (fastify: FastifyInstance) {
       billingDate?: number | null;
       provider?: string | null;
       parentId?: number | null;
+      liquidityClass?: (typeof liquidityClassEnum)[number];
     };
 
     if (!body.name?.trim()) {
@@ -105,6 +107,10 @@ export default async function (fastify: FastifyInstance) {
         .code(400)
         .send({ error: `Invalid account type. Must be one of: ${accountTypeEnum.join(", ")}` });
       return;
+    }
+    const liquidityClass = body.liquidityClass ?? (body.type === "asset" ? "cash_equivalent" : "non_cash");
+    if (!liquidityClassEnum.includes(liquidityClass) || (body.type !== "asset" && liquidityClass !== "non_cash")) {
+      return reply.code(400).send({ error: "Only asset accounts may be cash_equivalent, receivable, or investment" });
     }
 
     // Validate liability-specific fields
@@ -138,6 +144,7 @@ export default async function (fastify: FastifyInstance) {
         billingDate: body.billingDate ?? null,
         provider: body.provider ?? null,
         parentId: body.parentId ?? null,
+        liquidityClass,
       }).returning().all() as any[])[0];
       if (!inserted) throw new Error("Failed to create account");
       bumpFinancialRevisionSync(tx);
@@ -163,6 +170,7 @@ export default async function (fastify: FastifyInstance) {
       billingDate: number | null;
       provider: string | null;
       parentId: number | null;
+      liquidityClass: (typeof liquidityClassEnum)[number];
     }>;
 
     const [existing] = await db.select().from(accounts).where(eq(accounts.id, parseInt(id))).limit(1);
@@ -175,6 +183,11 @@ export default async function (fastify: FastifyInstance) {
     if (body.type !== undefined && !accountTypeEnum.includes(body.type)) {
       reply.code(400).send({ error: `Invalid account type. Must be one of: ${accountTypeEnum.join(", ")}` });
       return;
+    }
+    const nextType = body.type ?? existing.type;
+    const nextLiquidityClass = body.liquidityClass ?? existing.liquidityClass;
+    if (!liquidityClassEnum.includes(nextLiquidityClass as any) || (nextType !== "asset" && nextLiquidityClass !== "non_cash")) {
+      return reply.code(400).send({ error: "Only asset accounts may be cash_equivalent, receivable, or investment" });
     }
     if (body.name !== undefined && !body.name.trim()) {
       reply.code(400).send({ error: "name cannot be empty" });
@@ -224,6 +237,8 @@ export default async function (fastify: FastifyInstance) {
         ...(body.billingDate !== undefined && { billingDate: body.billingDate }),
         ...(body.provider !== undefined && { provider: body.provider }),
         ...(body.parentId !== undefined && { parentId: body.parentId }),
+        ...(body.liquidityClass !== undefined && { liquidityClass: body.liquidityClass }),
+        ...(body.type !== undefined && body.type !== "asset" && { liquidityClass: "non_cash" }),
       }).where(eq(accounts.id, parseInt(id))).returning().all() as any[])[0];
       if (!row) throw new Error("Account update failed");
       bumpFinancialRevisionSync(tx);

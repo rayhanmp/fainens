@@ -147,6 +147,11 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (!columnExists("loan_payment", "status")) {
       db.$client.exec("ALTER TABLE loan_payment ADD COLUMN status text DEFAULT 'posted' NOT NULL");
     }
+    if (!columnExists("account", "liquidity_class")) {
+      db.$client.exec("ALTER TABLE account ADD COLUMN liquidity_class text DEFAULT 'non_cash' NOT NULL");
+      db.$client.exec("UPDATE account SET liquidity_class = 'cash_equivalent' WHERE type = 'asset'");
+      db.$client.exec("UPDATE account SET liquidity_class = 'receivable' WHERE system_key = 'loans-receivable'");
+    }
     if (!columnExists("loan_payment", "reversal_transaction_id")) {
       db.$client.exec("ALTER TABLE loan_payment ADD COLUMN reversal_transaction_id integer REFERENCES \"transaction\"(id)");
     }
@@ -173,6 +178,7 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
 function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
     transaction: ["id", "date", "tx_type", "subscription_id", "status", "reversal_of_tx_id"],
+    account: ["id", "type", "liquidity_class"],
     transaction_line: ["transaction_id", "account_id", "debit", "credit"],
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],

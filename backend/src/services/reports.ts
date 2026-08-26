@@ -390,7 +390,7 @@ export async function generateCashFlowStatement(
     .from(accounts)
     .where(and(
       eq(accounts.type, "asset"),
-      sql`(${accounts.systemKey} IS NULL OR ${accounts.systemKey} <> 'loans-receivable')`,
+      eq(accounts.liquidityClass, "cash_equivalent"),
     ));
   const cashAccountIds = cashAccounts.map((a) => a.id);
 
@@ -457,7 +457,7 @@ export async function generateCashFlowStatement(
           WHERE tl2.transaction_id = ${transactionLines.transactionId}
             AND tl2.id != ${transactionLines.id}
             AND a2.type = 'asset'
-            AND a2.system_key = 'loans-receivable'
+            AND a2.liquidity_class <> 'cash_equivalent'
         )
       )`,
     })

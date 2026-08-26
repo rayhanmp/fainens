@@ -202,7 +202,7 @@ export async function precomputeNetWorth(): Promise<NetWorthCache> {
   const startedRevision = await getFinancialRevision();
   // Get all asset and liability accounts
   const assetAccounts = await db
-    .select({ id: accounts.id, systemKey: accounts.systemKey })
+    .select({ id: accounts.id, liquidityClass: accounts.liquidityClass })
     .from(accounts)
     .where(eq(accounts.type, "asset"));
 
@@ -217,7 +217,7 @@ export async function precomputeNetWorth(): Promise<NetWorthCache> {
   for (const account of assetAccounts) {
     const balance = await computeAccountBalanceRolledUp(account.id, db);
     totalAssets += balance;
-    if (account.systemKey !== 'loans-receivable') liquidAssets += balance;
+    if (account.liquidityClass === 'cash_equivalent') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
@@ -295,7 +295,7 @@ export async function precomputeRunway(): Promise<RunwayCache> {
     .from(accounts)
     .where(and(
       eq(accounts.type, "asset"),
-      sql`(${accounts.systemKey} IS NULL OR ${accounts.systemKey} <> 'loans-receivable')`,
+      eq(accounts.liquidityClass, "cash_equivalent"),
     ));
 
   let liquidAssets = 0;
