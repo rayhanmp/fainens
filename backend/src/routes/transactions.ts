@@ -703,7 +703,9 @@ RULES:
       reply.code(201).send({ id: txResult.transactionId, ...txResult });
     } catch (err) {
       fastify.log.error(err);
-      reply.code(400).send({ error: "Failed to create transaction" });
+      reply.code(400).send({
+        error: err instanceof Error ? err.message : "Failed to create transaction",
+      });
     }
   });
 

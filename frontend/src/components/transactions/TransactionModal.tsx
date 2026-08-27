@@ -803,7 +803,8 @@ export function TransactionModal({
           const feeAmount = transferDetails.fee;
           const feeDescription = `Transfer fee: ${simpleForm.description || 'Transfer'}`;
           
-          // Fee transaction: Debit expense (Transfer Fee), Credit source wallet
+          // Fee transaction: debit expense and credit the wallet that actually
+          // paid it. Recipient-deducted OVO fees reduce the destination wallet.
           await api.transactions.create({
             kind: 'expense',
             amountCents: feeAmount,
@@ -813,7 +814,7 @@ export function TransactionModal({
             date: dateIso,
             periodId: periodId ?? null,
             categoryId: null, // Will use auto expense account
-            walletAccountId,
+            walletAccountId: transferDetails.senderPays ? walletAccountId : toWalletAccountId,
             linkedTxId: mainTransaction.id, // Link to parent transfer transaction
           });
         } else {

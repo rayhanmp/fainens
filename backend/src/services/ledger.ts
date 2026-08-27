@@ -491,7 +491,13 @@ export async function prepareJournalEntry(
   if (new Set(categoryAllocations.map((allocation) => allocation.categoryId)).size !== categoryAllocations.length) {
     throw new Error("A category may appear only once per journal allocation");
   }
-  if (categoryAllocations.reduce((sum, allocation) => sum + allocation.amount, 0) !== netExpense) {
+  // An uncategorized expense is deliberately allowed. The auto expense
+  // account is the accounting counterpart for simple expenses such as a bank
+  // transfer fee; forcing it into an invented category makes those ordinary
+  // postings fail. When the caller supplies a category or allocations, they
+  // must still reconcile exactly to the expense line(s).
+  const hasExplicitCategoryAllocation = input.categoryId != null || input.categoryAllocations != null;
+  if (hasExplicitCategoryAllocation && categoryAllocations.reduce((sum, allocation) => sum + allocation.amount, 0) !== netExpense) {
     throw new Error("category allocations must equal the journal's net expense amount");
   }
   if (categoryAllocations.length > 0) {
