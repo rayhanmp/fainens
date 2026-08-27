@@ -13,6 +13,7 @@ import { ReconciliationModal } from '../components/reconciliation/Reconciliation
 import {
   Plus,
   Edit2,
+  Archive,
   Wallet,
   CreditCard,
   RefreshCw,
@@ -390,56 +391,15 @@ function AccountsPage() {
           />
         </div>
 
-        {/* Slim metrics bar — Stitch */}
+        {/* Position summary */}
         {isInitialLoading ? (
-          <div className="h-24 animate-pulse rounded-xl bg-[var(--ref-surface-container-highest)]/50" />
+          <div className="h-40 animate-pulse rounded-3xl bg-[var(--ref-surface-container-highest)]/50" />
         ) : summary ? (
-          <section className="rounded-2xl bg-[var(--ref-surface-container-lowest)] p-5 editorial-shadow">
-            <div className="flex flex-wrap items-center gap-6 md:gap-8">
-              <div>
-                <p className="mb-1 font-body text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-                  Total net worth
-                </p>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">
-                    {formatCurrency(summary.netWorth)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ref-surface-container)] px-2 py-1 text-[10px] font-semibold text-[var(--ref-on-surface-variant)]">
-                    <Clock3 className="h-3 w-3" aria-hidden />
-                    {lastLoadedAt ? `Updated ${new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Ledger balance'}
-                  </span>
-                </div>
-              </div>
-              <div className="hidden h-10 w-px bg-[var(--ref-outline-variant)]/40 sm:block" />
-              <div className="hidden sm:block">
-                <p className="mb-1 font-body text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-                  Assets
-                </p>
-                <p className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">
-                  {formatCurrency(summary.totalAssets)}
-                </p>
-              </div>
-              <div className="hidden h-10 w-px bg-[var(--ref-outline-variant)]/40 sm:block" />
-              <div className="hidden sm:block">
-                <p className="mb-1 font-body text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-                  Liabilities
-                </p>
-                <p className="font-headline text-lg font-bold text-[var(--ref-error)]">
-                  {formatCurrency(summary.totalLiabilities)}
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--ref-outline-variant)]/20 pt-4 text-xs text-[var(--ref-on-surface-variant)]">
-              <CheckCircle2 className="h-4 w-4 text-[var(--ref-secondary)]" aria-hidden />
-              <span>{reconciliationSummary.checked}/{reconciliationSummary.total || 0} {isFilteredQuery ? 'shown accounts' : 'accounts'} checked</span>
-              {reconciliationSummary.issues > 0 ? (
-                <span className="font-semibold text-[var(--ref-error)]">· {reconciliationSummary.issues} need attention</span>
-              ) : reconciliationSummary.checked === reconciliationSummary.total && reconciliationSummary.total > 0 ? (
-                <span className="font-semibold text-[var(--ref-secondary)]">· All matched</span>
-              ) : (
-                <span>· Reconcile to verify today’s balances</span>
-              )}
-            </div>
+          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-3xl bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]"><Wallet className="h-5 w-5" /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] opacity-70">Net worth</p><p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{formatCurrency(summary.netWorth)}</p><p className="mt-4 text-xs opacity-75">Assets less liabilities</p></article>
+            <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5"><Banknote className="h-5 w-5 text-[var(--ref-primary)]" /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Assets</p><p className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(summary.totalAssets)}</p><p className="mt-4 text-xs text-[var(--ref-on-surface-variant)]">Money and value you own</p></article>
+            <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5"><CreditCard className="h-5 w-5 text-rose-600 dark:text-rose-300" /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Liabilities</p><p className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(summary.totalLiabilities)}</p><p className="mt-4 text-xs text-[var(--ref-on-surface-variant)]">Cards, PayLater, and debts</p></article>
+            <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><CheckCircle2 className={cn('h-5 w-5', reconciliationSummary.issues > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]')} /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Balance checks</p><p className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{reconciliationSummary.checked}/{reconciliationSummary.total}</p><p className={cn('mt-4 text-xs', reconciliationSummary.issues > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface-variant)]')}>{reconciliationSummary.issues > 0 ? `${reconciliationSummary.issues} need attention` : lastLoadedAt ? `Updated ${new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Reconcile to verify'}</p></article>
           </section>
         ) : null}
 
@@ -504,7 +464,7 @@ function AccountsPage() {
             <p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Adjust search or filters.</p>
           </div>
         ) : (
-          <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <section className="space-y-6">
             <LedgerColumn
               title="Cash & checking"
               accounts={buckets.cash}
@@ -627,43 +587,30 @@ function LedgerColumn({
       ? `${accounts.length} card${accounts.length === 1 ? '' : 's'}`
       : `${accounts.length} account${accounts.length === 1 ? '' : 's'}`;
 
+  const total = accounts.reduce((sum, account) => sum + Math.abs(account.balance), 0);
+  const accent = cardVariant === 'credit' || cardVariant === 'paylater'
+    ? 'text-rose-600 dark:text-rose-300'
+    : cardVariant === 'investment'
+      ? 'text-violet-700 dark:text-violet-300'
+      : 'text-[var(--ref-primary)]';
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between px-1">
-        <h3 className="font-headline text-xs font-extrabold uppercase tracking-widest text-[var(--ref-primary)]">
-          {title}
-        </h3>
-        <span className="font-body text-[10px] font-medium text-[var(--ref-outline)]">{countLabel}</span>
-      </div>
+    <section className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm sm:p-5">
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--ref-outline-variant)]/20 pb-4">
+        <div>
+          <p className={cn('text-[10px] font-extrabold uppercase tracking-[0.16em]', accent)}>{title}</p>
+          <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{accounts.length > 0 ? countLabel : emptyHint}</p>
+        </div>
+        {accounts.length > 0 && <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">{cardVariant === 'credit' || cardVariant === 'paylater' ? 'Total owed' : 'Total'}</p><p className="mt-1 font-headline text-base font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(footerSummary ?? total)}</p></div>}
+      </header>
       {accounts.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-[var(--ref-outline-variant)]/40 px-3 py-6 text-center text-[10px] text-[var(--ref-outline)]">
-          {emptyHint}
-        </p>
+        <p className="py-8 text-center text-sm text-[var(--ref-on-surface-variant)]">No accounts here yet.</p>
       ) : (
-        accounts.map((a, idx) => (
-          <AccountTile
-            key={a.id}
-            account={a}
-            variant={cardVariant}
-            darkCard={cardVariant === 'credit' && a.type === 'liability' && idx === 0}
-            onEdit={() => onEdit(a)}
-            onDelete={() => onDelete(a.id)}
-            onRestore={() => onRestore(a.id)}
-            reconciliation={reconciliationByAccount.get(a.id)}
-          />
-        ))
-      )}
-      {footerSummary != null && footerSummary > 0 && (
-        <div className="rounded-xl border border-[var(--ref-primary)]/15 bg-[var(--ref-primary)]/5 p-4">
-          <p className="text-[9px] font-bold uppercase tracking-tighter text-[var(--ref-primary)]">
-            Total PayLater dues
-          </p>
-          <p className="font-headline text-sm font-bold text-[var(--ref-primary)]">
-            {formatCurrency(footerSummary)}
-          </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {accounts.map((account) => <AccountTile key={account.id} account={account} variant={cardVariant} onEdit={() => onEdit(account)} onDelete={() => onDelete(account.id)} onRestore={() => onRestore(account.id)} reconciliation={reconciliationByAccount.get(account.id)} />)}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -701,6 +648,31 @@ function AccountTile({
   const accountIdentifier = identifier ? `Account ${identifier}` : 'No account number added';
   const lifecycleAction = a.isActive ? onDelete : onRestore;
   const lifecycleLabel = a.isActive ? 'Archive' : 'Restore';
+  const AccountIcon = variant === 'ewallet' ? WalletCards : variant === 'credit' ? CreditCard : variant === 'paylater' ? Clock3 : variant === 'investment' ? Scale : variant === 'receivable' ? Banknote : Wallet;
+  const isLiability = a.type === 'liability';
+  const displayBalance = isLiability ? Math.abs(a.balance) : a.balance;
+  const tone = variant === 'credit' || variant === 'paylater'
+    ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+    : variant === 'investment'
+      ? 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+      : variant === 'ewallet'
+        ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+        : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]';
+
+  return (
+    <article className="group rounded-2xl border border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-low)] p-4 transition-all hover:-translate-y-0.5 hover:border-[var(--ref-primary)]/25 hover:shadow-lg">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', tone)}>{a.icon ? <span className="text-lg">{a.icon}</span> : <AccountIcon className="h-5 w-5" />}</div>
+          <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">{isLiability ? 'Liability' : variant === 'investment' ? 'Investment' : variant === 'receivable' ? 'Receivable' : 'Account'}</p><h4 className="truncate font-headline text-sm font-extrabold text-[var(--ref-on-surface)]">{a.name}</h4></div>
+        </div>
+        <button type="button" onClick={onEdit} className="rounded-xl p-2 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)]" aria-label={`Edit ${a.name}`} title="Edit account"><Edit2 className="h-4 w-4" /></button>
+      </div>
+      <div className="mt-5"><p className="text-xs text-[var(--ref-on-surface-variant)]">{isLiability ? 'Amount owed' : variant === 'investment' ? 'Current value' : variant === 'receivable' ? 'Owed to you' : 'Available balance'}</p><p className="mt-1 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(displayBalance)}</p>{a.creditLimit != null && <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}</div>
+      <div className="mt-5 flex items-center justify-between gap-2 border-t border-[var(--ref-outline-variant)]/20 pt-3"><span className={cn('min-w-0 truncate text-[11px] font-semibold', reconciliationClass)}>{reconciliationLabel}</span><Link to="/transactions" search={{ accountId: String(a.id) }} className="shrink-0 text-xs font-bold text-[var(--ref-primary)] hover:underline">Activity</Link></div>
+      <div className="mt-3 flex items-center justify-between gap-3 text-[11px]"><span className="truncate text-[var(--ref-on-surface-variant)]">{accountIdentifier}</span><button type="button" onClick={lifecycleAction} className="inline-flex shrink-0 items-center gap-1 text-[var(--ref-outline)] transition-colors hover:text-[var(--ref-error)]"><Archive className="h-3.5 w-3.5" />{lifecycleLabel}</button></div>
+    </article>
+  );
 
   if (darkCard) {
     return (
@@ -852,7 +824,7 @@ function AccountTile({
         </div>
         <p className="text-[10px] text-[var(--ref-on-surface-variant)]">Amount owed</p>
         <p className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">{formatCurrency(a.balance)}</p>
-        {a.creditLimit != null && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}
+        {a.creditLimit != null && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit ?? 0)}</p>}
         <div className="mt-3 flex items-center justify-between text-[9px] font-semibold">
           <span className={cn('uppercase', reconciliationClass)}>{reconciliationLabel}</span>
           <Link to="/transactions" search={{ accountId: String(a.id) }} className="text-[var(--ref-primary)] hover:underline">
@@ -899,7 +871,7 @@ function AccountTile({
       <p className="font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">
         {formatCurrency(a.balance)}
       </p>
-      {isCreditLight && a.creditLimit != null && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}
+      {isCreditLight && a.creditLimit != null && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit ?? 0)}</p>}
       <div className="mt-4 flex items-center justify-between border-t border-[var(--ref-outline-variant)]/15 pt-4 text-[10px] font-medium text-[var(--ref-on-surface-variant)]">
         <span className="flex items-center gap-1">
           <Banknote className="h-3 w-3" aria-hidden />
