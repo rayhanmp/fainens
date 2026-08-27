@@ -675,6 +675,7 @@ export const api = {
     restore: (id: number) => fetchApi(`/periods/${id}/restore`, { method: 'POST' }),
     returnPreview: (asOfDate: number) => fetchApi<{
       candidates: Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>;
+      payrollDay?: number;
       reason?: string;
     }>(`/periods/return-preview?asOfDate=${asOfDate}`),
     createReturnBackfill: (asOfDate: number, currentPeriodCoverage: 'partial' | 'complete' = 'partial') => fetchApi<{

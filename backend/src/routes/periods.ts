@@ -6,41 +6,43 @@ import { salaryPeriods, budgetPlans, categories, salarySettings, transactions, a
 import { precomputePeriodSummary } from "../cache/precompute";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { inclusivePeriodEnd } from "../services/period-locking";
+import { firstPayrollStartAfter, followingPayrollStart, payrollPeriodEnd } from "../services/period-cadence";
 
 const MAX_RETURN_BACKFILL_PERIODS = 120;
 
 type ReturnPeriodCandidate = { name: string; startDate: number; endDate: number; isCurrent: boolean };
 
-function followingPeriod(startDate: number, asOfDate: number): ReturnPeriodCandidate {
-  const end = new Date(startDate);
-  end.setMonth(end.getMonth() + 1);
-  end.setDate(end.getDate() - 1);
+function payrollPeriod(startDate: number, payrollDay: number, asOfDate: number): ReturnPeriodCandidate {
+  const endDate = payrollPeriodEnd(startDate, payrollDay);
+  const end = new Date(endDate);
   return {
     name: `${end.toLocaleString("default", { month: "long" })} ${end.getFullYear()}`,
     startDate,
-    endDate: end.getTime(),
-    isCurrent: asOfDate <= inclusivePeriodEnd(end.getTime()),
+    endDate,
+    isCurrent: asOfDate <= inclusivePeriodEnd(endDate),
   };
 }
 
-async function buildReturnBackfillPreview(asOfDate: number): Promise<{ candidates: ReturnPeriodCandidate[]; reason?: string }> {
+async function buildReturnBackfillPreview(asOfDate: number): Promise<{ candidates: ReturnPeriodCandidate[]; payrollDay?: number; reason?: string }> {
   const [latest] = await db.select({ endDate: salaryPeriods.endDate })
     .from(salaryPeriods).orderBy(desc(salaryPeriods.endDate)).limit(1);
   if (!latest) {
     return { candidates: [], reason: "No prior accounting period exists, so the product cannot infer a safe missing-period cadence." };
   }
-  let nextStart = inclusivePeriodEnd(Number(latest.endDate)) + 1;
+  const [settings] = await db.select({ payrollDay: salarySettings.payrollDay }).from(salarySettings).limit(1);
+  const payrollDay = settings?.payrollDay ?? 25;
+  let nextStart = firstPayrollStartAfter(Number(latest.endDate), payrollDay);
   if (nextStart > asOfDate) return { candidates: [] };
   const candidates: ReturnPeriodCandidate[] = [];
   while (nextStart <= asOfDate && candidates.length < MAX_RETURN_BACKFILL_PERIODS) {
-    const candidate = followingPeriod(nextStart, asOfDate);
+    const candidate = payrollPeriod(nextStart, payrollDay, asOfDate);
     candidates.push(candidate);
-    nextStart = inclusivePeriodEnd(candidate.endDate) + 1;
+    nextStart = followingPayrollStart(candidate.startDate, payrollDay);
   }
   if (nextStart <= asOfDate) {
     return { candidates: [], reason: `Refusing to infer more than ${MAX_RETURN_BACKFILL_PERIODS} periods at once.` };
   }
-  return { candidates };
+  return { candidates, payrollDay };
 }
 
 async function assertNoPeriodOverlap(startMs: number, endMs: number, excludeId?: number): Promise<void> {
