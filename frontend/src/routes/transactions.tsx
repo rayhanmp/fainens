@@ -58,6 +58,12 @@ function displayAmount(transaction: TransactionRow) {
   if (transaction.incomeCents > 0) return transaction.incomeCents;
   return Math.max(transaction.debitCents, transaction.creditCents);
 }
+function isTransferFee(transaction: TransactionRow) {
+  return transaction.linkedTxId != null && (
+    /^transfer fee:/i.test(transaction.description) ||
+    /^admin fee for transfer #\d+/i.test(transaction.notes ?? '')
+  );
+}
 function coverageMessage(period: Period) {
   if (period.coverageStatus === 'skipped') return 'This period was skipped during an untracked break. An empty activity list is not proof of zero activity.';
   if (period.coverageStatus === 'partial') return 'Some activity is missing in this period. Recorded totals are not a full financial result.';
@@ -177,6 +183,17 @@ function TransactionsPage() {
   const selectedPeriod = useMemo(() => periods.find((period) => String(period.id) === search.periodId) ?? null, [periods, search.periodId]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const periodLabel = selectedPeriod?.name ?? (search.periodId === 'all' ? 'All periods' : 'Current period');
+  const transactionRows = useMemo(() => {
+    const feesByParentId = new Map<number, number>();
+    for (const transaction of transactions) {
+      if (isTransferFee(transaction) && transaction.linkedTxId != null) {
+        feesByParentId.set(transaction.linkedTxId, (feesByParentId.get(transaction.linkedTxId) ?? 0) + Math.abs(transaction.expenseCents));
+      }
+    }
+    return transactions
+      .filter((transaction) => !isTransferFee(transaction))
+      .map((transaction) => ({ transaction, transferFee: feesByParentId.get(transaction.id) ?? 0 }));
+  }, [transactions]);
 
   const openModal = (transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit') => {
     setModalInitialMode(mode);
@@ -250,14 +267,14 @@ function TransactionsPage() {
     <section className="mt-4 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] shadow-sm">
       <div className="flex flex-col gap-3 border-b border-[var(--ref-outline-variant)]/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-headline font-bold text-[var(--ref-on-surface)]">Activity</p><p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">Normal day-to-day transactions</p></div><button type="button" role="switch" aria-checked={includeAdjustments} title="Include accounting corrections and recovery adjustments" onClick={() => setIncludeAdjustments((current) => !current)} className="inline-flex w-fit shrink-0 items-center gap-2.5 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs font-bold whitespace-nowrap text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--ref-primary)]/40 hover:text-[var(--ref-on-surface)]"><span className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', includeAdjustments ? 'bg-[var(--ref-primary)]' : 'bg-[var(--ref-outline-variant)]')}><span className={cn('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform', includeAdjustments ? 'translate-x-4' : 'translate-x-0')} /></span><span>{includeAdjustments ? 'Showing corrections' : 'Show corrections'}</span></button></div>
       {isLoading ? <div className="p-12 text-center text-sm text-[var(--ref-on-surface-variant)]">Loading activity…</div> : total === 0 ? <div className="p-12 text-center"><Wallet className="mx-auto mb-3 h-10 w-10 text-[var(--ref-outline)]" /><p className="font-headline font-bold">No activity in this view</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Try changing filters or add a transaction.</p></div> : <div className="divide-y divide-[var(--ref-outline-variant)]/20">
-        {transactions.map((transaction) => {
+        {transactionRows.map(({ transaction, transferFee }) => {
           const kind = getKind(transaction); const amount = displayAmount(transaction); const category = categoryLabel(transaction, categories);
           const walletLine = transaction.lines.find((line) => kind === 'income' ? line.debit > 0 : line.credit > 0) ?? transaction.lines[0];
           const accountName = walletLine?.accountName ?? accounts.find((account) => account.id === walletLine?.accountId)?.name;
           const correction = transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment';
           return <article key={transaction.id} className={cn('group flex cursor-pointer items-center gap-3 px-4 py-4 transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', correction && 'bg-[var(--ref-surface-container-low)]/60')} onClick={() => openModal(transaction, 'view')}>
             <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
-            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-headline font-bold text-[var(--ref-on-surface)]">{transaction.description}</p>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{formatDateTime(transaction.date)} · {accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p></div>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-headline font-bold text-[var(--ref-on-surface)]">{transaction.description}</p>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{formatDateTime(transaction.date)} · {accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p>{transferFee > 0 && <p className="mt-1 text-[11px] font-medium text-[var(--ref-on-surface-variant)]">Includes transfer fee {formatCurrency(transferFee)}</p>}</div>
             <div className="hidden min-w-32 text-right sm:block"><p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">{category ?? (kind === 'income' ? 'Income' : kind === 'transfer' ? 'Transfer' : kind === 'loan' ? 'Loan' : 'Unallocated')}</p>{transaction.categoryAllocations.length > 1 && <p className="mt-0.5 text-[10px] text-[var(--ref-outline)]">Split allocation</p>}</div>
             <div className={cn('min-w-24 text-right font-headline text-sm font-extrabold', amount > 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{amount > 0 ? '+' : ''}{formatCurrency(Math.abs(amount))}</div>
             <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100" onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => openModal(transaction, 'view')} className="rounded-xl p-2 text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)]" title="View details"><Edit2 className="h-4 w-4" /></button>{transaction.status === 'draft' ? <button type="button" onClick={() => void handleDeleteDraft(transaction)} className="rounded-xl p-2 text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10" title="Delete draft"><Trash2 className="h-4 w-4" /></button> : <button type="button" disabled={correction} onClick={() => void handleCorrect(transaction)} className={cn('rounded-xl p-2 text-amber-700 hover:bg-amber-500/10', correction && 'cursor-not-allowed opacity-40 hover:bg-transparent')} title={correction ? 'Corrections cannot be reversed' : 'Correct transaction'}><RotateCcw className="h-4 w-4" /></button>}</div>
