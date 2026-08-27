@@ -511,6 +511,7 @@ async function answerWithToolsStreaming(
   onTextDelta: (text: string) => void,
   onTool: (name: string) => void,
   executionContext?: AgentToolExecutionContext,
+  signal?: AbortSignal,
 ) {
   if (!env.OPENROUTER_API_KEY) {
     const result = await answerWithTools(question, scopeInput, history, images, memories, executionContext);
@@ -542,6 +543,7 @@ async function answerWithToolsStreaming(
       messages,
       tools: modelTools,
       onTextDelta: (text) => { roundContent += text; lastContent += text; onTextDelta(text); },
+      signal,
     });
     const assistantMessage = response.message;
     const requestedCalls = assistantMessage.tool_calls ?? [];
@@ -592,6 +594,7 @@ async function answerWithToolsStreaming(
       messages: [...messages, { role: "user", content: "Synthesize a useful, direct answer from the tool results already provided. Do not request another tool and do not return an empty message." }],
       tools: [],
       onTextDelta: (text) => { lastContent += text; onTextDelta(text); },
+      signal,
     });
     if (typeof finalResponse.message.content === "string" && !lastContent) lastContent = finalResponse.message.content;
   }
@@ -1018,13 +1021,22 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
 
     reply.hijack();
+    const providerAbortController = new AbortController();
+    let responseFinished = false;
+    const abortIfClientDisconnects = () => {
+      if (!responseFinished) providerAbortController.abort();
+    };
+    reply.raw.once("close", abortIfClientDisconnects);
+    request.raw.once("aborted", abortIfClientDisconnects);
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    const send = (event: unknown) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    const send = (event: unknown) => {
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
     try {
       const result = await executeAgentQuery(
         request,
@@ -1038,6 +1050,7 @@ export default async function agentRoutes(fastify: FastifyInstance) {
           (text) => send({ type: "delta", text }),
           (name) => send({ type: "tool", name }),
           executionContext,
+          providerAbortController.signal,
         ),
       );
       send({ type: "complete", response: result });
@@ -1045,7 +1058,10 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       fastify.log.error(error);
       send({ type: "error", error: error instanceof Error ? error.message : "Failed to answer agent query" });
     } finally {
-      reply.raw.end();
+      responseFinished = true;
+      reply.raw.off("close", abortIfClientDisconnects);
+      request.raw.off("aborted", abortIfClientDisconnects);
+      if (!reply.raw.writableEnded) reply.raw.end();
     }
   });
 

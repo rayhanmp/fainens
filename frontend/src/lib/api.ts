@@ -213,12 +213,14 @@ export type AgentTransactionActionProposal = AgentActionProposal & {
 async function streamAgentQuery(
   data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; replaceMessageId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> },
   onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
 ): Promise<AgentQueryResponse> {
   const response = await fetch(`${API_BASE}/agent/query/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     credentials: 'include',
     body: JSON.stringify(data),
+    signal,
   });
   if (!response.ok || !response.body) {
     const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));

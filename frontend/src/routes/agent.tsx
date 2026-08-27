@@ -18,6 +18,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Square,
   Trash2,
   User,
   X,
@@ -459,6 +460,7 @@ function AgentPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
+  const agentRequestRef = useRef<AbortController | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
 
   useLayoutEffect(() => {
@@ -612,6 +614,8 @@ function AgentPage() {
     });
     setIsSending(true);
     setStreamActivity('Thinking…');
+    const requestController = new AbortController();
+    agentRequestRef.current = requestController;
     let streamedAssistantId: string | null = null;
     try {
       let conversationId = activeConversationId;
@@ -655,7 +659,7 @@ function AgentPage() {
               : message,
           ));
         }
-      });
+      }, requestController.signal);
       // Keep the complete receipt even if the final SSE event was processed
       // immediately before React applied its state update.
       setMessages((current) => current.map((message) =>
@@ -668,12 +672,23 @@ function AgentPage() {
       setPendingImages([]);
       void refreshConversations().catch(() => undefined);
     } catch (caught) {
-      setMessages((current) => current.filter((message) => message.id !== streamedAssistantId));
-      setError(caught instanceof Error ? caught.message : 'The agent query failed. Please try again.');
+      const wasCancelled = requestController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError');
+      if (wasCancelled) {
+        setMessages((current) => current.filter((message) => message.id !== streamedAssistantId || message.role !== 'assistant' || message.text.trim().length > 0));
+        setNotice('Response stopped.');
+      } else {
+        setMessages((current) => current.filter((message) => message.id !== streamedAssistantId));
+        setError(caught instanceof Error ? caught.message : 'The agent query failed. Please try again.');
+      }
     } finally {
+      if (agentRequestRef.current === requestController) agentRequestRef.current = null;
       setIsSending(false);
       setStreamActivity(null);
     }
+  };
+
+  const stopAgentQuery = () => {
+    agentRequestRef.current?.abort();
   };
 
   const retryLastUserMessage = (message: Extract<ChatMessage, { role: 'user' }>) => {
@@ -1002,7 +1017,13 @@ function AgentPage() {
                       title="Attach images"
                       aria-label="Attach images"
                     ><ImagePlus className="h-5 w-5" /></button>
-                    <Button type="submit" disabled={draft.trim().length < 2} isLoading={isSending} className="h-9 w-9 shrink-0 rounded-full p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
+                    {isSending ? (
+                      <button type="button" onClick={stopAgentQuery} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-background)] transition-transform hover:scale-105" aria-label="Stop response" title="Stop response">
+                        <Square className="h-3.5 w-3.5 fill-current" />
+                      </button>
+                    ) : (
+                      <Button type="submit" disabled={draft.trim().length < 2} className="h-9 w-9 shrink-0 rounded-full p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
+                    )}
                   </div>
                 </div>
                 <p id="agent-question-help" className="sr-only">Drop an image here or use the attach button. JPEG, PNG, WebP, and GIF up to 4 MB. Images are not retained.</p>

@@ -95,6 +95,7 @@ export async function streamOpenRouterAgent(input: {
   tools: AgentChatTool[];
   model?: string;
   onTextDelta: (text: string) => void;
+  signal?: AbortSignal;
 }): Promise<AgentChatResponse> {
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -112,6 +113,7 @@ export async function streamOpenRouterAgent(input: {
       temperature: 0.2,
       max_tokens: 1200,
     }),
+    signal: input.signal,
   });
   if (!response.ok || !response.body) {
     throw new Error(`Agent model stream failed (${response.status})`);
