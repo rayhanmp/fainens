@@ -407,6 +407,11 @@ export const api = {
       periodId?: string;
       categoryId?: string;
       tagId?: string;
+      search?: string;
+      kind?: 'expense' | 'income' | 'transfer' | 'loan';
+      minAmount?: string;
+      maxAmount?: string;
+      sort?: 'newest' | 'oldest' | 'largest';
       /** Include internal inverse journals and superseded originals for audit views. */
       includeReversals?: string;
       limit?: string;
@@ -423,6 +428,7 @@ export const api = {
           place: string | null;
           txType: string;
           status: string;
+          reversalOfTxId: number | null;
           categoryId: number | null;
           periodId: number | null;
           linkedTxId: number | null;
@@ -448,6 +454,10 @@ export const api = {
           limit: number;
           offset: number;
           hasMore: boolean;
+        };
+        summary: {
+          expenseCents: number;
+          incomeCents: number;
         };
       }>(`/transactions${query ? `?${query}` : ''}`);
     },

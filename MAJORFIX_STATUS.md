@@ -226,6 +226,8 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
     - The Periods screen is now exposed in desktop and mobile navigation and redesigned as a current-period control card plus chronological history. Its detail view separates lifecycle from coverage, supports coverage review, archive/restore, and direct budget/activity links. Recovery backfill derives every shell from the configured payroll calendar (for example, 25th–24th), never a fixed 30-day cadence. Period dates are server-locked once posted activity or budget plans exist, so a boundary edit cannot silently reframe recorded history.
 
+    - The Transactions UI now treats the selected period’s coverage as part of the activity scope, labels totals as **Spending in this view**, and defaults to effective user activity rather than reversal/recovery mechanics. Search, account/category/kind/date/amount filters, sorting, pagination, and scoped totals execute on the server; category filtering includes multi-category allocations. Accounting corrections remain inspectable only through an explicit opt-in.
+
 ## Return-after-absence period coverage policy
 
 Missing calendar/accounting periods must be represented, not silently omitted and not treated as empty. A period created because the user was absent is a **skipped-coverage period**: it records that the ledger did not capture ordinary activity for that interval. It does not assert zero income, spending, cash movement, budget actuals, or account balance change.

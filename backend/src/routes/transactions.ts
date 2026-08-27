@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, inArray, count, ne, notInArray, SQL } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray, count, ne, notInArray, or, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { db } from "../db/client";
@@ -131,11 +131,31 @@ function buildBaseConditions(
 
   const parsedCategoryId = parseIdParam(categoryId);
   if (parsedCategoryId !== null) {
-    conditions.push(eq(transactions.categoryId, parsedCategoryId));
+    // A category can be the legacy/simple primary category or one of the
+    // explicit allocations on a multi-category journal.
+    conditions.push(or(
+      eq(transactions.categoryId, parsedCategoryId),
+      sql`exists (select 1 from transaction_category_allocation allocation_filter where allocation_filter.transaction_id = ${transactions.id} and allocation_filter.category_id = ${parsedCategoryId})`,
+    )!);
   }
 
   return { conditions, errors };
 }
+
+function activityKindCondition(kind: string): SQL | null {
+  if (kind === "expense") {
+    return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'expense' and kind_line.debit > kind_line.credit)`;
+  }
+  if (kind === "income") {
+    return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'revenue' and kind_line.credit > kind_line.debit)`;
+  }
+  if (kind === "transfer") return sql`${transactions.txType} in ('simple_transfer', 'transfer')`;
+  if (kind === "loan") return sql`${transactions.txType} like '%loan%'`;
+  return null;
+}
+
+/** The largest journal line is a display/filter convenience, not a statement calculation. */
+const transactionDisplayAmount = sql<number>`coalesce((select max(case when amount_line.debit > amount_line.credit then amount_line.debit else amount_line.credit end) from transaction_line amount_line where amount_line.transaction_id = ${transactions.id}), 0)`;
 
 // Fetch transaction details (lines and tags) in bulk to avoid N+1
 async function fetchTransactionDetails(txIds: number[]) {
@@ -308,6 +328,11 @@ RULES:
       periodId,
       categoryId,
       tagId,
+      search,
+      kind,
+      minAmount,
+      maxAmount,
+      sort = "newest",
       includeReversals: includeReversalsParam,
       limit: limitParam = String(DEFAULT_LIMIT),
       offset: offsetParam = "0",
@@ -319,6 +344,11 @@ RULES:
       periodId?: string;
       categoryId?: string;
       tagId?: string;
+      search?: string;
+      kind?: string;
+      minAmount?: string;
+      maxAmount?: string;
+      sort?: "newest" | "oldest" | "largest";
       includeReversals?: string;
       limit?: string;
       offset?: string;
@@ -361,7 +391,7 @@ RULES:
     // feed, while allowing audit/history consumers to opt in explicitly.
     if (includeReversalsParam !== "true") {
       baseConditions.push(
-        notInArray(transactions.txType, ["reversal", "domain_reversal"]),
+        notInArray(transactions.txType, ["reversal", "domain_reversal", "historical_recovery_adjustment"]),
         ne(transactions.status, "reversed"),
       );
     }
@@ -373,12 +403,44 @@ RULES:
 
     const parsedAccountId = parseIdParam(accountId);
     const parsedTagId = parseIdParam(tagId);
-
-    // Validate that we don't have conflicting filters
-    if (parsedAccountId !== null && parsedTagId !== null) {
-      reply.code(400).send({ error: "Cannot filter by both accountId and tagId simultaneously" });
-      return;
+    if (parsedAccountId !== null) {
+      baseConditions.push(sql`exists (select 1 from transaction_line account_filter where account_filter.transaction_id = ${transactions.id} and account_filter.account_id = ${parsedAccountId})`);
     }
+    if (parsedTagId !== null) {
+      baseConditions.push(sql`exists (select 1 from transaction_tag tag_filter where tag_filter.transaction_id = ${transactions.id} and tag_filter.tag_id = ${parsedTagId})`);
+    }
+
+    const normalizedSearch = search?.trim().toLowerCase();
+    if (normalizedSearch) {
+      if (normalizedSearch.length > 120) return reply.code(400).send({ error: "search must be 120 characters or fewer" });
+      const searchPattern = `%${normalizedSearch}%`;
+      baseConditions.push(sql`(
+        lower(${transactions.description}) like ${searchPattern}
+        or lower(coalesce(${transactions.notes}, '')) like ${searchPattern}
+        or lower(coalesce(${transactions.place}, '')) like ${searchPattern}
+        or lower(coalesce(${transactions.reference}, '')) like ${searchPattern}
+        or exists (select 1 from transaction_tag search_tag inner join tag search_tag_name on search_tag_name.id = search_tag.tag_id where search_tag.transaction_id = ${transactions.id} and lower(search_tag_name.name) like ${searchPattern})
+        or exists (select 1 from transaction_category_allocation search_allocation inner join category search_category on search_category.id = search_allocation.category_id where search_allocation.transaction_id = ${transactions.id} and lower(search_category.name) like ${searchPattern})
+      )`);
+    }
+
+    if (kind) {
+      const kindCondition = activityKindCondition(kind);
+      if (!kindCondition) return reply.code(400).send({ error: "kind must be expense, income, transfer, or loan" });
+      baseConditions.push(kindCondition);
+    }
+
+    const parsedMinAmount = minAmount == null || minAmount === "" ? null : Number(minAmount);
+    const parsedMaxAmount = maxAmount == null || maxAmount === "" ? null : Number(maxAmount);
+    if ((parsedMinAmount != null && (!Number.isSafeInteger(parsedMinAmount) || parsedMinAmount < 0)) || (parsedMaxAmount != null && (!Number.isSafeInteger(parsedMaxAmount) || parsedMaxAmount < 0))) {
+      return reply.code(400).send({ error: "minAmount and maxAmount must be non-negative whole rupiah amounts" });
+    }
+    if (parsedMinAmount != null && parsedMaxAmount != null && parsedMinAmount > parsedMaxAmount) {
+      return reply.code(400).send({ error: "minAmount cannot exceed maxAmount" });
+    }
+    if (parsedMinAmount != null) baseConditions.push(sql`${transactionDisplayAmount} >= ${parsedMinAmount}`);
+    if (parsedMaxAmount != null) baseConditions.push(sql`${transactionDisplayAmount} <= ${parsedMaxAmount}`);
+    if (!['newest', 'oldest', 'largest'].includes(sort)) return reply.code(400).send({ error: "sort must be newest, oldest, or largest" });
 
     type TransactionRow = {
       id: number;
@@ -408,77 +470,21 @@ RULES:
       createdAt: Date;
     };
 
-    let txList: TransactionRow[];
-    let totalCount: number;
-
-    if (parsedAccountId !== null) {
-      // Query with account filter (uses DISTINCT to prevent duplicates from multiple lines)
-      const accountCondition = eq(transactionLines.accountId, parsedAccountId);
-      const whereCondition = baseConditions.length > 0
-        ? and(accountCondition, ...baseConditions)
-        : accountCondition;
-
-      // Get total count for pagination
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(transactions)
-        .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
-        .where(whereCondition);
-      totalCount = countResult?.count || 0;
-
-      // Get paginated results with DISTINCT
-      txList = await db
-        .selectDistinct(transactionColumns)
-        .from(transactions)
-        .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
-        .where(whereCondition)
-        .orderBy(desc(transactions.date), desc(transactions.id))
-        .limit(limit)
-        .offset(offset);
-    } else if (parsedTagId !== null) {
-      // Query with tag filter
-      const tagCondition = eq(transactionTags.tagId, parsedTagId);
-      const whereCondition = baseConditions.length > 0
-        ? and(tagCondition, ...baseConditions)
-        : tagCondition;
-
-      // Get total count for pagination
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(transactions)
-        .innerJoin(transactionTags, eq(transactions.id, transactionTags.transactionId))
-        .where(whereCondition);
-      totalCount = countResult?.count || 0;
-
-      // Get paginated results (no DISTINCT needed for tags - many-to-many but we select from transactions)
-      txList = await db
-        .selectDistinct(transactionColumns)
-        .from(transactions)
-        .innerJoin(transactionTags, eq(transactions.id, transactionTags.transactionId))
-        .where(whereCondition)
-        .orderBy(desc(transactions.date), desc(transactions.id))
-        .limit(limit)
-        .offset(offset);
-    } else {
-      // Base query without filters
-      const whereCondition = baseConditions.length > 0 ? and(...baseConditions) : undefined;
-
-      // Get total count for pagination
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(transactions)
-        .where(whereCondition || sql`1=1`);
-      totalCount = countResult?.count || 0;
-
-      // Get paginated results
-      txList = await db
-        .select()
-        .from(transactions)
-        .where(whereCondition)
-        .orderBy(desc(transactions.date), desc(transactions.id))
-        .limit(limit)
-        .offset(offset) as unknown as TransactionRow[];
-    }
+    const whereCondition = baseConditions.length > 0 ? and(...baseConditions) : undefined;
+    const [countRows, summaryRows] = await Promise.all([
+      db.select({ count: count() }).from(transactions).where(whereCondition || sql`1=1`),
+      db.select({
+        expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
+        incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${transactionLines.credit} - ${transactionLines.debit} else 0 end), 0)`,
+      }).from(transactions).innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId)).innerJoin(accounts, eq(transactionLines.accountId, accounts.id)).where(whereCondition || sql`1=1`),
+    ]);
+    const totalCount = countRows[0]?.count || 0;
+    const orderBy = sort === 'oldest'
+      ? [asc(transactions.date), asc(transactions.id)]
+      : sort === 'largest'
+        ? [desc(transactionDisplayAmount), desc(transactions.date), desc(transactions.id)]
+        : [desc(transactions.date), desc(transactions.id)];
+    const txList = await db.select(transactionColumns).from(transactions).where(whereCondition).orderBy(...orderBy).limit(limit).offset(offset) as unknown as TransactionRow[];
 
     // Fetch transaction details efficiently (bulk query, no N+1)
     const txIds = txList.map((tx) => tx.id).filter(Boolean);
@@ -501,6 +507,10 @@ RULES:
         limit,
         offset,
         hasMore: offset + txList.length < totalCount,
+      },
+      summary: {
+        expenseCents: Number(summaryRows[0]?.expenseCents ?? 0),
+        incomeCents: Number(summaryRows[0]?.incomeCents ?? 0),
       },
     };
   });

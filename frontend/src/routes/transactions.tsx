@@ -1,44 +1,21 @@
-import { createFileRoute, Link, useNavigate, useSearch, redirect } from '@tanstack/react-router';
-import { Button } from '../components/ui/Button';
-import { PageHeader } from '../components/ui/PageHeader';
-import { PageContainer } from '../components/ui/PageContainer';
-import { Modal } from '../components/ui/Modal';
-import { useConfirm } from '../components/ui/ConfirmDialog';
-import { RequireAuth } from '../lib/auth';
+import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../lib/api';
-import { formatCurrency, cn } from '../lib/utils';
-import {
-  Plus,
-  Edit2,
-  Trash2,
-  Wallet,
-  Search,
-  Download,
-  Upload,
-  ShoppingCart,
-  UtensilsCrossed,
-  Car,
-  Briefcase,
-  ArrowLeftRight,
-  Landmark,
-  MoreHorizontal,
-  TrendingUp,
-  ChevronLeft,
-  ChevronRight,
-  CircleDot,
-  HandCoins,
-  Clock,
-  Receipt,
-  RotateCcw,
-} from 'lucide-react';
-import { TransactionModal,
-  type EditingTransaction,
-  type WalletAccount,
-} from '../components/transactions/TransactionModal';
+import { ArrowLeftRight, ChevronLeft, ChevronRight, CircleAlert, Clock, Download, Edit2, FileUp, Landmark, MoreHorizontal, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Upload, Wallet, X } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { PageContainer } from '../components/ui/PageContainer';
+import { PageHeader } from '../components/ui/PageHeader';
+import { TransactionModal, type EditingTransaction, type WalletAccount } from '../components/transactions/TransactionModal';
 import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
 import { PendingTransactionsModal } from '../components/transactions/PendingTransactionsModal';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { RequireAuth } from '../lib/auth';
+import { api } from '../lib/api';
+import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export const Route = createFileRoute('/transactions')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -48,1206 +25,250 @@ export const Route = createFileRoute('/transactions')({
     transactionId: typeof search.transactionId === 'string' ? search.transactionId : undefined,
     action: typeof search.action === 'string' ? search.action : undefined,
   }),
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   beforeLoad: async ({ search }: { search: any }) => {
-    // Don't redirect if periodId is "all" (show all) or a specific period number
-    if (search.periodId === 'all') return;
-    if (search.periodId && !isNaN(parseInt(search.periodId, 10))) return;
-    
-    const periods = await api.periods.list() as Array<{ id: number; startDate: number; endDate: number }>;
+    if (search.periodId === 'all' || (search.periodId && Number.isSafeInteger(Number(search.periodId)))) return;
+    const periods = await api.periods.list();
     const now = Date.now();
-    const current = periods.find((p) => p.startDate <= now && p.endDate >= now);
-    
-    if (current) {
-      throw redirect({
-        to: '/transactions',
-        search: { ...search, periodId: String(current.id) },
-        replace: true,
-      });
-    }
+    const current = periods.find((period) => period.startDate <= now && now <= period.endDate + DAY_MS - 1);
+    if (current) throw redirect({ to: '/transactions', search: { ...search, periodId: String(current.id) }, replace: true });
   },
-
   component: TransactionsPage,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any);
 
-interface TransactionRow {
-  id: number;
-  date: number;
-  description: string;
-  reference?: string;
-  notes?: string;
-  place?: string;
-  txType: string;
-  status?: string;
-  reversalOfTxId?: number | null;
-  categoryId: number | null;
-  periodId: number | null;
-  linkedTxId: number | null;
-  debitCents?: number;
-  creditCents?: number;
-  expenseCents?: number;
-  incomeCents?: number;
-  lines: Array<{
-    id: number;
-    accountId: number;
-    debit: number;
-    credit: number;
-    description?: string;
-    cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
-    accountName?: string | null;
-    accountType?: string | null;
-    accountSystemKey?: string | null;
-  }>;
-  categoryAllocations?: Array<{ categoryId: number; amount: number; categoryName?: string | null }>;
-  tags: Array<{ tagId: number; name: string; color: string }>;
+interface Category { id: number; name: string; icon?: string | null; color?: string | null; }
+interface Period { id: number; name: string; startDate: number; endDate: number; coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown'; coverageReason: string | null; }
+type TransactionRow = Awaited<ReturnType<typeof api.transactions.list>>['data'][number];
+type ActivityKind = 'expense' | 'income' | 'transfer' | 'loan' | 'other';
+
+function formatDateTime(timestamp: number) {
+  return new Date(timestamp).toLocaleString('en-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-
-interface Category {
-  id: number;
-  name: string;
-  icon?: string | null;
-  color?: string | null;
+function formatDateInputEnd(value: string) { return value ? value + 'T23:59:59.999' : undefined; }
+function getKind(transaction: TransactionRow): ActivityKind {
+  if (transaction.txType.includes('loan')) return 'loan';
+  if (transaction.txType === 'simple_transfer' || transaction.txType === 'transfer') return 'transfer';
+  if (transaction.expenseCents > 0) return 'expense';
+  if (transaction.incomeCents > 0) return 'income';
+  return 'other';
 }
-
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-const MAX_CLIENT_TRANSACTION_ROWS = 10_000;
-
-async function fetchAllTransactionPages(
-  params: Parameters<typeof api.transactions.list>[0],
-): Promise<{ data: Awaited<ReturnType<typeof api.transactions.list>>['data']; complete: boolean }> {
-  const rows: Awaited<ReturnType<typeof api.transactions.list>>['data'] = [];
-  let offset = 0;
-  while (rows.length < MAX_CLIENT_TRANSACTION_ROWS) {
-    const page = await api.transactions.list({
-      ...(params ?? {}),
-      limit: '100',
-      offset: String(offset),
-    });
-    rows.push(...page.data);
-    if (!page.pagination.hasMore || page.data.length === 0) return { data: rows, complete: true };
-    offset += page.data.length;
-  }
-  return { data: rows, complete: false };
+function displayAmount(transaction: TransactionRow) {
+  if (transaction.expenseCents > 0) return -transaction.expenseCents;
+  if (transaction.incomeCents > 0) return transaction.incomeCents;
+  return Math.max(transaction.debitCents, transaction.creditCents);
 }
-
-function formatTxTableDate(ts: number) {
-  return new Date(ts).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function coverageMessage(period: Period) {
+  if (period.coverageStatus === 'skipped') return 'This period was skipped during an untracked break. An empty activity list is not proof of zero activity.';
+  if (period.coverageStatus === 'partial') return 'Some activity is missing in this period. Recorded totals are not a full financial result.';
+  return 'This period’s activity coverage has not been reviewed. Treat totals as recorded activity only.';
 }
-
-function formatTxTime(ts: number) {
-  return new Date(ts).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
+function categoryLabel(transaction: TransactionRow, categories: Category[]) {
+  const allocations = transaction.categoryAllocations.filter((allocation) => allocation.amount !== 0);
+  if (allocations.length > 1) return (allocations[0].categoryName ?? 'Allocated') + ' + ' + String(allocations.length - 1);
+  if (allocations.length === 1) return allocations[0].categoryName ?? 'Allocated';
+  return categories.find((category) => category.id === transaction.categoryId)?.name ?? null;
 }
-
-function pickCategoryIcon(categoryName: string | undefined, kind: string) {
-  const n = (categoryName ?? '').toLowerCase();
-  if (kind === 'loan') return HandCoins;
-  if (kind === 'income') return Briefcase;
-  if (kind === 'transfer') return ArrowLeftRight;
-  if (n.includes('food') || n.includes('dining') || n.includes('meal')) return UtensilsCrossed;
-  if (n.includes('transport') || n.includes('taxi') || n.includes('grab')) return Car;
-  if (n.includes('shop') || n.includes('retail')) return ShoppingCart;
-  if (n.includes('bank') || n.includes('salary')) return Landmark;
-  return ShoppingCart;
-}
-
-function downloadTransactionsCsv(
-  rows: TransactionRow[],
-  getDisplay: (tx: TransactionRow) => { kind: string; amount: number; detail: string },
-  categories: Category[],
-) {
-  const header = 'Date,Description,Category,Amount (IDR),Type\n';
-  const csvText = (value: string) => {
-    const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
-    return `"${safe.replace(/"/g, '""')}"`;
+function downloadPageCsv(rows: TransactionRow[], categories: Category[]) {
+  const quote = (value: string) => {
+    const safe = /^[=+\-@]/.test(value) ? "'" + value : value;
+    return '"' + safe.replace(/"/g, '""') + '"';
   };
-  const body = rows
-    .map((tx) => {
-      const d = getDisplay(tx);
-      const cat = tx.categoryId
-        ? categories.find((c) => c.id === tx.categoryId)?.name ?? ''
-        : '';
-      const signedAmount = tx.expenseCents
-        ? -tx.expenseCents
-        : tx.incomeCents
-          ? tx.incomeCents
-          : d.amount;
-      return [formatTxTableDate(tx.date), tx.description, cat, String(signedAmount), d.kind]
-        .map(csvText)
-        .join(',');
-    })
-    .join('\n');
-  const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
+  const body = rows.map((row) => [formatDateTime(row.date), row.description, categoryLabel(row, categories) ?? '', String(displayAmount(row)), getKind(row)].map(quote).join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob(['Date,Description,Category,Amount (IDR),Type\n' + body], { type: 'text/csv;charset=utf-8;' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'transactions-page-' + new Date().toISOString().slice(0, 10) + '.csv';
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
+// Route modules necessarily export a route object beside their component.
+// eslint-disable-next-line react-refresh/only-export-components
 function TransactionsPage() {
   const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; categoryId?: string; transactionId?: string; action?: string };
   const navigate = useNavigate({ from: '/transactions' });
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const { confirm } = useConfirm();
-
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const openedDeepLinkId = useRef<string | null>(null);
+  const requestVersion = useRef(0);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [accounts, setAccounts] = useState<WalletAccount[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Array<{ id: number; name: string; color: string }>>([]);
-  const [periods, setPeriods] = useState<
-    Array<{ id: number; name: string; startDate: number; endDate: number }>
-  >([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [transactionDataComplete, setTransactionDataComplete] = useState(true);
-  const dataRequestVersion = useRef(0);
-  const openedDeepLinkId = useRef<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState({ expenseCents: 0, incomeCents: 0 });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [filterQuery, setFilterQuery] = useState('');
+  const [kindFilter, setKindFilter] = useState<ActivityKind | ''>('');
+  const [categoryFilter, setCategoryFilter] = useState(search.categoryId ?? '');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'largest'>('newest');
+  const [includeAdjustments, setIncludeAdjustments] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<EditingTransaction | null>(null);
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
-  const [filterQuery, setFilterQuery] = useState('');
-  const [txTypeFilter, setTxTypeFilter] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<string>(search.categoryId || '');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [newlyAddedTxId, setNewlyAddedTxId] = useState<number | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
-  const [editingPendingTx, setEditingPendingTx] = useState<{
-    id: number;
-    parsedData: {
-      type: string;
-      amount: number;
-      description: string;
-      category: string;
-      date?: string;
-      place?: string;
-      memo?: string;
-      fromAccount?: string;
-      toAccount?: string;
-      confidence: number;
-    };
-  } | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [editingPendingTx, setEditingPendingTx] = useState<{ id: number; parsedData: { type: string; amount: number; description: string; category: string; date?: string; place?: string; memo?: string; fromAccount?: string; toAccount?: string; confidence: number } } | null>(null);
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false);
   const [isSplitLoading, setIsSplitLoading] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
   const splitFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Keyboard shortcuts
-  useKeyboardShortcuts({
-    isModalOpen,
-    searchInputRef,
-  });
+  useKeyboardShortcuts({ isModalOpen, searchInputRef });
 
-  // Open modal automatically when action='new' is in URL
-  useEffect(() => {
-    if (search.action === 'new' && !isModalOpen) {
-      openModal();
-      // Clear the action from URL
-      navigate({
-        search: (prev: { periodId?: string; accountId?: string; action?: string }) => ({
-          periodId: prev.periodId,
-          accountId: prev.accountId,
+  const loadData = useCallback(async () => {
+    const version = ++requestVersion.current;
+    setIsLoading(true);
+    try {
+      const periodId = search.periodId === 'all' ? 'all' : search.periodId;
+      const [result, accountRows, categoryRows, tagRows] = await Promise.all([
+        api.transactions.list({
+          ...(periodId ? { periodId } : {}),
+          ...(search.accountId ? { accountId: search.accountId } : {}),
+          ...(categoryFilter ? { categoryId: categoryFilter } : {}),
+          ...(filterQuery.trim() ? { search: filterQuery.trim() } : {}),
+          ...(kindFilter ? { kind: kindFilter } : {}),
+          ...(startDate ? { startDate: startDate + 'T00:00:00' } : {}),
+          ...(endDate ? { endDate: formatDateInputEnd(endDate) } : {}),
+          ...(minAmount ? { minAmount } : {}),
+          ...(maxAmount ? { maxAmount } : {}),
+          ...(includeAdjustments ? { includeReversals: 'true' } : {}),
+          sort,
+          limit: String(pageSize),
+          offset: String((page - 1) * pageSize),
         }),
-      });
-    }
-  }, [search.action]);
+        api.accounts.list(), api.categories.list(), api.tags.list(),
+      ]);
+      if (version !== requestVersion.current) return;
+      setTransactions(result.data); setTotal(result.pagination.total); setSummary(result.summary);
+      setAccounts(accountRows as WalletAccount[]); setCategories(categoryRows); setTags(tagRows);
+    } finally { if (version === requestVersion.current) setIsLoading(false); }
+  }, [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, page, pageSize]);
 
+  useEffect(() => { void loadData(); }, [loadData]);
+  useEffect(() => { api.periods.list().then((rows) => setPeriods(rows as Period[])).catch(() => setPeriods([])); }, []);
+  useEffect(() => { api.pendingTransactions.list().then((rows) => setPendingCount(rows.length)).catch(() => setPendingCount(0)); }, []);
+  useEffect(() => { setCategoryFilter(search.categoryId ?? ''); }, [search.categoryId]);
+  useEffect(() => { setPage(1); }, [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, pageSize]);
+  useEffect(() => {
+    if (search.action !== 'new' || isModalOpen) return;
+    openModal();
+    navigate({ search: (previous) => ({ ...previous, action: undefined }) });
+  }, [search.action, isModalOpen, navigate]);
   useEffect(() => {
     if (!search.transactionId || openedDeepLinkId.current === search.transactionId) return;
     const id = Number(search.transactionId);
     if (!Number.isSafeInteger(id) || id <= 0) return;
     openedDeepLinkId.current = search.transactionId;
-    void api.transactions.get(id).then((transaction) => {
-      openModal({
-        ...transaction,
-        status: 'posted',
-        reference: undefined,
-        periodId: null,
-        linkedTxId: null,
-        debitCents: undefined,
-        creditCents: undefined,
-        expenseCents: undefined,
-        incomeCents: undefined,
-      } as unknown as TransactionRow, 'view');
-    }).catch(() => {
-      openedDeepLinkId.current = null;
-    });
+    void api.transactions.get(id).then((transaction) => openModal({ ...transaction, status: 'posted', reference: null, periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as TransactionRow, 'view')).catch(() => { openedDeepLinkId.current = null; });
   }, [search.transactionId]);
 
-  useEffect(() => {
-    const version = ++dataRequestVersion.current;
-    setIsLoading(true);
-    setTransactions([]);
-    void loadData(version);
-  }, [search.periodId, search.accountId, search.categoryId]);
-
-  useEffect(() => {
-    setCategoryFilter(search.categoryId || '');
-  }, [search.categoryId]);
-
-  useEffect(() => {
-    api.pendingTransactions.list().then((txs) => setPendingCount(txs.length)).catch(() => setPendingCount(0));
-  }, []);
-
-  useEffect(() => {
-    api.periods
-      .list()
-      .then(setPeriods)
-      .catch(() => setPeriods([]));
-  }, []);
-
-  const handleSplitFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsSplitLoading(true);
-    setSplitError(null);
-
-    try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        try {
-          const result = await api.splitbill.scan(base64, file.name);
-          // Store parsed result in localStorage for split page to read
-          localStorage.setItem('splitbill_parsed', JSON.stringify({
-            parsed: result.parsed,
-            imageUrl: base64,
-          }));
-          // Navigate to split page
-          navigate({ to: '/split' });
-        } catch (err) {
-          setSplitError((err as Error).message || 'Failed to scan receipt');
-        } finally {
-          setIsSplitLoading(false);
-        }
-      };
-      reader.onerror = () => {
-        setSplitError('Failed to read file');
-        setIsSplitLoading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setSplitError((err as Error).message);
-      setIsSplitLoading(false);
-    }
-  }, [navigate]);
-
-  const loadData = async (version = dataRequestVersion.current) => {
-    try {
-      const periodId =
-        search.periodId && search.periodId !== 'undefined' && !isNaN(parseInt(search.periodId, 10))
-          ? search.periodId
-          : search.periodId === 'all' ? 'all'
-          : undefined;
-
-      const accountId =
-        search.accountId && search.accountId !== 'undefined' && !isNaN(parseInt(search.accountId, 10))
-          ? search.accountId
-          : undefined;
-      const categoryId =
-        search.categoryId && !isNaN(parseInt(search.categoryId, 10))
-          ? search.categoryId
-          : undefined;
-
-      const [txData, accData, catData, tagData] = await Promise.all([
-        fetchAllTransactionPages({
-          ...(periodId && { periodId }),
-          ...(accountId && { accountId }),
-          ...(categoryId && { categoryId }),
-        }),
-        api.accounts.list(),
-        api.categories.list(),
-        api.tags.list(),
-      ]);
-      if (version !== dataRequestVersion.current) return;
-      setTransactions(txData.data as TransactionRow[]);
-      setTransactionDataComplete(txData.complete);
-      setAccounts(accData as WalletAccount[]);
-      setCategories(catData);
-      setTags(tagData);
-      // Clear selection when data is refreshed
-      setSelectedTransactions(new Set());
-    } finally {
-      if (version === dataRequestVersion.current) setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    const confirmed = await confirm({
-      title: 'Delete Transaction',
-      message: 'Are you sure you want to delete this transaction? This action cannot be undone.',
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      await api.transactions.delete(id);
-      await loadData();
-    } catch (err) {
-      alert((err as Error).message);
-    }
-  };
-
-  const handleReverse = async (id: number) => {
-    const confirmed = await confirm({
-      title: 'Reverse Posted Journal',
-      message: 'This keeps the original entry and posts an equal opposite journal. Continue?',
-      confirmLabel: 'Reverse',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      await api.transactions.reverse(id);
-      await loadData();
-    } catch (err) {
-      alert((err as Error).message);
-    }
-  };
-
-  const handleToggleSelection = (id: number) => {
-    const row = transactions.find((tx) => tx.id === id);
-    if (row && row.status !== 'draft') return;
-    const newSelected = new Set(selectedTransactions);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedTransactions(newSelected);
-  };
-
-  const handleSelectAll = () => {
-    const deletable = paginated.filter((tx) => tx.status === 'draft');
-    if (selectedTransactions.size === deletable.length) {
-      setSelectedTransactions(new Set());
-    } else {
-      setSelectedTransactions(new Set(deletable.map(tx => tx.id)));
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedTransactions.size === 0) return;
-    
-    const confirmed = await confirm({
-      title: 'Delete Transactions',
-      message: `Are you sure you want to delete ${selectedTransactions.size} selected transaction(s)? This action cannot be undone.`,
-      confirmLabel: 'Delete All',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    
-    try {
-      await api.transactions.bulkDelete(Array.from(selectedTransactions));
-      setSelectedTransactions(new Set());
-      await loadData();
-    } catch (err) {
-      alert((err as Error).message);
-    }
-  };
+  const selectedPeriod = useMemo(() => periods.find((period) => String(period.id) === search.periodId) ?? null, [periods, search.periodId]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const periodLabel = selectedPeriod?.name ?? (search.periodId === 'all' ? 'All periods' : 'Current period');
 
   const openModal = (transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit') => {
     setModalInitialMode(mode);
-    if (transaction) {
-      setEditingTransaction({
-        id: transaction.id,
-        date: transaction.date,
-        description: transaction.description,
-        notes: transaction.notes,
-        place: transaction.place,
-        categoryId: transaction.categoryId,
-        txType: transaction.txType,
-        lines: transaction.lines,
-        categoryAllocations: transaction.categoryAllocations,
-        tags: transaction.tags,
-      });
-    } else {
-      setEditingTransaction(null);
-    }
+    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
     setIsModalOpen(true);
   };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingTransaction(null);
-    setEditingPendingTx(null);
+  const closeModal = () => { setIsModalOpen(false); setEditingTransaction(null); setEditingPendingTx(null); };
+  const handleCorrect = async (transaction: TransactionRow) => {
+    if (!await confirm({ title: 'Correct transaction', message: 'This keeps the original for audit history and posts an equal opposite correction. You can then add the replacement transaction.', confirmLabel: 'Correct transaction', variant: 'warning' })) return;
+    try { await api.transactions.reverse(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
+  };
+  const handleDeleteDraft = async (transaction: TransactionRow) => {
+    if (!await confirm({ title: 'Delete draft', message: 'This draft has not affected reports or balances. Delete it?', confirmLabel: 'Delete draft', variant: 'danger' })) return;
+    try { await api.transactions.delete(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
+  };
+  const handleSplitFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; if (!file) return;
+    setIsSplitLoading(true); setSplitError(null);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const imageUrl = reader.result as string;
+        const result = await api.splitbill.scan(imageUrl, file.name);
+        localStorage.setItem('splitbill_parsed', JSON.stringify({ parsed: result.parsed, imageUrl }));
+        navigate({ to: '/split' });
+      } catch (error) { setSplitError((error as Error).message || 'Could not scan this receipt'); } finally { setIsSplitLoading(false); }
+    };
+    reader.onerror = () => { setSplitError('Could not read this receipt'); setIsSplitLoading(false); };
+    reader.readAsDataURL(file);
+  };
+  const clearFilters = () => {
+    setFilterQuery(''); setKindFilter(''); setCategoryFilter(''); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); setSort('newest'); setIncludeAdjustments(false);
+    navigate({ search: (previous) => ({ ...previous, accountId: undefined, categoryId: undefined }) });
   };
 
-  const getTransactionDisplay = useCallback(
-    (tx: TransactionRow) => {
-      const expenseEffect = tx.expenseCents ?? 0;
-      const incomeEffect = tx.incomeCents ?? 0;
-      const journalAmount = Math.max(tx.debitCents ?? 0, tx.creditCents ?? 0);
-      const amount = expenseEffect !== 0
-        ? Math.abs(expenseEffect)
-        : incomeEffect !== 0
-          ? Math.abs(incomeEffect)
-          : journalAmount;
-
-      // Check for loan-related transactions
-      if (tx.txType?.includes('loan')) {
-        const isLoanCreation = tx.txType === 'loan_creation';
-        const isLoanPayment = tx.txType === 'loan_payment';
-        // Find the wallet account line (not the system loan account)
-        const walletLine = tx.lines.find((l) => {
-          const acc = accounts.find((a) => a.id === l.accountId);
-          // Wallet account is an asset that is NOT a system loan account
-          return (acc ? acc.type === 'asset' && !acc.systemKey?.includes('loan') : l.accountType === 'asset' && !l.accountSystemKey?.includes('loan'));
-        });
-        const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
-        const walletName = walletLine?.accountName ?? acc?.name;
-        // For loans: if wallet has credit, money left your wallet (negative)
-        // if wallet has debit, money entered your wallet (positive)
-        const signedAmount = walletLine
-          ? walletLine.credit > 0
-            ? -amount
-            : amount
-          : amount;
-        return {
-          kind: 'loan' as const,
-          amount: signedAmount,
-          detail: isLoanCreation
-            ? `Loan created · ${walletName ?? 'Wallet'}`
-            : isLoanPayment
-            ? `Payment · ${walletName ?? 'Wallet'}`
-            : tx.description,
-          loanType: isLoanCreation ? 'creation' : isLoanPayment ? 'payment' : 'other',
-        };
-      }
-
-      if (tx.txType?.includes('transfer') || tx.txType === 'simple_transfer') {
-        const deb = tx.lines.find((l) => l.debit > 0);
-        const cred = tx.lines.find((l) => l.credit > 0);
-        const from = cred ? accounts.find((a) => a.id === cred.accountId) : undefined;
-        const to = deb ? accounts.find((a) => a.id === deb.accountId) : undefined;
-        return {
-          kind: 'transfer' as const,
-          amount: journalAmount,
-          detail: `${cred?.accountName ?? from?.name ?? '?'} → ${deb?.accountName ?? to?.name ?? '?'}`,
-        };
-      }
-
-      if (expenseEffect !== 0) {
-        const cat = categories.find((c) => c.id === tx.categoryId);
-        const walletLine = tx.lines.find((l) => l.credit > 0 && l.debit === 0);
-        const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
-        return {
-          kind: 'expense' as const,
-          amount,
-          detail: cat ? `${cat.name} · ${walletLine?.accountName ?? acc?.name ?? 'Wallet'}` : tx.description,
-        };
-      }
-
-      if (incomeEffect !== 0) {
-        const walletLine = tx.lines.find((l) => l.debit > 0);
-        const acc = walletLine ? accounts.find((a) => a.id === walletLine.accountId) : undefined;
-        return {
-          kind: 'income' as const,
-          amount,
-          detail: walletLine?.accountName ?? acc?.name ?? tx.description,
-        };
-      }
-
-      return {
-        kind: 'other' as const,
-        amount,
-        detail: tx.description,
-      };
-    },
-    [categories, accounts],
-  );
-
-  const filtered = useMemo(() => {
-    const q = filterQuery.trim().toLowerCase();
-    return transactions.filter((tx) => {
-      const d = getTransactionDisplay(tx);
-      const kind = d.kind;
-      if (txTypeFilter === 'expense' && kind !== 'expense') return false;
-      if (txTypeFilter === 'income' && kind !== 'income') return false;
-      if (txTypeFilter === 'transfer' && kind !== 'transfer') return false;
-      if (txTypeFilter === 'loan' && kind !== 'loan') return false;
-      if (categoryFilter && String(tx.categoryId ?? '') !== categoryFilter) return false;
-      if (!q) return true;
-      return (
-        tx.description.toLowerCase().includes(q) ||
-        d.detail.toLowerCase().includes(q) ||
-        tx.tags.some((t) => t.name.toLowerCase().includes(q))
-      );
-    });
-  }, [transactions, filterQuery, txTypeFilter, categoryFilter, getTransactionDisplay]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filterQuery, txTypeFilter, categoryFilter, search.periodId, search.accountId]);
-
-  const monthlyExpenseTotal = useMemo(() => {
-    return filtered.reduce((sum, tx) => {
-      const expenseEffect = tx.expenseCents ?? 0;
-      if (expenseEffect > 0) return sum + expenseEffect;
-      return sum;
-    }, 0);
-  }, [filtered]);
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-
-  const periodLabel = useMemo(() => {
-    if (!search.periodId) return null;
-    const p = periods.find((x) => String(x.id) === search.periodId);
-    return p?.name ?? null;
-  }, [search.periodId, periods]);
-
-  const accountFilterLabel = useMemo(() => {
-    if (!search.accountId) return null;
-    const id = parseInt(search.accountId, 10);
-    if (isNaN(id)) return null;
-    const a = accounts.find((x) => x.id === id);
-    return a?.name ?? `Account #${id}`;
-  }, [search.accountId, accounts]);
-
-  const categoryFilterLabel = useMemo(() => {
-    if (!search.categoryId) return null;
-    const id = parseInt(search.categoryId, 10);
-    if (isNaN(id)) return null;
-    return categories.find((category) => category.id === id)?.name ?? `Category #${id}`;
-  }, [search.categoryId, categories]);
-
-  return (
-    <RequireAuth>
-      <PageContainer>
-        {/* Hero — Stitch Localized Transactions */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <PageHeader
-            subtext="Transaction records"
-            title="Transactions"
-            description={
-              isLoading
-                ? 'Loading activity…'
-                : `Reviewing ${filtered.length} activit${filtered.length === 1 ? 'y' : 'ies'}${
-                    periodLabel ? ` · ${periodLabel}` : ''
-                  }${accountFilterLabel ? ` · ${accountFilterLabel}` : ''}${
-                    categoryFilterLabel ? ` · ${categoryFilterLabel}` : ''
-                  }`
-            }
-          />
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={filtered.length === 0}
-              onClick={() => downloadTransactionsCsv(filtered, getTransactionDisplay, categories)}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"
-            >
-              <Download className="h-4 w-4" />
-              Download CSV
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsImportModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)]"
-            >
-              <Upload className="h-4 w-4" />
-              Import CSV
-            </button>
-            <Button onClick={() => openModal()} className="rounded-full px-5 py-2.5">
-              <Plus className="w-4 h-4 mr-2" />
-              Add transaction
-            </Button>
-            <Button
-              onClick={() => setIsSplitBillModalOpen(true)}
-              variant="secondary"
-              className="rounded-full px-3 py-2.5"
-            >
-              <Receipt className="w-4 h-4" />
-            </Button>
-            <Button
-              onClick={() => setIsPendingModalOpen(true)}
-              variant="secondary"
-              className="rounded-full px-3 py-2.5 relative"
-            >
-              <Clock className="w-4 h-4" />
-              {pendingCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5">
-                  {pendingCount > 99 ? '99+' : pendingCount}
-                </span>
-              )}
-            </Button>
-          </div>
+  return <RequireAuth><PageContainer>
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <PageHeader subtext="Recorded activity" title="Transactions" description={isLoading ? 'Loading activity…' : total.toLocaleString() + ' activit' + (total === 1 ? 'y' : 'ies') + ' in ' + periodLabel + '.'} />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative"><Button variant="secondary" className="rounded-full px-3" onClick={() => setIsToolsOpen((open) => !open)}><MoreHorizontal className="h-4 w-4" /><span className="ml-2">More tools</span></Button>
+          {isToolsOpen && <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">
+            <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setIsToolsOpen(false); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
+            <button type="button" onClick={() => { setIsImportModalOpen(true); setIsToolsOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><FileUp className="h-4 w-4" />Import CSV</button>
+            <button type="button" onClick={() => { setIsSplitBillModalOpen(true); setIsToolsOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
+            <button type="button" onClick={() => { setIsPendingModalOpen(true); setIsToolsOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Clock className="h-4 w-4" />Review pending {pendingCount > 0 ? '(' + pendingCount + ')' : ''}</button>
+          </div>}
         </div>
-        {!transactionDataComplete && (
-          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Showing the first {MAX_CLIENT_TRANSACTION_ROWS.toLocaleString()} matching transactions. Narrow the period or filters to load a complete list and export.
-          </div>
-        )}
+        <Button className="rounded-full" onClick={() => openModal()}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
+      </div>
+    </div>
 
-        {accountFilterLabel && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 sm:px-5">
-            <p className="text-sm text-[var(--color-text-primary)]">
-              Showing ledger lines touching{' '}
-              <span className="font-headline font-bold">{accountFilterLabel}</span>
-            </p>
-            <Link
-              to="/transactions"
-              search={search.periodId ? { periodId: search.periodId } : {}}
-              className="text-sm font-semibold text-[var(--ref-primary)] hover:underline"
-            >
-              Clear account filter
-            </Link>
-          </div>
-        )}
-
-        {/* Search — pill */}
-        <div className="relative max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
-          <input
-            ref={searchInputRef}
-            type="search"
-            placeholder="Search transactions… (Press / to focus)"
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            className="w-full rounded-full border-none bg-[var(--ref-surface-container-highest)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-muted)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
-          />
-        </div>
-
-        {/* Bento filters */}
-        <div id="tx-filters" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm">
-            <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-              Period
-            </label>
-            <select
-              value={search.periodId ?? ''}
-              onChange={(e) => {
-                const v = e.target.value;
-                navigate({
-                  search: (prev: { periodId?: string }) => ({
-                    ...prev,
-                    periodId: v === 'all' ? 'all' : (v || undefined),
-                  }),
-                });
-              }}
-              className="w-full cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-[var(--color-text-primary)] focus:ring-0"
-            >
-              <option value="all">All periods</option>
-              {periods.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm">
-            <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-              Category
-            </label>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-[var(--color-text-primary)] focus:ring-0"
-            >
-              <option value="">All categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm">
-            <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-              Type
-            </label>
-            <select
-              value={txTypeFilter}
-              onChange={(e) => setTxTypeFilter(e.target.value)}
-              className="w-full cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-[var(--color-text-primary)] focus:ring-0"
-            >
-              <option value="">All types</option>
-              <option value="expense">Expense</option>
-              <option value="income">Income</option>
-              <option value="transfer">Transfer</option>
-              <option value="loan">Loan</option>
-            </select>
-          </div>
-          <div className="flex items-center justify-between rounded-xl bg-[var(--ref-tertiary-container)] p-5 text-[var(--ref-on-tertiary-container)] shadow-sm">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-90">Expense total</p>
-              <p className="font-headline text-xl font-extrabold tracking-tight">
-                {formatCurrency(monthlyExpenseTotal)}
-              </p>
-            </div>
-            <TrendingUp className="h-10 w-10 shrink-0 opacity-40" aria-hidden />
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-12 text-center shadow-sm">
-            <p className="text-[var(--color-text-secondary)]">Loading transactions…</p>
-          </div>
-        ) : transactions.length === 0 ? (
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-12 text-center shadow-sm">
-            <Wallet className="mx-auto mb-4 h-12 w-12 text-[var(--color-muted)]" />
-            <p className="mb-2 text-[var(--color-text-secondary)]">
-              No transactions yet. Add your first expense or income.
-            </p>
-            <Button onClick={() => openModal()} className="mt-4 rounded-full">
-              <Plus className="mr-2 h-4 w-4" />
-              Add transaction
-            </Button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-12 text-center shadow-sm">
-            <p className="text-[var(--color-text-secondary)]">No matches for your filters.</p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] shadow-sm">
-            {/* Bulk Actions Bar */}
-            {selectedTransactions.size > 0 && (
-              <div className="flex items-center justify-between bg-[var(--color-accent)]/10 px-4 py-3 border-b border-[var(--color-border)]">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-[var(--color-accent)]">
-                    {selectedTransactions.size} selected
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSelectedTransactions(new Set())}
-                    className="cursor-pointer px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkDelete}
-                    className="cursor-pointer flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-[var(--color-danger)] hover:bg-[var(--color-danger)]/90 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete Selected
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Mobile card view */}
-            <div className="md:hidden space-y-2">
-              {paginated.map((tx) => {
-                const display = getTransactionDisplay(tx);
-                const cat = tx.categoryId ? categories.find((c) => c.id === tx.categoryId) : null;
-                const Icon = pickCategoryIcon(cat?.name, display.kind);
-                const subLine = `${display.detail} · ${formatTxTime(tx.date)}`;
-                 const amountSigned = tx.expenseCents
-                   ? -tx.expenseCents
-                   : tx.incomeCents
-                     ? tx.incomeCents
-                     : display.kind === 'income'
-                       ? display.amount
-                       : display.kind === 'expense'
-                         ? -display.amount
-                         : display.amount;
-
-                return (
-                  <div 
-                    key={tx.id} 
-                    className={cn("bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 space-y-3 cursor-pointer hover:bg-[var(--ref-surface-container-low)]", tx.id === newlyAddedTxId && "animate-slide-in")} 
-                    onClick={() => openModal(tx, 'view')}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", display.kind === 'loan' ? 'bg-[var(--color-accent)]/10' : 'bg-[var(--ref-surface-container-highest)]')}>
-                          <Icon className={cn('h-5 w-5', display.kind === 'expense' && 'text-[var(--color-accent)]', display.kind === 'income' && 'text-[var(--color-success)]', display.kind === 'transfer' && 'text-[var(--ref-tertiary)]', display.kind === 'loan' && 'text-[var(--color-accent)]', display.kind === 'other' && 'text-[var(--color-muted)]')} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">{tx.description}</p>
-                          <p className="truncate text-[11px] font-medium text-[var(--color-muted)]">{subLine}</p>
-                        </div>
-                      </div>
-                      <div className={cn("whitespace-nowrap text-right font-headline text-sm font-extrabold shrink-0", amountSigned > 0 && 'text-[var(--color-success)]', amountSigned < 0 && 'text-[var(--color-text-primary)]')}>
-                        {amountSigned > 0 ? '+' : ''}{formatCurrency(Math.abs(amountSigned))}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="inline-block rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-tight bg-[var(--ref-surface-container-highest)]">{display.kind === 'loan' ? 'Loan' : (cat?.name ?? display.kind)}</span>
-                      {tx.linkedTxId && <span className="inline-flex items-center rounded-full bg-[var(--color-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-warning)]">Transfer Fee</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Desktop table view */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead>
-                  <tr className="bg-[var(--ref-surface-container-highest)]">
-                    <th className="px-2 py-3 sm:px-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedTransactions.size > 0 && selectedTransactions.size === paginated.filter((tx) => tx.status === 'draft').length}
-                        onChange={handleSelectAll}
-                        className="cursor-pointer h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
-                        title={selectedTransactions.size === paginated.filter((tx) => tx.status === 'draft').length ? "Deselect all" : "Select all"}
-                      />
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] sm:px-6">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] sm:px-6">
-                      Description
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] sm:px-6">
-                      Category
-                    </th>
-                    <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] sm:px-6">
-                      Amount
-                    </th>
-                    <th className="hidden px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[var(--color-text-secondary)] md:table-cell sm:px-6">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 sm:px-6" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-border)]">
-                  {paginated.map((tx) => {
-                    const display = getTransactionDisplay(tx);
-                    const cat = tx.categoryId
-                      ? categories.find((c) => c.id === tx.categoryId)
-                      : null;
-                    const Icon = pickCategoryIcon(cat?.name, display.kind);
-                    const subLine = `${display.detail} · ${formatTxTime(tx.date)}`;
-
-                     const amountSigned = tx.expenseCents
-                       ? -tx.expenseCents
-                       : tx.incomeCents
-                         ? tx.incomeCents
-                         : display.kind === 'income'
-                           ? display.amount
-                           : display.kind === 'expense'
-                             ? -display.amount
-                             : display.amount;
-
-                     const categoryPillClass =
-                      display.kind === 'loan'
-                        ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/30'
-                        : display.kind === 'income'
-                          ? 'bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]'
-                          : display.kind === 'transfer'
-                            ? 'bg-[var(--ref-surface-container-highest)] text-[var(--color-text-secondary)]'
-                            : cat?.color
-                              ? 'border border-[var(--color-border)]'
-                              : 'bg-[var(--ref-secondary-container)] text-[var(--ref-on-secondary-container)]';
-
-                    return (
-                      <tr
-                        key={tx.id}
-                        className={cn(
-                          "group transition-colors hover:bg-[var(--ref-surface-container-low)]",
-                          selectedTransactions.has(tx.id) && "bg-[var(--ref-surface-container-low)]",
-                          display.kind === 'loan' && "bg-[var(--color-accent)]/5",
-                          tx.id === newlyAddedTxId && "animate-slide-in"
-                        )}
-                      >
-                        <td className="px-2 py-4 sm:px-4 sm:py-5">
-                          <input
-                            type="checkbox"
-                            checked={selectedTransactions.has(tx.id)}
-                            onChange={() => handleToggleSelection(tx.id)}
-                            disabled={tx.status !== 'draft'}
-                            className="cursor-pointer h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
-                          />
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-4 text-sm font-medium text-[var(--color-muted)] sm:px-6 sm:py-5">
-                          {formatTxTableDate(tx.date)}
-                        </td>
-                        <td className="px-4 py-4 sm:px-6 sm:py-5">
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                              display.kind === 'loan' 
-                                ? 'bg-[var(--color-accent)]/10' 
-                                : 'bg-[var(--ref-surface-container-highest)]'
-                            )}>
-                              <Icon
-                                className={cn(
-                                  'h-5 w-5',
-                                  display.kind === 'expense' && 'text-[var(--color-accent)]',
-                                  display.kind === 'income' && 'text-[var(--color-success)]',
-                                  display.kind === 'transfer' && 'text-[var(--ref-tertiary)]',
-                                  display.kind === 'loan' && 'text-[var(--color-accent)]',
-                                  display.kind === 'other' && 'text-[var(--color-muted)]',
-                                )}
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">
-                                {tx.description}
-                                {display.kind === 'loan' && (
-                                  <span className="ml-2 inline-flex items-center rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] font-bold text-white">
-                                    LOAN
-                                  </span>
-                                )}
-                                {tx.linkedTxId && (
-                                  <span className="ml-2 inline-flex items-center rounded-full bg-[var(--color-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-warning)]">
-                                    Transfer Fee
-                                  </span>
-                                )}
-                              </p>
-                              <p className="truncate text-[11px] font-medium text-[var(--color-muted)]">
-                                {subLine}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 sm:px-6 sm:py-5">
-                          <span
-                            className={cn(
-                              'inline-block rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-tight',
-                              categoryPillClass,
-                            )}
-                            style={
-                              display.kind === 'expense' && cat?.color
-                                ? { backgroundColor: `${cat.color}22`, color: cat.color }
-                                : undefined
-                            }
-                          >
-                            {display.kind === 'loan' ? 'Loan' : (cat?.name ?? display.kind)}
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            'whitespace-nowrap px-4 py-4 text-right font-headline text-sm font-extrabold sm:px-6 sm:py-5',
-                            amountSigned > 0 && 'text-[var(--color-success)]',
-                            amountSigned < 0 && 'text-[var(--color-text-primary)]',
-                          )}
-                        >
-                          {amountSigned > 0 ? '+' : ''}
-                          {formatCurrency(Math.abs(amountSigned))}
-                        </td>
-                        <td className="hidden px-4 py-4 md:table-cell sm:px-6 sm:py-5">
-                          <div className={cn(
-                            'flex items-center gap-1.5 text-[11px] font-bold',
-                            tx.status === 'reversed' ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]',
-                          )}>
-                            <CircleDot className="h-3.5 w-3.5 fill-current" />
-                            {tx.status === 'reversed' ? 'Reversed' : tx.status === 'draft' ? 'Draft' : 'Posted'}
-                          </div>
-                        </td>
-                        <td className="px-2 py-4 text-right opacity-100 transition-opacity sm:px-4 sm:opacity-0 sm:group-hover:opacity-100 md:px-6 md:py-5">
-                          <div className="inline-flex items-center gap-0.5">
-                            {tx.linkedTxId && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const parentTx = transactions.find(t => t.id === tx.linkedTxId);
-                                  if (parentTx) openModal(parentTx);
-                                }}
-                                className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 cursor-pointer"
-                                title="View parent transfer"
-                              >
-                                <ArrowLeftRight className="h-4 w-4" />
-                              </button>
-                            )}
-                            {tx.status !== 'reversed' ? (
-                              <>
-                                <button type="button" onClick={() => openModal(tx, 'view')} className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] cursor-pointer" title="View or edit record details">
-                                  <Edit2 className="h-4 w-4" />
-                                </button>
-                                {tx.status === 'draft' ? (
-                                <button type="button" onClick={() => handleDelete(tx.id)} className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer" title="Delete">
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                                ) : (
-                                  <button type="button" onClick={() => handleReverse(tx.id)} className="rounded-lg p-2 text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 cursor-pointer" title="Reverse posted journal">
-                                    <RotateCcw className="h-4 w-4" />
-                                  </button>
-                                )}
-                              </>
-                            ) : null}
-                            <span className="hidden sm:inline">
-                              <MoreHorizontal className="h-4 w-4 text-[var(--color-muted)] opacity-50" />
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {filtered.length > 0 && (
-              <div className="flex flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-                <div className="flex items-center gap-4">
-                  <p className="text-xs font-medium text-[var(--color-muted)]">
-                    Showing{' '}
-                    <span className="font-bold text-[var(--color-text-primary)]">
-                      {(page - 1) * pageSize + 1} – {Math.min(page * pageSize, filtered.length)}
-                    </span>{' '}
-                    of {filtered.length} transactions
-                  </p>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs font-medium text-[var(--color-text-primary)] cursor-pointer"
-                  >
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  {totalPages > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                      >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                      <span className="px-2 text-xs font-bold text-[var(--color-text-secondary)]">
-                        {page} / {totalPages}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={page >= totalPages}
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        className="rounded-lg p-2 text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-highest)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                      >
-                        <ChevronRight className="h-5 w-5" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Contextual insight — compact */}
-        {!isLoading && transactions.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="relative flex min-h-[200px] flex-col justify-between overflow-hidden rounded-xl bg-[var(--color-accent)] p-6 text-white shadow-md lg:col-span-2">
-              <div className="relative z-10">
-                <h3 className="mb-2 font-headline text-xl font-extrabold">Spending snapshot</h3>
-                <p className="max-w-lg text-sm leading-relaxed opacity-90">
-                  Filter by period and category to focus this list. Export CSV for spreadsheets or
-                  your accountant.
-                </p>
-              </div>
-              <div className="relative z-10 pt-4">
-                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
-              </div>
-            </div>
-            <div className="flex flex-col items-center justify-center rounded-xl border-t-4 border-[var(--color-success)] bg-[var(--ref-surface-container-lowest)] p-6 text-center shadow-sm">
-              <CircleDot className="mb-3 h-10 w-10 text-[var(--color-success)]" />
-              <h3 className="mb-1 font-headline text-lg font-extrabold text-[var(--color-text-primary)]">
-                Ledger in sync
-              </h3>
-              <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-                Amounts reflect your recorded journal entries for the selected filters.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <TransactionModal
-          isOpen={isModalOpen}
-          onClose={closeModal}
-          onSaved={loadData}
-          onSuccess={(txId) => {
-            setNewlyAddedTxId(txId);
-            loadData();
-            setTimeout(() => setNewlyAddedTxId(null), 300);
-            setEditingPendingTx(null);
-          }}
-          accounts={accounts}
-          categories={categories}
-          tags={tags}
-          editingTransaction={editingTransaction}
-          periodId={search.periodId ? parseInt(search.periodId, 10) : null}
-          initialMode={modalInitialMode}
-          pendingTransaction={editingPendingTx}
-        />
-
-        <ImportCSVModal
-          isOpen={isImportModalOpen}
-          onClose={() => setIsImportModalOpen(false)}
-          onSuccess={loadData}
-        />
-
-        <PendingTransactionsModal
-          isOpen={isPendingModalOpen}
-          onClose={() => setIsPendingModalOpen(false)}
-          onEdit={(pendingTx) => {
-            setEditingPendingTx(pendingTx);
-            setIsPendingModalOpen(false);
-            openModal();
-          }}
-          onRefresh={() => {
-            api.pendingTransactions.list().then((txs) => setPendingCount(txs.length)).catch(() => setPendingCount(0));
-          }}
-        />
-
-        <Modal
-          isOpen={isSplitBillModalOpen}
-          onClose={() => setIsSplitBillModalOpen(false)}
-          title="Split Bill"
-          subtitle="Upload a receipt to start splitting the bill"
-        >
-          <div className="flex flex-col items-center">
-            <div 
-              className="border-2 border-dashed border-[var(--color-border)] rounded-xl p-8 w-full text-center cursor-pointer hover:bg-[var(--color-surface)] transition-colors"
-              onClick={() => splitFileInputRef.current?.click()}
-            >
-              <input
-                ref={splitFileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleSplitFileSelect}
-              />
-              {isSplitLoading ? (
-                <div className="flex flex-col items-center gap-3 py-4">
-                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                  <p className="text-sm text-[var(--color-text-secondary)]">Scanning receipt...</p>
-                </div>
-              ) : (
-                <>
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-                    <Upload className="w-8 h-8 text-[var(--color-text-secondary)]" />
-                  </div>
-                  <p className="font-semibold text-lg">Upload Receipt</p>
-                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">PNG, JPG up to 5MB</p>
-                </>
-              )}
-            </div>
-            
-            {splitError && (
-              <p className="text-sm text-[var(--color-danger)] mt-4 text-center">{splitError}</p>
-            )}
-          </div>
-        </Modal>
-      </PageContainer>
-    </RequireAuth>
-  );
+    {selectedPeriod && selectedPeriod.coverageStatus !== 'complete' && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><CircleAlert className="mt-0.5 h-5 w-5 shrink-0" /><div><strong>Read this activity carefully.</strong> {coverageMessage(selectedPeriod)} <Link to="/periods" className="ml-1 font-bold underline">Review period</Link></div></div>}
+    <section className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center"><div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ref-outline)]" /><input ref={searchInputRef} type="search" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} placeholder="Search description, place, note, tag, or category… (Press /)" className="w-full rounded-full bg-[var(--ref-surface-container-low)] py-2.5 pl-10 pr-4 text-sm outline-none ring-[var(--ref-primary)] focus:ring-2" /></div>
+        <select value={search.periodId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, periodId: event.target.value || undefined }) })} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-sm font-semibold"><option value="all">All periods</option>{periods.map((period) => <option key={period.id} value={String(period.id)}>{period.name}</option>)}</select>
+        <Button variant="secondary" className="rounded-full" onClick={() => setIsFiltersOpen((open) => !open)}><SlidersHorizontal className="mr-2 h-4 w-4" />Filters</Button>
+      </div>
+      {isFiltersOpen && <div className="mt-4 grid gap-3 border-t border-[var(--ref-outline-variant)]/20 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Account<select value={search.accountId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, accountId: event.target.value || undefined }) })} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="">All accounts</option>{accounts.map((account) => <option key={account.id} value={String(account.id)}>{account.name}</option>)}</select></label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Category<select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={String(category.id)}>{category.name}</option>)}</select></label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Activity type<select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as ActivityKind | '')} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="">All activity</option><option value="expense">Spending</option><option value="income">Income</option><option value="transfer">Transfers</option><option value="loan">Loans</option></select></label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Sort<select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="largest">Largest amount</option></select></label>
+        <label className="flex items-end gap-2 pb-2 text-xs font-semibold text-[var(--ref-on-surface-variant)]"><input type="checkbox" checked={includeAdjustments} onChange={(event) => setIncludeAdjustments(event.target.checked)} /> Include accounting corrections and recovery adjustments</label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">From<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm" /></label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">To<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm" /></label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Minimum amount<input inputMode="numeric" value={minAmount} onChange={(event) => setMinAmount(event.target.value.replace(/\D/g, ''))} placeholder="Rp 0" className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm" /></label>
+        <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Maximum amount<input inputMode="numeric" value={maxAmount} onChange={(event) => setMaxAmount(event.target.value.replace(/\D/g, ''))} placeholder="No limit" className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm" /></label>
+        <div className="flex items-end"><button type="button" onClick={clearFilters} className="inline-flex items-center gap-1.5 pb-2 text-sm font-bold text-[var(--ref-primary)] hover:underline"><X className="h-4 w-4" />Clear filters</button></div>
+      </div>}
+    </section>
+    <section className="mt-4 flex flex-col gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Spending in this view</p><p className="mt-1 font-headline text-2xl font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(summary.expenseCents)}</p></div><p className="max-w-md text-sm text-[var(--ref-on-surface-variant)]">{selectedPeriod?.coverageStatus === 'complete' || !selectedPeriod ? 'Based on the full active filter scope, not just this page.' : 'Recorded spending only; period coverage is incomplete.'}</p></section>
+    <section className="mt-4 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] shadow-sm">
+      {isLoading ? <div className="p-12 text-center text-sm text-[var(--ref-on-surface-variant)]">Loading activity…</div> : total === 0 ? <div className="p-12 text-center"><Wallet className="mx-auto mb-3 h-10 w-10 text-[var(--ref-outline)]" /><p className="font-headline font-bold">No activity in this view</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Try changing filters or add a transaction.</p></div> : <div className="divide-y divide-[var(--ref-outline-variant)]/20">
+        {transactions.map((transaction) => {
+          const kind = getKind(transaction); const amount = displayAmount(transaction); const category = categoryLabel(transaction, categories);
+          const walletLine = transaction.lines.find((line) => kind === 'income' ? line.debit > 0 : line.credit > 0) ?? transaction.lines[0];
+          const accountName = walletLine?.accountName ?? accounts.find((account) => account.id === walletLine?.accountId)?.name;
+          const correction = transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment';
+          return <article key={transaction.id} className={cn('group flex cursor-pointer items-center gap-3 px-4 py-4 transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', correction && 'bg-[var(--ref-surface-container-low)]/60')} onClick={() => openModal(transaction, 'view')}>
+            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-headline font-bold text-[var(--ref-on-surface)]">{transaction.description}</p>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{formatDateTime(transaction.date)} · {accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p></div>
+            <div className="hidden min-w-32 text-right sm:block"><p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">{category ?? (kind === 'transfer' ? 'Transfer' : kind === 'loan' ? 'Loan' : 'Unallocated')}</p>{transaction.categoryAllocations.length > 1 && <p className="mt-0.5 text-[10px] text-[var(--ref-outline)]">Split allocation</p>}</div>
+            <div className={cn('min-w-24 text-right font-headline text-sm font-extrabold', amount > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--ref-on-surface)]')}>{amount > 0 ? '+' : ''}{formatCurrency(Math.abs(amount))}</div>
+            <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100" onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => openModal(transaction, 'view')} className="rounded-xl p-2 text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)]" title="View details"><Edit2 className="h-4 w-4" /></button>{transaction.status === 'draft' ? <button type="button" onClick={() => void handleDeleteDraft(transaction)} className="rounded-xl p-2 text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10" title="Delete draft"><Trash2 className="h-4 w-4" /></button> : !correction ? <button type="button" onClick={() => void handleCorrect(transaction)} className="rounded-xl p-2 text-amber-700 hover:bg-amber-500/10" title="Correct transaction"><RotateCcw className="h-4 w-4" /></button> : null}</div>
+          </article>;
+        })}
+      </div>}
+      {total > 0 && <footer className="flex flex-col gap-3 border-t border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-low)]/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 text-xs text-[var(--ref-on-surface-variant)]"><span>Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()}</span><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 py-1">{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div><div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg p-2 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button><span className="text-xs font-bold">{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg p-2 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button></div></footer>}
+    </section>
+    <TransactionModal isOpen={isModalOpen} onClose={closeModal} onSaved={loadData} onSuccess={() => { void loadData(); setEditingPendingTx(null); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={editingTransaction} periodId={search.periodId && search.periodId !== 'all' ? Number(search.periodId) : null} initialMode={modalInitialMode} pendingTransaction={editingPendingTx} />
+    <ImportCSVModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onSuccess={loadData} />
+    <PendingTransactionsModal isOpen={isPendingModalOpen} onClose={() => setIsPendingModalOpen(false)} onEdit={(pending) => { setEditingPendingTx(pending); setIsPendingModalOpen(false); openModal(); }} onRefresh={() => { api.pendingTransactions.list().then((rows) => setPendingCount(rows.length)).catch(() => setPendingCount(0)); }} />
+    <Modal isOpen={isSplitBillModalOpen} onClose={() => setIsSplitBillModalOpen(false)} title="Split bill" subtitle="Upload a receipt to start a shared bill."><div className="flex flex-col items-center"><div className="w-full cursor-pointer rounded-2xl border-2 border-dashed border-[var(--color-border)] p-8 text-center hover:bg-[var(--ref-surface-container-low)]" onClick={() => splitFileInputRef.current?.click()}><input ref={splitFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleSplitFileSelect} />{isSplitLoading ? <div className="py-4"><div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[var(--ref-primary)] border-t-transparent" /><p className="mt-3 text-sm">Scanning receipt…</p></div> : <><Upload className="mx-auto mb-3 h-8 w-8 text-[var(--ref-primary)]" /><p className="font-bold">Upload receipt</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">PNG or JPG</p></>}</div>{splitError && <p className="mt-3 text-sm text-[var(--ref-error)]">{splitError}</p>}</div></Modal>
+  </PageContainer></RequireAuth>;
 }
