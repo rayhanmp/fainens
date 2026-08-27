@@ -700,7 +700,7 @@ export const api = {
         reviewedCurrentPeriod: currentPeriodCoverage === 'complete',
       }),
     }),
-    setCoverage: (id: number, data: { coverageStatus: 'partial' | 'complete'; reason: string; reviewed?: boolean }) =>
+    setCoverage: (id: number, data: { coverageStatus: 'partial' | 'complete' | 'skipped'; reason: string; reviewed?: boolean }) =>
       fetchApi(`/periods/${id}/coverage`, { method: 'POST', body: JSON.stringify(data) }),
     suggestNext: () => fetchApi<{
       suggestedName: string;

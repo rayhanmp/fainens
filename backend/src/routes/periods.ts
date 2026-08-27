@@ -320,17 +320,27 @@ export default async function (fastify: FastifyInstance) {
     const coverageStatus = body.coverageStatus;
     const reason = typeof body.reason === "string" ? body.reason.trim() : "";
     if (!Number.isSafeInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "Invalid period ID" });
-    if (coverageStatus !== "partial" && coverageStatus !== "complete") {
-      return reply.code(400).send({ error: "coverageStatus must be partial or complete" });
+    if (coverageStatus !== "partial" && coverageStatus !== "complete" && coverageStatus !== "skipped") {
+      return reply.code(400).send({ error: "coverageStatus must be partial, complete, or skipped" });
     }
     if (reason.length < 3 || reason.length > 500) return reply.code(400).send({ error: "A coverage review reason of 3-500 characters is required" });
-    if (coverageStatus === "complete" && body.reviewed !== true) {
-      return reply.code(400).send({ error: "reviewed: true is required before marking coverage complete" });
+    if ((coverageStatus === "complete" || coverageStatus === "skipped") && body.reviewed !== true) {
+      return reply.code(400).send({ error: `reviewed: true is required before marking coverage ${coverageStatus}` });
     }
     try {
       const updated = db.transaction((tx) => {
         const period = tx.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).all()[0];
         if (!period) throw new Error("Period not found");
+        // A skipped period is an explicit statement that there was no tracked
+        // activity. Never let that hide already-posted journals or a budget.
+        if (coverageStatus === "skipped") {
+          const [postedTransaction] = tx.select({ id: transactions.id }).from(transactions)
+            .where(and(eq(transactions.periodId, periodId), sql`${transactions.status} <> 'draft'`)).limit(1).all();
+          if (postedTransaction) throw new Error("A period with posted activity cannot be marked skipped. Use partial instead.");
+          const [budgetPlan] = tx.select({ id: budgetPlans.id }).from(budgetPlans)
+            .where(eq(budgetPlans.periodId, periodId)).limit(1).all();
+          if (budgetPlan) throw new Error("A period with budget plans cannot be marked skipped. Remove or move its budget plans first.");
+        }
         const row = tx.update(salaryPeriods).set({ coverageStatus, coverageReason: reason })
           .where(eq(salaryPeriods.id, periodId)).returning().all()[0];
         tx.insert(auditLogs).values({ entityType: "salary_period", entityId: periodId, action: "set_coverage", beforeSnapshot: Buffer.from(JSON.stringify(period)), afterSnapshot: Buffer.from(JSON.stringify(row)) }).run();
