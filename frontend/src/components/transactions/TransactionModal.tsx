@@ -29,6 +29,9 @@ import {
   X,
   CalendarClock,
   Sparkles,
+  Check,
+  Pencil,
+  RotateCcw,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -120,6 +123,16 @@ function toDatetimeLocal(d: Date = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function toDateInputLocal(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function toTimeInputLocal(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const stitchSelect =
   'rounded-xl border-none bg-[var(--ref-surface-container-low)] px-3 py-3 text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20';
 
@@ -147,12 +160,14 @@ export function TransactionModal({
 }: TransactionModalProps) {
   const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
+  const [activeDetailField, setActiveDetailField] = useState<string | null>(null);
   const { confirm } = useConfirm();
   
   // Reset view mode when modal opens/closes
   useEffect(() => {
     if (isOpen) {
       setViewMode(initialMode === 'view' && editingTransaction !== null);
+      setActiveDetailField(null);
     }
   }, [isOpen, initialMode, editingTransaction]);
 
@@ -449,8 +464,8 @@ export function TransactionModal({
       setInputMode('simple');
       const txDate = new Date(editingTransaction.date);
       setEditMeta({
-        date: txDate.toISOString().split('T')[0],
-        time: txDate.toTimeString().slice(0, 5),
+        date: toDateInputLocal(txDate),
+        time: toTimeInputLocal(txDate),
         description: editingTransaction.description,
         reference: editingTransaction.reference || '',
         notes: editingTransaction.notes || '',
@@ -595,6 +610,10 @@ export function TransactionModal({
 
   const handleEditMetaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await applyMetadataChanges();
+  };
+
+  const applyMetadataChanges = async () => {
     if (!editingTransaction) return;
     setFormError('');
     setIsSubmitting(true);
@@ -616,6 +635,54 @@ export function TransactionModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetMetadataChanges = () => {
+    if (!editingTransaction) return;
+    const txDate = new Date(editingTransaction.date);
+    setEditMeta({
+      date: toDateInputLocal(txDate),
+      time: toTimeInputLocal(txDate),
+      description: editingTransaction.description,
+      reference: editingTransaction.reference || '',
+      notes: editingTransaction.notes || '',
+      place: editingTransaction.place || '',
+      categoryId: editingTransaction.categoryId?.toString() || '',
+      tagIds: editingTransaction.tags.map((tag) => tag.tagId),
+    });
+    setActiveDetailField(null);
+    setFormError('');
+  };
+
+  const hasPendingMetadataChanges = (() => {
+    if (!editingTransaction) return false;
+    const txDate = new Date(editingTransaction.date);
+    const originalTagIds = editingTransaction.tags.map((tag) => tag.tagId).sort((a, b) => a - b);
+    const currentTagIds = [...editMeta.tagIds].sort((a, b) => a - b);
+    return (
+      editMeta.date !== toDateInputLocal(txDate) ||
+      editMeta.time !== toTimeInputLocal(txDate) ||
+      editMeta.description !== editingTransaction.description ||
+      editMeta.reference !== (editingTransaction.reference || '') ||
+      editMeta.notes !== (editingTransaction.notes || '') ||
+      editMeta.place !== (editingTransaction.place || '') ||
+      originalTagIds.length !== currentTagIds.length ||
+      originalTagIds.some((tagId, index) => tagId !== currentTagIds[index])
+    );
+  })();
+
+  const closeDetail = async () => {
+    if (hasPendingMetadataChanges) {
+      const discard = await confirm({
+        title: 'Discard unsaved edits?',
+        message: 'Your changes have not been applied to this transaction.',
+        confirmLabel: 'Discard edits',
+        variant: 'warning',
+      });
+      if (!discard) return;
+      resetMetadataChanges();
+    }
+    onClose();
   };
 
   const handleSimpleSubmit = async (e: React.FormEvent) => {
@@ -1086,6 +1153,9 @@ export function TransactionModal({
       const isTransfer = editingTransaction.txType?.includes('transfer');
       const isExpense = editingTransaction.txType?.includes('expense');
       const isIncome = editingTransaction.txType?.includes('income');
+      const detailDate = editMeta.date
+        ? new Date(`${editMeta.date}T${editMeta.time || '00:00'}:00`)
+        : new Date(editingTransaction.date);
       
       // Find the wallet account: for expense it's the line with credit, for income it's the line with debit
       const walletAccount = editingTransaction.lines.find(l => {
@@ -1272,37 +1342,20 @@ export function TransactionModal({
       return (
         <Modal
           isOpen={isOpen}
-          onClose={onClose}
+          onClose={() => { void closeDetail(); }}
           title={isExpense ? "Expense Detail" : "Income Detail"}
-          subtitle={`ID: #${editingTransaction.id}`}
+          subtitle={hasPendingMetadataChanges ? 'Unsaved edits' : `ID: #${editingTransaction.id}`}
           size="default"
           className="max-w-4xl"
           footer={
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 w-full">
-              <Button 
-                type="button" 
-                variant="secondary"
-                onClick={onClose}
-                className="w-full md:w-auto px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
-              >
-                Close
-              </Button>
-              <div className="flex gap-3 w-full md:w-auto">
-                <Button 
-                  type="button" 
-                  variant="secondary"
-                  onClick={() => setViewMode(false)} 
-                  className="flex-1 md:flex-none px-6 py-2.5 rounded-full font-headline font-semibold text-sm"
-                >
-                  Edit Record
-                </Button>
-                <Button 
-                  type="button" 
-                  onClick={onClose}
-                  className="flex-1 md:flex-none px-8 py-2.5 rounded-full font-headline font-semibold text-sm shadow-lg shadow-[var(--color-primary)]/20"
-                >
-                  Got it
-                </Button>
+            <div className="w-full space-y-3">
+              {formError && <div className="rounded-xl bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{formError}</div>}
+              <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+                <p className="text-xs text-[var(--color-muted)]">Click a detail to edit it. Amounts and accounts stay protected.</p>
+                <div className="flex w-full gap-3 md:w-auto">
+                  {hasPendingMetadataChanges && <Button type="button" variant="secondary" onClick={resetMetadataChanges} disabled={isSubmitting} className="flex-1 md:flex-none rounded-full px-5"><RotateCcw className="mr-2 h-4 w-4" />Discard</Button>}
+                  {hasPendingMetadataChanges ? <Button type="button" onClick={() => void applyMetadataChanges()} isLoading={isSubmitting} className="flex-1 md:flex-none rounded-full px-6"><Check className="mr-2 h-4 w-4" />Apply changes</Button> : <Button type="button" variant="secondary" onClick={() => { void closeDetail(); }} className="flex-1 md:flex-none rounded-full px-6">Close</Button>}
+                </div>
               </div>
             </div>
           }
@@ -1321,12 +1374,8 @@ export function TransactionModal({
                     )}
                   </div>
                   <div>
-                    <h1 className="font-headline font-bold text-base tracking-tight text-[var(--color-on-background)]">
-                      {editingTransaction.description}
-                    </h1>
-                    <p className="text-[var(--color-muted)] font-label text-xs mt-0.5 uppercase tracking-widest">
-                      {new Date(editingTransaction.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(editingTransaction.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    {activeDetailField === 'description' ? <input autoFocus value={editMeta.description} onChange={(event) => setEditMeta({ ...editMeta, description: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-full rounded-lg bg-[var(--ref-surface-container-low)] px-2 py-1 font-headline text-base font-bold tracking-tight outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('description')} className="group flex items-center gap-1 rounded-lg -ml-2 px-2 py-1 text-left transition-colors hover:bg-[var(--ref-surface-container-low)]"><h1 className="font-headline font-bold text-base tracking-tight text-[var(--color-on-background)]">{editMeta.description || 'Untitled transaction'}</h1><Pencil className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
+                    {activeDetailField === 'date' ? <div className="mt-1 flex gap-1"><input autoFocus type="date" value={editMeta.date} onChange={(event) => setEditMeta({ ...editMeta, date: event.target.value })} className="min-w-0 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /><input type="time" value={editMeta.time} onChange={(event) => setEditMeta({ ...editMeta, time: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-20 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /></div> : <button type="button" onClick={() => setActiveDetailField('date')} className="group mt-0.5 flex items-center gap-1 rounded px-1 -ml-1 text-[var(--color-muted)] font-label text-xs uppercase tracking-widest transition-colors hover:bg-[var(--ref-surface-container-low)]">{detailDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {detailDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}<Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 bg-[var(--color-secondary-container)]/30 text-[var(--color-on-secondary-container)] px-3 py-1.5 rounded-full">
@@ -1361,6 +1410,7 @@ export function TransactionModal({
                       <span className="text-[var(--color-muted)] text-sm">—</span>
                     )}
                   </div>
+                  <p className="pt-1 text-[10px] text-[var(--color-muted)]">Reporting classification · protected</p>
                 </div>
 
                 {/* Account */}
@@ -1376,29 +1426,17 @@ export function TransactionModal({
                       <span className="text-[var(--color-muted)] text-sm">—</span>
                     )}
                   </div>
+                  <p className="pt-1 text-[10px] text-[var(--color-muted)]">Balance-affecting · protected</p>
                 </div>
 
                 {/* Tags */}
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
                   <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Tags</p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {editingTransaction.tags.length > 0 ? (
-                      editingTransaction.tags.map(tag => (
-                        <span 
-                          key={tag.tagId}
-                          className="px-2 py-0.5 rounded-full text-xs font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)]"
-                        >
-                          {tag.name}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-[var(--color-muted)] text-sm">—</span>
-                    )}
-                  </div>
+                  {activeDetailField === 'tags' ? <div className="flex flex-wrap gap-1.5 pt-1">{tags.map((tag) => <button key={tag.id} type="button" onClick={() => setEditMeta({ ...editMeta, tagIds: editMeta.tagIds.includes(tag.id) ? editMeta.tagIds.filter((id) => id !== tag.id) : [...editMeta.tagIds, tag.id] })} className={cn('rounded-full border px-2 py-1 text-xs font-semibold transition-colors', editMeta.tagIds.includes(tag.id) ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white' : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)]')}>{tag.name}</button>)}<button type="button" onClick={() => setActiveDetailField(null)} className="px-1.5 text-xs font-bold text-[var(--ref-primary)]">Done</button></div> : <button type="button" onClick={() => setActiveDetailField('tags')} className="group flex flex-wrap items-center gap-1.5 text-left">{editMeta.tagIds.length > 0 ? tags.filter((tag) => editMeta.tagIds.includes(tag.id)).map((tag) => <span key={tag.id} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-secondary)]">{tag.name}</span>) : <span className="text-sm text-[var(--color-muted)]">Add tags</span>}<Pencil className="h-3.5 w-3.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                 </div>
 
                 {/* Location */}
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
                   <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Location</p>
                   <div className="flex items-center gap-2">
                     <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
@@ -1407,39 +1445,27 @@ export function TransactionModal({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                     </div>
-                    {editingTransaction.place ? (
-                      <p className="font-headline font-semibold text-base">{editingTransaction.place}</p>
-                    ) : (
-                      <span className="text-[var(--color-muted)] text-sm">—</span>
-                    )}
+                    {activeDetailField === 'place' ? <input autoFocus value={editMeta.place} onChange={(event) => setEditMeta({ ...editMeta, place: event.target.value })} onBlur={() => setActiveDetailField(null)} placeholder="Add location" className="min-w-0 flex-1 rounded bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-base font-semibold outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('place')} className="group flex min-w-0 items-center gap-1 text-left"><p className={cn('font-headline text-base font-semibold', !editMeta.place && 'text-sm font-normal text-[var(--color-muted)]')}>{editMeta.place || 'Add location'}</p><Pencil className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                   </div>
                 </div>
 
                 {/* Notes */}
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
                   <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Note</p>
                   <div className="flex items-center gap-2">
                     <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
                       <StickyNote className="w-3.5 h-3.5" />
                     </div>
-                    {editingTransaction.notes ? (
-                      <p className="font-headline font-semibold text-base italic">{editingTransaction.notes}</p>
-                    ) : (
-                      <span className="text-[var(--color-muted)] text-sm">—</span>
-                    )}
+                    {activeDetailField === 'notes' ? <textarea autoFocus value={editMeta.notes} onChange={(event) => setEditMeta({ ...editMeta, notes: event.target.value })} onBlur={() => setActiveDetailField(null)} placeholder="Add a note" rows={2} className="min-w-0 flex-1 resize-none rounded bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-base font-semibold italic outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('notes')} className="group flex min-w-0 items-center gap-1 text-left"><p className={cn('font-headline text-base font-semibold italic', !editMeta.notes && 'text-sm font-normal not-italic text-[var(--color-muted)]')}>{editMeta.notes || 'Add a note'}</p><Pencil className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                   </div>
                 </div>
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
                   <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Reference</p>
                   <div className="flex items-center gap-2">
                     <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
                       <TagIcon className="w-3.5 h-3.5" />
                     </div>
-                    {editingTransaction.reference ? (
-                      <p className="font-headline font-semibold text-base">{editingTransaction.reference}</p>
-                    ) : (
-                      <span className="text-[var(--color-muted)] text-sm">—</span>
-                    )}
+                    {activeDetailField === 'reference' ? <input autoFocus value={editMeta.reference} onChange={(event) => setEditMeta({ ...editMeta, reference: event.target.value })} onBlur={() => setActiveDetailField(null)} placeholder="Add reference" className="min-w-0 flex-1 rounded bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-base font-semibold outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('reference')} className="group flex min-w-0 items-center gap-1 text-left"><p className={cn('font-headline text-base font-semibold', !editMeta.reference && 'text-sm font-normal text-[var(--color-muted)]')}>{editMeta.reference || 'Add reference'}</p><Pencil className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                   </div>
                 </div>
               </div>
