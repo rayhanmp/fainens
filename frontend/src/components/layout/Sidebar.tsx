@@ -1,6 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import {
   LayoutDashboard,
+  Calendar,
   Wallet,
   Receipt,
   PiggyBank,
@@ -41,6 +42,7 @@ const topNav: NavItem[] = [
 const restNav: NavItem[] = [
   { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
+  { to: '/periods', label: 'Salary periods', icon: Calendar },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/anomalies', label: 'Data quality', icon: AlertTriangle },

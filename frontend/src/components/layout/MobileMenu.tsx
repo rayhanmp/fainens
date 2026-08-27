@@ -1,6 +1,7 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import {
   LayoutDashboard,
+  Calendar,
   Wallet,
   Receipt,
   CreditCard,
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/paylater', label: 'Pay Later', icon: CreditCard },
   { to: '/loans', label: 'Loans', icon: Users },
   { to: '/salary-income', label: 'Salary & Income', icon: Banknote },
+  { to: '/periods', label: 'Salary Periods', icon: Calendar },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
   { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
