@@ -224,6 +224,8 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
 11. **Implemented return-after-absence recovery and propagation.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Budget/dashboard/PDF/trend/agent reads disclose gaps and exclude skipped/unknown periods from averages and comparisons. Guided statement import/catch-up orchestration remains a follow-up.
 
+    - The Periods screen is now exposed in desktop and mobile navigation and redesigned as a current-period control card plus chronological history. Its detail view separates lifecycle from coverage, supports coverage review, archive/restore, and direct budget/activity links. Period dates are server-locked once posted activity or budget plans exist, so a boundary edit cannot silently reframe recorded history.
+
 ## Return-after-absence period coverage policy
 
 Missing calendar/accounting periods must be represented, not silently omitted and not treated as empty. A period created because the user was absent is a **skipped-coverage period**: it records that the ledger did not capture ordinary activity for that interval. It does not assert zero income, spending, cash movement, budget actuals, or account balance change.

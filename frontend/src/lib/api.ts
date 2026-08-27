@@ -650,7 +650,7 @@ export const api = {
 
   // Periods
   periods: {
-    list: () => fetchApi<Array<{
+    list: (params?: { includeInactive?: boolean }) => fetchApi<Array<{
       id: number;
       name: string;
       startDate: number;
@@ -658,9 +658,11 @@ export const api = {
       status: 'open' | 'closed';
       closedAt: number | null;
       reopenedAt: number | null;
+      isActive: boolean;
+      archivedAt: number | null;
       coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
       coverageReason: string | null;
-    }>>('/periods'),
+    }>>(`/periods${params?.includeInactive ? '?includeInactive=true' : ''}`),
     get: (id: number) => fetchApi(`/periods/${id}`),
     create: (data: { name: string; startDate: string; endDate: string }) =>
       fetchApi('/periods', { method: 'POST', body: JSON.stringify(data) }),
@@ -669,6 +671,8 @@ export const api = {
     delete: (id: number) => fetchApi(`/periods/${id}`, { method: 'DELETE' }),
     close: (id: number) => fetchApi(`/periods/${id}/close`, { method: 'POST' }),
     reopen: (id: number) => fetchApi(`/periods/${id}/reopen`, { method: 'POST' }),
+    archive: (id: number) => fetchApi(`/periods/${id}/archive`, { method: 'POST' }),
+    restore: (id: number) => fetchApi(`/periods/${id}/restore`, { method: 'POST' }),
     returnPreview: (asOfDate: number) => fetchApi<{
       candidates: Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>;
       reason?: string;

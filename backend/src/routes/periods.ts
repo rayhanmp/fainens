@@ -276,6 +276,26 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
+    const boundariesChanged = startMs !== existing.startDate || endMs !== existing.endDate;
+    if (boundariesChanged) {
+      // Period identity is referenced by posted journals and budget plans. A
+      // date-boundary edit must never silently reframe a period that already
+      // has financial history. Rename it freely; create a corrective period
+      // instead when recorded activity exists.
+      const [postedTransaction] = await db.select({ id: transactions.id }).from(transactions)
+        .where(and(eq(transactions.periodId, parseInt(id)), sql`${transactions.status} <> 'draft'`)).limit(1);
+      if (postedTransaction) {
+        reply.code(409).send({ error: "This period has posted transactions. Its dates are locked to protect recorded history." });
+        return;
+      }
+      const [budgetPlan] = await db.select({ id: budgetPlans.id }).from(budgetPlans)
+        .where(eq(budgetPlans.periodId, parseInt(id))).limit(1);
+      if (budgetPlan) {
+        reply.code(409).send({ error: "This period has budget plans. Remove or move those plans before changing its dates." });
+        return;
+      }
+    }
+
     const updated = db.transaction((tx) => {
       const row = (tx.update(salaryPeriods).set(updates)
         .where(eq(salaryPeriods.id, parseInt(id))).returning().all() as any[])[0];
