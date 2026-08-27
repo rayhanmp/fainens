@@ -395,11 +395,11 @@ function AccountsPage() {
         {isInitialLoading ? (
           <div className="h-40 animate-pulse rounded-3xl bg-[var(--ref-surface-container-highest)]/50" />
         ) : summary ? (
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <article className="rounded-3xl bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]"><Wallet className="h-5 w-5" /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] opacity-70">Net worth</p><p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{formatCurrency(summary.netWorth)}</p><p className="mt-4 text-xs opacity-75">Assets less liabilities</p></article>
-            <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5"><Banknote className="h-5 w-5 text-[var(--ref-primary)]" /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Assets</p><p className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(summary.totalAssets)}</p><p className="mt-4 text-xs text-[var(--ref-on-surface-variant)]">Money and value you own</p></article>
-            <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5"><CreditCard className="h-5 w-5 text-rose-600 dark:text-rose-300" /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Liabilities</p><p className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(summary.totalLiabilities)}</p><p className="mt-4 text-xs text-[var(--ref-on-surface-variant)]">Cards, PayLater, and debts</p></article>
-            <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><CheckCircle2 className={cn('h-5 w-5', reconciliationSummary.issues > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]')} /><p className="mt-5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Balance checks</p><p className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{reconciliationSummary.checked}/{reconciliationSummary.total}</p><p className={cn('mt-4 text-xs', reconciliationSummary.issues > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface-variant)]')}>{reconciliationSummary.issues > 0 ? `${reconciliationSummary.issues} need attention` : lastLoadedAt ? `Updated ${new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Reconcile to verify'}</p></article>
+          <section className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-2xl bg-[var(--ref-primary-container)] p-4 text-[var(--ref-on-primary-container)]"><Wallet className="h-4 w-4" /><p className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.14em] opacity-70">Net worth</p><p className="mt-1 font-headline text-2xl font-extrabold tracking-tight">{formatCurrency(summary.netWorth)}</p><p className="mt-2 text-[11px] opacity-75">Assets less liabilities</p></article>
+            <article className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4"><Banknote className="h-4 w-4 text-[var(--ref-primary)]" /><p className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Assets</p><p className="mt-1 font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(summary.totalAssets)}</p><p className="mt-2 text-[11px] text-[var(--ref-on-surface-variant)]">Money and value you own</p></article>
+            <article className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4"><CreditCard className="h-4 w-4 text-rose-600 dark:text-rose-300" /><p className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Liabilities</p><p className="mt-1 font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(summary.totalLiabilities)}</p><p className="mt-2 text-[11px] text-[var(--ref-on-surface-variant)]">Cards, PayLater, and debts</p></article>
+            <article className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4"><CheckCircle2 className={cn('h-4 w-4', reconciliationSummary.issues > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]')} /><p className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Balance checks</p><p className="mt-1 font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{reconciliationSummary.checked}/{reconciliationSummary.total}</p><p className={cn('mt-2 text-[11px]', reconciliationSummary.issues > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface-variant)]')}>{reconciliationSummary.issues > 0 ? `${reconciliationSummary.issues} need attention` : lastLoadedAt ? `Updated ${new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Reconcile to verify'}</p></article>
           </section>
         ) : null}
 
@@ -464,8 +464,8 @@ function AccountsPage() {
             <p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Adjust search or filters.</p>
           </div>
         ) : (
-          <section className="space-y-6">
-            <LedgerColumn
+          <section className="grid gap-4 xl:grid-cols-2">
+            {buckets.cash.length > 0 && <LedgerColumn
               title="Cash & checking"
               accounts={buckets.cash}
               emptyHint="Bank, cash, savings"
@@ -474,8 +474,8 @@ function AccountsPage() {
               onRestore={handleRestore}
               cardVariant="cash"
               reconciliationByAccount={latestReconciliationByAccount}
-            />
-            <LedgerColumn
+            />}
+            {buckets.ewallet.length > 0 && <LedgerColumn
               title="E-wallets"
               accounts={buckets.ewallet}
               emptyHint="GoPay, OVO, DANA…"
@@ -484,7 +484,7 @@ function AccountsPage() {
               onRestore={handleRestore}
               cardVariant="ewallet"
               reconciliationByAccount={latestReconciliationByAccount}
-            />
+            />}
             {buckets.investment.length > 0 && (
               <LedgerColumn
                 title="Investments"
@@ -509,7 +509,7 @@ function AccountsPage() {
                 reconciliationByAccount={latestReconciliationByAccount}
               />
             )}
-            <LedgerColumn
+            {buckets.creditcard.length > 0 && <LedgerColumn
               title="Credit cards"
               accounts={buckets.creditcard}
               emptyHint="Cards & loans"
@@ -518,8 +518,8 @@ function AccountsPage() {
               onRestore={handleRestore}
               cardVariant="credit"
               reconciliationByAccount={latestReconciliationByAccount}
-            />
-            <LedgerColumn
+            />}
+            {buckets.paylater.length > 0 && <LedgerColumn
               title="PayLater"
               accounts={buckets.paylater}
               emptyHint="Deferred liabilities"
@@ -529,7 +529,7 @@ function AccountsPage() {
               cardVariant="paylater"
               footerSummary={payLaterTotal > 0 ? payLaterTotal : undefined}
               reconciliationByAccount={latestReconciliationByAccount}
-            />
+            />}
           </section>
         )}
 
@@ -595,8 +595,8 @@ function LedgerColumn({
       : 'text-[var(--ref-primary)]';
 
   return (
-    <section className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm sm:p-5">
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--ref-outline-variant)]/20 pb-4">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-sm sm:p-4">
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--ref-outline-variant)]/20 pb-3">
         <div>
           <p className={cn('text-[10px] font-extrabold uppercase tracking-[0.16em]', accent)}>{title}</p>
           <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{accounts.length > 0 ? countLabel : emptyHint}</p>
@@ -604,9 +604,9 @@ function LedgerColumn({
         {accounts.length > 0 && <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">{cardVariant === 'credit' || cardVariant === 'paylater' ? 'Total owed' : 'Total'}</p><p className="mt-1 font-headline text-base font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(footerSummary ?? total)}</p></div>}
       </header>
       {accounts.length === 0 ? (
-        <p className="py-8 text-center text-sm text-[var(--ref-on-surface-variant)]">No accounts here yet.</p>
+        <p className="py-5 text-center text-sm text-[var(--ref-on-surface-variant)]">No accounts here yet.</p>
       ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {accounts.map((account) => <AccountTile key={account.id} account={account} variant={cardVariant} onEdit={() => onEdit(account)} onDelete={() => onDelete(account.id)} onRestore={() => onRestore(account.id)} reconciliation={reconciliationByAccount.get(account.id)} />)}
         </div>
       )}
@@ -660,17 +660,17 @@ function AccountTile({
         : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]';
 
   return (
-    <article className="group rounded-2xl border border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-low)] p-4 transition-all hover:-translate-y-0.5 hover:border-[var(--ref-primary)]/25 hover:shadow-lg">
+    <article className="group rounded-xl border border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-low)] p-3 transition-all hover:-translate-y-0.5 hover:border-[var(--ref-primary)]/25 hover:shadow-lg">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', tone)}>{a.icon ? <span className="text-lg">{a.icon}</span> : <AccountIcon className="h-5 w-5" />}</div>
+          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', tone)}>{a.icon ? <span className="text-base">{a.icon}</span> : <AccountIcon className="h-4 w-4" />}</div>
           <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">{isLiability ? 'Liability' : variant === 'investment' ? 'Investment' : variant === 'receivable' ? 'Receivable' : 'Account'}</p><h4 className="truncate font-headline text-sm font-extrabold text-[var(--ref-on-surface)]">{a.name}</h4></div>
         </div>
-        <button type="button" onClick={onEdit} className="rounded-xl p-2 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)]" aria-label={`Edit ${a.name}`} title="Edit account"><Edit2 className="h-4 w-4" /></button>
+        <button type="button" onClick={onEdit} className="rounded-lg p-1.5 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)]" aria-label={`Edit ${a.name}`} title="Edit account"><Edit2 className="h-3.5 w-3.5" /></button>
       </div>
-      <div className="mt-5"><p className="text-xs text-[var(--ref-on-surface-variant)]">{isLiability ? 'Amount owed' : variant === 'investment' ? 'Current value' : variant === 'receivable' ? 'Owed to you' : 'Available balance'}</p><p className="mt-1 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(displayBalance)}</p>{a.creditLimit != null && <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}</div>
-      <div className="mt-5 flex items-center justify-between gap-2 border-t border-[var(--ref-outline-variant)]/20 pt-3"><span className={cn('min-w-0 truncate text-[11px] font-semibold', reconciliationClass)}>{reconciliationLabel}</span><Link to="/transactions" search={{ accountId: String(a.id) }} className="shrink-0 text-xs font-bold text-[var(--ref-primary)] hover:underline">Activity</Link></div>
-      <div className="mt-3 flex items-center justify-between gap-3 text-[11px]"><span className="truncate text-[var(--ref-on-surface-variant)]">{accountIdentifier}</span><button type="button" onClick={lifecycleAction} className="inline-flex shrink-0 items-center gap-1 text-[var(--ref-outline)] transition-colors hover:text-[var(--ref-error)]"><Archive className="h-3.5 w-3.5" />{lifecycleLabel}</button></div>
+      <div className="mt-3"><p className="text-[11px] text-[var(--ref-on-surface-variant)]">{isLiability ? 'Amount owed' : variant === 'investment' ? 'Current value' : variant === 'receivable' ? 'Owed to you' : 'Available balance'}</p><p className="mt-0.5 font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{formatCurrency(displayBalance)}</p>{a.creditLimit != null && <p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">Limit {formatCurrency(a.creditLimit)}</p>}</div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--ref-outline-variant)]/20 pt-2"><span className={cn('min-w-0 truncate text-[10px] font-semibold', reconciliationClass)}>{reconciliationLabel}</span><Link to="/transactions" search={{ accountId: String(a.id) }} className="shrink-0 text-[11px] font-bold text-[var(--ref-primary)] hover:underline">Activity</Link></div>
+      <div className="mt-2 flex items-center justify-between gap-3 text-[10px]"><span className="truncate text-[var(--ref-on-surface-variant)]">{accountIdentifier}</span><button type="button" onClick={lifecycleAction} className="inline-flex shrink-0 items-center gap-1 text-[var(--ref-outline)] transition-colors hover:text-[var(--ref-error)]"><Archive className="h-3 w-3" />{lifecycleLabel}</button></div>
     </article>
   );
 
