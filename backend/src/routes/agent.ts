@@ -286,6 +286,7 @@ const AGENT_SYSTEM_PROMPT = [
   "USER PROFILE: Address the user as Ray when natural. The default currency is IDR (Indonesian rupiah). Ray's home is Bekasi, Indonesia; use this only for timezone/local-context interpretation, never as evidence of a transaction or location.",
   "CONVERSATION: Talk naturally. Answer greetings, thanks, casual conversation, app explanations, and non-financial questions directly without calling a tool. Do not force every turn into a report. Ask one focused clarification when the user's intent, date range, account, currency, or requested action is genuinely ambiguous.",
   "RETRIEVAL: Use the minimum read-only tools needed before every factual claim about Ray's recorded finances, including balances, transactions, spending, budgets, obligations, trends, comparisons, or period activity. Do not guess missing values, silently reuse stale results, or call tools repeatedly when an existing result answers the question.",
+  "TOOL COMPLETION: After receiving tool results, continue with either the next required tool call or a useful natural-language response. Never finish with an empty message. If a requested action is ready to prepare, call the preparation tool rather than stopping after account/category retrieval.",
   "TOOL CHOICES: Use calculate for arithmetic; get_current_datetime for an exact current-time check; calculate_date_difference for elapsed time; get_currency_exchange_rate for currency conversion; get_category_spending for category rankings/totals; and get_transaction_details for journal lines, provenance, or audit questions. Treat tool errors as uncertainty and explain the limitation.",
   "ACCOUNTING: Posted journals are actuals. Drafts are not actuals. Budgets are plans, not transactions. Reversals preserve the original history and are not deletion. Reconciliation is control evidence, never income, expense, or cash flow. Cash-flow classes come from classified journal lines, not transaction-type guesses. Amounts are integer IDR units despite legacy field names ending in Cents.",
   "USER-FACING ACTIVITY: Never include internal reversal journals or their superseded originals in a normal answer, timeline, ranking, or transaction list. The ledger tools already retain their net accounting effect in totals. Mention correction history only when Ray explicitly asks to audit, explain, or trace a correction.",
@@ -352,6 +353,7 @@ async function answerWithTools(
   let lastContent = "";
   let callsUsed = 0;
   let completedWithAnswer = false;
+  let emptyCompletionRetries = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
@@ -361,10 +363,19 @@ async function answerWithTools(
       tools: modelTools,
     });
     const assistantMessage = response.message;
-    lastContent = typeof assistantMessage.content === "string" ? assistantMessage.content : lastContent;
     const requestedCalls = assistantMessage.tool_calls ?? [];
     if (requestedCalls.length === 0) {
-      completedWithAnswer = true;
+      const content = typeof assistantMessage.content === "string" ? assistantMessage.content.trim() : "";
+      if (content) {
+        lastContent = content;
+        completedWithAnswer = true;
+        break;
+      }
+      if (emptyCompletionRetries < 1) {
+        emptyCompletionRetries += 1;
+        messages.push({ role: "user", content: "Your last response was blank. Continue from the available tool results and return either a useful answer or the next required tool call; do not return an empty message." });
+        continue;
+      }
       break;
     }
     if (callsUsed + requestedCalls.length > MAX_TOOL_CALLS_PER_QUERY) {
@@ -402,19 +413,21 @@ async function answerWithTools(
   // If the model spent the final allowed round retrieving data, give it one
   // synthesis turn with tools disabled so the response cannot end as an
   // unexplained empty tool-call transcript.
-  if (!completedWithAnswer) {
+  if (!completedWithAnswer || !lastContent.trim()) {
     const finalResponse = await callOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages: [
         ...messages,
         {
           role: "user",
-          content: "Synthesize the answer from the tool results already provided. Do not request another tool.",
+          content: "Synthesize a useful, direct answer from the tool results already provided. Do not request another tool and do not return an empty message.",
         },
       ],
       tools: [],
     });
-    if (typeof finalResponse.message.content === "string") lastContent = finalResponse.message.content;
+    if (typeof finalResponse.message.content === "string" && finalResponse.message.content.trim()) {
+      lastContent = finalResponse.message.content.trim();
+    }
   }
 
   return {
@@ -458,19 +471,29 @@ async function answerWithToolsStreaming(
   let lastContent = "";
   let callsUsed = 0;
   let completedWithAnswer = false;
+  let emptyCompletionRetries = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
+    let roundContent = "";
     const response = await streamOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages,
       tools: modelTools,
-      onTextDelta: (text) => { lastContent += text; onTextDelta(text); },
+      onTextDelta: (text) => { roundContent += text; lastContent += text; onTextDelta(text); },
     });
     const assistantMessage = response.message;
     const requestedCalls = assistantMessage.tool_calls ?? [];
     if (requestedCalls.length === 0) {
-      completedWithAnswer = true;
+      if (roundContent.trim()) {
+        completedWithAnswer = true;
+        break;
+      }
+      if (emptyCompletionRetries < 1) {
+        emptyCompletionRetries += 1;
+        messages.push({ role: "user", content: "Your last response was blank. Continue from the available tool results and return either a useful answer or the next required tool call; do not return an empty message." });
+        continue;
+      }
       break;
     }
     if (callsUsed + requestedCalls.length > MAX_TOOL_CALLS_PER_QUERY) {
@@ -502,10 +525,10 @@ async function answerWithToolsStreaming(
     }
   }
 
-  if (!completedWithAnswer) {
+  if (!completedWithAnswer || !lastContent.trim()) {
     const finalResponse = await streamOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
-      messages: [...messages, { role: "user", content: "Synthesize the answer from the tool results already provided. Do not request another tool." }],
+      messages: [...messages, { role: "user", content: "Synthesize a useful, direct answer from the tool results already provided. Do not request another tool and do not return an empty message." }],
       tools: [],
       onTextDelta: (text) => { lastContent += text; onTextDelta(text); },
     });
