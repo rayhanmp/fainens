@@ -39,6 +39,21 @@ type StreamDelta = {
 
 const DEFAULT_MODEL = "google/gemini-3.7-flash";
 
+function providerFailure(operation: "request" | "stream", status: number): Error {
+  const detail = status === 401
+    ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
+    : status === 403
+      ? "OpenRouter denied this request. Check account credits, model access, and API key permissions."
+      : status === 404
+        ? "The configured model was not found. Check OPENROUTER_MODEL."
+        : status === 429
+          ? "OpenRouter rate-limited the request. Try again shortly."
+          : status >= 500
+            ? "OpenRouter is temporarily unavailable. Try again shortly."
+            : "OpenRouter returned an unexpected error.";
+  return new Error(`Agent model ${operation} failed (${status}): ${detail}`);
+}
+
 /**
  * Small OpenRouter adapter for the agent loop. The normal insight adapter only
  * returns text; this one intentionally preserves function calls so the route
@@ -68,9 +83,7 @@ export async function callOpenRouterAgent(input: {
   });
 
   if (!response.ok) {
-    // Do not echo provider response bodies into the API; they can contain
-    // request metadata or provider-specific details that are not user-safe.
-    throw new Error(`Agent model request failed (${response.status})`);
+    throw providerFailure("request", response.status);
   }
 
   const payload = await response.json() as {
@@ -116,7 +129,7 @@ export async function streamOpenRouterAgent(input: {
     signal: input.signal,
   });
   if (!response.ok || !response.body) {
-    throw new Error(`Agent model stream failed (${response.status})`);
+    throw providerFailure("stream", response.status);
   }
 
   const decoder = new TextDecoder();

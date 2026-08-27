@@ -566,6 +566,8 @@ export const agentConversations = sqliteTable("agent_conversation", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   ownerEmail: text("owner_email").notNull(),
   title: text("title").notNull().default("New conversation"),
+  /** auto until the user explicitly edits the title; manual titles are never overwritten. */
+  titleSource: text("title_source").notNull().default("auto"), // auto | manual
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),

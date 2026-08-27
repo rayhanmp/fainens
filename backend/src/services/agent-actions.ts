@@ -16,7 +16,9 @@ const MAX_ASSUMPTION_LENGTH = 500;
 
 type BudgetPlanItem = { categoryId: number; plannedAmountCents: number };
 type BudgetActionInput = { periodId: number; plans: BudgetPlanItem[] };
+type TransactionIntent = "expense" | "income" | "transfer";
 type TransactionActionInput = {
+  intent: TransactionIntent | null;
   dateMs: number;
   description: string;
   reference: string | null;
@@ -98,11 +100,41 @@ function optionalNullableText(value: unknown, field: string, maxLength: number):
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function parseTransactionDate(value: Record<string, unknown>): number {
+  const suppliedIso = value.date;
+  const suppliedMs = value.dateMs;
+  if (suppliedIso != null) {
+    if (typeof suppliedIso !== "string" || suppliedIso.length > 64) {
+      throw new AgentActionError(400, "input.date must be a timezone-aware ISO 8601 date/time");
+    }
+    const normalized = suppliedIso.trim();
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) {
+      throw new AgentActionError(400, "input.date must include a UTC offset, for example 2026-08-27T14:00:00+07:00");
+    }
+    const parsed = Date.parse(normalized);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      throw new AgentActionError(400, "input.date is not a valid date/time");
+    }
+    if (suppliedMs != null) {
+      if (typeof suppliedMs !== "number" || !Number.isSafeInteger(suppliedMs) || suppliedMs < 0) {
+        throw new AgentActionError(400, "input.dateMs must be a non-negative integer timestamp when supplied");
+      }
+      if (suppliedMs !== parsed) throw new AgentActionError(400, "input.date and input.dateMs describe different moments");
+    }
+    return parsed;
+  }
+  if (typeof suppliedMs !== "number" || !Number.isSafeInteger(suppliedMs) || suppliedMs < 0) {
+    throw new AgentActionError(400, "input.date must be a timezone-aware ISO 8601 date/time (legacy input.dateMs is also accepted)");
+  }
+  return suppliedMs;
+}
+
 function parseTransactionActionInput(value: unknown): TransactionActionInput {
   if (!isRecord(value)) throw new AgentActionError(400, "input must be an object");
-  const dateMs = value.dateMs;
-  if (typeof dateMs !== "number" || !Number.isSafeInteger(dateMs) || dateMs < 0) {
-    throw new AgentActionError(400, "input.dateMs must be a non-negative integer timestamp");
+  const dateMs = parseTransactionDate(value);
+  const intent = value.intent == null ? null : value.intent;
+  if (intent != null && (typeof intent !== "string" || !["expense", "income", "transfer"].includes(intent))) {
+    throw new AgentActionError(400, "input.intent must be expense, income, transfer, or null");
   }
   const description = value.description;
   if (typeof description !== "string" || description.trim().length === 0 || description.length > 500) {
@@ -111,7 +143,7 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
   if (!Array.isArray(value.lines) || value.lines.length < 2 || value.lines.length > 100) {
     throw new AgentActionError(400, "input.lines must contain 2-100 journal lines");
   }
-  const allowedCashFlowClasses = new Set(["operating", "investing", "financing", "transfer", "recovery"]);
+  const allowedCashFlowClasses = new Set(["operating", "investing", "financing", "transfer"]);
   const lines = value.lines.map((candidate, index): JournalLineInput => {
     if (!isRecord(candidate)) throw new AgentActionError(400, `input.lines[${index}] must be an object`);
     const accountId = candidate.accountId;
@@ -121,7 +153,10 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
       throw new AgentActionError(400, `input.lines[${index}].accountId must be a positive integer`);
     }
     if (typeof debit !== "number" || !Number.isSafeInteger(debit) || debit < 0 || typeof credit !== "number" || !Number.isSafeInteger(credit) || credit < 0) {
-      throw new AgentActionError(400, `input.lines[${index}] debit and credit must be non-negative integers`);
+      throw new AgentActionError(400, `input.lines[${index}] debit and credit must be non-negative integer IDR amounts`);
+    }
+    if ((debit === 0 && credit === 0) || (debit > 0 && credit > 0)) {
+      throw new AgentActionError(400, `input.lines[${index}] must have exactly one non-zero side`);
     }
     const cashFlowClass = candidate.cashFlowClass == null ? null : candidate.cashFlowClass;
     if (cashFlowClass != null && (typeof cashFlowClass !== "string" || !allowedCashFlowClasses.has(cashFlowClass))) {
@@ -135,11 +170,11 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
       cashFlowClass: cashFlowClass as JournalLineInput["cashFlowClass"],
     };
   });
-  const categoryId = value.categoryId == null ? null : value.categoryId;
+  const categoryId: number | null = value.categoryId == null ? null : value.categoryId as number;
   if (categoryId != null && (typeof categoryId !== "number" || !Number.isSafeInteger(categoryId) || categoryId <= 0)) {
     throw new AgentActionError(400, "input.categoryId must be a positive integer or null");
   }
-  const periodId = value.periodId == null ? null : value.periodId;
+  const periodId: number | null = value.periodId == null ? null : value.periodId as number;
   if (periodId != null && (typeof periodId !== "number" || !Number.isSafeInteger(periodId) || periodId <= 0)) {
     throw new AgentActionError(400, "input.periodId must be a positive integer or null");
   }
@@ -156,12 +191,16 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
     seenCategories.add(candidate.categoryId);
     return { categoryId: candidate.categoryId, amount: candidate.amount };
   });
+  if (intent !== "expense" && (categoryId != null || parsedAllocations.length > 0)) {
+    throw new AgentActionError(400, "Only expense proposals may include a category or category allocations");
+  }
   const tagIdsValue = value.tagIds == null ? [] : value.tagIds;
   if (!Array.isArray(tagIdsValue) || tagIdsValue.length > 100 || tagIdsValue.some((id) => typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0)) {
     throw new AgentActionError(400, "input.tagIds must contain at most 100 positive integer IDs");
   }
   const tagIds = [...new Set(tagIdsValue as number[])].sort((a, b) => a - b);
   return {
+    intent: intent as TransactionIntent | null,
     dateMs,
     description: description.trim(),
     reference: optionalNullableText(value.reference, "input.reference", 500),
@@ -228,9 +267,44 @@ async function loadBudgetDetails(input: BudgetActionInput) {
   return input.plans.map((plan) => ({ categoryId: plan.categoryId, category: byId.get(plan.categoryId) as string, plannedAmountCents: plan.plannedAmountCents }));
 }
 
+async function assertTransactionIntent(input: TransactionActionInput, prepared: PreparedJournalEntry) {
+  if (input.intent == null) return;
+  const accountRows = await db.select({ id: accounts.id, type: accounts.type, liquidityClass: accounts.liquidityClass })
+    .from(accounts).where(inArray(accounts.id, prepared.accountIds));
+  const accountById = new Map(accountRows.map((account) => [account.id, account]));
+  const accountType = (line: JournalLineInput) => accountById.get(line.accountId)?.type;
+  const netExpense = prepared.validatedLines.reduce((sum, line) =>
+    accountType(line) === "expense" ? sum + line.debit - line.credit : sum, 0);
+  const netRevenue = prepared.validatedLines.reduce((sum, line) =>
+    accountType(line) === "revenue" ? sum + line.credit - line.debit : sum, 0);
+  const cashLines = prepared.validatedLines.filter((line) => accountById.get(line.accountId)?.liquidityClass === "cash_equivalent");
+
+  if (input.intent === "expense") {
+    if (netExpense <= 0) throw new AgentActionError(409, "An expense proposal must debit an expense account");
+    if (cashLines.some((line) => line.cashFlowClass !== "operating")) {
+      throw new AgentActionError(409, "A standard expense proposal must classify cash-equivalent lines as operating");
+    }
+    return;
+  }
+  if (input.intent === "income") {
+    if (netRevenue <= 0) throw new AgentActionError(409, "An income proposal must credit a revenue account");
+    if (cashLines.some((line) => line.cashFlowClass !== "operating")) {
+      throw new AgentActionError(409, "A standard income proposal must classify cash-equivalent lines as operating");
+    }
+    return;
+  }
+
+  if (prepared.validatedLines.length !== 2 || prepared.validatedLines.some((line) => accountType(line) !== "asset" || accountById.get(line.accountId)?.liquidityClass !== "cash_equivalent")) {
+    throw new AgentActionError(409, "A transfer proposal must move between exactly two cash-equivalent asset wallets; prepare fees and other effects separately");
+  }
+  if (prepared.validatedLines.some((line) => line.cashFlowClass !== "transfer")) {
+    throw new AgentActionError(409, "A wallet-to-wallet transfer must classify both wallet lines as transfer");
+  }
+}
+
 async function prepareTransactionAction(input: TransactionActionInput): Promise<PreparedJournalEntry> {
   try {
-    return await prepareJournalEntry({
+    const prepared = await prepareJournalEntry({
       date: input.dateMs,
       description: input.description,
       reference: input.reference,
@@ -243,7 +317,10 @@ async function prepareTransactionAction(input: TransactionActionInput): Promise<
       tagIds: input.tagIds,
       txType: "manual",
     }, db);
+    await assertTransactionIntent(input, prepared);
+    return prepared;
   } catch (error) {
+    if (error instanceof AgentActionError) throw error;
     throw new AgentActionError(409, error instanceof Error ? error.message : "Transaction proposal failed ledger validation");
   }
 }
@@ -259,6 +336,7 @@ async function loadTransactionDetails(input: TransactionActionInput, prepared: P
   const categoryRows = categoryIds.length === 0 ? [] : await db.select({ id: categories.id, name: categories.name })
     .from(categories).where(inArray(categories.id, categoryIds));
   return {
+    intent: input.intent,
     dateMs: prepared.dateMs,
     periodId: prepared.periodId,
     description: input.description,

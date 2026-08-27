@@ -29,6 +29,9 @@ const envSchema = z.object({
 
   // OpenRouter API for LLM insights
   OPENROUTER_API_KEY: z.string().optional(),
+  // Model used by the interactive finance agent. Keep this configurable so a
+  // provider/account can be changed without silently disagreeing with the UI.
+  OPENROUTER_MODEL: z.string().min(1).default("google/gemini-3.7-flash"),
 
   // App
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

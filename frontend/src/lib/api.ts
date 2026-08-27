@@ -202,6 +202,7 @@ export type AgentBudgetActionProposal = AgentActionProposal & {
 export type AgentTransactionActionProposal = AgentActionProposal & {
   kind: 'transaction_journal_create';
   input: {
+    intent?: 'expense' | 'income' | 'transfer' | null;
     dateMs: number;
     description: string;
     reference: string | null;
@@ -210,16 +211,17 @@ export type AgentTransactionActionProposal = AgentActionProposal & {
     periodId: number | null;
     categoryId: number | null;
     categoryAllocations: Array<{ categoryId: number; amount: number }>;
-    lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null }>;
+    lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | null }>;
     tagIds: number[];
   };
   details: {
+    intent?: 'expense' | 'income' | 'transfer' | null;
     dateMs: number;
     periodId: number | null;
     description: string;
     totalDebit: number;
     totalCredit: number;
-    lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null; account: string }>;
+    lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | null; account: string }>;
     categoryAllocations: Array<{ categoryId: number; amount: number; category: string }>;
   };
 };
@@ -1891,15 +1893,15 @@ export const api = {
       delete: (id: number) => fetchApi<void>(`/agent/memories/${id}`, { method: 'DELETE' }),
     },
     conversations: {
-      list: (options: { includeArchived?: boolean } = {}) => fetchApi<{ conversations: Array<{ id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null }>; includeArchived: boolean }>(`/agent/conversations${options.includeArchived ? '?includeArchived=true' : ''}`),
-      create: (data: { title?: string } = {}) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>('/agent/conversations', {
+      list: (options: { includeArchived?: boolean } = {}) => fetchApi<{ conversations: Array<{ id: number; title: string; titleSource: 'auto' | 'manual'; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null }>; includeArchived: boolean }>(`/agent/conversations${options.includeArchived ? '?includeArchived=true' : ''}`),
+      create: (data: { title?: string } = {}) => fetchApi<{ conversation: { id: number; title: string; titleSource: 'auto' | 'manual'; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>('/agent/conversations', {
         method: 'POST', body: JSON.stringify(data),
       }),
       get: (id: number) => fetchApi<{
-        conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null };
+        conversation: { id: number; title: string; titleSource: 'auto' | 'manual'; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null };
         messages: Array<{ id: number; role: 'user' | 'assistant'; content: string; response?: unknown; createdAt: number }>;
       }>(`/agent/conversations/${id}`),
-      update: (id: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>(`/agent/conversations/${id}`, {
+      update: (id: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => fetchApi<{ conversation: { id: number; title: string; titleSource: 'auto' | 'manual'; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>(`/agent/conversations/${id}`, {
         method: 'PATCH', body: JSON.stringify(data),
       }),
       delete: (id: number) => fetchApi<void>(`/agent/conversations/${id}`, { method: 'DELETE' }),
@@ -1973,7 +1975,9 @@ export const api = {
       prepareTransaction: (data: {
         conversationId?: number | null;
         input: {
-          dateMs: number;
+          intent?: 'expense' | 'income' | 'transfer' | null;
+          date?: string;
+          dateMs?: number;
           description: string;
           reference?: string | null;
           notes?: string | null;
@@ -1981,7 +1985,7 @@ export const api = {
           periodId?: number | null;
           categoryId?: number | null;
           categoryAllocations?: Array<{ categoryId: number; amount: number }>;
-          lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null }>;
+          lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | null }>;
           tagIds?: number[];
         };
         assumptions?: string[];

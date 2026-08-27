@@ -60,6 +60,7 @@ export interface AgentToolDefinition {
     type: "object";
     properties: Record<string, unknown>;
     required?: string[];
+    anyOf?: Array<{ required: string[] }>;
     additionalProperties: false;
   };
 }
@@ -84,9 +85,9 @@ interface CurrencyRatePayload {
 }
 
 const scopeProperties: Record<string, unknown> = {
-  periodId: { type: "integer", minimum: 1, description: "Salary-period ID. Omit for a custom date range or the current period." },
-  startDate: { type: "integer", minimum: 0, description: "Inclusive UTC timestamp in milliseconds." },
-  endDate: { type: "integer", minimum: 0, description: "Inclusive UTC timestamp in milliseconds." },
+  periodId: { type: "integer", minimum: 1, description: "Salary-period ID. Prefer this for a whole payroll period; omit it for a custom range." },
+  startDate: { type: "integer", minimum: 0, description: "Inclusive UTC epoch timestamp in milliseconds. Use only with a custom range, not periodId." },
+  endDate: { type: "integer", minimum: 0, description: "Inclusive UTC epoch timestamp in milliseconds. Use only with a custom range, not periodId." },
 };
 
 const scopeSchema = (): AgentToolDefinition["inputSchema"] => ({
@@ -95,15 +96,59 @@ const scopeSchema = (): AgentToolDefinition["inputSchema"] => ({
   additionalProperties: false,
 });
 
+const journalLineSchema = {
+  type: "object",
+  properties: {
+    accountId: { type: "integer", minimum: 1, description: "Account ID returned by get_account_balances." },
+    debit: { type: "integer", minimum: 0, description: "Integer IDR amount on the debit side. Exactly one of debit or credit must be non-zero." },
+    credit: { type: "integer", minimum: 0, description: "Integer IDR amount on the credit side. Exactly one of debit or credit must be non-zero." },
+    description: { type: ["string", "null"], maxLength: 500, description: "Optional line-level note; normally omit when the journal description is sufficient." },
+    cashFlowClass: { type: ["string", "null"], enum: ["operating", "investing", "financing", "transfer", null], description: "Required on every cash_equivalent account line and forbidden on non-cash lines. Use operating for ordinary income/expense, investing for investment movement, financing for borrowing/repayment, and transfer only between two cash-equivalent wallets." },
+  },
+  required: ["accountId", "debit", "credit"],
+  additionalProperties: false,
+} as const;
+
+const transactionProposalProperties: Record<string, unknown> = {
+  intent: { type: "string", enum: ["expense", "income", "transfer"], description: "The economic intent. expense requires an expense debit; income requires a revenue credit; transfer is only a two-wallet cash-equivalent transfer." },
+  date: { type: "string", format: "date-time", pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$", description: "Timezone-aware ISO 8601 date/time, for example 2026-08-27T14:00:00+07:00. Use Asia/Jakarta for Ray unless the user supplies another timezone." },
+  dateMs: { type: "integer", minimum: 0, description: "Legacy UTC epoch-millisecond input. Do not send this when date is supplied; prefer date." },
+  description: { type: "string", minLength: 1, maxLength: 500, description: "Short user-facing transaction name." },
+  reference: { type: ["string", "null"], maxLength: 500, description: "Optional external reference, receipt, or transfer reference." },
+  notes: { type: ["string", "null"], maxLength: 2000, description: "Optional longer note; do not put accounting instructions here." },
+  place: { type: ["string", "null"], maxLength: 500, description: "Optional merchant or location." },
+  periodId: { type: ["integer", "null"], minimum: 1, description: "Optional explicit period ID. Omit to assign the open period containing date." },
+  categoryId: { type: ["integer", "null"], minimum: 1, description: "Optional category for an expense only. Omit for income, transfers, and uncategorized fees." },
+  categoryAllocations: {
+    type: "array",
+    maxItems: 100,
+    description: "Optional signed integer-IDR allocations for an expense only. Their sum must equal the journal's net expense amount.",
+    items: {
+      type: "object",
+      properties: {
+        categoryId: { type: "integer", minimum: 1, description: "Active category ID from get_categories." },
+        amount: { type: "integer", description: "Signed integer IDR allocation; all allocations must reconcile to the net expense." },
+      },
+      required: ["categoryId", "amount"],
+      additionalProperties: false,
+    },
+  },
+  lines: { type: "array", minItems: 2, maxItems: 100, description: "Balanced journal lines. Total debit must equal total credit.", items: journalLineSchema },
+  tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 }, description: "Optional existing tag IDs." },
+  assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 }, description: "Brief assumptions made while preparing this proposal, such as a confidently inferred category." },
+};
+
+const transactionProposalRequired = ["intent", "date", "description", "lines"];
+
 export const agentToolDefinitions: AgentToolDefinition[] = [
   {
     name: "get_financial_facts",
-    description: "Read canonical posted income, expense, transaction rows, category totals, and wallet balance for a period or date range.",
+    description: "Period-level canonical overview of posted income, spending, net result, category totals, and coverage. Use for broad questions such as 'how am I doing?'; use search_transactions for an itemized/filtered list and get_account_balances for individual accounts.",
     inputSchema: scopeSchema(),
   },
   {
     name: "calculate",
-    description: "Evaluate a basic arithmetic expression deterministically. Supports numbers, parentheses, +, -, *, /, %, and ^. It never accesses financial data.",
+    description: "Evaluate a basic arithmetic expression deterministically. Use only when no purpose-built financial tool already supplies the calculation. Supports numbers, parentheses, +, -, *, /, %, and ^.",
     inputSchema: {
       type: "object",
       properties: { expression: { type: "string", minLength: 1, maxLength: 500 } },
@@ -113,12 +158,12 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_current_datetime",
-    description: "Read the current timestamp in UTC and Asia/Jakarta for date-sensitive planning. It never accesses financial data.",
+    description: "Read a separately verified current timestamp in UTC and Asia/Jakarta. The system runtime context already covers ordinary relative dates; use this only when an exact fresh time check matters.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "calculate_date_difference",
-    description: "Calculate the exact signed elapsed time between two UTC millisecond timestamps. Useful for due-date and planning arithmetic.",
+    description: "Calculate exact signed elapsed time between two UTC epoch-millisecond timestamps. Use for due-date or planning arithmetic after dates are known.",
     inputSchema: {
       type: "object",
       properties: {
@@ -131,13 +176,13 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_currency_exchange_rate",
-    description: "Fetch a current or historical reference exchange rate between two ISO-4217 currencies from Frankfurter/ECB. Returns the source date, rate, and converted amount; this is market reference data, not a transaction or accounting valuation.",
+    description: "Fetch a current or historical Frankfurter/ECB reference rate between ISO-4217 currencies. Returns the rate date and conversion; it is market reference data, never a transaction, bank settlement rate, or ledger valuation.",
     inputSchema: {
       type: "object",
       properties: {
         from: { type: "string", pattern: "^[A-Za-z]{3}$", description: "Base ISO-4217 currency code, for example IDR." },
         to: { type: "string", pattern: "^[A-Za-z]{3}$", description: "Quote ISO-4217 currency code, for example USD." },
-        amount: { type: "number", minimum: -1000000000000000, maximum: 1000000000000000, description: "Optional amount in the base currency; defaults to 1." },
+        amount: { type: "number", minimum: -1000000000000000, maximum: 1000000000000000, description: "Optional amount in the base currency for conversion; defaults to 1." },
         date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Optional UTC date for a historical reference rate; omit for the latest available rate." },
       },
       required: ["from", "to"],
@@ -146,7 +191,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_budget_facts",
-    description: "Read planned budget amounts and posted expense actuals by category for a salary period.",
+    description: "Read one period's planned budget and posted expense actuals by category. Use get_category_variance when the question is specifically about over/under budget or variance.",
     inputSchema: {
       type: "object",
       properties: { periodId: scopeProperties.periodId },
@@ -156,7 +201,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_account_balances",
-    description: "Read active ledger account balances as of an inclusive timestamp, using each account's normal balance.",
+    description: "Read all active account balances, types, and liquidity classes as of a timestamp. Use this to resolve named accounts/IDs before a proposal; use get_account_health for one account's reconciliation evidence. cash_equivalent lines require a cash-flow class, while non-cash lines must leave it null.",
     inputSchema: {
       type: "object",
       properties: {
@@ -167,7 +212,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_loan_balances",
-    description: "Read loan receivables and payables, remaining amounts, counterparties, due dates, and status.",
+    description: "Read loan receivables and payables, counterparties, remaining amounts, due dates, and status. Use before classifying lending, borrowing, or repayment; these are not automatically income or ordinary spending.",
     inputSchema: {
       type: "object",
       properties: {
@@ -178,12 +223,12 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_paylater_obligations",
-    description: "Read pay-later principal, posted interest, payments, outstanding balances, and installment schedule state.",
+    description: "Read pay-later principal, interest, payments, outstanding balances, and installment state. Use before discussing or classifying a pay-later settlement; it is not automatically ordinary spending.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "get_due_recurring",
-    description: "Preview subscription occurrences due by a timestamp. This is read-only and never posts or skips an occurrence.",
+    description: "Read subscription renewal occurrences due by a timestamp. This is a preview only: it never posts, skips, or changes an occurrence.",
     inputSchema: {
       type: "object",
       properties: {
@@ -194,142 +239,143 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_salary_catch_up",
-    description: "Preview unprocessed salary months after an absence. This is read-only; posting or skipping requires an explicit confirmed write command.",
+    description: "Read unprocessed salary occurrence candidates after an absence. This is a preview only; do not claim that any salary was posted or skipped from this result.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "search_transactions",
-    description: "Search posted journal summaries by text, date range, period, or result limit. Draft journals are excluded.",
+    description: "Search effective posted transaction summaries by text, period, date range, or limit. Use for itemized or filtered activity; drafts and internal correction mechanics are excluded. Use get_transaction_details after you know the exact journal ID.",
     inputSchema: {
       type: "object",
       properties: {
         ...scopeProperties,
-        text: { type: "string", maxLength: 200, description: "Searches description, notes, and reference." },
-        limit: { type: "integer", minimum: 1, maximum: MAX_TRANSACTION_SEARCH, description: "Maximum rows; defaults to 50." },
+        text: { type: "string", maxLength: 200, description: "Optional text matched against description, notes, and reference." },
+        limit: { type: "integer", minimum: 1, maximum: MAX_TRANSACTION_SEARCH, description: "Maximum returned summaries; defaults to 50." },
       },
       additionalProperties: false,
     },
   },
   {
     name: "get_category_spending",
-    description: "Read canonical posted spending by category, sorted by amount with percentage shares and period-coverage disclosure.",
+    description: "Read canonical posted spending by category, sorted by amount with percentage shares and coverage. Use for category rankings such as top spending; it is not a transaction list.",
     inputSchema: scopeSchema(),
   },
   {
     name: "find_similar_transactions",
-    description: "Find deterministic historical transaction candidates using merchant text and optional amount/category signals. Similarity is evidence for review, not an accounting conclusion.",
+    description: "Find deterministic historical candidates similar to a known transaction or merchant. Supply transactionId, or a non-empty query; amountCents is an optional integer-IDR refinement despite its legacy name. Similarity is review evidence, not an accounting conclusion.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", maxLength: 200 },
-        transactionId: { type: "integer", minimum: 1 },
-        amountCents: { type: "integer", minimum: 1 },
-        limit: { type: "integer", minimum: 1, maximum: 50 },
+        query: { type: "string", minLength: 1, maxLength: 200, description: "Merchant/description text. Provide this or transactionId." },
+        transactionId: { type: "integer", minimum: 1, description: "Known posted transaction to use as the similarity seed. Provide this or query." },
+        amountCents: { type: "integer", minimum: 1, description: "Optional integer IDR amount refinement despite the legacy field name." },
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum candidates; defaults to 20." },
       },
+      anyOf: [{ required: ["query"] }, { required: ["transactionId"] }],
       additionalProperties: false,
     },
   },
   {
     name: "get_cash_flow",
-    description: "Read the canonical cash-flow statement with operating, investing, financing, recovery-bridge, and coverage disclosures.",
+    description: "Read the canonical cash-flow statement: operating, investing, financing, recovery bridge, and coverage. Use for 'where did cash go?' rather than category spending or a P&L overview.",
     inputSchema: scopeSchema(),
   },
   {
     name: "get_category_variance",
-    description: "Compare planned budget amounts with allocation-aware posted spending for a period; skipped and unknown coverage is disclosed rather than treated as under budget.",
+    description: "Compare a period's planned budget with allocation-aware posted spending, optionally for one category. Use for over/under-budget analysis; skipped/unknown coverage is never treated as under budget.",
     inputSchema: {
       type: "object",
-      properties: { periodId: scopeProperties.periodId, categoryId: { type: "integer", minimum: 1 } },
+      properties: { periodId: scopeProperties.periodId, categoryId: { type: "integer", minimum: 1, description: "Optional category to narrow the variance; omit for all categories." } },
       required: ["periodId"],
       additionalProperties: false,
     },
   },
   {
     name: "compare_periods",
-    description: "Compare canonical income, spending, net cash result, and coverage between two salary periods.",
+    description: "Compare two to six salary periods on canonical income, spending, net result, and coverage. Use this rather than manually comparing several get_financial_facts results.",
     inputSchema: {
       type: "object",
-      properties: { periodIds: { type: "array", minItems: 2, maxItems: 6, items: { type: "integer", minimum: 1 } } },
+      properties: { periodIds: { type: "array", minItems: 2, maxItems: 6, description: "Two to six distinct salary-period IDs to compare.", items: { type: "integer", minimum: 1 } } },
       required: ["periodIds"],
       additionalProperties: false,
     },
   },
   {
     name: "forecast_cash_position",
-    description: "Project cash-equivalent balance using the current canonical balance and recorded operating burn. This is a disclosed forecast, not a ledger mutation.",
+    description: "Project cash-equivalent balance from current cash and recorded operating burn over a requested horizon. This is a disclosed forecast, never a ledger mutation or a guarantee.",
     inputSchema: {
       type: "object",
-      properties: { horizonMonths: { type: "integer", minimum: 1, maximum: 60 } },
+      properties: { horizonMonths: { type: "integer", minimum: 1, maximum: 60, description: "Forecast horizon in whole months; defaults to 6." } },
       additionalProperties: false,
     },
   },
   {
     name: "get_account_health",
-    description: "Read one account's current balance, liquidity treatment, and latest reconciliation evidence.",
+    description: "Read one account's balance, liquidity treatment, and latest reconciliation evidence. Use after get_account_balances when answering a health/reconciliation question about a specific account.",
     inputSchema: {
       type: "object",
-      properties: { accountId: { type: "integer", minimum: 1 }, asOfDate: { type: "integer", minimum: 0 } },
+      properties: { accountId: { type: "integer", minimum: 1, description: "Account ID from get_account_balances." }, asOfDate: { type: "integer", minimum: 0, description: "Inclusive UTC epoch timestamp in milliseconds; defaults to now." } },
       required: ["accountId"],
       additionalProperties: false,
     },
   },
   {
     name: "get_money_anomalies",
-    description: "Read human-reviewable money anomaly candidates. Scanning and review never change ledger data.",
+    description: "Read human-reviewable anomaly candidates. Findings are signals for review, not proven errors, and this tool never changes ledger data.",
     inputSchema: {
       type: "object",
-      properties: { status: { type: "string", enum: ["open", "resolved", "dismissed"] }, limit: { type: "integer", minimum: 1, maximum: 100 } },
+      properties: { status: { type: "string", enum: ["open", "resolved", "dismissed"], description: "Review-state filter; defaults to open." }, limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum findings; defaults to 50." } },
       additionalProperties: false,
     },
   },
   {
     name: "get_transaction_details",
-    description: "Read one exact journal's immutable header, debit/credit lines, cash-flow classifications, and category allocations for audit/provenance.",
+    description: "Read one exact posted journal's header, debit/credit lines, cash-flow classifications, links, and category allocations. Use for audit/provenance after an exact transaction ID is known.",
     inputSchema: {
       type: "object",
-      properties: { transactionId: { type: "integer", minimum: 1 } },
+      properties: { transactionId: { type: "integer", minimum: 1, description: "Exact posted transaction ID, usually returned by search_transactions." } },
       required: ["transactionId"],
       additionalProperties: false,
     },
   },
   {
     name: "get_reconciliation_status",
-    description: "Read durable reconciliation sessions and account-level differences. Reconciliation is control evidence, not income or expense.",
+    description: "Read reconciliation sessions and account-level differences, optionally for one account. Reconciliation is control evidence, never income, expense, or cash flow.",
     inputSchema: {
       type: "object",
       properties: {
-        accountId: { type: "integer", minimum: 1 },
-        limit: { type: "integer", minimum: 1, maximum: MAX_RECONCILIATION_SESSIONS },
+        accountId: { type: "integer", minimum: 1, description: "Optional account ID to narrow session items." },
+        limit: { type: "integer", minimum: 1, maximum: MAX_RECONCILIATION_SESSIONS, description: "Maximum recent reconciliation sessions; defaults to 20." },
       },
       additionalProperties: false,
     },
   },
   {
     name: "list_periods",
-    description: "Read salary periods and their budget-plan totals, useful for returning after a long absence or comparing periods.",
+    description: "Read salary periods with dates, lifecycle/coverage status, and planned-budget totals. Use to choose a period, explain a return after an absence, or prepare a period comparison.",
     inputSchema: {
       type: "object",
       properties: {
-        limit: { type: "integer", minimum: 1, maximum: 100 },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum periods, newest first; defaults to 24." },
       },
       additionalProperties: false,
     },
   },
   {
     name: "preview_budget_plan",
-    description: "Calculate a read-only budget suggestion from canonical historical expense debits and a target savings rate. It never writes a budget.",
+    description: "Create a read-only budget suggestion by scaling the selected period's recorded category spending to a target savings rate. It never writes or changes a budget.",
     inputSchema: {
       type: "object",
       properties: {
         periodId: scopeProperties.periodId,
-        targetSavingsRate: { type: "number", minimum: 0, maximum: 100, description: "Desired savings percentage of canonical income; defaults to 20." },
+        targetSavingsRate: { type: "number", minimum: 0, maximum: 100, description: "Desired savings percentage of the selected period's recorded income; defaults to 20." },
       },
       additionalProperties: false,
     },
   },
   {
     name: "get_categories",
-    description: "Read the small active category list (IDs, names, and reporting-account links) for transaction classification. Call without search when preparing a transaction so the model can choose the closest category locally.",
+    description: "Read active category IDs, names, and reporting-account links for classifying a standard spending expense. Call without search to load the small local list. Do not call for pure income, wallet transfers, loan/debt movements, or uncategorized transfer fees.",
     inputSchema: {
       type: "object",
       properties: {
@@ -341,54 +387,17 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "prepare_transaction",
-    description: "Prepare an explicit balanced manual journal proposal for user review. This never posts or changes financial data. First retrieve account IDs and the local category list when needed; ask a clarification only for missing date, amount, or account facts, while a clear merchant/category may be reasonably inferred.",
+    description: "Prepare one explicit, balanced, non-posting review proposal. Supports a standard expense, income, or two-wallet transfer. First resolve account IDs and liquidity with get_account_balances; load categories only for a categorised expense. Use a timezone-aware ISO date and an intent that the backend validates. Nothing is posted until Ray confirms the resulting card.",
     inputSchema: {
       type: "object",
-      properties: {
-        dateMs: { type: "integer", minimum: 0, description: "Transaction date as a UTC timestamp in milliseconds." },
-        description: { type: "string", minLength: 1, maxLength: 500 },
-        reference: { type: ["string", "null"], maxLength: 500 },
-        notes: { type: ["string", "null"], maxLength: 2000 },
-        place: { type: ["string", "null"], maxLength: 500 },
-        periodId: { type: ["integer", "null"], minimum: 1 },
-        categoryId: { type: ["integer", "null"], minimum: 1 },
-        categoryAllocations: {
-          type: "array",
-          maxItems: 100,
-          items: {
-            type: "object",
-            properties: { categoryId: { type: "integer", minimum: 1 }, amount: { type: "integer" } },
-            required: ["categoryId", "amount"],
-            additionalProperties: false,
-          },
-        },
-        lines: {
-          type: "array",
-          minItems: 2,
-          maxItems: 100,
-          items: {
-            type: "object",
-            properties: {
-              accountId: { type: "integer", minimum: 1 },
-              debit: { type: "integer", minimum: 0 },
-              credit: { type: "integer", minimum: 0 },
-              description: { type: ["string", "null"], maxLength: 500 },
-              cashFlowClass: { type: ["string", "null"], enum: ["operating", "investing", "financing", "transfer", "recovery", null] },
-            },
-            required: ["accountId", "debit", "credit"],
-            additionalProperties: false,
-          },
-        },
-        tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 } },
-        assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 } },
-      },
-      required: ["dateMs", "description", "lines"],
+      properties: transactionProposalProperties,
+      required: transactionProposalRequired,
       additionalProperties: false,
     },
   },
   {
     name: "prepare_transactions",
-    description: "Prepare several independent explicit balanced manual journal proposals from one user message. Each item becomes its own review card and nothing is posted. Do not merge unrelated transactions; ask for clarification when a required item is ambiguous.",
+    description: "Prepare 1-20 independent, balanced, non-posting review proposals from one message. Each item has the same contract as prepare_transaction and becomes its own confirmable card. Do not merge unrelated events. If a transfer has a fee, prepare the fee as a separate expense item rather than merging it into the transfer journal.",
     inputSchema: {
       type: "object",
       properties: {
@@ -396,48 +405,11 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
           type: "array",
           minItems: 1,
           maxItems: 20,
-          description: "One explicit transaction payload per independent transaction.",
+          description: "One independent transaction proposal per item. Each will have its own approval card.",
           items: {
             type: "object",
-            properties: {
-              dateMs: { type: "integer", minimum: 0, description: "Transaction date as a UTC timestamp in milliseconds." },
-              description: { type: "string", minLength: 1, maxLength: 500 },
-              reference: { type: ["string", "null"], maxLength: 500 },
-              notes: { type: ["string", "null"], maxLength: 2000 },
-              place: { type: ["string", "null"], maxLength: 500 },
-              periodId: { type: ["integer", "null"], minimum: 1 },
-              categoryId: { type: ["integer", "null"], minimum: 1 },
-              categoryAllocations: {
-                type: "array",
-                maxItems: 100,
-                items: {
-                  type: "object",
-                  properties: { categoryId: { type: "integer", minimum: 1 }, amount: { type: "integer" } },
-                  required: ["categoryId", "amount"],
-                  additionalProperties: false,
-                },
-              },
-              lines: {
-                type: "array",
-                minItems: 2,
-                maxItems: 100,
-                items: {
-                  type: "object",
-                  properties: {
-                    accountId: { type: "integer", minimum: 1 },
-                    debit: { type: "integer", minimum: 0 },
-                    credit: { type: "integer", minimum: 0 },
-                    description: { type: ["string", "null"], maxLength: 500 },
-                    cashFlowClass: { type: ["string", "null"], enum: ["operating", "investing", "financing", "transfer", "recovery", null] },
-                  },
-                  required: ["accountId", "debit", "credit"],
-                  additionalProperties: false,
-                },
-              },
-              tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 } },
-              assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 } },
-            },
-            required: ["dateMs", "description", "lines"],
+            properties: transactionProposalProperties,
+            required: transactionProposalRequired,
             additionalProperties: false,
           },
         },
@@ -763,6 +735,7 @@ export async function getAccountBalancesTool(input: unknown) {
     id: accounts.id,
     name: accounts.name,
     type: accounts.type,
+    liquidityClass: accounts.liquidityClass,
     isActive: accounts.isActive,
     provider: accounts.provider,
     systemKey: accounts.systemKey,

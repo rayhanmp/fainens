@@ -17,7 +17,6 @@ import {
   PinOff,
   RefreshCw,
   Send,
-  ShieldCheck,
   Sparkles,
   Square,
   Trash2,
@@ -51,8 +50,6 @@ type Period = {
 };
 
 type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
-type BudgetPreview = Awaited<ReturnType<typeof api.agent.planBudget>>;
-type AgentActionProposal = Awaited<ReturnType<typeof api.agent.actions.prepareBudget>>;
 type AgentTransactionProposal = AgentTransactionActionProposal;
 type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
 type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
@@ -63,6 +60,14 @@ type ChatMessage =
 
 function hasAgentResponse(message: ChatMessage): message is Extract<ChatMessage, { role: 'assistant' }> & { response: AgentResponse } {
   return message.role === 'assistant' && message.response != null;
+}
+
+function ConversationTitle({ conversation, isActive }: { conversation: Conversation; isActive: boolean }) {
+  const isAutoTitlePending = conversation.titleSource === 'auto' && conversation.title === 'New conversation';
+  if (isAutoTitlePending) {
+    return <span aria-label="Conversation title loading" className={cn('inline-block h-4 w-32 max-w-full animate-pulse rounded', isActive ? 'bg-white/35' : 'bg-[var(--ref-surface-container-highest)]')} />;
+  }
+  return <span className="truncate">{conversation.title}</span>;
 }
 
 const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -273,6 +278,17 @@ function transactionProposalStatusLabel(status: TransactionProposalStatus): stri
   return 'Could not post';
 }
 
+function transactionIntentLabel(intent: AgentTransactionProposal['input']['intent']): string {
+  if (intent === 'expense') return 'Expense';
+  if (intent === 'income') return 'Income';
+  if (intent === 'transfer') return 'Transfer';
+  return 'Transaction';
+}
+
+function proposalUsesExpenseCategory(intent: AgentTransactionProposal['input']['intent']): boolean {
+  return intent !== 'income' && intent !== 'transfer';
+}
+
 function localDateTimeInput(timestamp: number): string {
   const date = new Date(timestamp);
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -350,7 +366,9 @@ function TransactionProposalCard({
   const restorationAttempted = useRef(false);
   const details = currentProposal.details;
   const input = currentProposal.input;
-  const categoryName = input.categoryId == null
+  const usesExpenseCategory = proposalUsesExpenseCategory(input.intent);
+  const intentLabel = transactionIntentLabel(input.intent);
+  const categoryName = !usesExpenseCategory ? null : input.categoryId == null
     ? (input.categoryAllocations[0] ? categories.find((category) => category.id === input.categoryAllocations[0].categoryId)?.name ?? details.categoryAllocations[0]?.category : null)
     : categories.find((category) => category.id === input.categoryId)?.name ?? details.categoryAllocations.find((allocation) => allocation.categoryId === input.categoryId)?.category;
 
@@ -408,16 +426,17 @@ function TransactionProposalCard({
       const originalCategoryId = input.categoryId ?? input.categoryAllocations[0]?.categoryId ?? null;
       const nextInput = {
         ...input,
+        intent: input.intent ?? null,
         dateMs,
         description: draft.name.trim(),
         place: draft.place.trim() || null,
         reference: draft.reference.trim() || null,
         notes: draft.notes.trim() || null,
-        categoryId: nextCategoryId,
+        categoryId: usesExpenseCategory ? nextCategoryId : null,
         lines: journalLinesForAmount(input.lines, amount),
-        categoryAllocations: allocationForAmount(input.categoryAllocations, details.totalDebit, amount),
+        categoryAllocations: usesExpenseCategory ? allocationForAmount(input.categoryAllocations, details.totalDebit, amount) : [],
       };
-      if (nextCategoryId !== originalCategoryId) {
+      if (usesExpenseCategory && nextCategoryId !== originalCategoryId) {
         if (nextCategoryId == null) {
           nextInput.categoryAllocations = [];
         } else if (nextInput.categoryAllocations.length > 0) {
@@ -478,7 +497,7 @@ function TransactionProposalCard({
     <div className="mt-4 rounded-xl border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold">Transaction ready for review</p>
+          <p className="text-sm font-semibold">{intentLabel} ready for review</p>
           <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">Nothing is posted until you confirm it.</p>
         </div>
         <span className={cn('rounded-full bg-[var(--color-surface)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide', (status === 'executed' || status === 'rejected') && 'text-[var(--color-success)]')}>{transactionProposalStatusLabel(status)}</span>
@@ -488,7 +507,7 @@ function TransactionProposalCard({
           <label className="text-xs font-semibold sm:col-span-2">Transaction name<input value={draft.name} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))} className="brutalist-input mt-1" maxLength={500} /></label>
           <label className="text-xs font-semibold">Amount (IDR)<input inputMode="numeric" value={draft.amount} onChange={(event) => setDraft((value) => ({ ...value, amount: event.target.value }))} className="brutalist-input mt-1" /></label>
           <label className="text-xs font-semibold">Date &amp; time<input type="datetime-local" value={draft.dateTime} onChange={(event) => setDraft((value) => ({ ...value, dateTime: event.target.value }))} className="brutalist-input mt-1" /></label>
-          <label className="text-xs font-semibold">Category<select value={draft.categoryId} onChange={(event) => setDraft((value) => ({ ...value, categoryId: event.target.value }))} className="brutalist-input mt-1"><option value="">Uncategorized</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+          {usesExpenseCategory ? <label className="text-xs font-semibold">Category<select value={draft.categoryId} onChange={(event) => setDraft((value) => ({ ...value, categoryId: event.target.value }))} className="brutalist-input mt-1"><option value="">Uncategorized</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label> : <div><p className="text-xs font-semibold">Type</p><p className="mt-2 text-sm">{intentLabel}</p></div>}
           <label className="text-xs font-semibold">Place<input value={draft.place} onChange={(event) => setDraft((value) => ({ ...value, place: event.target.value }))} className="brutalist-input mt-1" maxLength={500} placeholder="Optional" /></label>
           <label className="text-xs font-semibold">Reference<input value={draft.reference} onChange={(event) => setDraft((value) => ({ ...value, reference: event.target.value }))} className="brutalist-input mt-1" maxLength={500} placeholder="Optional" /></label>
           <label className="text-xs font-semibold sm:col-span-2">Notes / description<textarea value={draft.notes} onChange={(event) => setDraft((value) => ({ ...value, notes: event.target.value }))} className="brutalist-input mt-1 min-h-20 resize-y" maxLength={2000} placeholder="Optional details" /></label>
@@ -498,7 +517,8 @@ function TransactionProposalCard({
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Transaction name</p><p className="mt-0.5 font-semibold">{input.description}</p></div>
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Amount</p><p className="mt-0.5 font-semibold">{formatCurrency(details.totalDebit)}</p></div>
-          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Category</p><p className="mt-0.5">{categoryName ?? 'Uncategorized'}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Type</p><p className="mt-0.5">{intentLabel}</p></div>
+          {usesExpenseCategory && <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Category</p><p className="mt-0.5">{categoryName ?? 'Uncategorized'}</p></div>}
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Date &amp; time</p><p className="mt-0.5">{formatDateTime(details.dateMs)}</p></div>
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Period</p><p className="mt-0.5">{details.periodId == null ? 'Unassigned' : `Period #${details.periodId}`}</p></div>
           {input.place && <div><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Place</p><p className="mt-0.5">{input.place}</p></div>}
@@ -547,11 +567,6 @@ function AgentPage() {
   const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
   const [editingUserMessageText, setEditingUserMessageText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
-  const [isPlanning, setIsPlanning] = useState(false);
-  const [budgetAction, setBudgetAction] = useState<AgentActionProposal | null>(null);
-  const [isPreparingAction, setIsPreparingAction] = useState(false);
-  const [isExecutingAction, setIsExecutingAction] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
@@ -821,8 +836,6 @@ function AgentPage() {
     setImageError(null);
     setError(null);
     setNotice(null);
-    setBudgetPreview(null);
-    setBudgetAction(null);
     setEditingUserMessageId(null);
     setEditingUserMessageText('');
   };
@@ -871,81 +884,6 @@ function AgentPage() {
     }
   };
 
-  const previewBudget = async () => {
-    if (!selectedPeriodId || isPlanning) return;
-    setIsPlanning(true);
-    setError(null);
-    try {
-      setBudgetPreview(await api.agent.planBudget({ periodId: Number(selectedPeriodId) }));
-      setBudgetAction(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not prepare the budget plan.');
-    } finally {
-      setIsPlanning(false);
-    }
-  };
-
-  const prepareBudgetAction = async () => {
-    if (!budgetPreview || !selectedPeriodId || isPreparingAction) return;
-    const plans = budgetPreview.recommendations
-      .filter((recommendation): recommendation is typeof recommendation & { categoryId: number } => recommendation.categoryId != null)
-      .map((recommendation) => ({ categoryId: recommendation.categoryId, plannedAmountCents: recommendation.suggestedAmountCents }));
-    if (plans.length === 0) {
-      setError('This preview has no categorized recommendations to apply.');
-      return;
-    }
-    setIsPreparingAction(true);
-    setError(null);
-    try {
-      const proposal = await api.agent.actions.prepareBudget({
-        conversationId: activeConversationId,
-        input: { periodId: Number(selectedPeriodId), plans },
-        assumptions: [
-          'Only the categories shown in this proposal will be created or updated.',
-          'Existing budget categories not shown will be left unchanged.',
-          'This proposal is bound to the displayed ledger revision and expires shortly.',
-        ],
-      });
-      setBudgetAction(proposal);
-      if (!proposal.approvalToken) setError('This proposal was already prepared. Use the existing confirmation card or prepare again after it expires.');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not prepare the budget change.');
-    } finally {
-      setIsPreparingAction(false);
-    }
-  };
-
-  const executeBudgetAction = async () => {
-    if (!budgetAction?.approvalToken || isExecutingAction) return;
-    setIsExecutingAction(true);
-    setError(null);
-    try {
-      const result = await api.agent.actions.execute(budgetAction.approvalId, budgetAction.approvalToken);
-      setBudgetAction(null);
-      setBudgetPreview(null);
-      setNotice(`Budget updated: ${result.receipt.changedCount} plan${result.receipt.changedCount === 1 ? '' : 's'} changed (revision ${result.receipt.financialRevision}; audit ${result.receipt.auditLogIds.join(', ')}).`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not apply the approved budget change.');
-    } finally {
-      setIsExecutingAction(false);
-    }
-  };
-
-  const rejectBudgetAction = async () => {
-    if (!budgetAction?.approvalToken || isExecutingAction) return;
-    setIsExecutingAction(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await api.agent.actions.reject(budgetAction.approvalId, budgetAction.approvalToken);
-      setBudgetAction(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not dismiss the proposal.');
-    } finally {
-      setIsExecutingAction(false);
-    }
-  };
-
   const activeConversations = conversations.filter((conversation) => conversation.archivedAt == null);
   const archivedConversations = conversations.filter((conversation) => conversation.archivedAt != null);
   const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id ?? null;
@@ -973,8 +911,8 @@ function AgentPage() {
             </div>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <Card className="min-h-[620px] overflow-hidden">
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            <Card className="overflow-hidden">
               <div className="flex items-center justify-between gap-4 border-b border-[var(--color-border)] p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--ref-primary-container)] text-white"><Sparkles className="h-5 w-5" /></span>
@@ -1165,7 +1103,7 @@ function AgentPage() {
                 title="Conversations"
                 action={<span className="text-xs text-[var(--color-text-secondary)]">{activeConversations.length} active · {archivedConversations.length} archived</span>}
               >
-                <div className="max-h-56 space-y-1 overflow-y-auto">
+                <div className="max-h-[32rem] space-y-1 overflow-y-auto lg:max-h-[calc(100vh-18rem)]">
                   {conversations.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">Your conversations will appear here.</p>}
                   {conversations.map((conversation) => {
                     const isActive = conversation.id === activeConversationId;
@@ -1205,7 +1143,7 @@ function AgentPage() {
                             >
                               <span className="flex items-center gap-1 truncate text-sm font-medium">
                                 {conversation.isPinned && <Pin className="h-3 w-3 shrink-0" aria-label="Pinned" />}
-                                <span className="truncate">{conversation.title}</span>
+                                <ConversationTitle conversation={conversation} isActive={isActive} />
                               </span>
                               <span className={cn('mt-0.5 block text-xs', isActive ? 'text-white/80' : 'text-[var(--color-text-secondary)]')}>
                                 {isArchived ? `Archived · ${formatDate(conversation.archivedAt ?? conversation.updatedAt)}` : formatDate(conversation.updatedAt)}
@@ -1257,52 +1195,6 @@ function AgentPage() {
                   })}
                 </div>
                 {isLoadingConversation && <p className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Loading conversation…</p>}
-              </Card>
-
-              <Card title="Trust boundary">
-                <div className="space-y-3 text-sm text-[var(--color-text-secondary)]">
-                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" /> Retrieval stays read-only. Any budget change is shown as a normalized proposal and requires your explicit confirmation before execution.</p>
-                  <p className="flex gap-2"><RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ref-primary)]" /> Every question retrieves fresh financial facts instead of relying on chat memory.</p>
-                </div>
-              </Card>
-
-              <Card title="Budget plan preview">
-                <p className="text-sm text-[var(--color-text-secondary)]">Get deterministic spending suggestions for {selectedPeriod?.name ?? 'the selected period'}. It does not change your budget.</p>
-                <Button variant="secondary" className="mt-4 w-full" onClick={() => void previewBudget()} isLoading={isPlanning} disabled={!selectedPeriodId}>
-                  <Sparkles className="h-4 w-4" /> Preview plan
-                </Button>
-                {budgetPreview && (
-                  <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Target spend {formatCurrency(budgetPreview.targetSpendCents)}</p>
-                    <div className="mt-3 space-y-3">
-                      {budgetPreview.recommendations.slice(0, 5).map((recommendation, index) => (
-                        <div key={`${recommendation.categoryId}-${index}`} className="rounded-lg bg-[var(--color-background)] p-3">
-                          <div className="flex items-start justify-between gap-3"><span className="text-sm font-medium">{recommendation.category}</span><span className="text-sm font-semibold">{formatCurrency(recommendation.suggestedAmountCents)}</span></div>
-                          <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{recommendation.basis}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mt-3 text-xs text-[var(--color-text-secondary)]">Revision {budgetPreview.revision} · Preview only</p>
-                    <Button variant="secondary" className="mt-4 w-full" onClick={() => void prepareBudgetAction()} isLoading={isPreparingAction} disabled={!!budgetAction}>
-                      <ShieldCheck className="h-4 w-4" /> Prepare for confirmation
-                    </Button>
-                  </div>
-                )}
-                {budgetAction && (
-                  <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-                    <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3">
-                      <p className="text-sm font-semibold">Review before applying</p>
-                      <p className="mt-1 text-xs text-[var(--color-text-secondary)]">This will upsert {budgetAction.details.length} category plan{budgetAction.details.length === 1 ? '' : 's'} for {selectedPeriod?.name ?? 'the selected period'}. Existing categories not listed stay unchanged.</p>
-                      <div className="mt-3 max-h-40 space-y-1 overflow-y-auto">
-                        {budgetAction.details.map((detail) => <div key={detail.categoryId} className="flex items-center justify-between gap-2 text-xs"><span>{detail.category}</span><span className="font-semibold">{formatCurrency(detail.plannedAmountCents)}</span></div>)}
-                      </div>
-                      <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">Bound to revision {budgetAction.baseFinancialRevision} · expires {formatDate(budgetAction.expiresAt)}</p>
-                      {budgetAction.approvalToken ? (
-                        <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void executeBudgetAction()} isLoading={isExecutingAction}><Check className="h-4 w-4" /> Confirm &amp; apply</Button><Button size="sm" variant="secondary" onClick={() => void rejectBudgetAction()} disabled={isExecutingAction}>Dismiss</Button></div>
-                      ) : <p className="mt-3 text-xs text-[var(--color-danger)]">The one-time approval token is no longer available in this browser. Prepare a fresh proposal.</p>}
-                    </div>
-                  </div>
-                )}
               </Card>
 
               {selectedPeriod && <Card title="Current scope"><p className="text-sm font-medium">{selectedPeriod.name}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{formatDate(selectedPeriod.startDate)} – {formatDate(selectedPeriod.endDate)}</p></Card>}
