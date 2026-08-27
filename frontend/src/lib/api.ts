@@ -1024,6 +1024,9 @@ export const api = {
         netAmount?: number;
         message?: string;
       }>('/salary-settings/post-salary', { method: 'POST', body: JSON.stringify(occurrenceDate == null ? {} : { occurrenceDate }) }),
+    attachOccurrencePeriod: (occurrenceDate: number) => fetchApi<{ transactionId: number; periodId: number; changed: boolean }>(
+      `/salary-settings/occurrences/${occurrenceDate}/attach-period`, { method: 'POST' },
+    ),
     update: (data: Partial<{
       grossMonthly: number;
       payrollDay: number;

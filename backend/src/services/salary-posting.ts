@@ -16,6 +16,7 @@ import { monthlyOccurrenceDate } from "./recurrence-calendar";
 import { findPeriodIdForDate } from "./transaction-mutations";
 import { bumpFinancialRevisionSync } from "./financial-revision";
 import { insertDomainReversalSync, prepareDomainReversal } from "./domain-reversal";
+import { assertJournalPeriodOpen, assertPreparedJournalPeriodOpenSync, findPeriodForDate } from "./period-locking";
 
 const SINGLETON_ID = 1;
 
@@ -107,8 +108,23 @@ export async function postSalaryIfPayrollDay(
     return { posted: false, occurrenceDate, netAmount: payroll.estimatedNetMonthly, message: "Salary occurrence is due and requires confirmation" };
   }
 
+  const matchingPeriod = await findPeriodForDate(occurrenceDate);
+  if (!matchingPeriod) {
+    return {
+      posted: false,
+      occurrenceDate,
+      message: "Create the salary period containing this payroll date before posting salary",
+    };
+  }
+  if (matchingPeriod.status === "closed") {
+    return {
+      posted: false,
+      occurrenceDate,
+      message: `Salary period ${matchingPeriod.id} is closed; reopen it before posting this salary`,
+    };
+  }
+  const periodId = matchingPeriod.id;
   const incomeAccount = await getOrCreateAutoIncomeAccount(defaultDb);
-  const periodId = await findPeriodIdForDate(occurrenceDate);
   let transactionId: number;
   try {
     transactionId = defaultDb.transaction((tx) => {
@@ -130,6 +146,7 @@ export async function postSalaryIfPayrollDay(
             status: "pending",
           }).returning({ id: recurringOccurrences.id }).all()[0];
       if (!occurrence) throw new Error("Failed to claim salary occurrence");
+      assertPreparedJournalPeriodOpenSync(tx, { dateMs: occurrenceDate, periodId });
       const transaction = tx.insert(transactions).values({
         date: new Date(occurrenceDate),
         description: `Salary income - ${new Date(occurrenceDate).toLocaleDateString("en-ID", { month: "long", year: "numeric" })}`,
@@ -185,6 +202,70 @@ export type SalaryCatchUpOccurrence = {
   status: "due" | "posted" | "skipped" | "legacy";
   transactionId?: number;
 };
+
+/**
+ * Repair an older salary journal that was posted before its payroll period
+ * existed. This only fills a missing period assignment; it never moves an
+ * assigned salary, changes money, or bypasses a closed-period lock.
+ */
+export async function attachSalaryOccurrenceToMatchingPeriod(occurrenceDate: number): Promise<{
+  transactionId: number;
+  periodId: number;
+  changed: boolean;
+}> {
+  if (!Number.isSafeInteger(occurrenceDate) || occurrenceDate < 0) {
+    throw new Error("occurrenceDate must be a valid timestamp");
+  }
+  const [occurrence] = await defaultDb.select().from(recurringOccurrences).where(and(
+    eq(recurringOccurrences.jobType, "salary"),
+    eq(recurringOccurrences.scheduleId, SINGLETON_ID),
+    eq(recurringOccurrences.occurrenceDate, new Date(occurrenceDate)),
+  )).limit(1);
+  if (!occurrence?.transactionId || !["posted", "corrected"].includes(occurrence.status)) {
+    throw new Error("A posted salary occurrence is required to attach a period");
+  }
+  const [transaction] = await defaultDb.select().from(transactions)
+    .where(eq(transactions.id, occurrence.transactionId)).limit(1);
+  if (!transaction || !["salary_income", "salary_correction"].includes(transaction.txType)) {
+    throw new Error("Salary occurrence does not reference a salary journal");
+  }
+  const periodId = await assertJournalPeriodOpen(Number(transaction.date), null);
+  if (periodId == null) {
+    throw new Error("No salary period contains this journal date. Create the period first.");
+  }
+  if (transaction.periodId != null) {
+    if (transaction.periodId === periodId) return { transactionId: transaction.id, periodId, changed: false };
+    throw new Error("Salary journal is already assigned to a different period and cannot be moved by this repair");
+  }
+
+  const result = defaultDb.transaction((tx) => {
+    const freshOccurrence = tx.select().from(recurringOccurrences).where(eq(recurringOccurrences.id, occurrence.id)).limit(1).all()[0];
+    const freshTransaction = tx.select().from(transactions).where(eq(transactions.id, occurrence.transactionId!)).limit(1).all()[0];
+    if (!freshOccurrence || !freshTransaction || freshTransaction.periodId != null) {
+      throw new Error("Salary occurrence changed; retry period attachment");
+    }
+    assertPreparedJournalPeriodOpenSync(tx, { dateMs: Number(freshTransaction.date), periodId });
+    const lines = tx.select({ accountId: transactionLines.accountId }).from(transactionLines)
+      .where(eq(transactionLines.transactionId, freshTransaction.id)).all();
+    tx.update(transactions).set({ periodId }).where(eq(transactions.id, freshTransaction.id)).run();
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: freshTransaction.id,
+      action: "attach_matching_salary_period",
+      beforeSnapshot: Buffer.from(JSON.stringify({ periodId: null, occurrenceId: freshOccurrence.id })),
+      afterSnapshot: Buffer.from(JSON.stringify({ periodId, occurrenceId: freshOccurrence.id })),
+    }).run();
+    bumpFinancialRevisionSync(tx);
+    return { transactionId: freshTransaction.id, accountIds: lines.map((line) => line.accountId) };
+  });
+  await invalidateOnTransactionMutation({
+    transactionId: result.transactionId,
+    affectedAccountIds: result.accountIds,
+    affectedPeriodIds: [periodId],
+    revisionBumped: true,
+  });
+  return { transactionId: result.transactionId, periodId, changed: true };
+}
 
 /**
  * Return the concrete salary months that became due after the last recorded

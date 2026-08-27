@@ -11,7 +11,7 @@ import {
   getTERCategory,
   type PayrollSettings,
 } from "../services/indonesia-payroll";
-import { correctSalaryOccurrence, postSalaryIfPayrollDay, previewSalaryPosting, previewSalaryCatchUp, skipSalaryOccurrence } from "../services/salary-posting";
+import { attachSalaryOccurrenceToMatchingPeriod, correctSalaryOccurrence, postSalaryIfPayrollDay, previewSalaryPosting, previewSalaryCatchUp, skipSalaryOccurrence } from "../services/salary-posting";
 
 const SINGLETON_ID = 1;
 
@@ -202,6 +202,15 @@ export default async function (fastify: FastifyInstance) {
       return reply.code(201).send(result);
     } catch (error) {
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to correct salary occurrence" });
+    }
+  });
+
+  fastify.post("/api/salary-settings/occurrences/:occurrenceDate/attach-period", async (request, reply) => {
+    const occurrenceDate = Number((request.params as { occurrenceDate?: string }).occurrenceDate);
+    try {
+      return reply.send(await attachSalaryOccurrenceToMatchingPeriod(occurrenceDate));
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to attach salary to its matching period" });
     }
   });
 
