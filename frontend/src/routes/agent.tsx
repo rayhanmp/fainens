@@ -1,5 +1,5 @@
 import { createFileRoute, useSearch } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   ArchiveRestore,
@@ -458,6 +458,21 @@ function AgentPage() {
   const [isExecutingAction, setIsExecutingAction] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const questionInputRef = useRef<HTMLTextAreaElement>(null);
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+
+  useLayoutEffect(() => {
+    const textarea = questionInputRef.current;
+    if (!textarea) return;
+
+    const maxHeight = 160;
+    textarea.style.height = 'auto';
+    const contentHeight = textarea.scrollHeight;
+    setIsComposerExpanded(draft.includes('\n') || contentHeight > 40);
+    const nextHeight = Math.min(contentHeight, maxHeight);
+    textarea.style.height = `${Math.max(nextHeight, 40)}px`;
+    textarea.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
+  }, [draft]);
 
   const refreshConversations = async () => {
     const result = await api.agent.conversations.list({ includeArchived: true });
@@ -958,16 +973,13 @@ function AgentPage() {
                   </div>
                 )}
                 {imageError && <p role="alert" className="mb-2 whitespace-pre-line text-xs text-[var(--color-danger)]">{imageError}</p>}
-                <div className={cn('flex items-end gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 transition-colors', isDraggingImages && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/5 ring-2 ring-[var(--ref-primary)]/15')}>
-                  <button
-                    type="button"
-                    onClick={() => imageInputRef.current?.click()}
-                    disabled={isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Attach images"
-                    aria-label="Attach images"
-                  ><ImagePlus className="h-5 w-5" /></button>
+                <div className={cn(
+                  'border border-[var(--color-border)] bg-[var(--color-surface)] transition-colors',
+                  isComposerExpanded ? 'rounded-[1.65rem] px-4 py-3' : 'flex items-center gap-2 rounded-full p-1.5',
+                  isDraggingImages && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/5 ring-2 ring-[var(--ref-primary)]/15',
+                )}>
                   <textarea
+                    ref={questionInputRef}
                     id="agent-question"
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
@@ -975,11 +987,25 @@ function AgentPage() {
                     placeholder="Ask Fainens anything…"
                     rows={1}
                     maxLength={2000}
-                    className="min-h-10 max-h-32 min-w-0 flex-1 resize-y border-0 bg-transparent px-2 py-2 text-sm shadow-none outline-none placeholder:text-[var(--color-text-secondary)] focus:border-0 focus:ring-0"
+                    aria-describedby="agent-question-help"
+                    className={cn(
+                      'max-h-40 resize-none overflow-y-hidden border-0 bg-transparent text-sm leading-6 shadow-none outline-none placeholder:text-[var(--color-text-secondary)] focus:border-0 focus:ring-0',
+                      isComposerExpanded ? 'block min-h-10 w-full px-0 py-0' : 'min-h-10 min-w-0 flex-1 px-2 py-2',
+                    )}
                   />
-                  <Button type="submit" disabled={draft.trim().length < 2} isLoading={isSending} className="h-10 w-10 shrink-0 rounded-xl p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
+                  <div className={cn(isComposerExpanded ? 'mt-2 flex items-center justify-between gap-3' : 'contents')}>
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT}
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Attach images"
+                      aria-label="Attach images"
+                    ><ImagePlus className="h-5 w-5" /></button>
+                    <Button type="submit" disabled={draft.trim().length < 2} isLoading={isSending} className="h-9 w-9 shrink-0 rounded-full p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
+                  </div>
                 </div>
-                <p className="mt-2 px-1 text-[11px] leading-4 text-[var(--color-text-secondary)]">Drop an image or attach one · JPEG, PNG, WebP, GIF · 4 MB max · not retained</p>
+                <p id="agent-question-help" className="sr-only">Drop an image here or use the attach button. JPEG, PNG, WebP, and GIF up to 4 MB. Images are not retained.</p>
               </form>
             </Card>
 
