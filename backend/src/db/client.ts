@@ -5,7 +5,10 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 const backendRoot = path.resolve(__dirname, "..", "..");
-const dbPath = path.join(backendRoot, "data", "fainens.db");
+const configuredDbPath = process.env.FAINENS_DB_PATH?.trim();
+const dbPath = configuredDbPath
+  ? path.resolve(configuredDbPath)
+  : path.join(backendRoot, "data", "fainens.db");
 
 // Ensure DB directory exists even on fresh containers.
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });

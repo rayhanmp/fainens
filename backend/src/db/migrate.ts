@@ -75,7 +75,11 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
   if (tableExists("__drizzle_migrations")) {
     const rows = db.$client.prepare("SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at").all() as Array<{ hash: string; created_at: number }>;
     const isLegacyPush = rows.some((row) => row.hash.startsWith("legacy-push-baseline"));
-    if (!isLegacyPush) return;
+    // A number of older `db push` installs created Drizzle's history table
+    // but never recorded a row. Treat that empty table like absent history:
+    // the schema is already present and needs the compatibility baseline,
+    // otherwise Drizzle starts again at 0000 and tries to recreate `account`.
+    if (rows.length > 0 && !isLegacyPush) return;
     if (rows.some((row) => Number(row.created_at) >= compatibilityFloor.when)) return;
   }
 
