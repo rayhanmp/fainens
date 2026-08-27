@@ -56,7 +56,7 @@ type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['co
 type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
 
 type ChatMessage =
-  | { id: string; role: 'user'; text: string; createdAt: number; images?: ChatImage[] }
+  | { id: string; serverId?: number; role: 'user'; text: string; createdAt: number; images?: ChatImage[] }
   | { id: string; role: 'assistant'; text: string; createdAt: number; response?: AgentResponse };
 
 const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -448,6 +448,8 @@ function AgentPage() {
   const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
   const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
   const [conversationTitleDraft, setConversationTitleDraft] = useState('');
+  const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
+  const [editingUserMessageText, setEditingUserMessageText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [budgetPreview, setBudgetPreview] = useState<BudgetPreview | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
@@ -473,7 +475,7 @@ function AgentPage() {
       setActiveConversationId(detail.conversation.id);
       setMessages(detail.messages.map((message) => message.role === 'assistant'
         ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
-        : { id: String(message.id), role: 'user', text: message.content, createdAt: message.createdAt },
+        : { id: String(message.id), serverId: message.id, role: 'user', text: message.content, createdAt: message.createdAt },
       ));
       setPendingImages([]);
       setImageError(null);
@@ -571,16 +573,28 @@ function AgentPage() {
     setImageError(errors.length > 0 ? errors.join('\n') : null);
   };
 
-  const submitQuestion = async (question = draft) => {
+  const submitQuestion = async (question = draft, replacement?: { localId: string; serverId: number }) => {
     const text = question.trim();
     if (text.length < 2 || isSending) return;
-    const attachedImages = pendingImages;
+    const attachedImages = replacement ? [] : pendingImages;
     const createdAt = Date.now();
+    const userLocalId = replacement?.localId ?? `user-${createdAt}`;
     setDraft('');
     setError(null);
     setNotice(null);
     setImageError(null);
-    setMessages((current) => [...current, { id: `user-${createdAt}`, role: 'user', text, createdAt, images: attachedImages }]);
+    setEditingUserMessageId(null);
+    setEditingUserMessageText('');
+    setMessages((current) => {
+      if (!replacement) return [...current, { id: userLocalId, role: 'user', text, createdAt, images: attachedImages }];
+      const replacementIndex = current.findIndex((message) => message.id === replacement.localId);
+      if (replacementIndex < 0) return current;
+      return current.slice(0, replacementIndex + 1).map((message) =>
+        message.id === replacement.localId && message.role === 'user'
+          ? { ...message, text, images: undefined }
+          : message,
+      );
+    });
     setIsSending(true);
     setStreamActivity('Thinking…');
     let streamedAssistantId: string | null = null;
@@ -604,6 +618,7 @@ function AgentPage() {
         question: text,
         ...(selectedPeriodId ? { periodId: Number(selectedPeriodId) } : {}),
         conversationId,
+        ...(replacement ? { replaceMessageId: replacement.serverId } : {}),
         ...(attachedImages.length > 0 ? { images: attachedImages.map((image) => ({ filename: image.filename, mimeType: image.mimeType, data: image.dataUrl })) } : {}),
       }, (event) => {
         if (event.type === 'delta') {
@@ -631,7 +646,9 @@ function AgentPage() {
       setMessages((current) => current.map((message) =>
         message.id === assistantId && message.role === 'assistant'
           ? { ...message, response }
-          : message,
+          : message.id === userLocalId && message.role === 'user'
+            ? { ...message, serverId: response.userMessageId ?? message.serverId }
+            : message,
       ));
       setPendingImages([]);
       void refreshConversations().catch(() => undefined);
@@ -644,6 +661,28 @@ function AgentPage() {
     }
   };
 
+  const retryLastUserMessage = (message: Extract<ChatMessage, { role: 'user' }>) => {
+    if (isSending) return;
+    if (message.serverId == null) {
+      void submitQuestion(message.text);
+      return;
+    }
+    void submitQuestion(message.text, { localId: message.id, serverId: message.serverId });
+  };
+
+  const saveEditedLastUserMessage = (message: Extract<ChatMessage, { role: 'user' }>) => {
+    const nextText = editingUserMessageText.trim();
+    if (nextText.length < 2) {
+      setError('Message must be at least 2 characters.');
+      return;
+    }
+    if (message.serverId == null) {
+      void submitQuestion(nextText);
+      return;
+    }
+    void submitQuestion(nextText, { localId: message.id, serverId: message.serverId });
+  };
+
   const startNewConversation = () => {
     setActiveConversationId(null);
     setMessages([]);
@@ -654,6 +693,8 @@ function AgentPage() {
     setNotice(null);
     setBudgetPreview(null);
     setBudgetAction(null);
+    setEditingUserMessageId(null);
+    setEditingUserMessageText('');
   };
 
   const updateConversation = async (conversationId: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => {
@@ -777,6 +818,7 @@ function AgentPage() {
 
   const activeConversations = conversations.filter((conversation) => conversation.archivedAt == null);
   const archivedConversations = conversations.filter((conversation) => conversation.archivedAt != null);
+  const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id ?? null;
 
   return (
     <RequireAuth>
@@ -851,7 +893,15 @@ function AgentPage() {
                       )}
                       {message.role === 'assistant'
                         ? <MarkdownMessage>{message.text || '…'}</MarkdownMessage>
-                        : <p className="whitespace-pre-wrap leading-6">{message.text}</p>}
+                        : editingUserMessageId === message.id
+                          ? <div className="space-y-2"><textarea value={editingUserMessageText} onChange={(event) => setEditingUserMessageText(event.target.value)} className="brutalist-input min-h-24 w-full resize-y bg-white/95 text-[var(--color-text-primary)]" maxLength={2000} autoFocus /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => { setEditingUserMessageId(null); setEditingUserMessageText(''); }} disabled={isSending}>Cancel</Button><Button size="sm" onClick={() => void saveEditedLastUserMessage(message)} disabled={isSending}><Send className="h-4 w-4" /> Save &amp; resend</Button></div></div>
+                          : <p className="whitespace-pre-wrap leading-6">{message.text}</p>}
+                      {message.role === 'user' && message.id === latestUserMessageId && editingUserMessageId !== message.id && !isSending && !message.images?.length && (
+                        <div className="mt-2 flex justify-end gap-1 border-t border-white/20 pt-2">
+                          <button type="button" onClick={() => retryLastUserMessage(message)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-white/85 hover:bg-white/15 hover:text-white" title="Send this message again"><RefreshCw className="h-3.5 w-3.5" /> Retry</button>
+                          <button type="button" onClick={() => { setEditingUserMessageId(message.id); setEditingUserMessageText(message.text); }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-white/85 hover:bg-white/15 hover:text-white" title="Edit this message and regenerate the reply"><Pencil className="h-3.5 w-3.5" /> Edit</button>
+                        </div>
+                      )}
                       {message.response && (
                         <>
                           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--color-text-secondary)]">

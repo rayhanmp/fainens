@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt } from "drizzle-orm";
 
 import { env } from "../lib/env";
 import { db } from "../db/client";
-import { agentConversations, agentMessages } from "../db/schema";
+import { agentApprovals, agentConversations, agentMessages, agentPendingActions } from "../db/schema";
 import {
   agentToolDefinitions,
   executeAgentTool,
@@ -114,6 +114,26 @@ async function conversationHistory(conversationId: number): Promise<AgentChatMes
     .select({ role: agentMessages.role, content: agentMessages.content, responseJson: agentMessages.responseJson })
     .from(agentMessages)
     .where(eq(agentMessages.conversationId, conversationId))
+    .orderBy(desc(agentMessages.createdAt), desc(agentMessages.id))
+    .limit(HISTORY_MESSAGE_LIMIT);
+  return newestFirst.reverse().flatMap((message): AgentChatMessage[] =>
+    message.role === "user" || message.role === "assistant"
+      ? [{
+        role: message.role,
+        content: message.role === "assistant" && message.responseJson
+          ? `${message.content}\n\n${pendingActionHistoryContext(message.responseJson)}`
+          : message.content,
+      }]
+      : [],
+  );
+}
+
+/** History before a saved user turn, used when that turn is edited or retried. */
+async function conversationHistoryBefore(conversationId: number, messageId: number): Promise<AgentChatMessage[]> {
+  const newestFirst = await db
+    .select({ role: agentMessages.role, content: agentMessages.content, responseJson: agentMessages.responseJson })
+    .from(agentMessages)
+    .where(and(eq(agentMessages.conversationId, conversationId), lt(agentMessages.id, messageId)))
     .orderBy(desc(agentMessages.createdAt), desc(agentMessages.id))
     .limit(HISTORY_MESSAGE_LIMIT);
   return newestFirst.reverse().flatMap((message): AgentChatMessage[] =>
@@ -547,7 +567,7 @@ async function answerWithToolsStreaming(
   };
 }
 
-type AgentQueryBody = { question?: unknown; periodId?: unknown; startDate?: unknown; endDate?: unknown; conversationId?: unknown; images?: unknown };
+type AgentQueryBody = { question?: unknown; periodId?: unknown; startDate?: unknown; endDate?: unknown; conversationId?: unknown; replaceMessageId?: unknown; images?: unknown };
 type AgentQueryResult = Awaited<ReturnType<typeof answerWithTools>>;
 
 async function executeAgentQuery(
@@ -560,20 +580,66 @@ async function executeAgentQuery(
   const images = parseAgentImages(body.images);
   const scopeInput = parseAgentScopeInput({ periodId: body.periodId, startDate: body.startDate, endDate: body.endDate });
   const conversationId = body.conversationId == null ? null : Number(body.conversationId);
+  const replaceMessageId = body.replaceMessageId == null ? null : Number(body.replaceMessageId);
   if (conversationId != null && (!Number.isSafeInteger(conversationId) || conversationId <= 0)) {
     throw new Error("Invalid conversation ID");
   }
+  if (replaceMessageId != null && (!Number.isSafeInteger(replaceMessageId) || replaceMessageId <= 0)) {
+    throw new Error("Invalid message to retry");
+  }
+  if (replaceMessageId != null && conversationId == null) throw new Error("A saved conversation is required to retry a message");
+  if (replaceMessageId != null && images.length > 0) throw new Error("Retrying a message with new image attachments is not supported");
 
   let history: AgentChatMessage[] = [];
   let conversation: typeof agentConversations.$inferSelect | undefined;
+  let userMessageId: number | null = null;
   if (conversationId != null) {
     conversation = await ownedConversation(conversationId, ownerEmail);
     if (!conversation) throw new Error("Conversation not found");
-    history = await conversationHistory(conversationId);
-    const storedQuestion = images.length > 0
-      ? `${question}\n\n[${images.length} image attachment${images.length === 1 ? "" : "s"} provided for this turn; image pixels are not retained in chat history.]`
-      : question;
-    await db.insert(agentMessages).values({ conversationId, role: "user", content: storedQuestion });
+    if (replaceMessageId != null) {
+      const [target] = await db.select({ id: agentMessages.id, role: agentMessages.role, createdAt: agentMessages.createdAt })
+        .from(agentMessages)
+        .where(and(eq(agentMessages.id, replaceMessageId), eq(agentMessages.conversationId, conversationId)))
+        .limit(1);
+      const [latestUser] = await db.select({ id: agentMessages.id })
+        .from(agentMessages)
+        .where(and(eq(agentMessages.conversationId, conversationId), eq(agentMessages.role, "user")))
+        .orderBy(desc(agentMessages.id))
+        .limit(1);
+      if (!target || target.role !== "user" || latestUser?.id !== target.id) {
+        throw new Error("Only the latest user message can be edited or retried");
+      }
+      // Replacing a turn also abandons unconfirmed proposals made in that
+      // turn. Otherwise an old card could remain postable after its source
+      // instruction was edited or retried.
+      db.transaction((tx) => {
+        const pendingActions = tx.select({ id: agentPendingActions.id })
+          .from(agentPendingActions)
+          .where(and(
+            eq(agentPendingActions.conversationId, conversationId),
+            eq(agentPendingActions.status, "pending"),
+            gte(agentPendingActions.createdAt, target.createdAt),
+          )).all();
+        const pendingActionIds = pendingActions.map((action) => action.id);
+        if (pendingActionIds.length > 0) {
+          tx.update(agentApprovals).set({ status: "rejected" })
+            .where(and(inArray(agentApprovals.pendingActionId, pendingActionIds), eq(agentApprovals.status, "pending"))).run();
+          tx.update(agentPendingActions).set({ status: "rejected", updatedAt: new Date() })
+            .where(inArray(agentPendingActions.id, pendingActionIds)).run();
+        }
+        tx.delete(agentMessages).where(and(eq(agentMessages.conversationId, conversationId), gt(agentMessages.id, target.id))).run();
+        tx.update(agentMessages).set({ content: question }).where(eq(agentMessages.id, target.id)).run();
+      });
+      history = await conversationHistoryBefore(conversationId, replaceMessageId);
+      userMessageId = replaceMessageId;
+    } else {
+      history = await conversationHistory(conversationId);
+      const storedQuestion = images.length > 0
+        ? `${question}\n\n[${images.length} image attachment${images.length === 1 ? "" : "s"} provided for this turn; image pixels are not retained in chat history.]`
+        : question;
+      const [stored] = await db.insert(agentMessages).values({ conversationId, role: "user", content: storedQuestion }).returning({ id: agentMessages.id });
+      userMessageId = stored?.id ?? null;
+    }
     await db.update(agentConversations)
       .set({ title: conversation.title === "New conversation" ? conversationTitle(question) : conversation.title, updatedAt: new Date() })
       .where(eq(agentConversations.id, conversationId));
@@ -585,7 +651,7 @@ async function executeAgentQuery(
     await db.insert(agentMessages).values({ conversationId, role: "assistant", content: displayText, responseJson: JSON.stringify(redactApprovalTokens(result)) });
     await db.update(agentConversations).set({ updatedAt: new Date() }).where(eq(agentConversations.id, conversationId));
   }
-  return { ...result, conversationId: conversation?.id ?? null };
+  return { ...result, conversationId: conversation?.id ?? null, userMessageId };
 }
 
 export default async function agentRoutes(fastify: FastifyInstance) {

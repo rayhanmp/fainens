@@ -142,6 +142,7 @@ export type AgentQueryResponse = {
   scope?: unknown;
   revision?: number;
   conversationId?: number | null;
+  userMessageId?: number | null;
   toolCalls: Array<{ id: string; name: string; input: unknown }>;
   toolResults: Array<{ id: string; name: string; result: unknown }>;
   pendingActions?: AgentActionProposal[];
@@ -202,7 +203,7 @@ export type AgentTransactionActionProposal = AgentActionProposal & {
 };
 
 async function streamAgentQuery(
-  data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> },
+  data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; replaceMessageId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> },
   onEvent: (event: AgentStreamEvent) => void,
 ): Promise<AgentQueryResponse> {
   const response = await fetch(`${API_BASE}/agent/query/stream`, {
@@ -1893,7 +1894,7 @@ export const api = {
       if (params?.endDate) query.set('endDate', String(params.endDate));
       return fetchApi(`/agent/context${query.toString() ? `?${query.toString()}` : ''}`);
     },
-    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> }) =>
+    query: (data: { question: string; periodId?: number; startDate?: number; endDate?: number; conversationId?: number; replaceMessageId?: number; images?: Array<{ filename: string; mimeType: string; data: string }> }) =>
       fetchApi<AgentQueryResponse>('/agent/query', {
         method: 'POST', body: JSON.stringify(data),
       }),
