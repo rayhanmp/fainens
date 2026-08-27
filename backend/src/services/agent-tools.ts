@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, inArray, like, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
@@ -1240,6 +1241,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       }
       const proposals: unknown[] = [];
       const errors: Array<{ index: number; error: string }> = [];
+      const batchId = randomUUID();
       for (const [index, transaction] of input.transactions.entries()) {
         try {
           proposals.push(await prepareAgentAction({
@@ -1248,6 +1250,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
             kind: "transaction_journal_create",
             input: transaction,
             assumptions: isRecord(transaction) ? transaction.assumptions : undefined,
+            batchId,
           }));
         } catch (error) {
           errors.push({ index, error: error instanceof Error ? error.message : "Transaction proposal failed" });

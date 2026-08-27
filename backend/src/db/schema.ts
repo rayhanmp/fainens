@@ -613,6 +613,8 @@ export const agentPendingActions = sqliteTable("agent_pending_action", {
   normalizedInput: text("normalized_input").notNull(),
   assumptions: text("assumptions"),
   missingFields: text("missing_fields"),
+  /** Links independently approved proposals prepared from one multi-transaction request. */
+  batchId: text("batch_id"),
   baseFinancialRevision: integer("base_financial_revision").notNull(),
   status: text("status").notNull().default("pending"), // pending | executed | rejected | expired | superseded | failed
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
@@ -625,6 +627,7 @@ export const agentPendingActions = sqliteTable("agent_pending_action", {
 }, (table) => ({
   ownerStatusIdx: index("idx_agent_pending_action_owner_status").on(table.ownerEmail, table.status, table.createdAt),
   conversationIdx: index("idx_agent_pending_action_conversation").on(table.conversationId, table.createdAt),
+  batchIdx: index("idx_agent_pending_action_batch").on(table.batchId, table.status),
 }));
 
 /**

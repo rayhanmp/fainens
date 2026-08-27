@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { accounts, agentApprovals, agentConversations, agentPendingActions, auditLogs, budgetPlans, categories, salaryPeriods } from "../db/schema";
@@ -286,6 +286,8 @@ export async function prepareAgentAction(args: {
   assumptions?: unknown;
   missingFields?: unknown;
   idempotencyKey?: unknown;
+  /** Internal only: independently confirmable proposals from one agent call. */
+  batchId?: string | null;
 }) {
   if (!args.ownerEmail.trim()) throw new AgentActionError(401, "Authenticated user email is unavailable");
   if (typeof args.kind !== "string") throw new AgentActionError(400, "kind is required");
@@ -295,6 +297,10 @@ export async function prepareAgentAction(args: {
   const normalizedInput = normalizeInput(kind, args.input);
   const assumptions = parseAssumptions(args.assumptions);
   const missingFields = parseAssumptions(args.missingFields);
+  const batchId = args.batchId == null ? null : args.batchId;
+  if (batchId != null && !/^[a-f0-9-]{36}$/i.test(batchId)) {
+    throw new AgentActionError(400, "Invalid proposal batch");
+  }
   const conversationId = await ownedConversation(args.conversationId, args.ownerEmail);
 
   let details: unknown;
@@ -338,6 +344,7 @@ export async function prepareAgentAction(args: {
       normalizedInput,
       assumptions: JSON.stringify(assumptions),
       missingFields: JSON.stringify(missingFields),
+      batchId,
       baseFinancialRevision: revision,
       status: "pending",
       expiresAt,
@@ -510,6 +517,18 @@ async function executeTransactionApproval(args: {
       .where(and(eq(auditLogs.entityType, "transaction"), eq(auditLogs.entityId, transactionId), eq(auditLogs.action, "create")))
       .orderBy(desc(auditLogs.id)).limit(1).all()[0];
     const financialRevision = getFinancialRevisionSync(tx);
+    // A multi-transaction request creates independently approved actions.
+    // Posting one advances the ledger revision, but must not stale untouched
+    // siblings. Advance only their shared batch baseline; any outside write
+    // still supersedes the remaining proposal normally.
+    if (action.batchId) {
+      tx.update(agentPendingActions).set({ baseFinancialRevision: financialRevision, updatedAt: new Date(nowMs) })
+        .where(and(
+          eq(agentPendingActions.batchId, action.batchId),
+          eq(agentPendingActions.status, "pending"),
+          ne(agentPendingActions.id, action.id),
+        )).run();
+    }
     const receipt: TransactionExecutionReceipt = {
       actionId: action.id,
       approvalId: approval.id,
