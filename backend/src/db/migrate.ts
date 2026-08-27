@@ -330,6 +330,7 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     "0023_revision_cache_outbox_trigger": triggerExists("cache_invalidation_on_revision"),
     "0024_category_archive_lifecycle": has("category", "is_active"),
     "0025_agent_action_batches": has("agent_pending_action", "batch_id"),
+    "0026_agent_personal_memory": has("agent_memory", "id", "owner_email", "label", "content", "created_at", "updated_at"),
   };
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
@@ -375,6 +376,7 @@ function assertRequiredSchema(): void {
     agent_message: ["id", "conversation_id", "role", "content", "created_at"],
     agent_pending_action: ["id", "owner_email", "conversation_id", "kind", "normalized_input", "batch_id", "base_financial_revision", "status", "expires_at", "created_at", "updated_at"],
     agent_approval: ["id", "pending_action_id", "owner_email", "token_hash", "idempotency_key", "status", "approved_at", "executed_at", "execution_receipt", "expires_at", "created_at"],
+    agent_memory: ["id", "owner_email", "label", "content", "created_at", "updated_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

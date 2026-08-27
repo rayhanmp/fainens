@@ -9,6 +9,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
+import type { AgentMemory } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
@@ -32,6 +33,8 @@ import {
   Sun,
   Monitor,
   Check,
+  Brain,
+  Pencil,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
@@ -55,9 +58,10 @@ interface ExportOptions {
   categories: boolean;
   budgets: boolean;
   settings: boolean;
+  memories: boolean;
 }
 
-type TabType = 'general' | 'accounts' | 'appearance' | 'data';
+type TabType = 'general' | 'accounts' | 'appearance' | 'memory' | 'data';
 
 const CURRENCIES = [
   { value: 'IDR', label: 'Rp (IDR - Indonesian Rupiah)', symbol: 'Rp' },
@@ -80,6 +84,7 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Settings2 },
   { id: 'accounts', label: 'Accounts', icon: CreditCard },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'memory', label: 'Agent memory', icon: Brain },
   { id: 'data', label: 'Data', icon: Database },
 ];
 
@@ -96,6 +101,14 @@ function SettingsPage() {
     theme: 'auto',
   });
   const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string }>>([]);
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
+  const [memoryLimits, setMemoryLimits] = useState({ maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 });
+  const [memoryLabel, setMemoryLabel] = useState('');
+  const [memoryContent, setMemoryContent] = useState('');
+  const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -110,6 +123,7 @@ function SettingsPage() {
     categories: true,
     budgets: true,
     settings: true,
+    memories: true,
   });
   
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,6 +131,7 @@ function SettingsPage() {
   useEffect(() => {
     loadSettings();
     loadAccounts();
+    loadMemories();
   }, []);
 
   // Auto-save with 500ms debounce
@@ -178,6 +193,77 @@ function SettingsPage() {
     }
   };
 
+  const loadMemories = async () => {
+    setIsLoadingMemories(true);
+    try {
+      const response = await api.agent.memories.list();
+      setMemories(response.memories);
+      setMemoryLimits(response.limits);
+      setMemoryError(null);
+    } catch (err) {
+      setMemoryError(err instanceof Error ? err.message : 'Could not load agent memory.');
+    } finally {
+      setIsLoadingMemories(false);
+    }
+  };
+
+  const resetMemoryForm = () => {
+    setEditingMemoryId(null);
+    setMemoryLabel('');
+    setMemoryContent('');
+  };
+
+  const saveMemory = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const label = memoryLabel.trim();
+    const content = memoryContent.trim();
+    if (!label || !content) {
+      setMemoryError('Add a short name and the memory you want the agent to remember.');
+      return;
+    }
+    setIsSavingMemory(true);
+    setMemoryError(null);
+    try {
+      if (editingMemoryId == null) {
+        const response = await api.agent.memories.create({ label, content });
+        setMemories((current) => [...current, response.memory]);
+      } else {
+        const response = await api.agent.memories.update(editingMemoryId, { label, content });
+        setMemories((current) => current.map((memory) => memory.id === editingMemoryId ? response.memory : memory));
+      }
+      resetMemoryForm();
+    } catch (err) {
+      setMemoryError(err instanceof Error ? err.message : 'Could not save agent memory.');
+    } finally {
+      setIsSavingMemory(false);
+    }
+  };
+
+  const editMemory = (memory: AgentMemory) => {
+    setEditingMemoryId(memory.id);
+    setMemoryLabel(memory.label);
+    setMemoryContent(memory.content);
+    setMemoryError(null);
+  };
+
+  const deleteMemory = async (memory: AgentMemory) => {
+    const confirmed = await confirm({
+      title: 'Delete personal memory',
+      message: `Remove “${memory.label}” from the information supplied to the agent?`,
+      confirmLabel: 'Delete memory',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    setMemoryError(null);
+    try {
+      await api.agent.memories.delete(memory.id);
+      setMemories((current) => current.filter((candidate) => candidate.id !== memory.id));
+      if (editingMemoryId === memory.id) resetMemoryForm();
+    } catch (err) {
+      setMemoryError(err instanceof Error ? err.message : 'Could not delete agent memory.');
+    }
+  };
+
   const getAccountOptions = (type?: string) => {
     const options = [{ value: '', label: 'None (Auto-select)' }];
     const filtered = type ? accounts.filter((a) => a.type === type) : accounts;
@@ -211,6 +297,9 @@ function SettingsPage() {
       }
       if (exportOptions.settings) {
         exportData.settings = settings;
+      }
+      if (exportOptions.memories) {
+        exportData.agentMemories = (await api.agent.memories.list()).memories;
       }
 
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -507,6 +596,86 @@ function SettingsPage() {
             </div>
           )}
 
+          {/* Agent memory Tab */}
+          {activeTab === 'memory' && (
+            <div className="max-w-3xl space-y-6 animate-in fade-in duration-300">
+              <Card
+                title={
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-5 h-5" />
+                    Personal memory
+                  </div>
+                }
+              >
+                <div className="space-y-4">
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Save useful preferences and background so the agent can personalize future chats. Memories are context only—not ledger evidence, and never authorization to change your data.
+                  </p>
+                  <form className="space-y-4" onSubmit={(event) => void saveMemory(event)}>
+                    <Input
+                      label="Memory name"
+                      value={memoryLabel}
+                      onChange={(event) => setMemoryLabel(event.target.value)}
+                      placeholder="e.g. Financial goal"
+                      maxLength={memoryLimits.maxLabelLength}
+                      required
+                    />
+                    <div className="space-y-1">
+                      <label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should the agent remember?</label>
+                      <textarea
+                        id="agent-memory-content"
+                        value={memoryContent}
+                        onChange={(event) => setMemoryContent(event.target.value)}
+                        placeholder="e.g. I am saving for a down payment and prefer conservative suggestions."
+                        maxLength={memoryLimits.maxContentLength}
+                        required
+                        rows={3}
+                        className="brutalist-input min-h-24 w-full resize-y"
+                      />
+                      <p className="text-xs text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" isLoading={isSavingMemory} disabled={memories.length >= memoryLimits.maxItems && editingMemoryId == null}>
+                        {editingMemoryId == null ? 'Add memory' : 'Save changes'}
+                      </Button>
+                      {editingMemoryId != null && <Button type="button" variant="secondary" onClick={resetMemoryForm} disabled={isSavingMemory}>Cancel</Button>}
+                    </div>
+                  </form>
+                  {memories.length >= memoryLimits.maxItems && editingMemoryId == null && <p className="text-xs text-[var(--color-warning)]">You have reached the {memoryLimits.maxItems}-memory limit. Edit or delete an existing memory to add another.</p>}
+                  {memoryError && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{memoryError}</p>}
+                </div>
+              </Card>
+
+              <Card
+                title="Saved memories"
+                action={<span className="text-xs text-[var(--color-text-secondary)]">{memories.length}/{memoryLimits.maxItems}</span>}
+              >
+                {isLoadingMemories ? (
+                  <p className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]"><RefreshCw className="h-4 w-4 animate-spin" /> Loading memories…</p>
+                ) : memories.length === 0 ? (
+                  <p className="text-sm text-[var(--color-text-secondary)]">No memories saved yet. Add preferences, goals, or stable background that helps the agent understand you.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {memories.map((memory) => (
+                      <div key={memory.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-semibold">{memory.label}</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">{memory.content}</p>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <Button type="button" size="sm" variant="secondary" onClick={() => editMemory(memory)} disabled={isSavingMemory}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
+                            <Button type="button" size="sm" variant="danger" onClick={() => void deleteMemory(memory)} disabled={isSavingMemory}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+
           {/* Data Tab */}
           {activeTab === 'data' && (
             <div className="space-y-6 animate-in fade-in duration-300">
@@ -533,6 +702,7 @@ function SettingsPage() {
                         { key: 'categories', label: 'Categories & Tags' },
                         { key: 'budgets', label: 'Budgets & Periods' },
                         { key: 'settings', label: 'Settings' },
+                        { key: 'memories', label: 'Agent memory' },
                       ].map(({ key, label }) => (
                         <label
                           key={key}

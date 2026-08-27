@@ -155,6 +155,14 @@ export type AgentStreamEvent =
   | { type: 'complete'; response: AgentQueryResponse }
   | { type: 'error'; error: string };
 
+export type AgentMemory = {
+  id: number;
+  label: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type AgentActionProposal = {
   pendingActionId: number;
   approvalId: number;
@@ -1851,6 +1859,16 @@ export const api = {
   },
 
   agent: {
+    memories: {
+      list: () => fetchApi<{ memories: AgentMemory[]; limits: { maxItems: number; maxLabelLength: number; maxContentLength: number } }>('/agent/memories'),
+      create: (data: { label: string; content: string }) => fetchApi<{ memory: AgentMemory }>('/agent/memories', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
+      update: (id: number, data: { label?: string; content?: string }) => fetchApi<{ memory: AgentMemory }>(`/agent/memories/${id}`, {
+        method: 'PATCH', body: JSON.stringify(data),
+      }),
+      delete: (id: number) => fetchApi<void>(`/agent/memories/${id}`, { method: 'DELETE' }),
+    },
     conversations: {
       list: (options: { includeArchived?: boolean } = {}) => fetchApi<{ conversations: Array<{ id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null }>; includeArchived: boolean }>(`/agent/conversations${options.includeArchived ? '?includeArchived=true' : ''}`),
       create: (data: { title?: string } = {}) => fetchApi<{ conversation: { id: number; title: string; createdAt: number; updatedAt: number; isPinned: boolean; archivedAt: number | null } }>('/agent/conversations', {

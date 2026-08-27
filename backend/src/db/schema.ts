@@ -579,6 +579,23 @@ export const agentConversations = sqliteTable("agent_conversation", {
   ownerStateIdx: index("idx_agent_conversation_owner_state").on(table.ownerEmail, table.archivedAt, table.isPinned, table.updatedAt),
 }));
 
+/** User-maintained profile context supplied to the finance agent. Memories are
+ * deliberately separate from conversation history and financial records. */
+export const agentMemories = sqliteTable("agent_memory", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerEmail: text("owner_email").notNull(),
+  label: text("label").notNull(),
+  content: text("content").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  ownerUpdatedIdx: index("idx_agent_memory_owner_updated").on(table.ownerEmail, table.updatedAt),
+}));
+
 /**
  * Persist only the user-visible exchange and structured response receipt.
  * Tool results are retained as evidence for that answer, not supplied as a

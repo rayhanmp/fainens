@@ -183,6 +183,13 @@
       "when": 1787802000000,
       "tag": "0025_agent_action_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787813000000,
+      "tag": "0026_agent_personal_memory",
+      "breakpoints": true
     }
   ]
 }
