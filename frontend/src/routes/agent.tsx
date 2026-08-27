@@ -928,7 +928,7 @@ function AgentPage() {
                 onDragOver={(event) => { event.preventDefault(); if (!isSending) setIsDraggingImages(true); }}
                 onDragLeave={() => setIsDraggingImages(false)}
                 onDrop={(event) => { event.preventDefault(); setIsDraggingImages(false); if (!isSending) void addImageFiles(Array.from(event.dataTransfer.files)); }}
-                className={cn('border-t border-[var(--color-border)] bg-[var(--color-background)] p-4', isDraggingImages && 'bg-[var(--ref-primary)]/5')}
+                className={cn('border-t border-[var(--color-border)] bg-[var(--color-background)] p-3 sm:p-4', isDraggingImages && 'bg-[var(--ref-primary)]/5')}
               >
                 <label htmlFor="agent-question" className="sr-only">Ask Fainens Agent</label>
                 <input
@@ -958,12 +958,12 @@ function AgentPage() {
                   </div>
                 )}
                 {imageError && <p role="alert" className="mb-2 whitespace-pre-line text-xs text-[var(--color-danger)]">{imageError}</p>}
-                <div className="flex items-end gap-2">
+                <div className={cn('flex items-end gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 transition-colors', isDraggingImages && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/5 ring-2 ring-[var(--ref-primary)]/15')}>
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
                     disabled={isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT}
-                    className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)] hover:text-[var(--ref-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                     title="Attach images"
                     aria-label="Attach images"
                   ><ImagePlus className="h-5 w-5" /></button>
@@ -972,14 +972,14 @@ function AgentPage() {
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); } }}
-                    placeholder="Ask about spending, balances, obligations, or a plan…"
-                    rows={2}
+                    placeholder="Ask Fainens anything…"
+                    rows={1}
                     maxLength={2000}
-                    className="brutalist-input min-h-12 resize-y"
+                    className="min-h-10 max-h-32 min-w-0 flex-1 resize-y border-0 bg-transparent px-2 py-2 text-sm shadow-none outline-none placeholder:text-[var(--color-text-secondary)] focus:border-0 focus:ring-0"
                   />
-                  <Button type="submit" disabled={draft.trim().length < 2} isLoading={isSending} className="h-12 px-4" aria-label="Send question"><Send className="h-4 w-4" /></Button>
+                  <Button type="submit" disabled={draft.trim().length < 2} isLoading={isSending} className="h-10 w-10 shrink-0 rounded-xl p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
                 </div>
-                <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Drop images here or use the image button · JPEG, PNG, WebP, GIF up to 4MB each. Images are sent for this turn and not retained as pixels in chat history.</p>
+                <p className="mt-2 px-1 text-[11px] leading-4 text-[var(--color-text-secondary)]">Drop an image or attach one · JPEG, PNG, WebP, GIF · 4 MB max · not retained</p>
               </form>
             </Card>
 
