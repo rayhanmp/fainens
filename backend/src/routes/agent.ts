@@ -29,8 +29,10 @@ import {
   rejectAgentApproval,
 } from "../services/agent-actions";
 
-const MAX_TOOL_CALLS_PER_QUERY = 8;
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_CALLS_PER_QUERY = 30;
+// A model may make dependent calls one at a time, so rounds must not reduce
+// the advertised 30-call budget below that number.
+const MAX_TOOL_ROUNDS = 30;
 const HISTORY_MESSAGE_LIMIT = 12;
 const MAX_AGENT_IMAGE_COUNT = 3;
 const MAX_AGENT_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -286,6 +288,7 @@ const AGENT_SYSTEM_PROMPT = [
   "RETRIEVAL: Use the minimum read-only tools needed before every factual claim about Ray's recorded finances, including balances, transactions, spending, budgets, obligations, trends, comparisons, or period activity. Do not guess missing values, silently reuse stale results, or call tools repeatedly when an existing result answers the question.",
   "TOOL CHOICES: Use calculate for arithmetic; get_current_datetime for an exact current-time check; calculate_date_difference for elapsed time; get_currency_exchange_rate for currency conversion; get_category_spending for category rankings/totals; and get_transaction_details for journal lines, provenance, or audit questions. Treat tool errors as uncertainty and explain the limitation.",
   "ACCOUNTING: Posted journals are actuals. Drafts are not actuals. Budgets are plans, not transactions. Reversals preserve the original history and are not deletion. Reconciliation is control evidence, never income, expense, or cash flow. Cash-flow classes come from classified journal lines, not transaction-type guesses. Amounts are integer IDR units despite legacy field names ending in Cents.",
+  "USER-FACING ACTIVITY: Never include internal reversal journals or their superseded originals in a normal answer, timeline, ranking, or transaction list. The ledger tools already retain their net accounting effect in totals. Mention correction history only when Ray explicitly asks to audit, explain, or trace a correction.",
   "PERIOD COVERAGE: Always distinguish complete, partial, skipped, and unknown periods. Skipped means activity is unknown, not zero. Never say 'no transactions' for a skipped/unknown period; say that the recorded activity cannot establish whether transactions occurred. Disclose coverage gaps when comparing periods, computing averages, or making forecasts.",
   "CATEGORIES AND REPORTING: Use persisted category allocations and report Unallocated/unknown amounts when evidence is incomplete. For transaction preparation, first call get_categories without a search term to fetch the small complete local list, then infer a category when the merchant or description makes it reasonably clear (for example burger, cendol, restaurant, coffee, or groceries → Food; bus, taxi, or ride-hailing → Transport; rent or electricity → Housing/Utilities). This is a classification suggestion, not a fact: use the closest active category and include a short assumption such as 'Category inferred as Food from burger merchant' in the proposal assumptions. Ask a clarification only when two materially different categories are equally plausible or the user explicitly wants a different category. Category totals, budgets, reports, and dashboard figures must reconcile to the scoped posted ledger rather than being inferred from labels or transaction types.",
   "CURRENCY: For conversions, use get_currency_exchange_rate and state the returned rate date and Frankfurter/ECB reference source. A reference rate is not a transaction, bank settlement rate, or historical revaluation. Never silently convert or rewrite ledger entries.",
@@ -351,6 +354,7 @@ async function answerWithTools(
   let completedWithAnswer = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
     const response = await callOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages,
@@ -456,6 +460,7 @@ async function answerWithToolsStreaming(
   let completedWithAnswer = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
     const response = await streamOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages,

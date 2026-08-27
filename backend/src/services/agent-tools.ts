@@ -35,6 +35,7 @@ const MAX_RECONCILIATION_SESSIONS = 50;
 const CURRENCY_RATE_API = "https://api.frankfurter.app";
 const CURRENCY_RATE_CACHE_TTL_MS = 5 * 60_000;
 const currencyRateCache = new Map<string, { expiresAt: number; payload: CurrencyRatePayload }>();
+const INTERNAL_CORRECTION_TX_TYPES = ["reversal", "domain_reversal", "historical_recovery_adjustment"] as const;
 
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
 
@@ -615,7 +616,10 @@ export async function getFinancialFactsTool(input: AgentScopeInput): Promise<{ s
     asOfMs,
     periodId: scope.periodId ?? undefined,
   });
-  return { scope, facts, coverage: await getPeriodCoverage(scope.startMs, scope.endMs) };
+  // Totals must include correction journals so they reconcile to the ledger,
+  // but raw bookkeeping mechanics do not belong in a normal assistant answer.
+  const visibleRows = facts.rows.filter((row) => row.status !== "reversed" && !INTERNAL_CORRECTION_TX_TYPES.includes(row.txType as typeof INTERNAL_CORRECTION_TX_TYPES[number]));
+  return { scope, facts: { ...facts, rows: visibleRows }, coverage: await getPeriodCoverage(scope.startMs, scope.endMs) };
 }
 
 export function calculateTool(input: unknown) {
@@ -840,7 +844,8 @@ export async function searchTransactionsTool(input: unknown) {
     LEFT JOIN category c ON c.id = t.category_id
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
-      AND t.status <> 'draft'
+      AND t.status = 'posted'
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
       ${scope.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(scope.periodId, sql`t.period_id`)}`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
     GROUP BY t.id, t.date, t.description, t.reference, t.notes, t.tx_type, t.status, t.period_id, t.category_id, c.name
@@ -911,7 +916,8 @@ export async function findSimilarTransactionsTool(input: unknown) {
     LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
     LEFT JOIN category c ON c.id = t.category_id
-    WHERE t.status <> 'draft' AND t.status <> 'reversed'
+    WHERE t.status = 'posted'
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
     GROUP BY t.id, t.date, t.description, t.category_id, c.name
     ORDER BY t.date DESC, t.id DESC
     LIMIT 500

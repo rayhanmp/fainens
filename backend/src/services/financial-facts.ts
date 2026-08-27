@@ -9,6 +9,7 @@ export interface FinancialFactRow {
   id: number;
   date: number;
   description: string;
+  status: string;
   categoryId: number | null;
   category: string | null;
   txType: string;
@@ -48,6 +49,7 @@ export async function getFinancialFacts(input: {
       t.id,
       t.date,
       t.description,
+      t.status,
       t.category_id AS category_id,
       c.name AS category,
       t.tx_type AS tx_type,
@@ -62,7 +64,7 @@ export async function getFinancialFacts(input: {
       AND t.date <= ${asOfMs}
       AND t.status <> 'draft'
       ${input.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(input.periodId, sql`t.period_id`)}`}
-    GROUP BY t.id, t.date, t.description, t.category_id, c.name, t.tx_type
+    GROUP BY t.id, t.date, t.description, t.status, t.category_id, c.name, t.tx_type
     ORDER BY t.date ASC, t.id ASC
   `) as unknown as Array<Record<string, unknown>>;
 
@@ -70,6 +72,7 @@ export async function getFinancialFacts(input: {
     id: Number(row.id),
     date: Number(row.date),
     description: String(row.description ?? ""),
+    status: String(row.status ?? "posted"),
     categoryId: row.category_id == null ? null : Number(row.category_id),
     category: row.category == null ? null : String(row.category),
     txType: String(row.tx_type ?? "manual"),
