@@ -146,7 +146,21 @@ export type AgentQueryResponse = {
   toolCalls: Array<{ id: string; name: string; input: unknown }>;
   toolResults: Array<{ id: string; name: string; result: unknown }>;
   pendingActions?: AgentActionProposal[];
+  clarifications?: AgentClarification[];
   message?: string;
+};
+
+export type AgentClarificationChoice = {
+  id: string;
+  label: string;
+  description?: string;
+  freeText?: boolean;
+};
+
+export type AgentClarification = {
+  id: string;
+  question: string;
+  choices: AgentClarificationChoice[];
 };
 
 export type AgentStreamEvent =

@@ -52,6 +52,59 @@ const modelTools: AgentChatTool[] = agentToolDefinitions.map((definition) => ({
   },
 }));
 
+type AgentClarificationChoice = {
+  id: string;
+  label: string;
+  description?: string;
+  freeText?: boolean;
+};
+
+type AgentClarification = {
+  id: string;
+  question: string;
+  choices: AgentClarificationChoice[];
+};
+
+/**
+ * This is deliberately a model tool rather than a convention hidden in
+ * prose. The client can render a reliable decision card and the user's click
+ * becomes an ordinary follow-up turn in the same conversation.
+ */
+const clarificationTool: AgentChatTool = {
+  type: "function",
+  function: {
+    name: "ask_clarification",
+    description: "Ask one focused question when two or more materially different interpretations are genuinely plausible. Provide 2-4 concise choices. Use a choice with freeText=true for Neither/Other when the user may need to type their own option. Do not use this for casual conversation, obvious defaults, or facts that a read-only tool can retrieve.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["question", "choices"],
+      properties: {
+        id: { type: "string", description: "Stable short identifier for this question; optional in practice." },
+        question: { type: "string", minLength: 1, maxLength: 400 },
+        choices: {
+          type: "array",
+          minItems: 2,
+          maxItems: 4,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["id", "label"],
+            properties: {
+              id: { type: "string", minLength: 1, maxLength: 40 },
+              label: { type: "string", minLength: 1, maxLength: 80 },
+              description: { type: "string", maxLength: 160 },
+              freeText: { type: "boolean" },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const modelToolsWithClarification: AgentChatTool[] = [...modelTools, clarificationTool];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -186,10 +239,16 @@ async function conversationHistoryBefore(conversationId: number, messageId: numb
 function pendingActionHistoryContext(responseJson: string): string {
   try {
     const parsed = redactApprovalTokens(JSON.parse(responseJson));
-    if (!isRecord(parsed) || !Array.isArray(parsed.pendingActions) || parsed.pendingActions.length === 0) return "";
-    const proposals = parsed.pendingActions.filter((item) => isRecord(item) && item.kind === "transaction_journal_create");
-    if (proposals.length === 0) return "";
-    return `[PENDING TRANSACTION PROPOSALS — not posted; use these details when the user asks to edit or confirm them]\n${safeToolResult(proposals).slice(0, 40_000)}`;
+    if (!isRecord(parsed)) return "";
+    const context: string[] = [];
+    if (Array.isArray(parsed.clarifications) && parsed.clarifications.length > 0) {
+      context.push(`[PENDING CLARIFICATION — the user may answer this question in their next message]\n${safeToolResult(parsed.clarifications).slice(0, 8_000)}`);
+    }
+    if (Array.isArray(parsed.pendingActions) && parsed.pendingActions.length > 0) {
+      const proposals = parsed.pendingActions.filter((item) => isRecord(item) && item.kind === "transaction_journal_create");
+      if (proposals.length > 0) context.push(`[PENDING TRANSACTION PROPOSALS — not posted; use these details when the user asks to edit or confirm them]\n${safeToolResult(proposals).slice(0, 40_000)}`);
+    }
+    return context.join("\n\n");
   } catch {
     return "";
   }
@@ -262,6 +321,36 @@ function parseToolArguments(raw: string | undefined): unknown {
   } catch {
     throw new Error("The model returned invalid JSON tool arguments");
   }
+}
+
+function parseClarificationArguments(value: unknown): AgentClarification {
+  if (!isRecord(value)) throw new Error("clarification arguments must be an object");
+  const question = typeof value.question === "string" ? value.question.trim() : "";
+  if (!question || question.length > 400) throw new Error("clarification question is required and must be at most 400 characters");
+  if (!Array.isArray(value.choices) || value.choices.length < 2 || value.choices.length > 4) {
+    throw new Error("clarification must provide between 2 and 4 choices");
+  }
+  const seen = new Set<string>();
+  const choices = value.choices.map((candidate, index): AgentClarificationChoice => {
+    if (!isRecord(candidate)) throw new Error(`clarification choice ${index + 1} is invalid`);
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
+    if (!id || id.length > 40 || !/^[A-Za-z0-9_-]+$/.test(id) || !label || label.length > 80 || seen.has(id)) {
+      throw new Error(`clarification choice ${index + 1} must have a unique id and a label`);
+    }
+    seen.add(id);
+    const description = typeof candidate.description === "string" ? candidate.description.trim() : undefined;
+    if (description && description.length > 160) throw new Error(`clarification choice ${index + 1} description is too long`);
+    return {
+      id,
+      label,
+      ...(description ? { description } : {}),
+      ...(candidate.freeText === true ? { freeText: true } : {}),
+    };
+  });
+  const suppliedId = typeof value.id === "string" ? value.id.trim() : "";
+  const id = suppliedId && suppliedId.length <= 80 && /^[A-Za-z0-9_-]+$/.test(suppliedId) ? suppliedId : `clarification-${Date.now()}`;
+  return { id, question, choices };
 }
 
 function safeToolResult(value: unknown): string {
@@ -337,6 +426,7 @@ const AGENT_SYSTEM_PROMPT = [
   "ROLE: You are Ray's warm, concise personal-finance assistant for a double-entry ledger.",
   "USER PROFILE: Address the user as Ray when natural. The default currency is IDR (Indonesian rupiah). Ray's home is Bekasi, Indonesia; use this only for timezone/local-context interpretation, never as evidence of a transaction or location.",
   "CONVERSATION: Talk naturally. Answer greetings, thanks, casual conversation, app explanations, and non-financial questions directly without calling a tool. Do not force every turn into a report. Ask one focused clarification when the user's intent, date range, account, currency, or requested action is genuinely ambiguous.",
+  "CLARIFICATIONS: When a decision is genuinely ambiguous after the relevant read-only retrieval, call ask_clarification with one plain-language question and 2-4 actionable choices. Use a freeText choice for Neither/Other when needed. Do not ask for confirmation before a reasonable, evidence-backed default; do not use clarification cards for missing facts that can be retrieved.",
   "RETRIEVAL: Use the minimum read-only tools needed before every factual claim about Ray's recorded finances, including balances, transactions, spending, budgets, obligations, trends, comparisons, or period activity. Do not guess missing values, silently reuse stale results, or call tools repeatedly when an existing result answers the question.",
   "TOOL COMPLETION: After receiving tool results, continue with either the next required tool call or a useful natural-language response. Never finish with an empty message. If a requested action is ready to prepare, call the preparation tool rather than stopping after account/category retrieval.",
   "TOOL CHOICES: Use calculate for arithmetic; get_current_datetime for an exact current-time check; calculate_date_difference for elapsed time; get_currency_exchange_rate for currency conversion; get_category_spending for category rankings/totals; and get_transaction_details for journal lines, provenance, or audit questions. Treat tool errors as uncertainty and explain the limitation.",
@@ -393,6 +483,7 @@ async function answerWithTools(
       context,
       toolCalls: [],
       toolResults: [],
+      clarifications: [],
       message: "LLM is not configured; use the structured read-only context to answer locally.",
     };
   }
@@ -410,6 +501,7 @@ async function answerWithTools(
   const toolCalls: Array<{ id: string; name: string; input: unknown }> = [];
   const toolResults: Array<{ id: string; name: string; result: unknown }> = [];
   const pendingActions: unknown[] = [];
+  const clarifications: AgentClarification[] = [];
   let lastContent = "";
   let callsUsed = 0;
   let completedWithAnswer = false;
@@ -420,7 +512,7 @@ async function answerWithTools(
     const response = await callOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages,
-      tools: modelTools,
+      tools: modelToolsWithClarification,
     });
     const assistantMessage = response.message;
     const requestedCalls = assistantMessage.tool_calls ?? [];
@@ -443,12 +535,21 @@ async function answerWithTools(
     }
 
     messages.push(assistantMessage);
+    let clarificationRequested = false;
     for (const requested of requestedCalls) {
-      const definition = toolDefinitionMap.get(requested.function.name);
       const input = parseToolArguments(requested.function.arguments);
       toolCalls.push({ id: requested.id, name: requested.function.name, input });
       let result: unknown;
-      if (!definition) {
+      if (requested.function.name === clarificationTool.function.name) {
+        try {
+          const clarification = parseClarificationArguments(input);
+          clarifications.push(clarification);
+          clarificationRequested = true;
+          result = { status: "clarification_requested", clarificationId: clarification.id };
+        } catch (error) {
+          result = { error: error instanceof Error ? error.message : "Invalid clarification" };
+        }
+      } else if (!toolDefinitionMap.has(requested.function.name)) {
         result = { error: "Unknown or unavailable agent tool" };
       } else {
         try {
@@ -467,13 +568,15 @@ async function answerWithTools(
         content: safeToolResult(modelResult),
       });
       callsUsed += 1;
+      if (clarificationRequested) break;
     }
+    if (clarificationRequested) break;
   }
 
   // If the model spent the final allowed round retrieving data, give it one
   // synthesis turn with tools disabled so the response cannot end as an
   // unexplained empty tool-call transcript.
-  if (!completedWithAnswer || !lastContent.trim()) {
+  if (clarifications.length === 0 && (!completedWithAnswer || !lastContent.trim())) {
     const finalResponse = await callOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages: [
@@ -491,13 +594,14 @@ async function answerWithTools(
   }
 
   return {
-    answer: lastContent || "I could not complete the analysis from the available ledger tools.",
+    answer: lastContent || (clarifications.length > 0 ? "I need one detail before I continue." : "I could not complete the analysis from the available ledger tools."),
     llmAvailable: true,
     context: null,
     scope,
     toolCalls,
     toolResults,
     pendingActions,
+    clarifications,
     revision: await getFinancialRevision(),
   };
 }
@@ -530,6 +634,7 @@ async function answerWithToolsStreaming(
   const toolCalls: Array<{ id: string; name: string; input: unknown }> = [];
   const toolResults: Array<{ id: string; name: string; result: unknown }> = [];
   const pendingActions: unknown[] = [];
+  const clarifications: AgentClarification[] = [];
   let lastContent = "";
   let callsUsed = 0;
   let completedWithAnswer = false;
@@ -541,7 +646,7 @@ async function answerWithToolsStreaming(
     const response = await streamOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages,
-      tools: modelTools,
+      tools: modelToolsWithClarification,
       onTextDelta: (text) => { roundContent += text; lastContent += text; onTextDelta(text); },
       signal,
     });
@@ -564,13 +669,22 @@ async function answerWithToolsStreaming(
     }
 
     messages.push(assistantMessage);
+    let clarificationRequested = false;
     for (const requested of requestedCalls) {
-      const definition = toolDefinitionMap.get(requested.function.name);
       const input = parseToolArguments(requested.function.arguments);
       toolCalls.push({ id: requested.id, name: requested.function.name, input });
       onTool(requested.function.name);
       let result: unknown;
-      if (!definition) {
+      if (requested.function.name === clarificationTool.function.name) {
+        try {
+          const clarification = parseClarificationArguments(input);
+          clarifications.push(clarification);
+          clarificationRequested = true;
+          result = { status: "clarification_requested", clarificationId: clarification.id };
+        } catch (error) {
+          result = { error: error instanceof Error ? error.message : "Invalid clarification" };
+        }
+      } else if (!toolDefinitionMap.has(requested.function.name)) {
         result = { error: "Unknown or unavailable agent tool" };
       } else {
         try {
@@ -585,10 +699,12 @@ async function answerWithToolsStreaming(
       toolResults.push({ id: requested.id, name: requested.function.name, result: modelResult });
       messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(modelResult) });
       callsUsed += 1;
+      if (clarificationRequested) break;
     }
+    if (clarificationRequested) break;
   }
 
-  if (!completedWithAnswer || !lastContent.trim()) {
+  if (clarifications.length === 0 && (!completedWithAnswer || !lastContent.trim())) {
     const finalResponse = await streamOpenRouterAgent({
       apiKey: env.OPENROUTER_API_KEY,
       messages: [...messages, { role: "user", content: "Synthesize a useful, direct answer from the tool results already provided. Do not request another tool and do not return an empty message." }],
@@ -600,13 +716,14 @@ async function answerWithToolsStreaming(
   }
 
   return {
-    answer: lastContent || "I could not complete the analysis from the available ledger tools.",
+    answer: lastContent || (clarifications.length > 0 ? "I need one detail before I continue." : "I could not complete the analysis from the available ledger tools."),
     llmAvailable: true,
     context: null,
     scope,
     toolCalls,
     toolResults,
     pendingActions,
+    clarifications,
     revision: await getFinancialRevision(),
   };
 }

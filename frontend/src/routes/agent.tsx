@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  HelpCircle,
   ImagePlus,
   LoaderCircle,
   MoreHorizontal,
@@ -31,7 +32,7 @@ import { Select } from '../components/ui/Select';
 import { MarkdownMessage } from '../components/agent/MarkdownMessage';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import type { AgentTransactionActionProposal } from '../lib/api';
+import type { AgentClarification, AgentClarificationChoice, AgentTransactionActionProposal } from '../lib/api';
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 
 export const Route = createFileRoute('/agent')({
@@ -59,6 +60,10 @@ type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: stri
 type ChatMessage =
   | { id: string; serverId?: number; role: 'user'; text: string; createdAt: number; images?: ChatImage[] }
   | { id: string; role: 'assistant'; text: string; createdAt: number; response?: AgentResponse };
+
+function hasAgentResponse(message: ChatMessage): message is Extract<ChatMessage, { role: 'assistant' }> & { response: AgentResponse } {
+  return message.role === 'assistant' && message.response != null;
+}
 
 const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_AGENT_IMAGE_SIZE = 4 * 1024 * 1024;
@@ -97,6 +102,7 @@ function ToolTrace({ response }: { response: AgentResponse }) {
   const calls = response.toolCalls ?? [];
   const results = response.toolResults ?? [];
   const hasStructuredContext = response.context != null;
+  const hasNonLedgerTool = calls.some((call) => call.name === 'ask_clarification');
   if (calls.length === 0 && !hasStructuredContext) return null;
 
   return (
@@ -107,7 +113,7 @@ function ToolTrace({ response }: { response: AgentResponse }) {
         className="flex w-full items-center justify-between gap-3 text-left text-xs font-semibold text-[var(--color-text-secondary)]"
         aria-expanded={open}
       >
-        <span className="flex items-center gap-2"><Database className="h-4 w-4" /> {calls.length > 0 ? `Used ${calls.length} ledger tool${calls.length === 1 ? '' : 's'}` : 'Structured ledger context'}</span>
+        <span className="flex items-center gap-2"><Database className="h-4 w-4" /> {calls.length > 0 ? `Used ${calls.length} ${hasNonLedgerTool ? 'agent tool' : 'ledger tool'}${calls.length === 1 ? '' : 's'}` : 'Structured ledger context'}</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
       {open && (
@@ -144,9 +150,98 @@ function ToolTrace({ response }: { response: AgentResponse }) {
   );
 }
 
+function ClarificationCard({
+  clarification,
+  disabled,
+  onSelect,
+}: {
+  clarification: AgentClarification;
+  disabled?: boolean;
+  onSelect: (choice: AgentClarificationChoice, customValue?: string) => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [customChoiceId, setCustomChoiceId] = useState<string | null>(null);
+  const [customValue, setCustomValue] = useState('');
+  const customChoice = clarification.choices.find((choice) => choice.id === customChoiceId) ?? null;
+
+  const choose = (choice: AgentClarificationChoice) => {
+    if (disabled || selected) return;
+    if (choice.freeText) {
+      setCustomChoiceId(choice.id);
+      return;
+    }
+    setSelected(choice.label);
+    onSelect(choice);
+  };
+
+  const submitCustom = () => {
+    const value = customValue.trim();
+    if (!customChoice || !value || disabled || selected) return;
+    setSelected(`${customChoice.label}: ${value}`);
+    onSelect(customChoice, value);
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-[var(--ref-primary)]/25 bg-[var(--ref-surface-container-low)] p-4" role="group" aria-label="Clarification needed">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]"><HelpCircle className="h-4 w-4" /></span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Quick clarification</p>
+          <p className="mt-1 text-sm leading-5 text-[var(--color-text-primary)]">{clarification.question}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {clarification.choices.map((choice) => (
+          <button
+            key={choice.id}
+            type="button"
+            onClick={() => choose(choice)}
+            disabled={Boolean(disabled || selected)}
+            className={cn(
+              'rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-left transition-colors hover:border-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/5 disabled:cursor-not-allowed disabled:opacity-60',
+              selected === choice.label && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10',
+            )}
+          >
+            <span className="block text-sm font-semibold">{choice.label}</span>
+            {choice.description && <span className="mt-0.5 block text-xs text-[var(--color-text-secondary)]">{choice.description}</span>}
+          </button>
+        ))}
+      </div>
+      {customChoice && !selected && (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <label className="sr-only" htmlFor={`clarification-${clarification.id}`}>Your answer</label>
+          <input
+            id={`clarification-${clarification.id}`}
+            value={customValue}
+            onChange={(event) => setCustomValue(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitCustom(); } }}
+            className="brutalist-input min-w-0 flex-1"
+            placeholder="Type your answer"
+            maxLength={200}
+            autoFocus
+          />
+          <Button type="button" size="sm" onClick={submitCustom} disabled={!customValue.trim()}>Send choice</Button>
+        </div>
+      )}
+      {selected && <p className="mt-3 text-xs font-medium text-[var(--color-text-secondary)]">Sent: {selected}</p>}
+    </div>
+  );
+}
+
 function isTransactionProposal(value: unknown): value is AgentTransactionProposal {
   if (!isRecord(value) || value.kind !== 'transaction_journal_create' || typeof value.approvalId !== 'number') return false;
   return isRecord(value.details) && Array.isArray(value.details.lines) && typeof value.details.totalDebit === 'number';
+}
+
+function isClarification(value: unknown): value is AgentClarification {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id || typeof value.question !== 'string' || !value.question || !Array.isArray(value.choices)) return false;
+  const ids = new Set<string>();
+  return value.choices.length >= 2 && value.choices.length <= 4 && value.choices.every((choice) => {
+    if (!isRecord(choice) || typeof choice.id !== 'string' || !choice.id || ids.has(choice.id) || typeof choice.label !== 'string' || !choice.label) return false;
+    ids.add(choice.id);
+    return (choice.description == null || typeof choice.description === 'string')
+      && (choice.freeText == null || typeof choice.freeText === 'boolean');
+  });
 }
 
 type TransactionEditDraft = {
@@ -687,6 +782,11 @@ function AgentPage() {
     }
   };
 
+  const submitClarification = (clarification: AgentClarification, choice: AgentClarificationChoice, customValue?: string) => {
+    const choiceText = customValue ? `${choice.label}: ${customValue}` : choice.label;
+    void submitQuestion(`For "${clarification.question}", I choose "${choiceText}".`);
+  };
+
   const stopAgentQuery = () => {
     agentRequestRef.current?.abort();
   };
@@ -932,7 +1032,7 @@ function AgentPage() {
                           <button type="button" onClick={() => { setEditingUserMessageId(message.id); setEditingUserMessageText(message.text); }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-white/85 hover:bg-white/15 hover:text-white" title="Edit this message and regenerate the reply"><Pencil className="h-3.5 w-3.5" /> Edit</button>
                         </div>
                       )}
-                      {message.response && (
+                      {hasAgentResponse(message) && (
                         <>
                           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--color-text-secondary)]">
                             <span className="rounded-full bg-[var(--ref-surface-container-low)] px-2 py-1">Scope: {scopeLabel(message.response.scope ?? (isRecord(message.response.context) ? message.response.context.scope : null), periods)}</span>
@@ -940,6 +1040,14 @@ function AgentPage() {
                             {!message.response.llmAvailable && <span className="rounded-full bg-[var(--color-warning)]/10 px-2 py-1 text-[var(--color-warning)]">LLM setup required for written analysis</span>}
                           </div>
                           <ToolTrace response={message.response} />
+                          {message.response.clarifications?.filter(isClarification).map((clarification) => (
+                            <ClarificationCard
+                              key={clarification.id}
+                              clarification={clarification}
+                              disabled={isSending}
+                              onSelect={(choice, customValue) => submitClarification(clarification, choice, customValue)}
+                            />
+                          ))}
                           {message.response.pendingActions?.map((action, index) => isTransactionProposal(action) && <TransactionProposalCard key={`${action.approvalId}-${index}`} proposal={action} categories={categories} conversationId={message.response.conversationId ?? activeConversationId} />)}
                         </>
                       )}
