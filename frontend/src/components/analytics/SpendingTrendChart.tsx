@@ -104,9 +104,9 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
 
   const maxDailySpend = Math.max(1, ...points.map((point) => point.spent));
   const modeOptions: Array<{ id: ViewMode; label: string; description: string }> = [
-    { id: 'calendar', label: 'Calendar', description: 'Daily activity heatmap' },
+    { id: 'calendar', label: 'Daily', description: 'Daily activity heatmap' },
     { id: 'weekly', label: 'Weekly', description: 'Seven-day totals' },
-    { id: 'cumulative', label: 'Cumulative', description: 'Known spend pace' },
+    { id: 'cumulative', label: 'Pace', description: 'Known spend pace' },
   ];
 
   if (isLoading) {
@@ -126,15 +126,18 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1" role="tablist" aria-label="Spending activity time scope">
-          <button type="button" role="tab" aria-selected={dataScope === '30d'} onClick={() => setDataScope('30d')} className={cn('min-h-9 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors', dataScope === '30d' ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)]')}>Last 30 days</button>
-          <button type="button" role="tab" aria-selected={dataScope === 'period'} disabled={periodId == null} title={periodId == null ? 'Select a salary period to use this view' : 'Use the selected salary period'} onClick={() => { if (periodId != null) setDataScope('period'); }} className={cn('min-h-9 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors', dataScope === 'period' && periodId != null ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] disabled:cursor-not-allowed disabled:opacity-40')}>This period</button>
-        </div>
-        {dataScope === 'period' && periodId != null && <span className="text-[10px] text-[var(--ref-on-surface-variant)]">Selected above</span>}
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1" role="tablist" aria-label="Spending activity view">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <label className="sr-only" htmlFor="spending-activity-scope">Spending time range</label>
+        <select
+          id="spending-activity-scope"
+          value={dataScope}
+          onChange={(event) => setDataScope(event.target.value as '30d' | 'period')}
+          className="min-h-9 w-[7rem] shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 py-1.5 text-[11px] font-bold text-[var(--ref-on-surface)] outline-none focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/20"
+        >
+          <option value="30d">Last 30 days</option>
+          <option value="period" disabled={periodId == null}>This period{periodId == null ? ' (select a period)' : ''}</option>
+        </select>
+        <div className="flex shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-0.5" role="tablist" aria-label="Spending activity view">
         {modeOptions.map((option) => (
           <button
             key={option.id}
@@ -144,7 +147,7 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
             title={option.description}
             onClick={() => setView(option.id)}
             className={cn(
-              'min-h-9 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors',
+              'min-h-8 rounded-md px-1.5 py-1 text-[10px] font-bold transition-colors',
               view === option.id
                 ? 'bg-[var(--ref-primary)] text-white shadow-sm'
                 : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]',
@@ -153,6 +156,7 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
             {option.label}
           </button>
         ))}
+        </div>
       </div>
 
       {loadError ? <p className="mt-4 text-sm text-[var(--color-danger)]">{loadError}</p> : points.every((point) => point.spent === 0) ? (
