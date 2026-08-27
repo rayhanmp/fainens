@@ -826,8 +826,12 @@ export const api = {
         }>;
       }>(`/analytics/net-worth-trend${qs ? `?${qs}` : ''}`);
     },
-    spendingTrend: () => fetchApi<{
-      range: '30d';
+    spendingTrend: (params: { periodId?: number } = {}) => fetchApi<{
+      range: '30d' | 'period';
+      periodId: number | null;
+      periodName: string | null;
+      startMs: number;
+      endMs: number;
       bucketCount: number;
       totalSpent: number;
       averageDailySpend: number;
@@ -840,7 +844,7 @@ export const api = {
         transactionCount: number;
         coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
       }>;
-    }>('/analytics/spending-trend'),
+    }>(`/analytics/spending-trend${params.periodId ? `?periodId=${params.periodId}` : ''}`),
     burnRate: () => fetchApi('/analytics/burn-rate'),
     runway: () => fetchApi<{ runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number }>('/analytics/runway'),
     accountBalance: (accountId: number) => fetchApi<{ accountId: number; balance: number }>(`/analytics/account-balance/${accountId}`),

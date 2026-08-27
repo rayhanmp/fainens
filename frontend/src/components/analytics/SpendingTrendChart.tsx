@@ -35,24 +35,28 @@ function coverageText(point: Point): string {
   return 'Unknown coverage';
 }
 
-export function SpendingTrendChart() {
+export function SpendingTrendChart({ periodId = null }: { periodId?: number | null } = {}) {
   const [points, setPoints] = useState<Point[]>([]);
   const [totalSpent, setTotalSpent] = useState(0);
   const [averageDailySpend, setAverageDailySpend] = useState(0);
   const [hasIncompleteCoverage, setHasIncompleteCoverage] = useState(false);
+  const [dataScope, setDataScope] = useState<'30d' | 'period'>('30d');
+  const [periodName, setPeriodName] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('calendar');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void api.analytics.spendingTrend()
+    const periodQuery = dataScope === 'period' && periodId != null ? { periodId } : {};
+    void api.analytics.spendingTrend(periodQuery)
       .then((result) => {
         if (cancelled) return;
         setPoints(result.series);
         setTotalSpent(result.totalSpent);
         setAverageDailySpend(result.averageDailySpend);
         setHasIncompleteCoverage(result.hasIncompleteCoverage);
+        setPeriodName(result.periodName);
       })
       .catch((error) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load spending trend.');
@@ -61,7 +65,11 @@ export function SpendingTrendChart() {
         if (!cancelled) setIsLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [dataScope, periodId]);
+
+  useEffect(() => {
+    if (periodId == null && dataScope === 'period') setDataScope('30d');
+  }, [dataScope, periodId]);
 
   const weeklyPoints = useMemo(() => {
     const groups: Array<{ label: string; startMs: number; endMs: number; spent: number; transactionCount: number; hasIncompleteCoverage: boolean }> = [];
@@ -110,12 +118,20 @@ export function SpendingTrendChart() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Spending activity</h3>
-          <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Recorded expenses over the last 30 days</p>
+          <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{dataScope === 'period' && periodId != null ? `${periodName ?? 'Selected salary period'} · daily activity` : 'Recorded expenses over the last 30 days'}</p>
         </div>
         <div className="text-right">
           <p className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(totalSpent)}</p>
           <p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">{formatCurrency(averageDailySpend)} avg/day</p>
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1" role="tablist" aria-label="Spending activity time scope">
+          <button type="button" role="tab" aria-selected={dataScope === '30d'} onClick={() => setDataScope('30d')} className={cn('min-h-9 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors', dataScope === '30d' ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)]')}>Last 30 days</button>
+          <button type="button" role="tab" aria-selected={dataScope === 'period'} disabled={periodId == null} title={periodId == null ? 'Select a salary period to use this view' : 'Use the selected salary period'} onClick={() => { if (periodId != null) setDataScope('period'); }} className={cn('min-h-9 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors', dataScope === 'period' && periodId != null ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] disabled:cursor-not-allowed disabled:opacity-40')}>This period</button>
+        </div>
+        {dataScope === 'period' && periodId != null && <span className="text-[10px] text-[var(--ref-on-surface-variant)]">Selected above</span>}
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1" role="tablist" aria-label="Spending activity view">

@@ -37,10 +37,15 @@ export default async function (fastify: FastifyInstance) {
     return getNetWorthTrend(r as NetWorthRange);
   });
 
-  /** Rolling daily posted expense activity. */
-  fastify.get("/api/analytics/spending-trend", async (_request, reply) => {
+  /** Daily posted expense activity for the rolling window or one salary period. */
+  fastify.get("/api/analytics/spending-trend", async (request, reply) => {
     try {
-      return await getSpendingTrend(30);
+      const query = request.query as { periodId?: string };
+      const periodId = query.periodId == null || query.periodId.trim() === "" ? undefined : Number(query.periodId);
+      if (periodId != null && (!Number.isSafeInteger(periodId) || periodId <= 0)) {
+        return reply.code(400).send({ error: "Invalid periodId" });
+      }
+      return await getSpendingTrend(30, periodId);
     } catch (error) {
       fastify.log.error(error);
       return reply.code(500).send({ error: "Failed to load spending trend" });

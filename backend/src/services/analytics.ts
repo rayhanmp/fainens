@@ -59,20 +59,47 @@ export interface SpendingTrendPoint {
 
 /** Daily posted expense activity for a rolling window. Values are canonical
  * expense-account effects, not inferred from transaction types or balances. */
-export async function getSpendingTrend(dayCount: number = 30): Promise<{
-  range: "30d";
+export async function getSpendingTrend(dayCount: number = 30, periodId?: number): Promise<{
+  range: "30d" | "period";
+  periodId: number | null;
+  periodName: string | null;
+  startMs: number;
+  endMs: number;
   bucketCount: number;
   totalSpent: number;
   averageDailySpend: number;
   hasIncompleteCoverage: boolean;
   series: SpendingTrendPoint[];
 }> {
-  const count = Math.max(1, Math.min(90, Math.trunc(dayCount)));
+  const count = Math.max(1, Math.min(370, Math.trunc(dayCount)));
   const now = Date.now();
+  const scopedPeriodId = periodId == null ? null : Number(periodId);
+  let selectedPeriod: { id: number; name: string; startDate: Date | number; endDate: Date | number; coverageStatus: string } | null = null;
+  if (scopedPeriodId != null && Number.isSafeInteger(scopedPeriodId) && scopedPeriodId > 0) {
+    const [period] = await db
+      .select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus })
+      .from(salaryPeriods)
+      .where(eq(salaryPeriods.id, scopedPeriodId))
+      .limit(1);
+    if (!period) throw new Error("Salary period not found");
+    selectedPeriod = period;
+  }
   const firstDay = new Date();
-  firstDay.setHours(0, 0, 0, 0);
-  firstDay.setDate(firstDay.getDate() - (count - 1));
-  const firstStartMs = firstDay.getTime();
+  let firstStartMs: number;
+  let finalEndMs: number;
+  if (selectedPeriod) {
+    firstStartMs = selectedPeriod.startDate instanceof Date ? selectedPeriod.startDate.getTime() : Number(selectedPeriod.startDate);
+    const periodEndMs = (selectedPeriod.endDate instanceof Date ? selectedPeriod.endDate.getTime() : Number(selectedPeriod.endDate)) + DAY_MS - 1;
+    finalEndMs = Math.max(firstStartMs, Math.min(now, periodEndMs));
+  } else {
+    firstDay.setHours(0, 0, 0, 0);
+    firstDay.setDate(firstDay.getDate() - (count - 1));
+    firstStartMs = firstDay.getTime();
+    finalEndMs = now;
+  }
+  const bucketCount = selectedPeriod
+    ? Math.max(1, Math.min(370, Math.floor((finalEndMs - firstStartMs) / DAY_MS) + 1))
+    : count;
 
   const expenseAccounts = await db
     .select({ id: accounts.id })
@@ -92,7 +119,7 @@ export async function getSpendingTrend(dayCount: number = 30): Promise<{
       .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
       .where(and(
         sql`${transactions.date} >= ${firstStartMs}`,
-        sql`${transactions.date} <= ${now}`,
+        sql`${transactions.date} <= ${finalEndMs}`,
         ne(transactions.status, "draft"),
         ne(transactions.status, "reversed"),
         notInArray(transactions.txType, ["paylater_settlement", "simple_transfer", "reversal", "domain_reversal"]),
@@ -102,12 +129,14 @@ export async function getSpendingTrend(dayCount: number = 30): Promise<{
   const periods = await db
     .select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus })
     .from(salaryPeriods)
-      .where(sql`${salaryPeriods.endDate} >= ${firstStartMs} AND ${salaryPeriods.startDate} <= ${now}`);
-  const transactionIdsByPoint = Array.from({ length: count }, () => new Set<number>());
-  const points: SpendingTrendPoint[] = Array.from({ length: count }, (_, index) => {
+      .where(selectedPeriod
+        ? eq(salaryPeriods.id, selectedPeriod.id)
+        : sql`${salaryPeriods.endDate} >= ${firstStartMs} AND ${salaryPeriods.startDate} <= ${finalEndMs}`);
+  const transactionIdsByPoint = Array.from({ length: bucketCount }, () => new Set<number>());
+  const points: SpendingTrendPoint[] = Array.from({ length: bucketCount }, (_, index) => {
     const startMs = firstStartMs + index * DAY_MS;
     const endMs = Math.min(now, startMs + DAY_MS - 1);
-    const period = periods.find((candidate) => Number(candidate.startDate) <= startMs && Number(candidate.endDate) + DAY_MS - 1 >= startMs);
+    const period = selectedPeriod ?? periods.find((candidate) => Number(candidate.startDate) <= startMs && Number(candidate.endDate) + DAY_MS - 1 >= startMs);
     return {
       label: new Date(startMs).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       startMs,
@@ -129,7 +158,11 @@ export async function getSpendingTrend(dayCount: number = 30): Promise<{
   const totalSpent = points.reduce((sum, point) => sum + point.spent, 0);
   const comparablePoints = points.filter((point) => point.coverageStatus === "complete" || point.coverageStatus === "partial");
   return {
-    range: "30d",
+    range: selectedPeriod ? "period" : "30d",
+    periodId: selectedPeriod?.id ?? null,
+    periodName: selectedPeriod?.name ?? null,
+    startMs: firstStartMs,
+    endMs: finalEndMs,
     bucketCount: points.length,
     totalSpent,
     // Skipped/unknown coverage is not zero activity. Exclude those buckets
