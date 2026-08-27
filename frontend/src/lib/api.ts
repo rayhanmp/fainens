@@ -490,6 +490,7 @@ export const api = {
       id: number;
       date: number;
       description: string;
+      reference: string | null;
       notes: string | null;
       place: string | null;
       categoryId: number | null;

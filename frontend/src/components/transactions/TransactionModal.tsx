@@ -75,6 +75,7 @@ export type EditingTransaction = {
   id: number;
   date: number;
   description: string;
+  reference?: string;
   notes?: string;
   place?: string;
   categoryId?: number | null;
@@ -435,6 +436,7 @@ export function TransactionModal({
     date: '',
     time: '',
     description: '',
+    reference: '',
     notes: '',
     place: '',
     categoryId: '',
@@ -450,6 +452,7 @@ export function TransactionModal({
         date: txDate.toISOString().split('T')[0],
         time: txDate.toTimeString().slice(0, 5),
         description: editingTransaction.description,
+        reference: editingTransaction.reference || '',
         notes: editingTransaction.notes || '',
         place: editingTransaction.place || '',
         categoryId: editingTransaction.categoryId?.toString() || '',
@@ -599,6 +602,7 @@ export function TransactionModal({
       const dateTime = editMeta.time ? `${editMeta.date}T${editMeta.time}:00` : editMeta.date;
       await api.transactions.update(editingTransaction.id, {
         description: editMeta.description,
+        reference: editMeta.reference || null,
         notes: editMeta.notes || null,
         place: editMeta.place || null,
         date: dateTime,
@@ -1217,6 +1221,17 @@ export function TransactionModal({
                   </div>
                 </div>
               )}
+              {editingTransaction.reference && (
+                <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl flex items-center gap-4 group transition-all hover:bg-[var(--ref-surface-container)] mb-6">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--ref-surface-container-high)] flex items-center justify-center group-hover:bg-[var(--color-surface)] transition-colors">
+                    <TagIcon className="w-5 h-5 text-[var(--color-muted)]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-label text-xs text-[var(--color-muted)]">Reference</p>
+                    <p className="font-body text-sm font-semibold">{editingTransaction.reference}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons - Sticky at bottom */}
               <div className="sticky bottom-0 bg-[var(--ref-surface-container-lowest)] pt-4 pb-2 border-t border-[var(--color-border)] mt-auto">
@@ -1414,6 +1429,19 @@ export function TransactionModal({
                     )}
                   </div>
                 </div>
+                <div className="space-y-0.5">
+                  <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Reference</p>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
+                      <TagIcon className="w-3.5 h-3.5" />
+                    </div>
+                    {editingTransaction.reference ? (
+                      <p className="font-headline font-semibold text-base">{editingTransaction.reference}</p>
+                    ) : (
+                      <span className="text-[var(--color-muted)] text-sm">—</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1553,7 +1581,7 @@ export function TransactionModal({
         <div className="bg-[var(--ref-surface-container-low)] rounded-2xl p-4 mb-6">
           <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
             <StickyNote className="w-4 h-4 text-[var(--color-warning)]" />
-            <span>Posted amounts and accounts are immutable. To correct them, reverse the posted journal and create its replacement.</span>
+            <span>Names, notes, references, places, tags, and dates within the same period can be updated. Posted amounts, accounts, and cross-period changes require a correction.</span>
           </div>
         </div>
         <form onSubmit={handleEditMetaSubmit}>
@@ -1580,6 +1608,7 @@ export function TransactionModal({
                   required
                 />
               </div>
+              <p className="text-[11px] text-[var(--color-muted)]">Keep the date in this transaction's period.</p>
             </div>
 
             {/* Category (if available) */}
@@ -1601,6 +1630,7 @@ export function TransactionModal({
                     </option>
                   ))}
                 </select>
+                <p className="text-[11px] text-[var(--color-muted)]">Category changes affect reporting and are handled separately from descriptive edits.</p>
               </div>
             )}
 
@@ -1635,6 +1665,22 @@ export function TransactionModal({
                 onChange={(e) => setEditMeta({ ...editMeta, place: e.target.value })}
                 className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
                 placeholder="e.g. Starbucks, Indomaret, Online"
+              />
+            </div>
+
+            {/* Reference */}
+            <div className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl space-y-2 group hover:bg-[var(--ref-surface-container-low)] transition-colors">
+              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                <StickyNote className="w-3.5 h-3.5" />
+                Reference
+              </label>
+              <input
+                type="text"
+                value={editMeta.reference}
+                onChange={(e) => setEditMeta({ ...editMeta, reference: e.target.value })}
+                className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
+                placeholder="e.g. receipt or bank reference"
+                maxLength={500}
               />
             </div>
 

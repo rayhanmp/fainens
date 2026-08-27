@@ -155,7 +155,21 @@ export async function updateTransactionAtomically(
     throw new TransactionMutationError("Transaction type cannot be changed through the generic editor", 409);
   }
 
-  const periodId = await assertJournalPeriodOpen(effectiveDate, null);
+  // Descriptive edits do not change the accounting identity of a journal and
+  // remain safe even for domain-owned/closed-period entries. A date/time move
+  // is also safe when it remains inside the journal's already-assigned period;
+  // moving it to another period changes period totals and stays protected.
+  const targetPeriod = input.date === undefined ? null : await findPeriodForDate(effectiveDate);
+  const targetPeriodId = targetPeriod?.id ?? null;
+  const dateChangesPeriod = input.date !== undefined && targetPeriodId !== current.periodId;
+  const categoryChanges = input.categoryId !== undefined && input.categoryId !== current.categoryId;
+  const hasProtectedAccountingChange = dateChangesPeriod
+    || (input.txType !== undefined && input.txType !== current.txType)
+    || categoryChanges
+    || input.lines !== undefined;
+  const periodId = input.date === undefined || !dateChangesPeriod
+    ? current.periodId
+    : await assertJournalPeriodOpen(effectiveDate, null);
   const validatedLines = input.lines === undefined ? undefined : validateJournalLines(input.lines).lines;
   if (validatedLines) {
     const accountIds = [...new Set(validatedLines.map((line) => line.accountId))];
@@ -201,7 +215,7 @@ export async function updateTransactionAtomically(
       .limit(1)
       .all()[0];
     if (!fresh) throw new TransactionMutationError("Transaction not found", 404);
-    assertGenericMutationAllowed(fresh, tx);
+    if (hasProtectedAccountingChange) assertGenericMutationAllowed(fresh, tx);
 
     tx.update(transactions).set(updates).where(eq(transactions.id, transactionId)).run();
     if (validatedLines !== undefined) {

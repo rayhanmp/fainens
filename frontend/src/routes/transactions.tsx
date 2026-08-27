@@ -171,7 +171,7 @@ function TransactionsPage() {
     const id = Number(search.transactionId);
     if (!Number.isSafeInteger(id) || id <= 0) return;
     openedDeepLinkId.current = search.transactionId;
-    void api.transactions.get(id).then((transaction) => openModal({ ...transaction, status: 'posted', reference: null, periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as TransactionRow, 'view')).catch(() => { openedDeepLinkId.current = null; });
+    void api.transactions.get(id).then((transaction) => openModal({ ...transaction, status: 'posted', periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as TransactionRow, 'view')).catch(() => { openedDeepLinkId.current = null; });
   }, [search.transactionId]);
 
   const selectedPeriod = useMemo(() => periods.find((period) => String(period.id) === search.periodId) ?? null, [periods, search.periodId]);
@@ -180,7 +180,7 @@ function TransactionsPage() {
 
   const openModal = (transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit') => {
     setModalInitialMode(mode);
-    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
+    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, reference: transaction.reference ?? undefined, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
     setIsModalOpen(true);
   };
   const closeModal = () => { setIsModalOpen(false); setEditingTransaction(null); setEditingPendingTx(null); };
