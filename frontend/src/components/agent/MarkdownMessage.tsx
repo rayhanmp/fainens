@@ -50,7 +50,17 @@ function remarkBreakHtml() {
 export function MarkdownMessage({ children }: MarkdownMessageProps) {
   return (
     <div className="agent-markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreakHtml]} rehypePlugins={[rehypeKatex]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath, remarkBreakHtml]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          table: ({ children }) => (
+            <div className="agent-markdown-table-wrap">
+              <table>{children}</table>
+            </div>
+          ),
+        }}
+      >
         {children}
       </ReactMarkdown>
     </div>
