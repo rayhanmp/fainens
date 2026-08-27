@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { SlidersHorizontal } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn, formatCurrency } from '../../lib/utils';
 
@@ -43,6 +44,7 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
   const [dataScope, setDataScope] = useState<'30d' | 'period'>('30d');
   const [periodName, setPeriodName] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('calendar');
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -104,63 +106,93 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
 
   const maxDailySpend = Math.max(1, ...points.map((point) => point.spent));
   const modeOptions: Array<{ id: ViewMode; label: string; description: string }> = [
-    { id: 'calendar', label: 'Daily', description: 'Daily activity heatmap' },
+    { id: 'calendar', label: 'Calendar', description: 'Daily activity heatmap' },
     { id: 'weekly', label: 'Weekly', description: 'Seven-day totals' },
-    { id: 'cumulative', label: 'Pace', description: 'Known spend pace' },
+    { id: 'cumulative', label: 'Cumulative', description: 'Known spend pace' },
   ];
+
+  const selectScope = (scope: '30d' | 'period') => {
+    setDataScope(scope);
+    setIsOptionsOpen(false);
+  };
+
+  const selectView = (nextView: ViewMode) => {
+    setView(nextView);
+    setIsOptionsOpen(false);
+  };
 
   if (isLoading) {
     return <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="h-5 w-40 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-4 h-10 w-48 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-5 h-52 rounded-xl bg-[var(--ref-surface-container-highest)]/60" /></div>;
   }
 
   return (
-    <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5">
+    <div className="relative rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Spending activity</h3>
-          <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{dataScope === 'period' && periodId != null ? `${periodName ?? 'Selected salary period'} · daily activity` : 'Recorded expenses over the last 30 days'}</p>
+          <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{dataScope === 'period' && periodId != null ? `${periodName ?? 'Selected salary period'} · recorded expenses` : 'Last 30 days · recorded expenses'}</p>
         </div>
-        <div className="text-right">
-          <p className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(totalSpent)}</p>
-          <p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">{formatCurrency(averageDailySpend)} avg/day</p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <label className="sr-only" htmlFor="spending-activity-scope">Spending time range</label>
-        <select
-          id="spending-activity-scope"
-          value={dataScope}
-          onChange={(event) => setDataScope(event.target.value as '30d' | 'period')}
-          className="min-h-9 w-[7rem] shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 py-1.5 text-[11px] font-bold text-[var(--ref-on-surface)] outline-none focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/20"
-        >
-          <option value="30d">Last 30 days</option>
-          <option value="period" disabled={periodId == null}>This period{periodId == null ? ' (select a period)' : ''}</option>
-        </select>
-        <div className="flex shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-0.5" role="tablist" aria-label="Spending activity view">
-        {modeOptions.map((option) => (
+        <div className="flex items-start gap-2">
+          <div className="text-right">
+            <p className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(totalSpent)}</p>
+            <p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">{formatCurrency(averageDailySpend)} avg/day</p>
+          </div>
           <button
-            key={option.id}
             type="button"
-            role="tab"
-            aria-selected={view === option.id}
-            title={option.description}
-            onClick={() => setView(option.id)}
+            aria-label="Spending chart options"
+            aria-expanded={isOptionsOpen}
+            onClick={() => setIsOptionsOpen((open) => !open)}
             className={cn(
-              'min-h-8 rounded-md px-1.5 py-1 text-[10px] font-bold transition-colors',
-              view === option.id
-                ? 'bg-[var(--ref-primary)] text-white shadow-sm'
-                : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]',
+              'grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]/30',
+              isOptionsOpen
+                ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white'
+                : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]',
             )}
           >
-            {option.label}
+            <SlidersHorizontal className="h-4 w-4" />
           </button>
-        ))}
         </div>
       </div>
 
+      {isOptionsOpen && (
+        <div className="absolute right-5 top-[4.75rem] z-20 w-60 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-xl">
+          <p className="px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Time range</p>
+          <div className="mt-2 grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={() => selectScope('30d')}
+              className={cn('rounded-lg px-2 py-2 text-left text-xs font-bold transition-colors', dataScope === '30d' ? 'bg-[var(--ref-primary)] text-white' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]')}
+            >
+              Last 30 days
+            </button>
+            <button
+              type="button"
+              disabled={periodId == null}
+              onClick={() => selectScope('period')}
+              className={cn('rounded-lg px-2 py-2 text-left text-xs font-bold transition-colors', dataScope === 'period' ? 'bg-[var(--ref-primary)] text-white' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]', 'disabled:cursor-not-allowed disabled:opacity-40')}
+            >
+              This period
+            </button>
+          </div>
+          <p className="mt-4 px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Chart style</p>
+          <div className="mt-2 grid gap-1">
+            {modeOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => selectView(option.id)}
+                className={cn('rounded-lg px-2 py-2 text-left transition-colors', view === option.id ? 'bg-[var(--ref-primary)] text-white' : 'hover:bg-[var(--ref-surface-container-high)]')}
+              >
+                <span className={cn('block text-xs font-bold', view === option.id ? 'text-white' : 'text-[var(--ref-on-surface)]')}>{option.label}</span>
+                <span className={cn('mt-0.5 block text-[10px]', view === option.id ? 'text-white/80' : 'text-[var(--ref-on-surface-variant)]')}>{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loadError ? <p className="mt-4 text-sm text-[var(--color-danger)]">{loadError}</p> : points.every((point) => point.spent === 0) ? (
-        <div className="mt-4 flex min-h-52 items-center justify-center px-3 text-center text-sm text-[var(--ref-on-surface-variant)]">No posted spending recorded in the last 30 days.</div>
+        <div className="mt-4 flex min-h-52 items-center justify-center px-3 text-center text-sm text-[var(--ref-on-surface-variant)]">No posted spending recorded for this view.</div>
       ) : view === 'calendar' ? (
         <div className="mt-5">
           <div className="grid grid-cols-7 gap-1.5" role="img" aria-label="Spending activity by day; darker cells mean more spending">
