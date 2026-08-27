@@ -1,4 +1,4 @@
-import { eq, lte, sql } from "drizzle-orm";
+import { eq, lte } from "drizzle-orm";
 
 import { db as defaultDb } from "../db/client";
 import { salaryPeriods } from "../db/schema";
@@ -26,9 +26,17 @@ export function periodContainsDate(period: Pick<PeriodState, "startDate" | "endD
   return dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate));
 }
 
-/** Shared read-side membership: assigned journals plus date-scoped legacy nulls. */
-export function assignedOrLegacyPeriodMembership(periodId: number | null | undefined, periodColumn: any) {
-  return periodId == null ? undefined : sql`(${periodColumn} = ${periodId} OR ${periodColumn} IS NULL)`;
+/**
+ * Canonical read-side membership for a selected salary period.
+ *
+ * A null period ID means the journal has not been assigned. It must never be
+ * silently attributed to every period whose date range happens to contain it:
+ * old reversals and recovery adjustments are commonly dated when they were
+ * entered, rather than when the corrected activity occurred. Callers that
+ * need unassigned history should query it explicitly as its own bucket.
+ */
+export function assignedPeriodMembership(periodId: number | null | undefined, periodColumn: any) {
+  return periodId == null ? undefined : eq(periodColumn, periodId);
 }
 
 export async function findPeriodForDate(dateMs: number, dbLike: any = defaultDb): Promise<PeriodState | null> {

@@ -7,7 +7,7 @@ import { cacheSet, CacheKeys } from "./redis";
 import { CACHE_TTL, Keys } from "./keys";
 import { ANALYTICS_KEYS } from "./keys";
 import { getFinancialRevision } from "../services/financial-revision";
-import { assignedOrLegacyPeriodMembership } from "../services/period-locking";
+import { assignedPeriodMembership } from "../services/period-locking";
 
 const DAY_MS = 86_400_000;
 
@@ -131,7 +131,7 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
         sql`${transactions.date} >= ${period.startDate}`,
         sql`${transactions.date} <= ${period.endDate + DAY_MS - 1}`,
         sql`${transactions.status} <> 'draft'`,
-        assignedOrLegacyPeriodMembership(periodId, transactions.periodId),
+        assignedPeriodMembership(periodId, transactions.periodId),
       ),
     );
 

@@ -23,7 +23,7 @@ import { previewDueSubscriptionRenewals } from "./subscription-renewals";
 import { previewSalaryCatchUp } from "./salary-posting";
 import { generateCashFlowStatement } from "./reports";
 import { calculateBurnRate } from "./analytics";
-import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
+import { assignedPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getPeriodCoverage } from "./period-coverage";
 import { prepareAgentAction } from "./agent-actions";
 import { listMoneyAnomalyReviews } from "./money-anomaly-review";
@@ -841,7 +841,7 @@ export async function searchTransactionsTool(input: unknown) {
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
       AND t.status <> 'draft'
-      ${scope.periodId == null ? sql`` : sql`AND ${assignedOrLegacyPeriodMembership(scope.periodId, sql`t.period_id`)}`}
+      ${scope.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(scope.periodId, sql`t.period_id`)}`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
     GROUP BY t.id, t.date, t.description, t.reference, t.notes, t.tx_type, t.status, t.period_id, t.category_id, c.name
     ORDER BY t.date DESC, t.id DESC

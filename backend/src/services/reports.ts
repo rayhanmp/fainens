@@ -2,7 +2,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactions, transactionLines, salaryPeriods } from "../db/schema";
 import { computeAccountBalanceRolledUp, computeTrialBalanceTotals } from "./ledger";
-import { assignedOrLegacyPeriodMembership, inclusivePeriodEnd } from "./period-locking";
+import { assignedPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getFinancialFacts } from "./financial-facts";
 import { getPeriodCoverage, type PeriodCoverage } from "./period-coverage";
 
@@ -78,7 +78,7 @@ export interface SpendingBreakdown {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const periodMembership = (periodId?: number) => assignedOrLegacyPeriodMembership(periodId, transactions.periodId);
+const periodMembership = (periodId?: number) => assignedPeriodMembership(periodId, transactions.periodId);
 
 /** Salary-period end dates are commonly stored as midnight from an HTML date input. */
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;

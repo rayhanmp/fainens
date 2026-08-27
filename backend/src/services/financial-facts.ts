@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { assignedOrLegacyPeriodMembership } from "./period-locking";
+import { assignedPeriodMembership } from "./period-locking";
 
 const DAY_MS = 86_400_000;
 
@@ -61,7 +61,7 @@ export async function getFinancialFacts(input: {
       AND t.date <= ${input.endMs}
       AND t.date <= ${asOfMs}
       AND t.status <> 'draft'
-      ${input.periodId == null ? sql`` : sql`AND ${assignedOrLegacyPeriodMembership(input.periodId, sql`t.period_id`)}`}
+      ${input.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(input.periodId, sql`t.period_id`)}`}
     GROUP BY t.id, t.date, t.description, t.category_id, c.name, t.tx_type
     ORDER BY t.date ASC, t.id ASC
   `) as unknown as Array<Record<string, unknown>>;
