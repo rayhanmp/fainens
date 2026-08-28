@@ -305,6 +305,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Settings now consumes the canonical Accounts and Agent Memory queries, removing duplicate route-level account/memory caches and loading effects.
 - Memory create/update/delete operations invalidate the shared memory query; local settings and export controls remain client-only state.
 
+### `38dd089` — transaction pending/detail query migration
+
+- Pending approval rows and their count now come from a canonical React Query entry instead of a route-local fetch, so approvals refresh consistently after posting or dismissal.
+- Deep-linked transaction details use a cancelable, cacheable detail query. Opening a transaction from another page no longer relies on an imperative request that can race a filter change or unmount.
+- Transaction list reads retain the last successful snapshot while refreshing, avoiding a blank activity feed during ordinary refetches.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
