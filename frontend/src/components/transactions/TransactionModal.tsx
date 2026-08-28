@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -37,6 +39,13 @@ import {
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
 import { loadTransferFeeRules, type TransferFeeRule } from '../../lib/transferFees';
+import {
+  editMetadataSchema,
+  formatValidationError,
+  journalFormSchema,
+  simpleTransactionFormSchema,
+  type EditMetadataValues,
+} from '../../features/transactions/schemas';
 
 export type WalletAccount = {
   id: number;
@@ -518,6 +527,22 @@ export function TransactionModal({
     tagIds: [] as number[],
   });
 
+  const editMetadataForm = useForm<EditMetadataValues>({
+    resolver: zodResolver(editMetadataSchema),
+    defaultValues: {
+      date: '',
+      time: '',
+      description: '',
+      reference: '',
+      notes: '',
+      place: '',
+      categoryId: '',
+      tagIds: [],
+    },
+    mode: 'onSubmit',
+  });
+  const editMetadataTagIds = editMetadataForm.watch('tagIds');
+
   useEffect(() => {
     if (!isOpen) return;
     setTransferFeeControlsOpen(false);
@@ -529,6 +554,16 @@ export function TransactionModal({
       setInputMode('simple');
       const txDate = new Date(editingTransaction.date);
       setEditMeta({
+        date: toDateInputLocal(txDate),
+        time: toTimeInputLocal(txDate),
+        description: editingTransaction.description,
+        reference: editingTransaction.reference || '',
+        notes: editingTransaction.notes || '',
+        place: editingTransaction.place || '',
+        categoryId: editingTransaction.categoryId?.toString() || '',
+        tagIds: editingTransaction.tags.map((t) => t.tagId),
+      });
+      editMetadataForm.reset({
         date: toDateInputLocal(txDate),
         time: toTimeInputLocal(txDate),
         description: editingTransaction.description,
@@ -601,6 +636,7 @@ export function TransactionModal({
         transferFeePayerOverride: '',
         subscriptionId: '',
       });
+      editMetadataForm.reset();
       setInstallmentPreview(null);
       setAttachments([]);
       setAttachmentUrls({});
@@ -811,25 +847,31 @@ export function TransactionModal({
     }
   };
 
-  const handleEditMetaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await applyMetadataChanges();
-  };
+  const handleEditMetaSubmit = editMetadataForm.handleSubmit(
+    async (values) => {
+      await applyMetadataChanges(values);
+    },
+    (errors) => {
+      const firstError = Object.values(errors)[0];
+      setFormError(firstError?.message || 'Please check the form values');
+    },
+  );
 
-  const applyMetadataChanges = async () => {
+  const applyMetadataChanges = async (values?: EditMetadataValues) => {
     if (!editingTransaction) return;
     setFormError('');
     setIsSubmitting(true);
     try {
-      const dateTime = editMeta.time ? `${editMeta.date}T${editMeta.time}:00` : editMeta.date;
+      const metadata = values ?? editMeta;
+      const dateTime = metadata.time ? `${metadata.date}T${metadata.time}:00` : metadata.date;
       await api.transactions.update(editingTransaction.id, {
-        description: editMeta.description,
-        reference: editMeta.reference || null,
-        notes: editMeta.notes || null,
-        place: editMeta.place || null,
+        description: metadata.description,
+        reference: metadata.reference || null,
+        notes: metadata.notes || null,
+        place: metadata.place || null,
         date: dateTime,
-        tagIds: editMeta.tagIds,
-        categoryId: editMeta.categoryId ? parseInt(editMeta.categoryId, 10) : null,
+        tagIds: metadata.tagIds,
+        categoryId: metadata.categoryId ? parseInt(metadata.categoryId, 10) : null,
       });
       onSaved();
       onClose();
@@ -844,6 +886,16 @@ export function TransactionModal({
     if (!editingTransaction) return;
     const txDate = new Date(editingTransaction.date);
     setEditMeta({
+      date: toDateInputLocal(txDate),
+      time: toTimeInputLocal(txDate),
+      description: editingTransaction.description,
+      reference: editingTransaction.reference || '',
+      notes: editingTransaction.notes || '',
+      place: editingTransaction.place || '',
+      categoryId: editingTransaction.categoryId?.toString() || '',
+      tagIds: editingTransaction.tags.map((tag) => tag.tagId),
+    });
+    editMetadataForm.reset({
       date: toDateInputLocal(txDate),
       time: toTimeInputLocal(txDate),
       description: editingTransaction.description,
@@ -891,6 +943,12 @@ export function TransactionModal({
   const handleSimpleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+
+    const simpleValidation = simpleTransactionFormSchema.safeParse(simpleForm);
+    if (!simpleValidation.success) {
+      setFormError(formatValidationError(simpleValidation.error));
+      return;
+    }
 
     const amount = parseIdNominalToInt(simpleForm.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -1238,6 +1296,12 @@ export function TransactionModal({
   const handleJournalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+
+    const journalValidation = journalFormSchema.safeParse(journalForm);
+    if (!journalValidation.success) {
+      setFormError(formatValidationError(journalValidation.error));
+      return;
+    }
 
     const { totalDebit, totalCredit, isBalanced } = calculateJournalTotals();
 
@@ -1842,15 +1906,13 @@ export function TransactionModal({
               <div className="flex gap-2">
                 <input
                   type="date"
-                  value={editMeta.date}
-                  onChange={(e) => setEditMeta({ ...editMeta, date: e.target.value })}
+                  {...editMetadataForm.register('date')}
                   className="flex-1 bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
                   required
                 />
                 <input
                   type="time"
-                  value={editMeta.time}
-                  onChange={(e) => setEditMeta({ ...editMeta, time: e.target.value })}
+                  {...editMetadataForm.register('time')}
                   className="w-24 bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
                   required
                 />
@@ -1866,8 +1928,7 @@ export function TransactionModal({
                   Category
                 </label>
                 <select
-                  value={editMeta.categoryId}
-                  onChange={(e) => setEditMeta({ ...editMeta, categoryId: e.target.value })}
+                  {...editMetadataForm.register('categoryId')}
                   className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
                 >
                   <option value="">None</option>
@@ -1889,8 +1950,7 @@ export function TransactionModal({
               </label>
               <input
                 type="text"
-                value={editMeta.description}
-                onChange={(e) => setEditMeta({ ...editMeta, description: e.target.value })}
+                {...editMetadataForm.register('description')}
                 className="w-full bg-transparent text-base font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
                 placeholder="Enter transaction description..."
                 required
@@ -1908,8 +1968,7 @@ export function TransactionModal({
               </label>
               <input
                 type="text"
-                value={editMeta.place}
-                onChange={(e) => setEditMeta({ ...editMeta, place: e.target.value })}
+                {...editMetadataForm.register('place')}
                 className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
                 placeholder="e.g. Starbucks, Indomaret, Online"
               />
@@ -1923,8 +1982,7 @@ export function TransactionModal({
               </label>
               <input
                 type="text"
-                value={editMeta.reference}
-                onChange={(e) => setEditMeta({ ...editMeta, reference: e.target.value })}
+                {...editMetadataForm.register('reference')}
                 className="w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50"
                 placeholder="e.g. receipt or bank reference"
                 maxLength={500}
@@ -1943,14 +2001,14 @@ export function TransactionModal({
                     key={tag.id}
                     type="button"
                     onClick={() => {
-                      const next = editMeta.tagIds.includes(tag.id)
-                        ? editMeta.tagIds.filter((id) => id !== tag.id)
-                        : [...editMeta.tagIds, tag.id];
-                      setEditMeta({ ...editMeta, tagIds: next });
+                      const next = editMetadataTagIds.includes(tag.id)
+                        ? editMetadataTagIds.filter((id) => id !== tag.id)
+                        : [...editMetadataTagIds, tag.id];
+                      editMetadataForm.setValue('tagIds', next, { shouldDirty: true });
                     }}
                     className={cn(
                       'cursor-pointer px-2.5 py-1 text-xs rounded-full border transition-all',
-                      editMeta.tagIds.includes(tag.id)
+                      editMetadataTagIds.includes(tag.id)
                         ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)] shadow-sm'
                         : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/40 bg-[var(--ref-surface-container)]',
                     )}
@@ -1973,8 +2031,7 @@ export function TransactionModal({
               <textarea
                 className="w-full min-h-[100px] rounded-lg bg-transparent px-2 py-1 text-sm text-[var(--color-text-primary)] focus:outline-none placeholder:text-[var(--color-muted)]/50 resize-none"
                 placeholder="Write a note..."
-                value={editMeta.notes}
-                onChange={(e) => setEditMeta({ ...editMeta, notes: e.target.value })}
+                {...editMetadataForm.register('notes')}
               />
             </div>
           </div>
