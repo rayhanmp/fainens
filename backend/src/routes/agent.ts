@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt } from "drizzle-orm";
+import { z } from "zod";
 
 import { env } from "../lib/env";
 import { db } from "../db/client";
@@ -43,6 +44,16 @@ const MAX_AGENT_MEMORIES = 50;
 const MAX_AGENT_MEMORY_LABEL_LENGTH = 80;
 const MAX_AGENT_MEMORY_CONTENT_LENGTH = 1000;
 const MAX_AGENT_NICKNAME_LENGTH = 80;
+
+const agentErrorSchema = z.object({ error: z.string() }).passthrough();
+const agentProfileSchema = z.object({ nickname: z.string().nullable() }).passthrough();
+const agentMemorySchema = z.object({ id: z.number().int(), label: z.string(), content: z.string(), createdAt: z.number(), updatedAt: z.number() }).passthrough();
+const agentMemoryLimitsSchema = z.object({ maxItems: z.number().int(), maxLabelLength: z.number().int(), maxContentLength: z.number().int() }).passthrough();
+const agentConversationSchema = z.object({ id: z.number().int(), title: z.string(), titleSource: z.string(), createdAt: z.number(), updatedAt: z.number(), isPinned: z.boolean(), archivedAt: z.number().nullable() }).passthrough();
+const agentMessageSchema = z.object({ id: z.number().int(), role: z.enum(["user", "assistant"]), content: z.string(), response: z.unknown().optional(), createdAt: z.number() }).passthrough();
+const agentConversationListSchema = z.object({ conversations: z.array(agentConversationSchema), includeArchived: z.boolean() }).passthrough();
+const agentConversationDetailSchema = z.object({ conversation: agentConversationSchema, messages: z.array(agentMessageSchema) }).passthrough();
+const agentActionIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 
 const toolDefinitionMap = new Map(agentToolDefinitions.map((definition) => [definition.name, definition]));
 const modelTools: AgentChatTool[] = agentToolDefinitions.map((definition) => ({
@@ -957,7 +968,9 @@ async function executeAgentQuery(
 export default async function agentRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/agent/tools", async () => ({
+  fastify.get("/api/agent/tools", {
+    schema: { operationId: "listAgentTools", tags: ["agent"], response: { 200: z.object({ schemaVersion: z.number().int(), revision: z.number().int(), tools: z.array(z.unknown()), policy: z.object({ readOnly: z.boolean(), writesRequireExplicitConfirmation: z.boolean(), guardedActions: z.array(z.string()) }).passthrough() }).passthrough() } },
+  }, async () => ({
     schemaVersion: 6,
     revision: await getFinancialRevision(),
     tools: agentToolDefinitions,
@@ -968,7 +981,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     },
   }));
 
-  fastify.get("/api/agent/profile", async (request, reply) => {
+  fastify.get("/api/agent/profile", {
+    schema: { operationId: "getAgentProfile", tags: ["agent"], response: { 200: agentProfileSchema, 400: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const [profile] = await db.select({ nickname: agentProfiles.nickname })
@@ -981,7 +996,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.put("/api/agent/profile", async (request, reply) => {
+  fastify.put("/api/agent/profile", {
+    schema: { operationId: "updateAgentProfile", tags: ["agent"], body: z.object({ nickname: z.string().max(MAX_AGENT_NICKNAME_LENGTH).nullable().optional() }).passthrough(), response: { 200: agentProfileSchema, 400: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const body = request.body as { nickname?: unknown };
@@ -1003,7 +1020,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/api/agent/memories", async (request, reply) => {
+  fastify.get("/api/agent/memories", {
+    schema: { operationId: "listAgentMemories", tags: ["agent"], response: { 200: z.object({ memories: z.array(agentMemorySchema), limits: agentMemoryLimitsSchema }).passthrough(), 401: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const memories = await db.select().from(agentMemories)
@@ -1015,7 +1034,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/agent/memories", async (request, reply) => {
+  fastify.post("/api/agent/memories", {
+    schema: { operationId: "createAgentMemory", tags: ["agent"], body: z.object({ label: z.string().trim().min(1).max(MAX_AGENT_MEMORY_LABEL_LENGTH), content: z.string().trim().min(1).max(MAX_AGENT_MEMORY_CONTENT_LENGTH) }).passthrough(), response: { 201: z.object({ memory: agentMemorySchema }).passthrough(), 400: agentErrorSchema, 409: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const body = request.body as { label?: unknown; content?: unknown };
@@ -1031,7 +1052,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.patch("/api/agent/memories/:id", async (request, reply) => {
+  fastify.patch("/api/agent/memories/:id", {
+    schema: { operationId: "updateAgentMemory", tags: ["agent"], params: agentActionIdParamsSchema, body: z.object({ label: z.string().trim().min(1).max(MAX_AGENT_MEMORY_LABEL_LENGTH).optional(), content: z.string().trim().min(1).max(MAX_AGENT_MEMORY_CONTENT_LENGTH).optional() }).passthrough(), response: { 200: z.object({ memory: agentMemorySchema }).passthrough(), 400: agentErrorSchema, 404: agentErrorSchema } },
+  }, async (request, reply) => {
     const memoryId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(memoryId) || memoryId <= 0) return reply.code(400).send({ error: "Invalid memory ID" });
     try {
@@ -1052,7 +1075,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.delete("/api/agent/memories/:id", async (request, reply) => {
+  fastify.delete("/api/agent/memories/:id", {
+    schema: { operationId: "deleteAgentMemory", tags: ["agent"], params: agentActionIdParamsSchema, response: { 204: z.null(), 400: agentErrorSchema, 404: agentErrorSchema } },
+  }, async (request, reply) => {
     const memoryId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(memoryId) || memoryId <= 0) return reply.code(400).send({ error: "Invalid memory ID" });
     try {
@@ -1066,7 +1091,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/api/agent/conversations", async (request, reply) => {
+  fastify.get("/api/agent/conversations", {
+    schema: { operationId: "listAgentConversations", tags: ["agent"], querystring: z.object({ includeArchived: z.enum(["true", "false"]).optional() }), response: { 200: agentConversationListSchema, 401: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const query = request.query as { includeArchived?: string };
@@ -1085,7 +1112,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/agent/conversations", async (request, reply) => {
+  fastify.post("/api/agent/conversations", {
+    schema: { operationId: "createAgentConversation", tags: ["agent"], body: z.object({ title: z.string().trim().max(200).optional() }).passthrough(), response: { 201: z.object({ conversation: agentConversationSchema }).passthrough(), 400: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const body = request.body as { title?: unknown };
@@ -1098,7 +1127,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/api/agent/conversations/:id", async (request, reply) => {
+  fastify.get("/api/agent/conversations/:id", {
+    schema: { operationId: "getAgentConversation", tags: ["agent"], params: agentActionIdParamsSchema, response: { 200: agentConversationDetailSchema, 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema } },
+  }, async (request, reply) => {
     const conversationId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
       return reply.code(400).send({ error: "Invalid conversation ID" });
@@ -1117,7 +1148,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.patch("/api/agent/conversations/:id", async (request, reply) => {
+  fastify.patch("/api/agent/conversations/:id", {
+    schema: { operationId: "updateAgentConversation", tags: ["agent"], params: agentActionIdParamsSchema, body: z.object({ title: z.string().trim().min(1).max(200).optional(), isPinned: z.boolean().optional(), archived: z.boolean().optional() }).passthrough(), response: { 200: z.object({ conversation: agentConversationSchema }).passthrough(), 400: agentErrorSchema, 404: agentErrorSchema } },
+  }, async (request, reply) => {
     const conversationId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
       return reply.code(400).send({ error: "Invalid conversation ID" });
@@ -1164,7 +1197,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.delete("/api/agent/conversations/:id", async (request, reply) => {
+  fastify.delete("/api/agent/conversations/:id", {
+    schema: { operationId: "deleteAgentConversation", tags: ["agent"], params: agentActionIdParamsSchema, response: { 204: z.null(), 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema } },
+  }, async (request, reply) => {
     const conversationId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(conversationId) || conversationId <= 0) {
       return reply.code(400).send({ error: "Invalid conversation ID" });
