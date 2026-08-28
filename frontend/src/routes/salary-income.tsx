@@ -1,7 +1,10 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import { useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
+import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
 import { formatCurrency, cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -98,58 +101,22 @@ function downloadIncomeCsv(rows: TxRow[]) {
   URL.revokeObjectURL(url);
 }
 
-type SalaryBundle = Awaited<ReturnType<typeof api.salarySettings.get>>;
 type Account = { id: number; name: string; type: string };
 
 function SalaryIncomePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const incomeQuery = useSalaryIncomeQuery();
+  const salaryQuery = useSalarySettingsQuery();
+  const catchUpPreviewQuery = useSalaryCatchUpPreviewQuery();
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [salary, setSalary] = useState<SalaryBundle | null>(null);
-  const [salaryLoading, setSalaryLoading] = useState(true);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-
-  const [transactions, setTransactions] = useState<TxRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const now = new Date();
-        const start = startOfMonth(new Date(now.getFullYear(), now.getMonth() - 5, 1));
-        const [factsResult, accData] = await Promise.all([
-          api.agent.financialFacts({ startDate: start, endDate: Date.now() }),
-          api.accounts.list(),
-        ]);
-        setTransactions(factsResult.data.facts.rows
-          .filter((row) => row.incomeCents > 0)
-          .map((row) => ({
-            id: row.id,
-            date: row.date,
-            description: row.description,
-            txType: row.txType,
-            incomeCents: row.incomeCents,
-          })));
-        setAccounts(accData as Account[]);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await api.salarySettings.get();
-        setSalary(data);
-      } catch {
-        setSalary(null);
-      } finally {
-        setSalaryLoading(false);
-      }
-    })();
-  }, []);
+  const salary = salaryQuery.data ?? null;
+  const accounts = (incomeQuery.data?.accounts ?? []) as Account[];
+  const transactions = (incomeQuery.data?.transactions ?? []) as TxRow[];
+  const isLoading = incomeQuery.isPending && !incomeQuery.data;
+  const salaryLoading = salaryQuery.isPending && !salaryQuery.data;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -243,7 +210,7 @@ function SalaryIncomePage() {
           }}
           ptkpOptions={salary?.ptkpOptions ?? []}
           accounts={accounts}
-          onSaved={(res) => setSalary(res)}
+          onSaved={(res) => queryClient.setQueryData(queryKeys.salary.settings, res)}
         />
 
         {/* Header */}
@@ -284,7 +251,9 @@ function SalaryIncomePage() {
                           onClick={async () => {
                           setMenuOpen(false);
                             try {
-                              const preview = await api.salarySettings.catchUpPreview();
+                              const previewResult = await catchUpPreviewQuery.refetch();
+                              const preview = previewResult.data;
+                              if (!preview) throw new Error('Could not load salary catch-up preview');
                               const due = preview.occurrences.filter((occurrence) => occurrence.status === 'due');
                               if (due.length === 0) {
                                 alert(preview.message || 'No unprocessed salary months are due.');
@@ -294,8 +263,7 @@ function SalaryIncomePage() {
                               const lastMonth = new Date(due[due.length - 1].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                               if (!window.confirm(`Post ${due.length} due salary month${due.length === 1 ? '' : 's'} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`)) return;
                               await api.salarySettings.catchUp({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
-                              const data = await api.salarySettings.get();
-                              setSalary(data);
+                              await invalidateFinancialSummaries(queryClient);
                               alert(`Posted ${due.length} salary month${due.length === 1 ? '' : 's'}.`);
                             } catch (e) {
                               alert(e instanceof Error ? e.message : 'Failed to post salary');
