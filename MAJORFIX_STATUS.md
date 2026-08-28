@@ -285,6 +285,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Audit entries are now fetched through a feature-owned query keyed by page, filters, and debounced search, with the existing pagination and filter UI preserved.
 - Refresh and query errors are visible without a second route-local server cache; search/filter changes naturally cancel and replace stale requests through React Query.
 
+### `ed25cf4` — salary income query migration
+
+- Salary income history and account lookups now use a feature-owned query, while salary settings have their own cached query and update directly in the cache after profile save.
+- Catch-up preview is an on-demand disabled query rather than an imperative read hidden inside the menu action. Posting catch-up invalidates salary and shared financial-summary keys so dashboard and reports converge.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
