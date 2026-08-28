@@ -365,6 +365,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Successful renewal posting invalidates the same financial-summary families as ordinary transactions; skip-only renewals still refresh the recurring preview without creating ledger rows.
 - Subscription forms retain their existing validation and confirmation UX while dropping duplicate route-level refresh calls.
 
+### `3f3e0ed` — PayLater settlement mutation hook
+
+- PayLater settlement now uses a feature-owned typed mutation with shared financial-summary invalidation.
+- The existing outstanding-balance validation and payment modal remain unchanged, while the route no longer performs a second manual refresh after a successful settlement.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
