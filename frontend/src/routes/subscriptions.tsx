@@ -12,12 +12,9 @@ import {
   Trash2,
   CreditCard,
 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 import { RequireAuth } from '../lib/auth';
-import { api } from '../lib/api';
-import { useSubscriptionsQuery } from '../features/subscriptions/queries';
-import { invalidateFinancialSummaries } from '../features/core/query-keys';
+import { useCreateSubscriptionMutation, useDeleteSubscriptionMutation, useRunRenewalsMutation, useSubscriptionsQuery, useUpdateSubscriptionMutation } from '../features/subscriptions/queries';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
@@ -123,8 +120,11 @@ function formatBillingCycle(cycle: string) {
 }
 
 function SubscriptionsPage() {
-  const queryClient = useQueryClient();
   const subscriptionsQuery = useSubscriptionsQuery();
+  const createSubscriptionMutation = useCreateSubscriptionMutation();
+  const updateSubscriptionMutation = useUpdateSubscriptionMutation();
+  const deleteSubscriptionMutation = useDeleteSubscriptionMutation();
+  const runRenewalsMutation = useRunRenewalsMutation();
   const rows = (subscriptionsQuery.data?.subscriptions ?? []) as ApiSubscription[];
   const accounts = subscriptionsQuery.data?.accounts ?? [];
   const categories = subscriptionsQuery.data?.categories ?? [];
@@ -147,11 +147,6 @@ function SubscriptionsPage() {
     status: 'active',
     iconKey: 'default',
   });
-
-  const load = useCallback(async () => {
-    setBanner(null);
-    await invalidateFinancialSummaries(queryClient);
-  }, [queryClient]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -216,7 +211,7 @@ function SubscriptionsPage() {
     setBanner(null);
     try {
       if (editingId == null) {
-        await api.subscriptions.create({
+        await createSubscriptionMutation.mutateAsync({
           name,
           linkedAccountId,
           categoryId,
@@ -228,7 +223,7 @@ function SubscriptionsPage() {
         });
         setBanner({ type: 'success', text: 'Subscription added.' });
       } else {
-        await api.subscriptions.update(editingId, {
+        await updateSubscriptionMutation.mutateAsync({ id: editingId, data: {
           name,
           linkedAccountId,
           categoryId,
@@ -237,11 +232,10 @@ function SubscriptionsPage() {
           nextRenewalAt,
           status: form.status,
           iconKey: form.iconKey,
-        });
+        } });
         setBanner({ type: 'success', text: 'Subscription updated.' });
       }
       closeModal();
-      await load();
     } catch (err) {
       setBanner({ type: 'error', text: err instanceof Error ? err.message : 'Save failed' });
     } finally {
@@ -259,9 +253,8 @@ function SubscriptionsPage() {
     if (!confirmed) return;
     setBanner(null);
     try {
-      await api.subscriptions.delete(id);
+      await deleteSubscriptionMutation.mutateAsync(id);
       setBanner({ type: 'success', text: 'Subscription removed.' });
-      await load();
     } catch (e) {
       setBanner({ type: 'error', text: e instanceof Error ? e.message : 'Delete failed' });
     }
@@ -281,17 +274,16 @@ function SubscriptionsPage() {
     setProcessingRenewals(true);
     setBanner(null);
     try {
-      const result = await api.subscriptions.runRenewals(
+      const result = await runRenewalsMutation.mutateAsync({
         mode,
-        renewalPreview.occurrences.map((item) => ({ subscriptionId: item.subscriptionId, dueAt: item.dueAt })),
-      );
+        occurrences: renewalPreview.occurrences.map((item) => ({ subscriptionId: item.subscriptionId, dueAt: item.dueAt })),
+      });
       setBanner({
         type: 'success',
         text: mode === 'post'
           ? `Posted ${result.posted} confirmed renewal charge(s).`
           : `Skipped ${result.skipped} missed occurrence(s); no financial transactions were created.`,
       });
-      await load();
     } catch (error) {
       setBanner({ type: 'error', text: error instanceof Error ? error.message : 'Renewal processing failed' });
     } finally {

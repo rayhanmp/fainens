@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
-import { queryKeys } from '../core/query-keys';
+import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type SubscriptionsPageData = {
   subscriptions: Awaited<ReturnType<typeof api.subscriptions.list>>['subscriptions'];
@@ -27,5 +27,37 @@ export function useSubscriptionsQuery() {
       };
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useCreateSubscriptionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.subscriptions.create>[0]) => api.subscriptions.create(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useUpdateSubscriptionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.subscriptions.update>[1] }) => api.subscriptions.update(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useDeleteSubscriptionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.subscriptions.delete(id),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useRunRenewalsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ mode, occurrences }: { mode: 'post' | 'skip'; occurrences: Array<{ subscriptionId: number; dueAt: number }> }) => api.subscriptions.runRenewals(mode, occurrences),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
