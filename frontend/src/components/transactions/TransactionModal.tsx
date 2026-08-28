@@ -1012,7 +1012,7 @@ export function TransactionModal({
       }
       const transferDetails = calculateTransferDetails();
       if (transferDetails && 'error' in transferDetails) {
-        setFormError(transferDetails.error);
+        setFormError(transferDetails.error ?? 'Invalid transfer details');
         return;
       }
       
@@ -1093,7 +1093,7 @@ export function TransactionModal({
             date: dateIso,
             periodId: periodId ?? null,
             categoryId: null, // Will use auto expense account
-            walletAccountId: transferDetails.senderPays ? walletAccountId : toWalletAccountId,
+            walletAccountId: transferDetails.senderPays ? walletAccountId : toWalletAccountId!,
             linkedTxId: mainTransaction.id, // Link to parent transfer transaction
           });
         } else {

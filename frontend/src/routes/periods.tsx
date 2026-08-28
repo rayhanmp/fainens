@@ -198,7 +198,7 @@ function PeriodsPage() {
     setEditingPeriod(period ?? null);
     setFormData(period
       ? { name: period.name, startDate: toLocalDateInputValue(new Date(period.startDate)), endDate: toLocalDateInputValue(new Date(period.endDate)) }
-      : suggestedDates ?? { name: '', startDate: '', endDate: '' });
+      : suggestedDates ? { name: suggestedDates.suggestedName, startDate: suggestedDates.suggestedStartDate, endDate: suggestedDates.suggestedEndDate } : { name: '', startDate: '', endDate: '' });
     setFormError('');
     setIsModalOpen(true);
   };

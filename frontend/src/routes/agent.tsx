@@ -838,11 +838,11 @@ function TransactionProposalCard({
     }
     const outgoingAccountId = draft.outgoingAccountId ? Number(draft.outgoingAccountId) : null;
     const incomingAccountId = draft.incomingAccountId ? Number(draft.incomingAccountId) : null;
-    if (canEditOutgoingAccount && (!Number.isSafeInteger(outgoingAccountId) || !outgoingAccountIds.has(outgoingAccountId))) {
+    if (canEditOutgoingAccount && (outgoingAccountId == null || !Number.isSafeInteger(outgoingAccountId) || !outgoingAccountIds.has(outgoingAccountId))) {
       setMessage('Choose a valid payment account.');
       return;
     }
-    if (canEditIncomingAccount && (!Number.isSafeInteger(incomingAccountId) || !incomingAccountIds.has(incomingAccountId))) {
+    if (canEditIncomingAccount && (incomingAccountId == null || !Number.isSafeInteger(incomingAccountId) || !incomingAccountIds.has(incomingAccountId))) {
       setMessage('Choose a valid receiving account.');
       return;
     }
@@ -1023,6 +1023,10 @@ function AgentPage() {
   const [copiedAssistantId, setCopiedAssistantId] = useState<string | null>(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [conversationActionId, setConversationActionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setStartupSelection(createStartupSelection(nickname));
+  }, [nickname]);
   const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
   const [conversationMenuPlacement, setConversationMenuPlacement] = useState<'above' | 'below'>('below');
   const [editingConversationId, setEditingConversationId] = useState<number | null>(null);

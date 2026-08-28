@@ -144,7 +144,7 @@ function TransactionsPage() {
           ...(search.accountId ? { accountId: search.accountId } : {}),
           ...(categoryFilter ? { categoryId: categoryFilter } : {}),
           ...(filterQuery.trim() ? { search: filterQuery.trim() } : {}),
-          ...(kindFilter ? { kind: kindFilter } : {}),
+          ...(kindFilter && kindFilter !== 'other' ? { kind: kindFilter } : {}),
           ...(startDate ? { startDate: startDate + 'T00:00:00' } : {}),
           ...(endDate ? { endDate: formatDateInputEnd(endDate) } : {}),
           ...(minAmount ? { minAmount } : {}),
@@ -177,7 +177,7 @@ function TransactionsPage() {
     const id = Number(search.transactionId);
     if (!Number.isSafeInteger(id) || id <= 0) return;
     openedDeepLinkId.current = search.transactionId;
-    void api.transactions.get(id).then((transaction) => openModal({ ...transaction, status: 'posted', periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as TransactionRow, 'view')).catch(() => { openedDeepLinkId.current = null; });
+      void api.transactions.get(id).then((transaction) => openModal({ ...transaction, status: 'posted', periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as unknown as TransactionRow, 'view')).catch(() => { openedDeepLinkId.current = null; });
   }, [search.transactionId]);
 
   const selectedPeriod = useMemo(() => periods.find((period) => String(period.id) === search.periodId) ?? null, [periods, search.periodId]);

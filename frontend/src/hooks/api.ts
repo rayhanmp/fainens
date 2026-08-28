@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { queryKeys } from '../features/core/query-keys';
 
 // Categories
 export function useCategories() {
   return useQuery({
-    queryKey: ['categories'],
+    queryKey: queryKeys.categories.all,
     queryFn: () => api.categories.list(),
   });
 }
@@ -12,7 +13,7 @@ export function useCategories() {
 // Accounts
 export function useAccounts() {
   return useQuery({
-    queryKey: ['accounts'],
+    queryKey: queryKeys.accounts.all,
     queryFn: () => api.accounts.list(),
   });
 }
@@ -20,7 +21,7 @@ export function useAccounts() {
 // Tags
 export function useTags() {
   return useQuery({
-    queryKey: ['tags'],
+    queryKey: queryKeys.tags.all,
     queryFn: () => api.tags.list(),
   });
 }
@@ -28,7 +29,7 @@ export function useTags() {
 // Periods
 export function usePeriods() {
   return useQuery({
-    queryKey: ['periods'],
+    queryKey: queryKeys.periods.all,
     queryFn: () => api.periods.list(),
   });
 }
@@ -41,7 +42,7 @@ export function useTransactions(params?: {
   periodId?: string;
 }) {
   return useQuery({
-    queryKey: ['transactions', params],
+    queryKey: queryKeys.transactions.list(params ?? {}),
     queryFn: async () => {
       const response = await api.transactions.list(params);
       return response.data;
@@ -58,7 +59,7 @@ export function useCreateCategory() {
       api.categories.create(data),
     onSuccess: () => {
       // Invalidate and refetch categories list
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
     },
   });
 }
@@ -70,7 +71,7 @@ export function useDeleteCategory() {
   return useMutation({
     mutationFn: (id: number) => api.categories.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
     },
   });
 }

@@ -6,7 +6,6 @@ import {
   Bot,
   CalendarClock,
   ChevronDown,
-  ChevronRight,
   CircleDollarSign,
   Info,
   Landmark,

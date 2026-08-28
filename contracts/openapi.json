@@ -1,0 +1,44 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Fainens API", "version": "1.0.0", "description": "Generated contract for the finance-critical API pilot." },
+  "paths": {
+    "/api/accounts": {
+      "get": { "operationId": "listAccounts", "tags": ["accounts"], "responses": { "200": { "description": "Accounts", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Account" } } } } } } },
+      "post": { "operationId": "createAccount", "tags": ["accounts"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateAccount" } } } }, "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Account" } } } } } }
+    },
+    "/api/categories": {
+      "get": { "operationId": "listCategories", "tags": ["categories"], "responses": { "200": { "description": "Categories", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } } } } } } },
+      "post": { "operationId": "createCategory", "tags": ["categories"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateCategory" } } } }, "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Category" } } } } } }
+    },
+    "/api/periods": { "get": { "operationId": "listPeriods", "tags": ["periods"], "responses": { "200": { "description": "Periods", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Period" } } } } } } } },
+    "/api/transactions": {
+      "get": { "operationId": "listTransactions", "tags": ["transactions"], "parameters": [{ "name": "periodId", "in": "query", "schema": { "type": "string" } }, { "name": "limit", "in": "query", "schema": { "type": "string" } }, { "name": "offset", "in": "query", "schema": { "type": "string" } }], "responses": { "200": { "description": "Transactions", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TransactionList" } } } } } },
+      "post": { "operationId": "createTransaction", "tags": ["transactions"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTransaction" } } } }, "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Transaction" } } } } } }
+    },
+    "/api/budgets": {
+      "get": { "operationId": "listBudgets", "tags": ["budgets"], "responses": { "200": { "description": "Budget summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BudgetSummary" } } } } } },
+      "post": { "operationId": "createBudget", "tags": ["budgets"], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateBudget" } } } }, "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BudgetPlan" } } } } } }
+    },
+    "/api/analytics/dashboard": { "get": { "operationId": "getDashboardAnalytics", "tags": ["analytics"], "responses": { "200": { "description": "Dashboard analytics", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } } } } },
+    "/api/agent/conversations": {
+      "get": { "operationId": "listAgentConversations", "tags": ["agent"], "responses": { "200": { "description": "Conversations", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationList" } } } } } },
+      "post": { "operationId": "createAgentConversation", "tags": ["agent"], "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateConversation" } } } }, "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Conversation" } } } } } }
+    }
+  },
+  "components": { "schemas": {
+    "Account": { "type": "object", "required": ["id", "name", "type"], "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "type": { "type": "string" }, "balance": { "type": "number" } }, "additionalProperties": true },
+    "CreateAccount": { "type": "object", "required": ["name", "type"], "properties": { "name": { "type": "string" }, "type": { "type": "string", "enum": ["asset", "liability", "equity", "revenue", "expense"] } }, "additionalProperties": true },
+    "Category": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "icon": { "type": "string", "nullable": true }, "color": { "type": "string", "nullable": true } }, "additionalProperties": true },
+    "CreateCategory": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "icon": { "type": "string", "nullable": true }, "color": { "type": "string", "nullable": true } }, "additionalProperties": false },
+    "Period": { "type": "object", "required": ["id", "name", "startDate", "endDate"], "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "startDate": { "type": "number" }, "endDate": { "type": "number" } }, "additionalProperties": true },
+    "Transaction": { "type": "object", "required": ["id", "date", "description"], "properties": { "id": { "type": "integer" }, "date": { "type": "number" }, "description": { "type": "string" } }, "additionalProperties": true },
+    "CreateTransaction": { "type": "object", "required": ["date", "description", "lines"], "properties": { "date": { "type": "number" }, "description": { "type": "string" }, "lines": { "type": "array", "items": { "type": "object", "additionalProperties": true } } }, "additionalProperties": true },
+    "TransactionList": { "type": "object", "required": ["data"], "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Transaction" } } }, "additionalProperties": true },
+    "BudgetPlan": { "type": "object", "required": ["id", "periodId", "categoryId", "plannedAmount"], "properties": { "id": { "type": "integer" }, "periodId": { "type": "integer" }, "categoryId": { "type": "integer" }, "plannedAmount": { "type": "number" } }, "additionalProperties": true },
+    "CreateBudget": { "type": "object", "required": ["periodId", "categoryId", "plannedAmount"], "properties": { "periodId": { "type": "integer" }, "categoryId": { "type": "integer" }, "plannedAmount": { "type": "number" } }, "additionalProperties": false },
+    "BudgetSummary": { "type": "object", "properties": { "periodId": { "type": "integer" }, "plans": { "type": "array", "items": { "$ref": "#/components/schemas/BudgetPlan" } } }, "additionalProperties": true },
+    "Conversation": { "type": "object", "required": ["id", "title", "createdAt", "updatedAt"], "properties": { "id": { "type": "integer" }, "title": { "type": "string" }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" } }, "additionalProperties": true },
+    "ConversationList": { "type": "object", "required": ["conversations"], "properties": { "conversations": { "type": "array", "items": { "$ref": "#/components/schemas/Conversation" } } }, "additionalProperties": true },
+    "CreateConversation": { "type": "object", "properties": { "title": { "type": "string" } }, "additionalProperties": false }
+  } }
+}

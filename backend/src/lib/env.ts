@@ -43,6 +43,10 @@ const envSchema = z.object({
    */
   LOCAL_AUTH_BYPASS: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 
+  // Intervals remain the compatibility default. Set queue only when the
+  // standalone BullMQ worker is deployed and healthy.
+  JOB_RUNNER_MODE: z.enum(["interval", "queue"]).default("interval"),
+
   /**
    * Where to send the browser after successful Google OAuth (must match the origin you use in the browser).
    * e.g. http://localhost:8080 for Vite dev (see vite.config server.port).

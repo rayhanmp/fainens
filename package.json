@@ -8,9 +8,14 @@
     "dev:backend": "pnpm --filter backend dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "start": "pnpm --filter backend start"
+    "start": "pnpm --filter backend start",
+    "generate:api": "pnpm exec orval --config orval.config.cjs",
+    "verify:generated": "pnpm generate:api && git diff --exit-code -- contracts/openapi.json frontend/src/generated"
   },
   "keywords": [],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "orval": "^7.14.0"
+  }
 }
