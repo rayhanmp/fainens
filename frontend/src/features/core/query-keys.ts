@@ -26,6 +26,7 @@ export const queryKeys = {
   auditLog: { all: ["audit-log"] as const, list: (filters: object = {}) => ["audit-log", "list", filters] as const },
   salary: { all: ["salary"] as const, income: ["salary", "income"] as const, settings: ["salary", "settings"] as const, catchUpPreview: ["salary", "catch-up-preview"] as const },
   split: { all: ["split-bill"] as const },
+  wishlist: { all: ["wishlist"] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
@@ -53,5 +54,6 @@ export async function invalidateFinancialSummaries(queryClient: { invalidateQuer
     queryClient.invalidateQueries({ queryKey: queryKeys.paylater.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.reports.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.salary.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.wishlist.all }),
   ]);
 }

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   Sparkles, 
   MoreVertical, 
@@ -12,6 +13,8 @@ import {
   Heart
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useWishlistQuery } from '../features/wishlist/queries';
+import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -56,9 +59,11 @@ type FilterCategory = 'all' | number;
 
 export default function WishlistPage() {
   const navigate = useNavigate();
-  const [items, setItems] = useState<WishlistItem[]>([]);
-  const [categories, setCategories] = useState<Array<{ id: number; name: string; icon: string | null; color: string | null }>>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const wishlistQuery = useWishlistQuery();
+  const items = (wishlistQuery.data?.items ?? []) as WishlistItem[];
+  const categories = wishlistQuery.data?.categories ?? [];
+  const isLoading = wishlistQuery.isPending && !wishlistQuery.data;
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('active');
   const [filterCategory, setFilterCategory] = useState<FilterCategory>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -67,24 +72,8 @@ export default function WishlistPage() {
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<WishlistItem | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   async function loadData() {
-    try {
-      setIsLoading(true);
-      const [wishlistData, categoriesData] = await Promise.all([
-        api.wishlist.list(),
-        api.categories.list(),
-      ]);
-      setItems(wishlistData);
-      setCategories(categoriesData);
-    } catch (err) {
-      console.error('Failed to load wishlist:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    await invalidateFinancialSummaries(queryClient);
   }
 
   const filteredItems = items.filter(item => {
@@ -102,7 +91,7 @@ export default function WishlistPage() {
   async function handleDelete(item: WishlistItem) {
     try {
       await api.wishlist.delete(item.id);
-      setItems(prev => prev.filter(i => i.id !== item.id));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.wishlist.all });
       setDeleteConfirmItem(null);
       setActiveMenuId(null);
     } catch (err) {
