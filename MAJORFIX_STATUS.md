@@ -341,6 +341,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Successful account mutations invalidate account, dashboard, period, and other financial-summary queries through the shared invalidation boundary.
 - Existing confirmation and modal behavior is preserved, including keeping archived history available when the archived view is enabled.
 
+### `a7165ba` — period lifecycle mutation hooks
+
+- Period create/edit, auto-create, close/reopen, archive/restore, coverage updates, and return-after-break backfill now use typed feature-owned mutations.
+- Return-period previews are keyed and cached by the selected snapshot date, with stale preview results no longer reused while a new date is being checked.
+- The return flow keeps the payroll-cycle and skipped-period semantics intact while exposing mutation/query errors through the existing modal.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
