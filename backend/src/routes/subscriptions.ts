@@ -1,5 +1,6 @@
 import { eq, desc, asc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { subscriptions, accounts, categories } from "../db/schema";
@@ -37,6 +38,23 @@ const STATUS = ["active", "paused"] as const;
 const ICON_KEYS = ["car", "film", "music", "signal", "sparkles", "default"] as const;
 const BILLING_CYCLES = ["monthly", "annual"] as const;
 
+const subscriptionErrorSchema = z.object({ error: z.string() }).passthrough();
+const subscriptionIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const subscriptionOccurrenceParamsSchema = subscriptionIdParamsSchema.extend({ dueAt: z.coerce.number().int().nonnegative() });
+const subscriptionStatusSchema = z.enum(["active", "paused"]);
+const subscriptionIconSchema = z.enum(["car", "film", "music", "signal", "sparkles", "default"]);
+const subscriptionBillingCycleSchema = z.enum(["monthly", "annual"]);
+const subscriptionSchema = z.object({ id: z.number().int(), name: z.string(), linkedAccountId: z.number().int(), linkedAccountName: z.string(), categoryId: z.number().int().nullable(), amount: z.number().int(), billingCycle: subscriptionBillingCycleSchema, nextRenewalAt: z.number(), status: z.string(), iconKey: z.string(), sortOrder: z.number().int(), createdAt: z.number(), updatedAt: z.number() }).passthrough();
+const subscriptionOccurrenceSchema = z.object({ subscriptionId: z.number().int(), subscriptionName: z.string(), dueAt: z.number(), amount: z.number().int(), linkedAccountId: z.number().int(), billingCycle: z.string() }).passthrough();
+const renewalPreviewSchema = z.object({ occurrences: z.array(subscriptionOccurrenceSchema), truncated: z.boolean() }).passthrough();
+const subscriptionsListResponseSchema = z.object({ subscriptions: z.array(subscriptionSchema), renewalPreview: renewalPreviewSchema }).passthrough();
+const subscriptionCreateBodySchema = z.object({ name: z.string().trim().min(1).max(200), linkedAccountId: z.number().int().positive(), categoryId: z.number().int().positive().nullable().optional(), amount: z.number().int().positive(), billingCycle: subscriptionBillingCycleSchema.optional(), nextRenewalAt: z.number().int().nonnegative(), status: subscriptionStatusSchema.optional(), iconKey: subscriptionIconSchema.optional(), sortOrder: z.number().int().optional() }).passthrough();
+const subscriptionUpdateBodySchema = subscriptionCreateBodySchema.partial().passthrough();
+const subscriptionRunRenewalsBodySchema = z.object({ mode: z.enum(["post", "skip"]), occurrences: z.array(z.object({ subscriptionId: z.number().int().positive(), dueAt: z.number().int().nonnegative() }).passthrough()).min(1).max(120) }).passthrough();
+const subscriptionRunRenewalsResponseSchema = z.object({ posted: z.number().int().nonnegative(), skipped: z.number().int().nonnegative(), transactionIds: z.array(z.number().int()) }).passthrough();
+const subscriptionCorrectionBodySchema = z.object({ reason: z.string().trim().min(1).max(500), effectiveDate: z.number().int().nonnegative().optional(), amount: z.number().int().positive().optional(), linkedAccountId: z.number().int().positive().optional(), categoryId: z.number().int().positive().nullable().optional() }).passthrough();
+const subscriptionCorrectionResponseSchema = z.object({ reversalTransactionId: z.number().int(), replacementTransactionId: z.number().int() }).passthrough();
+
 function isStatus(s: string): s is (typeof STATUS)[number] {
   return (STATUS as readonly string[]).includes(s);
 }
@@ -52,7 +70,9 @@ function isBillingCycle(s: string): s is (typeof BILLING_CYCLES)[number] {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/subscriptions", async () => {
+  fastify.get("/api/subscriptions", {
+    schema: { operationId: "listSubscriptions", tags: ["subscriptions"], response: { 200: subscriptionsListResponseSchema } },
+  }, async () => {
     const rows = await db
       .select()
       .from(subscriptions)
@@ -64,7 +84,7 @@ export default async function (fastify: FastifyInstance) {
     };
   });
 
-  fastify.post("/api/subscriptions/run-renewals", { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post("/api/subscriptions/run-renewals", { onRequest: [fastify.authenticate], schema: { operationId: "processSubscriptionRenewals", tags: ["subscriptions"], body: subscriptionRunRenewalsBodySchema, response: { 200: subscriptionRunRenewalsResponseSchema, 400: subscriptionErrorSchema, 409: subscriptionErrorSchema } } }, async (request, reply) => {
     const body = request.body as {
       mode?: "post" | "skip";
       occurrences?: Array<{ subscriptionId: number; dueAt: number }>;
@@ -80,7 +100,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/subscriptions/:id/occurrences/:dueAt/correct", async (request, reply) => {
+  fastify.post("/api/subscriptions/:id/occurrences/:dueAt/correct", {
+    schema: { operationId: "correctSubscriptionOccurrence", tags: ["subscriptions"], params: subscriptionOccurrenceParamsSchema, body: subscriptionCorrectionBodySchema, response: { 201: subscriptionCorrectionResponseSchema, 409: subscriptionErrorSchema } },
+  }, async (request, reply) => {
     const subscriptionId = Number((request.params as { id?: string }).id);
     const dueAt = Number((request.params as { dueAt?: string }).dueAt);
     const body = (request.body ?? {}) as {
@@ -106,7 +128,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/api/subscriptions/:id", async (request, reply) => {
+  fastify.get("/api/subscriptions/:id", {
+    schema: { operationId: "getSubscription", tags: ["subscriptions"], params: subscriptionIdParamsSchema, response: { 200: subscriptionSchema, 404: subscriptionErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [row] = await db.select().from(subscriptions).where(eq(subscriptions.id, parseInt(id, 10))).limit(1);
@@ -119,7 +143,9 @@ export default async function (fastify: FastifyInstance) {
     return serializeSubscription(row);
   });
 
-  fastify.post("/api/subscriptions", async (request, reply) => {
+  fastify.post("/api/subscriptions", {
+    schema: { operationId: "createSubscription", tags: ["subscriptions"], body: subscriptionCreateBodySchema, response: { 201: subscriptionSchema, 400: subscriptionErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       linkedAccountId: number;
@@ -198,7 +224,9 @@ export default async function (fastify: FastifyInstance) {
     reply.code(201).send(await serializeSubscription(row));
   });
 
-  fastify.patch("/api/subscriptions/:id", async (request, reply) => {
+  fastify.patch("/api/subscriptions/:id", {
+    schema: { operationId: "updateSubscription", tags: ["subscriptions"], params: subscriptionIdParamsSchema, body: subscriptionUpdateBodySchema, response: { 200: subscriptionSchema, 400: subscriptionErrorSchema, 404: subscriptionErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;
@@ -293,13 +321,17 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Advance subscription renewal (called when a transaction pays for the subscription)
-  fastify.post("/api/subscriptions/:id/advance", async (request, reply) => {
+  fastify.post("/api/subscriptions/:id/advance", {
+    schema: { operationId: "advanceSubscription", tags: ["subscriptions"], params: subscriptionIdParamsSchema, response: { 410: subscriptionErrorSchema } },
+  }, async (request, reply) => {
     return reply.code(410).send({
       error: "Direct schedule advancement is disabled; confirm or skip a concrete renewal occurrence",
     });
   });
 
-  fastify.delete("/api/subscriptions/:id", async (request, reply) => {
+  fastify.delete("/api/subscriptions/:id", {
+    schema: { operationId: "archiveSubscription", tags: ["subscriptions"], params: subscriptionIdParamsSchema, response: { 204: z.null(), 404: subscriptionErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db.select().from(subscriptions).where(eq(subscriptions.id, parseInt(id, 10))).limit(1);

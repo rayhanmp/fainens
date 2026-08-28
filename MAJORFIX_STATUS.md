@@ -481,6 +481,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Salary settings, payroll calculation/posting previews, catch-up preview, post/skip catch-up, occurrence correction, period attachment, and settings update routes now declare typed payloads, payroll breakdowns, occurrence statuses, and explicit correction/attachment results.
 - Catch-up contracts distinguish `due`, `posted`, `skipped`, and `legacy` occurrences, preserving the long-absence workflow without implying that a skipped month had zero income or spending.
 
+### `pending` — subscription lifecycle contracts
+
+- Subscription list/create/detail/update/archive, renewal processing, occurrence correction, and the intentionally disabled direct-advance route now declare typed payloads, renewal previews, correction receipts, and explicit `410` behavior for unsafe direct advancement.
+- Renewal inputs are bounded to unique positive subscription IDs and historical due timestamps at the domain boundary, while the response keeps posted and skipped counts separate from transaction IDs.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.
