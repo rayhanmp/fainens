@@ -208,6 +208,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Successful generated API calls now return the `{ data, status, headers }` envelope expected by Orval's fetch client. HTTP errors retain the shared typed `ApiError` envelope and `204` responses are handled explicitly.
 
+### `344d01f` — generated-client adoption for core reads
+
+- Accounts, categories, periods, and dashboard query adapters now consume the checked-in generated client. Rich legacy fields remain available through the response's additional properties until each endpoint's schema is expanded, with explicit adapter casts at the feature boundary.
+- The period contract now documents coverage, archive, and open/closed lifecycle fields so subsequent generated-client expansion can expose those states without another transport change.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
