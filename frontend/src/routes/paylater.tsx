@@ -5,8 +5,11 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { usePaylaterQuery } from '../features/paylater/queries';
+import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { formatCurrency } from '../lib/utils';
 import { PageContainer } from '../components/ui/PageContainer';
 import {
@@ -52,13 +55,11 @@ function scheduleForDay(
 }
 
 function PaylaterPage() {
-  const [obligationsPayload, setObligationsPayload] = useState<Awaited<
-    ReturnType<typeof api.paylater.obligations>
-  > | null>(null);
-  const [accounts, setAccounts] = useState<
-    Array<{ id: number; name: string; type: string; systemKey: string | null }>
-  >([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const paylaterQuery = usePaylaterQuery();
+  const obligationsPayload = paylaterQuery.data?.obligations ?? null;
+  const accounts = paylaterQuery.data?.accounts ?? [];
+  const isLoading = paylaterQuery.isPending && !paylaterQuery.data;
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,19 +74,7 @@ function PaylaterPage() {
     bankId: '',
   });
 
-  const load = async () => {
-    try {
-      const [obl, acc] = await Promise.all([api.paylater.obligations(), api.accounts.list()]);
-      setObligationsPayload(obl);
-      setAccounts(acc as typeof accounts);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
+  const load = async () => invalidateFinancialSummaries(queryClient);
 
   const banks = accounts.filter((a) => a.type === 'asset' && !a.systemKey);
 
