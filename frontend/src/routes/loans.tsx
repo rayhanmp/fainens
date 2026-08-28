@@ -3,8 +3,11 @@ import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useLoansQuery } from '../features/loans/queries';
+import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { formatCurrency, cn } from '../lib/utils';
 import { NewLoanModal } from '../components/loans/NewLoanModal';
 import { RecordPaymentModal } from '../components/loans/RecordPaymentModal';
@@ -72,10 +75,12 @@ function getInitials(name: string): string {
 }
 
 function LoansPage() {
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [contacts, setContacts] = useState<ContactSummary[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const loansQuery = useLoansQuery();
+  const loans = (loansQuery.data?.loans ?? []) as Loan[];
+  const contacts = (loansQuery.data?.contacts ?? []) as ContactSummary[];
+  const summary = (loansQuery.data?.summary ?? null) as Summary | null;
+  const isLoading = loansQuery.isPending && !loansQuery.data;
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -84,26 +89,10 @@ function LoansPage() {
   const [isNewContactModalOpen, setIsNewContactModalOpen] = useState(false);
   const { confirm } = useConfirm();
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [activeLoans, repaidLoans, contactsData, summaryData] = await Promise.all([
-        api.loans.list({ status: 'active' }),
-        api.loans.list({ status: 'repaid' }),
-        api.contacts.list(),
-        api.loans.summary(),
-      ]);
-      setLoans([...activeLoans, ...repaidLoans]);
-      setContacts(contactsData);
-      setSummary(summaryData);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const loadData = useCallback(
+    () => invalidateFinancialSummaries(queryClient),
+    [queryClient],
+  );
 
   // Group contacts by net balance for display
   const contactsWithLoans = useMemo(() => {
@@ -130,18 +119,18 @@ function LoansPage() {
 
   const handleLoanCreated = () => {
     setIsNewLoanModalOpen(false);
-    loadData();
+    void loadData();
   };
 
   const handleContactCreated = () => {
     setIsNewContactModalOpen(false);
-    loadData();
+    void loadData();
   };
 
   const handlePaymentRecorded = () => {
     setIsPaymentModalOpen(false);
     setSelectedLoan(null);
-    loadData();
+    void loadData();
   };
 
   const openPaymentModal = (loan: Loan) => {
@@ -465,7 +454,7 @@ function LoansPage() {
                           if (confirmed) {
                             try {
                               await api.loans.delete(loan.id);
-                              loadData();
+                              void loadData();
                             } catch (err) {
                               alert((err as Error).message);
                             }

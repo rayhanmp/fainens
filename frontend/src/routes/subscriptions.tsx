@@ -12,9 +12,12 @@ import {
   Trash2,
   CreditCard,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import { useSubscriptionsQuery } from '../features/subscriptions/queries';
+import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
@@ -42,15 +45,6 @@ type ApiSubscription = {
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
-};
-
-type RenewalOccurrence = {
-  subscriptionId: number;
-  subscriptionName: string;
-  dueAt: number;
-  amount: number;
-  linkedAccountId: number;
-  billingCycle: string;
 };
 
 const ICON_OPTIONS = [
@@ -129,15 +123,14 @@ function formatBillingCycle(cycle: string) {
 }
 
 function SubscriptionsPage() {
-  const [rows, setRows] = useState<ApiSubscription[]>([]);
-  const [accounts, setAccounts] = useState<Array<{ id: number; name: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const subscriptionsQuery = useSubscriptionsQuery();
+  const rows = (subscriptionsQuery.data?.subscriptions ?? []) as ApiSubscription[];
+  const accounts = subscriptionsQuery.data?.accounts ?? [];
+  const categories = subscriptionsQuery.data?.categories ?? [];
+  const renewalPreview = subscriptionsQuery.data?.renewalPreview ?? { occurrences: [], truncated: false };
+  const loading = subscriptionsQuery.isPending && !subscriptionsQuery.data;
   const [banner, setBanner] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
-  const [renewalPreview, setRenewalPreview] = useState<{ occurrences: RenewalOccurrence[]; truncated: boolean }>({
-    occurrences: [],
-    truncated: false,
-  });
   const [processingRenewals, setProcessingRenewals] = useState(false);
   const { confirm } = useConfirm();
 
@@ -156,28 +149,9 @@ function SubscriptionsPage() {
   });
 
   const load = useCallback(async () => {
-    setLoading(true);
     setBanner(null);
-    try {
-      const [data, accs, cats] = await Promise.all([
-        api.subscriptions.list(),
-        api.accounts.list(),
-        api.categories.list(),
-      ]);
-      setRows(data.subscriptions);
-      setRenewalPreview(data.renewalPreview);
-      setAccounts(accs.map((a) => ({ id: a.id, name: a.name })));
-      setCategories(cats.map((c) => ({ id: c.id, name: c.name })));
-    } catch (e) {
-      setBanner({ type: 'error', text: e instanceof Error ? e.message : 'Failed to load subscriptions' });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    await invalidateFinancialSummaries(queryClient);
+  }, [queryClient]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -360,16 +334,16 @@ function SubscriptionsPage() {
   return (
     <RequireAuth>
       <PageContainer className="pt-8 pb-16 px-4 sm:px-6 lg:px-8">
-        {banner && (
+        {(banner || subscriptionsQuery.error) && (
           <div
             className={cn(
               'mb-6 rounded-xl border px-4 py-3 text-sm',
-              banner.type === 'error'
+              (banner?.type ?? 'error') === 'error'
                 ? 'border-[var(--color-danger)] bg-[var(--color-danger)]/10 text-[var(--color-danger)]'
                 : 'border-[var(--ref-secondary)] bg-[var(--ref-secondary-container)]/30 text-[var(--ref-on-secondary-container)]',
             )}
           >
-            {banner.text}
+            {banner?.text ?? (subscriptionsQuery.error instanceof Error ? subscriptionsQuery.error.message : 'Failed to load subscriptions')}
           </div>
         )}
 
