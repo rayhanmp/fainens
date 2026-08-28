@@ -280,6 +280,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Money anomaly candidates are now cached by review status in a feature-owned query, so switching open/resolved/dismissed views does not race route-local loading state.
 - Scans and review decisions invalidate the anomaly family and retain clear action/query errors without mutating financial records.
 
+### `d3ccc65` — audit-log query migration
+
+- Audit entries are now fetched through a feature-owned query keyed by page, filters, and debounced search, with the existing pagination and filter UI preserved.
+- Refresh and query errors are visible without a second route-local server cache; search/filter changes naturally cancel and replace stale requests through React Query.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
