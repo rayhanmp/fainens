@@ -496,6 +496,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Dashboard/budget insight generation and latest-cache routes now declare period filters and provenance-bearing insight envelopes, including stale cache state and revision numbers.
 - Legacy pending-transaction parse, list, detail, approve, reject, and retry routes now declare bounded messages, parsed payloads, lifecycle statuses, and explicit approval/retry outcomes. These routes remain a compatibility surface alongside the newer durable agent proposal flow.
 
+### `pending` — wishlist and scraping contracts
+
+- Wishlist list/detail/create/update/delete, fulfilment, transaction linking, and standard/advanced product scraping routes now declare typed filters, item relationships, fulfilment receipts, SSRF-safe URL inputs, and scraper success/error envelopes.
+- Wishlist fulfilment remains an explicit financial mutation that returns both the updated wishlist state and created transaction; scraping responses keep product data opaque to the route contract so the scraper can evolve without widening financial records.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.

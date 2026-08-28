@@ -1,5 +1,6 @@
 import { eq, and, desc, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { accounts, auditLogs, wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
@@ -36,6 +37,22 @@ const BLOCKED_IP_PATTERNS = [
   /^fc00:/i, // IPv6 unique local
   /^fe80:/i, // IPv6 link-local
 ];
+
+const wishlistErrorSchema = z.object({ error: z.string() }).passthrough();
+const wishlistIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const wishlistTimestampSchema = z.union([z.date(), z.string(), z.number()]);
+const wishlistStatusSchema = z.enum(["active", "fulfilled", "cancelled"]);
+const wishlistCategorySchema = z.object({ id: z.number().int(), name: z.string(), icon: z.string().nullable(), color: z.string().nullable() }).passthrough();
+const wishlistPeriodSchema = z.object({ id: z.number().int(), name: z.string(), startDate: wishlistTimestampSchema, endDate: wishlistTimestampSchema }).passthrough();
+const wishlistItemSchema = z.object({ id: z.number().int(), name: z.string(), description: z.string().nullable(), amount: z.number(), status: wishlistStatusSchema, createdAt: wishlistTimestampSchema, updatedAt: wishlistTimestampSchema, fulfilledAt: wishlistTimestampSchema.nullable(), fulfilledTransactionId: z.number().int().nullable(), categoryId: z.number().int().nullable(), periodId: z.number().int().nullable(), imageUrl: z.string().nullable().optional(), category: wishlistCategorySchema.nullable().optional(), period: wishlistPeriodSchema.nullable().optional() }).passthrough();
+const wishlistQuerySchema = z.object({ status: wishlistStatusSchema.optional(), categoryId: z.string().regex(/^\d+$/).optional(), periodId: z.string().regex(/^\d+$/).optional() });
+const wishlistCreateBodySchema = z.object({ name: z.string().trim().min(1).max(200), description: z.string().max(2000).nullable().optional(), amount: z.number().nonnegative(), categoryId: z.number().int().positive().nullable().optional(), periodId: z.number().int().positive().nullable().optional(), imageUrl: z.string().url().nullable().optional() }).passthrough();
+const wishlistUpdateBodySchema = wishlistCreateBodySchema.partial().extend({ status: wishlistStatusSchema.optional() }).passthrough();
+const wishlistFulfillBodySchema = z.object({ date: z.string().min(1), accountId: z.number().int().positive(), description: z.string().trim().max(500).optional(), notes: z.string().max(2000).optional() }).passthrough();
+const wishlistLinkBodySchema = z.object({ transactionId: z.number().int().positive() }).passthrough();
+const wishlistFulfillResponseSchema = z.object({ wishlist: z.object({ id: z.number().int(), status: wishlistStatusSchema, fulfilledAt: wishlistTimestampSchema.nullable(), fulfilledTransactionId: z.number().int().nullable() }).passthrough(), transaction: z.object({ id: z.number().int(), description: z.string() }).passthrough() }).passthrough();
+const wishlistScrapeBodySchema = z.object({ url: z.string().url().max(2000) }).passthrough();
+const wishlistScrapeResponseSchema = z.object({ success: z.boolean(), data: z.unknown().optional(), attempts: z.array(z.unknown()), requiresAdvancedScraping: z.boolean(), error: z.unknown().optional() }).passthrough();
 
 /**
  * Validates URL to prevent SSRF attacks
@@ -94,7 +111,9 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   // Get all wishlist items with optional filtering
-  fastify.get("/api/wishlist", async (request) => {
+  fastify.get("/api/wishlist", {
+    schema: { operationId: "listWishlist", tags: ["wishlist"], querystring: wishlistQuerySchema, response: { 200: z.array(wishlistItemSchema) } },
+  }, async (request) => {
     const { status, categoryId, periodId } = request.query as { 
       status?: string; 
       categoryId?: string;
@@ -156,7 +175,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get a single wishlist item
-  fastify.get("/api/wishlist/:id", async (request, reply) => {
+  fastify.get("/api/wishlist/:id", {
+    schema: { operationId: "getWishlistItem", tags: ["wishlist"], params: wishlistIdParamsSchema, response: { 200: wishlistItemSchema, 404: wishlistErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [item] = await db
@@ -201,7 +222,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Create a new wishlist item
-  fastify.post("/api/wishlist", async (request, reply) => {
+  fastify.post("/api/wishlist", {
+    schema: { operationId: "createWishlistItem", tags: ["wishlist"], body: wishlistCreateBodySchema, response: { 201: wishlistItemSchema, 400: wishlistErrorSchema, 500: wishlistErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       description?: string | null;
@@ -251,7 +274,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Update a wishlist item
-  fastify.patch("/api/wishlist/:id", async (request, reply) => {
+  fastify.patch("/api/wishlist/:id", {
+    schema: { operationId: "updateWishlistItem", tags: ["wishlist"], params: wishlistIdParamsSchema, body: wishlistUpdateBodySchema, response: { 200: wishlistItemSchema, 404: wishlistErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;
@@ -293,7 +318,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Delete a wishlist item
-  fastify.delete("/api/wishlist/:id", async (request, reply) => {
+  fastify.delete("/api/wishlist/:id", {
+    schema: { operationId: "deleteWishlistItem", tags: ["wishlist"], params: wishlistIdParamsSchema, response: { 204: z.null(), 404: wishlistErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db
@@ -315,7 +342,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Fulfill a wishlist item by creating a real transaction
-  fastify.post("/api/wishlist/:id/fulfill", async (request, reply) => {
+  fastify.post("/api/wishlist/:id/fulfill", {
+    schema: { operationId: "fulfillWishlistItem", tags: ["wishlist"], params: wishlistIdParamsSchema, body: wishlistFulfillBodySchema, response: { 200: wishlistFulfillResponseSchema, 400: wishlistErrorSchema, 404: wishlistErrorSchema, 409: wishlistErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
       date: string; // ISO date string
@@ -422,7 +451,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Link wishlist item to existing transaction
-  fastify.post("/api/wishlist/:id/link", async (request, reply) => {
+  fastify.post("/api/wishlist/:id/link", {
+    schema: { operationId: "linkWishlistTransaction", tags: ["wishlist"], params: wishlistIdParamsSchema, body: wishlistLinkBodySchema, response: { 200: wishlistFulfillResponseSchema, 400: wishlistErrorSchema, 404: wishlistErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
       transactionId: number;
@@ -481,6 +512,7 @@ export default async function (fastify: FastifyInstance) {
   // Scrape product data from URL
   fastify.post("/api/wishlist/scrape", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "wishlist-scrape" } },
+    schema: { operationId: "scrapeWishlistProduct", tags: ["wishlist"], body: wishlistScrapeBodySchema, response: { 200: wishlistScrapeResponseSchema, 400: wishlistScrapeResponseSchema } },
   }, async (request, reply) => {
     const { url } = request.body as { url: string };
 
@@ -529,6 +561,7 @@ export default async function (fastify: FastifyInstance) {
   // Advanced scraping with Puppeteer
   fastify.post("/api/wishlist/scrape-advanced", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "wishlist-scrape" } },
+    schema: { operationId: "scrapeWishlistProductAdvanced", tags: ["wishlist"], body: wishlistScrapeBodySchema, response: { 200: wishlistScrapeResponseSchema, 400: wishlistScrapeResponseSchema } },
   }, async (request, reply) => {
     const { url } = request.body as { url: string };
 
