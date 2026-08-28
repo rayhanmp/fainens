@@ -471,6 +471,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Upload contracts constrain transaction IDs, filenames, supported MIME types, and non-empty payloads. Delete responses distinguish an immediate `204` removal from a committed removal whose object cleanup is queued (`202`), so clients do not report storage cleanup as a failed financial operation.
 - Wildcard file routes remain response-streaming handlers; their contract describes the not-found envelope without pretending the binary stream is JSON.
 
+### `pending` — PayLater and audit contracts
+
+- PayLater recognition, schedule preview, interest, settlement, reversal, summary, and obligation routes now declare typed request/response contracts with installment, exposure, due-status, and error fields.
+- Audit-log listing and entity-history routes now validate entity/action filters, pagination, positive IDs, and structured before/after snapshots. Audit data remains evidence and is not treated as a financial mutation command by the agent layer.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.
