@@ -5,6 +5,9 @@ import { Input } from '../ui/Input';
 import { api } from '../../lib/api';
 import { formatCurrency, parseSignedIdNominalToInt, cn, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../../lib/utils';
 import { Check, AlertCircle, Wallet, Building2, CreditCard } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAccountsLedgerQuery, useReconciliationHistoryQuery } from '../../features/accounts/queries';
+import { queryKeys } from '../../features/core/query-keys';
 
 type Account = {
   id: number;
@@ -73,12 +76,15 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
-  const [history, setHistory] = useState<ReconciliationSession[]>([]);
   const [voidingSessionId, setVoidingSessionId] = useState<number | null>(null);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [acknowledgement, setAcknowledgement] = useState('');
   const [recoveryNote, setRecoveryNote] = useState('');
   const [asOfDate, setAsOfDate] = useState(() => toLocalDateInputValue());
+  const queryClient = useQueryClient();
+  const historyQuery = useReconciliationHistoryQuery();
+  const allAccountsQuery = useAccountsLedgerQuery();
+  const history = (historyQuery.data?.sessions ?? []) as ReconciliationSession[];
 
   const reconcilableAccounts = useMemo(() =>
     accounts.filter(a => (a.type === 'asset' || a.type === 'liability') && !a.systemKey),
@@ -94,7 +100,6 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
       setAcknowledgement('');
       setRecoveryNote('');
       setAsOfDate(toLocalDateInputValue());
-      void api.accounts.reconciliationHistory().then(({ sessions }) => setHistory(sessions)).catch(() => setHistory([]));
     }
   }, [isOpen, reconcilableAccounts]);
 
@@ -102,15 +107,15 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
     setRecoveryMode(enabled);
     setError(null);
     if (!enabled) return;
-    try {
-      // A recovery snapshot must include all active assets/liabilities even if
-      // the Accounts page is currently searched or filtered.
-      const allAccounts = await api.accounts.list();
-      setRows(rowsFor(allAccounts, true));
-    } catch (err) {
+    // A recovery snapshot must include all active assets/liabilities even if
+    // the Accounts page is currently searched or filtered.
+    const result = await allAccountsQuery.refetch();
+    if (result.error || !result.data) {
       setRecoveryMode(false);
-      setError((err as Error).message || 'Failed to load the complete recovery snapshot');
+      setError(result.error?.message || 'Failed to load the complete recovery snapshot');
+      return;
     }
+    setRows(rowsFor(result.data, true));
   };
 
   const handleVoid = async (session: ReconciliationSession) => {
@@ -124,8 +129,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
     setError(null);
     try {
       await api.accounts.voidReconciliation(session.id, reason.trim());
-      const { sessions } = await api.accounts.reconciliationHistory();
-      setHistory(sessions);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts.reconciliation(25) });
     } catch (err) {
       setError((err as Error).message || 'Failed to void reconciliation');
     } finally {
