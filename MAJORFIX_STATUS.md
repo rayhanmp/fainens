@@ -311,6 +311,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Deep-linked transaction details use a cancelable, cacheable detail query. Opening a transaction from another page no longer relies on an imperative request that can race a filter change or unmount.
 - Transaction list reads retain the last successful snapshot while refreshing, avoiding a blank activity feed during ordinary refetches.
 
+### `1215fe7` — agent startup context query migration
+
+- The agent workspace now reads periods, categories, accounts, and the preferred name through feature-owned React Query hooks rather than a mount-time bundle of imperative requests.
+- Period selection still defaults to the active period, while cached context survives navigation and refetches without resetting the composer or conversation view.
+- Profile edits update the canonical profile cache immediately; opening Agent Memory performs an explicit query refetch instead of maintaining a second profile/memory loading path.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
