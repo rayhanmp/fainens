@@ -353,6 +353,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Route-local refresh calls were removed from those forms, avoiding duplicate requests after a successful mutation while preserving the existing confirmation and modal flows.
 - Reporting-account mapping changes therefore converge with budgets, reports, dashboards, and agent context through the same cache boundary.
 
+### `833e682` — transaction mutation hooks
+
+- Transaction create, metadata edit, reversal, draft deletion, bulk deletion, and CSV import now use feature-owned typed mutations.
+- The transaction modal and import flow retain their existing domain validation, multi-line journal handling, and attachment behavior while mutation success invalidates canonical financial summaries.
+- Transaction list actions no longer own a second mutation transport path, reducing the chance of stale dashboard/account data after a successful write.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
