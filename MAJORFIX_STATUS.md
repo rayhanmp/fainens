@@ -238,6 +238,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Dashboard overview facts, accounts/categories/tags, reconciliation, loans, PayLater, subscriptions, and selected-period facts/budget/activity/outlook now use feature-owned React Query entries.
 - Period changes are isolated to period-scoped queries. Refreshing after a transaction invalidates the shared dashboard/account/period keys instead of remounting the page or clearing unrelated data; the existing outlier-review follow-up invalidates only the selected period.
 
+### `701a1b6` — Budget query migration
+
+- Budget plans, period/category lists, comparisons, and reusable templates now use feature-owned React Query queries with stable period/comparison/template keys.
+- Budget mutations invalidate the relevant cache families instead of clearing local rows before a request completes. A failed refresh keeps the last snapshot visible and exposes a retry affordance.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
@@ -272,7 +277,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 7. **Implemented account/category archive dependency previews and restore flows.** The API and Accounts/Categories screens preserve history and require an explicit opt-in to view archived records. A richer cross-domain dependency graph remains an enhancement.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
 9. **Started the RHF/Zod form migration.** Simple/journal schemas, edit-details, and the dynamic journal lines/category allocation editor are migrated. The simple transaction form and remaining conditional subflows still use focused local state until their field boundaries can be moved without duplicating transfer/PayLater behavior.
-10. **Accounts and Dashboard are migrated to feature-owned React Query hooks.** Budget, periods, reconciliation, and the remaining auxiliary screens still have legacy request orchestration and are next migration candidates.
+10. **Accounts, Dashboard, and Budget are migrated to feature-owned React Query hooks.** Periods, reconciliation, and the remaining auxiliary screens still have legacy request orchestration and are next migration candidates.
 11. **Implemented guarded agent write paths for budgets and transactions plus high-value retrieval/planning tools.** Budget-plan upserts and explicit journal transaction creation use durable pending actions and one-time approval tokens. Deterministic similar-transaction, cash-flow, category-variance, period-comparison, cash-forecast, account-health, and anomaly tools are available. Recurring occurrence decisions, recovery/reconciliation commands, and domain correction/reversal proposals still need their own contracts.
 12. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
 13. **Implemented return-after-absence recovery and propagation.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Budget/dashboard/PDF/trend/agent reads disclose gaps and exclude skipped/unknown periods from averages and comparisons. Guided statement import/catch-up orchestration remains a follow-up.
