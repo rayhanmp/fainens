@@ -22,6 +22,7 @@ export const queryKeys = {
     trends: ["reports", "trends"] as const,
     summary: ["reports", "summary"] as const,
   },
+  anomalies: { all: ["anomalies"] as const, list: (status: string) => ["anomalies", status] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
