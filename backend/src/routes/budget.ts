@@ -52,6 +52,34 @@ const budgetCreateBodySchema = z.object({
   plannedAmount: z.number().int().nonnegative(),
 });
 const budgetUpdateBodySchema = z.object({ plannedAmount: z.number().int().nonnegative().optional() });
+const budgetOutlookCategorySchema = z.object({
+  categoryId: z.number().int(), categoryName: z.string(), plannedAmount: z.number(), actualAmount: z.number(),
+  remainingAmount: z.number(), scheduledRemainingAmount: z.number(), historicalRemainingAmount: z.number().nullable(),
+  projectedAmount: z.number().nullable(), projectedLowAmount: z.number().nullable(), projectedHighAmount: z.number().nullable(),
+  riskStatus: z.enum(["within_budget", "at_risk", "over_budget", "unknown"]), historicalSampleCount: z.number().int(),
+  outlierCount: z.number().int(), evidencePeriodIds: z.array(z.number().int()), historicalSampleAmounts: z.array(z.number()),
+  patternReview: z.object({ transactionId: z.number().int(), amount: z.number(), description: z.string(), classification: z.string(), confidence: z.number(), rationale: z.string() }).nullable(),
+}).passthrough();
+const budgetOutlookSchema = z.object({
+  periodId: z.number().int(), asOfMs: z.number(), totalDays: z.number().int(), daysElapsed: z.number().int(), daysRemaining: z.number().int(),
+  eligiblePeriodCount: z.number().int(), confidence: z.enum(["unavailable", "low", "moderate", "high"]),
+  method: z.enum(["completed_cycle_median", "insufficient_history", "period_complete"]),
+  patternReview: z.object({ applied: z.boolean(), categoryCount: z.number().int(), evidenceRevision: z.number().int() }).passthrough(),
+  total: z.object({ plannedAmount: z.number(), actualAmount: z.number(), remainingAmount: z.number(), scheduledRemainingAmount: z.number(), projectedAmount: z.number().nullable(), projectedLowAmount: z.number().nullable(), projectedHighAmount: z.number().nullable(), riskStatus: z.enum(["within_budget", "at_risk", "over_budget", "unknown"]) }).passthrough(),
+  categories: z.array(budgetOutlookCategorySchema),
+}).passthrough();
+const budgetReviewStatusSchema = z.object({ periodId: z.number().int(), evidenceRevision: z.number().int(), reviews: z.array(z.unknown()) }).passthrough();
+const budgetReviewResultSchema = z.object({ applied: z.boolean(), reason: z.string(), reviews: z.array(z.unknown()), largePurchaseCount: z.number().int().optional(), detail: z.string().optional() }).passthrough();
+const budgetTemplateSchema = z.object({
+  id: z.number().int(), name: z.string(), description: z.string().nullable().optional(), isActive: z.boolean().optional(),
+  createdAt: z.union([z.date(), z.string(), z.number()]).optional(),
+  items: z.array(z.object({ id: z.number().int(), categoryId: z.number().int(), plannedAmount: z.number(), categoryName: z.string() }).passthrough()).optional(),
+}).passthrough();
+const budgetTemplateBodySchema = z.object({ name: z.string().trim().min(1).max(200), description: z.string().max(1000).optional(), periodId: z.number().int().positive() }).passthrough();
+const budgetTemplateIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const budgetTemplateApplyBodySchema = z.object({ periodId: z.number().int().positive(), replaceExisting: z.boolean().optional() }).passthrough();
+const budgetComparisonSchema = z.object({ categoryId: z.number().int(), categoryName: z.string(), currentPlanned: z.number(), comparePlanned: z.number(), compareActual: z.number(), plannedDiff: z.number(), actualDiff: z.number() }).passthrough();
+const budgetReviewParamsSchema = z.object({ periodId: z.coerce.number().int().positive(), transactionId: z.coerce.number().int().positive() });
 
 async function invalidateBudgetMutation(periodIds: number[]): Promise<void> {
   // The caller bumps the revision in the same SQLite transaction as the plan
@@ -199,7 +227,9 @@ export default async function (fastify: FastifyInstance) {
     return budgetSummary;
   });
 
-  fastify.get("/api/budgets/:periodId/outlook", async (request, reply) => {
+  fastify.get("/api/budgets/:periodId/outlook", {
+    schema: { operationId: "getBudgetOutlook", tags: ["budgets"], params: budgetPeriodParamsSchema, response: { 200: budgetOutlookSchema, 400: budgetErrorSchema, 404: budgetErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { periodId?: string }).periodId);
     if (!Number.isInteger(periodId) || periodId <= 0) {
       return reply.code(400).send({ error: "A valid period ID is required" });
@@ -212,13 +242,17 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/api/budgets/:periodId/outlook/review", async (request, reply) => {
+  fastify.get("/api/budgets/:periodId/outlook/review", {
+    schema: { operationId: "getBudgetOutlookReview", tags: ["budgets"], params: budgetPeriodParamsSchema, response: { 200: budgetReviewStatusSchema, 400: budgetErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { periodId?: string }).periodId);
     if (!Number.isInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "A valid period ID is required" });
     return getBudgetReviewStatus(periodId);
   });
 
-  fastify.post("/api/budgets/:periodId/outlook/review", async (request, reply) => {
+  fastify.post("/api/budgets/:periodId/outlook/review", {
+    schema: { operationId: "reviewBudgetOutlook", tags: ["budgets"], params: budgetPeriodParamsSchema, response: { 200: budgetReviewResultSchema, 400: budgetErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { periodId?: string }).periodId);
     if (!Number.isInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "A valid period ID is required" });
     try {
@@ -234,9 +268,11 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.patch("/api/budgets/:periodId/outlook/review/:categoryId", async (request, reply) => {
+  fastify.patch("/api/budgets/:periodId/outlook/review/:transactionId", {
+    schema: { operationId: "updateBudgetOutlookReview", tags: ["budgets"], params: budgetReviewParamsSchema, body: z.object({ weight: z.number().min(0.05).max(1).nullable().optional() }).passthrough(), response: { 200: z.object({ updated: z.literal(true), periodId: z.number().int(), transactionId: z.number().int(), userWeight: z.number().nullable() }).passthrough(), 400: budgetErrorSchema, 404: budgetErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { periodId?: string }).periodId);
-    const transactionId = Number((request.params as { categoryId?: string }).categoryId);
+    const transactionId = Number((request.params as { transactionId?: string }).transactionId);
     const body = request.body as { weight?: unknown };
     if (!Number.isInteger(periodId) || periodId <= 0 || !Number.isInteger(transactionId) || transactionId <= 0) {
       return reply.code(400).send({ error: "Valid period and transaction IDs are required" });
@@ -408,7 +444,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get all budget templates
-  fastify.get("/api/budgets/templates", async (request) => {
+  fastify.get("/api/budgets/templates", {
+    schema: { operationId: "listBudgetTemplates", tags: ["budgets"], querystring: z.object({ includeInactive: z.enum(["true", "false"]).optional() }), response: { 200: z.array(budgetTemplateSchema) } },
+  }, async (request) => {
     const { includeInactive } = request.query as { includeInactive?: string };
     const templates = await db
       .select({
@@ -447,7 +485,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Create a new budget template from current period
-  fastify.post("/api/budgets/templates", async (request, reply) => {
+  fastify.post("/api/budgets/templates", {
+    schema: { operationId: "createBudgetTemplate", tags: ["budgets"], body: budgetTemplateBodySchema, response: { 201: budgetTemplateSchema, 400: budgetErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       description?: string;
@@ -497,7 +537,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Apply a template to a period
-  fastify.post("/api/budgets/templates/:id/apply", async (request, reply) => {
+  fastify.post("/api/budgets/templates/:id/apply", {
+    schema: { operationId: "applyBudgetTemplate", tags: ["budgets"], params: budgetTemplateIdParamsSchema, body: budgetTemplateApplyBodySchema, response: { 200: z.object({ applied: z.number().int(), skipped: z.number().int() }).passthrough(), 400: budgetErrorSchema, 404: budgetErrorSchema, 409: budgetErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as { periodId: number; replaceExisting?: boolean };
 
@@ -565,7 +607,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Delete a template
-  fastify.delete("/api/budgets/templates/:id", async (request, reply) => {
+  fastify.delete("/api/budgets/templates/:id", {
+    schema: { operationId: "deleteBudgetTemplate", tags: ["budgets"], params: budgetTemplateIdParamsSchema, response: { 204: z.null(), 404: budgetErrorSchema, 409: budgetErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db
@@ -599,7 +643,9 @@ export default async function (fastify: FastifyInstance) {
     reply.code(204).send();
   });
 
-  fastify.post("/api/budgets/templates/:id/restore", async (request, reply) => {
+  fastify.post("/api/budgets/templates/:id/restore", {
+    schema: { operationId: "restoreBudgetTemplate", tags: ["budgets"], params: budgetTemplateIdParamsSchema, response: { 200: budgetTemplateSchema, 400: budgetErrorSchema, 404: budgetErrorSchema, 409: budgetErrorSchema } },
+  }, async (request, reply) => {
     const templateId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(templateId) || templateId <= 0) {
       return reply.code(400).send({ error: "Invalid template ID" });
@@ -630,7 +676,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Compare budgets between two periods
-  fastify.get("/api/budgets/compare", async (request, reply) => {
+  fastify.get("/api/budgets/compare", {
+    schema: { operationId: "compareBudgets", tags: ["budgets"], querystring: z.object({ currentPeriodId: z.string().regex(/^\d+$/), comparePeriodId: z.string().regex(/^\d+$/) }), response: { 200: z.array(budgetComparisonSchema), 400: budgetErrorSchema } },
+  }, async (request, reply) => {
     const { currentPeriodId, comparePeriodId } = request.query as {
       currentPeriodId?: string;
       comparePeriodId?: string;

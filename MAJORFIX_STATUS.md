@@ -422,7 +422,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Budget listing now declares the mixed selected-period/all-period response explicitly, including coverage evidence and per-category actuals/variance.
 - Budget create, update, and delete routes now declare typed params/bodies, stable operation IDs, and the existing 400/404/409 error envelope plus 204 deletion response.
-- Non-negative integer plan amounts and numeric period/category identifiers are rejected at the transport boundary before they reach ledger-derived budget calculations. Outlook, template, comparison, and review routes remain to be contracted.
+- Non-negative integer plan amounts and numeric period/category identifiers are rejected at the transport boundary before they reach ledger-derived budget calculations.
 
 ### `pending` — transaction route contracts
 
@@ -458,7 +458,13 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Coverage assertion, close, reopen, archive, restore, delete, suggested-next, and auto-create period routes now declare typed request/response contracts and stable operation IDs.
 - The coverage body explicitly supports `partial`, `complete`, and `skipped` with a reviewed reason, keeping the long-absence workflow representable without implying zero activity.
-- Period route registration is now fully contract-covered; CSV imports, budget outlook/template/comparison, and the remaining domain workflows are the next schema gaps.
+- Period route registration is now fully contract-covered; CSV imports and the remaining domain workflows are the next schema gaps.
+
+### `pending` — budget outlook and template contracts
+
+- Budget outlook, individual purchase-review overrides, template list/create/apply/archive/restore, and cross-period comparison now declare typed route contracts and stable operation IDs.
+- The review override path is named `transactionId` in the route contract and handler to match its actual lookup key, without changing the URL shape used by the frontend.
+- Forecast response schemas preserve confidence, historical samples, outlier counts, per-purchase review metadata, and risk status so UI projections can remain explainable and revision-aware.
 
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
