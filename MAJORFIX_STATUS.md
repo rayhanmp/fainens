@@ -375,24 +375,24 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Loan deletion now uses a feature-owned typed mutation with shared financial-summary invalidation.
 - The existing confirmation warning remains in place, including the associated-transaction consequence; the route no longer owns a separate delete transport path.
 
-### `pending` — wishlist, loan, contact, and split-bill mutation hooks
+### `completed` — wishlist, loan, contact, and split-bill mutation hooks
 
 - Wishlist create, delete, fulfill, and link actions now use feature-owned mutations instead of modal/route-local API calls.
 - Loan creation, payment recording, and contact create/update actions now share the loans feature mutation boundary. Split-bill contact creation uses the same hook, so new contacts invalidate loan and split-bill lookup data consistently.
 - The canonical invalidation boundary now includes contacts and split-bill lookups alongside financial summaries, preventing successful writes from leaving stale account, transaction, dashboard, report, or workflow data visible.
 
-### `pending` — anomaly and salary mutation hooks
+### `completed` — anomaly and salary mutation hooks
 
 - Money-anomaly scans and review decisions now use feature-owned mutations. Scan results invalidate anomaly queries; a resolved or dismissed candidate invalidates the broader financial summaries as well.
 - Salary settings updates and salary catch-up posting now use feature-owned mutations. Settings cache updates immediately while posting invalidates ledger-derived views, and route-local refresh duplication is removed.
 
-### `pending` — pending-transaction query and mutation hooks
+### `completed` — pending-transaction query and mutation hooks
 
 - Pending transaction approval/rejection, AI parse preview, draft creation, and draft edits now use feature-owned mutations. Approval invalidates the full financial summary set; draft-only actions invalidate the pending queue.
 - The pending-transaction modal now reads through the canonical React Query pending key instead of maintaining a second server-data cache and imperative reload effect.
 - The transaction modal uses the same pending mutation boundary for AI preview, save-and-keep-pending, and approve-after-edit, preserving its existing validation and confirmation behavior.
 
-### `pending` — transport route-template query and mutation hooks
+### `completed` — transport route-template query and mutation hooks
 
 - Saved transport routes are now read through a keyed React Query query and created, renamed, or deleted through feature-owned mutations.
 - The transaction modal no longer keeps a second route-template server cache or performs an imperative list fetch on every open. Template changes invalidate only the route-template key while preserving the existing editor state.
@@ -402,118 +402,124 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Regenerated the checked-in Orval client directly from the committed pilot contract. The generated Period types now include coverage and lifecycle enums that were present in the OpenAPI document but missing from the stale client output.
 - The normal `generate:api` wrapper is currently blocked before Orval by pnpm's minimum-release-age policy on the existing lockfile (`markdown-it@14.3.1`). The direct installed Orval binary produces the same reproducible client output without changing dependency resolution.
 
-### `pending` — database-free OpenAPI bootstrap
+### `74a9163` — complete route-contract coverage checkpoint
+
+- The contract-only app registry now exposes **146 paths and 188 operations**. Every application-owned operation has an explicit stable `operationId`; the only unlabeled operation is the redirect route generated internally by `@fastify/oauth2` (`/api/auth/google`).
+- Accounts, categories, periods, budgets, transactions/imports, analytics, reports/exports, tags, route templates, reconciliation/recovery, authentication, attachments, PayLater, audit, salary, subscriptions, contacts/loans, insights, pending transactions, wishlist/scraping, split bills, anomalies, agent, and budget-outlook/template routes now have route-level Zod contracts in source.
+- The committed OpenAPI/client pair remains the smaller finance pilot until the full generated artifact is reviewed. This keeps generated output stable while the remaining work focuses on schema quality, response-envelope consistency, and client migration rather than silently committing a schema-less expansion.
+
+### `completed` — database-free OpenAPI bootstrap
 
 - Contract-mode app construction now sets a contract-only boundary before importing routes. SQLite is not opened during route registration, so OpenAPI generation no longer depends on a writable database or a locally matching `better-sqlite3` native binding.
-- The generated route registry currently exposes all registered endpoints, but most legacy routes still lack explicit Fastify Zod schemas. The committed pilot contract and typed client remain the compatibility source until those route schemas are added; generating the full registry directly is intentionally not committed because Orval cannot safely type schema-less `void` responses.
+- The generated route registry can be inspected deterministically without opening SQLite, starting timers, or listening on a port. The committed pilot contract and typed client remain the compatibility source while the full registry is reviewed for response-envelope quality.
 
-### `pending` — accounts and categories route contracts
+### `completed` — accounts and categories route contracts
 
 - Accounts list/detail/create/update and category list/detail/create/update/archive/dependency/restore routes now declare Fastify Zod params, query, body, and response contracts with stable operation IDs.
 - Account and category record responses are modeled as passthrough records so existing ledger fields remain compatible while the public contract gains useful required identity/type fields. Error status shapes remain permissive until the shared error envelope is standardized.
 
-### `pending` — period lifecycle route contracts
+### `completed` — period lifecycle route contracts
 
 - Period list/detail, return-after-absence preview/backfill, create, and update routes now declare Zod params, query, body, and response contracts with stable operation IDs.
 - Period schemas preserve coverage and open/closed/archive lifecycle fields, tolerate the existing timestamp serialization forms, and include the return workflow's explicit skipped-period response instead of treating missing months as empty data.
-- Contract-only route registration verifies these period paths without opening SQLite. The remaining period lifecycle actions and the broader generated contract still need the same treatment before the pilot contract can be expanded safely.
+- Contract-only route registration verifies these period paths without opening SQLite; the close/reopen/archive/restore/delete tail is covered by the complete lifecycle contract below.
 
-### `pending` — budget summary and plan route contracts
+### `completed` — budget summary and plan route contracts
 
 - Budget listing now declares the mixed selected-period/all-period response explicitly, including coverage evidence and per-category actuals/variance.
 - Budget create, update, and delete routes now declare typed params/bodies, stable operation IDs, and the existing 400/404/409 error envelope plus 204 deletion response.
 - Non-negative integer plan amounts and numeric period/category identifiers are rejected at the transport boundary before they reach ledger-derived budget calculations.
 
-### `pending` — transaction route contracts
+### `completed` — transaction route contracts
 
 - Transaction category recommendation, list/detail, create, reverse, update, delete, and bulk-delete routes now declare Zod query/params/bodies and response shapes with stable operation IDs.
 - The list contract describes pagination, signed debit/credit effects, tags, and category allocations so consumers no longer have to infer journal amounts from the largest line. Create/edit inputs validate positive identifiers, non-negative journal line amounts, and supported activity kinds before ledger services run.
-- Mutation error status narrowing keeps the declared 400/404/409/500 responses aligned with `TransactionMutationError`; CSV import preview/confirm routes now also declare bounded row/mapping payloads and stable operation IDs. The legacy route names remain `/transactions/import-preview` and `/transactions/import-confirm`, while the current handwritten frontend still calls `/transactions/import/preview` and `/transactions/import/confirm`; the generated-client adapter should normalize that compatibility gap before this feature is marked migrated.
+- Mutation error status narrowing keeps the declared 400/404/409/500 responses aligned with `TransactionMutationError`; CSV import preview/confirm routes now also declare bounded row/mapping payloads and stable operation IDs. The handwritten frontend adapter now calls the registered `/transactions/import-preview` and `/transactions/import-confirm` paths, eliminating the old nested-path 404.
 
-### `pending` — analytics route contracts
+### `completed` — analytics route contracts
 
 - Net-worth, burn-rate, runway, trial-balance, dashboard, net-worth trend, period-aware spending trend, account-balance, period-summary, lifestyle, opportunity-cost, and period-summary list routes now declare response schemas and stable operation IDs.
 - Range, period, and account identifiers are validated at the transport boundary. The spending-trend contract preserves coverage status and bucket metadata so skipped/partial periods cannot be mistaken for zero spending by generated clients.
-- Remaining report/PDF routes and the full generated artifact still need to be expanded from the compatibility pilot.
+- Report/PDF routes are covered separately below; the full generated artifact remains intentionally gated on review.
 
-### `pending` — report and export route contracts
+### `completed` — report and export route contracts
 
 - Income statement, balance sheet, cash flow, spending, monthly report, CSV export, and multi-period trend routes now declare their validated query/param shapes, structured report responses, and error envelopes with stable operation IDs.
 - Report schemas expose coverage evidence, cash-flow classification source, category breakdowns, monthly provenance, and signed statement totals so report consumers do not reconstruct accounting facts from capped transaction lists.
 - Export contracts explicitly retain `asOfDate` alongside period-range filters; the remaining generated contract refresh is still gated on completing legacy route schemas and resolving the pnpm release-age policy.
 
-### `pending` — tag and transport-route contracts
+### `completed` — tag and transport-route contracts
 
 - Tag list/detail/create/update/delete routes now declare typed IDs, tag payloads, hex-color validation, usage counts, and deletion responses.
 - Saved transport route list/create/update/delete routes now declare reusable route metadata, coordinates, category/account references, tag IDs, and timestamp-bearing view responses.
-- The route-template contract preserves the existing “fare varies per trip” model while validating reusable route metadata before it reaches the database. Remaining reconciliation, account lifecycle, period lifecycle, and import contracts are next.
+- The route-template contract preserves the existing “fare varies per trip” model while validating reusable route metadata before it reaches the database.
 
-### `pending` — account lifecycle and reconciliation contracts
+### `completed` — account lifecycle and reconciliation contracts
 
 - Account archive, dependency-preview, and restore routes now declare lifecycle responses and blockers alongside the existing account CRUD contract.
 - Reconciliation history, control snapshots, recovery bridges, and reasoned void actions now declare typed payloads/responses. Recovery responses expose the optional bridge journal explicitly instead of making clients infer whether a ledger mutation occurred.
-- Reconciliation remains a control-evidence snapshot in the contract; only the separate recovery endpoint can return a recovery transaction ID. Period lifecycle tail routes and CSV import contracts remain.
+- Reconciliation remains a control-evidence snapshot in the contract; only the separate recovery endpoint can return a recovery transaction ID.
 
-### `pending` — complete period lifecycle contracts
+### `completed` — complete period lifecycle contracts
 
 - Coverage assertion, close, reopen, archive, restore, delete, suggested-next, and auto-create period routes now declare typed request/response contracts and stable operation IDs.
 - The coverage body explicitly supports `partial`, `complete`, and `skipped` with a reviewed reason, keeping the long-absence workflow representable without implying zero activity.
-- Period route registration is now fully contract-covered; CSV imports and the remaining domain workflows are the next schema gaps.
+- Period route registration is now fully contract-covered, including the explicit skipped-coverage return workflow.
 
-### `pending` — authentication route contracts
+### `completed` — authentication route contracts
 
 - CSRF token, OAuth callback outcomes, current-user, onboarding-status, and logout routes now declare stable operation IDs plus typed success/error envelopes. The OAuth provider's generated `/api/auth/google` redirect remains owned by `@fastify/oauth2` and is intentionally not re-registered by the application.
 - Authentication responses are now part of the same OpenAPI boundary as finance routes, so generated clients can distinguish an expired session, a forbidden account, and an onboarding-required state without scraping response text.
 
-### `pending` — attachment route contracts
+### `completed` — attachment route contracts
 
 - Attachment listing, metadata/detail, presigned URL, upload, delete, local-file serving, and wishlist-image serving routes now declare typed request/response contracts and stable operation IDs.
 - Upload contracts constrain transaction IDs, filenames, supported MIME types, and non-empty payloads. Delete responses distinguish an immediate `204` removal from a committed removal whose object cleanup is queued (`202`), so clients do not report storage cleanup as a failed financial operation.
 - Wildcard file routes remain response-streaming handlers; their contract describes the not-found envelope without pretending the binary stream is JSON.
 
-### `pending` — PayLater and audit contracts
+### `completed` — PayLater and audit contracts
 
 - PayLater recognition, schedule preview, interest, settlement, reversal, summary, and obligation routes now declare typed request/response contracts with installment, exposure, due-status, and error fields.
 - Audit-log listing and entity-history routes now validate entity/action filters, pagination, positive IDs, and structured before/after snapshots. Audit data remains evidence and is not treated as a financial mutation command by the agent layer.
 
-### `pending` — salary lifecycle contracts
+### `completed` — salary lifecycle contracts
 
 - Salary settings, payroll calculation/posting previews, catch-up preview, post/skip catch-up, occurrence correction, period attachment, and settings update routes now declare typed payloads, payroll breakdowns, occurrence statuses, and explicit correction/attachment results.
 - Catch-up contracts distinguish `due`, `posted`, `skipped`, and `legacy` occurrences, preserving the long-absence workflow without implying that a skipped month had zero income or spending.
 
-### `pending` — subscription lifecycle contracts
+### `completed` — subscription lifecycle contracts
 
 - Subscription list/create/detail/update/archive, renewal processing, occurrence correction, and the intentionally disabled direct-advance route now declare typed payloads, renewal previews, correction receipts, and explicit `410` behavior for unsafe direct advancement.
 - Renewal inputs are bounded to unique positive subscription IDs and historical due timestamps at the domain boundary, while the response keeps posted and skipped counts separate from transaction IDs.
 
-### `pending` — contacts and loan contracts
+### `completed` — contacts and loan contracts
 
 - Contact list/detail/create/update/archive/restore routes now declare typed search filters, contact payloads, loan summaries, and archive blockers.
 - Loan list/detail/create/update/delete, payment, origin-reversal, and payment-reversal routes now declare direction/status filters, timestamp-tolerant subledger records, payment receipts, reversal receipts, and explicit conflict responses. Liability/receivable subledger rows remain domain-owned and are not editable through generic transaction mutations.
 
-### `pending` — insights and pending-transaction contracts
+### `completed` — insights and pending-transaction contracts
 
 - Dashboard/budget insight generation and latest-cache routes now declare period filters and provenance-bearing insight envelopes, including stale cache state and revision numbers.
 - Legacy pending-transaction parse, list, detail, approve, reject, and retry routes now declare bounded messages, parsed payloads, lifecycle statuses, and explicit approval/retry outcomes. These routes remain a compatibility surface alongside the newer durable agent proposal flow.
 
-### `pending` — wishlist and scraping contracts
+### `completed` — wishlist and scraping contracts
 
 - Wishlist list/detail/create/update/delete, fulfilment, transaction linking, and standard/advanced product scraping routes now declare typed filters, item relationships, fulfilment receipts, SSRF-safe URL inputs, and scraper success/error envelopes.
 - Wishlist fulfilment remains an explicit financial mutation that returns both the updated wishlist state and created transaction; scraping responses keep product data opaque to the route contract so the scraper can evolve without widening financial records.
 
-### `pending` — split-bill and anomaly contracts
+### `completed` — split-bill and anomaly contracts
 
 - Split-bill receipt scan, split calculation, derived-loan creation, journal reversal, history, and session-detail routes now declare bounded image/assignment inputs, parsed receipt structures, split results, loan receipts, and reversal outcomes.
 - Money-anomaly listing, scanning, and review routes now declare review status filters, candidate counts, linked transaction evidence, and required review notes. Scanning remains read-only and review status changes remain separate from any ledger correction.
 
-### `pending` — agent route contracts
+### `completed` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.
 - Memory limits, nickname bounds, pinned/archive fields, message roles, and timestamp-normalized conversation views are part of the public contract, keeping durable session state separate from live stream transport.
 - Tool execution, durable preparation/approval actions, context retrieval, non-streaming query, SSE query streaming, and budget-plan preview now also declare their request contracts, operation IDs, and bounded response/error envelopes. The streaming endpoint intentionally declares only request/error metadata because its successful response is an SSE event stream rather than JSON.
 - Polymorphic tool payloads remain represented as validated `unknown` values at this boundary; domain services continue to validate each tool's input and enforce read/write authorization. Generated-client adapters should preserve that distinction instead of widening financial records into client-side state.
 
-### `pending` — budget outlook and template contracts
+### `completed` — budget outlook and template contracts
 
 - Budget outlook, individual purchase-review overrides, template list/create/apply/archive/restore, and cross-period comparison now declare typed route contracts and stable operation IDs.
 - The review override path is named `transactionId` in the route contract and handler to match its actual lookup key, without changing the URL shape used by the frontend.

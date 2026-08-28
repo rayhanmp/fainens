@@ -665,7 +665,10 @@ export const api = {
       existingCategories: Array<{ id: number; name: string }>;
       existingAccounts: Array<{ id: number; name: string }>;
       existingPeriods: Array<{ id: number; name: string }>;
-    }>('/transactions/import/preview', {
+    // Keep these paths aligned with the backend's explicit import route names.
+    // The old nested `/import/preview` form was never registered and returned
+    // a misleading 404 from the frontend import flow.
+    }>('/transactions/import-preview', {
       method: 'POST',
       body: JSON.stringify({ csvText }),
     }),
@@ -689,7 +692,7 @@ export const api = {
       skipped: number;
       errors: Array<{ row: number; message: string }>;
       transactions: Array<{ id: number; description: string; amount: number }>;
-    }>('/transactions/import/confirm', {
+    }>('/transactions/import-confirm', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
