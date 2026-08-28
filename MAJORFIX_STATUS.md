@@ -454,6 +454,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Reconciliation history, control snapshots, recovery bridges, and reasoned void actions now declare typed payloads/responses. Recovery responses expose the optional bridge journal explicitly instead of making clients infer whether a ledger mutation occurred.
 - Reconciliation remains a control-evidence snapshot in the contract; only the separate recovery endpoint can return a recovery transaction ID. Period lifecycle tail routes and CSV import contracts remain.
 
+### `pending` — complete period lifecycle contracts
+
+- Coverage assertion, close, reopen, archive, restore, delete, suggested-next, and auto-create period routes now declare typed request/response contracts and stable operation IDs.
+- The coverage body explicitly supports `partial`, `complete`, and `skipped` with a reviewed reason, keeping the long-absence workflow representable without implying zero activity.
+- Period route registration is now fully contract-covered; CSV imports, budget outlook/template/comparison, and the remaining domain workflows are the next schema gaps.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.

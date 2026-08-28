@@ -78,6 +78,16 @@ const periodMutationResponses = {
   404: periodErrorSchema,
   409: periodErrorSchema,
 };
+const periodCoverageBodySchema = z.object({
+  coverageStatus: z.enum(["partial", "complete", "skipped"]),
+  reason: z.string().trim().min(3).max(500),
+  reviewed: z.boolean().optional(),
+});
+const periodSuggestionSchema = z.object({
+  suggestedName: z.string(),
+  suggestedStartDate: z.string(),
+  suggestedEndDate: z.string(),
+}).passthrough();
 
 type ReturnPeriodCandidate = { name: string; startDate: number; endDate: number; isCurrent: boolean };
 
@@ -431,7 +441,9 @@ export default async function (fastify: FastifyInstance) {
 
   // Coverage is a separate, deliberately reviewed assertion. It must never be
   // inferred from an empty transaction list or from closing a period.
-  fastify.post("/api/periods/:id/coverage", async (request, reply) => {
+  fastify.post("/api/periods/:id/coverage", {
+    schema: { operationId: "setPeriodCoverage", tags: ["periods"], params: periodIdParamsSchema, body: periodCoverageBodySchema, response: { 200: periodSchema, 400: periodErrorSchema, 404: periodErrorSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { id: string }).id);
     const body = request.body as { coverageStatus?: string; reason?: string; reviewed?: boolean };
     const coverageStatus = body.coverageStatus;
@@ -473,7 +485,9 @@ export default async function (fastify: FastifyInstance) {
 
   // Close a completed accounting period. Closing is deliberate, audited, and
   // blocks any new/backdated journal in the period at the database layer.
-  fastify.post("/api/periods/:id/close", async (request, reply) => {
+  fastify.post("/api/periods/:id/close", {
+    schema: { operationId: "closePeriod", tags: ["periods"], params: periodIdParamsSchema, response: { 200: periodSchema, 400: periodErrorSchema, 404: periodErrorSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(periodId) || periodId <= 0) {
       return reply.code(400).send({ error: "Invalid period ID" });
@@ -519,7 +533,9 @@ export default async function (fastify: FastifyInstance) {
 
   // Reopening is explicit and audited. It is required before historical
   // correction entries or budget/date changes can be made.
-  fastify.post("/api/periods/:id/reopen", async (request, reply) => {
+  fastify.post("/api/periods/:id/reopen", {
+    schema: { operationId: "reopenPeriod", tags: ["periods"], params: periodIdParamsSchema, response: { 200: periodSchema, 400: periodErrorSchema, 404: periodErrorSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(periodId) || periodId <= 0) {
       return reply.code(400).send({ error: "Invalid period ID" });
@@ -552,7 +568,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/periods/:id/archive", async (request, reply) => {
+  fastify.post("/api/periods/:id/archive", {
+    schema: { operationId: "archivePeriod", tags: ["periods"], params: periodIdParamsSchema, response: { 200: periodSchema, 400: periodErrorSchema, 404: periodErrorSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "Invalid period ID" });
     try {
@@ -571,7 +589,9 @@ export default async function (fastify: FastifyInstance) {
     } catch (error) { const message = error instanceof Error ? error.message : "Failed to archive period"; return reply.code(message === "Period not found" ? 404 : 409).send({ error: message }); }
   });
 
-  fastify.post("/api/periods/:id/restore", async (request, reply) => {
+  fastify.post("/api/periods/:id/restore", {
+    schema: { operationId: "restorePeriod", tags: ["periods"], params: periodIdParamsSchema, response: { 200: periodSchema, 400: periodErrorSchema, 404: periodErrorSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const periodId = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "Invalid period ID" });
     try {
@@ -590,7 +610,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Delete salary period
-  fastify.delete("/api/periods/:id", async (request, reply) => {
+  fastify.delete("/api/periods/:id", {
+    schema: { operationId: "deletePeriod", tags: ["periods"], params: periodIdParamsSchema, response: { 204: z.null(), 404: periodErrorSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db
@@ -629,7 +651,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get suggested next period dates
-  fastify.get("/api/periods/suggest-next", async () => {
+  fastify.get("/api/periods/suggest-next", {
+    schema: { operationId: "suggestNextPeriod", tags: ["periods"], response: { 200: periodSuggestionSchema } },
+  }, async () => {
     const [latestPeriod] = await db
       .select()
       .from(salaryPeriods)
@@ -667,7 +691,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Auto-create next period
-  fastify.post("/api/periods/auto-create", async (request, reply) => {
+  fastify.post("/api/periods/auto-create", {
+    schema: { operationId: "autoCreatePeriod", tags: ["periods"], response: { 201: periodSchema, 409: periodErrorSchema } },
+  }, async (request, reply) => {
     const [latestPeriod] = await db
       .select()
       .from(salaryPeriods)
