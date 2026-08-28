@@ -23,6 +23,35 @@ export function useTransactionDetailQuery(id: number | null) {
   });
 }
 
+export function useTransportRouteTemplatesQuery(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.transactions.routeTemplates,
+    queryFn: () => api.transportRouteTemplates.list(),
+    enabled,
+    placeholderData: (previous) => previous,
+  });
+}
+
+function useRouteTemplateMutation<TInput>(mutationFn: (input: TInput) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.routeTemplates }),
+  });
+}
+
+export function useCreateTransportRouteTemplateMutation() {
+  return useRouteTemplateMutation((input: Parameters<typeof api.transportRouteTemplates.create>[0]) => api.transportRouteTemplates.create(input));
+}
+
+export function useUpdateTransportRouteTemplateMutation() {
+  return useRouteTemplateMutation(({ id, data }: { id: number; data: Parameters<typeof api.transportRouteTemplates.update>[1] }) => api.transportRouteTemplates.update(id, data));
+}
+
+export function useDeleteTransportRouteTemplateMutation() {
+  return useRouteTemplateMutation((id: number) => api.transportRouteTemplates.delete(id));
+}
+
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (input: Parameters<typeof api.transactions.create>[0]) => api.transactions.create(input), onSuccess: () => invalidateFinancialSummaries(queryClient) });

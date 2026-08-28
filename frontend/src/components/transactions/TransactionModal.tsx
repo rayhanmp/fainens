@@ -52,8 +52,12 @@ import {
   useApprovePendingTransactionMutation,
   useCreatePendingTransactionMutation,
   useCreateTransaction,
+  useCreateTransportRouteTemplateMutation,
+  useDeleteTransportRouteTemplateMutation,
   usePreviewPendingTransactionMutation,
+  useTransportRouteTemplatesQuery,
   useUpdatePendingTransactionMutation,
+  useUpdateTransportRouteTemplateMutation,
   useUpdateTransaction,
 } from '../../features/transactions/queries';
 
@@ -193,6 +197,10 @@ export function TransactionModal({
   const createPendingMutation = useCreatePendingTransactionMutation();
   const updatePendingMutation = useUpdatePendingTransactionMutation();
   const approvePendingMutation = useApprovePendingTransactionMutation();
+  const routeTemplatesQuery = useTransportRouteTemplatesQuery(isOpen);
+  const createRouteTemplateMutation = useCreateTransportRouteTemplateMutation();
+  const updateRouteTemplateMutation = useUpdateTransportRouteTemplateMutation();
+  const deleteRouteTemplateMutation = useDeleteTransportRouteTemplateMutation();
   const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
   const [activeDetailField, setActiveDetailField] = useState<string | null>(null);
@@ -377,7 +385,7 @@ export function TransactionModal({
   const [transferFeeControlsOpen, setTransferFeeControlsOpen] = useState(false);
   const [showAllTransferFromAccounts, setShowAllTransferFromAccounts] = useState(false);
   const [showAllTransferToAccounts, setShowAllTransferToAccounts] = useState(false);
-  const [routeTemplates, setRouteTemplates] = useState<TransportRouteTemplate[]>([]);
+  const routeTemplates = (routeTemplatesQuery.data ?? []) as TransportRouteTemplate[];
   const [isSavingRouteTemplate, setIsSavingRouteTemplate] = useState(false);
   const [isUpdatingRouteTemplate, setIsUpdatingRouteTemplate] = useState(false);
   const [selectedRouteTemplateId, setSelectedRouteTemplateId] = useState<number | null>(null);
@@ -676,15 +684,6 @@ export function TransactionModal({
     if (isOpen) setTransferFeeRules(loadTransferFeeRules());
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
-    api.transportRouteTemplates.list()
-      .then((templates) => { if (!cancelled) setRouteTemplates(templates as TransportRouteTemplate[]); })
-      .catch(() => { if (!cancelled) setRouteTemplates([]); });
-    return () => { cancelled = true; };
-  }, [isOpen]);
-
   const applyRouteTemplate = (template: TransportRouteTemplate) => {
     const origin = template.originName && template.originLat != null && template.originLng != null
       ? { name: template.originName, lat: template.originLat, lng: template.originLng }
@@ -738,7 +737,7 @@ export function TransactionModal({
     const name = routeTemplateName.trim() || fallbackName;
     setIsSavingRouteTemplate(true);
     try {
-      const created = await api.transportRouteTemplates.create({
+      const created = await createRouteTemplateMutation.mutateAsync({
         name,
         provider: simpleForm.rideProvider || null,
         service: simpleForm.rideService || null,
@@ -753,7 +752,6 @@ export function TransactionModal({
         notes: simpleForm.notes || null,
         tagIds: simpleForm.tagIds,
       });
-      setRouteTemplates((current) => [created as TransportRouteTemplate, ...current.filter((item) => item.id !== (created as TransportRouteTemplate).id)]);
       setSelectedRouteTemplateId((created as TransportRouteTemplate).id);
       setRouteTemplateName(name);
       setRouteTemplateEditorMode(null);
@@ -768,8 +766,7 @@ export function TransactionModal({
     if (!selectedRouteTemplateId || !routeTemplateName.trim()) return;
     setIsUpdatingRouteTemplate(true);
     try {
-      const updated = await api.transportRouteTemplates.update(selectedRouteTemplateId, { name: routeTemplateName.trim() });
-      setRouteTemplates((current) => current.map((template) => template.id === selectedRouteTemplateId ? { ...template, ...(updated as TransportRouteTemplate) } : template));
+      await updateRouteTemplateMutation.mutateAsync({ id: selectedRouteTemplateId, data: { name: routeTemplateName.trim() } });
       setRouteTemplateEditorMode(null);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Could not rename route');
@@ -789,8 +786,7 @@ export function TransactionModal({
     if (!confirmed) return;
     setIsUpdatingRouteTemplate(true);
     try {
-      await api.transportRouteTemplates.delete(selectedRouteTemplateId);
-      setRouteTemplates((current) => current.filter((template) => template.id !== selectedRouteTemplateId));
+      await deleteRouteTemplateMutation.mutateAsync(selectedRouteTemplateId);
       setSelectedRouteTemplateId(null);
       setRouteTemplateName('');
       setRouteTemplateEditorMode(null);

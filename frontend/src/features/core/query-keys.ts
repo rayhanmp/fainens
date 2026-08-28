@@ -9,6 +9,7 @@ export const queryKeys = {
     pending: ["transactions", "pending"] as const,
     list: (filters: object = {}) => ["transactions", "list", filters] as const,
     detail: (id: number) => ["transactions", "detail", id] as const,
+    routeTemplates: ["transactions", "route-templates"] as const,
   },
   budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const, comparison: (periodId: number, comparePeriodId: number) => ["budgets", "comparison", periodId, comparePeriodId] as const, templates: ["budgets", "templates"] as const },
   loans: { all: ["loans"] as const, list: (filters: object = {}) => ["loans", "list", filters] as const, summary: ["loans", "summary"] as const },
