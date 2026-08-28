@@ -397,6 +397,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Saved transport routes are now read through a keyed React Query query and created, renamed, or deleted through feature-owned mutations.
 - The transaction modal no longer keeps a second route-template server cache or performs an imperative list fetch on every open. Template changes invalidate only the route-template key while preserving the existing editor state.
 
+### `pending` — generated client refresh
+
+- Regenerated the checked-in Orval client directly from the committed pilot contract. The generated Period types now include coverage and lifecycle enums that were present in the OpenAPI document but missing from the stale client output.
+- The normal `generate:api` wrapper is currently blocked before Orval by pnpm's minimum-release-age policy on the existing lockfile (`markdown-it@14.3.1`). The direct installed Orval binary produces the same reproducible client output without changing dependency resolution.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.

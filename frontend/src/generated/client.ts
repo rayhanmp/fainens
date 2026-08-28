@@ -50,11 +50,36 @@ export interface CreateCategory {
   color?: string | null;
 }
 
+export type PeriodCoverageStatus = typeof PeriodCoverageStatus[keyof typeof PeriodCoverageStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const PeriodCoverageStatus = {
+  complete: 'complete',
+  partial: 'partial',
+  skipped: 'skipped',
+  unknown: 'unknown',
+} as const;
+
+export type PeriodStatus = typeof PeriodStatus[keyof typeof PeriodStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const PeriodStatus = {
+  open: 'open',
+  closed: 'closed',
+} as const;
+
 export interface Period {
   id: number;
   name: string;
   startDate: number;
   endDate: number;
+  coverageStatus?: PeriodCoverageStatus;
+  /** @nullable */
+  coverageReason?: string | null;
+  isActive?: boolean;
+  status?: PeriodStatus;
   [key: string]: unknown;
  }
 
