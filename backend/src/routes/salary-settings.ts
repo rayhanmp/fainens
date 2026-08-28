@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { salarySettings, accounts } from "../db/schema";
@@ -14,6 +15,30 @@ import {
 import { attachSalaryOccurrenceToMatchingPeriod, correctSalaryOccurrence, postSalaryIfPayrollDay, previewSalaryPosting, previewSalaryCatchUp, skipSalaryOccurrence } from "../services/salary-posting";
 
 const SINGLETON_ID = 1;
+
+const salaryErrorSchema = z.object({ error: z.string() }).passthrough();
+const salarySettingsBodySchema = z.object({
+  grossMonthly: z.number().int().nonnegative().optional(), payrollDay: z.number().int().min(1).max(31).optional(), ptkpCode: z.string().min(1).max(20).optional(), depositAccountId: z.number().int().positive().nullable().optional(), terCategory: z.enum(["A", "B", "C"]).optional(), jkkRiskGrade: z.number().int().min(0).max(10000).optional(), jkmRate: z.number().int().min(0).max(10000).optional(), bpjsKesehatanActive: z.boolean().optional(), jpWageCap: z.number().int().nonnegative().optional(), bpjsKesWageCap: z.number().int().nonnegative().optional(), jhtWageCap: z.number().int().nonnegative().optional(),
+}).passthrough();
+const payrollBreakdownSchema = z.object({
+  grossMonthly: z.number(), ptkpCode: z.string(), ptkpAnnual: z.number(), terCategory: z.enum(["A", "B", "C"]), taxBasisBruto: z.number(), employerJkk: z.number(), employerJkm: z.number(), employerBpjsKes: z.number(), jhtMonthly: z.number(), jpMonthly: z.number(), bpjsKesehatanMonthly: z.number(), pph21Monthly: z.number(), totalMandatoryDeductionsMonthly: z.number(), estimatedNetMonthly: z.number(), calculationMethod: z.enum(["TER", "Pasal17"]), notes: z.array(z.string()),
+}).passthrough();
+const salarySettingsResponseSchema = z.object({
+  settings: z.object({ grossMonthly: z.number(), payrollDay: z.number().int(), ptkpCode: z.string(), depositAccountId: z.number().int().nullable(), depositAccountName: z.string().nullable(), terCategory: z.string(), jkkRiskGrade: z.number(), jkmRate: z.number(), bpjsKesehatanActive: z.boolean(), jpWageCap: z.number(), bpjsKesWageCap: z.number(), jhtWageCap: z.number() }).passthrough(),
+  ptkpOptions: z.array(z.object({ code: z.string(), label: z.string(), annualPtkp: z.number(), terCategory: z.enum(["A", "B", "C"]) }).passthrough()), computed: payrollBreakdownSchema,
+}).passthrough();
+const salaryPreviewQuerySchema = z.object({ grossMonthly: z.string().regex(/^\d+$/).optional(), ptkpCode: z.string().max(20).optional(), month: z.string().regex(/^\d+$/).optional(), jkkRiskGrade: z.string().regex(/^\d+(?:\.\d+)?$/).optional(), jkmRate: z.string().regex(/^\d+(?:\.\d+)?$/).optional(), bpjsKesehatanActive: z.enum(["true", "false"]).optional(), jpWageCap: z.string().regex(/^\d+$/).optional(), bpjsKesWageCap: z.string().regex(/^\d+$/).optional(), jhtWageCap: z.string().regex(/^\d+$/).optional() });
+const salaryPostingBodySchema = z.object({ occurrenceDate: z.number().int().nonnegative().optional() }).passthrough();
+const salaryPostingResponseSchema = z.object({ posted: z.boolean(), transactionId: z.number().int().optional(), netAmount: z.number().optional(), occurrenceDate: z.number().optional(), message: z.string().optional() }).passthrough();
+const salaryCatchUpBodySchema = z.object({ mode: z.enum(["post", "skip"]), occurrenceDates: z.array(z.number().int().nonnegative()).min(1).max(120) }).passthrough();
+const salaryCatchUpResponseSchema = z.object({ mode: z.enum(["post", "skip"]), results: z.array(z.object({ occurrenceDate: z.number().int(), posted: z.boolean().optional(), skipped: z.boolean().optional(), transactionId: z.number().int().optional(), netAmount: z.number().optional(), message: z.string().optional() }).passthrough()) }).passthrough();
+const salaryOccurrenceParamsSchema = z.object({ occurrenceDate: z.coerce.number().int().nonnegative() });
+const salaryCorrectionBodySchema = z.object({ reason: z.string().trim().min(1).max(500), effectiveDate: z.number().int().nonnegative().optional(), netAmount: z.number().int().positive().optional(), depositAccountId: z.number().int().positive().optional() }).passthrough();
+const salaryCorrectionResponseSchema = z.object({ reversalTransactionId: z.number().int(), replacementTransactionId: z.number().int() }).passthrough();
+const salaryAttachResponseSchema = z.object({ transactionId: z.number().int(), periodId: z.number().int(), changed: z.boolean() }).passthrough();
+const salaryCatchUpOccurrenceSchema = z.object({ occurrenceDate: z.number().int(), netAmount: z.number(), status: z.enum(["due", "posted", "skipped", "legacy"]), transactionId: z.number().int().optional() }).passthrough();
+const salaryCatchUpPreviewSchema = z.object({ occurrences: z.array(salaryCatchUpOccurrenceSchema), truncated: z.boolean(), message: z.string().optional() }).passthrough();
+const salaryPostingPreviewSchema = z.object({ wouldPost: z.boolean(), isPayrollDay: z.boolean(), todayDay: z.number().int(), payrollDay: z.number().int(), grossMonthly: z.number(), netMonthly: z.number(), depositAccountId: z.number().int().nullable(), depositAccountName: z.string().nullable(), occurrenceDate: z.number().optional(), message: z.string() }).passthrough();
 
 async function getOrCreateRow() {
   const [row] = await db.select().from(salarySettings).where(eq(salarySettings.id, SINGLETON_ID)).limit(1);
@@ -89,14 +114,18 @@ async function buildResponse(row: typeof salarySettings.$inferSelect, computed: 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/salary-settings", async () => {
+  fastify.get("/api/salary-settings", {
+    schema: { operationId: "getSalarySettings", tags: ["salary"], response: { 200: salarySettingsResponseSchema } },
+  }, async () => {
     const row = await getOrCreateRow();
     const settings = buildPayrollSettings(row);
     const computed = estimatePayroll(row.grossMonthly, row.ptkpCode, 1, settings);
     return buildResponse(row, computed);
   });
 
-  fastify.get("/api/salary-settings/preview", async (request) => {
+  fastify.get("/api/salary-settings/preview", {
+    schema: { operationId: "previewSalaryCalculation", tags: ["salary"], querystring: salaryPreviewQuerySchema, response: { 200: z.object({ computed: payrollBreakdownSchema, month: z.number().int() }).passthrough() } },
+  }, async (request) => {
     const q = request.query as { 
       grossMonthly?: string; 
       ptkpCode?: string;
@@ -141,14 +170,20 @@ export default async function (fastify: FastifyInstance) {
     return { computed, month };
   });
 
-  fastify.get("/api/salary-settings/posting-preview", async () => {
+  fastify.get("/api/salary-settings/posting-preview", {
+    schema: { operationId: "previewSalaryPosting", tags: ["salary"], response: { 200: salaryPostingPreviewSchema } },
+  }, async () => {
     const preview = await previewSalaryPosting(db);
     return preview;
   });
 
-  fastify.get("/api/salary-settings/catch-up-preview", async () => previewSalaryCatchUp());
+  fastify.get("/api/salary-settings/catch-up-preview", {
+    schema: { operationId: "previewSalaryCatchUp", tags: ["salary"], response: { 200: salaryCatchUpPreviewSchema } },
+  }, async () => previewSalaryCatchUp());
 
-  fastify.post("/api/salary-settings/post-salary", async (request, reply) => {
+  fastify.post("/api/salary-settings/post-salary", {
+    schema: { operationId: "postSalary", tags: ["salary"], body: salaryPostingBodySchema, response: { 200: salaryPostingResponseSchema, 400: salaryErrorSchema } },
+  }, async (request, reply) => {
     const body = (request.body ?? {}) as { occurrenceDate?: number };
     if (body.occurrenceDate !== undefined && (!Number.isSafeInteger(body.occurrenceDate) || body.occurrenceDate < 0)) {
       reply.code(400).send({ error: "occurrenceDate must be a non-negative safe integer" });
@@ -163,7 +198,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/salary-settings/catch-up", async (request, reply) => {
+  fastify.post("/api/salary-settings/catch-up", {
+    schema: { operationId: "processSalaryCatchUp", tags: ["salary"], body: salaryCatchUpBodySchema, response: { 200: salaryCatchUpResponseSchema, 400: salaryErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as { mode?: "post" | "skip"; occurrenceDates?: number[] };
     if (!body || !["post", "skip"].includes(body.mode ?? "") || !Array.isArray(body.occurrenceDates) || body.occurrenceDates.length === 0 || body.occurrenceDates.length > 120) {
       reply.code(400).send({ error: "mode and 1-120 occurrenceDates are required" });
@@ -183,7 +220,9 @@ export default async function (fastify: FastifyInstance) {
     return { mode: body.mode, results };
   });
 
-  fastify.post("/api/salary-settings/occurrences/:occurrenceDate/correct", async (request, reply) => {
+  fastify.post("/api/salary-settings/occurrences/:occurrenceDate/correct", {
+    schema: { operationId: "correctSalaryOccurrence", tags: ["salary"], params: salaryOccurrenceParamsSchema, body: salaryCorrectionBodySchema, response: { 201: salaryCorrectionResponseSchema, 409: salaryErrorSchema } },
+  }, async (request, reply) => {
     const occurrenceDate = Number((request.params as { occurrenceDate?: string }).occurrenceDate);
     const body = (request.body ?? {}) as {
       reason?: string;
@@ -205,7 +244,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/salary-settings/occurrences/:occurrenceDate/attach-period", async (request, reply) => {
+  fastify.post("/api/salary-settings/occurrences/:occurrenceDate/attach-period", {
+    schema: { operationId: "attachSalaryOccurrencePeriod", tags: ["salary"], params: salaryOccurrenceParamsSchema, response: { 200: salaryAttachResponseSchema, 409: salaryErrorSchema } },
+  }, async (request, reply) => {
     const occurrenceDate = Number((request.params as { occurrenceDate?: string }).occurrenceDate);
     try {
       return reply.send(await attachSalaryOccurrenceToMatchingPeriod(occurrenceDate));
@@ -214,7 +255,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.put("/api/salary-settings", async (request, reply) => {
+  fastify.put("/api/salary-settings", {
+    schema: { operationId: "updateSalarySettings", tags: ["salary"], body: salarySettingsBodySchema, response: { 200: salarySettingsResponseSchema, 400: salaryErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       grossMonthly?: number;
       payrollDay?: number;

@@ -476,6 +476,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - PayLater recognition, schedule preview, interest, settlement, reversal, summary, and obligation routes now declare typed request/response contracts with installment, exposure, due-status, and error fields.
 - Audit-log listing and entity-history routes now validate entity/action filters, pagination, positive IDs, and structured before/after snapshots. Audit data remains evidence and is not treated as a financial mutation command by the agent layer.
 
+### `pending` — salary lifecycle contracts
+
+- Salary settings, payroll calculation/posting previews, catch-up preview, post/skip catch-up, occurrence correction, period attachment, and settings update routes now declare typed payloads, payroll breakdowns, occurrence statuses, and explicit correction/attachment results.
+- Catch-up contracts distinguish `due`, `posted`, `skipped`, and `legacy` occurrences, preserving the long-absence workflow without implying that a skipped month had zero income or spending.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.
