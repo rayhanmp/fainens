@@ -32,3 +32,35 @@ export function useReverseTransaction() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (id: number) => api.transactions.reverse(id), onSuccess: () => invalidateFinancialSummaries(queryClient) });
 }
+
+export function useUpdateTransaction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.transactions.update>[1] }) => api.transactions.update(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useDeleteTransaction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.transactions.delete(id),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useBulkDeleteTransactions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => api.transactions.bulkDelete(ids),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useImportTransactions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.transactions.importConfirm>[0]) => api.transactions.importConfirm(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}

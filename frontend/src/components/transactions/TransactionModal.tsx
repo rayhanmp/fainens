@@ -48,6 +48,7 @@ import {
   type JournalFormLineValues,
   type JournalFormValues,
 } from '../../features/transactions/schemas';
+import { useCreateTransaction, useUpdateTransaction } from '../../features/transactions/queries';
 
 export type WalletAccount = {
   id: number;
@@ -179,6 +180,8 @@ export function TransactionModal({
   initialMode = 'edit',
   pendingTransaction,
 }: TransactionModalProps) {
+  const createTransactionMutation = useCreateTransaction();
+  const updateTransactionMutation = useUpdateTransaction();
   const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
   const [activeDetailField, setActiveDetailField] = useState<string | null>(null);
@@ -864,7 +867,7 @@ export function TransactionModal({
     try {
       const metadata = values ?? editMeta;
       const dateTime = metadata.time ? `${metadata.date}T${metadata.time}:00` : metadata.date;
-      await api.transactions.update(editingTransaction.id, {
+      await updateTransactionMutation.mutateAsync({ id: editingTransaction.id, data: {
         description: metadata.description,
         reference: metadata.reference || null,
         notes: metadata.notes || null,
@@ -872,7 +875,7 @@ export function TransactionModal({
         date: dateTime,
         tagIds: metadata.tagIds,
         categoryId: metadata.categoryId ? parseInt(metadata.categoryId, 10) : null,
-      });
+      } });
       onSaved();
       onClose();
     } catch (err) {
@@ -1122,7 +1125,7 @@ export function TransactionModal({
         
         if (transferDetails && !('error' in transferDetails) && transferDetails.fee > 0) {
           // Create main transfer with the actual transfer amount
-          mainTransaction = await api.transactions.create({
+          mainTransaction = await createTransactionMutation.mutateAsync({
             kind: 'transfer',
             amountCents: amount,
             description: simpleForm.description,
@@ -1142,7 +1145,7 @@ export function TransactionModal({
           
           // Fee transaction: debit expense and credit the wallet that actually
           // paid it. Recipient-deducted OVO fees reduce the destination wallet.
-          await api.transactions.create({
+          await createTransactionMutation.mutateAsync({
             kind: 'expense',
             amountCents: feeAmount,
             description: feeDescription,
@@ -1156,7 +1159,7 @@ export function TransactionModal({
           });
         } else {
           // No fee - create normal transfer
-          mainTransaction = await api.transactions.create({
+          mainTransaction = await createTransactionMutation.mutateAsync({
             kind: 'transfer',
             amountCents: amount,
             description: simpleForm.description,
@@ -1172,7 +1175,7 @@ export function TransactionModal({
         }
       } else {
         // Non-transfer transactions
-        mainTransaction = await api.transactions.create({
+        mainTransaction = await createTransactionMutation.mutateAsync({
           kind: simpleForm.type,
           amountCents: amount,
           description: simpleForm.description,
@@ -1339,7 +1342,7 @@ export function TransactionModal({
     setIsSubmitting(true);
     try {
       const dateIso = new Date(values.dateTime).toISOString();
-      await api.transactions.create({
+      await createTransactionMutation.mutateAsync({
         date: dateIso,
         description: values.description,
         notes: values.notes || null,

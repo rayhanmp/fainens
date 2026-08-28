@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
+import { useImportTransactions } from '../../features/transactions/queries';
 import { Upload, FileText, AlertCircle, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 interface ImportCSVModalProps {
@@ -55,6 +56,7 @@ interface PreviewData {
 }
 
 export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalProps) {
+  const importTransactionsMutation = useImportTransactions();
   const [step, setStep] = useState<'upload' | 'preview' | 'result'>('upload');
   const [csvText, setCsvText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -209,7 +211,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
 
     setIsLoading(true);
     try {
-      const result = await api.transactions.importConfirm({
+      const result = await importTransactionsMutation.mutateAsync({
         rows: validRows.map(row => ({
           date: row.date,
           description: row.description,

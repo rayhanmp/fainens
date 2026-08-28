@@ -14,7 +14,7 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { usePendingTransactionsQuery, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
+import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery } from '../features/categories/queries';
 import { usePeriodsQuery } from '../features/periods/queries';
@@ -152,6 +152,8 @@ function TransactionsPage() {
   const categoriesQuery = useCategoriesQuery();
   const periodsQuery = usePeriodsQuery();
   const tagsQuery = useTags();
+  const reverseTransactionMutation = useReverseTransaction();
+  const deleteTransactionMutation = useDeleteTransaction();
   const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
   const accounts = (accountsQuery.data ?? []) as WalletAccount[];
   const categories = (categoriesQuery.data ?? []) as Category[];
@@ -204,11 +206,11 @@ function TransactionsPage() {
   const closeModal = () => { setIsModalOpen(false); setEditingTransaction(null); setEditingPendingTx(null); };
   const handleCorrect = async (transaction: TransactionRow) => {
     if (!await confirm({ title: 'Correct transaction', message: 'This keeps the original for audit history and posts an equal opposite correction. You can then add the replacement transaction.', confirmLabel: 'Correct transaction', variant: 'warning' })) return;
-    try { await api.transactions.reverse(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
+    try { await reverseTransactionMutation.mutateAsync(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
   };
   const handleDeleteDraft = async (transaction: TransactionRow) => {
     if (!await confirm({ title: 'Delete draft', message: 'This draft has not affected reports or balances. Delete it?', confirmLabel: 'Delete draft', variant: 'danger' })) return;
-    try { await api.transactions.delete(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
+    try { await deleteTransactionMutation.mutateAsync(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
   };
   const handleSplitFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
