@@ -407,6 +407,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The contract-only app registry now exposes **146 paths and 188 operations**. Every application-owned operation has an explicit stable `operationId`; the only unlabeled operation is the redirect route generated internally by `@fastify/oauth2` (`/api/auth/google`).
 - Accounts, categories, periods, budgets, transactions/imports, analytics, reports/exports, tags, route templates, reconciliation/recovery, authentication, attachments, PayLater, audit, salary, subscriptions, contacts/loans, insights, pending transactions, wishlist/scraping, split bills, anomalies, agent, and budget-outlook/template routes now have route-level Zod contracts in source.
 - The committed OpenAPI/client pair remains the smaller finance pilot until the full generated artifact is reviewed. This keeps generated output stable while the remaining work focuses on schema quality, response-envelope consistency, and client migration rather than silently committing a schema-less expansion.
+- Added `verify:contract`, a database-free registry check that catches missing/duplicate operation IDs, missing responses, and import-route regressions without rewriting generated artifacts.
 
 ### `completed` — database-free OpenAPI bootstrap
 
