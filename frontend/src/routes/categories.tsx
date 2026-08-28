@@ -5,8 +5,11 @@ import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useCategoriesPageQuery } from '../features/categories/page-queries';
+import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { cn } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
@@ -62,11 +65,14 @@ const PRESET_COLORS = [
 ];
 
 function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [tags, setTags] = useState<TagRow[]>([]);
-  const [transactions, setTransactions] = useState<TxRow[]>([]);
-  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccount[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [showArchived, setShowArchived] = useState(false);
+  const categoriesQuery = useCategoriesPageQuery(showArchived);
+  const categories = (categoriesQuery.data?.categories ?? []) as Category[];
+  const tags = (categoriesQuery.data?.tags ?? []) as TagRow[];
+  const transactions = (categoriesQuery.data?.transactions ?? []) as TxRow[];
+  const expenseAccounts = (categoriesQuery.data?.expenseAccounts ?? []) as ExpenseAccount[];
+  const isLoading = categoriesQuery.isPending && !categoriesQuery.data;
   const { confirm } = useConfirm();
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -78,29 +84,9 @@ function CategoriesPage() {
   const [tagForm, setTagForm] = useState({ name: '', color: PRESET_COLORS[0] });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [showArchived]);
-
-  const loadData = async () => {
-    try {
-      const [catData, tagData, txRes, accountList] = await Promise.all([
-        api.categories.list(showArchived ? { includeInactive: true } : undefined),
-        api.tags.list(),
-        api.transactions.list({ limit: '2000' }),
-        api.accounts.list({ type: 'expense' }),
-      ]);
-      setCategories(catData);
-      setTags(tagData);
-      setTransactions(txRes.data as TxRow[]);
-      setExpenseAccounts(accountList.filter((account) => account.type === 'expense' && account.isActive));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const loadData = async () => invalidateFinancialSummaries(queryClient);
 
   const stats = useMemo(() => {
     const byCat: Record<number, number> = {};
