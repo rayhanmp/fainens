@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyInput } from '../ui/CurrencyInput';
-import { api } from '../../lib/api';
 import { cn, parseIdNominalToInt } from '../../lib/utils';
+import { useCreateAccountMutation, useUpdateAccountMutation } from '../../features/accounts/queries';
 import { Wallet, CreditCard } from 'lucide-react';
 
 type AccountType = 'asset' | 'liability';
@@ -38,6 +38,8 @@ const PROVIDERS = [
 ];
 
 export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: AccountModalProps) {
+  const createAccountMutation = useCreateAccountMutation();
+  const updateAccountMutation = useUpdateAccountMutation();
   const [formData, setFormData] = useState({
     name: '',
     type: 'asset' as AccountType,
@@ -131,9 +133,9 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
       }
 
       if (editingAccount) {
-        await api.accounts.update(editingAccount.id, payload);
+        await updateAccountMutation.mutateAsync({ id: editingAccount.id, data: payload });
       } else {
-        await api.accounts.create(payload);
+        await createAccountMutation.mutateAsync(payload);
       }
 
       onSaved();

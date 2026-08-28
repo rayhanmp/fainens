@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAccounts } from '../../generated/client';
-import { queryKeys } from '../core/query-keys';
+import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 import { api } from '../../lib/api';
 
 export const useAccountsQuery = () => useQuery({
@@ -33,5 +33,37 @@ export function useAccountDashboardQuery() {
     queryKey: queryKeys.dashboard.analytics,
     queryFn: () => api.analytics.dashboard(),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useCreateAccountMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.accounts.create>[0]) => api.accounts.create(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useUpdateAccountMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.accounts.update>[1] }) => api.accounts.update(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useDeleteAccountMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.accounts.delete(id),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useRestoreAccountMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.accounts.restore(id),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

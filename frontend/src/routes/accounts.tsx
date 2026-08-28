@@ -6,10 +6,9 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccountDashboardQuery, useAccountsLedgerQuery, useReconciliationHistoryQuery } from '../features/accounts/queries';
+import { useAccountDashboardQuery, useAccountsLedgerQuery, useDeleteAccountMutation, useReconciliationHistoryQuery, useRestoreAccountMutation } from '../features/accounts/queries';
 import { queryKeys } from '../features/core/query-keys';
 import { AccountModal } from '../components/accounts/AccountModal';
 import { ReconciliationModal } from '../components/reconciliation/ReconciliationModal';
@@ -131,6 +130,8 @@ function AccountsPage() {
   const allAccountsQuery = useAccountsLedgerQuery(showArchived ? { includeInactive: true } : undefined);
   const dashboardQuery = useAccountDashboardQuery();
   const reconciliationQuery = useReconciliationHistoryQuery(25);
+  const deleteAccountMutation = useDeleteAccountMutation();
+  const restoreAccountMutation = useRestoreAccountMutation();
   const accounts = (accountsQuery.data ?? []) as AccountRow[];
   const allAccounts = (allAccountsQuery.data ?? []) as AccountRow[];
   const reconciliationSessions = reconciliationQuery.data?.sessions ?? [];
@@ -213,18 +214,16 @@ function AccountsPage() {
     });
     if (!confirmed) return;
     try {
-      const result = await api.accounts.delete(id);
-      console.log('Delete result:', result);
+      await deleteAccountMutation.mutateAsync(id);
       await loadAccounts();
     } catch (err) {
-      console.error('Delete error:', err);
       alert((err as Error).message);
     }
   };
 
   const handleRestore = async (id: number) => {
     try {
-      await api.accounts.restore(id);
+      await restoreAccountMutation.mutateAsync(id);
       await loadAccounts();
     } catch (err) {
       alert((err as Error).message);
