@@ -25,6 +25,7 @@ export const queryKeys = {
   anomalies: { all: ["anomalies"] as const, list: (status: string) => ["anomalies", status] as const },
   auditLog: { all: ["audit-log"] as const, list: (filters: object = {}) => ["audit-log", "list", filters] as const },
   salary: { all: ["salary"] as const, income: ["salary", "income"] as const, settings: ["salary", "settings"] as const, catchUpPreview: ["salary", "catch-up-preview"] as const },
+  split: { all: ["split-bill"] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,

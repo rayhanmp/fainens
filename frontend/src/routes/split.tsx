@@ -1,6 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useSplitLookupsQuery } from '../features/split/queries';
+import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
 import { formatCurrency } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -99,6 +102,8 @@ export const Route = createFileRoute('/split')({
 
 function SplitBillPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const lookupsQuery = useSplitLookupsQuery();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -111,25 +116,24 @@ function SplitBillPage() {
   const [payerId, setPayerId] = useState<number | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [recentContacts, setRecentContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [isCreatingContact, setIsCreatingContact] = useState(false);
   
-  const [accounts, setAccounts] = useState<WalletAccount[]>([]);
   const [isAccountExpanded, setIsAccountExpanded] = useState(false);
   const [isPayerExpanded, setIsPayerExpanded] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const accounts = (lookupsQuery.data?.accounts ?? []) as WalletAccount[];
+  const contacts = (lookupsQuery.data?.contacts ?? []) as Contact[];
+  const recentContacts = contacts.slice(0, 3);
+  const activeAccountId = selectedAccountId ?? accounts[0]?.id ?? null;
 
   const meId = 0; // Backend uses 0 to identify "Me"
 
   useEffect(() => {
-    loadInitialData();
-    
     // Check for parsed receipt from localStorage (set by transactions page)
     const storedData = localStorage.getItem('splitbill_parsed');
     if (storedData) {
@@ -160,26 +164,6 @@ function SplitBillPage() {
     };
     setPeople([mePerson]);
   }, []);
-
-  const loadInitialData = async () => {
-    try {
-      const [accountsData, contactsData] = await Promise.all([
-        api.accounts.list() as Promise<WalletAccount[]>,
-        api.contacts.list() as Promise<Contact[]>,
-      ]);
-      
-      setAccounts(accountsData.filter(a => a.type === 'asset'));
-      if (accountsData.length > 0) {
-        setSelectedAccountId(accountsData[0].id);
-      }
-      
-      setContacts(contactsData);
-      const recent = contactsData.slice(0, 3);
-      setRecentContacts(recent);
-    } catch (err) {
-      console.error('Failed to load data:', err);
-    }
-  };
 
   const createEmptyReceipt = useCallback((imageUrl?: string | null) => {
     const emptyReceipt: ParsedReceipt = {
@@ -390,6 +374,7 @@ function SplitBillPage() {
       const contact = await api.contacts.create({ 
         name: newContactName.trim(),
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.split.all });
       handleAddParticipant({ id: contact.id, name: contact.name });
       setNewContactName('');
     } catch {
@@ -452,7 +437,7 @@ function SplitBillPage() {
 
   const handleCreateLoans = useCallback(async () => {
     if (payerId === null) return;
-    if (payerId === meId && !selectedAccountId) return; // Me pays requires wallet
+    if (payerId === meId && !activeAccountId) return; // Me pays requires wallet
     
     setIsLoading(true);
     try {
@@ -476,18 +461,19 @@ function SplitBillPage() {
             total: r.total,
           })),
           isBorrower: payerId !== meId,
-          walletAccountId: payerId === meId ? selectedAccountId! : undefined,
+          walletAccountId: payerId === meId ? activeAccountId! : undefined,
           expenseCategory: parsedReceipt?.expenseCategory || 'Food & Dining',
         });
       }
       
+      await invalidateFinancialSummaries(queryClient);
       navigate({ to: '/transactions' });
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedAccountId, payerId, splitResults, navigate, parsedReceipt?.expenseCategory]);
+  }, [activeAccountId, payerId, splitResults, navigate, parsedReceipt?.expenseCategory, queryClient]);
 
   const getAssignedPeople = (itemIndex: number): number[] => {
     const assignment = assignments.find(a => a.itemIndex === itemIndex);
@@ -513,8 +499,8 @@ function SplitBillPage() {
     return contacts.filter(c => c.name.toLowerCase().includes(query));
   }, [contacts, contactSearch, recentContacts]);
 
-  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
-  const selectedAccountIconIndex = accounts.findIndex(a => a.id === selectedAccountId);
+  const selectedAccount = accounts.find(a => a.id === activeAccountId);
+  const selectedAccountIconIndex = accounts.findIndex(a => a.id === activeAccountId);
   const SelectedAccountIcon = selectedAccountIconIndex >= 0 ? WALLET_ICONS[selectedAccountIconIndex % 3] : null;
 
   if (!parsedReceipt) {
@@ -1124,7 +1110,7 @@ function SplitBillPage() {
                     <div className="p-2 space-y-1">
                       {accounts.map((account, idx) => {
                         const Icon = WALLET_ICONS[idx % 3];
-                        const isSelected = selectedAccountId === account.id;
+                        const isSelected = activeAccountId === account.id;
                         return (
                           <button
                             key={account.id}
@@ -1210,7 +1196,7 @@ function SplitBillPage() {
               <Button 
                 onClick={handleCreateLoans} 
                 className="w-full"
-                disabled={isLoading || payerId === null || unallocated > 0 || (payerId === meId && !selectedAccountId)}
+                disabled={isLoading || payerId === null || unallocated > 0 || (payerId === meId && !activeAccountId)}
               >
                 {isLoading ? 'Processing...' : 'Confirm Split'}
               </Button>
