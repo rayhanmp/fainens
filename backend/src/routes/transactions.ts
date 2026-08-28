@@ -1,5 +1,6 @@
 import { eq, and, asc, desc, sql, inArray, count, ne, notInArray, or, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs } from "../db/schema";
@@ -23,6 +24,144 @@ import { findPeriodForDate } from "../services/period-locking";
 // Pagination constants
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
+
+const transactionErrorSchema = z.object({
+  error: z.string().optional(),
+  errors: z.array(z.string()).optional(),
+}).passthrough();
+const timestampValueSchema = z.union([z.date(), z.string(), z.number()]);
+const transactionLineSchema = z.object({
+  id: z.number().int().optional(),
+  transactionId: z.number().int().optional(),
+  accountId: z.number().int(),
+  debit: z.number(),
+  credit: z.number(),
+  description: z.string().nullable().optional(),
+  cashFlowClass: z.enum(["operating", "investing", "financing", "transfer", "recovery"]).nullable().optional(),
+}).passthrough();
+const transactionTagSchema = z.object({
+  tagId: z.number().int(),
+  name: z.string(),
+  color: z.string(),
+}).passthrough();
+const transactionAllocationSchema = z.object({
+  categoryId: z.number().int(),
+  amount: z.number(),
+  categoryName: z.string().nullable().optional(),
+}).passthrough();
+const transactionRecordSchema = z.object({
+  id: z.number().int(),
+  date: timestampValueSchema,
+  description: z.string(),
+  reference: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  place: z.string().nullable().optional(),
+  txType: z.string().optional(),
+  status: z.string().optional(),
+  periodId: z.number().int().nullable().optional(),
+  linkedTxId: z.number().int().nullable().optional(),
+  reversalOfTxId: z.number().int().nullable().optional(),
+  categoryId: z.number().int().nullable().optional(),
+  dueDate: timestampValueSchema.nullable().optional(),
+  createdAt: timestampValueSchema.optional(),
+  debitCents: z.number().optional(),
+  creditCents: z.number().optional(),
+  expenseCents: z.number().optional(),
+  incomeCents: z.number().optional(),
+  lines: z.array(transactionLineSchema).optional(),
+  tags: z.array(transactionTagSchema).optional(),
+  categoryAllocations: z.array(transactionAllocationSchema).optional(),
+}).passthrough();
+const transactionListResponseSchema = z.object({
+  data: z.array(transactionRecordSchema),
+  pagination: z.object({
+    total: z.number().int(),
+    limit: z.number().int(),
+    offset: z.number().int(),
+    hasMore: z.boolean(),
+  }).passthrough(),
+  summary: z.object({ expenseCents: z.number(), incomeCents: z.number() }).passthrough(),
+}).passthrough();
+const transactionListQuerySchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  accountId: z.string().regex(/^\d+$/).optional(),
+  txType: z.string().optional(),
+  periodId: z.union([z.string().regex(/^\d+$/), z.literal("all")]).optional(),
+  categoryId: z.string().regex(/^\d+$/).optional(),
+  tagId: z.string().regex(/^\d+$/).optional(),
+  search: z.string().max(120).optional(),
+  kind: z.enum(["expense", "income", "transfer", "loan"]).optional(),
+  minAmount: z.string().optional(),
+  maxAmount: z.string().optional(),
+  sort: z.enum(["newest", "oldest", "largest"]).optional(),
+  includeReversals: z.enum(["true", "false"]).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+  offset: z.string().regex(/^\d+$/).optional(),
+});
+const transactionIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const journalLineBodySchema = z.object({
+  accountId: z.number().int().positive(),
+  debit: z.number().int().nonnegative(),
+  credit: z.number().int().nonnegative(),
+  description: z.string().optional(),
+  cashFlowClass: z.enum(["operating", "investing", "financing", "transfer", "recovery"]).nullable().optional(),
+}).passthrough();
+const simpleTransactionBodySchema = z.object({
+  kind: z.enum(["expense", "income", "transfer"]),
+  amountCents: z.number().int().positive(),
+  description: z.string().trim().min(1),
+  notes: z.string().nullable().optional(),
+  place: z.string().nullable().optional(),
+  date: z.string().min(1),
+  periodId: z.number().int().positive().nullable().optional(),
+  categoryId: z.number().int().positive().nullable().optional(),
+  tagIds: z.array(z.number().int().positive()).optional(),
+  walletAccountId: z.number().int().positive(),
+  toWalletAccountId: z.number().int().positive().nullable().optional(),
+  linkedTxId: z.number().int().positive().nullable().optional(),
+  originLat: z.number().nullable().optional(),
+  originLng: z.number().nullable().optional(),
+  originName: z.string().nullable().optional(),
+  destLat: z.number().nullable().optional(),
+  destLng: z.number().nullable().optional(),
+  destName: z.string().nullable().optional(),
+  distanceKm: z.number().nonnegative().nullable().optional(),
+  subscriptionId: z.number().int().positive().optional(),
+}).passthrough();
+const journalTransactionBodySchema = z.object({
+  date: z.string().min(1),
+  description: z.string().trim().min(1),
+  reference: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  place: z.string().nullable().optional(),
+  txType: z.literal("manual").optional(),
+  periodId: z.number().int().positive().nullable().optional(),
+  linkedTxId: z.number().int().positive().nullable().optional(),
+  tagIds: z.array(z.number().int().positive()).optional(),
+  categoryId: z.number().int().positive().nullable().optional(),
+  categoryAllocations: z.array(z.object({ categoryId: z.number().int().positive(), amount: z.number().int() }).passthrough()).optional(),
+  lines: z.array(journalLineBodySchema).min(2),
+}).passthrough();
+const transactionCreateBodySchema = z.union([simpleTransactionBodySchema, journalTransactionBodySchema]);
+const transactionUpdateBodySchema = z.object({
+  date: z.string().min(1).optional(),
+  description: z.string().trim().min(1).optional(),
+  reference: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  place: z.string().nullable().optional(),
+  txType: z.string().optional(),
+  categoryId: z.number().int().positive().nullable().optional(),
+  tagIds: z.array(z.number().int().positive()).optional(),
+  lines: z.array(journalLineBodySchema).min(2).optional(),
+}).passthrough();
+const transactionMutationResponseSchema = z.object({ id: z.number().int(), transactionId: z.number().int().optional() }).passthrough();
+const bulkDeleteResponseSchema = z.object({ success: z.literal(true), deletedCount: z.number().int(), message: z.string() }).passthrough();
+
+type TransactionRouteErrorStatus = 400 | 404 | 409 | 500;
+function transactionRouteErrorStatus(status: number): TransactionRouteErrorStatus {
+  return status === 400 || status === 404 || status === 409 || status === 500 ? status : 500;
+}
 
 // Helper to find period ID based on transaction date
 async function findPeriodIdForDate(dateMs: number): Promise<number | null> {
@@ -260,7 +399,18 @@ async function fetchTransactionEffects(txIds: number[]) {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.post("/api/transactions/recommend-category", async (request, reply) => {
+  fastify.post("/api/transactions/recommend-category", {
+    schema: {
+      operationId: "recommendTransactionCategory",
+      tags: ["transactions"],
+      body: z.object({ name: z.string().trim().min(2) }),
+      response: {
+        200: z.object({ categoryId: z.number().int(), categoryName: z.string() }).passthrough(),
+        400: transactionErrorSchema,
+        500: transactionErrorSchema,
+      },
+    },
+  }, async (request, reply) => {
     const { name } = request.body as { name?: string };
     
     if (!name || name.trim().length < 2) {
@@ -319,7 +469,14 @@ RULES:
     }
   });
 
-  fastify.get("/api/transactions", async (request, reply) => {
+  fastify.get("/api/transactions", {
+    schema: {
+      operationId: "listTransactions",
+      tags: ["transactions"],
+      querystring: transactionListQuerySchema,
+      response: { 200: transactionListResponseSchema, 400: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const {
       startDate,
       endDate,
@@ -515,7 +672,14 @@ RULES:
     };
   });
 
-  fastify.get("/api/transactions/:id", async (request, reply) => {
+  fastify.get("/api/transactions/:id", {
+    schema: {
+      operationId: "getTransaction",
+      tags: ["transactions"],
+      params: transactionIdParamsSchema,
+      response: { 200: transactionRecordSchema, 400: transactionErrorSchema, 404: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsedId = parseInt(id, 10);
 
@@ -571,7 +735,14 @@ RULES:
     };
   });
 
-  fastify.post("/api/transactions", async (request, reply) => {
+  fastify.post("/api/transactions", {
+    schema: {
+      operationId: "createTransaction",
+      tags: ["transactions"],
+      body: transactionCreateBodySchema,
+      response: { 201: transactionMutationResponseSchema, 400: transactionErrorSchema, 409: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const body = request.body as
       | {
           date: string;
@@ -710,7 +881,14 @@ RULES:
   });
 
   /** Reverse a posted journal without erasing its audit history. */
-  fastify.post("/api/transactions/:id/reverse", async (request, reply) => {
+  fastify.post("/api/transactions/:id/reverse", {
+    schema: {
+      operationId: "reverseTransaction",
+      tags: ["transactions"],
+      params: transactionIdParamsSchema,
+      response: { 201: z.object({ id: z.number().int(), reversalOfTxId: z.number().int() }).passthrough(), 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const transactionId = parseIdParam((request.params as { id?: string }).id);
     if (transactionId === null) return reply.code(400).send({ error: "Invalid transaction ID" });
     try {
@@ -802,7 +980,15 @@ RULES:
     }
   });
 
-  fastify.put("/api/transactions/:id", async (request, reply) => {
+  fastify.put("/api/transactions/:id", {
+    schema: {
+      operationId: "updateTransaction",
+      tags: ["transactions"],
+      params: transactionIdParamsSchema,
+      body: transactionUpdateBodySchema,
+      response: { 200: transactionRecordSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
       date?: string;
@@ -830,14 +1016,21 @@ RULES:
       return reply.code(200).send(updated);
     } catch (err) {
       fastify.log.error(err);
-      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to update transaction",
       });
     }
   });
 
-  fastify.delete("/api/transactions/:id", async (request, reply) => {
+  fastify.delete("/api/transactions/:id", {
+    schema: {
+      operationId: "deleteTransaction",
+      tags: ["transactions"],
+      params: transactionIdParamsSchema,
+      response: { 204: z.null(), 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
       const txId = parseIdParam(id);
@@ -848,7 +1041,7 @@ RULES:
       return reply.code(204).send();
     } catch (err) {
       fastify.log.error(err);
-      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to delete transaction",
       });
@@ -856,7 +1049,14 @@ RULES:
   });
 
   // Bulk delete transactions
-  fastify.post("/api/transactions/bulk-delete", async (request, reply) => {
+  fastify.post("/api/transactions/bulk-delete", {
+    schema: {
+      operationId: "bulkDeleteTransactions",
+      tags: ["transactions"],
+      body: z.object({ ids: z.array(z.number().int().positive()).min(1) }).passthrough(),
+      response: { 200: bulkDeleteResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
     const { ids } = request.body as { ids: number[] };
     try {
       if (!Array.isArray(ids)) throw new TransactionMutationError("ids array is required", 400);
@@ -869,7 +1069,7 @@ RULES:
       });
     } catch (err) {
       fastify.log.error(err);
-      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to bulk delete transactions",
       });

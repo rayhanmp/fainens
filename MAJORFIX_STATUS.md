@@ -424,6 +424,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Budget create, update, and delete routes now declare typed params/bodies, stable operation IDs, and the existing 400/404/409 error envelope plus 204 deletion response.
 - Non-negative integer plan amounts and numeric period/category identifiers are rejected at the transport boundary before they reach ledger-derived budget calculations. Outlook, template, comparison, and review routes remain to be contracted.
 
+### `pending` — transaction route contracts
+
+- Transaction category recommendation, list/detail, create, reverse, update, delete, and bulk-delete routes now declare Zod query/params/bodies and response shapes with stable operation IDs.
+- The list contract describes pagination, signed debit/credit effects, tags, and category allocations so consumers no longer have to infer journal amounts from the largest line. Create/edit inputs validate positive identifiers, non-negative journal line amounts, and supported activity kinds before ledger services run.
+- Mutation error status narrowing keeps the declared 400/404/409/500 responses aligned with `TransactionMutationError`; CSV import routes and their preview/confirm response contracts remain to be migrated.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
