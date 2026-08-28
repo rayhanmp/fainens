@@ -5,8 +5,17 @@ import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../lib/api';
+import { usePeriodsLedgerQuery } from '../features/periods/queries';
+import {
+  useBalanceSheetQuery,
+  useCashFlowQuery,
+  useIncomeStatementQuery,
+  useReportSummaryQuery,
+  useSpendingQuery,
+  useTrendsQuery,
+} from '../features/reports/queries';
 import { formatCurrency, cn } from '../lib/utils';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { jsPDF } from 'jspdf';
@@ -54,87 +63,23 @@ function inclusivePeriodEnd(timestamp: number): number {
 
 function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('income');
-  const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number; coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown'; coverageReason: string | null }>>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState('');
-  const summaryRequestVersion = useRef(0);
-
-  useEffect(() => {
-    loadPeriods();
-  }, []);
-
-  const loadPeriods = async () => {
-    try {
-      const data = await api.periods.list();
-      setPeriods(data);
-      if (data.length > 0) {
-        // The API returns periods newest first. Start with the current period.
-        setSelectedPeriodId(data[0].id.toString());
-      }
-    } catch (err) {
-      console.error('Failed to load periods:', err);
-    }
-  };
-
-  const selectedPeriod = periods.find(p => p.id.toString() === selectedPeriodId);
-  const [summaryData, setSummaryData] = useState<{
-    totalRevenue: number;
-    totalExpenses: number;
-    netIncome: number;
-    totalAssets: number;
-    totalLiabilities: number;
-    previousPeriodRevenue?: number;
-    previousPeriodExpenses?: number;
-  } | null>(null);
-
-  useEffect(() => {
-    loadSummaryData();
-  }, [selectedPeriodId, periods]);
-
-  const loadSummaryData = async () => {
-    const requestVersion = ++summaryRequestVersion.current;
-    if (!selectedPeriodId) {
-      setSummaryData(null);
-      return;
-    }
-    try {
-      const periodId = parseInt(selectedPeriodId);
-      const currentPeriodIndex = periods.findIndex(p => p.id === periodId);
-      // With newest-first periods, the previous chronological period is index + 1.
-      const previousPeriod = currentPeriodIndex >= 0 ? periods[currentPeriodIndex + 1] : null;
-      
-      const [incomeData, balanceData] = await Promise.all([
-        api.reports.incomeStatement(periodId),
-        api.reports.balanceSheet(selectedPeriod?.endDate == null ? undefined : inclusivePeriodEnd(selectedPeriod.endDate)),
-      ]);
-
-      let prevData = undefined;
-      if (previousPeriod) {
-        try {
-          const prevIncome = await api.reports.incomeStatement(previousPeriod.id);
-          prevData = {
-            previousPeriodRevenue: prevIncome.totalRevenue,
-            previousPeriodExpenses: prevIncome.totalExpenses,
-          };
-        } catch (e) {
-          // Ignore errors for previous period
-        }
-      }
-
-      if (requestVersion !== summaryRequestVersion.current) return;
-      setSummaryData({
-        totalRevenue: incomeData.totalRevenue,
-        totalExpenses: incomeData.totalExpenses,
-        netIncome: incomeData.netIncome,
-        totalAssets: balanceData.totalAssets,
-        totalLiabilities: balanceData.totalLiabilities,
-        ...prevData,
-      });
-    } catch (err) {
-      if (requestVersion !== summaryRequestVersion.current) return;
-      setSummaryData(null);
-      console.error('Failed to load summary:', err);
-    }
-  };
+  const periodsQuery = usePeriodsLedgerQuery();
+  const periods = periodsQuery.data ?? [];
+  // Null means “use the newest period”; an explicit empty string means All Periods.
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  const effectivePeriodId = selectedPeriodId ?? periods[0]?.id.toString() ?? '';
+  const selectedPeriod = periods.find((p) => p.id.toString() === effectivePeriodId);
+  const selectedNumericPeriodId = effectivePeriodId ? Number(effectivePeriodId) : null;
+  const currentPeriodIndex = selectedNumericPeriodId == null
+    ? -1
+    : periods.findIndex((period) => period.id === selectedNumericPeriodId);
+  const previousPeriodId = currentPeriodIndex >= 0 ? periods[currentPeriodIndex + 1]?.id : undefined;
+  const summaryQuery = useReportSummaryQuery({
+    periodId: selectedNumericPeriodId,
+    periodEndDate: selectedPeriod?.endDate,
+    previousPeriodId,
+  });
+  const summaryData = summaryQuery.data ?? null;
 
   const handleExportPDF = (reportTitle: string, data: any[]) => {
     const doc = new jsPDF();
@@ -158,7 +103,7 @@ function ReportsPage() {
     try {
       const csv = await api.reports.export(
         reportType,
-        selectedPeriodId ? parseInt(selectedPeriodId) : undefined
+        effectivePeriodId ? parseInt(effectivePeriodId) : undefined
       );
 
       // Download CSV
@@ -183,7 +128,7 @@ function ReportsPage() {
             description="Income statements, balance sheets, and analytics"
           />
           <Select
-            value={selectedPeriodId}
+            value={effectivePeriodId}
             onChange={(e) => setSelectedPeriodId(e.target.value)}
             options={[
               { value: '', label: 'All Periods' },
@@ -234,7 +179,7 @@ function ReportsPage() {
         </div>
 
         {/* Summary Dashboard */}
-        {summaryData && selectedPeriodId && (
+        {summaryData && effectivePeriodId && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <SummaryCard
               title="Total Revenue"
@@ -269,26 +214,25 @@ function ReportsPage() {
         <div className="mt-6">
           {activeTab === 'income' && (
             <IncomeStatementReport
-              periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined}
+              periodId={effectivePeriodId ? parseInt(effectivePeriodId) : undefined}
               onExport={() => handleExport('income-statement')}
               onExportPDF={handleExportPDF}
             />
           )}
           {activeTab === 'balance' && (
             <BalanceSheetReport 
-              periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined}
               periodEndDate={selectedPeriod?.endDate}
               onExport={() => handleExport('balance-sheet')} 
             />
           )}
           {activeTab === 'cashflow' && (
             <CashFlowReport
-              periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined}
+              periodId={effectivePeriodId ? parseInt(effectivePeriodId) : undefined}
               onExport={() => handleExport('cash-flow')}
             />
           )}
           {activeTab === 'spending' && (
-            <SpendingReport periodId={selectedPeriodId ? parseInt(selectedPeriodId) : undefined} />
+            <SpendingReport periodId={effectivePeriodId ? parseInt(effectivePeriodId) : undefined} />
           )}
           {activeTab === 'trends' && <TrendsReport />}
         </div>
@@ -387,34 +331,11 @@ function IncomeStatementReport({
   onExport: () => void;
   onExportPDF: (title: string, data: any[]) => void;
 }) {
-  const [data, setData] = useState<{
-    revenue: Array<{ name: string; amount: number; level: number }>;
-    expenses: Array<{ name: string; amount: number; level: number }>;
-    totalRevenue: number;
-    totalExpenses: number;
-    netIncome: number;
-    periodName?: string;
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, [periodId]);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const report = await api.reports.incomeStatement(periodId);
-      setData(report);
-    } catch (err) {
-      console.error('Failed to load income statement:', err);
-      setError('Failed to load income statement report');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const query = useIncomeStatementQuery(periodId);
+  const data = query.data ?? null;
+  const isLoading = query.isPending && !query.data;
+  const error = query.error ? 'Failed to load income statement report' : null;
+  const loadData = () => query.refetch();
 
   const handlePDFExport = () => {
     if (!data) return;
@@ -539,45 +460,18 @@ function IncomeStatementReport({
 
 // Balance Sheet Report
 function BalanceSheetReport({ 
-  periodId, 
   periodEndDate,
   onExport 
 }: { 
-  periodId?: number;
   periodEndDate?: number;
   onExport: () => void;
 }) {
-  const [data, setData] = useState<{
-    assets: Array<{ name: string; code: string; balance: number; level: number }>;
-    liabilities: Array<{ name: string; code: string; balance: number; level: number }>;
-    equity: Array<{ name: string; code: string; balance: number; level: number }>;
-    totalAssets: number;
-    totalLiabilities: number;
-    totalEquity: number;
-    asOfDate: string;
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, [periodId, periodEndDate]);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Use period end date as the "as of" date for the balance sheet
-      const asOfDate = periodEndDate == null ? undefined : inclusivePeriodEnd(periodEndDate);
-      const report = await api.reports.balanceSheet(asOfDate);
-      setData(report);
-    } catch (err) {
-      console.error('Failed to load balance sheet:', err);
-      setError('Failed to load balance sheet report');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const asOfDate = periodEndDate == null ? undefined : inclusivePeriodEnd(periodEndDate);
+  const query = useBalanceSheetQuery(asOfDate);
+  const data = query.data ?? null;
+  const isLoading = query.isPending && !query.data;
+  const error = query.error ? 'Failed to load balance sheet report' : null;
+  const loadData = () => query.refetch();
 
   if (isLoading) return <CardSkeleton className="h-96" />;
   if (error) return (
@@ -682,44 +576,16 @@ function CashFlowReport({
   periodId?: number;
   onExport: () => void;
 }) {
-  const [data, setData] = useState<{
-    operating: Array<{ description: string; amount: number; classificationSource: 'explicit' | 'legacy_inference' }>;
-    investing: Array<{ description: string; amount: number; classificationSource: 'explicit' | 'legacy_inference' }>;
-    financing: Array<{ description: string; amount: number; classificationSource: 'explicit' | 'legacy_inference' }>;
-    netOperating: number;
-    netInvesting: number;
-    netFinancing: number;
-    netChange: number;
-    historicalRecoveryBridge?: number;
-    beginningCash: number;
-    endingCash: number;
-    coverage?: { isComparable: boolean; warnings: string[] };
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<{
     operating: boolean;
     investing: boolean;
     financing: boolean;
   }>({ operating: false, investing: false, financing: false });
-
-  useEffect(() => {
-    loadData();
-  }, [periodId]);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const report = await api.reports.cashFlow(periodId);
-      setData(report);
-    } catch (err) {
-      console.error('Failed to load cash flow:', err);
-      setError('Failed to load cash flow report');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const query = useCashFlowQuery(periodId);
+  const data = query.data ?? null;
+  const isLoading = query.isPending && !query.data;
+  const error = query.error ? 'Failed to load cash flow report' : null;
+  const loadData = () => query.refetch();
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -854,36 +720,12 @@ function CashFlowReport({
 
 // Spending Report
 function SpendingReport({ periodId }: { periodId?: number }) {
-  const [data, setData] = useState<{
-    breakdown: Array<{ category: string; amount: number; percentage: number }>;
-    total: number;
-    coverage?: { isComparable: boolean; warnings: string[] };
-  } | null>(null);
-  const [categories, setCategories] = useState<Array<{ id: number; name: string; color: string | null }>>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, [periodId]);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [report, cats] = await Promise.all([
-        api.reports.spending(periodId),
-        api.categories.list(),
-      ]);
-      setData(report);
-      setCategories(cats);
-    } catch (err) {
-      console.error('Failed to load spending:', err);
-      setError('Failed to load spending report');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const query = useSpendingQuery(periodId);
+  const data = query.data?.report ?? null;
+  const categories = query.data?.categories ?? [];
+  const isLoading = query.isPending && !query.data;
+  const error = query.error ? 'Failed to load spending report' : null;
+  const loadData = () => query.refetch();
 
   if (isLoading) return <CardSkeleton className="h-96" />;
   if (error) return (
@@ -1000,30 +842,9 @@ function SpendingReport({ periodId }: { periodId?: number }) {
 
 // Trends Report
 function TrendsReport() {
-  const [data, setData] = useState<Array<{
-    periodName: string;
-    revenue: number;
-    expenses: number;
-    netIncome: number;
-    coverage?: { isComparable: boolean; warnings: string[] };
-  }> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const report = await api.reports.trends(6);
-      setData(report);
-    } catch (err) {
-      console.error('Failed to load trends:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const query = useTrendsQuery(6);
+  const data = query.data ?? null;
+  const isLoading = query.isPending && !query.data;
 
   if (isLoading) return <CardSkeleton className="h-80" />;
   if (!data || data.length === 0) {

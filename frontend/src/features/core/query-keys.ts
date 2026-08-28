@@ -13,6 +13,15 @@ export const queryKeys = {
   loans: { all: ["loans"] as const, list: (filters: object = {}) => ["loans", "list", filters] as const, summary: ["loans", "summary"] as const },
   subscriptions: { all: ["subscriptions"] as const, list: ["subscriptions", "list"] as const },
   paylater: { all: ["paylater"] as const },
+  reports: {
+    all: ["reports"] as const,
+    income: ["reports", "income"] as const,
+    balance: ["reports", "balance"] as const,
+    cashflow: ["reports", "cashflow"] as const,
+    spending: ["reports", "spending"] as const,
+    trends: ["reports", "trends"] as const,
+    summary: ["reports", "summary"] as const,
+  },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
@@ -38,5 +47,6 @@ export async function invalidateFinancialSummaries(queryClient: { invalidateQuer
     queryClient.invalidateQueries({ queryKey: queryKeys.loans.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.paylater.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.reports.all }),
   ]);
 }
