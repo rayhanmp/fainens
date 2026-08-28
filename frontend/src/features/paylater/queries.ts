@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
-import { queryKeys } from '../core/query-keys';
+import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type PaylaterPageData = {
   obligations: Awaited<ReturnType<typeof api.paylater.obligations>>;
@@ -27,5 +27,13 @@ export function usePaylaterQuery() {
       };
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useSettlePaylaterMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.paylater.settle>[0]) => api.paylater.settle(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

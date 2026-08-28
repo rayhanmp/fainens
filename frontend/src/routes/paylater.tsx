@@ -6,10 +6,8 @@ import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { RequireAuth } from '../lib/auth';
 import { useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { usePaylaterQuery } from '../features/paylater/queries';
-import { invalidateFinancialSummaries } from '../features/core/query-keys';
+import { usePaylaterQuery, useSettlePaylaterMutation } from '../features/paylater/queries';
 import { formatCurrency } from '../lib/utils';
 import { PageContainer } from '../components/ui/PageContainer';
 import {
@@ -55,8 +53,8 @@ function scheduleForDay(
 }
 
 function PaylaterPage() {
-  const queryClient = useQueryClient();
   const paylaterQuery = usePaylaterQuery();
+  const settlePaylaterMutation = useSettlePaylaterMutation();
   const obligationsPayload = paylaterQuery.data?.obligations ?? null;
   const accounts = paylaterQuery.data?.accounts ?? [];
   const isLoading = paylaterQuery.isPending && !paylaterQuery.data;
@@ -73,8 +71,6 @@ function PaylaterPage() {
     amount: '',
     bankId: '',
   });
-
-  const load = async () => invalidateFinancialSummaries(queryClient);
 
   const banks = accounts.filter((a) => a.type === 'asset' && !a.systemKey);
 
@@ -130,7 +126,7 @@ function PaylaterPage() {
     }
     setIsSubmitting(true);
     try {
-      await api.paylater.settle({
+      await settlePaylaterMutation.mutateAsync({
         date: new Date(payForm.date).getTime(),
         description: payForm.description || 'Paylater payment',
         paymentAmount: amt,
@@ -139,7 +135,6 @@ function PaylaterPage() {
         originalTxId: payModal.recognitionTxId,
       });
       setPayModal(null);
-      await load();
     } catch (err) {
       setFormError((err as Error).message);
     } finally {
