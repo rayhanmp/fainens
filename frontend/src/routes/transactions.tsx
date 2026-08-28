@@ -152,7 +152,7 @@ function TransactionsPage() {
   const accounts = (accountsQuery.data ?? []) as WalletAccount[];
   const categories = (categoriesQuery.data ?? []) as Category[];
   const tags = (tagsQuery.data ?? []) as Array<{ id: number; name: string; color: string }>;
-  const periods = (periodsQuery.data ?? []) as Period[];
+  const periods = (periodsQuery.data ?? []) as unknown as Period[];
   const isLoading = transactionQuery.isLoading || accountsQuery.isLoading || categoriesQuery.isLoading || periodsQuery.isLoading || tagsQuery.isLoading;
   const total = transactionQuery.data?.pagination?.total ?? 0;
   const summary = transactionQuery.data?.summary ?? { expenseCents: 0, incomeCents: 0 };

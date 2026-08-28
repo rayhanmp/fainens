@@ -1,5 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { listAccounts } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 
-export const useAccountsQuery = () => useQuery({ queryKey: queryKeys.accounts.all, queryFn: () => api.accounts.list() });
+export const useAccountsQuery = () => useQuery({
+  queryKey: queryKeys.accounts.all,
+  queryFn: async () => (await listAccounts()).data,
+});
