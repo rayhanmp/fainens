@@ -465,6 +465,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - CSRF token, OAuth callback outcomes, current-user, onboarding-status, and logout routes now declare stable operation IDs plus typed success/error envelopes. The OAuth provider's generated `/api/auth/google` redirect remains owned by `@fastify/oauth2` and is intentionally not re-registered by the application.
 - Authentication responses are now part of the same OpenAPI boundary as finance routes, so generated clients can distinguish an expired session, a forbidden account, and an onboarding-required state without scraping response text.
 
+### `pending` — attachment route contracts
+
+- Attachment listing, metadata/detail, presigned URL, upload, delete, local-file serving, and wishlist-image serving routes now declare typed request/response contracts and stable operation IDs.
+- Upload contracts constrain transaction IDs, filenames, supported MIME types, and non-empty payloads. Delete responses distinguish an immediate `204` removal from a committed removal whose object cleanup is queued (`202`), so clients do not report storage cleanup as a failed financial operation.
+- Wildcard file routes remain response-streaming handlers; their contract describes the not-found envelope without pretending the binary stream is JSON.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.

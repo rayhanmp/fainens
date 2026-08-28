@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { createReadStream } from "fs";
 import { promises as fs } from "fs";
 
@@ -29,12 +30,31 @@ const ALLOWED_MIME_TYPES = [
 // Maximum file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
 
+const attachmentErrorSchema = z.object({ error: z.string() }).passthrough();
+const attachmentIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const attachmentMimeTypeSchema = z.enum([
+  "image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf", "text/plain", "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel",
+]);
+const attachmentSchema = z.object({
+  id: z.number().int(), transactionId: z.number().int(), filename: z.string(), r2Key: z.string(), mimetype: z.string(), fileSize: z.number().int(),
+}).passthrough();
+const attachmentWithUrlSchema = attachmentSchema.extend({ downloadUrl: z.string().url().nullable(), expiresIn: z.number().int().nonnegative() }).passthrough();
+const attachmentListQuerySchema = z.object({ transactionId: z.string().regex(/^\d+$/).optional() });
+const attachmentUrlQuerySchema = z.object({ expiresIn: z.string().regex(/^\d+$/).optional() });
+const attachmentUploadBodySchema = z.object({
+  transactionId: z.number().int().positive(), filename: z.string().trim().min(1).max(255), contentType: attachmentMimeTypeSchema, data: z.string().min(1),
+}).passthrough();
+const attachmentCleanupPendingSchema = z.object({ success: z.literal(true), cleanupPending: z.literal(true), message: z.string() }).passthrough();
+
 export default async function (fastify: FastifyInstance) {
   // All routes require authentication
   fastify.addHook("onRequest", fastify.authenticate);
 
   // List attachments for a transaction
-  fastify.get("/api/attachments", async (request) => {
+  fastify.get("/api/attachments", {
+    schema: { operationId: "listAttachments", tags: ["attachments"], querystring: attachmentListQuerySchema, response: { 200: z.array(attachmentSchema) } },
+  }, async (request) => {
     const { transactionId } = request.query as { transactionId?: string };
 
     // Build query
@@ -49,7 +69,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get single attachment with presigned URL
-  fastify.get("/api/attachments/:id", async (request, reply) => {
+  fastify.get("/api/attachments/:id", {
+    schema: { operationId: "getAttachment", tags: ["attachments"], params: attachmentIdParamsSchema, response: { 200: attachmentWithUrlSchema, 404: attachmentErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [attachment] = await db
@@ -74,7 +96,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get presigned URL for direct download
-  fastify.get("/api/attachments/:id/url", async (request, reply) => {
+  fastify.get("/api/attachments/:id/url", {
+    schema: { operationId: "getAttachmentDownloadUrl", tags: ["attachments"], params: attachmentIdParamsSchema, querystring: attachmentUrlQuerySchema, response: { 200: z.object({ url: z.string().url(), expiresIn: z.number().int().nonnegative() }).passthrough(), 404: attachmentErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { expiresIn = "3600" } = request.query as { expiresIn?: string };
 
@@ -97,6 +121,7 @@ export default async function (fastify: FastifyInstance) {
   // Upload attachment
   fastify.post("/api/attachments/upload", {
     config: { rateLimit: { max: 20, timeWindow: "1 minute", groupId: "attachment-upload" } },
+    schema: { operationId: "uploadAttachment", tags: ["attachments"], body: attachmentUploadBodySchema, response: { 201: attachmentWithUrlSchema, 400: attachmentErrorSchema, 404: attachmentErrorSchema, 500: attachmentErrorSchema } },
   }, async (request, reply) => {
     const body = request.body as {
       transactionId: number;
@@ -221,7 +246,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Delete attachment
-  fastify.delete("/api/attachments/:id", async (request, reply) => {
+  fastify.delete("/api/attachments/:id", {
+    schema: { operationId: "deleteAttachment", tags: ["attachments"], params: attachmentIdParamsSchema, response: { 202: attachmentCleanupPendingSchema, 204: z.null(), 400: attachmentErrorSchema, 404: attachmentErrorSchema, 500: attachmentErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
@@ -274,7 +301,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Serve local files (when R2 is not configured)
-  fastify.get("/api/attachments/local/*", async (request, reply) => {
+  fastify.get("/api/attachments/local/*", {
+    schema: { operationId: "serveLocalAttachment", tags: ["attachments"], response: { 404: attachmentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const key = request.url.replace('/api/attachments/local/', '');
       const decodedKey = decodeURIComponent(key);
@@ -307,7 +336,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Serve wishlist images (when R2 is not configured)
-  fastify.get("/api/wishlist-images/*", async (request, reply) => {
+  fastify.get("/api/wishlist-images/*", {
+    schema: { operationId: "serveWishlistImage", tags: ["attachments"], response: { 404: attachmentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const key = request.url.replace('/api/wishlist-images/', '');
       const decodedKey = decodeURIComponent(key);
