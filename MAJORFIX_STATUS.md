@@ -217,6 +217,17 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Core generated-client query hooks pass React Query's abort signal through the shared transport, so filter changes and unmounts can cancel stale requests.
 
+### `e24b36b` — transaction form validation foundation
+
+- Added shared Zod schemas for simple transactions, journals, and editable transaction metadata, including bounded text, tag, date/time, amount, and journal-line shapes.
+- Simple and journal submissions now run schema validation before domain-specific account, balance, cash-flow, and category-allocation checks, producing a human-readable first error instead of relying only on browser constraints.
+- The edit-details form now uses React Hook Form with the shared metadata resolver, including typed tag selection and reset behavior when the edited transaction changes. Transfer, PayLater, route-template, and attachment state remain isolated while the larger journal `useFieldArray` migration is staged separately.
+
+### `303b778` — dynamic journal form state
+
+- The journal editor now uses React Hook Form and `useFieldArray` for journal lines and category allocations. Add/remove/update operations mutate focused fields instead of rebuilding the complete form object.
+- Journal submission receives the resolver-validated form snapshot before applying balance, cash-flow classification, and exact category-allocation checks. Existing simple, transfer, PayLater, route-template, and attachment state remains unchanged.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
@@ -250,9 +261,10 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 1. **Implemented durable cache invalidation locally.** Revision updates enqueue a full invalidation in SQLite; the startup/periodic worker retries Redis failures indefinitely. A production outage rehearsal and metrics/alerting are still required.
 7. **Implemented account/category archive dependency previews and restore flows.** The API and Accounts/Categories screens preserve history and require an explicit opt-in to view archived records. A richer cross-domain dependency graph remains an enhancement.
 8. Add route-level rate-limit injection tests; audited expensive routes now use the intended scope configuration.
-9. **Implemented guarded agent write paths for budgets and transactions plus high-value retrieval/planning tools.** Budget-plan upserts and explicit journal transaction creation use durable pending actions and one-time approval tokens. Deterministic similar-transaction, cash-flow, category-variance, period-comparison, cash-forecast, account-health, and anomaly tools are available. Recurring occurrence decisions, recovery/reconciliation commands, and domain correction/reversal proposals still need their own contracts.
-10. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
-11. **Implemented return-after-absence recovery and propagation.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Budget/dashboard/PDF/trend/agent reads disclose gaps and exclude skipped/unknown periods from averages and comparisons. Guided statement import/catch-up orchestration remains a follow-up.
+9. **Started the RHF/Zod form migration.** Simple/journal schemas, edit-details, and the dynamic journal lines/category allocation editor are migrated. The simple transaction form and remaining conditional subflows still use focused local state until their field boundaries can be moved without duplicating transfer/PayLater behavior.
+10. **Implemented guarded agent write paths for budgets and transactions plus high-value retrieval/planning tools.** Budget-plan upserts and explicit journal transaction creation use durable pending actions and one-time approval tokens. Deterministic similar-transaction, cash-flow, category-variance, period-comparison, cash-forecast, account-health, and anomaly tools are available. Recurring occurrence decisions, recovery/reconciliation commands, and domain correction/reversal proposals still need their own contracts.
+11. Run blank-DB migration integration, legacy-copy migration integration, and full DB-backed tests with a compatible native SQLite binary before merge.
+12. **Implemented return-after-absence recovery and propagation.** Migration `0018` persists separate period coverage (`complete`/`partial`/`skipped`/`unknown`) and recovery-session metadata. The Periods UI previews and explicitly creates skipped shells; the Accounts reconciliation UI can post a confirmed full asset/liability recovery snapshot to a dedicated equity bridge. Budget/dashboard/PDF/trend/agent reads disclose gaps and exclude skipped/unknown periods from averages and comparisons. Guided statement import/catch-up orchestration remains a follow-up.
 
     - The Periods screen is now exposed in desktop and mobile navigation and redesigned as a current-period control card plus chronological history. Its detail view separates lifecycle from coverage, supports coverage review, archive/restore, and direct budget/activity links. Recovery backfill derives every shell from the configured payroll calendar (for example, 25th–24th), never a fixed 30-day cadence. Period dates are server-locked once posted activity or budget plans exist, so a boundary edit cannot silently reframe recorded history.
 
