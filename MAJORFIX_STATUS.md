@@ -486,6 +486,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Subscription list/create/detail/update/archive, renewal processing, occurrence correction, and the intentionally disabled direct-advance route now declare typed payloads, renewal previews, correction receipts, and explicit `410` behavior for unsafe direct advancement.
 - Renewal inputs are bounded to unique positive subscription IDs and historical due timestamps at the domain boundary, while the response keeps posted and skipped counts separate from transaction IDs.
 
+### `pending` — contacts and loan contracts
+
+- Contact list/detail/create/update/archive/restore routes now declare typed search filters, contact payloads, loan summaries, and archive blockers.
+- Loan list/detail/create/update/delete, payment, origin-reversal, and payment-reversal routes now declare direction/status filters, timestamp-tolerant subledger records, payment receipts, reversal receipts, and explicit conflict responses. Liability/receivable subledger rows remain domain-owned and are not editable through generic transaction mutations.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.

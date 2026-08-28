@@ -1,8 +1,19 @@
 import { eq, like, desc, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { auditLogs, contacts, loans } from "../db/schema";
+
+const contactErrorSchema = z.object({ error: z.string() }).passthrough();
+const contactIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const contactQuerySchema = z.object({ search: z.string().max(120).optional(), includeInactive: z.enum(["true", "false"]).optional() });
+const contactTimestampSchema = z.union([z.date(), z.string(), z.number()]);
+const contactSchema = z.object({ id: z.number().int(), name: z.string(), fullName: z.string().nullable(), email: z.string().nullable(), phone: z.string().nullable(), relationshipType: z.string().nullable(), notes: z.string().nullable(), isActive: z.boolean(), createdAt: contactTimestampSchema, updatedAt: contactTimestampSchema }).passthrough();
+const contactSummarySchema = z.object({ totalLent: z.number(), totalBorrowed: z.number(), netBalance: z.number(), activeLoansCount: z.number().int(), repaidLoansCount: z.number().int().optional(), totalLentAllTime: z.number().optional(), totalBorrowedAllTime: z.number().optional() }).passthrough();
+const contactListItemSchema = contactSchema.extend({ totalLent: z.number(), totalBorrowed: z.number(), netBalance: z.number(), activeLoansCount: z.number().int() }).passthrough();
+const contactBodySchema = z.object({ name: z.string().trim().min(1).max(200), fullName: z.string().max(200).nullable().optional(), email: z.string().email().nullable().optional(), phone: z.string().max(80).nullable().optional(), relationshipType: z.string().max(100).nullable().optional(), notes: z.string().max(2000).nullable().optional() }).passthrough();
+const contactUpdateBodySchema = contactBodySchema.partial().passthrough();
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -13,7 +24,9 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   // GET /api/contacts - List all contacts with loan summary
-  fastify.get("/api/contacts", async (request) => {
+  fastify.get("/api/contacts", {
+    schema: { operationId: "listContacts", tags: ["contacts"], querystring: contactQuerySchema, response: { 200: z.array(contactListItemSchema) } },
+  }, async (request) => {
     const { search, includeInactive } = request.query as {
       search?: string;
       includeInactive?: string;
@@ -74,7 +87,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // GET /api/contacts/:id - Get single contact with all loans
-  fastify.get("/api/contacts/:id", async (request, reply) => {
+  fastify.get("/api/contacts/:id", {
+    schema: { operationId: "getContact", tags: ["contacts"], params: contactIdParamsSchema, response: { 200: contactSchema.extend({ loans: z.array(z.unknown()), summary: contactSummarySchema }).passthrough(), 404: contactErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [contact] = await db
@@ -126,7 +141,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // POST /api/contacts - Create new contact
-  fastify.post("/api/contacts", async (request, reply) => {
+  fastify.post("/api/contacts", {
+    schema: { operationId: "createContact", tags: ["contacts"], body: contactBodySchema, response: { 201: contactSchema, 400: contactErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       fullName?: string | null;
@@ -157,7 +174,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // PATCH /api/contacts/:id - Update contact
-  fastify.patch("/api/contacts/:id", async (request, reply) => {
+  fastify.patch("/api/contacts/:id", {
+    schema: { operationId: "updateContact", tags: ["contacts"], params: contactIdParamsSchema, body: contactUpdateBodySchema, response: { 200: contactSchema, 404: contactErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;
@@ -193,11 +212,15 @@ export default async function (fastify: FastifyInstance) {
       .where(eq(contacts.id, parseInt(id)))
       .returning();
 
+    // Keep the mutation response consistent with create/get so clients do not
+    // need a special array-unwrapping path for a single contact update.
     return updated;
   });
 
   // DELETE /api/contacts/:id - Soft delete contact
-  fastify.delete("/api/contacts/:id", async (request, reply) => {
+  fastify.delete("/api/contacts/:id", {
+    schema: { operationId: "archiveContact", tags: ["contacts"], params: contactIdParamsSchema, response: { 204: z.null(), 400: contactErrorSchema, 404: contactErrorSchema, 409: contactErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const contactId = Number(id);
     if (!Number.isSafeInteger(contactId) || contactId <= 0) {
@@ -235,7 +258,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/contacts/:id/restore", async (request, reply) => {
+  fastify.post("/api/contacts/:id/restore", {
+    schema: { operationId: "restoreContact", tags: ["contacts"], params: contactIdParamsSchema, response: { 200: contactSchema, 400: contactErrorSchema, 404: contactErrorSchema, 409: contactErrorSchema } },
+  }, async (request, reply) => {
     const contactId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(contactId) || contactId <= 0) {
       return reply.code(400).send({ error: "Invalid contact ID" });

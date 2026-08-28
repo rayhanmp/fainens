@@ -1,5 +1,6 @@
 import { eq, desc, and, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { contacts, loans, loanPayments, accounts, auditLogs } from "../db/schema";
@@ -18,6 +19,25 @@ const SYSTEM_KEYS = {
   badDebtExpense: "bad-debt-expense",
   forgivenessIncome: "loan-forgiveness-income",
 };
+
+const loanErrorSchema = z.object({ error: z.string() }).passthrough();
+const loanIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const loanPaymentIdParamsSchema = z.object({ paymentId: z.coerce.number().int().positive() });
+const loanTimestampSchema = z.union([z.date(), z.string(), z.number()]);
+const loanDirectionSchema = z.enum(["lent", "borrowed"]);
+const loanStatusSchema = z.enum(["active", "repaid", "defaulted", "written_off", "cancelled"]);
+const loanPaymentSchema = z.object({ id: z.number().int(), loanId: z.number().int(), amountCents: z.number().int(), principalCents: z.number().int(), paymentDate: loanTimestampSchema, transactionId: z.number().int().nullable().optional(), status: z.string().optional(), reversalTransactionId: z.number().int().nullable().optional(), reversedAt: loanTimestampSchema.nullable().optional(), reversalReason: z.string().nullable().optional(), notes: z.string().nullable().optional(), createdAt: loanTimestampSchema }).passthrough();
+const loanSchema = z.object({ id: z.number().int(), contactId: z.number().int(), direction: loanDirectionSchema, amountCents: z.number().int(), remainingCents: z.number().int(), startDate: loanTimestampSchema, dueDate: loanTimestampSchema.nullable(), status: loanStatusSchema, description: z.string().nullable(), sourceType: z.string().optional(), sourceTransactionId: z.number().int().nullable().optional(), walletAccountId: z.number().int().nullable().optional(), lendingTransactionId: z.number().int().nullable().optional(), isActive: z.boolean().optional(), createdAt: loanTimestampSchema.optional(), updatedAt: loanTimestampSchema.optional() }).passthrough();
+const loanListItemSchema = loanSchema.extend({ contact: z.object({ id: z.number().int(), name: z.string() }).passthrough(), isOverdue: z.boolean(), daysOverdue: z.number().int() }).passthrough();
+const loanDetailSchema = loanSchema.extend({ contact: z.object({ id: z.number().int(), name: z.string() }).passthrough(), payments: z.array(loanPaymentSchema), isOverdue: z.boolean(), daysOverdue: z.number().int() }).passthrough();
+const loanSummarySchema = z.object({ totalLent: z.number(), totalBorrowed: z.number(), netPosition: z.number(), totalRepaid: z.number(), activeLoansCount: z.number().int(), repaidLoansCount: z.number().int(), defaultedLoansCount: z.number().int() }).passthrough();
+const loanListQuerySchema = z.object({ direction: loanDirectionSchema.optional(), status: z.enum(["active", "repaid", "defaulted", "written_off"]).optional(), contactId: z.string().regex(/^\d+$/).optional(), includeHistory: z.enum(["true", "false"]).optional() });
+const loanCreateBodySchema = z.object({ contactId: z.number().int().positive(), direction: loanDirectionSchema, amountCents: z.number().int().positive(), description: z.string().trim().max(500).optional(), dueDate: z.number().int().positive().nullable().optional(), walletAccountId: z.number().int().positive() }).passthrough();
+const loanPaymentBodySchema = z.object({ amountCents: z.number().int().positive(), paymentDate: z.number().int().positive().optional(), notes: z.string().max(2000).optional(), walletAccountId: z.number().int().positive() }).passthrough();
+const loanReasonBodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).passthrough();
+const loanUpdateBodySchema = z.object({ status: z.enum(["active", "repaid", "defaulted", "written_off"]).optional(), description: z.string().max(500).optional() }).passthrough();
+const loanPaymentResponseSchema = z.object({ payment: loanPaymentSchema, loan: z.object({ id: z.number().int(), remainingCents: z.number().int(), status: loanStatusSchema }).passthrough() }).passthrough();
+const loanReversalResponseSchema = z.object({ reversalTransactionId: z.number().int(), loanId: z.number().int().optional(), remainingCents: z.number().int().optional() }).passthrough();
 
 async function getOrCreateSystemAccount(
   dbLike: any,
@@ -88,7 +108,9 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   // GET /api/loans - List all loans with contact info
-  fastify.get("/api/loans", async (request) => {
+  fastify.get("/api/loans", {
+    schema: { operationId: "listLoans", tags: ["loans"], querystring: loanListQuerySchema, response: { 200: z.array(loanListItemSchema) } },
+  }, async (request) => {
     const { direction, status, contactId, includeHistory } = request.query as {
       direction?: 'lent' | 'borrowed';
       status?: 'active' | 'repaid' | 'defaulted' | 'written_off';
@@ -148,7 +170,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // GET /api/loans/summary - Get loan summary statistics
-  fastify.get("/api/loans/summary", async () => {
+  fastify.get("/api/loans/summary", {
+    schema: { operationId: "getLoanSummary", tags: ["loans"], response: { 200: loanSummarySchema } },
+  }, async () => {
     const summary = await db
       .select({
         totalLent: sql<number>`COALESCE(SUM(CASE WHEN ${loans.direction} = 'lent' AND ${loans.status} = 'active' THEN ${loans.remainingCents} ELSE 0 END), 0)`,
@@ -176,7 +200,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // GET /api/loans/:id - Get single loan with payment history
-  fastify.get("/api/loans/:id", async (request, reply) => {
+  fastify.get("/api/loans/:id", {
+    schema: { operationId: "getLoan", tags: ["loans"], params: loanIdParamsSchema, response: { 200: loanDetailSchema, 404: loanErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [loanResult] = await db
@@ -225,7 +251,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // POST /api/loans - Create new loan
-  fastify.post("/api/loans", async (request, reply) => {
+  fastify.post("/api/loans", {
+    schema: { operationId: "createLoan", tags: ["loans"], body: loanCreateBodySchema, response: { 201: loanSchema, 400: loanErrorSchema, 404: loanErrorSchema } },
+  }, async (request, reply) => {
     try {
       const body = request.body as {
         contactId: number;
@@ -339,7 +367,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // POST /api/loans/:id/payments - Record a payment on a loan
-  fastify.post("/api/loans/:id/payments", async (request, reply) => {
+  fastify.post("/api/loans/:id/payments", {
+    schema: { operationId: "recordLoanPayment", tags: ["loans"], params: loanIdParamsSchema, body: loanPaymentBodySchema, response: { 201: loanPaymentResponseSchema, 400: loanErrorSchema, 404: loanErrorSchema } },
+  }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const loanId = Number(id);
@@ -486,7 +516,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   /** Reverse a payment and restore the loan subledger in the same commit. */
-  fastify.post("/api/loans/payments/:paymentId/reverse", async (request, reply) => {
+  fastify.post("/api/loans/payments/:paymentId/reverse", {
+    schema: { operationId: "reverseLoanPayment", tags: ["loans"], params: loanPaymentIdParamsSchema, body: loanReasonBodySchema, response: { 201: loanReversalResponseSchema, 400: loanErrorSchema, 409: loanErrorSchema } },
+  }, async (request, reply) => {
     const paymentId = Number((request.params as { paymentId?: string }).paymentId);
     const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
     if (!Number.isSafeInteger(paymentId) || paymentId <= 0) return reply.code(400).send({ error: "Invalid payment id" });
@@ -553,7 +585,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   /** Reverse the original lending/borrowing event before any repayment exists. */
-  fastify.post("/api/loans/:id/reverse-origin", async (request, reply) => {
+  fastify.post("/api/loans/:id/reverse-origin", {
+    schema: { operationId: "reverseLoanOrigin", tags: ["loans"], params: loanIdParamsSchema, body: loanReasonBodySchema, response: { 201: z.object({ reversalTransactionId: z.number().int() }).passthrough(), 400: loanErrorSchema, 409: loanErrorSchema } },
+  }, async (request, reply) => {
     const loanId = Number((request.params as { id?: string }).id);
     const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
     if (!Number.isSafeInteger(loanId) || loanId <= 0) return reply.code(400).send({ error: "Invalid loan id" });
@@ -609,7 +643,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // PATCH /api/loans/:id - Update loan status (mark as defaulted, written off, etc.)
-  fastify.patch("/api/loans/:id", async (request, reply) => {
+  fastify.patch("/api/loans/:id", {
+    schema: { operationId: "updateLoan", tags: ["loans"], params: loanIdParamsSchema, body: loanUpdateBodySchema, response: { 200: loanSchema, 400: loanErrorSchema, 404: loanErrorSchema, 409: loanErrorSchema } },
+  }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const loanId = Number(id);
@@ -724,7 +760,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // DELETE /api/loans/:id - Soft delete loan and its transaction
-  fastify.delete("/api/loans/:id", async (request, reply) => {
+  fastify.delete("/api/loans/:id", {
+    schema: { operationId: "deleteLoan", tags: ["loans"], params: loanIdParamsSchema, response: { 400: loanErrorSchema, 404: loanErrorSchema, 409: loanErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const loanId = parseInt(id);
 
