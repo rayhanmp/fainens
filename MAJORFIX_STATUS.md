@@ -300,6 +300,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Wishlist items and category lookups now use a feature-owned query instead of route-level effects and duplicated server state.
 - Delete, fulfill, and link workflows invalidate the wishlist and shared financial-summary keys so goal status and ledger-derived views stay synchronized.
 
+### `420f048` — shared Settings server queries
+
+- Settings now consumes the canonical Accounts and Agent Memory queries, removing duplicate route-level account/memory caches and loading effects.
+- Memory create/update/delete operations invalidate the shared memory query; local settings and export controls remain client-only state.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
