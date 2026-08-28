@@ -6,6 +6,7 @@ export const queryKeys = {
   periods: { all: ["periods"] as const, detail: (id: number) => ["periods", id] as const },
   transactions: {
     all: ["transactions"] as const,
+    pending: ["transactions", "pending"] as const,
     list: (filters: object = {}) => ["transactions", "list", filters] as const,
     detail: (id: number) => ["transactions", "detail", id] as const,
   },

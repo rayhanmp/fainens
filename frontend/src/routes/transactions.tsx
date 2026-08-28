@@ -14,7 +14,7 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { useTransactionList } from '../features/transactions/queries';
+import { usePendingTransactionsQuery, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery } from '../features/categories/queries';
 import { usePeriodsQuery } from '../features/periods/queries';
@@ -122,7 +122,6 @@ function TransactionsPage() {
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
   const [editingPendingTx, setEditingPendingTx] = useState<{ id: number; parsedData: { type: string; amount: number; description: string; category: string; date?: string; place?: string; memo?: string; fromAccount?: string; toAccount?: string; confidence: number } } | null>(null);
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false);
   const [isSplitLoading, setIsSplitLoading] = useState(false);
@@ -144,6 +143,11 @@ function TransactionsPage() {
     sort, limit: String(pageSize), offset: String((page - 1) * pageSize),
   }), [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, page, pageSize]);
   const transactionQuery = useTransactionList(transactionFilters);
+  const pendingQuery = usePendingTransactionsQuery();
+  const deepLinkTransactionId = search.transactionId && Number.isSafeInteger(Number(search.transactionId))
+    ? Number(search.transactionId)
+    : null;
+  const deepLinkQuery = useTransactionDetailQuery(deepLinkTransactionId);
   const accountsQuery = useAccountsQuery();
   const categoriesQuery = useCategoriesQuery();
   const periodsQuery = usePeriodsQuery();
@@ -153,6 +157,7 @@ function TransactionsPage() {
   const categories = (categoriesQuery.data ?? []) as Category[];
   const tags = (tagsQuery.data ?? []) as Array<{ id: number; name: string; color: string }>;
   const periods = (periodsQuery.data ?? []) as unknown as Period[];
+  const pendingCount = pendingQuery.data?.length ?? 0;
   const isLoading = transactionQuery.isLoading || accountsQuery.isLoading || categoriesQuery.isLoading || periodsQuery.isLoading || tagsQuery.isLoading;
   const total = transactionQuery.data?.pagination?.total ?? 0;
   const summary = transactionQuery.data?.summary ?? { expenseCents: 0, incomeCents: 0 };
@@ -160,7 +165,6 @@ function TransactionsPage() {
   useKeyboardShortcuts({ isModalOpen, searchInputRef });
 
   const loadData = () => invalidateFinancialSummaries(queryClient);
-  useEffect(() => { api.pendingTransactions.list().then((rows) => setPendingCount(rows.length)).catch(() => setPendingCount(0)); }, []);
   useEffect(() => { setCategoryFilter(search.categoryId ?? ''); }, [search.categoryId]);
   useEffect(() => { setPage(1); }, [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, pageSize]);
   useEffect(() => {
@@ -170,11 +174,12 @@ function TransactionsPage() {
   }, [search.action, isModalOpen, navigate]);
   useEffect(() => {
     if (!search.transactionId || openedDeepLinkId.current === search.transactionId) return;
-    const id = Number(search.transactionId);
-    if (!Number.isSafeInteger(id) || id <= 0) return;
+    if (deepLinkQuery.error) return;
+    if (!deepLinkQuery.data) return;
     openedDeepLinkId.current = search.transactionId;
-      void api.transactions.get(id).then((transaction) => openModal({ ...transaction, status: 'posted', periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as unknown as TransactionRow, 'view')).catch(() => { openedDeepLinkId.current = null; });
-  }, [search.transactionId]);
+    const transaction = deepLinkQuery.data;
+    openModal({ ...transaction, status: 'posted', periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as unknown as TransactionRow, 'view');
+  }, [search.transactionId, deepLinkQuery.data, deepLinkQuery.error]);
 
   const selectedPeriod = useMemo(() => periods.find((period) => String(period.id) === search.periodId) ?? null, [periods, search.periodId]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -281,7 +286,7 @@ function TransactionsPage() {
     </section>
     <TransactionModal isOpen={isModalOpen} onClose={closeModal} onSaved={loadData} onSuccess={() => { void loadData(); setEditingPendingTx(null); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={editingTransaction} periodId={search.periodId && search.periodId !== 'all' ? Number(search.periodId) : null} initialMode={modalInitialMode} pendingTransaction={editingPendingTx} />
     <ImportCSVModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onSuccess={loadData} />
-    <PendingTransactionsModal isOpen={isPendingModalOpen} onClose={() => setIsPendingModalOpen(false)} onEdit={(pending) => { setEditingPendingTx(pending); setIsPendingModalOpen(false); openModal(); }} onRefresh={() => { api.pendingTransactions.list().then((rows) => setPendingCount(rows.length)).catch(() => setPendingCount(0)); }} />
+    <PendingTransactionsModal isOpen={isPendingModalOpen} onClose={() => setIsPendingModalOpen(false)} onEdit={(pending) => { setEditingPendingTx(pending); setIsPendingModalOpen(false); openModal(); }} onRefresh={() => { void pendingQuery.refetch(); }} />
     <Modal isOpen={isSplitBillModalOpen} onClose={() => setIsSplitBillModalOpen(false)} title="Split bill" subtitle="Upload a receipt to start a shared bill."><div className="flex flex-col items-center"><div className="w-full cursor-pointer rounded-2xl border-2 border-dashed border-[var(--color-border)] p-8 text-center hover:bg-[var(--ref-surface-container-low)]" onClick={() => splitFileInputRef.current?.click()}><input ref={splitFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleSplitFileSelect} />{isSplitLoading ? <div className="py-4"><div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[var(--ref-primary)] border-t-transparent" /><p className="mt-3 text-sm">Scanning receipt…</p></div> : <><Upload className="mx-auto mb-3 h-8 w-8 text-[var(--ref-primary)]" /><p className="font-bold">Upload receipt</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">PNG or JPG</p></>}</div>{splitError && <p className="mt-3 text-sm text-[var(--ref-error)]">{splitError}</p>}</div></Modal>
   </PageContainer></RequireAuth>;
 }
