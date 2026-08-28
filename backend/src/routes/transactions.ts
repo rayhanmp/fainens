@@ -157,6 +157,16 @@ const transactionUpdateBodySchema = z.object({
 }).passthrough();
 const transactionMutationResponseSchema = z.object({ id: z.number().int(), transactionId: z.number().int().optional() }).passthrough();
 const bulkDeleteResponseSchema = z.object({ success: z.literal(true), deletedCount: z.number().int(), message: z.string() }).passthrough();
+const importPreviewBodySchema = z.object({
+  csvText: z.string().min(1).max(2_000_000), mappings: z.record(z.string(), z.string()).default({}), hasHeader: z.boolean().default(true), accountId: z.number().int().positive(), dateFormat: z.string().min(1).max(40),
+}).passthrough();
+const importPreviewResponseSchema = z.object({
+  preview: z.array(z.object({ rowNumber: z.number().int(), date: z.string().nullable(), amountCents: z.number().int(), description: z.string(), raw: z.record(z.string(), z.string()) }).passthrough()), totalRows: z.number().int().nonnegative(),
+}).passthrough();
+const importConfirmBodySchema = z.object({
+  rows: z.array(z.object({ date: z.string().min(1), amountCents: z.number().int(), description: z.string() }).passthrough()).min(1).max(1000), accountId: z.number().int().positive(), defaultDescription: z.string().trim().min(1).max(500), tagIds: z.array(z.number().int().positive()).max(100).optional(),
+}).passthrough();
+const importConfirmResponseSchema = z.object({ imported: z.number().int().nonnegative(), transactions: z.array(transactionMutationResponseSchema) }).passthrough();
 
 type TransactionRouteErrorStatus = 400 | 404 | 409 | 500;
 function transactionRouteErrorStatus(status: number): TransactionRouteErrorStatus {
@@ -1079,6 +1089,7 @@ RULES:
   // Import preview endpoint
   fastify.post("/api/transactions/import-preview", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "transaction-import" } },
+    schema: { operationId: "previewTransactionImport", tags: ["transactions"], body: importPreviewBodySchema, response: { 200: importPreviewResponseSchema, 400: transactionErrorSchema } },
   }, async (request, reply) => {
     const { csvText, mappings, hasHeader, accountId, dateFormat } = request.body as {
       csvText: string;
@@ -1134,6 +1145,7 @@ RULES:
   // Import confirm endpoint
   fastify.post("/api/transactions/import-confirm", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "transaction-import" } },
+    schema: { operationId: "confirmTransactionImport", tags: ["transactions"], body: importConfirmBodySchema, response: { 201: importConfirmResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema } },
   }, async (request, reply) => {
     const { rows, accountId, defaultDescription, tagIds } = request.body as {
       rows: Array<{ date: string; amountCents: number; description: string }>;
@@ -1156,7 +1168,7 @@ RULES:
       return reply.code(201).send({ imported: results.length, transactions: results });
     } catch (err) {
       fastify.log.error(err);
-      const status = err instanceof TransactionMutationError ? err.statusCode : 500;
+      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to import transactions",
       });

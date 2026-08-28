@@ -428,7 +428,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Transaction category recommendation, list/detail, create, reverse, update, delete, and bulk-delete routes now declare Zod query/params/bodies and response shapes with stable operation IDs.
 - The list contract describes pagination, signed debit/credit effects, tags, and category allocations so consumers no longer have to infer journal amounts from the largest line. Create/edit inputs validate positive identifiers, non-negative journal line amounts, and supported activity kinds before ledger services run.
-- Mutation error status narrowing keeps the declared 400/404/409/500 responses aligned with `TransactionMutationError`; CSV import routes and their preview/confirm response contracts remain to be migrated.
+- Mutation error status narrowing keeps the declared 400/404/409/500 responses aligned with `TransactionMutationError`; CSV import preview/confirm routes now also declare bounded row/mapping payloads and stable operation IDs. The legacy route names remain `/transactions/import-preview` and `/transactions/import-confirm`, while the current handwritten frontend still calls `/transactions/import/preview` and `/transactions/import/confirm`; the generated-client adapter should normalize that compatibility gap before this feature is marked migrated.
 
 ### `pending` — analytics route contracts
 
