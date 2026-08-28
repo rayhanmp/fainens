@@ -323,6 +323,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The local message view hydrates only from the matching conversation response, preventing an older detail request from overwriting a newly selected chat.
 - Conversation refreshes reuse the list query's refetch function, removing a duplicate imperative list request while preserving the existing streaming lifecycle.
 
+### `bba4ce7` — onboarding lookup query migration
+
+- Onboarding category presets and payroll-period suggestions now use the shared category and period query caches rather than independent mount-time requests.
+- The period form still seeds a safe calendar-month fallback when the suggestion endpoint fails, and user edits are never overwritten by later refetches.
+- Newly created onboarding categories update the canonical category cache immediately for the rest of the setup flow.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
