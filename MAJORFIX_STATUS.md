@@ -335,6 +335,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Successful budget mutations invalidate the shared financial-summary families, while template-only changes invalidate the template list without rebuilding route-local server state.
 - The existing forms, confirmation dialogs, and retry action remain unchanged; only the mutation/cache boundary moved into the budget feature.
 
+### `24ce488` — account mutation hooks
+
+- Account create/update in the account modal and account archive/restore in the Accounts page now use typed feature-owned mutations.
+- Successful account mutations invalidate account, dashboard, period, and other financial-summary queries through the shared invalidation boundary.
+- Existing confirmation and modal behavior is preserved, including keeping archived history available when the archived view is enabled.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
