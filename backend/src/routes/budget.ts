@@ -4,11 +4,13 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client";
 
 const DAY_MS = 86_400_000;
-import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
+import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, forecastPurchaseReviews, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary } from "../cache/invalidation";
 import { getBudgetFacts } from "../services/financial-facts";
 import { getPeriodCoverage } from "../services/period-coverage";
+import { getBudgetOutlook } from "../services/budget-outlook";
+import { getBudgetReviewStatus, reviewBudgetOutlook } from "../services/budget-outlook-review";
 
 async function invalidateBudgetMutation(periodIds: number[]): Promise<void> {
   // The caller bumps the revision in the same SQLite transaction as the plan
@@ -147,6 +149,59 @@ export default async function (fastify: FastifyInstance) {
       return budgetSummary[0];
     }
     return budgetSummary;
+  });
+
+  fastify.get("/api/budgets/:periodId/outlook", async (request, reply) => {
+    const periodId = Number((request.params as { periodId?: string }).periodId);
+    if (!Number.isInteger(periodId) || periodId <= 0) {
+      return reply.code(400).send({ error: "A valid period ID is required" });
+    }
+    try {
+      return await getBudgetOutlook(periodId);
+    } catch (error) {
+      return reply.code(error instanceof Error && error.message === "Salary period not found" ? 404 : 400)
+        .send({ error: error instanceof Error ? error.message : "Could not build the budget outlook" });
+    }
+  });
+
+  fastify.get("/api/budgets/:periodId/outlook/review", async (request, reply) => {
+    const periodId = Number((request.params as { periodId?: string }).periodId);
+    if (!Number.isInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "A valid period ID is required" });
+    return getBudgetReviewStatus(periodId);
+  });
+
+  fastify.post("/api/budgets/:periodId/outlook/review", async (request, reply) => {
+    const periodId = Number((request.params as { periodId?: string }).periodId);
+    if (!Number.isInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "A valid period ID is required" });
+    try {
+      return await reviewBudgetOutlook(periodId);
+    } catch (error) {
+      // Forecast review is optional. A provider outage must not make the
+      // deterministic dashboard unavailable.
+      request.log.warn({ err: error }, "Budget pattern review unavailable");
+      const detail = error instanceof Error && error.message.length < 300
+        ? error.message
+        : "The optional pattern-review provider could not be reached";
+      return { applied: false, reason: "provider_error", detail, reviews: [] };
+    }
+  });
+
+  fastify.patch("/api/budgets/:periodId/outlook/review/:categoryId", async (request, reply) => {
+    const periodId = Number((request.params as { periodId?: string }).periodId);
+    const transactionId = Number((request.params as { categoryId?: string }).categoryId);
+    const body = request.body as { weight?: unknown };
+    if (!Number.isInteger(periodId) || periodId <= 0 || !Number.isInteger(transactionId) || transactionId <= 0) {
+      return reply.code(400).send({ error: "Valid period and transaction IDs are required" });
+    }
+    const weight = body?.weight == null ? null : Number(body.weight);
+    if (weight != null && (!Number.isFinite(weight) || weight < 0.05 || weight > 1)) {
+      return reply.code(400).send({ error: "weight must be between 0.05 and 1" });
+    }
+    const [existing] = await db.select({ id: forecastPurchaseReviews.id, periodId: forecastPurchaseReviews.periodId }).from(forecastPurchaseReviews)
+      .where(eq(forecastPurchaseReviews.transactionId, transactionId)).limit(1);
+    if (!existing) return reply.code(404).send({ error: "No stored pattern review exists for this purchase" });
+    await db.update(forecastPurchaseReviews).set({ userWeight: weight, status: weight == null ? "active" : "user_override", updatedAt: new Date() }).where(eq(forecastPurchaseReviews.id, existing.id));
+    return { updated: true, periodId, transactionId, userWeight: weight };
   });
 
   fastify.post("/api/budgets", async (request, reply) => {

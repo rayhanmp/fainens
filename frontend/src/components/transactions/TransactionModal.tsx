@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -7,7 +7,7 @@ import { Select } from '../ui/Select';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { api } from '../../lib/api';
-import { formatCurrency, cn, getAccountTypeLabel, parseIdNominalToInt, formatFileSize } from '../../lib/utils';
+import { formatCurrency, cn, getAccountTypeLabel, parseIdNominalToInt, parseSignedIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
   Plus,
   Trash2,
@@ -32,9 +32,11 @@ import {
   Check,
   Pencil,
   RotateCcw,
+  Info,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
+import { loadTransferFeeRules, type TransferFeeRule } from '../../lib/transferFees';
 
 export type WalletAccount = {
   id: number;
@@ -53,6 +55,23 @@ export type CategoryRow = {
 };
 
 export type TagRow = { id: number; name: string; color: string };
+
+type TransportRouteTemplate = {
+  id: number;
+  name: string;
+  provider: string | null;
+  service: string | null;
+  originName: string | null;
+  originLat: number | null;
+  originLng: number | null;
+  destName: string | null;
+  destLat: number | null;
+  destLng: number | null;
+  categoryId: number | null;
+  defaultAccountId: number | null;
+  notes: string | null;
+  tagIds: number[];
+};
 
 type SimpleTxType = 'expense' | 'income' | 'transfer' | 'paylater';
 
@@ -242,6 +261,8 @@ export function TransactionModal({
     rideService: '',
     /** Transfer admin fee (in rupiah) */
     transferAdminFee: '',
+    /** Optional per-transfer payer override */
+    transferFeePayerOverride: '' as '' | 'sender' | 'recipient',
     /** Subscription this transaction pays for */
     subscriptionId: '',
   });
@@ -329,6 +350,18 @@ export function TransactionModal({
 
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [transferFeeRules, setTransferFeeRules] = useState<TransferFeeRule[]>([]);
+  const [transferFeeControlsOpen, setTransferFeeControlsOpen] = useState(false);
+  const [showAllTransferFromAccounts, setShowAllTransferFromAccounts] = useState(false);
+  const [showAllTransferToAccounts, setShowAllTransferToAccounts] = useState(false);
+  const [routeTemplates, setRouteTemplates] = useState<TransportRouteTemplate[]>([]);
+  const [isSavingRouteTemplate, setIsSavingRouteTemplate] = useState(false);
+  const [isUpdatingRouteTemplate, setIsUpdatingRouteTemplate] = useState(false);
+  const [selectedRouteTemplateId, setSelectedRouteTemplateId] = useState<number | null>(null);
+  const [routeTemplateEditorMode, setRouteTemplateEditorMode] = useState<'save' | 'rename' | null>(null);
+  const [routeTemplateName, setRouteTemplateName] = useState('');
+  const autoTransferDescriptionRef = useRef('');
+  const autoTransportDescriptionRef = useRef('');
 
   const [categoryRecommendation, setCategoryRecommendation] = useState<{
     categoryId: number;
@@ -403,6 +436,27 @@ export function TransactionModal({
            account.name.toLowerCase().includes('ovo');
   };
 
+  const defaultTransferDescription = (fromAccountId: string, toAccountId: string) => {
+    const from = accounts.find((account) => account.id.toString() === fromAccountId);
+    const to = accounts.find((account) => account.id.toString() === toAccountId);
+    return from && to ? `Transfer ${from.name} -> ${to.name}` : '';
+  };
+
+  useEffect(() => {
+    if (simpleForm.type !== 'transfer') {
+      autoTransferDescriptionRef.current = '';
+      return;
+    }
+    const generated = defaultTransferDescription(simpleForm.fromAccountId, simpleForm.toAccountId);
+    if (!generated) return;
+    setSimpleForm((current) => {
+      if (current.type !== 'transfer') return current;
+      if (current.description.trim() !== '' && current.description !== autoTransferDescriptionRef.current) return current;
+      autoTransferDescriptionRef.current = generated;
+      return { ...current, description: generated };
+    });
+  }, [simpleForm.type, simpleForm.fromAccountId, simpleForm.toAccountId, accounts]);
+
   // Calculate transfer fee and amounts
   const calculateTransferDetails = () => {
     if (simpleForm.type !== 'transfer' || !simpleForm.fromAccountId || !simpleForm.toAccountId) {
@@ -420,31 +474,37 @@ export function TransactionModal({
       return { error: 'Cannot transfer to or from paylater accounts' };
     }
 
-    // Bank to GoPay: sender pays fee (amount + 1000 deducted from bank)
-    if (isBankAccount(fromId) && isGoPayAccount(toId)) {
-      const fee = 1000;
-      return {
-        fee,
-        senderPays: true,
-        fromAmount: amount + fee,
-        toAmount: amount,
-        description: `Transfer ${formatCurrency(amount)} + Fee ${formatCurrency(fee)} = ${formatCurrency(amount + fee)} deducted from source`
-      };
+    const rule = transferFeeRules.find((candidate) => candidate.fromAccountId === Number(fromId) && candidate.toAccountId === Number(toId));
+    // Preserve the previous provider defaults when no custom pair rule exists.
+    const builtIn = isBankAccount(fromId) && isGoPayAccount(toId)
+      ? { fee: 1000, senderPays: true as const }
+      : isOVOAccount(toId)
+        ? { fee: 1000, senderPays: false as const }
+        : { fee: 0, senderPays: true as const };
+    const manualFeeEntered = simpleForm.transferAdminFee.trim() !== '';
+    const parsedManualFee = manualFeeEntered ? parseSignedIdNominalToInt(simpleForm.transferAdminFee) : null;
+    if (manualFeeEntered && (parsedManualFee == null || parsedManualFee < 0)) {
+      return { error: 'Transfer fee must be zero or a positive amount' };
     }
-
-    // To OVO: recipient pays fee (amount sent, but fee deducted at destination)
-    if (isOVOAccount(toId)) {
-      const fee = 1000;
-      return {
-        fee,
-        senderPays: false,
-        fromAmount: amount,
-        toAmount: amount - fee,
-        description: `Transfer ${formatCurrency(amount)} - Fee ${formatCurrency(fee)} = ${formatCurrency(amount - fee)} received (fee deducted at destination)`
-      };
-    }
-
-    return null;
+    const fee = parsedManualFee ?? rule?.feeCents ?? builtIn.fee;
+    const senderPays = simpleForm.transferFeePayerOverride
+      ? simpleForm.transferFeePayerOverride === 'sender'
+      : rule?.payer
+        ? rule.payer === 'sender'
+        : builtIn.senderPays;
+    const fromAmount = senderPays ? amount + fee : amount;
+    const toAmount = senderPays ? amount : amount - fee;
+    if (toAmount < 0) return { error: 'Transfer fee cannot exceed the transfer amount when paid by the recipient' };
+    return {
+      fee,
+      senderPays,
+      fromAmount,
+      toAmount,
+      source: manualFeeEntered ? 'manual' as const : rule ? 'default' as const : builtIn.fee > 0 ? 'provider' as const : 'none' as const,
+      description: senderPays
+        ? `Transfer ${formatCurrency(amount)} + Fee ${formatCurrency(fee)} = ${formatCurrency(fromAmount)} deducted from source`
+        : `Transfer ${formatCurrency(amount)} - Fee ${formatCurrency(fee)} = ${formatCurrency(toAmount)} received (fee deducted at destination)`,
+    };
   };
 
   const [editMeta, setEditMeta] = useState({
@@ -460,6 +520,11 @@ export function TransactionModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    setTransferFeeControlsOpen(false);
+    setShowAllTransferFromAccounts(false);
+    setShowAllTransferToAccounts(false);
+    autoTransferDescriptionRef.current = '';
+    autoTransportDescriptionRef.current = '';
     if (editingTransaction) {
       setInputMode('simple');
       const txDate = new Date(editingTransaction.date);
@@ -507,6 +572,9 @@ export function TransactionModal({
         .catch(() => setAttachments([]));
     } else {
       setInputMode('simple');
+      setRouteTemplateName('');
+      setSelectedRouteTemplateId(null);
+      setRouteTemplateEditorMode(null);
       setSimpleForm({
         dateTime: toDatetimeLocal(),
         type: 'expense',
@@ -530,6 +598,7 @@ export function TransactionModal({
         rideProvider: '',
         rideService: '',
         transferAdminFee: '',
+        transferFeePayerOverride: '',
         subscriptionId: '',
       });
       setInstallmentPreview(null);
@@ -554,6 +623,135 @@ export function TransactionModal({
   }, [isOpen, editingTransaction]);
 
   useEffect(() => {
+    if (isOpen) setTransferFeeRules(loadTransferFeeRules());
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    api.transportRouteTemplates.list()
+      .then((templates) => { if (!cancelled) setRouteTemplates(templates as TransportRouteTemplate[]); })
+      .catch(() => { if (!cancelled) setRouteTemplates([]); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  const applyRouteTemplate = (template: TransportRouteTemplate) => {
+    const origin = template.originName && template.originLat != null && template.originLng != null
+      ? { name: template.originName, lat: template.originLat, lng: template.originLng }
+      : null;
+    const destination = template.destName && template.destLat != null && template.destLng != null
+      ? { name: template.destName, lat: template.destLat, lng: template.destLng }
+      : null;
+    const hasDefaultAccount = template.defaultAccountId != null && accounts.some((account) => account.id === template.defaultAccountId);
+    const hasCategory = template.categoryId != null && categories.some((category) => category.id === template.categoryId);
+    setSimpleForm((current) => ({
+      ...current,
+      origin,
+      destination,
+      rideProvider: (template.provider === 'gojek' || template.provider === 'grab' || template.provider === 'others') ? template.provider : '',
+      rideService: template.service || '',
+      categoryId: hasCategory ? String(template.categoryId) : current.categoryId,
+      fromAccountId: hasDefaultAccount ? String(template.defaultAccountId) : current.fromAccountId,
+      notes: template.notes || current.notes,
+      tagIds: template.tagIds,
+      description: '',
+    }));
+    setRouteTemplateName(template.name);
+    setRouteTemplateEditorMode(null);
+  };
+
+  const currentRouteTemplateFallbackName = () => {
+    if (!simpleForm.origin || !simpleForm.destination) return '';
+    return `${simpleForm.origin.name.split(',')[0].trim()} -> ${simpleForm.destination.name.split(',')[0].trim()}`;
+  };
+
+  const openRouteTemplateEditor = (mode: 'save' | 'rename') => {
+    if (mode === 'rename') {
+      const selected = routeTemplates.find((template) => template.id === selectedRouteTemplateId);
+      if (!selected) return;
+      setRouteTemplateName(selected.name);
+    } else {
+      setRouteTemplateName(currentRouteTemplateFallbackName());
+    }
+    setRouteTemplateEditorMode(mode);
+  };
+
+  const closeRouteTemplateEditor = () => {
+    const selected = routeTemplates.find((template) => template.id === selectedRouteTemplateId);
+    setRouteTemplateName(selected?.name ?? '');
+    setRouteTemplateEditorMode(null);
+  };
+
+  const saveCurrentRouteTemplate = async () => {
+    if (!simpleForm.origin || !simpleForm.destination) return;
+    const fallbackName = currentRouteTemplateFallbackName();
+    const name = routeTemplateName.trim() || fallbackName;
+    setIsSavingRouteTemplate(true);
+    try {
+      const created = await api.transportRouteTemplates.create({
+        name,
+        provider: simpleForm.rideProvider || null,
+        service: simpleForm.rideService || null,
+        originName: simpleForm.origin.name,
+        originLat: simpleForm.origin.lat,
+        originLng: simpleForm.origin.lng,
+        destName: simpleForm.destination.name,
+        destLat: simpleForm.destination.lat,
+        destLng: simpleForm.destination.lng,
+        categoryId: simpleForm.categoryId ? Number(simpleForm.categoryId) : null,
+        defaultAccountId: simpleForm.fromAccountId ? Number(simpleForm.fromAccountId) : null,
+        notes: simpleForm.notes || null,
+        tagIds: simpleForm.tagIds,
+      });
+      setRouteTemplates((current) => [created as TransportRouteTemplate, ...current.filter((item) => item.id !== (created as TransportRouteTemplate).id)]);
+      setSelectedRouteTemplateId((created as TransportRouteTemplate).id);
+      setRouteTemplateName(name);
+      setRouteTemplateEditorMode(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not save route');
+    } finally {
+      setIsSavingRouteTemplate(false);
+    }
+  };
+
+  const renameRouteTemplate = async () => {
+    if (!selectedRouteTemplateId || !routeTemplateName.trim()) return;
+    setIsUpdatingRouteTemplate(true);
+    try {
+      const updated = await api.transportRouteTemplates.update(selectedRouteTemplateId, { name: routeTemplateName.trim() });
+      setRouteTemplates((current) => current.map((template) => template.id === selectedRouteTemplateId ? { ...template, ...(updated as TransportRouteTemplate) } : template));
+      setRouteTemplateEditorMode(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not rename route');
+    } finally {
+      setIsUpdatingRouteTemplate(false);
+    }
+  };
+
+  const deleteRouteTemplate = async () => {
+    if (!selectedRouteTemplateId) return;
+    const confirmed = await confirm({
+      title: 'Delete saved route?',
+      message: 'This only removes the reusable route shortcut. Existing transactions stay unchanged.',
+      confirmLabel: 'Delete route',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+    setIsUpdatingRouteTemplate(true);
+    try {
+      await api.transportRouteTemplates.delete(selectedRouteTemplateId);
+      setRouteTemplates((current) => current.filter((template) => template.id !== selectedRouteTemplateId));
+      setSelectedRouteTemplateId(null);
+      setRouteTemplateName('');
+      setRouteTemplateEditorMode(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not delete route');
+    } finally {
+      setIsUpdatingRouteTemplate(false);
+    }
+  };
+
+  useEffect(() => {
     if (!isOpen || editingTransaction) return;
     let cancelled = false;
     (async () => {
@@ -569,25 +767,30 @@ export function TransactionModal({
     };
   }, [isOpen, editingTransaction]);
 
-  // Auto-generate transaction name for transport expenses
+  // Auto-generate a compact, consistent name for transport expenses.
   useEffect(() => {
-    if (!simpleForm.description && simpleForm.origin && simpleForm.destination) {
-      const selectedCategory = categories.find(c => c.id.toString() === simpleForm.categoryId);
-      const isTransport = selectedCategory && /transport/i.test(selectedCategory.name);
-      
-      if (isTransport) {
-        // Extract short place names (first part before comma)
-        const originName = simpleForm.origin.name.split(',')[0].trim();
-        const destName = simpleForm.destination.name.split(',')[0].trim();
-        const rideService = simpleForm.rideService ? ` [${simpleForm.rideService}]` : '';
-        
-        setSimpleForm(prev => ({
-          ...prev,
-          description: `${originName} to ${destName}${rideService}`
-        }));
-      }
+    const selectedCategory = categories.find(c => c.id.toString() === simpleForm.categoryId);
+    const isTransport = simpleForm.type === 'expense' && selectedCategory && /transport/i.test(selectedCategory.name);
+    if (!isTransport || !simpleForm.origin || !simpleForm.destination) {
+      autoTransportDescriptionRef.current = '';
+      return;
     }
-  }, [simpleForm.origin, simpleForm.destination, simpleForm.rideService, simpleForm.categoryId, categories]);
+    const originName = simpleForm.origin.name.split(',')[0].trim();
+    const destName = simpleForm.destination.name.split(',')[0].trim();
+    const routeName = routeTemplateName.trim() || `${originName} -> ${destName}`;
+    const providerName = simpleForm.rideService || (
+      simpleForm.rideProvider === 'gojek' ? 'GoJek' :
+        simpleForm.rideProvider === 'grab' ? 'Grab' :
+          simpleForm.rideProvider === 'others' ? 'Transport' : ''
+    );
+    const generated = [providerName, routeName].filter(Boolean).join(' ');
+    if (!generated) return;
+    setSimpleForm((current) => {
+      if (current.description.trim() !== '' && current.description !== autoTransportDescriptionRef.current) return current;
+      autoTransportDescriptionRef.current = generated;
+      return { ...current, description: generated };
+    });
+  }, [simpleForm.type, simpleForm.origin, simpleForm.destination, simpleForm.rideProvider, simpleForm.rideService, simpleForm.categoryId, categories, routeTemplateName]);
 
   // Calculate installment preview for paylater
   const calculateInstallmentPreview = async (form: typeof simpleForm) => {
@@ -807,6 +1010,11 @@ export function TransactionModal({
         setFormError('Cannot transfer to or from paylater accounts');
         return;
       }
+      const transferDetails = calculateTransferDetails();
+      if (transferDetails && 'error' in transferDetails) {
+        setFormError(transferDetails.error);
+        return;
+      }
       
       walletAccountId = parseInt(simpleForm.fromAccountId, 10);
       toWalletAccountId = parseInt(simpleForm.toAccountId, 10);
@@ -836,7 +1044,7 @@ export function TransactionModal({
       // Add transfer fee info to notes
       if (simpleForm.type === 'transfer') {
         const transferDetails = calculateTransferDetails();
-        if (transferDetails && !('error' in transferDetails)) {
+        if (transferDetails && !('error' in transferDetails) && transferDetails.fee > 0) {
           const feeInfo = [
             finalNotes,
             `Transfer Fee: ${formatCurrency(transferDetails.fee)}`,
@@ -1115,6 +1323,9 @@ export function TransactionModal({
     idx: number,
     selected: boolean,
     onSelect: () => void,
+    compact = false,
+    disabled = false,
+    disabledHint?: string,
   ) => {
     const Icon = WALLET_ICONS[idx % 3];
     return (
@@ -1122,8 +1333,13 @@ export function TransactionModal({
         key={a.id}
         type="button"
         onClick={onSelect}
+        disabled={disabled}
+        aria-disabled={disabled || undefined}
+        title={disabled ? disabledHint : undefined}
         className={cn(
-          'cursor-pointer flex flex-col items-start p-4 rounded-xl transition-all text-left min-h-[96px]',
+          'flex flex-col items-start rounded-xl transition-all text-left',
+          compact ? 'min-w-0 w-full p-3 min-h-[72px]' : 'p-4 min-h-[96px]',
+          disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
           selected
             ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)] shadow-sm'
             : 'bg-[var(--ref-surface-container-low)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
@@ -1131,7 +1347,7 @@ export function TransactionModal({
       >
         <Icon
           className={cn(
-            'w-6 h-6 mb-2',
+            compact ? 'w-5 h-5 mb-1.5' : 'w-6 h-6 mb-2',
             selected ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]',
           )}
         />
@@ -1141,6 +1357,11 @@ export function TransactionModal({
         <span className="text-[10px] text-[var(--color-muted)]">
           {getAccountTypeLabel(a.type)} · {formatCurrency(a.balance)}
         </span>
+        {disabled && disabledHint && (
+          <span className="mt-0.5 text-[10px] font-semibold text-[var(--color-muted)]">
+            {disabledHint}
+          </span>
+        )}
       </button>
     );
   };
@@ -1779,6 +2000,56 @@ export function TransactionModal({
     );
   }
 
+  const transferWalletAccounts = walletAccounts.filter((account) => !isPaylaterAccount(account.id.toString()));
+  const transferAccountChoices = (_selectedId: string, showAll: boolean) =>
+    showAll ? transferWalletAccounts : transferWalletAccounts.slice(0, 3);
+
+  const renderTransferFeePanel = () => {
+    const details = calculateTransferDetails();
+    if (!details) return null;
+    if ('error' in details) {
+      return <div className="rounded-xl border border-[var(--color-danger)]/20 bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]">{details.error}</div>;
+    }
+    const ruleLabel = simpleForm.transferFeePayerOverride
+      ? 'Manual payer override'
+      : details.source === 'manual'
+        ? 'Manual override'
+        : details.source === 'default'
+          ? 'Settings default'
+          : details.source === 'provider'
+            ? 'Provider default'
+            : 'No fee rule';
+    const defaultPayer = details.senderPays ? 'sender' : 'recipient';
+    const alternatePayer = defaultPayer === 'sender' ? 'recipient' : 'sender';
+    const feeSummary = details.fee > 0
+      ? `${formatCurrency(details.fee)} · ${details.senderPays ? 'Sender pays' : 'Recipient pays'}`
+      : 'No fee';
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-[var(--color-text-primary)]">Transfer fee</label>
+        <button type="button" onClick={() => setTransferFeeControlsOpen((open) => !open)} className="flex w-full items-center justify-between gap-3 rounded-xl border-none bg-[var(--ref-surface-container-low)] px-3 py-3 text-left text-sm text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20" aria-expanded={transferFeeControlsOpen}>
+          <span className="min-w-0 truncate">{feeSummary}</span>
+          <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-[var(--color-accent)]">
+            <span className="group relative inline-flex" tabIndex={0} aria-label="Show transfer fee details">
+              <Info className="h-4 w-4" />
+              <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 hidden w-72 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs font-normal leading-relaxed text-[var(--color-text-primary)] shadow-lg group-hover:block group-focus-within:block">
+                {formatCurrency(details.fromAmount)} deducted from the source and {formatCurrency(details.toAmount)} received. Applied rule: {ruleLabel}.
+              </span>
+            </span>
+            <span>{transferFeeControlsOpen ? 'Done' : 'Adjust'}</span>
+          </span>
+        </button>
+        {transferFeeControlsOpen && <>
+          <div className="space-y-2 rounded-xl bg-[var(--ref-surface-container-low)] p-3">
+            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Override the fee or who incurs it for this transfer only.</p>
+            <Input label="Fee override (IDR)" type="number" min="0" step="1" value={simpleForm.transferAdminFee} onChange={(event) => setSimpleForm({ ...simpleForm, transferAdminFee: event.target.value })} placeholder={details.fee > 0 ? String(details.fee) : '0'} className="mt-2 rounded-xl" />
+            <Select label="Fee incurred by" value={simpleForm.transferFeePayerOverride === defaultPayer ? '' : simpleForm.transferFeePayerOverride} onChange={(event) => setSimpleForm({ ...simpleForm, transferFeePayerOverride: event.target.value as '' | 'sender' | 'recipient' })} options={[{ value: '', label: `${defaultPayer === 'sender' ? 'Sender' : 'Recipient'} (default)` }, { value: alternatePayer, label: alternatePayer === 'sender' ? 'Sender' : 'Recipient' }]} className="mt-2 rounded-xl" />
+          </div>
+        </>}
+      </div>
+    );
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -2169,7 +2440,7 @@ export function TransactionModal({
         <form onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           <div className="lg:col-span-8 space-y-6 lg:space-y-8">
-            <div className="flex flex-wrap p-1 bg-[var(--ref-surface-container)] rounded-2xl gap-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 p-1 bg-[var(--ref-surface-container)] rounded-2xl gap-1">
               {(
                 [
                   { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },
@@ -2181,16 +2452,24 @@ export function TransactionModal({
                 <button
                   key={t.value}
                   type="button"
-                  onClick={() =>
-                    setSimpleForm({
-                      ...simpleForm,
-                      type: t.value,
-                      paylaterRecognitionId:
-                        t.value === 'paylater' ? simpleForm.paylaterRecognitionId : '',
-                    })
-                  }
+                  onClick={() => {
+                    if (t.value !== 'transfer') setTransferFeeControlsOpen(false);
+                    setSimpleForm(() => {
+                      const generated = t.value === 'transfer'
+                        ? defaultTransferDescription(simpleForm.fromAccountId, simpleForm.toAccountId)
+                        : '';
+                      autoTransferDescriptionRef.current = generated;
+                      return {
+                        ...simpleForm,
+                        type: t.value,
+                        description: t.value === 'transfer' && generated ? generated : simpleForm.description,
+                        paylaterRecognitionId:
+                          t.value === 'paylater' ? simpleForm.paylaterRecognitionId : '',
+                      };
+                    });
+                  }}
                   className={cn(
-                    'cursor-pointer flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 rounded-xl sm:rounded-full text-xs sm:text-sm transition-all min-w-[70px]',
+                    'cursor-pointer w-full min-w-0 inline-flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-xl sm:rounded-full text-xs sm:text-sm transition-all',
                     simpleForm.type === t.value
                       ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
                       : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',
@@ -2208,10 +2487,17 @@ export function TransactionModal({
               onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
               size="lg"
               required
+              hintInline={simpleForm.type === 'transfer'}
+              hint={simpleForm.type === 'transfer' ? (() => {
+                const details = calculateTransferDetails();
+                return details && !('error' in details) && details.fee > 0
+                  ? `* ${formatCurrency(details.fee)} transfer fee from ${details.senderPays ? 'sender' : 'recipient'}`
+                  : undefined;
+              })() : undefined}
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-              <div className="md:col-span-2 space-y-2">
+            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+              {simpleForm.type !== 'transfer' && <div className="md:col-span-2 space-y-2">
                 <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
                   Transaction name
                 </label>
@@ -2237,7 +2523,7 @@ export function TransactionModal({
                 {isLoadingRecommendation && !categoryRecommendation && (
                   <p className="text-xs text-[var(--color-muted)]">Getting category recommendation...</p>
                 )}
-              </div>
+              </div>}
               <div className="space-y-2">
                 <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
                   Date &amp; time
@@ -2250,6 +2536,7 @@ export function TransactionModal({
                   required
                 />
               </div>
+              {simpleForm.type === 'transfer' && <div className="md:absolute md:left-1/2 md:right-0 md:top-0 md:z-20">{renderTransferFeePanel()}</div>}
               {(simpleForm.type === 'expense' && isPaylaterAccount(simpleForm.fromAccountId)) && (
                 <>
                   {/* Installment Term */}
@@ -2391,6 +2678,79 @@ export function TransactionModal({
                 const isTransport = selectedCategory && /transport/i.test(selectedCategory.name);
                 return isTransport ? (
                   <>
+                    <div className="md:col-span-2 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="block text-sm font-semibold text-[var(--color-text-primary)]">Saved route</label>
+                        {simpleForm.origin && simpleForm.destination && (
+                          <button
+                            type="button"
+                            onClick={() => openRouteTemplateEditor('save')}
+                            className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
+                          >
+                            Save as new route
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <select
+                            value={selectedRouteTemplateId?.toString() ?? ''}
+                            onChange={(event) => {
+                              const selected = routeTemplates.find((template) => template.id === Number(event.target.value));
+                              setSelectedRouteTemplateId(selected?.id ?? null);
+                              if (selected) applyRouteTemplate(selected);
+                              else {
+                                setRouteTemplateName('');
+                                setRouteTemplateEditorMode(null);
+                              }
+                            }}
+                            disabled={routeTemplates.length === 0}
+                            className={cn('w-full appearance-none', stitchSelect, routeTemplates.length === 0 && 'cursor-not-allowed opacity-60')}
+                          >
+                            <option value="">{routeTemplates.length ? 'Choose a saved route…' : 'No saved routes yet'}</option>
+                            {routeTemplates.map((template) => (
+                              <option key={template.id} value={template.id}>{template.name}</option>
+                            ))}
+                          </select>
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">▾</span>
+                        </div>
+                        {selectedRouteTemplateId && (
+                          <>
+                            <button type="button" onClick={() => openRouteTemplateEditor('rename')} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]" title="Rename saved route" aria-label="Rename saved route">
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={deleteRouteTemplate} disabled={isUpdatingRouteTemplate} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50" title="Delete saved route" aria-label="Delete saved route">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {routeTemplateEditorMode && (
+                        <div className="flex flex-col gap-2 rounded-xl bg-[var(--ref-surface-container-low)] p-2 sm:flex-row sm:items-center">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={routeTemplateName}
+                            onChange={(event) => setRouteTemplateName(event.target.value)}
+                            placeholder="Route name"
+                            maxLength={150}
+                            className={cn('min-w-0 flex-1', stitchSelect)}
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <button type="button" onClick={closeRouteTemplateEditor} disabled={isSavingRouteTemplate || isUpdatingRouteTemplate} className="px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Cancel</button>
+                            <button
+                              type="button"
+                              onClick={routeTemplateEditorMode === 'save' ? saveCurrentRouteTemplate : renameRouteTemplate}
+                              disabled={!routeTemplateName.trim() || isSavingRouteTemplate || isUpdatingRouteTemplate}
+                              className="rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                            >
+                              {isSavingRouteTemplate || isUpdatingRouteTemplate ? 'Saving…' : routeTemplateEditorMode === 'save' ? 'Save route' : 'Rename'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-xs text-[var(--color-text-secondary)]">Reuse the route details and enter this trip’s fare separately.</p>
+                    </div>
                     <div className="md:col-span-2">
                       <TransportRoute
                         origin={simpleForm.origin}
@@ -2598,81 +2958,33 @@ export function TransactionModal({
                   <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
                     From account
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
+                  <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3 overflow-hidden transition-[max-height] duration-300 ease-out', showAllTransferFromAccounts ? 'max-h-[1000px]' : 'max-h-[180px]')}>
+                    {transferAccountChoices(simpleForm.fromAccountId, showAllTransferFromAccounts).map((a, idx) =>
                       renderWalletCard(a, idx, simpleForm.fromAccountId === a.id.toString(), () =>
                         setSimpleForm({ ...simpleForm, fromAccountId: a.id.toString() }),
+                        true,
                       ),
                     )}
+                    {transferWalletAccounts.length > 3 && <button type="button" onClick={() => setShowAllTransferFromAccounts((show) => !show)} aria-expanded={showAllTransferFromAccounts} className="min-h-[72px] w-full rounded-xl border-2 border-dashed border-[var(--color-border)] px-3 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--ref-surface-container-low)]">{showAllTransferFromAccounts ? 'Show less' : `+${transferWalletAccounts.length - 3} more`}</button>}
                   </div>
                 </div>
                 <div className="space-y-4">
                   <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
                     To account
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
+                  <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3 overflow-hidden transition-[max-height] duration-300 ease-out', showAllTransferToAccounts ? 'max-h-[1000px]' : 'max-h-[180px]')}>
+                    {transferAccountChoices(simpleForm.toAccountId, showAllTransferToAccounts).map((a, idx) =>
                       renderWalletCard(a, idx, simpleForm.toAccountId === a.id.toString(), () =>
                         setSimpleForm({ ...simpleForm, toAccountId: a.id.toString() }),
+                        true,
+                        a.id.toString() === simpleForm.fromAccountId,
+                        'Same as source account',
                       ),
                     )}
-                    <Link
-                      to="/accounts"
-                      className="flex flex-col items-center justify-center p-4 min-h-[96px] bg-[var(--ref-surface-container-low)] border-2 border-dashed border-[var(--color-border-strong)]/60 rounded-xl hover:bg-[var(--ref-surface-container-highest)] transition-colors"
-                      title="Manage accounts"
-                    >
-                      <Plus className="w-7 h-7 text-[var(--color-muted)]" />
-                    </Link>
+                    {transferWalletAccounts.length > 3 && <button type="button" onClick={() => setShowAllTransferToAccounts((show) => !show)} aria-expanded={showAllTransferToAccounts} className="min-h-[72px] w-full rounded-xl border-2 border-dashed border-[var(--color-border)] px-3 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--ref-surface-container-low)]">{showAllTransferToAccounts ? 'Show less' : `+${transferWalletAccounts.length - 3} more`}</button>}
                   </div>
                 </div>
 
-                {/* Transfer Fee Calculation */}
-                {(() => {
-                  const details = calculateTransferDetails();
-                  if (!details) return null;
-                  if ('error' in details) {
-                    return (
-                      <div className="p-4 rounded-xl bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/20 text-[var(--color-danger)] text-sm">
-                        {details.error}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="p-4 rounded-xl bg-[var(--ref-surface-container-low)] border border-[var(--color-border)]">
-                      <h4 className="text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                        Transfer Summary
-                      </h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-[var(--color-text-secondary)]">Amount:</span>
-                          <span>{formatCurrency(parseIdNominalToInt(simpleForm.amount))}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-[var(--color-text-secondary)]">Admin Fee:</span>
-                          <span>{formatCurrency(details.fee)}</span>
-                        </div>
-                        <div className="h-px bg-[var(--color-border)] my-2" />
-                        <div className="flex justify-between font-medium">
-                          <span className="text-[var(--color-text-secondary)]">From Account:</span>
-                          <span className="text-[var(--color-danger)]">-{formatCurrency(details.fromAmount)}</span>
-                        </div>
-                        <div className="flex justify-between font-medium">
-                          <span className="text-[var(--color-text-secondary)]">To Account:</span>
-                          <span className="text-[var(--color-success)]">+{formatCurrency(details.toAmount)}</span>
-                        </div>
-                        {details.senderPays ? (
-                          <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                            *Fee paid by sender (added to source deduction)
-                          </p>
-                        ) : (
-                          <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                            *Fee deducted from recipient amount
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
               </>
             )}
           </div>

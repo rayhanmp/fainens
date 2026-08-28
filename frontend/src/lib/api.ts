@@ -135,6 +135,46 @@ export type BudgetSummary = {
   plans: BudgetPlan[];
 };
 
+export type BudgetOutlook = {
+  periodId: number;
+  asOfMs: number;
+  totalDays: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  eligiblePeriodCount: number;
+  confidence: 'unavailable' | 'low' | 'moderate' | 'high';
+  method: 'completed_cycle_median' | 'insufficient_history' | 'period_complete';
+  patternReview: { applied: boolean; categoryCount: number; evidenceRevision: number };
+  total: {
+    plannedAmount: number;
+    actualAmount: number;
+    remainingAmount: number;
+    scheduledRemainingAmount: number;
+    projectedAmount: number | null;
+    projectedLowAmount: number | null;
+    projectedHighAmount: number | null;
+    riskStatus: 'within_budget' | 'at_risk' | 'over_budget' | 'unknown';
+  };
+  categories: Array<{
+    categoryId: number;
+    categoryName: string;
+    plannedAmount: number;
+    actualAmount: number;
+    remainingAmount: number;
+    scheduledRemainingAmount: number;
+    historicalRemainingAmount: number | null;
+    projectedAmount: number | null;
+    projectedLowAmount: number | null;
+    projectedHighAmount: number | null;
+    riskStatus: 'within_budget' | 'at_risk' | 'over_budget' | 'unknown';
+    historicalSampleCount: number;
+    outlierCount: number;
+    evidencePeriodIds: number[];
+    historicalSampleAmounts: number[];
+    patternReview: { transactionId: number; amount: number; description: string; classification: string; confidence: number; rationale: string } | null;
+  }>;
+};
+
 export type AgentQueryResponse = {
   answer: string | null;
   llmAvailable: boolean;
@@ -165,6 +205,7 @@ export type AgentClarification = {
 
 export type AgentStreamEvent =
   | { type: 'delta'; text: string }
+  | { type: 'progress'; phase: 'understand' | 'retrieve' | 'compare' | 'calculate' | 'prepare'; label: string; status: 'started' | 'completed'; detail?: string }
   | { type: 'tool'; name: string }
   | { type: 'complete'; response: AgentQueryResponse }
   | { type: 'error'; error: string };
@@ -686,6 +727,109 @@ export const api = {
     delete: (id: number) => fetchApi(`/tags/${id}`, { method: 'DELETE' }),
   },
 
+  transportRouteTemplates: {
+    list: () => fetchApi<{ templates: Array<{
+      id: number;
+      name: string;
+      provider: string | null;
+      service: string | null;
+      originName: string | null;
+      originLat: number | null;
+      originLng: number | null;
+      destName: string | null;
+      destLat: number | null;
+      destLng: number | null;
+      categoryId: number | null;
+      defaultAccountId: number | null;
+      notes: string | null;
+      tagIds: number[];
+      createdAt: number;
+      updatedAt: number;
+    }> }>('/transport-route-templates').then((response: { templates: Array<{
+      id: number;
+      name: string;
+      provider: string | null;
+      service: string | null;
+      originName: string | null;
+      originLat: number | null;
+      originLng: number | null;
+      destName: string | null;
+      destLat: number | null;
+      destLng: number | null;
+      categoryId: number | null;
+      defaultAccountId: number | null;
+      notes: string | null;
+      tagIds: number[];
+      createdAt: number;
+      updatedAt: number;
+    }> }) => response.templates),
+    create: (data: {
+      name: string;
+      provider?: string | null;
+      service?: string | null;
+      originName?: string | null;
+      originLat?: number | null;
+      originLng?: number | null;
+      destName?: string | null;
+      destLat?: number | null;
+      destLng?: number | null;
+      categoryId?: number | null;
+      defaultAccountId?: number | null;
+      notes?: string | null;
+      tagIds?: number[];
+    }) => fetchApi<{ template: {
+      id: number;
+      name: string;
+      provider: string | null;
+      service: string | null;
+      originName: string | null;
+      originLat: number | null;
+      originLng: number | null;
+      destName: string | null;
+      destLat: number | null;
+      destLng: number | null;
+      categoryId: number | null;
+      defaultAccountId: number | null;
+      notes: string | null;
+      tagIds: number[];
+      createdAt: number;
+      updatedAt: number;
+    } }>('/transport-route-templates', { method: 'POST', body: JSON.stringify(data) }).then((response) => response.template),
+    update: (id: number, data: Partial<{
+      name: string;
+      provider: string | null;
+      service: string | null;
+      originName: string | null;
+      originLat?: number | null;
+      originLng?: number | null;
+      destName: string | null;
+      destLat?: number | null;
+      destLng?: number | null;
+      categoryId: number | null;
+      defaultAccountId: number | null;
+      notes: string | null;
+      tagIds: number[];
+    }>) => fetchApi<{ template: {
+      id: number;
+      name: string;
+      provider: string | null;
+      service: string | null;
+      originName: string | null;
+      originLat: number | null;
+      originLng: number | null;
+      destName: string | null;
+      destLat: number | null;
+      destLng: number | null;
+      categoryId: number | null;
+      defaultAccountId: number | null;
+      notes: string | null;
+      tagIds: number[];
+      createdAt: number;
+      updatedAt: number;
+    } }>(`/transport-route-templates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }).then((response) => response.template),
+    delete: (id: number) => fetchApi<void>(`/transport-route-templates/${id}`, { method: 'DELETE' }),
+  },
+
   // Periods
   periods: {
     list: (params?: { includeInactive?: boolean }) => fetchApi<Array<{
@@ -748,6 +892,10 @@ export const api = {
     update: (id: number, data: Partial<{ plannedAmount: number }>) =>
       fetchApi(`/budgets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/budgets/${id}`, { method: 'DELETE' }),
+    outlook: (periodId: number) => fetchApi<BudgetOutlook>(`/budgets/${periodId}/outlook`),
+    reviewOutlook: (periodId: number) => fetchApi<{ applied: boolean; reason: string; reviews: unknown[] }>(`/budgets/${periodId}/outlook/review`, { method: 'POST' }),
+    reviewStatus: (periodId: number) => fetchApi<{ evidenceRevision: number; reviews: unknown[] }>(`/budgets/${periodId}/outlook/review`),
+    setReviewWeight: (periodId: number, transactionId: number, weight: number | null) => fetchApi<{ updated: boolean }>(`/budgets/${periodId}/outlook/review/${transactionId}`, { method: 'PATCH', body: JSON.stringify({ weight }) }),
     // Templates
     templates: {
       list: (params?: { includeInactive?: boolean }) => fetchApi<Array<{
@@ -1882,6 +2030,12 @@ export const api = {
   },
 
   agent: {
+    profile: {
+      get: () => fetchApi<{ nickname: string | null }>('/agent/profile'),
+      update: (nickname: string | null) => fetchApi<{ nickname: string | null }>('/agent/profile', {
+        method: 'PUT', body: JSON.stringify({ nickname }),
+      }),
+    },
     memories: {
       list: () => fetchApi<{ memories: AgentMemory[]; limits: { maxItems: number; maxLabelLength: number; maxContentLength: number } }>('/agent/memories'),
       create: (data: { label: string; content: string }) => fetchApi<{ memory: AgentMemory }>('/agent/memories', {

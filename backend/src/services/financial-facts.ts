@@ -39,6 +39,8 @@ export async function getFinancialFacts(input: {
   endMs: number;
   asOfMs?: number;
   periodId?: number;
+  /** Exclude known recurring transactions when another read model supplies their future schedule separately. */
+  excludeTxTypes?: string[];
 }): Promise<FinancialFacts> {
   if (!Number.isFinite(input.startMs) || !Number.isFinite(input.endMs) || input.endMs < input.startMs) {
     throw new Error("Invalid financial facts date range");
@@ -64,6 +66,7 @@ export async function getFinancialFacts(input: {
       AND t.date <= ${asOfMs}
       AND t.status <> 'draft'
       ${input.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(input.periodId, sql`t.period_id`)}`}
+      ${input.excludeTxTypes?.length ? sql`AND t.tx_type NOT IN (${sql.join(input.excludeTxTypes.map((txType) => sql`${txType}`), sql`, `)})` : sql``}
     GROUP BY t.id, t.date, t.description, t.status, t.category_id, c.name, t.tx_type
     ORDER BY t.date ASC, t.id ASC
   `) as unknown as Array<Record<string, unknown>>;

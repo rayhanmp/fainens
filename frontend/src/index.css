@@ -386,6 +386,160 @@ h6 {
   padding: 0.25rem 0;
 }
 
+/* Inline finance visualizations emitted by the agent. Keep them compact so
+ * prose, charts, and follow-up actions read as one continuous answer. */
+.agent-viz-card {
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  padding: 0.9rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.agent-viz-card:first-child { margin-top: 0.35rem; }
+.agent-viz-card:last-child { margin-bottom: 0.35rem; }
+
+.agent-viz-donut {
+  display: grid;
+  width: 7rem;
+  height: 7rem;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.agent-viz-donut::before {
+  content: '';
+  grid-area: 1 / 1;
+  width: 4.7rem;
+  height: 4.7rem;
+  border-radius: 999px;
+  background: var(--color-background);
+}
+
+.agent-viz-donut > span {
+  z-index: 1;
+  grid-area: 1 / 1;
+  max-width: 4.2rem;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-viz-heat-cell {
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: 0.25rem;
+}
+
+.agent-viz-number {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  padding: 0.5rem 2.2rem 0.5rem 0.65rem;
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.agent-viz-number:focus {
+  border-color: var(--ref-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-primary) 18%, transparent);
+}
+
+.agent-viz-range {
+  width: 100%;
+  height: 0.35rem;
+  cursor: pointer;
+  accent-color: var(--ref-primary);
+}
+
+.agent-viz-worksheet-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.agent-viz-worksheet-wrap table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.agent-viz-worksheet-wrap th,
+.agent-viz-worksheet-wrap td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.45rem 0.55rem;
+  text-align: right;
+  vertical-align: middle;
+}
+
+.agent-viz-worksheet-wrap thead th {
+  background: var(--ref-surface-container-low);
+  font-weight: 700;
+}
+
+.agent-viz-worksheet-wrap th:first-child,
+.agent-viz-worksheet-wrap td:first-child {
+  position: sticky;
+  left: 0;
+  text-align: left;
+}
+
+.agent-viz-worksheet-wrap tbody th {
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.agent-viz-worksheet-wrap tfoot th,
+.agent-viz-worksheet-wrap tfoot td {
+  border-bottom: 0;
+  background: var(--ref-surface-container-low);
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.agent-viz-workbook-input {
+  width: 6.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+  padding: 0.25rem 0.35rem;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.agent-viz-workbook-input:hover,
+.agent-viz-workbook-input:focus {
+  border-color: var(--ref-primary);
+  background: var(--color-surface);
+  outline: none;
+}
+
+.agent-viz-workbook-result {
+  background: color-mix(in srgb, var(--ref-primary) 5%, transparent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.agent-message-content > .agent-markdown + .agent-viz-card,
+.agent-message-content > .agent-viz-card + .agent-markdown {
+  margin-top: 1rem;
+}
+
 /* Focus ring animation for all interactive elements */
 @keyframes focusRingGlow {
   0% {
@@ -725,4 +879,53 @@ button[data-variant="danger"]:focus-visible,
 
 .dark .brutalist-table tbody tr:hover {
   background-color: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+}
+
+@keyframes fainensStartupRise {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fainensStartupFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.startup-empty-icon {
+  animation: fainensStartupFloat 3.2s ease-in-out 0.4s infinite;
+}
+
+.startup-empty-greeting,
+.startup-empty-subtitle {
+  animation: fainensStartupRise 420ms ease-out both;
+}
+
+.startup-empty-subtitle {
+  animation-delay: 80ms;
+}
+
+.startup-prompt {
+  opacity: 0;
+  animation: fainensStartupRise 360ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-empty-icon,
+  .startup-empty-greeting,
+  .startup-empty-subtitle,
+  .startup-prompt {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }

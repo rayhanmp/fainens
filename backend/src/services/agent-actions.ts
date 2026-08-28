@@ -24,6 +24,8 @@ type TransactionActionInput = {
   reference: string | null;
   notes: string | null;
   place: string | null;
+  originName: string | null;
+  destName: string | null;
   periodId: number | null;
   categoryId: number | null;
   categoryAllocations: Array<{ categoryId: number; amount: number }>;
@@ -206,6 +208,8 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
     reference: optionalNullableText(value.reference, "input.reference", 500),
     notes: optionalNullableText(value.notes, "input.notes", 2000),
     place: optionalNullableText(value.place, "input.place", 500),
+    originName: optionalNullableText(value.originName, "input.originName", 200),
+    destName: optionalNullableText(value.destName, "input.destName", 200),
     periodId,
     categoryId,
     categoryAllocations: parsedAllocations,
@@ -310,6 +314,8 @@ async function prepareTransactionAction(input: TransactionActionInput): Promise<
       reference: input.reference,
       notes: input.notes,
       place: input.place,
+      originName: input.originName,
+      destName: input.destName,
       periodId: input.periodId,
       categoryId: input.categoryId,
       categoryAllocations: input.categoryAllocations,
@@ -340,6 +346,8 @@ async function loadTransactionDetails(input: TransactionActionInput, prepared: P
     dateMs: prepared.dateMs,
     periodId: prepared.periodId,
     description: input.description,
+    originName: input.originName,
+    destName: input.destName,
     totalDebit: prepared.totalDebit,
     totalCredit: prepared.totalCredit,
     lines: prepared.validatedLines.map((line) => ({ ...line, account: accountsById.get(line.accountId)?.name ?? `Account #${line.accountId}` })),

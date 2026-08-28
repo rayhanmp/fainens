@@ -10,6 +10,8 @@ interface CurrencyInputProps {
   className?: string;
   required?: boolean;
   error?: string;
+  hint?: string;
+  hintInline?: boolean;
   showDivider?: boolean;
   currencySymbol?: string;
 }
@@ -23,6 +25,8 @@ export function CurrencyInput({
   className,
   required,
   error,
+  hint,
+  hintInline = false,
   showDivider = true,
   currencySymbol = 'Rp',
 }: CurrencyInputProps) {
@@ -231,7 +235,16 @@ export function CurrencyInput({
             sizeClasses[size]
           )}
         />
+        {hint && hintInline && (
+          <span
+            className="shrink-0 max-w-[42%] text-left text-[10px] sm:text-xs leading-tight text-[var(--color-text-secondary)]"
+            title={hint}
+          >
+            {hint}
+          </span>
+        )}
       </div>
+      {hint && !hintInline && <p className="-mt-2 text-xs text-[var(--color-text-secondary)]">{hint}</p>}
       {showDivider && (
         <div className="h-px w-full bg-[var(--ref-surface-container-highest)]" />
       )}

@@ -108,7 +108,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
   const [payerContactId, setPayerContactId] = useState<number | null>(null);
   const [selectedWalletId, setSelectedWalletId] = useState<number>(accounts[0]?.id || 0);
   
-  const [createdLoans, setCreatedLoans] = useState<Array<{ id: number; direction: string; amountCents: number }>>([]);
+  const [_createdLoans, setCreatedLoans] = useState<Array<{ id: number; direction: string; amountCents: number }>>([]);
   
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');

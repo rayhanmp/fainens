@@ -22,11 +22,6 @@ export async function callOpenRouter(
   apiKey: string,
   model: string = DEFAULT_MODEL
 ): Promise<string> {
-  console.log('=== OPENROUTER API CALL ===');
-  console.log('Model:', model);
-  console.log('System prompt length:', systemPrompt.length);
-  console.log('User prompt length:', userPrompt.length);
-  
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -51,17 +46,7 @@ export async function callOpenRouter(
     throw new Error(`OpenRouter API error: ${error}`);
   }
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt }
-  ];
-  console.log('=== FULL API REQUEST ===');
-      console.log(JSON.stringify({ model, messages }, null, 2));
-  console.log('=== END API REQUEST ===');
-
   const data: OpenRouterResponse = await response.json();
-  console.log('OpenRouter response received, tokens used:', data.usage?.total_tokens);
-  console.log('=== END API CALL ===');
   return data.choices[0]?.message?.content || 'No insight generated';
 }
 
@@ -80,12 +65,6 @@ export async function callOpenRouterVision(
   apiKey: string,
   model: string = DEFAULT_MODEL
 ): Promise<string> {
-  console.log('=== OPENROUTER VISION API CALL ===');
-  console.log('Model:', model);
-  console.log('Image URL:', imageUrl);
-  console.log('System prompt length:', systemPrompt.length);
-  console.log('User prompt length:', userPrompt.length);
-  
   const messages: Array<{ role: string; content: VisionMessageContent[] }> = [
     { role: 'system', content: [{ type: 'text', text: systemPrompt }] },
     { 
@@ -118,12 +97,6 @@ export async function callOpenRouterVision(
     throw new Error(`OpenRouter Vision API error: ${error}`);
   }
 
-  console.log('=== FULL API REQUEST ===');
-  console.log(JSON.stringify({ model, messages: [{ role: 'system', content: '[text]' }, { role: 'user', content: '[text + image]' }] }, null, 2));
-  console.log('=== END API REQUEST ===');
-
   const data: OpenRouterResponse = await response.json();
-  console.log('OpenRouter Vision response received, tokens used:', data.usage?.total_tokens);
-  console.log('=== END API CALL ===');
   return data.choices[0]?.message?.content || '';
 }

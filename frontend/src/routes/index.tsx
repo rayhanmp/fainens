@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Bot,
   CalendarClock,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
   Info,
@@ -20,7 +21,7 @@ import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { api, type AgentFinancialFacts, type BudgetPlan, type BudgetSummary } from '../lib/api';
+import { api, type AgentFinancialFacts, type BudgetOutlook, type BudgetPlan, type BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
@@ -96,6 +97,16 @@ function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[]): Budge
   return Array.isArray(summary?.plans) ? summary.plans : [];
 }
 
+function formatForecastRange(low: number | null, high: number | null, midpoint: number | null): string | null {
+  if (midpoint == null) return null;
+  if (low == null || high == null || low === high) return formatCurrency(midpoint);
+  return `${formatCurrency(low)}–${formatCurrency(high)}`;
+}
+
+function formatConfidenceLabel(confidence: BudgetOutlook['confidence']): string {
+  return confidence.charAt(0).toUpperCase() + confidence.slice(1);
+}
+
 function DashboardPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
@@ -109,12 +120,14 @@ function DashboardPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionData | null>(null);
   const [facts, setFacts] = useState<Facts | null>(null);
   const [budgetRows, setBudgetRows] = useState<BudgetRow[]>([]);
+  const [budgetOutlook, setBudgetOutlook] = useState<BudgetOutlook | null>(null);
   const [recent, setRecent] = useState<RecentTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPeriodLoading, setIsPeriodLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isAttentionExpanded, setIsAttentionExpanded] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [agentPrompt, setAgentPrompt] = useState('');
   const navigate = useNavigate();
@@ -170,17 +183,30 @@ function DashboardPage() {
     if (!selectedPeriod) return;
     let cancelled = false;
     setIsPeriodLoading(true);
+    setBudgetOutlook(null);
     void (async () => {
       try {
-        const [financialFacts, budgets, recentResult] = await Promise.all([
+        const [financialFacts, budgets, recentResult, outlook] = await Promise.all([
           api.agent.financialFacts({ periodId: selectedPeriod.id }),
           api.budgets.list(String(selectedPeriod.id)),
           api.transactions.list({ periodId: String(selectedPeriod.id), limit: '12' }),
+          api.budgets.outlook(selectedPeriod.id),
         ]);
         if (cancelled) return;
         setFacts(financialFacts.data);
         setBudgetRows(budgetPlansFromPayload(budgets));
         setRecent(recentResult.data);
+        setBudgetOutlook(outlook);
+        // Render the deterministic outlook immediately. If it contains
+        // candidate outliers, let the optional model review run in the
+        // background and refresh only after validated metadata is stored.
+        if (!outlook.patternReview.applied && outlook.categories.some((row) => row.outlierCount > 0)) {
+          void api.budgets.reviewOutlook(selectedPeriod.id).then(async (review) => {
+            if (cancelled || !review.applied) return;
+            const refreshed = await api.budgets.outlook(selectedPeriod.id);
+            if (!cancelled) setBudgetOutlook(refreshed);
+          }).catch(() => undefined);
+        }
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load selected-period data.');
       } finally {
@@ -188,18 +214,6 @@ function DashboardPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedPeriod]);
-
-  const periodTiming = useMemo(() => {
-    if (!selectedPeriod) return null;
-    const totalDays = Math.max(1, Math.round((selectedPeriod.endDate - selectedPeriod.startDate) / DAY_MS) + 1);
-    const now = Date.now();
-    const elapsed = now < selectedPeriod.startDate
-      ? 0
-      : now > selectedPeriod.endDate + DAY_MS - 1
-        ? totalDays
-        : Math.min(totalDays, Math.floor((now - selectedPeriod.startDate) / DAY_MS) + 1);
-    return { totalDays, daysElapsed: elapsed, daysRemaining: Math.max(0, totalDays - elapsed) };
   }, [selectedPeriod]);
 
   const budgetSummary = useMemo(() => {
@@ -211,11 +225,8 @@ function DashboardPage() {
       totalPlanned,
       remaining: isTracked ? remaining : null,
       isTracked,
-      dailyRoom: isTracked && periodTiming && periodTiming.daysRemaining > 0 && totalPlanned > 0
-        ? Math.max(0, remaining / periodTiming.daysRemaining)
-        : null,
     };
-  }, [budgetRows, periodTiming, selectedPeriod]);
+  }, [budgetRows, selectedPeriod]);
 
   const attentionItems = useMemo<Attention[]>(() => {
     const next: Attention[] = [];
@@ -253,12 +264,12 @@ function DashboardPage() {
       next.push({ id: 'subscriptions', tone: 'info', title: `${dueSubscriptions.length} subscription renewal${dueSubscriptions.length === 1 ? '' : 's'} due soon`, detail: 'Review upcoming recurring charges before they post.', to: '/subscriptions', action: 'Review subscriptions' });
     }
     const riskyBudget = budgetSummary.isTracked ? budgetRows.find((row) => row.percentUsed >= 100) : undefined;
-    const projectedBudget = budgetSummary.isTracked && !riskyBudget && periodTiming && periodTiming.daysElapsed > 0
-      ? budgetRows.find((row) => Math.round(row.actualAmount / periodTiming.daysElapsed * periodTiming.totalDays) > row.plannedAmount)
+    const projectedBudget = budgetSummary.isTracked && !riskyBudget
+      ? budgetOutlook?.categories.find((row) => row.riskStatus === 'at_risk')
       : undefined;
     if (riskyBudget || projectedBudget) {
       const row = riskyBudget ?? projectedBudget!;
-      next.push({ id: 'budget', tone: riskyBudget ? 'danger' : 'warning', title: riskyBudget ? `${row.categoryName} is over budget` : `${row.categoryName} may exceed its budget`, detail: riskyBudget ? `${formatCurrency(row.actualAmount)} spent against ${formatCurrency(row.plannedAmount)} planned.` : 'Current pace projects an overrun before the period ends.', to: '/budget', action: 'Review budget' });
+      next.push({ id: 'budget', tone: riskyBudget ? 'danger' : 'warning', title: riskyBudget ? `${row.categoryName} is over budget` : `${row.categoryName} may exceed its budget`, detail: riskyBudget ? `${formatCurrency(row.actualAmount)} spent against ${formatCurrency(row.plannedAmount)} planned.` : 'Completed-period history suggests this budget may be exceeded.', to: '/budget', action: 'Review budget' });
     }
     const unallocated = facts?.facts.byCategory.find((row) => row.categoryId == null && row.spentCents > 0);
     if (unallocated) {
@@ -266,18 +277,25 @@ function DashboardPage() {
     }
     const priority = { danger: 0, warning: 1, info: 2 } as const;
     return next.sort((a, b) => priority[a.tone] - priority[b.tone]).slice(0, 5);
-  }, [analytics, budgetRows, budgetSummary.isTracked, facts, loans, paylater, periodTiming, reconciliation, selectedPeriod, subscriptions]);
+  }, [analytics, budgetOutlook, budgetRows, budgetSummary.isTracked, facts, loans, paylater, reconciliation, selectedPeriod, subscriptions]);
 
   const planRows = useMemo(() => {
+    if (budgetOutlook && budgetOutlook.periodId === selectedPeriod?.id && budgetOutlook.categories.length > 0) {
+      const riskRank = { over_budget: 0, at_risk: 1, unknown: 2, within_budget: 3 } as const;
+      return [...budgetOutlook.categories]
+        .sort((a, b) => riskRank[a.riskStatus] - riskRank[b.riskStatus] || b.actualAmount / Math.max(1, b.plannedAmount) - a.actualAmount / Math.max(1, a.plannedAmount))
+        .slice(0, 5)
+        .map((row) => ({ name: row.categoryName, actual: row.actualAmount, planned: row.plannedAmount, outlook: row }));
+    }
     if (budgetRows.length > 0) {
       return [...budgetRows]
         .sort((a, b) => Math.max(b.percentUsed, b.actualAmount / Math.max(1, b.plannedAmount) * 100) - Math.max(a.percentUsed, a.actualAmount / Math.max(1, a.plannedAmount) * 100))
         .slice(0, 5)
-        .map((row) => ({ name: row.categoryName, actual: row.actualAmount, planned: row.plannedAmount }));
+        .map((row) => ({ name: row.categoryName, actual: row.actualAmount, planned: row.plannedAmount, outlook: null }));
     }
     return (facts?.facts.byCategory ?? []).filter((row) => row.spentCents > 0).slice(0, 5)
-      .map((row) => ({ name: row.category, actual: row.spentCents, planned: 0 }));
-  }, [budgetRows, facts]);
+      .map((row) => ({ name: row.category, actual: row.spentCents, planned: 0, outlook: null }));
+  }, [budgetOutlook, budgetRows, facts, selectedPeriod]);
 
   const coverageWarnings = facts?.coverage.warnings ?? [];
   const periodIncome = facts?.facts.totalIncomeCents ?? 0;
@@ -287,6 +305,8 @@ function DashboardPage() {
   const selectedPeriodAsOf = facts?.facts.asOfMs ?? Date.now();
   const notificationItems = attentionItems.filter((item) => item.id !== 'coverage');
   const visibleRecent = recent.filter((transaction) => !isTransferFee(transaction));
+  const budgetRemaining = budgetOutlook?.total.remainingAmount ?? budgetSummary.remaining ?? 0;
+  const dailyBudget = budgetOutlook && budgetOutlook.daysRemaining > 0 ? Math.max(0, Math.round(budgetRemaining / budgetOutlook.daysRemaining)) : null;
   const openAgent = (prompt = agentPrompt) => {
     const text = prompt.trim();
     void navigate({ to: '/agent', search: text ? { prompt: text } : {} } as any);
@@ -310,7 +330,7 @@ function DashboardPage() {
 
         {loadError && <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{loadError}</div>}
         {coverageWarnings.length > 0 && <Link to="/periods" className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Read this period carefully.</strong> {coverageWarnings[0]} <span className="ml-1 font-semibold underline">Review coverage</span></span></Link>}
-        {notificationItems.length > 0 && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm"><AlertTriangle className={cn('mt-0.5 h-5 w-5 shrink-0', notificationItems[0].tone === 'danger' ? 'text-rose-600' : notificationItems[0].tone === 'warning' ? 'text-amber-600' : 'text-sky-600')} /><div className="min-w-0 flex-1"><span className="font-bold">{notificationItems.length} item{notificationItems.length === 1 ? '' : 's'} may need your attention.</span> <span className="text-[var(--ref-on-surface-variant)]">{notificationItems[0].title}: {notificationItems[0].detail}</span></div><Link to={notificationItems[0].to} className="shrink-0 font-semibold text-[var(--ref-primary)] hover:underline">{notificationItems[0].action}</Link></div>}
+        {notificationItems.length > 0 && <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm"><div className="flex items-center gap-3"><AlertTriangle className={cn('h-5 w-5 shrink-0', notificationItems[0].tone === 'danger' ? 'text-rose-600' : notificationItems[0].tone === 'warning' ? 'text-amber-600' : 'text-sky-600')} /><p className="min-w-0 flex-1 font-bold">{notificationItems.length} item{notificationItems.length === 1 ? '' : 's'} may need your attention.</p><button type="button" onClick={() => setIsAttentionExpanded((current) => !current)} aria-expanded={isAttentionExpanded} aria-controls="dashboard-attention-details" className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/10">{isAttentionExpanded ? 'Hide details' : 'View details'}<ChevronDown className={cn('h-4 w-4 transition-transform', isAttentionExpanded && 'rotate-180')} /></button></div>{isAttentionExpanded && <div id="dashboard-attention-details" className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">{notificationItems.map((item) => <div key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><p className="min-w-0 flex-1 text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">{item.title}:</span> {item.detail}</p><Link to={item.to} className="shrink-0 font-semibold text-[var(--ref-primary)] hover:underline">{item.action}</Link></div>)}</div>}</div>}
 
         <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <article className="relative overflow-hidden rounded-3xl bg-[var(--ref-primary-container)] p-6 text-[var(--ref-on-primary-container)]"><Wallet className="h-5 w-5" /><p className="mt-4 text-xs font-bold uppercase tracking-widest">Available cash</p><p className="mt-3 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</p><p className="mt-4 text-xs">Cash-equivalent assets only · current balance</p></article>
@@ -322,7 +342,42 @@ function DashboardPage() {
         <section className="mt-6 grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3"><div className="h-full xl:col-span-2"><NetWorthChart /></div><div className="flex h-full flex-col gap-5"><SpendingTrendChart periodId={selectedPeriod?.id ?? null} /><aside className="relative self-start overflow-hidden rounded-3xl bg-[var(--ref-secondary-container)] p-5 text-[var(--ref-on-secondary-container)]"><Bot className="absolute -bottom-8 -right-4 h-36 w-36 opacity-10" /><div className="relative flex flex-col gap-4"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-widest opacity-70">Ask Fainens</p><h2 className="mt-1 font-headline text-2xl font-extrabold">What do you want to understand?</h2><p className="mt-2 text-sm leading-relaxed opacity-90">Ask about spending, balances, obligations, or a purchase decision.</p></div><form className="relative min-w-0" onSubmit={(event) => { event.preventDefault(); openAgent(); }}><label htmlFor="dashboard-agent-prompt" className="sr-only">Ask Fainens a question</label><div className="flex gap-2"><input id="dashboard-agent-prompt" value={agentPrompt} onChange={(event) => setAgentPrompt(event.target.value)} placeholder="e.g. Where did most of my money go?" className="min-w-0 flex-1 rounded-xl border border-black/10 bg-white/80 px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:ring-2 focus:ring-black/20" /><button type="submit" disabled={agentPrompt.trim().length < 2} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[var(--ref-on-secondary-container)] px-3 py-2.5 text-sm font-bold text-[var(--ref-secondary-container)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"><Send className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Ask</span></button></div><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setAgentPrompt('What were my top 10 expenses recently?')} className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-semibold hover:bg-black/15">Top expenses</button><button type="button" onClick={() => setAgentPrompt('How is my budget tracking this period?')} className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-semibold hover:bg-black/15">Budget pace</button><button type="button" onClick={() => setAgentPrompt('What bills and obligations are coming up?')} className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-semibold hover:bg-black/15">Upcoming bills</button></div></form></div></aside></div></section>
 
         <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm xl:col-span-2"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Plan versus actual</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Spending pace by category</h2></div>{budgetSummary.totalPlanned > 0 && budgetSummary.isTracked ? <div className="text-left sm:text-right"><p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatCurrency(budgetSummary.remaining ?? 0)} left</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{budgetSummary.dailyRoom != null ? `${formatCurrency(budgetSummary.dailyRoom)} daily room` : 'Period is complete'}</p></div> : <Link to="/budget" className="text-sm font-bold text-[var(--ref-primary)] hover:underline">{budgetSummary.totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</Link>}</div>{isPeriodLoading ? <div className="mt-6 h-56 animate-pulse rounded-2xl bg-[var(--ref-surface-container-highest)]" /> : !periodIsTracked ? <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">Budget and activity actuals are <strong>not tracked</strong> for this {selectedPeriod?.coverageStatus === 'skipped' ? 'skipped' : 'incomplete'} period. Empty totals are not a zero-activity result.</div> : planRows.length === 0 ? <div className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] p-6 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending for this period yet. Add transactions or set a budget to start planning.</div> : <div className="mt-6 space-y-5">{planRows.map((row) => { const ratio = row.planned > 0 ? row.actual / row.planned : 0; const projection = periodTiming && periodTiming.daysElapsed > 0 ? Math.round(row.actual / periodTiming.daysElapsed * periodTiming.totalDays) : row.actual; const isAtRisk = row.planned > 0 && (ratio >= 1 || projection > row.planned); return <div key={row.name}><div className="flex items-end justify-between gap-3"><div><p className="font-bold text-[var(--ref-on-surface)]">{row.name}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{row.planned > 0 ? `${formatCurrency(row.actual)} of ${formatCurrency(row.planned)}` : `${formatCurrency(row.actual)} recorded`}</p></div><p className={cn('text-sm font-bold', isAtRisk ? 'text-[var(--color-danger)]' : 'text-[var(--ref-primary)]')}>{row.planned > 0 ? `${Math.round(ratio * 100)}%` : formatCurrency(row.actual)}</p></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={cn('h-full rounded-full', isAtRisk ? 'bg-[var(--color-danger)]' : 'bg-[var(--ref-primary)]')} style={{ width: `${Math.min(100, row.planned > 0 ? ratio * 100 : 100)}%` }} /></div>{row.planned > 0 && periodTiming && periodTiming.daysRemaining > 0 && <p className="mt-1.5 text-[11px] text-[var(--ref-on-surface-variant)]">At this pace: {formatCurrency(projection)} projected by period end.</p>}</div>; })}</div>}<Link to="/budget" className="mt-6 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Manage budget <ArrowRight className="h-4 w-4" /></Link></div>
+          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm xl:col-span-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Budget outlook</p>
+                <h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Spending by category</h2>
+              </div>
+              {budgetSummary.totalPlanned > 0 && budgetSummary.isTracked ? <div className="flex flex-col items-end text-right">
+                <div className="flex items-center gap-1">
+                  <p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatCurrency(budgetRemaining)} remaining</p>
+                  {budgetOutlook?.total.projectedAmount != null && <div className="group relative">
+                    <button type="button" aria-label="Show budget outlook" title="Show budget outlook" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-3.5 w-3.5" /></button>
+                    <div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Budget outlook</p><p className="mt-1 leading-relaxed">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount)}.</p>{dailyBudget != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatCurrency(dailyBudget)} daily budget for the remaining days.</p>}<p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatConfidenceLabel(budgetOutlook.confidence)} confidence · based on {budgetOutlook.eligiblePeriodCount} completed periods.</p>{budgetOutlook.patternReview.applied && <><p className="mt-1 text-[var(--ref-on-surface-variant)]">Pattern review applied to {budgetOutlook.patternReview.categoryCount} categor{budgetOutlook.patternReview.categoryCount === 1 ? 'y' : 'ies'}.</p><p className="mt-1 text-[var(--ref-on-surface-variant)]">Flagged purchase{budgetOutlook.patternReview.categoryCount === 1 ? '' : 's'}: {budgetOutlook.categories.filter((row) => row.patternReview).map((row) => `${row.patternReview!.description} (${formatCurrency(row.patternReview!.amount)}, ${row.patternReview!.classification.replace('_', ' ')})`).join(', ')}.</p></>}</div>
+                  </div>}
+                </div>
+                {budgetOutlook?.total.projectedAmount != null && <p className="mt-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount)}</p>}
+              </div> : <Link to="/budget" className="text-sm font-bold text-[var(--ref-primary)] hover:underline">{budgetSummary.totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</Link>}
+            </div>
+            {isPeriodLoading ? <div className="mt-6 h-56 animate-pulse rounded-2xl bg-[var(--ref-surface-container-highest)]" /> : !periodIsTracked ? <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">Budget and activity actuals are <strong>not tracked</strong> for this {selectedPeriod?.coverageStatus === 'skipped' ? 'skipped' : 'incomplete'} period. Empty totals are not a zero-activity result.</div> : planRows.length === 0 ? <div className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] p-6 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending for this period yet. Add transactions or set a budget to start planning.</div> : <div className="mt-6 space-y-5">{planRows.map((row) => {
+              const ratio = row.planned > 0 ? row.actual / row.planned : 0;
+              const actualOverBudget = row.planned > 0 && ratio >= 1;
+              const actualNearBudget = row.planned > 0 && ratio >= 0.75;
+              const outlookRange = formatForecastRange(row.outlook?.projectedLowAmount ?? null, row.outlook?.projectedHighAmount ?? null, row.outlook?.projectedAmount ?? null);
+              return <div key={row.outlook?.categoryId ?? row.name}>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-[var(--ref-on-surface)]">{row.name}</p>
+                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{row.planned > 0 ? `${formatCurrency(row.actual)} of ${formatCurrency(row.planned)}` : `${formatCurrency(row.actual)} recorded`}</p>
+                  </div>
+                  <p className={cn('text-sm font-bold', actualOverBudget ? 'text-[var(--color-danger)]' : actualNearBudget ? 'text-amber-700' : 'text-[var(--ref-primary)]')}>{row.planned > 0 ? `${Math.round(ratio * 100)}%` : formatCurrency(row.actual)}</p>
+                </div>
+                <div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={cn('h-full rounded-full', actualOverBudget ? 'bg-[var(--color-danger)]' : actualNearBudget ? 'bg-amber-600' : 'bg-[var(--ref-primary)]')} style={{ width: `${Math.min(100, row.planned > 0 ? ratio * 100 : 100)}%` }} /></div>
+                {outlookRange && <p className={cn('mt-1.5 text-[11px]', row.outlook?.riskStatus === 'at_risk' ? 'text-amber-800' : 'text-[var(--ref-on-surface-variant)]')}>Outlook: likely {outlookRange} by period end{row.outlook?.scheduledRemainingAmount ? ` · includes ${formatCurrency(row.outlook.scheduledRemainingAmount)} scheduled` : ''}.</p>}
+              </div>;
+            })}</div>}
+            <Link to="/budget" className="mt-6 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Manage budget <ArrowRight className="h-4 w-4" /></Link>
+          </div>
           <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div><div className="mt-5 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visibleRecent.slice(0, 8).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <div key={tx.id} className="py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{tx.description}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div><p className={cn('shrink-0 font-mono text-sm font-bold', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatCurrency(transactionAmount(tx))}</p></div></div>; })}</div><Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link></div>
         </section>
 

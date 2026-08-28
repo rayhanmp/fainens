@@ -38,6 +38,9 @@ type StreamDelta = {
 };
 
 const DEFAULT_MODEL = "google/gemini-3.7-flash";
+// Completion budget for each provider request. Tool-assisted turns can make
+// several requests, so this is per model response rather than per chat.
+const MAX_AGENT_OUTPUT_TOKENS = 4096;
 
 function providerFailure(operation: "request" | "stream", status: number): Error {
   const detail = status === 401
@@ -75,10 +78,9 @@ export async function callOpenRouterAgent(input: {
     body: JSON.stringify({
       model: input.model ?? DEFAULT_MODEL,
       messages: input.messages,
-      tools: input.tools,
-      ...(input.tools.length > 0 ? { tool_choice: "auto" } : {}),
+      ...(input.tools.length > 0 ? { tools: input.tools, tool_choice: "auto" } : {}),
       temperature: 0.2,
-      max_tokens: 1200,
+      max_tokens: MAX_AGENT_OUTPUT_TOKENS,
     }),
   });
 
@@ -124,7 +126,7 @@ export async function streamOpenRouterAgent(input: {
       ...(input.tools.length > 0 ? { tool_choice: "auto" } : {}),
       stream: true,
       temperature: 0.2,
-      max_tokens: 1200,
+      max_tokens: MAX_AGENT_OUTPUT_TOKENS,
     }),
     signal: input.signal,
   });

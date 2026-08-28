@@ -14,7 +14,10 @@ import {
   subscriptions,
   transactionCategoryAllocations,
   transactionLines,
+  transactionTags,
   transactions,
+  tags,
+  transportRouteTemplates,
 } from "../db/schema";
 import { computeAccountBalanceAsOf } from "./ledger";
 import { getBudgetFacts, getFinancialFacts } from "./financial-facts";
@@ -28,10 +31,13 @@ import { assignedPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getPeriodCoverage } from "./period-coverage";
 import { prepareAgentAction } from "./agent-actions";
 import { listMoneyAnomalyReviews } from "./money-anomaly-review";
+import { reviewBudgetOutlook } from "./budget-outlook-review";
+import { updateTransactionAtomically } from "./transaction-mutations";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
 const MAX_CATEGORIES = 200;
+const MAX_TAGS = 200;
 const MAX_RECONCILIATION_SESSIONS = 50;
 const CURRENCY_RATE_API = "https://api.frankfurter.app";
 const CURRENCY_RATE_CACHE_TTL_MS = 5 * 60_000;
@@ -111,12 +117,14 @@ const journalLineSchema = {
 
 const transactionProposalProperties: Record<string, unknown> = {
   intent: { type: "string", enum: ["expense", "income", "transfer"], description: "The economic intent. expense requires an expense debit; income requires a revenue credit; transfer is only a two-wallet cash-equivalent transfer." },
-  date: { type: "string", format: "date-time", pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$", description: "Timezone-aware ISO 8601 date/time, for example 2026-08-27T14:00:00+07:00. Use Asia/Jakarta for Ray unless the user supplies another timezone." },
+  date: { type: "string", format: "date-time", pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$", description: "Timezone-aware ISO 8601 date/time, for example 2026-08-27T14:00:00+07:00. Use Asia/Jakarta unless the user supplies another timezone." },
   dateMs: { type: "integer", minimum: 0, description: "Legacy UTC epoch-millisecond input. Do not send this when date is supplied; prefer date." },
   description: { type: "string", minLength: 1, maxLength: 500, description: "Short user-facing transaction name." },
   reference: { type: ["string", "null"], maxLength: 500, description: "Optional external reference, receipt, or transfer reference." },
   notes: { type: ["string", "null"], maxLength: 2000, description: "Optional longer note; do not put accounting instructions here." },
   place: { type: ["string", "null"], maxLength: 500, description: "Optional merchant or location." },
+  originName: { type: ["string", "null"], maxLength: 200, description: "Optional transport origin from a saved route template." },
+  destName: { type: ["string", "null"], maxLength: 200, description: "Optional transport destination from a saved route template." },
   periodId: { type: ["integer", "null"], minimum: 1, description: "Optional explicit period ID. Omit to assign the open period containing date." },
   categoryId: { type: ["integer", "null"], minimum: 1, description: "Optional category for an expense only. Omit for income, transfers, and uncategorized fees." },
   categoryAllocations: {
@@ -310,6 +318,16 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     },
   },
   {
+    name: "review_budget_patterns",
+    description: "Ask the configured model to classify deterministic budget outliers as one-off, unusual, recurring, or normal. The validated result is stored as revision-bound analytical metadata and never changes ledger facts, balances, or budget amounts.",
+    inputSchema: {
+      type: "object",
+      properties: { periodId: { type: "integer", minimum: 1, description: "Salary-period ID to review." } },
+      required: ["periodId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "get_account_health",
     description: "Read one account's balance, liquidity treatment, and latest reconciliation evidence. Use after get_account_balances when answering a health/reconciliation question about a specific account.",
     inputSchema: {
@@ -330,11 +348,89 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_transaction_details",
-    description: "Read one exact posted journal's header, debit/credit lines, cash-flow classifications, links, and category allocations. Use for audit/provenance after an exact transaction ID is known.",
+    description: "Read one exact posted journal's header, notes, tags, debit/credit lines, cash-flow classifications, links, and category allocations. Use for audit/provenance after an exact transaction ID is known.",
     inputSchema: {
       type: "object",
       properties: { transactionId: { type: "integer", minimum: 1, description: "Exact posted transaction ID, usually returned by search_transactions." } },
       required: ["transactionId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_transaction_tags",
+    description: "Update descriptive tags on one exact posted transaction. Tags are metadata only and do not change categories, budgets, reports, balances, or cash flow. Use search_transactions or get_transaction_details first to resolve the exact transaction and get_tags to resolve tag IDs, then add, remove, or replace existing tag IDs. This explicit metadata update executes immediately and returns an audit receipt; it does not require accounting confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        transactionId: { type: "integer", minimum: 1, description: "Exact posted transaction ID." },
+        operation: { type: "string", enum: ["add", "remove", "replace"], description: "How to apply tagIds. Defaults to replace." },
+        tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 }, description: "Existing tag IDs returned by get_tags." },
+      },
+      required: ["transactionId", "tagIds"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_tags",
+    description: "Read available descriptive tags and IDs for transaction labeling. Tags are metadata only and do not affect categories, budgets, reports, balances, or cash flow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        search: { type: "string", maxLength: 100, description: "Optional case-insensitive tag-name search." },
+        limit: { type: "integer", minimum: 1, maximum: MAX_TAGS, description: "Maximum tags; defaults to all up to 200." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_transport_route_templates",
+    description: "Read saved transport route templates for repeated trips. Templates provide reusable origin/destination, provider, service, category, account, notes, and tags; the fare and date still come from the current trip. Use before preparing a familiar transport expense when the user refers to a saved route.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        search: { type: "string", maxLength: 120, description: "Optional case-insensitive search across route names and locations." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum templates; defaults to 50." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "create_tag",
+    description: "Create one new global descriptive tag for labeling transactions. Tags are metadata only and do not affect accounting or reporting. Use this only when the user explicitly asks for a new tag; then use the returned ID with update_transaction_tags or update_transaction_metadata. The tag is created immediately and returns an audit receipt without accounting confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 100, description: "Human-readable tag name." },
+        color: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$", description: "Optional six-digit hex color. Defaults to #2563EB." },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_transaction_metadata",
+    description: "Update descriptive notes and/or tags on one or more exact posted transactions (up to 20). Metadata changes do not affect categories, budgets, reports, balances, or cash flow. Resolve exact transaction IDs with search_transactions and tag IDs with get_tags first. Each item must provide notes (a string or null to clear) and/or tagIds with tagOperation add, remove, or replace. Explicit metadata requests execute immediately and return per-transaction audit receipts without accounting confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        transactions: {
+          type: "array",
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: "object",
+            properties: {
+              transactionId: { type: "integer", minimum: 1, description: "Exact posted transaction ID." },
+              notes: { type: ["string", "null"], maxLength: 2000, description: "Replacement notes. Use null to clear notes." },
+              tagIds: { type: "array", maxItems: 100, items: { type: "integer", minimum: 1 }, description: "Existing tag IDs returned by get_tags." },
+              tagOperation: { type: "string", enum: ["add", "remove", "replace"], description: "How to apply tagIds; defaults to replace." },
+            },
+            required: ["transactionId"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["transactions"],
       additionalProperties: false,
     },
   },
@@ -374,6 +470,34 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     },
   },
   {
+    name: "prepare_budget",
+    description: "Prepare a non-posting budget setup or modification for an active open salary period. Retrieve the period and current budget first, then provide each category amount in integer IDR units. Existing categories not included stay unchanged; use zero deliberately to stop a category. Nothing changes until the user confirms the review card.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        periodId: { type: "integer", minimum: 1, description: "Active open salary-period ID from list_periods." },
+        plans: {
+          type: "array",
+          minItems: 1,
+          maxItems: 100,
+          description: "Category budget amounts to create or update. Amounts are integer IDR units despite the legacy plannedAmountCents name.",
+          items: {
+            type: "object",
+            properties: {
+              categoryId: { type: "integer", minimum: 1, description: "Active category ID from get_categories." },
+              plannedAmountCents: { type: "integer", minimum: 0, description: "Planned amount in whole IDR units. Use zero only when intentionally stopping a category." },
+            },
+            required: ["categoryId", "plannedAmountCents"],
+            additionalProperties: false,
+          },
+        },
+        assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 }, description: "Brief planning assumptions shown on the review card." },
+      },
+      required: ["periodId", "plans"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "get_categories",
     description: "Read active category IDs, names, and reporting-account links for classifying a standard spending expense. Call without search to load the small local list. Do not call for pure income, wallet transfers, loan/debt movements, or uncategorized transfer fees.",
     inputSchema: {
@@ -387,7 +511,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "prepare_transaction",
-    description: "Prepare one explicit, balanced, non-posting review proposal. Supports a standard expense, income, or two-wallet transfer. First resolve account IDs and liquidity with get_account_balances; load categories only for a categorised expense. Use a timezone-aware ISO date and an intent that the backend validates. Nothing is posted until Ray confirms the resulting card.",
+    description: "Prepare one explicit, balanced, non-posting review proposal. Supports a standard expense, income, or two-wallet transfer. First resolve account IDs and liquidity with get_account_balances; load categories only for a categorised expense. Use a timezone-aware ISO date and an intent that the backend validates. Nothing is posted until the user confirms the resulting card.",
     inputSchema: {
       type: "object",
       properties: transactionProposalProperties,
@@ -984,6 +1108,75 @@ export async function getCategoriesTool(input: unknown) {
   return { search: search ?? null, categories: rows, limit };
 }
 
+export async function getTagsTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const search = optionalText(input.search, "search", 100);
+  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 }) ?? MAX_TAGS;
+  const limit = Math.min(requestedLimit, MAX_TAGS);
+  const pattern = search ? `%${search.toLowerCase().replace(/[%_]/g, "\\$&")}%` : null;
+  const rows = await db.select({ id: tags.id, name: tags.name, color: tags.color })
+    .from(tags)
+    .where(pattern == null ? undefined : like(sql`lower(${tags.name})`, pattern))
+    .orderBy(tags.name)
+    .limit(limit);
+  return { search: search ?? null, tags: rows, limit };
+}
+
+export async function getTransportRouteTemplatesTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const search = optionalText(input.search, "search", 120)?.toLowerCase();
+  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 }) ?? 50;
+  const limit = Math.min(requestedLimit, 100);
+  const rows = await db.select().from(transportRouteTemplates).orderBy(transportRouteTemplates.name).limit(100);
+  const templates = rows.map((row) => {
+    let tagIds: number[] = [];
+    try {
+      const parsed = JSON.parse(row.tagIds);
+      if (Array.isArray(parsed)) tagIds = parsed.filter((id): id is number => Number.isSafeInteger(id) && id > 0);
+    } catch { /* malformed metadata is treated as empty */ }
+    return {
+      id: row.id,
+      name: row.name,
+      provider: row.provider,
+      service: row.service,
+      originName: row.originName,
+      originLat: row.originLat,
+      originLng: row.originLng,
+      destName: row.destName,
+      destLat: row.destLat,
+      destLng: row.destLng,
+      categoryId: row.categoryId,
+      defaultAccountId: row.defaultAccountId,
+      notes: row.notes,
+      tagIds,
+    };
+  }).filter((template) => !search || [template.name, template.originName, template.destName, template.provider, template.service]
+    .some((value) => value?.toLowerCase().includes(search)));
+  return { search: search ?? null, templates: templates.slice(0, limit), limit, writesPerformed: false };
+}
+
+export async function createTagTool(input: unknown, executionContext?: AgentToolExecutionContext) {
+  if (!executionContext?.ownerEmail?.trim()) throw new Error("Creating tags requires an authenticated conversation");
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const name = input.name;
+  if (typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
+    throw new Error("name must be a non-empty string of at most 100 characters");
+  }
+  const normalizedName = name.trim();
+  const color = input.color == null ? "#2563EB" : input.color;
+  if (typeof color !== "string" || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+    throw new Error("color must be a six-digit hex color such as #2563EB");
+  }
+  const [existing] = await db.select({ id: tags.id, name: tags.name, color: tags.color }).from(tags)
+    .where(eq(sql`lower(${tags.name})`, normalizedName.toLowerCase())).limit(1);
+  if (existing) {
+    return { writesPerformed: false, alreadyExists: true, tag: existing, message: "A tag with this name already exists" };
+  }
+  const [created] = await db.insert(tags).values({ name: normalizedName, color: color.toUpperCase() }).returning({ id: tags.id, name: tags.name, color: tags.color });
+  if (!created) throw new Error("Failed to create tag");
+  return { writesPerformed: true, alreadyExists: false, receipt: { tagId: created.id, name: created.name, color: created.color } };
+}
+
 export async function getTransactionDetailsTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const transactionId = optionalInteger(input.transactionId, "transactionId", { min: 1 });
@@ -1006,7 +1199,7 @@ export async function getTransactionDetailsTool(input: unknown) {
   }).from(transactions).leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(eq(transactions.id, transactionId), eq(transactions.status, "posted"))).limit(1);
   if (!transaction) throw new Error("Posted transaction not found");
-  const [lines, allocations] = await Promise.all([
+  const [lines, allocations, transactionTagRows] = await Promise.all([
     db.select({
       id: transactionLines.id,
       accountId: transactionLines.accountId,
@@ -1024,8 +1217,153 @@ export async function getTransactionDetailsTool(input: unknown) {
       amountCents: transactionCategoryAllocations.amount,
     }).from(transactionCategoryAllocations).innerJoin(categories, eq(transactionCategoryAllocations.categoryId, categories.id))
       .where(eq(transactionCategoryAllocations.transactionId, transactionId)),
+    db.select({
+      tagId: transactionTags.tagId,
+      tag: tags.name,
+      color: tags.color,
+    }).from(transactionTags).innerJoin(tags, eq(transactionTags.tagId, tags.id))
+      .where(eq(transactionTags.transactionId, transactionId)).orderBy(tags.name),
   ]);
-  return { transaction, lines, categoryAllocations: allocations };
+  return { transaction, lines, categoryAllocations: allocations, tags: transactionTagRows };
+}
+
+export async function updateTransactionTagsTool(input: unknown, executionContext?: AgentToolExecutionContext) {
+  if (!executionContext?.ownerEmail?.trim()) throw new Error("Tag updates require an authenticated conversation");
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const transactionId = optionalInteger(input.transactionId, "transactionId", { min: 1 });
+  if (transactionId == null) throw new Error("transactionId is required");
+  const operation = input.operation == null ? "replace" : input.operation;
+  if (operation !== "add" && operation !== "remove" && operation !== "replace") {
+    throw new Error("operation must be add, remove, or replace");
+  }
+  if (!Array.isArray(input.tagIds) || input.tagIds.length > 100 || input.tagIds.some((id) => typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error("tagIds must contain at most 100 positive integer IDs");
+  }
+  const requestedTagIds = [...new Set(input.tagIds as number[])].sort((a, b) => a - b);
+  const [transaction] = await db.select({ id: transactions.id, description: transactions.description, status: transactions.status, txType: transactions.txType })
+    .from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+  if (!transaction || transaction.status !== "posted") throw new Error("Posted transaction not found");
+  if (INTERNAL_CORRECTION_TX_TYPES.includes(transaction.txType as typeof INTERNAL_CORRECTION_TX_TYPES[number])) {
+    throw new Error("Internal correction transactions cannot be tagged through the agent");
+  }
+  if (requestedTagIds.length > 0) {
+    const validTags = await db.select({ id: tags.id }).from(tags).where(inArray(tags.id, requestedTagIds));
+    if (validTags.length !== requestedTagIds.length) throw new Error("One or more tags do not exist; call get_tags first");
+  }
+  const currentRows = await db.select({ tagId: transactionTags.tagId }).from(transactionTags)
+    .where(eq(transactionTags.transactionId, transactionId));
+  const currentTagIds = currentRows.map((row) => row.tagId);
+  const requestedSet = new Set(requestedTagIds);
+  const nextTagIds = operation === "replace"
+    ? requestedTagIds
+    : operation === "add"
+      ? [...new Set([...currentTagIds, ...requestedTagIds])].sort((a, b) => a - b)
+      : currentTagIds.filter((tagId) => !requestedSet.has(tagId)).sort((a, b) => a - b);
+  const changed = currentTagIds.length !== nextTagIds.length || currentTagIds.some((tagId) => !nextTagIds.includes(tagId));
+  if (changed) await updateTransactionAtomically(transactionId, { tagIds: nextTagIds });
+  const nextTags = nextTagIds.length === 0 ? [] : await db.select({ id: tags.id, name: tags.name, color: tags.color })
+    .from(tags).where(inArray(tags.id, nextTagIds)).orderBy(tags.name);
+  return {
+    writesPerformed: changed,
+    requiresConfirmation: false,
+    receipt: {
+      transactionId,
+      operation,
+      changed,
+      previousTagIds: currentTagIds,
+      tagIds: nextTagIds,
+      tags: nextTags,
+    },
+    transaction: { id: transaction.id, description: transaction.description },
+  };
+}
+
+export async function updateTransactionMetadataTool(input: unknown, executionContext?: AgentToolExecutionContext) {
+  if (!executionContext?.ownerEmail?.trim()) throw new Error("Metadata updates require an authenticated conversation");
+  if (!isRecord(input) || !Array.isArray(input.transactions) || input.transactions.length < 1 || input.transactions.length > 20) {
+    throw new Error("transactions must contain 1-20 metadata updates");
+  }
+  const requests = input.transactions.map((candidate, index) => {
+    if (!isRecord(candidate)) throw new Error(`transactions[${index}] must be an object`);
+    const transactionId = optionalInteger(candidate.transactionId, `transactions[${index}].transactionId`, { min: 1 });
+    if (transactionId == null) throw new Error(`transactions[${index}].transactionId is required`);
+    const hasNotes = Object.prototype.hasOwnProperty.call(candidate, "notes");
+    const hasTagIds = Object.prototype.hasOwnProperty.call(candidate, "tagIds");
+    if (!hasNotes && !hasTagIds) throw new Error(`transactions[${index}] must include notes and/or tagIds`);
+    let notes: string | null | undefined;
+    if (hasNotes) {
+      if (candidate.notes == null) notes = null;
+      else if (typeof candidate.notes !== "string" || candidate.notes.length > 2000) throw new Error(`transactions[${index}].notes must be a string of at most 2000 characters or null`);
+      else notes = candidate.notes.trim() || null;
+    }
+    const tagOperation = candidate.tagOperation == null ? "replace" : candidate.tagOperation;
+    if (tagOperation !== "add" && tagOperation !== "remove" && tagOperation !== "replace") {
+      throw new Error(`transactions[${index}].tagOperation must be add, remove, or replace`);
+    }
+    if (hasTagIds && (!Array.isArray(candidate.tagIds) || candidate.tagIds.length > 100 || candidate.tagIds.some((id) => typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0))) {
+      throw new Error(`transactions[${index}].tagIds must contain at most 100 positive integer IDs`);
+    }
+    const tagIds = hasTagIds ? [...new Set(candidate.tagIds as number[])].sort((a, b) => a - b) : undefined;
+    return { transactionId, hasNotes, hasTagIds, notes, tagOperation, tagIds };
+  });
+  const ids = requests.map((request) => request.transactionId);
+  if (new Set(ids).size !== ids.length) throw new Error("transactions must not contain duplicate transaction IDs");
+  const transactionRows = await db.select({ id: transactions.id, description: transactions.description, status: transactions.status, txType: transactions.txType, notes: transactions.notes })
+    .from(transactions).where(inArray(transactions.id, ids));
+  const transactionById = new Map(transactionRows.map((transaction) => [transaction.id, transaction]));
+  for (const request of requests) {
+    const transaction = transactionById.get(request.transactionId);
+    if (!transaction || transaction.status !== "posted") throw new Error(`Posted transaction ${request.transactionId} not found`);
+    if (INTERNAL_CORRECTION_TX_TYPES.includes(transaction.txType as typeof INTERNAL_CORRECTION_TX_TYPES[number])) {
+      throw new Error(`Internal correction transaction ${request.transactionId} cannot be changed through the agent`);
+    }
+  }
+  const requestedTagIds = [...new Set(requests.flatMap((request) => request.tagIds ?? []))];
+  if (requestedTagIds.length > 0) {
+    const validTags = await db.select({ id: tags.id }).from(tags).where(inArray(tags.id, requestedTagIds));
+    if (validTags.length !== requestedTagIds.length) throw new Error("One or more tags do not exist; call get_tags first");
+  }
+  const existingTagRows = await db.select({ transactionId: transactionTags.transactionId, tagId: transactionTags.tagId })
+    .from(transactionTags).where(inArray(transactionTags.transactionId, ids));
+  const existingByTransaction = new Map<number, number[]>();
+  for (const row of existingTagRows) existingByTransaction.set(row.transactionId, [...(existingByTransaction.get(row.transactionId) ?? []), row.tagId]);
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const request of requests) {
+    const transaction = transactionById.get(request.transactionId) as typeof transactionRows[number];
+    const currentTagIds = [...(existingByTransaction.get(request.transactionId) ?? [])].sort((a, b) => a - b);
+    const requestedTagIdsForTransaction = request.tagIds ?? [];
+    const requestedSet = new Set(requestedTagIdsForTransaction);
+    const nextTagIds = !request.hasTagIds
+      ? currentTagIds
+      : request.tagOperation === "replace"
+        ? requestedTagIdsForTransaction
+        : request.tagOperation === "add"
+          ? [...new Set([...currentTagIds, ...requestedTagIdsForTransaction])].sort((a, b) => a - b)
+          : currentTagIds.filter((tagId) => !requestedSet.has(tagId)).sort((a, b) => a - b);
+    const nextNotes = request.hasNotes ? request.notes ?? null : transaction.notes;
+    const tagsChanged = currentTagIds.length !== nextTagIds.length || currentTagIds.some((tagId, index) => tagId !== nextTagIds[index]);
+    const notesChanged = nextNotes !== transaction.notes;
+    if (tagsChanged || notesChanged) {
+      await updateTransactionAtomically(request.transactionId, {
+        ...(request.hasNotes ? { notes: nextNotes } : {}),
+        ...(request.hasTagIds ? { tagIds: nextTagIds } : {}),
+      });
+    }
+    results.push({
+      transactionId: request.transactionId,
+      description: transaction.description,
+      changed: tagsChanged || notesChanged,
+      changedFields: [ ...(notesChanged ? ["notes"] : []), ...(tagsChanged ? ["tags"] : []) ],
+      notes: nextNotes,
+      tagIds: nextTagIds,
+    });
+  }
+  return {
+    writesPerformed: results.some((result) => result.changed === true),
+    requiresConfirmation: false,
+    receipt: { transactionCount: results.length, changedCount: results.filter((result) => result.changed === true).length, transactions: results },
+  };
 }
 
 export async function getReconciliationStatusTool(input: unknown) {
@@ -1176,6 +1514,10 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
     case "forecast_cash_position":
       data = await forecastCashPositionTool(input);
       break;
+    case "review_budget_patterns":
+      if (!isRecord(input) || typeof input.periodId !== "number") throw new Error("periodId is required");
+      data = await reviewBudgetOutlook(input.periodId);
+      break;
     case "get_account_health":
       data = await getAccountHealthTool(input);
       break;
@@ -1188,6 +1530,21 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
     case "get_transaction_details":
       data = await getTransactionDetailsTool(input);
       break;
+    case "update_transaction_tags":
+      data = await updateTransactionTagsTool(input, executionContext);
+      break;
+    case "update_transaction_metadata":
+      data = await updateTransactionMetadataTool(input, executionContext);
+      break;
+    case "get_tags":
+      data = await getTagsTool(input);
+      break;
+    case "get_transport_route_templates":
+      data = await getTransportRouteTemplatesTool(input);
+      break;
+    case "create_tag":
+      data = await createTagTool(input, executionContext);
+      break;
     case "get_reconciliation_status":
       data = await getReconciliationStatusTool(input);
       break;
@@ -1196,6 +1553,16 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       break;
     case "preview_budget_plan":
       data = await previewBudgetPlanTool(input);
+      break;
+    case "prepare_budget":
+      if (!executionContext?.ownerEmail) throw new Error("Budget proposals require an authenticated conversation");
+      data = await prepareAgentAction({
+        ownerEmail: executionContext.ownerEmail,
+        conversationId: executionContext.conversationId,
+        kind: "budget_plan_upsert",
+        input,
+        assumptions: isRecord(input) ? input.assumptions : undefined,
+      });
       break;
     case "prepare_transaction":
       if (!executionContext?.ownerEmail) throw new Error("Transaction proposals require an authenticated conversation");
@@ -1238,5 +1605,5 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
     default:
       throw new Error("Unknown or unavailable agent tool");
   }
-  return { tool: name, revision: await getFinancialRevision(), readOnly: name !== "prepare_transaction" && name !== "prepare_transactions", data };
+  return { tool: name, revision: await getFinancialRevision(), readOnly: !["prepare_transaction", "prepare_transactions", "prepare_budget", "review_budget_patterns", "update_transaction_tags", "update_transaction_metadata", "create_tag"].includes(name), data };
 }

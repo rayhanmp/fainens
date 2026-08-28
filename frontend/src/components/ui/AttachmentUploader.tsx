@@ -55,13 +55,14 @@ function generateId() {
 }
 
 export function AttachmentUploader({
-  transactionId,
+  transactionId: _unused,
   attachments,
   pendingAttachments,
   onAttachmentsChange,
   onPendingAttachmentsChange,
   disabled = false,
 }: AttachmentUploaderProps) {
+  void _unused;
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [previewFile, setPreviewFile] = useState<PendingAttachment | null>(null);

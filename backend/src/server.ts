@@ -23,6 +23,7 @@ import accountRoutes from "./routes/accounts";
 import transactionRoutes from "./routes/transactions";
 import categoryRoutes from "./routes/categories";
 import tagRoutes from "./routes/tags";
+import transportRouteTemplateRoutes from "./routes/transport-route-templates";
 import periodRoutes from "./routes/periods";
 import budgetRoutes from "./routes/budget";
 import attachmentRoutes from "./routes/attachments";
@@ -259,6 +260,7 @@ const start = async () => {
     await fastify.register(transactionRoutes);
     await fastify.register(categoryRoutes);
     await fastify.register(tagRoutes);
+    await fastify.register(transportRouteTemplateRoutes);
     await fastify.register(periodRoutes);
     await fastify.register(budgetRoutes);
     await fastify.register(attachmentRoutes);

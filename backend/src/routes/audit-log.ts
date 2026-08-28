@@ -42,7 +42,7 @@ export default async function (fastify: FastifyInstance) {
       const history = await getEntityAuditHistory(entityType as EntityType, parseInt(entityId));
       return { entityType, entityId: parseInt(entityId), history };
     } catch (err) {
-      reply.code(400).send({ error: (err as Error).message });
+      reply.code(400).send({ error: "Failed to get audit history" });
     }
   });
 }

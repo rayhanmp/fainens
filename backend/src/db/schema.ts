@@ -71,6 +71,26 @@ export const transactions: any = sqliteTable("transaction", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** Reusable transport routes. Amounts stay variable because fares change per trip. */
+export const transportRouteTemplates: any = sqliteTable("transport_route_template", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  provider: text("provider"),
+  service: text("service"),
+  originName: text("origin_name"),
+  originLat: real("origin_lat"),
+  originLng: real("origin_lng"),
+  destName: text("dest_name"),
+  destLat: real("dest_lat"),
+  destLng: real("dest_lng"),
+  categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
+  defaultAccountId: integer("default_account_id").references(() => accounts.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  tagIds: text("tag_ids").notNull().default("[]"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+});
+
 export const transactionLines = sqliteTable("transaction_line", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   transactionId: integer("transaction_id")
@@ -182,6 +202,52 @@ export const budgetPlans = sqliteTable("budget_plan", {
     .references(() => categories.id),
   plannedAmount: integer("planned_amount").notNull(), // cents
 });
+
+/** Optional revision-bound adjudication of historical spending patterns. */
+export const forecastReviews = sqliteTable("forecast_review", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  periodId: integer("period_id").notNull().references(() => salaryPeriods.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id").notNull().references(() => categories.id, { onDelete: "cascade" }),
+  evidenceRevision: integer("evidence_revision").notNull(),
+  classification: text("classification").notNull(),
+  weight: real("weight").notNull(),
+  confidence: real("confidence").notNull(),
+  rationale: text("rationale").notNull(),
+  evidencePeriodIds: text("evidence_period_ids").notNull().default("[]"),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  status: text("status").notNull().default("active"),
+  userWeight: real("user_weight"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  periodCategoryIdx: uniqueIndex("idx_forecast_review_period_category").on(table.periodId, table.categoryId),
+  revisionIdx: index("idx_forecast_review_revision").on(table.evidenceRevision),
+}));
+
+/** Per-transaction pattern adjudication used to adjust historical samples. */
+export const forecastPurchaseReviews = sqliteTable("forecast_purchase_review", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  transactionId: integer("transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  transactionDate: integer("transaction_date").notNull(),
+  periodId: integer("period_id").notNull().references(() => salaryPeriods.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id").notNull().references(() => categories.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  evidenceRevision: integer("evidence_revision").notNull(),
+  classification: text("classification").notNull(),
+  weight: real("weight").notNull(),
+  confidence: real("confidence").notNull(),
+  rationale: text("rationale").notNull(),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  status: text("status").notNull().default("active"),
+  userWeight: real("user_weight"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  transactionIdx: uniqueIndex("idx_forecast_purchase_review_transaction").on(table.transactionId),
+  revisionIdx: index("idx_forecast_purchase_review_revision").on(table.evidenceRevision),
+}));
 
 export const budgetTemplates = sqliteTable("budget_template", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -597,6 +663,17 @@ export const agentMemories = sqliteTable("agent_memory", {
 }, (table) => ({
   ownerUpdatedIdx: index("idx_agent_memory_owner_updated").on(table.ownerEmail, table.updatedAt),
 }));
+
+/** Durable per-user agent preferences. Kept separate from free-form memories
+ * so identity/display preferences can be edited without mixing them into
+ * contextual notes. */
+export const agentProfiles = sqliteTable("agent_profile", {
+  ownerEmail: text("owner_email").primaryKey(),
+  nickname: text("nickname"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
 
 /**
  * Persist only the user-visible exchange and structured response receipt.

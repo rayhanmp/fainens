@@ -138,8 +138,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleConfirm = useCallback(() => {
-    setState(prev => ({ ...prev, isLoading: true }));
-    resolveRef.current?.(true);
+    // The promise resolves before the caller starts its async mutation. Close
+    // immediately so confirmations cannot remain stuck on a permanent
+    // “Loading…” state. Callers own their mutation/loading/error UI; the
+    // dialog only answers the yes/no question.
+    const resolve = resolveRef.current;
+    resolveRef.current = null;
+    setState(defaultState);
+    resolve?.(true);
   }, []);
 
   return (

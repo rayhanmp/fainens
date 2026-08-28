@@ -354,6 +354,98 @@ function repairMigrationHistory(journal: MigrationJournal): void {
   })();
 }
 
+/**
+ * Agent profile preferences are additive and owner-scoped. Keep this small
+ * compatibility ensure separate from the generated migration stream so
+ * legacy databases and fresh databases both receive the table idempotently.
+ */
+function ensureAgentProfileTable(): void {
+  db.$client.exec(`
+    CREATE TABLE IF NOT EXISTS agent_profile (
+      owner_email text PRIMARY KEY NOT NULL,
+      nickname text,
+      updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
+    )
+  `);
+}
+
+function ensureForecastReviewTable(): void {
+  db.$client.exec(`
+    CREATE TABLE IF NOT EXISTS forecast_review (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      period_id integer NOT NULL REFERENCES salary_period(id) ON DELETE CASCADE,
+      category_id integer NOT NULL REFERENCES category(id) ON DELETE CASCADE,
+      evidence_revision integer NOT NULL,
+      classification text NOT NULL,
+      weight real NOT NULL,
+      confidence real NOT NULL,
+      rationale text NOT NULL,
+      evidence_period_ids text DEFAULT '[]' NOT NULL,
+      model text NOT NULL,
+      prompt_version text NOT NULL,
+      status text DEFAULT 'active' NOT NULL,
+      user_weight real,
+      created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+      updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+      UNIQUE(period_id, category_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_forecast_review_revision ON forecast_review(evidence_revision);
+    CREATE TABLE IF NOT EXISTS forecast_purchase_review (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      transaction_id integer NOT NULL REFERENCES "transaction"(id) ON DELETE CASCADE,
+      transaction_date integer NOT NULL,
+      period_id integer NOT NULL REFERENCES salary_period(id) ON DELETE CASCADE,
+      category_id integer NOT NULL REFERENCES category(id) ON DELETE CASCADE,
+      amount integer NOT NULL,
+      evidence_revision integer NOT NULL,
+      classification text NOT NULL,
+      weight real NOT NULL,
+      confidence real NOT NULL,
+      rationale text NOT NULL,
+      model text NOT NULL,
+      prompt_version text NOT NULL,
+      status text DEFAULT 'active' NOT NULL,
+      user_weight real,
+      created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+      updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+      UNIQUE(transaction_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_forecast_purchase_review_revision ON forecast_purchase_review(evidence_revision);
+  `);
+  if (tableExists("forecast_purchase_review") && !columnExists("forecast_purchase_review", "transaction_date")) {
+    db.$client.exec("ALTER TABLE forecast_purchase_review ADD COLUMN transaction_date integer DEFAULT 0 NOT NULL");
+  }
+}
+
+function ensureTransportRouteTemplateTable(): void {
+  db.$client.exec(`
+    CREATE TABLE IF NOT EXISTS transport_route_template (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      name text NOT NULL,
+      provider text,
+      service text,
+      origin_name text,
+      origin_lat real,
+      origin_lng real,
+      dest_name text,
+      dest_lat real,
+      dest_lng real,
+      category_id integer REFERENCES category(id) ON DELETE SET NULL,
+      default_account_id integer REFERENCES account(id) ON DELETE SET NULL,
+      notes text,
+      tag_ids text DEFAULT '[]' NOT NULL,
+      created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+      updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_transport_route_template_updated_at ON transport_route_template(updated_at);
+  `);
+  for (const column of ["origin_lat", "origin_lng", "dest_lat", "dest_lng"] as const) {
+    if (!columnExists("transport_route_template", column)) {
+      db.$client.exec(`ALTER TABLE transport_route_template ADD COLUMN ${column} real`);
+    }
+  }
+}
+
 function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
     transaction: ["id", "date", "tx_type", "subscription_id", "status", "reversal_of_tx_id"],
@@ -378,6 +470,10 @@ function assertRequiredSchema(): void {
     agent_pending_action: ["id", "owner_email", "conversation_id", "kind", "normalized_input", "batch_id", "base_financial_revision", "status", "expires_at", "created_at", "updated_at"],
     agent_approval: ["id", "pending_action_id", "owner_email", "token_hash", "idempotency_key", "status", "approved_at", "executed_at", "execution_receipt", "expires_at", "created_at"],
     agent_memory: ["id", "owner_email", "label", "content", "created_at", "updated_at"],
+    agent_profile: ["owner_email", "nickname", "updated_at"],
+    forecast_review: ["period_id", "category_id", "evidence_revision", "classification", "weight", "confidence", "rationale", "status"],
+    forecast_purchase_review: ["transaction_id", "transaction_date", "period_id", "category_id", "amount", "evidence_revision", "classification", "weight", "confidence", "rationale", "status"],
+    transport_route_template: ["id", "name", "provider", "service", "origin_name", "origin_lat", "origin_lng", "dest_name", "dest_lat", "dest_lng", "category_id", "default_account_id", "notes", "tag_ids", "created_at", "updated_at"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];
@@ -459,6 +555,9 @@ export async function bootstrapDb() {
   // assertion runs. Startup must fail closed if the schema cannot be brought
   // to the checked-in version.
   migrate(db, { migrationsFolder });
+  ensureAgentProfileTable();
+  ensureForecastReviewTable();
+  ensureTransportRouteTemplateTable();
   assertRequiredSchema();
   repairActiveReturnPeriodCoverage();
   await seedDb(db);

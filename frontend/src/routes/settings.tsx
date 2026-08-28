@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import type { AgentMemory } from '../lib/api';
 import { cn } from '../lib/utils';
+import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
 import {
@@ -35,6 +36,8 @@ import {
   Check,
   Brain,
   Pencil,
+  ArrowRightLeft,
+  Plus,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
@@ -50,6 +53,7 @@ interface AppSettings {
   defaultExpenseAccountId: number | null;
   defaultIncomeAccountId: number | null;
   theme: 'light' | 'dark' | 'auto';
+  transferFeeRules: TransferFeeRule[];
 }
 
 interface ExportOptions {
@@ -99,8 +103,9 @@ function SettingsPage() {
     defaultExpenseAccountId: null,
     defaultIncomeAccountId: null,
     theme: 'auto',
+    transferFeeRules: [],
   });
-  const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string }>>([]);
+  const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; systemKey?: string | null }>>([]);
   const [memories, setMemories] = useState<AgentMemory[]>([]);
   const [memoryLimits, setMemoryLimits] = useState({ maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 });
   const [memoryLabel, setMemoryLabel] = useState('');
@@ -115,6 +120,10 @@ function SettingsPage() {
   const [showClearCacheModal, setShowClearCacheModal] = useState(false);
   const [showDeleteDataModal, setShowDeleteDataModal] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
+  const [feeRuleFrom, setFeeRuleFrom] = useState('');
+  const [feeRuleTo, setFeeRuleTo] = useState('');
+  const [feeRuleAmount, setFeeRuleAmount] = useState('');
+  const [feeRulePayer, setFeeRulePayer] = useState<TransferFeePayer>('sender');
   const { confirm } = useConfirm();
   
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
@@ -176,6 +185,7 @@ function SettingsPage() {
         defaultExpenseAccountId: parsed.defaultExpenseAccountId || null,
         defaultIncomeAccountId: parsed.defaultIncomeAccountId || null,
         theme: parsed.theme || 'auto',
+        transferFeeRules: loadTransferFeeRules(),
       });
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -184,10 +194,31 @@ function SettingsPage() {
     }
   };
 
+  const addTransferFeeRule = () => {
+    const fromAccountId = Number(feeRuleFrom);
+    const toAccountId = Number(feeRuleTo);
+    const feeCents = Number(feeRuleAmount);
+    if (!Number.isSafeInteger(fromAccountId) || !Number.isSafeInteger(toAccountId) || fromAccountId <= 0 || toAccountId <= 0 || fromAccountId === toAccountId) return;
+    if (!Number.isSafeInteger(feeCents) || feeCents < 0) return;
+    const nextRule: TransferFeeRule = { fromAccountId, toAccountId, feeCents, payer: feeRulePayer };
+    const next = [...settings.transferFeeRules.filter((rule) => !(rule.fromAccountId === fromAccountId && rule.toAccountId === toAccountId)), nextRule];
+    setSettings({ ...settings, transferFeeRules: next });
+    saveTransferFeeRules(next);
+    setFeeRuleFrom('');
+    setFeeRuleTo('');
+    setFeeRuleAmount('');
+  };
+
+  const removeTransferFeeRule = (rule: TransferFeeRule) => {
+    const next = settings.transferFeeRules.filter((candidate) => candidate !== rule && !(candidate.fromAccountId === rule.fromAccountId && candidate.toAccountId === rule.toAccountId));
+    setSettings({ ...settings, transferFeeRules: next });
+    saveTransferFeeRules(next);
+  };
+
   const loadAccounts = async () => {
     try {
       const data = await api.accounts.list();
-      setAccounts(data.map(({ id, name, type }) => ({ id, name, type })));
+      setAccounts(data.map(({ id, name, type, systemKey }) => ({ id, name, type, systemKey })));
     } catch (err) {
       console.error('Failed to load accounts:', err);
     }
@@ -504,7 +535,7 @@ function SettingsPage() {
 
           {/* Accounts Tab */}
           {activeTab === 'accounts' && (
-            <div className="max-w-2xl animate-in fade-in duration-300">
+            <div className="max-w-2xl space-y-6 animate-in fade-in duration-300">
               <Card
                 title={
                   <div className="flex items-center gap-2">
@@ -550,6 +581,75 @@ function SettingsPage() {
                   <p className="text-xs text-[var(--color-muted)]">
                     These accounts will be pre-selected when creating transactions.
                   </p>
+                </div>
+              </Card>
+              <Card
+                title={
+                  <div className="flex items-center gap-2">
+                    <ArrowRightLeft className="w-5 h-5" />
+                    Transfer fee defaults
+                  </div>
+                }
+              >
+                <div className="space-y-4">
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Set a fee for a specific source-to-destination pair. The transfer form uses this amount automatically, and you can override it for an individual transfer.
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Select
+                      label="From account"
+                      value={feeRuleFrom}
+                      onChange={(event) => setFeeRuleFrom(event.target.value)}
+                      options={[
+                        { value: '', label: 'Choose source…' },
+                        ...accounts.filter((account) => account.type === 'asset' && !account.systemKey).map((account) => ({ value: String(account.id), label: account.name })),
+                      ]}
+                    />
+                    <Select
+                      label="To account"
+                      value={feeRuleTo}
+                      onChange={(event) => setFeeRuleTo(event.target.value)}
+                      options={[
+                        { value: '', label: 'Choose destination…' },
+                        ...accounts.filter((account) => account.type === 'asset' && !account.systemKey).map((account) => ({ value: String(account.id), label: account.name })),
+                      ]}
+                    />
+                    <Input
+                      label="Fee (IDR)"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={feeRuleAmount}
+                      onChange={(event) => setFeeRuleAmount(event.target.value)}
+                      placeholder="e.g. 1000"
+                    />
+                    <Select
+                      label="Who pays"
+                      value={feeRulePayer}
+                      onChange={(event) => setFeeRulePayer(event.target.value as TransferFeePayer)}
+                      options={[{ value: 'sender', label: 'Sender' }, { value: 'recipient', label: 'Recipient' }]}
+                    />
+                  </div>
+                  <Button type="button" onClick={addTransferFeeRule} disabled={!feeRuleFrom || !feeRuleTo || !feeRuleAmount}>
+                    <Plus className="h-4 w-4" /> Save pair default
+                  </Button>
+                  {settings.transferFeeRules.length > 0 ? (
+                    <div className="divide-y divide-[var(--color-border)] rounded-xl border border-[var(--color-border)]">
+                      {settings.transferFeeRules.map((rule) => (
+                        <div key={`${rule.fromAccountId}-${rule.toAccountId}`} className="flex items-center justify-between gap-3 p-3 text-sm">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">{accounts.find((account) => account.id === rule.fromAccountId)?.name ?? `Account #${rule.fromAccountId}`} → {accounts.find((account) => account.id === rule.toAccountId)?.name ?? `Account #${rule.toAccountId}`}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)]">{rule.feeCents.toLocaleString('id-ID')} IDR · paid by {rule.payer}</p>
+                          </div>
+                          <Button type="button" size="sm" variant="danger" onClick={() => removeTransferFeeRule(rule)}>
+                            <Trash2 className="h-3.5 w-3.5" /> Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[var(--color-muted)]">No pair defaults yet. Built-in provider defaults still apply where recognized.</p>
+                  )}
                 </div>
               </Card>
             </div>

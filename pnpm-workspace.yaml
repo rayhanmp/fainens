@@ -1,4 +1,8 @@
 packages:
   - "frontend"
   - "backend"
-
+allowBuilds:
+  better-sqlite3: set this to true or false
+  core-js: set this to true or false
+  esbuild: set this to true or false
+  puppeteer: set this to true or false

@@ -63,8 +63,8 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
 
-      // Create JWT
-      const jwt = fastify.jwt.sign({ email: userInfo.email });
+      // Create JWT with 7-day expiration
+      const jwt = fastify.jwt.sign({ email: userInfo.email }, { expiresIn: '7d' });
 
       const postLoginRedirect =
         env.FRONTEND_URL && env.FRONTEND_URL.length > 0
