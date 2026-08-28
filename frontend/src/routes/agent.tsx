@@ -1,5 +1,6 @@
 import { createFileRoute, useSearch } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
   ArchiveRestore,
@@ -37,6 +38,10 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory, AgentTransactionActionProposal } from '../lib/api';
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
+import { useDraftStore } from '../stores/draft-store';
+import { useAgentSessionStore } from '../features/agent/session-store';
+import { useAgentConversationsQuery, useAgentMemoriesQuery } from '../features/agent/queries';
+import { queryKeys } from '../features/core/query-keys';
 
 export const Route = createFileRoute('/agent')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -1003,13 +1008,15 @@ function TransactionProposalCard({
 
 function AgentPage() {
   const search = useSearch({ from: '/agent' }) as { prompt?: string };
+  const queryClient = useQueryClient();
+  const conversationsQuery = useAgentConversationsQuery(true);
+  const memoriesQuery = useAgentMemoriesQuery();
   const [startupSelection, setStartupSelection] = useState<StartupSelection>(() => createStartupSelection());
   const [nickname, setNickname] = useState('');
   const [periods, setPeriods] = useState<Period[]>([]);
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -1036,12 +1043,9 @@ function AgentPage() {
   const [revealedMessageActionsId, setRevealedMessageActionsId] = useState<string | null>(null);
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
-  const [memories, setMemories] = useState<AgentMemory[]>([]);
-  const [memoryLimits, setMemoryLimits] = useState({ maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 });
   const [memoryLabel, setMemoryLabel] = useState('');
   const [memoryContent, setMemoryContent] = useState('');
   const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
-  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
@@ -1057,6 +1061,52 @@ function AgentPage() {
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [visibleConversationCount, setVisibleConversationCount] = useState(CONVERSATIONS_PAGE_SIZE);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
+
+  const conversations = conversationsQuery.data?.conversations ?? [];
+  const memories = memoriesQuery.data?.memories ?? [];
+  const memoryLimits = memoriesQuery.data?.limits ?? { maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 };
+  const isLoadingMemories = memoriesQuery.isLoading;
+  type ConversationsResponse = Awaited<ReturnType<typeof api.agent.conversations.list>>;
+  const updateConversationCache = (update: (current: Conversation[]) => Conversation[]) => {
+    queryClient.setQueryData<ConversationsResponse>(queryKeys.agent.conversations(true), (current) => current ? { ...current, conversations: update(current.conversations) } : current);
+  };
+
+  // The page keeps its rich streaming view state locally, while these small
+  // selectors make the durable draft and transient session lifecycle visible
+  // to other agent UI components without putting server facts in Zustand.
+  const setSessionConversationId = useAgentSessionStore((state) => state.setActiveConversationId);
+  const setSessionStreamStatus = useAgentSessionStore((state) => state.setStreamStatus);
+  const setSessionAttachmentIds = useAgentSessionStore((state) => state.setPendingAttachmentIds);
+  const persistDraft = useDraftStore((state) => state.setDraft);
+  const clearDraft = useDraftStore((state) => state.clearDraft);
+  const draftKey = `agent:${activeConversationId ?? 'new'}`;
+  const storedDraft = useDraftStore((state) => state.drafts[draftKey]?.value ?? '');
+  const lastDraftKeyRef = useRef(draftKey);
+
+  useEffect(() => {
+    setSessionConversationId(activeConversationId);
+  }, [activeConversationId, setSessionConversationId]);
+
+  useEffect(() => {
+    setSessionStreamStatus(isSending ? 'streaming' : 'idle');
+  }, [isSending, setSessionStreamStatus]);
+
+  useEffect(() => {
+    setSessionAttachmentIds(pendingImages.map((image) => image.id));
+  }, [pendingImages, setSessionAttachmentIds]);
+
+  useEffect(() => {
+    if (lastDraftKeyRef.current !== draftKey) {
+      lastDraftKeyRef.current = draftKey;
+      setDraft(storedDraft);
+      return;
+    }
+    if (!draft.trim() && storedDraft) {
+      setDraft(storedDraft);
+      return;
+    }
+    if (draft.trim()) persistDraft(draftKey, draft);
+  }, [draft, draftKey, persistDraft, storedDraft]);
 
   useEffect(() => () => {
     if (messageActionHoldTimerRef.current != null) window.clearTimeout(messageActionHoldTimerRef.current);
@@ -1109,16 +1159,11 @@ function AgentPage() {
   }, [editingUserMessageId, editingUserMessageText]);
 
   const loadMemories = async () => {
-    setIsLoadingMemories(true);
     setMemoryError(null);
     try {
-      const response = await api.agent.memories.list();
-      setMemories(response.memories);
-      setMemoryLimits(response.limits);
+      await queryClient.refetchQueries({ queryKey: queryKeys.agent.memories });
     } catch (caught) {
       setMemoryError(caught instanceof Error ? caught.message : 'Could not load agent memory.');
-    } finally {
-      setIsLoadingMemories(false);
     }
   };
 
@@ -1175,12 +1220,11 @@ function AgentPage() {
     setMemoryError(null);
     try {
       if (editingMemoryId == null) {
-        const response = await api.agent.memories.create({ label, content });
-        setMemories((current) => [...current, response.memory]);
+        await api.agent.memories.create({ label, content });
       } else {
-        const response = await api.agent.memories.update(editingMemoryId, { label, content });
-        setMemories((current) => current.map((memory) => memory.id === editingMemoryId ? response.memory : memory));
+        await api.agent.memories.update(editingMemoryId, { label, content });
       }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       resetMemoryForm();
     } catch (caught) {
       setMemoryError(caught instanceof Error ? caught.message : 'Could not save agent memory.');
@@ -1201,7 +1245,7 @@ function AgentPage() {
     setMemoryError(null);
     try {
       await api.agent.memories.delete(memory.id);
-      setMemories((current) => current.filter((candidate) => candidate.id !== memory.id));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       if (editingMemoryId === memory.id) resetMemoryForm();
     } catch (caught) {
       setMemoryError(caught instanceof Error ? caught.message : 'Could not delete agent memory.');
@@ -1222,8 +1266,11 @@ function AgentPage() {
   }, [draft]);
 
   const refreshConversations = async () => {
-    const result = await api.agent.conversations.list({ includeArchived: true });
-    setConversations(result.conversations);
+    const result = await queryClient.fetchQuery({
+      queryKey: queryKeys.agent.conversations(true),
+      queryFn: () => api.agent.conversations.list({ includeArchived: true }),
+      staleTime: 0,
+    });
     return result.conversations;
   };
 
@@ -1284,15 +1331,17 @@ function AgentPage() {
       setActiveConversationId(null);
       setMessages([]);
       setPendingImages([]);
+      setDraft(search.prompt.trim());
     }
-    void refreshConversations()
-      .then(() => {
-        if (search.prompt?.trim()) {
-          setDraft(search.prompt.trim());
-        }
-      })
-      .catch(() => setError('Could not load saved conversations.'));
   }, [search.prompt]);
+
+  useEffect(() => {
+    if (conversationsQuery.isError) setError('Could not load saved conversations.');
+  }, [conversationsQuery.isError]);
+
+  useEffect(() => {
+    if (memoriesQuery.isError && isMemoryOpen) setMemoryError('Could not load agent memory.');
+  }, [isMemoryOpen, memoriesQuery.isError]);
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId),
@@ -1353,6 +1402,7 @@ function AgentPage() {
   const submitQuestion = async (question = draft, replacement?: { localId: string; serverId: number }) => {
     const text = question.trim();
     if (text.length < 2 || isSending) return;
+    const composerDraftKey = draftKey;
     const attachedImages = replacement ? [] : pendingImages;
     const createdAt = Date.now();
     const userLocalId = replacement?.localId ?? `user-${createdAt}`;
@@ -1384,7 +1434,7 @@ function AgentPage() {
         const created = await api.agent.conversations.create();
         conversationId = created.conversation.id;
         setActiveConversationId(conversationId);
-        setConversations((current) => [created.conversation, ...current]);
+        updateConversationCache((current) => [created.conversation, ...current.filter((candidate) => candidate.id !== created.conversation.id)]);
       }
       const assistantId = `assistant-${Date.now()}`;
       streamedAssistantId = assistantId;
@@ -1436,6 +1486,7 @@ function AgentPage() {
             : message,
       ));
       setPendingImages([]);
+      clearDraft(composerDraftKey);
       void refreshConversations().catch(() => undefined);
     } catch (caught) {
       const wasCancelled = requestController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError');
@@ -1460,6 +1511,7 @@ function AgentPage() {
   };
 
   const stopAgentQuery = () => {
+    if (agentRequestRef.current) setSessionStreamStatus('cancelling');
     agentRequestRef.current?.abort();
   };
 
@@ -1553,7 +1605,7 @@ function AgentPage() {
     setError(null);
     try {
       const result = await api.agent.conversations.update(conversationId, data);
-      setConversations((current) => current.map((conversation) => conversation.id === conversationId ? result.conversation : conversation));
+      updateConversationCache((current) => current.map((conversation) => conversation.id === conversationId ? result.conversation : conversation));
       return result.conversation;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not update that conversation.');
@@ -1594,7 +1646,7 @@ function AgentPage() {
     setError(null);
     try {
       await api.agent.conversations.delete(conversation.id);
-      setConversations((current) => current.filter((candidate) => candidate.id !== conversation.id));
+      updateConversationCache((current) => current.filter((candidate) => candidate.id !== conversation.id));
       setOpenConversationMenuId(null);
       if (activeConversationId === conversation.id) startNewConversation();
     } catch (caught) {

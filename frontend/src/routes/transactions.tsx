@@ -1,5 +1,6 @@
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ChevronLeft, ChevronRight, CircleAlert, Clock, Download, FileUp, Landmark, MoreHorizontal, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Upload, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -13,6 +14,12 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useTransactionList } from '../features/transactions/queries';
+import { useAccountsQuery } from '../features/accounts/queries';
+import { useCategoriesQuery } from '../features/categories/queries';
+import { usePeriodsQuery } from '../features/periods/queries';
+import { invalidateFinancialSummaries } from '../features/core/query-keys';
+import { useTags } from '../hooks/api';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -97,15 +104,6 @@ function TransactionsPage() {
   const { confirm } = useConfirm();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openedDeepLinkId = useRef<string | null>(null);
-  const requestVersion = useRef(0);
-  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
-  const [accounts, setAccounts] = useState<WalletAccount[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [tags, setTags] = useState<Array<{ id: number; name: string; color: string }>>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState({ expenseCents: 0, incomeCents: 0 });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [filterQuery, setFilterQuery] = useState('');
@@ -131,39 +129,37 @@ function TransactionsPage() {
   const [splitError, setSplitError] = useState<string | null>(null);
   const splitFileInputRef = useRef<HTMLInputElement>(null);
 
+  const queryClient = useQueryClient();
+  const transactionFilters = useMemo(() => ({
+    ...(search.periodId ? { periodId: search.periodId === 'all' ? 'all' : search.periodId } : {}),
+    ...(search.accountId ? { accountId: search.accountId } : {}),
+    ...(categoryFilter ? { categoryId: categoryFilter } : {}),
+    ...(filterQuery.trim() ? { search: filterQuery.trim() } : {}),
+    ...(kindFilter && kindFilter !== 'other' ? { kind: kindFilter } : {}),
+    ...(startDate ? { startDate: startDate + 'T00:00:00' } : {}),
+    ...(endDate ? { endDate: formatDateInputEnd(endDate) } : {}),
+    ...(minAmount ? { minAmount } : {}),
+    ...(maxAmount ? { maxAmount } : {}),
+    ...(includeAdjustments ? { includeReversals: 'true' } : {}),
+    sort, limit: String(pageSize), offset: String((page - 1) * pageSize),
+  }), [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, page, pageSize]);
+  const transactionQuery = useTransactionList(transactionFilters);
+  const accountsQuery = useAccountsQuery();
+  const categoriesQuery = useCategoriesQuery();
+  const periodsQuery = usePeriodsQuery();
+  const tagsQuery = useTags();
+  const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
+  const accounts = (accountsQuery.data ?? []) as WalletAccount[];
+  const categories = (categoriesQuery.data ?? []) as Category[];
+  const tags = (tagsQuery.data ?? []) as Array<{ id: number; name: string; color: string }>;
+  const periods = (periodsQuery.data ?? []) as Period[];
+  const isLoading = transactionQuery.isLoading || accountsQuery.isLoading || categoriesQuery.isLoading || periodsQuery.isLoading || tagsQuery.isLoading;
+  const total = transactionQuery.data?.pagination?.total ?? 0;
+  const summary = transactionQuery.data?.summary ?? { expenseCents: 0, incomeCents: 0 };
+
   useKeyboardShortcuts({ isModalOpen, searchInputRef });
 
-  const loadData = useCallback(async () => {
-    const version = ++requestVersion.current;
-    setIsLoading(true);
-    try {
-      const periodId = search.periodId === 'all' ? 'all' : search.periodId;
-      const [result, accountRows, categoryRows, tagRows] = await Promise.all([
-        api.transactions.list({
-          ...(periodId ? { periodId } : {}),
-          ...(search.accountId ? { accountId: search.accountId } : {}),
-          ...(categoryFilter ? { categoryId: categoryFilter } : {}),
-          ...(filterQuery.trim() ? { search: filterQuery.trim() } : {}),
-          ...(kindFilter && kindFilter !== 'other' ? { kind: kindFilter } : {}),
-          ...(startDate ? { startDate: startDate + 'T00:00:00' } : {}),
-          ...(endDate ? { endDate: formatDateInputEnd(endDate) } : {}),
-          ...(minAmount ? { minAmount } : {}),
-          ...(maxAmount ? { maxAmount } : {}),
-          ...(includeAdjustments ? { includeReversals: 'true' } : {}),
-          sort,
-          limit: String(pageSize),
-          offset: String((page - 1) * pageSize),
-        }),
-        api.accounts.list(), api.categories.list(), api.tags.list(),
-      ]);
-      if (version !== requestVersion.current) return;
-      setTransactions(result.data); setTotal(result.pagination.total); setSummary(result.summary);
-      setAccounts(accountRows as WalletAccount[]); setCategories(categoryRows); setTags(tagRows);
-    } finally { if (version === requestVersion.current) setIsLoading(false); }
-  }, [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, page, pageSize]);
-
-  useEffect(() => { void loadData(); }, [loadData]);
-  useEffect(() => { api.periods.list().then((rows) => setPeriods(rows as Period[])).catch(() => setPeriods([])); }, []);
+  const loadData = () => invalidateFinancialSummaries(queryClient);
   useEffect(() => { api.pendingTransactions.list().then((rows) => setPendingCount(rows.length)).catch(() => setPendingCount(0)); }, []);
   useEffect(() => { setCategoryFilter(search.categoryId ?? ''); }, [search.categoryId]);
   useEffect(() => { setPage(1); }, [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, pageSize]);
