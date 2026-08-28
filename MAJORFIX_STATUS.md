@@ -329,6 +329,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The period form still seeds a safe calendar-month fallback when the suggestion endpoint fails, and user edits are never overwritten by later refetches.
 - Newly created onboarding categories update the canonical category cache immediately for the rest of the setup flow.
 
+### `658332e` — budget mutation hooks
+
+- Budget line create/update/delete and template create/apply/delete operations now use feature-owned typed React Query mutations.
+- Successful budget mutations invalidate the shared financial-summary families, while template-only changes invalidate the template list without rebuilding route-local server state.
+- The existing forms, confirmation dialogs, and retry action remain unchanged; only the mutation/cache boundary moved into the budget feature.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
