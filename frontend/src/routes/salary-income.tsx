@@ -2,9 +2,8 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
-import { api } from '../lib/api';
-import { useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
-import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
+import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
+import { queryKeys } from '../features/core/query-keys';
 import { formatCurrency, cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -109,6 +108,7 @@ function SalaryIncomePage() {
   const incomeQuery = useSalaryIncomeQuery();
   const salaryQuery = useSalarySettingsQuery();
   const catchUpPreviewQuery = useSalaryCatchUpPreviewQuery();
+  const salaryCatchUpMutation = useSalaryCatchUpMutation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -262,8 +262,7 @@ function SalaryIncomePage() {
                               const firstMonth = new Date(due[0].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                               const lastMonth = new Date(due[due.length - 1].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                               if (!window.confirm(`Post ${due.length} due salary month${due.length === 1 ? '' : 's'} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`)) return;
-                              await api.salarySettings.catchUp({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
-                              await invalidateFinancialSummaries(queryClient);
+                              await salaryCatchUpMutation.mutateAsync({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
                               alert(`Posted ${due.length} salary month${due.length === 1 ? '' : 's'}.`);
                             } catch (e) {
                               alert(e instanceof Error ? e.message : 'Failed to post salary');

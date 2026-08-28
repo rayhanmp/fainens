@@ -1,14 +1,12 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Search, XCircle } from 'lucide-react';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import { useMoneyAnomaliesQuery } from '../features/anomalies/queries';
-import { queryKeys } from '../features/core/query-keys';
+import { useMoneyAnomaliesQuery, useReviewMoneyAnomalyMutation, useScanMoneyAnomaliesMutation } from '../features/anomalies/queries';
 import { formatCurrency, formatDate } from '../lib/utils';
 
 export const Route = createFileRoute('/anomalies')({ component: MoneyAnomaliesPage } as any);
@@ -17,8 +15,9 @@ type Review = Awaited<ReturnType<typeof api.anomalies.money>>['reviews'][number]
 
 function MoneyAnomaliesPage() {
   const [status, setStatus] = useState<'open' | 'resolved' | 'dismissed'>('open');
-  const queryClient = useQueryClient();
   const anomaliesQuery = useMoneyAnomaliesQuery(status);
+  const scanMutation = useScanMoneyAnomaliesMutation();
+  const reviewMutation = useReviewMoneyAnomalyMutation();
   const reviews = (anomaliesQuery.data?.reviews ?? []) as Review[];
   const loading = anomaliesQuery.isPending && !anomaliesQuery.data;
   const [scanning, setScanning] = useState(false);
@@ -26,16 +25,11 @@ function MoneyAnomaliesPage() {
   const [noteById, setNoteById] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const load = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.anomalies.all });
-  };
-
   const scan = async () => {
     setScanning(true);
     setError(null);
     try {
-      await api.anomalies.scanMoney();
-      await load();
+      await scanMutation.mutateAsync();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not scan for anomalies');
     } finally {
@@ -52,8 +46,7 @@ function MoneyAnomaliesPage() {
     setBusyId(id);
     setError(null);
     try {
-      await api.anomalies.reviewMoney(id, nextStatus, reviewNote);
-      await load();
+      await reviewMutation.mutateAsync({ id, status: nextStatus, reviewNote });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update anomaly review');
     } finally {

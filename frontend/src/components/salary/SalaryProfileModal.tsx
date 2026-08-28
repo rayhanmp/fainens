@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { formatCurrency, parseIdNominalToInt, cn } from '../../lib/utils';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Landmark, Wallet, Banknote, ToggleLeft, ToggleRight, Calculator, Info } from 'lucide-react';
+import { useUpdateSalarySettingsMutation } from '../../features/salary/queries';
 
 type PtkpOption = { code: string; label: string; annualPtkp: number; terCategory: string };
 
@@ -71,6 +72,7 @@ interface Props {
 }
 
 export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, accounts, onSaved }: Props) {
+  const updateSalarySettingsMutation = useUpdateSalarySettingsMutation();
   const [grossStr, setGrossStr] = useState('');
   const [payrollDay, setPayrollDay] = useState(25);
   const [ptkpCode, setPtkpCode] = useState('TK0');
@@ -157,7 +159,7 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
     setSaving(true);
     setErr(null);
     try {
-      const res = await api.salarySettings.update({
+      const res = await updateSalarySettingsMutation.mutateAsync({
         grossMonthly: grossNum,
         payrollDay,
         ptkpCode,

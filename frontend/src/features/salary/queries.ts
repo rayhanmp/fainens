@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
-import { queryKeys } from '../core/query-keys';
+import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type SalaryIncomeRow = {
   id: number;
@@ -50,5 +50,24 @@ export function useSalaryCatchUpPreviewQuery() {
     queryKey: queryKeys.salary.catchUpPreview,
     queryFn: () => api.salarySettings.catchUpPreview(),
     enabled: false,
+  });
+}
+
+export function useUpdateSalarySettingsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.salarySettings.update>[0]) => api.salarySettings.update(input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.salary.settings, data);
+      void invalidateFinancialSummaries(queryClient);
+    },
+  });
+}
+
+export function useSalaryCatchUpMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.salarySettings.catchUp>[0]) => api.salarySettings.catchUp(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
