@@ -2,6 +2,10 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { api } from '../lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCategoriesQuery } from '../features/categories/queries';
+import { useSuggestedPeriodQuery } from '../features/periods/queries';
+import { queryKeys } from '../features/core/query-keys';
 import {
   Wallet,
   Tag,
@@ -49,6 +53,9 @@ export const Route = createFileRoute('/onboarding')({
 
 function OnboardingPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const categoriesQuery = useCategoriesQuery();
+  const suggestedPeriodQuery = useSuggestedPeriodQuery();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +65,6 @@ function OnboardingPage() {
   );
   const [customWalletName, setCustomWalletName] = useState('');
 
-  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
 
   const [periodName, setPeriodName] = useState('');
@@ -69,30 +75,25 @@ function OnboardingPage() {
 
   const [createdPeriodId, setCreatedPeriodId] = useState<number | null>(null);
 
-  useEffect(() => {
-    api.categories
-      .list()
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
+  const categories = categoriesQuery.data ?? [];
 
   useEffect(() => {
-    api.periods
-      .suggestNext()
-      .then((s) => {
-        setPeriodName(s.suggestedName);
-        setPeriodStart(s.suggestedStartDate.slice(0, 10));
-        setPeriodEnd(s.suggestedEndDate.slice(0, 10));
-      })
-      .catch(() => {
-        const today = new Date();
-        const start = new Date(today.getFullYear(), today.getMonth(), 1);
-        const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        setPeriodName(`${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`);
-        setPeriodStart(start.toISOString().slice(0, 10));
-        setPeriodEnd(end.toISOString().slice(0, 10));
-      });
-  }, []);
+    if (periodName || periodStart || periodEnd) return;
+    const suggestion = suggestedPeriodQuery.data;
+    if (suggestion) {
+      setPeriodName(suggestion.suggestedName);
+      setPeriodStart(suggestion.suggestedStartDate.slice(0, 10));
+      setPeriodEnd(suggestion.suggestedEndDate.slice(0, 10));
+      return;
+    }
+    if (!suggestedPeriodQuery.isError) return;
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    setPeriodName(`${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`);
+    setPeriodStart(start.toISOString().slice(0, 10));
+    setPeriodEnd(end.toISOString().slice(0, 10));
+  }, [periodEnd, periodName, periodStart, suggestedPeriodQuery.data, suggestedPeriodQuery.isError]);
 
   const toggleWallet = (name: string) => {
     setSelectedWallets((prev) => {
@@ -120,7 +121,10 @@ function OnboardingPage() {
         id: number;
         name: string;
       };
-      setCategories((c) => [...c, { id: created.id, name: created.name }]);
+      queryClient.setQueryData<Array<{ id: number; name: string }>>(queryKeys.categories.all, (current) => [
+        ...(current ?? []),
+        { id: created.id, name: created.name },
+      ]);
       setNewCategoryName('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add category');
