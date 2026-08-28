@@ -5,9 +5,12 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn } from '../lib/utils';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAccountDashboardQuery, useAccountsLedgerQuery, useReconciliationHistoryQuery } from '../features/accounts/queries';
+import { queryKeys } from '../features/core/query-keys';
 import { AccountModal } from '../components/accounts/AccountModal';
 import { ReconciliationModal } from '../components/reconciliation/ReconciliationModal';
 import {
@@ -101,17 +104,7 @@ function downloadAccountsCsv(rows: AccountRow[]) {
 }
 
 function AccountsPage() {
-  const [accounts, setAccounts] = useState<AccountRow[]>([]);
-  const [allAccounts, setAllAccounts] = useState<AccountRow[]>([]);
-  const [summary, setSummary] = useState<{
-    totalAssets: number;
-    totalLiabilities: number;
-    netWorth: number;
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
-  const [reconciliationSessions, setReconciliationSessions] = useState<Awaited<ReturnType<typeof api.accounts.reconciliationHistory>>['sessions']>([]);
+  const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -121,75 +114,45 @@ function AccountsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'asset' | 'liability'>('all');
-  const requestVersion = useRef(0);
-
-
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);
     return () => window.clearTimeout(id);
   }, [searchInput]);
 
-  const loadAccounts = useCallback(async () => {
-    const requestId = ++requestVersion.current;
-    setIsLoading(true);
-    try {
-      const params: { type?: string; search?: string; includeInactive?: boolean } = {};
-      if (typeFilter !== 'all') params.type = typeFilter;
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (showArchived) params.includeInactive = true;
-
-      const filtered = Object.keys(params).length > 0;
-      const listPromise = api.accounts.list(filtered ? params : undefined);
-      const allPromise = filtered ? api.accounts.list() : listPromise;
-      const [list, all, dash, history] = await Promise.all([
-        listPromise,
-        allPromise,
-        api.analytics.dashboard().catch(() => null),
-        api.accounts.reconciliationHistory(25).catch(() => ({ sessions: [] })),
-      ]);
-      if (requestId !== requestVersion.current) return;
-      const currentAccounts = list as AccountRow[];
-      const completeAccounts = all as AccountRow[];
-      setAccounts(currentAccounts);
-      setAllAccounts(completeAccounts);
-      setReconciliationSessions(history.sessions);
-      setLoadError(null);
-      setLastLoadedAt(Date.now());
-
-      if (dash?.netWorth) {
-        setSummary({
-          totalAssets: dash.netWorth.totalAssets,
-          totalLiabilities: dash.netWorth.totalLiabilities,
-          netWorth: dash.netWorth.netWorth,
-        });
-      } else {
-        const ua = completeAccounts.filter((a) => !a.systemKey);
-        let totalAssets = 0;
-        let totalLiabilities = 0;
-        for (const a of ua) {
-          if (a.type === 'asset') totalAssets += a.balance;
-          else if (a.type === 'liability') totalLiabilities += Math.abs(a.balance);
-        }
-        setSummary({
-          totalAssets,
-          totalLiabilities,
-          netWorth: totalAssets - totalLiabilities,
-        });
-      }
-    } catch (e) {
-      console.error(e);
-      if (requestId === requestVersion.current) {
-        setLoadError(e instanceof Error ? e.message : 'Unable to load account balances');
-      }
-    } finally {
-      if (requestId === requestVersion.current) setIsLoading(false);
-    }
+  const accountParams = useMemo(() => {
+    const params: { type?: string; search?: string; includeInactive?: boolean } = {};
+    if (typeFilter !== 'all') params.type = typeFilter;
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (showArchived) params.includeInactive = true;
+    return params;
   }, [debouncedSearch, showArchived, typeFilter]);
-
-  useEffect(() => {
-    void loadAccounts();
-  }, [loadAccounts]);
+  const accountsQuery = useAccountsLedgerQuery(accountParams);
+  const allAccountsQuery = useAccountsLedgerQuery(showArchived ? { includeInactive: true } : undefined);
+  const dashboardQuery = useAccountDashboardQuery();
+  const reconciliationQuery = useReconciliationHistoryQuery(25);
+  const accounts = (accountsQuery.data ?? []) as AccountRow[];
+  const allAccounts = (allAccountsQuery.data ?? []) as AccountRow[];
+  const reconciliationSessions = reconciliationQuery.data?.sessions ?? [];
+  const isLoading = accountsQuery.isLoading || allAccountsQuery.isLoading || dashboardQuery.isLoading || reconciliationQuery.isLoading;
+  const loadError = accountsQuery.error || allAccountsQuery.error || dashboardQuery.error || reconciliationQuery.error;
+  const lastLoadedAt = Math.max(accountsQuery.dataUpdatedAt, allAccountsQuery.dataUpdatedAt, dashboardQuery.dataUpdatedAt, reconciliationQuery.dataUpdatedAt) || null;
+  const dashboardSummary = dashboardQuery.data?.netWorth;
+  const summary = dashboardSummary
+    ? { totalAssets: dashboardSummary.totalAssets, totalLiabilities: dashboardSummary.totalLiabilities, netWorth: dashboardSummary.netWorth }
+    : allAccounts.length > 0
+      ? allAccounts.reduce((totals, account) => {
+        if (account.systemKey) return totals;
+        if (account.type === 'asset') totals.totalAssets += account.balance;
+        if (account.type === 'liability') totals.totalLiabilities += Math.abs(account.balance);
+        totals.netWorth = totals.totalAssets - totals.totalLiabilities;
+        return totals;
+      }, { totalAssets: 0, totalLiabilities: 0, netWorth: 0 })
+      : null;
+  const loadAccounts = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+  };
 
   const userAccounts = useMemo(
     () => accounts.filter((a) => !a.systemKey),

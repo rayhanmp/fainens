@@ -1,6 +1,6 @@
 /** One canonical query-key vocabulary. Server facts belong in React Query, never Zustand. */
 export const queryKeys = {
-  accounts: { all: ["accounts"] as const, detail: (id: number) => ["accounts", id] as const },
+  accounts: { all: ["accounts"] as const, list: (filters: object = {}) => ["accounts", "list", filters] as const, detail: (id: number) => ["accounts", id] as const, reconciliation: (limit: number) => ["accounts", "reconciliation", limit] as const },
   categories: { all: ["categories"] as const },
   tags: { all: ["tags"] as const },
   periods: { all: ["periods"] as const, detail: (id: number) => ["periods", id] as const },
