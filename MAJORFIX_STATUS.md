@@ -253,6 +253,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Reconciliation history now uses the Accounts feature query cache, and recovery mode refetches the complete unfiltered account snapshot through the same account query boundary.
 - Voiding a check invalidates the shared history key instead of maintaining a second local copy. Balance-entry rows remain local drafts until the user explicitly submits them.
 
+### `4553ec7` — loans and subscriptions query migration
+
+- Loans now load the page's loan records, contact summaries, and aggregate summary through one feature-owned React Query hook instead of route-level effects and server-record state.
+- Subscriptions now load subscription rows, renewal previews, payment-account lookups, and category lookups through one feature-owned query with a preserved last snapshot while refreshing.
+- Loan, subscription, renewal, and related financial mutations invalidate the shared financial-summary query families, keeping dashboard/account/period views from retaining stale facts.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
