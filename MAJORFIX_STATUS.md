@@ -430,6 +430,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The list contract describes pagination, signed debit/credit effects, tags, and category allocations so consumers no longer have to infer journal amounts from the largest line. Create/edit inputs validate positive identifiers, non-negative journal line amounts, and supported activity kinds before ledger services run.
 - Mutation error status narrowing keeps the declared 400/404/409/500 responses aligned with `TransactionMutationError`; CSV import routes and their preview/confirm response contracts remain to be migrated.
 
+### `pending` — analytics route contracts
+
+- Net-worth, burn-rate, runway, trial-balance, dashboard, net-worth trend, period-aware spending trend, account-balance, period-summary, lifestyle, opportunity-cost, and period-summary list routes now declare response schemas and stable operation IDs.
+- Range, period, and account identifiers are validated at the transport boundary. The spending-trend contract preserves coverage status and bucket metadata so skipped/partial periods cannot be mistaken for zero spending by generated clients.
+- Remaining report/PDF routes and the full generated artifact still need to be expanded from the compatibility pilot.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
