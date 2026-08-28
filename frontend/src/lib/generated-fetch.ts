@@ -23,6 +23,10 @@ export async function generatedFetch<T>(url: string, options: RequestInit = {}):
     const body = await response.json().catch(() => ({ message: "Something went wrong" })) as ApiErrorEnvelope;
     throw new ApiError(response.status, body);
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  if (response.status === 204) return { data: undefined, status: response.status, headers: response.headers } as T;
+  const data = await response.json();
+  // Orval's fetch client models successful responses as a small envelope.
+  // Keeping that envelope here gives every generated endpoint the same
+  // status/header metadata without leaking transport details into features.
+  return { data, status: response.status, headers: response.headers } as T;
 }
