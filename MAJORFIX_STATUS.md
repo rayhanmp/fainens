@@ -275,6 +275,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Report retry actions refetch their query directly, and report caches are included in shared financial-summary invalidation after ledger, budget, or recovery mutations.
 - The reports page no longer uses imperative period/summary loading effects or request-version guards; the selected-period query boundary owns stale-response handling.
 
+### `a0426e7` — anomaly review query migration
+
+- Money anomaly candidates are now cached by review status in a feature-owned query, so switching open/resolved/dismissed views does not race route-local loading state.
+- Scans and review decisions invalidate the anomaly family and retain clear action/query errors without mutating financial records.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
