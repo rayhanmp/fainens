@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Archive, Calendar, CalendarCheck2, CalendarClock, ChevronRight, Edit2, History, Lock, LockOpen, Plus, RotateCcw, Wallet } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -10,6 +10,9 @@ import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../features/core/query-keys';
+import { usePeriodDetailQuery, usePeriodsLedgerQuery, useSuggestedPeriodQuery } from '../features/periods/queries';
 
 // TanStack routes are module-level exports rather than React components.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,16 +72,11 @@ function lifecycleClasses(period: Period) {
 // Route modules necessarily export a route object beside their component.
 // eslint-disable-next-line react-refresh/only-export-components
 function PeriodsPage() {
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<Period | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null);
-  const [selectedDetail, setSelectedDetail] = useState<PeriodDetail | null>(null);
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const { confirm } = useConfirm();
-  const [suggestedDates, setSuggestedDates] = useState<{ suggestedName: string; suggestedStartDate: string; suggestedEndDate: string } | null>(null);
   const [formData, setFormData] = useState({ name: '', startDate: '', endDate: '' });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,23 +92,21 @@ function PeriodsPage() {
   const [coverageReviewed, setCoverageReviewed] = useState(false);
   const [coverageError, setCoverageError] = useState('');
 
-  const loadData = useCallback(async () => {
-    try {
-      const [periodsData, suggestion] = await Promise.all([
-        api.periods.list({ includeInactive: showArchived }),
-        api.periods.suggestNext(),
-      ]);
-      setPeriods(periodsData as Period[]);
-      setSuggestedDates(suggestion);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [showArchived]);
-
-  useEffect(() => {
-    setIsLoading(true);
-    void loadData();
-  }, [loadData]);
+  const queryClient = useQueryClient();
+  const periodsQuery = usePeriodsLedgerQuery(showArchived);
+  const suggestionQuery = useSuggestedPeriodQuery();
+  const periods = (periodsQuery.data ?? []) as Period[];
+  const suggestedDates = suggestionQuery.data ?? null;
+  const isLoading = periodsQuery.isLoading;
+  const loadData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.periods.all }),
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.periods.all, 'suggested'] }),
+    ]);
+  };
+  const selectedDetailQuery = usePeriodDetailQuery(selectedPeriod?.id ?? null);
+  const selectedDetail = (selectedDetailQuery.data ?? null) as PeriodDetail | null;
+  const isDetailLoading = selectedDetailQuery.isLoading;
 
   const currentPeriod = useMemo(() => {
     const now = Date.now();
@@ -123,22 +119,12 @@ function PeriodsPage() {
 
   const historyPeriods = useMemo(() => periods.filter((period) => period.id !== currentPeriod?.id), [periods, currentPeriod]);
 
-  const openDetails = async (period: Period) => {
+  const openDetails = (period: Period) => {
     setSelectedPeriod(period);
-    setSelectedDetail(null);
-    setIsDetailLoading(true);
-    try {
-      setSelectedDetail(await api.periods.get(period.id) as PeriodDetail);
-    } catch {
-      setSelectedDetail(null);
-    } finally {
-      setIsDetailLoading(false);
-    }
   };
 
   const closeDetails = () => {
     setSelectedPeriod(null);
-    setSelectedDetail(null);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
