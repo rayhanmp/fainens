@@ -855,6 +855,7 @@ export const api = {
     reopen: (id: number) => fetchApi(`/periods/${id}/reopen`, { method: 'POST' }),
     archive: (id: number) => fetchApi(`/periods/${id}/archive`, { method: 'POST' }),
     restore: (id: number) => fetchApi(`/periods/${id}/restore`, { method: 'POST' }),
+    autoCreate: () => fetchApi<{ id: number; name: string }>('/periods/auto-create', { method: 'POST' }),
     returnPreview: (asOfDate: number) => fetchApi<{
       candidates: Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>;
       payrollDay?: number;

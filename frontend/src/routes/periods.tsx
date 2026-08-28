@@ -7,12 +7,23 @@ import { Modal } from '../components/ui/Modal';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
-import { api } from '../lib/api';
 import { formatCurrency, formatDate, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
-import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '../features/core/query-keys';
-import { usePeriodDetailQuery, usePeriodsLedgerQuery, useSuggestedPeriodQuery } from '../features/periods/queries';
+import {
+  useArchivePeriodMutation,
+  useAutoCreatePeriodMutation,
+  useClosePeriodMutation,
+  useCreatePeriodMutation,
+  usePeriodDetailQuery,
+  usePeriodsLedgerQuery,
+  useReopenPeriodMutation,
+  useRestorePeriodMutation,
+  useReturnBackfillMutation,
+  useReturnPreviewQuery,
+  useSetPeriodCoverageMutation,
+  useSuggestedPeriodQuery,
+  useUpdatePeriodMutation,
+} from '../features/periods/queries';
 
 // TanStack routes are module-level exports rather than React components.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,9 +93,6 @@ function PeriodsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnDate, setReturnDate] = useState(() => toLocalDateInputValue());
-  const [returnPreview, setReturnPreview] = useState<Array<{ name: string; startDate: number; endDate: number; isCurrent: boolean }>>([]);
-  const [returnPayrollDay, setReturnPayrollDay] = useState<number | null>(null);
-  const [returnError, setReturnError] = useState('');
   const [returnStartedAtPeriodStart, setReturnStartedAtPeriodStart] = useState(false);
   const [coveragePeriod, setCoveragePeriod] = useState<Period | null>(null);
   const [coverageStatus, setCoverageStatus] = useState<'partial' | 'complete' | 'skipped'>('partial');
@@ -92,21 +100,32 @@ function PeriodsPage() {
   const [coverageReviewed, setCoverageReviewed] = useState(false);
   const [coverageError, setCoverageError] = useState('');
 
-  const queryClient = useQueryClient();
   const periodsQuery = usePeriodsLedgerQuery(showArchived);
   const suggestionQuery = useSuggestedPeriodQuery();
+  const createPeriodMutation = useCreatePeriodMutation();
+  const updatePeriodMutation = useUpdatePeriodMutation();
+  const autoCreatePeriodMutation = useAutoCreatePeriodMutation();
+  const closePeriodMutation = useClosePeriodMutation();
+  const reopenPeriodMutation = useReopenPeriodMutation();
+  const archivePeriodMutation = useArchivePeriodMutation();
+  const restorePeriodMutation = useRestorePeriodMutation();
+  const returnBackfillMutation = useReturnBackfillMutation();
+  const setCoverageMutation = useSetPeriodCoverageMutation();
   const periods = (periodsQuery.data ?? []) as Period[];
   const suggestedDates = suggestionQuery.data ?? null;
   const isLoading = periodsQuery.isLoading;
-  const loadData = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.periods.all }),
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.periods.all, 'suggested'] }),
-    ]);
-  };
   const selectedDetailQuery = usePeriodDetailQuery(selectedPeriod?.id ?? null);
   const selectedDetail = (selectedDetailQuery.data ?? null) as PeriodDetail | null;
   const isDetailLoading = selectedDetailQuery.isLoading;
+  const returnAsOfDate = snapshotTimestampForLocalDate(returnDate);
+  const returnPreviewQuery = useReturnPreviewQuery(isReturnModalOpen ? returnAsOfDate : null);
+  const returnPreviewData = returnPreviewQuery.data;
+  const returnPreview = returnPreviewData?.reason ? [] : (returnPreviewData?.candidates ?? []);
+  const returnPayrollDay = returnPreviewData?.payrollDay ?? null;
+  const returnError = (returnPreviewData?.reason
+    ?? (returnPreviewQuery.error instanceof Error ? returnPreviewQuery.error.message : returnPreviewQuery.error ? 'Could not preview missing periods.' : ''))
+    || (returnBackfillMutation.error instanceof Error ? returnBackfillMutation.error.message : returnBackfillMutation.error ? 'Could not create the return-period backfill.' : '')
+    || (returnAsOfDate == null && isReturnModalOpen ? 'Choose a current or historical return date' : '');
 
   const currentPeriod = useMemo(() => {
     const now = Date.now();
@@ -136,9 +155,8 @@ function PeriodsPage() {
     }
     setIsSubmitting(true);
     try {
-      if (editingPeriod) await api.periods.update(editingPeriod.id, formData);
-      else await api.periods.create(formData);
-      await loadData();
+      if (editingPeriod) await updatePeriodMutation.mutateAsync({ id: editingPeriod.id, data: formData });
+      else await createPeriodMutation.mutateAsync(formData);
       setIsModalOpen(false);
       setEditingPeriod(null);
     } catch (error) {
@@ -151,9 +169,7 @@ function PeriodsPage() {
   const handleAutoCreate = async () => {
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/periods/auto-create', { method: 'POST', credentials: 'include' });
-      if (!response.ok) throw new Error((await response.json().catch(() => ({ error: 'Could not create the next period' }))).error);
-      await loadData();
+      await autoCreatePeriodMutation.mutateAsync();
     } catch (error) {
       alert((error as Error).message);
     } finally {
@@ -163,21 +179,21 @@ function PeriodsPage() {
 
   const handleClose = async (period: Period) => {
     if (!await confirm({ title: 'Close accounting period', message: `Close ${period.name}? New or backdated transactions and budget changes will be blocked until you reopen it.`, confirmLabel: 'Close period', variant: 'warning' })) return;
-    try { await api.periods.close(period.id); await loadData(); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'closed' }); } catch (error) { alert((error as Error).message); }
+    try { await closePeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'closed' }); } catch (error) { alert((error as Error).message); }
   };
 
   const handleReopen = async (period: Period) => {
     if (!await confirm({ title: 'Reopen accounting period', message: `Reopen ${period.name}? This permits historical corrections and budget changes again.`, confirmLabel: 'Reopen period', variant: 'warning' })) return;
-    try { await api.periods.reopen(period.id); await loadData(); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'open' }); } catch (error) { alert((error as Error).message); }
+    try { await reopenPeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'open' }); } catch (error) { alert((error as Error).message); }
   };
 
   const handleArchive = async (period: Period) => {
     if (!await confirm({ title: 'Archive period', message: `${period.name} will be hidden from everyday period pickers but kept for reports and audit history. You can restore it later.`, confirmLabel: 'Archive period', variant: 'warning' })) return;
-    try { await api.periods.archive(period.id); closeDetails(); await loadData(); } catch (error) { alert((error as Error).message); }
+    try { await archivePeriodMutation.mutateAsync(period.id); closeDetails(); } catch (error) { alert((error as Error).message); }
   };
 
   const handleRestore = async (period: Period) => {
-    try { await api.periods.restore(period.id); await loadData(); if (selectedPeriod?.id === period.id) void openDetails({ ...period, isActive: true }); } catch (error) { alert((error as Error).message); }
+    try { await restorePeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, isActive: true }); } catch (error) { alert((error as Error).message); }
   };
 
   const openModal = (period?: Period) => {
@@ -189,29 +205,20 @@ function PeriodsPage() {
     setIsModalOpen(true);
   };
 
-  const loadReturnPreview = async (date = returnDate) => {
-    setReturnError('');
-    const asOfDate = snapshotTimestampForLocalDate(date);
-    if (asOfDate == null) { setReturnPreview([]); setReturnError('Choose a current or historical return date'); return; }
-    try {
-      const result = await api.periods.returnPreview(asOfDate);
-      setReturnPreview(result.reason ? [] : result.candidates);
-      setReturnPayrollDay(result.payrollDay ?? null);
-      setReturnError(result.reason ?? '');
-    } catch (error) { setReturnPreview([]); setReturnPayrollDay(null); setReturnError((error as Error).message); }
-  };
-
   const openReturnModal = () => {
-    const date = toLocalDateInputValue();
-    setReturnDate(date); setReturnPreview([]); setReturnPayrollDay(null); setReturnError(''); setReturnStartedAtPeriodStart(false); setIsReturnModalOpen(true);
-    void loadReturnPreview(date);
+    setReturnDate(toLocalDateInputValue());
+    setReturnStartedAtPeriodStart(false);
+    returnBackfillMutation.reset();
+    setIsReturnModalOpen(true);
   };
 
   const createReturnBackfill = async () => {
-    const asOfDate = snapshotTimestampForLocalDate(returnDate);
-    if (asOfDate == null) { setReturnError('Choose a current or historical return date'); return; }
+    if (returnAsOfDate == null) return;
     setIsSubmitting(true);
-    try { await api.periods.createReturnBackfill(asOfDate, returnStartedAtPeriodStart ? 'complete' : 'partial'); setIsReturnModalOpen(false); await loadData(); } catch (error) { setReturnError((error as Error).message); } finally { setIsSubmitting(false); }
+    try {
+      await returnBackfillMutation.mutateAsync({ asOfDate: returnAsOfDate, currentPeriodCoverage: returnStartedAtPeriodStart ? 'complete' : 'partial' });
+      setIsReturnModalOpen(false);
+    } catch (error) { /* the mutation error is rendered from its state below */ } finally { setIsSubmitting(false); }
   };
 
   const openCoverage = (period: Period) => {
@@ -226,9 +233,8 @@ function PeriodsPage() {
     if (!coveragePeriod) return;
     setCoverageError('');
     try {
-      await api.periods.setCoverage(coveragePeriod.id, { coverageStatus, reason: coverageReason, reviewed: coverageStatus === 'partial' ? undefined : coverageReviewed });
+      await setCoverageMutation.mutateAsync({ id: coveragePeriod.id, data: { coverageStatus, reason: coverageReason, reviewed: coverageStatus === 'partial' ? undefined : coverageReviewed } });
       setCoveragePeriod(null);
-      await loadData();
       if (selectedPeriod?.id === coveragePeriod.id) void openDetails({ ...coveragePeriod, coverageStatus, coverageReason });
     } catch (error) { setCoverageError((error as Error).message); }
   };
@@ -252,7 +258,7 @@ function PeriodsPage() {
 
     <Modal isOpen={selectedPeriod != null} onClose={closeDetails} title={selectedPeriod?.name ?? 'Period'} subtitle={selectedPeriod ? `${formatDate(selectedPeriod.startDate)} – ${formatDate(selectedPeriod.endDate)}` : undefined} size="xl">{selectedPeriod && <div className="space-y-6"><div className="flex flex-wrap gap-2"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${lifecycleClasses(selectedPeriod)}`}>{lifecycleCopy(selectedPeriod)}</span><span className={`rounded-full px-3 py-1 text-xs font-bold ${coverageClasses(selectedPeriod.coverageStatus)}`}>{coverageCopy(selectedPeriod)}</span></div>{isDetailLoading ? <div className="h-40 animate-pulse rounded-2xl bg-[var(--ref-surface-container)]" /> : <><div className="rounded-2xl bg-[var(--ref-surface-container-low)] p-4"><p className="text-sm font-bold text-[var(--ref-on-surface)]">Activity coverage</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">{selectedPeriod.coverageReason || coverageCopy(selectedPeriod)}.</p></div>{isTracked(selectedPeriod) && selectedDetail?.summary ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-[var(--ref-outline-variant)]/25 p-4"><p className="text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Income</p><p className="mt-2 font-headline text-xl font-extrabold">{formatCurrency(selectedDetail.summary.income)}</p></div><div className="rounded-2xl border border-[var(--ref-outline-variant)]/25 p-4"><p className="text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Spending</p><p className="mt-2 font-headline text-xl font-extrabold">{formatCurrency(selectedDetail.summary.expenses)}</p></div><div className="rounded-2xl border border-[var(--ref-outline-variant)]/25 p-4"><p className="text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Net</p><p className="mt-2 font-headline text-xl font-extrabold">{formatCurrency(selectedDetail.summary.net)}</p></div></div> : <div className="rounded-2xl border border-dashed border-[var(--ref-outline-variant)]/40 p-4 text-sm text-[var(--ref-on-surface-variant)]">Activity totals are not shown because this period’s coverage is not reliable enough to interpret as a financial result.</div>}<div className="flex flex-wrap gap-2"><Link to="/budget" search={{ periodId: String(selectedPeriod.id) }} className="inline-flex items-center rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]">View budget{selectedDetail?.budgets ? ` (${selectedDetail.budgets.length})` : ''}</Link><Link to="/transactions" search={{ periodId: String(selectedPeriod.id) }} className="inline-flex items-center rounded-full border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]">View activity</Link></div><div className="border-t border-[var(--ref-outline-variant)]/20 pt-5"><p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--ref-outline)]">Manage period</p><div className="flex flex-wrap gap-2">{selectedPeriod.isActive && <Button variant="secondary" className="rounded-full" onClick={() => openCoverage(selectedPeriod)}>Review coverage</Button>}{selectedPeriod.isActive && selectedPeriod.status === 'open' && <><Button variant="secondary" className="rounded-full" onClick={() => openModal(selectedPeriod)}><Edit2 className="mr-2 h-4 w-4" />Edit</Button><Button variant="secondary" className="rounded-full" onClick={() => void handleClose(selectedPeriod)}><Lock className="mr-2 h-4 w-4" />Close period</Button></>}{selectedPeriod.isActive && selectedPeriod.status === 'closed' && <><Button variant="secondary" className="rounded-full" onClick={() => void handleReopen(selectedPeriod)}><LockOpen className="mr-2 h-4 w-4" />Reopen</Button><Button variant="secondary" className="rounded-full" onClick={() => void handleArchive(selectedPeriod)}><Archive className="mr-2 h-4 w-4" />Archive</Button></>}{!selectedPeriod.isActive && <Button variant="secondary" className="rounded-full" onClick={() => void handleRestore(selectedPeriod)}><RotateCcw className="mr-2 h-4 w-4" />Restore</Button>}</div>{selectedPeriod.isActive && selectedPeriod.status === 'open' && <p className="mt-3 text-xs text-[var(--ref-on-surface-variant)]">Dates can be changed only before this period has posted activity or budget plans. This protects recorded history from being silently reframed.</p>}</div></>}</div>}</Modal>
 
-    <Modal isOpen={isReturnModalOpen} onClose={() => setIsReturnModalOpen(false)} title="Resume tracking" subtitle="Mark the time away explicitly, then reconcile your real balances. No transactions or opening balances are fabricated."><div className="space-y-4"><Input label="Date you returned / took a balance snapshot" type="date" value={returnDate} max={toLocalDateInputValue()} onChange={(event) => { setReturnDate(event.target.value); void loadReturnPreview(event.target.value); }} />{returnError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{returnError}</p>}{!returnError && <div className="rounded-xl border border-[var(--color-border)] p-3 text-sm">{returnPayrollDay != null && <p className="mb-2 font-semibold text-[var(--ref-on-surface)]">Using your payroll cycle: the {returnPayrollDay}th through the {returnPayrollDay === 1 ? 'last day' : `${returnPayrollDay - 1}th`}.</p>}{returnPreview.length === 0 ? <p className="text-[var(--color-text-secondary)]">No missing periods were found before this date.</p> : <><p className="font-semibold">{returnPreview.length} period{returnPreview.length === 1 ? '' : 's'} will be created</p><ul className="mt-2 max-h-44 space-y-1 overflow-auto text-[var(--color-text-secondary)]">{returnPreview.map((period) => <li key={period.startDate}>{formatDate(period.startDate)} – {formatDate(period.endDate)} · {period.isCurrent ? 'current period remains open' : 'skipped coverage'}</li>)}</ul></>}</div>}{returnPreview.some((period) => period.isCurrent) && !returnError && <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--color-border)] p-3 text-sm"><input type="checkbox" checked={returnStartedAtPeriodStart} onChange={(event) => setReturnStartedAtPeriodStart(event.target.checked)} className="mt-1" /><span><strong className="block">I resumed tracking at the start of this current period</strong><span className="mt-1 block text-[var(--color-text-secondary)]">Mark only this current period as complete. Earlier missing periods stay skipped.</span></span></label>}<p className="text-xs text-[var(--color-text-secondary)]">Next: use Accounts → Reconciliation and choose the return-after-break option to record actual balances.</p><div className="flex justify-end gap-3"><Button variant="secondary" onClick={() => setIsReturnModalOpen(false)}>Cancel</Button><Button onClick={createReturnBackfill} isLoading={isSubmitting} disabled={returnPreview.length === 0 || !!returnError}>{returnStartedAtPeriodStart ? 'Create and mark current complete' : 'Create skipped periods'}</Button></div></div></Modal>
+    <Modal isOpen={isReturnModalOpen} onClose={() => setIsReturnModalOpen(false)} title="Resume tracking" subtitle="Mark the time away explicitly, then reconcile your real balances. No transactions or opening balances are fabricated."><div className="space-y-4"><Input label="Date you returned / took a balance snapshot" type="date" value={returnDate} max={toLocalDateInputValue()} onChange={(event) => { setReturnDate(event.target.value); returnBackfillMutation.reset(); }} />{returnError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{returnError}</p>}{!returnError && <div className="rounded-xl border border-[var(--color-border)] p-3 text-sm">{returnPreviewQuery.isFetching ? <p className="text-[var(--color-text-secondary)]">Checking period coverage…</p> : <>{returnPayrollDay != null && <p className="mb-2 font-semibold text-[var(--ref-on-surface)]">Using your payroll cycle: the {returnPayrollDay}th through the {returnPayrollDay === 1 ? 'last day' : `${returnPayrollDay - 1}th`}.</p>}{returnPreview.length === 0 ? <p className="text-[var(--color-text-secondary)]">No missing periods were found before this date.</p> : <><p className="font-semibold">{returnPreview.length} period{returnPreview.length === 1 ? '' : 's'} will be created</p><ul className="mt-2 max-h-44 space-y-1 overflow-auto text-[var(--color-text-secondary)]">{returnPreview.map((period) => <li key={period.startDate}>{formatDate(period.startDate)} – {formatDate(period.endDate)} · {period.isCurrent ? 'current period remains open' : 'skipped coverage'}</li>)}</ul></>}</>}</div>}{returnPreview.some((period) => period.isCurrent) && !returnError && !returnPreviewQuery.isFetching && <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--color-border)] p-3 text-sm"><input type="checkbox" checked={returnStartedAtPeriodStart} onChange={(event) => setReturnStartedAtPeriodStart(event.target.checked)} className="mt-1" /><span><strong className="block">I resumed tracking at the start of this current period</strong><span className="mt-1 block text-[var(--color-text-secondary)]">Mark only this current period as complete. Earlier missing periods stay skipped.</span></span></label>}<p className="text-xs text-[var(--color-text-secondary)]">Next: use Accounts → Reconciliation and choose the return-after-break option to record actual balances.</p><div className="flex justify-end gap-3"><Button variant="secondary" onClick={() => setIsReturnModalOpen(false)}>Cancel</Button><Button onClick={createReturnBackfill} isLoading={isSubmitting} disabled={returnPreview.length === 0 || !!returnError || returnPreviewQuery.isFetching}>{returnStartedAtPeriodStart ? 'Create and mark current complete' : 'Create skipped periods'}</Button></div></div></Modal>
 
     <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingPeriod ? 'Edit period' : 'New salary period'} subtitle={editingPeriod ? 'Changing dates is allowed only while this period has no posted activity or budget plans.' : 'Create a period boundary for a salary cycle.'}><form onSubmit={handleSubmit} className="space-y-4"><Input label="Period name" value={formData.name} onChange={(event) => setFormData({ ...formData, name: event.target.value })} placeholder="e.g., August 2026" required /><div className="grid grid-cols-2 gap-4"><Input label="Start date" type="date" value={formData.startDate} onChange={(event) => setFormData({ ...formData, startDate: event.target.value })} required /><Input label="End date" type="date" value={formData.endDate} onChange={(event) => setFormData({ ...formData, endDate: event.target.value })} required /></div>{formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}<div className="flex justify-end gap-3 pt-2"><Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button><Button type="submit" isLoading={isSubmitting}>{editingPeriod ? 'Save changes' : 'Create period'}</Button></div></form></Modal>
 
