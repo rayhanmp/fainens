@@ -359,6 +359,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The transaction modal and import flow retain their existing domain validation, multi-line journal handling, and attachment behavior while mutation success invalidates canonical financial summaries.
 - Transaction list actions no longer own a second mutation transport path, reducing the chance of stale dashboard/account data after a successful write.
 
+### `a7f23b8` — subscription mutation hooks
+
+- Subscription create/edit/delete and the explicit post/skip renewal workflow now use feature-owned typed mutations.
+- Successful renewal posting invalidates the same financial-summary families as ordinary transactions; skip-only renewals still refresh the recurring preview without creating ledger rows.
+- Subscription forms retain their existing validation and confirmation UX while dropping duplicate route-level refresh calls.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
