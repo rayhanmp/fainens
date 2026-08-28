@@ -40,7 +40,7 @@ import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationC
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
-import { useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
+import { useAgentConversationQuery, useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useCategoriesQuery } from '../features/categories/queries';
 import { queryKeys } from '../features/core/query-keys';
@@ -72,6 +72,7 @@ type AccountOption = {
 type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
 type AgentTransactionProposal = AgentTransactionActionProposal;
 type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
+type ConversationDetail = Awaited<ReturnType<typeof api.agent.conversations.get>>;
 type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
 
 type ChatMessage =
@@ -82,6 +83,13 @@ type AgentActivityStep = { id: string; label: string; status: 'active' | 'done';
 
 function hasAgentResponse(message: ChatMessage): message is Extract<ChatMessage, { role: 'assistant' }> & { response: AgentResponse } {
   return message.role === 'assistant' && message.response != null;
+}
+
+function toChatMessages(detail: ConversationDetail): ChatMessage[] {
+  return detail.messages.map((message) => message.role === 'assistant'
+    ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
+    : { id: String(message.id), serverId: message.id, role: 'user', text: message.content, createdAt: message.createdAt },
+  );
 }
 
 function ConversationTitle({ conversation, isActive }: { conversation: Conversation; isActive: boolean }) {
@@ -1021,6 +1029,7 @@ function AgentPage() {
   const [startupSelection, setStartupSelection] = useState<StartupSelection>(() => createStartupSelection());
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const conversationQuery = useAgentConversationQuery(activeConversationId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [pendingImages, setPendingImages] = useState<ChatImage[]>([]);
@@ -1031,7 +1040,6 @@ function AgentPage() {
   const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [activityTimeline, setActivityTimeline] = useState<AgentActivityStep[]>([]);
   const [copiedAssistantId, setCopiedAssistantId] = useState<string | null>(null);
-  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [conversationActionId, setConversationActionId] = useState<number | null>(null);
 
   const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
@@ -1067,6 +1075,7 @@ function AgentPage() {
   const memories = memoriesQuery.data?.memories ?? [];
   const memoryLimits = memoriesQuery.data?.limits ?? { maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 };
   const isLoadingMemories = memoriesQuery.isLoading;
+  const isLoadingConversation = activeConversationId != null && conversationQuery.isFetching && !conversationQuery.data;
   const nickname = profileQuery.data?.nickname ?? '';
   const periods = (periodsQuery.data ?? []) as Period[];
   const categories = useMemo(
@@ -1275,34 +1284,27 @@ function AgentPage() {
   }, [draft]);
 
   const refreshConversations = async () => {
-    const result = await queryClient.fetchQuery({
-      queryKey: queryKeys.agent.conversations(true),
-      queryFn: () => api.agent.conversations.list({ includeArchived: true }),
-      staleTime: 0,
-    });
-    return result.conversations;
+    const result = await conversationsQuery.refetch();
+    return result.data?.conversations ?? [];
   };
 
-  const selectConversation = async (conversationId: number) => {
+  const selectConversation = (conversationId: number) => {
     if (conversationId === activeConversationId || isLoadingConversation) return;
-    setIsLoadingConversation(true);
     setError(null);
     setNotice(null);
-    try {
-      const detail = await api.agent.conversations.get(conversationId);
-      setActiveConversationId(detail.conversation.id);
-      setMessages(detail.messages.map((message) => message.role === 'assistant'
-        ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
-        : { id: String(message.id), serverId: message.id, role: 'user', text: message.content, createdAt: message.createdAt },
-      ));
-      setPendingImages([]);
-      setImageError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load that conversation.');
-    } finally {
-      setIsLoadingConversation(false);
-    }
+    setActiveConversationId(conversationId);
+    setMessages([]);
+    setPendingImages([]);
+    setImageError(null);
   };
+
+  useEffect(() => {
+    if (activeConversationId == null || !conversationQuery.data) return;
+    if (conversationQuery.data.conversation.id !== activeConversationId) return;
+    setMessages(toChatMessages(conversationQuery.data));
+    setPendingImages([]);
+    setImageError(null);
+  }, [activeConversationId, conversationQuery.data]);
 
   useEffect(() => {
     if (selectedPeriodId || periods.length === 0) return;
@@ -1333,6 +1335,10 @@ function AgentPage() {
   useEffect(() => {
     if (conversationsQuery.isError) setError('Could not load saved conversations.');
   }, [conversationsQuery.isError]);
+
+  useEffect(() => {
+    if (conversationQuery.isError) setError('Could not load that conversation.');
+  }, [conversationQuery.isError]);
 
   useEffect(() => {
     if (memoriesQuery.isError && isMemoryOpen) setMemoryError('Could not load agent memory.');

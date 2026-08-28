@@ -17,3 +17,9 @@ export const useAgentProfileQuery = () => useQuery({
   queryFn: () => api.agent.profile.get(),
   placeholderData: (previous) => previous,
 });
+
+export const useAgentConversationQuery = (conversationId: number | null) => useQuery({
+  queryKey: queryKeys.agent.conversation(conversationId ?? 0),
+  queryFn: () => api.agent.conversations.get(conversationId!),
+  enabled: conversationId != null,
+});
