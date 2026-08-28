@@ -187,6 +187,27 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Asset-to-asset movements distinguish cash-to-cash transfers from cash-to-investment movements, so the latter are investing flows rather than silently disappearing as wallet transfers. Loan receivable origin/collection is investing; borrowing and debt repayment are financing.
 - Migration `0017` also adds a durable, audited money-anomaly review queue. An authenticated scan only flags likely 100× pairs with the same account/direction/type/normalized description and reconciliation-related historical journals. A reviewer must explicitly resolve or dismiss a candidate with a note; scanning never rescales, deletes, or reverses ledger data.
 
+### `9aa73c3` — API contract and background-job foundation
+
+- Fastify startup is split into an app builder and listener. Contract mode registers routes and Swagger without opening a port or starting maintenance timers.
+- Zod validator/serializer compilers and a checked-in finance-pilot OpenAPI document are in place. Orval generation is reproducible through `generate:api` and `verify:generated`, with one shared credential/error/204-aware fetch transport.
+- BullMQ queue and worker foundations cover cache invalidation, subscription renewal, and salary-posting maintenance. Interval mode remains the default until queue-mode equivalence is rehearsed in deployment.
+
+### `62f84a8` — feature-owned query foundations
+
+- Added canonical query-key factories and feature-owned React Query hooks for accounts, categories, periods, transactions, budgets, dashboard analytics, and agent conversations/memories.
+- Added narrowly scoped Zustand stores for UI preferences, recoverable text drafts, and transient agent-session lifecycle. Server records remain outside Zustand.
+
+### `456a0de` — React Query/Zustand pilot migration
+
+- The Transactions page now derives filtered activity, totals, accounts, categories, tags, and periods from React Query instead of manual `useEffect` request state. Posting, reversal, deletion, import, and modal saves invalidate the shared financial-summary keys, preventing stale dashboard/account views.
+- Agent conversations and memories now use their React Query caches. Conversation mutations update the canonical cache, while streaming text remains local/transient.
+- Agent composer drafts are persisted per conversation and restored when switching chats or reloading. Drafts clear only after a successful send; active conversation, stream cancellation, and pending attachment IDs are exposed through the agent-session store.
+
+### `feb9369` — generated-client transport correctness
+
+- Successful generated API calls now return the `{ data, status, headers }` envelope expected by Orval's fetch client. HTTP errors retain the shared typed `ApiError` envelope and `204` responses are handled explicitly.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
@@ -209,11 +230,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ## Verification completed
 
 - Backend TypeScript checks pass for the changed code; the only remaining diagnostic is the pre-existing optional `puppeteer` module declaration in `scraper-enhanced.ts`.
-- Frontend TypeScript project build passes.
+- Frontend TypeScript project build and Vite production build pass after repairing the local pnpm-linked dependency tree with the project Node 22 runtime. Vite still reports the existing large-bundle advisory and the `.env` `NODE_ENV=production` warning.
 - Drizzle migration journal/schema integrity check passes with migrations `0009`–`0024`, including the cache trigger and category archive lifecycle.
 - Focused report/reconciliation/journal suite passes 9 tests after this wave; an earlier broader pure run passed 49 tests across journal validation, mutation policy, IDR parsing, report CSV behavior, and storage path confinement.
 - The complete DB-backed suite is still blocked locally because installed `better-sqlite3` targets Node ABI 127 while the bundled Node runtime requires ABI 137. Do not treat this environment failure as a test pass.
-- The direct Vite production build is currently blocked by Windows `Access is denied` while loading existing pnpm-linked dependencies; this is an environment/module-store issue, not a TypeScript diagnostic.
+- The local pnpm-linked dependency tree required a Node 22 reinstall because the bundled Node 24 runtime could not complete the Windows module relink. No source or user data was changed by that repair.
 
 ## High-risk work still open
 
