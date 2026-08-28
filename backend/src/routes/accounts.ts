@@ -1,5 +1,6 @@
 import { eq, like, desc, and, inArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { accounts, auditLogs, budgetPlans, categories, reconciliationItems, reconciliationSessions, transactionLines, transactions } from "../db/schema";
@@ -12,6 +13,45 @@ import { createRecoveryReconciliation } from "../services/recovery-reconciliatio
 const accountTypeEnum = ["asset", "liability", "equity", "revenue", "expense"] as const;
 const liquidityClassEnum = ["cash_equivalent", "receivable", "investment", "non_cash"] as const;
 
+const accountIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const accountListQuerySchema = z.object({
+  type: z.enum(accountTypeEnum).optional(),
+  search: z.string().max(100).optional(),
+  includeInactive: z.enum(["true", "false"]).optional(),
+  includeChildren: z.enum(["true", "false"]).optional(),
+});
+const accountBodySchema = z.object({
+  name: z.string().min(1).max(200),
+  type: z.enum(accountTypeEnum),
+  icon: z.string().max(20).nullable().optional(),
+  color: z.string().max(20).nullable().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+  description: z.string().max(500).nullable().optional(),
+  accountNumber: z.string().max(100).nullable().optional(),
+  creditLimit: z.coerce.number().nonnegative().nullable().optional(),
+  interestRate: z.coerce.number().nonnegative().nullable().optional(),
+  billingDate: z.coerce.number().int().min(1).max(31).nullable().optional(),
+  provider: z.string().max(100).nullable().optional(),
+  parentId: z.coerce.number().int().positive().nullable().optional(),
+  liquidityClass: z.enum(liquidityClassEnum).optional(),
+}).passthrough();
+const accountUpdateBodySchema = accountBodySchema.partial().passthrough();
+const accountRecordSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  type: z.enum(accountTypeEnum),
+  balance: z.number().optional(),
+}).passthrough();
+const accountResponseSchemas = {
+  200: z.union([z.array(accountRecordSchema), accountRecordSchema]),
+  201: accountRecordSchema,
+  204: z.void(),
+  400: z.any(),
+  404: z.any(),
+  409: z.any(),
+  500: z.any(),
+};
+
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
   // Remove SQL special characters that could be used for injection
@@ -21,7 +61,9 @@ function sanitizeSearchInput(input: string): string {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/accounts", async (request) => {
+  fastify.get("/api/accounts", {
+    schema: { operationId: "listAccounts", tags: ["accounts"], querystring: accountListQuerySchema, response: accountResponseSchemas },
+  }, async (request) => {
     const { type, search, includeInactive } = request.query as {
       type?: string;
       search?: string;
@@ -61,7 +103,9 @@ export default async function (fastify: FastifyInstance) {
     return accountsWithBalances;
   });
 
-  fastify.get("/api/accounts/:id", async (request, reply) => {
+  fastify.get("/api/accounts/:id", {
+    schema: { operationId: "getAccount", tags: ["accounts"], params: accountIdParamsSchema, querystring: accountListQuerySchema, response: accountResponseSchemas },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const includeChildren = (request.query as { includeChildren?: string }).includeChildren === "true";
 
@@ -82,7 +126,9 @@ export default async function (fastify: FastifyInstance) {
     };
   });
 
-  fastify.post("/api/accounts", async (request, reply) => {
+  fastify.post("/api/accounts", {
+    schema: { operationId: "createAccount", tags: ["accounts"], body: accountBodySchema, response: accountResponseSchemas },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       type: (typeof accountTypeEnum)[number];
@@ -156,7 +202,9 @@ export default async function (fastify: FastifyInstance) {
     reply.code(201).send(account);
   });
 
-  fastify.patch("/api/accounts/:id", async (request, reply) => {
+  fastify.patch("/api/accounts/:id", {
+    schema: { operationId: "updateAccount", tags: ["accounts"], params: accountIdParamsSchema, body: accountUpdateBodySchema, response: accountResponseSchemas },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;

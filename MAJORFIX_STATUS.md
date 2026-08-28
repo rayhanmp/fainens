@@ -407,6 +407,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Contract-mode app construction now sets a contract-only boundary before importing routes. SQLite is not opened during route registration, so OpenAPI generation no longer depends on a writable database or a locally matching `better-sqlite3` native binding.
 - The generated route registry currently exposes all registered endpoints, but most legacy routes still lack explicit Fastify Zod schemas. The committed pilot contract and typed client remain the compatibility source until those route schemas are added; generating the full registry directly is intentionally not committed because Orval cannot safely type schema-less `void` responses.
 
+### `pending` — accounts and categories route contracts
+
+- Accounts list/detail/create/update and category list/detail/create/update/archive/dependency/restore routes now declare Fastify Zod params, query, body, and response contracts with stable operation IDs.
+- Account and category record responses are modeled as passthrough records so existing ledger fields remain compatible while the public contract gains useful required identity/type fields. Error status shapes remain permissive until the shared error envelope is standardized.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.

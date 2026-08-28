@@ -21,11 +21,26 @@ const categorySchema = z.object({
 });
 
 const categoryUpdateSchema = categorySchema.partial();
+const categoryIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const categoryListQuerySchema = z.object({
+  search: z.string().max(100).optional(),
+  includeInactive: z.enum(["true", "false"]).optional(),
+});
+const categoryResponseSchemas = {
+  200: z.union([z.array(categorySchema), categorySchema]),
+  201: categorySchema,
+  204: z.void(),
+  400: z.any(),
+  404: z.any(),
+  500: z.any(),
+};
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/categories", async (request) => {
+  fastify.get("/api/categories", {
+    schema: { operationId: "listCategories", tags: ["categories"], querystring: categoryListQuerySchema, response: categoryResponseSchemas },
+  }, async (request) => {
     const { search, includeInactive } = request.query as { search?: string; includeInactive?: string };
 
     const conditions = includeInactive === "true" ? [] : [eq(categories.isActive, true)];
@@ -44,7 +59,9 @@ export default async function (fastify: FastifyInstance) {
     return allCategories;
   });
 
-  fastify.get("/api/categories/:id", async (request, reply) => {
+  fastify.get("/api/categories/:id", {
+    schema: { operationId: "getCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [category] = await db.select().from(categories).where(eq(categories.id, parseInt(id))).limit(1);
@@ -57,7 +74,9 @@ export default async function (fastify: FastifyInstance) {
     return category;
   });
 
-  fastify.post("/api/categories", async (request, reply) => {
+  fastify.post("/api/categories", {
+    schema: { operationId: "createCategory", tags: ["categories"], body: categorySchema, response: categoryResponseSchemas },
+  }, async (request, reply) => {
     const parseResult = categorySchema.safeParse(request.body);
     
     if (!parseResult.success) {
@@ -104,7 +123,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.patch("/api/categories/:id", async (request, reply) => {
+  fastify.patch("/api/categories/:id", {
+    schema: { operationId: "updateCategory", tags: ["categories"], params: categoryIdParamsSchema, body: categoryUpdateSchema, response: categoryResponseSchemas },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     
     const parseResult = categoryUpdateSchema.safeParse(request.body);
@@ -155,7 +176,9 @@ export default async function (fastify: FastifyInstance) {
     return updated;
   });
 
-  fastify.delete("/api/categories/:id", async (request, reply) => {
+  fastify.delete("/api/categories/:id", {
+    schema: { operationId: "archiveCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db.select().from(categories).where(eq(categories.id, parseInt(id))).limit(1);
@@ -185,7 +208,9 @@ export default async function (fastify: FastifyInstance) {
     reply.code(204).send();
   });
 
-  fastify.get("/api/categories/:id/dependency-preview", async (request, reply) => {
+  fastify.get("/api/categories/:id/dependency-preview", {
+    schema: { operationId: "getCategoryDependencyPreview", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+  }, async (request, reply) => {
     const categoryId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return reply.code(400).send({ error: "Invalid category id" });
     const [category] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1);
@@ -210,7 +235,9 @@ export default async function (fastify: FastifyInstance) {
     };
   });
 
-  fastify.post("/api/categories/:id/restore", async (request, reply) => {
+  fastify.post("/api/categories/:id/restore", {
+    schema: { operationId: "restoreCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+  }, async (request, reply) => {
     const categoryId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return reply.code(400).send({ error: "Invalid category id" });
     const [existing] = await db.select().from(categories).where(eq(categories.id, categoryId)).limit(1);
