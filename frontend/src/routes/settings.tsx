@@ -8,8 +8,12 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { AgentMemory } from '../lib/api';
+import { useAccountsLedgerQuery } from '../features/accounts/queries';
+import { useAgentMemoriesQuery } from '../features/agent/queries';
+import { queryKeys } from '../features/core/query-keys';
 import { cn } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { useConfirm } from '../components/ui/ConfirmDialog';
@@ -94,6 +98,9 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 
 function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const accountsQuery = useAccountsLedgerQuery();
+  const memoriesQuery = useAgentMemoriesQuery();
   const [settings, setSettings] = useState<AppSettings>({
     currency: 'IDR',
     dateFormat: 'DD/MM/YYYY',
@@ -105,13 +112,13 @@ function SettingsPage() {
     theme: 'auto',
     transferFeeRules: [],
   });
-  const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; systemKey?: string | null }>>([]);
-  const [memories, setMemories] = useState<AgentMemory[]>([]);
-  const [memoryLimits, setMemoryLimits] = useState({ maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 });
+  const accounts = (accountsQuery.data ?? []).map(({ id, name, type, systemKey }) => ({ id, name, type, systemKey }));
+  const memories = memoriesQuery.data?.memories ?? [];
+  const memoryLimits = memoriesQuery.data?.limits ?? { maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 };
   const [memoryLabel, setMemoryLabel] = useState('');
   const [memoryContent, setMemoryContent] = useState('');
   const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
-  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const isLoadingMemories = memoriesQuery.isPending && !memoriesQuery.data;
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -139,8 +146,6 @@ function SettingsPage() {
 
   useEffect(() => {
     loadSettings();
-    loadAccounts();
-    loadMemories();
   }, []);
 
   // Auto-save with 500ms debounce
@@ -215,29 +220,6 @@ function SettingsPage() {
     saveTransferFeeRules(next);
   };
 
-  const loadAccounts = async () => {
-    try {
-      const data = await api.accounts.list();
-      setAccounts(data.map(({ id, name, type, systemKey }) => ({ id, name, type, systemKey })));
-    } catch (err) {
-      console.error('Failed to load accounts:', err);
-    }
-  };
-
-  const loadMemories = async () => {
-    setIsLoadingMemories(true);
-    try {
-      const response = await api.agent.memories.list();
-      setMemories(response.memories);
-      setMemoryLimits(response.limits);
-      setMemoryError(null);
-    } catch (err) {
-      setMemoryError(err instanceof Error ? err.message : 'Could not load agent memory.');
-    } finally {
-      setIsLoadingMemories(false);
-    }
-  };
-
   const resetMemoryForm = () => {
     setEditingMemoryId(null);
     setMemoryLabel('');
@@ -256,12 +238,11 @@ function SettingsPage() {
     setMemoryError(null);
     try {
       if (editingMemoryId == null) {
-        const response = await api.agent.memories.create({ label, content });
-        setMemories((current) => [...current, response.memory]);
+        await api.agent.memories.create({ label, content });
       } else {
-        const response = await api.agent.memories.update(editingMemoryId, { label, content });
-        setMemories((current) => current.map((memory) => memory.id === editingMemoryId ? response.memory : memory));
+        await api.agent.memories.update(editingMemoryId, { label, content });
       }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       resetMemoryForm();
     } catch (err) {
       setMemoryError(err instanceof Error ? err.message : 'Could not save agent memory.');
@@ -288,7 +269,7 @@ function SettingsPage() {
     setMemoryError(null);
     try {
       await api.agent.memories.delete(memory.id);
-      setMemories((current) => current.filter((candidate) => candidate.id !== memory.id));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       if (editingMemoryId === memory.id) resetMemoryForm();
     } catch (err) {
       setMemoryError(err instanceof Error ? err.message : 'Could not delete agent memory.');
