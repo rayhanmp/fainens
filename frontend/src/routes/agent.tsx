@@ -40,8 +40,11 @@ import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationC
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
-import { useAgentConversationsQuery, useAgentMemoriesQuery } from '../features/agent/queries';
+import { useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
+import { useAccountsLedgerQuery } from '../features/accounts/queries';
+import { useCategoriesQuery } from '../features/categories/queries';
 import { queryKeys } from '../features/core/query-keys';
+import { usePeriodsLedgerQuery } from '../features/periods/queries';
 
 export const Route = createFileRoute('/agent')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -1011,11 +1014,11 @@ function AgentPage() {
   const queryClient = useQueryClient();
   const conversationsQuery = useAgentConversationsQuery(true);
   const memoriesQuery = useAgentMemoriesQuery();
+  const profileQuery = useAgentProfileQuery();
+  const periodsQuery = usePeriodsLedgerQuery(true);
+  const categoriesQuery = useCategoriesQuery();
+  const accountsQuery = useAccountsLedgerQuery();
   const [startupSelection, setStartupSelection] = useState<StartupSelection>(() => createStartupSelection());
-  const [nickname, setNickname] = useState('');
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1031,9 +1034,6 @@ function AgentPage() {
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [conversationActionId, setConversationActionId] = useState<number | null>(null);
 
-  useEffect(() => {
-    setStartupSelection(createStartupSelection(nickname));
-  }, [nickname]);
   const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
   const [conversationMenuPlacement, setConversationMenuPlacement] = useState<'above' | 'below'>('below');
   const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
@@ -1058,6 +1058,7 @@ function AgentPage() {
   const conversationListRef = useRef<HTMLDivElement>(null);
   const agentRequestRef = useRef<AbortController | null>(null);
   const conversationLoadMoreTimerRef = useRef<number | null>(null);
+  const lastProfileNicknameRef = useRef<string | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [visibleConversationCount, setVisibleConversationCount] = useState(CONVERSATIONS_PAGE_SIZE);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
@@ -1066,6 +1067,27 @@ function AgentPage() {
   const memories = memoriesQuery.data?.memories ?? [];
   const memoryLimits = memoriesQuery.data?.limits ?? { maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 };
   const isLoadingMemories = memoriesQuery.isLoading;
+  const nickname = profileQuery.data?.nickname ?? '';
+  const periods = (periodsQuery.data ?? []) as Period[];
+  const categories = useMemo(
+    () => (categoriesQuery.data ?? []).map((category) => ({ id: category.id, name: category.name })),
+    [categoriesQuery.data],
+  );
+  const accounts = useMemo(
+    () => (accountsQuery.data ?? []).map((account) => ({
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      isActive: account.isActive,
+      liquidityClass: account.liquidityClass,
+    })),
+    [accountsQuery.data],
+  );
+
+  useEffect(() => {
+    setStartupSelection(createStartupSelection(nickname));
+  }, [nickname]);
+
   type ConversationsResponse = Awaited<ReturnType<typeof api.agent.conversations.list>>;
   const updateConversationCache = (update: (current: Conversation[]) => Conversation[]) => {
     queryClient.setQueryData<ConversationsResponse>(queryKeys.agent.conversations(true), (current) => current ? { ...current, conversations: update(current.conversations) } : current);
@@ -1094,6 +1116,14 @@ function AgentPage() {
   useEffect(() => {
     setSessionAttachmentIds(pendingImages.map((image) => image.id));
   }, [pendingImages, setSessionAttachmentIds]);
+
+  useEffect(() => {
+    if (!profileQuery.data) return;
+    if (lastProfileNicknameRef.current == null || lastProfileNicknameRef.current === nickname) {
+      setNicknameDraft(nickname);
+    }
+    lastProfileNicknameRef.current = nickname;
+  }, [nickname, profileQuery.data]);
 
   useEffect(() => {
     if (lastDraftKeyRef.current !== draftKey) {
@@ -1158,27 +1188,6 @@ function AgentPage() {
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, [editingUserMessageId, editingUserMessageText]);
 
-  const loadMemories = async () => {
-    setMemoryError(null);
-    try {
-      await queryClient.refetchQueries({ queryKey: queryKeys.agent.memories });
-    } catch (caught) {
-      setMemoryError(caught instanceof Error ? caught.message : 'Could not load agent memory.');
-    }
-  };
-
-  const loadProfile = async (showError = false) => {
-    try {
-      const response = await api.agent.profile.get();
-      const value = response.nickname ?? '';
-      setNickname(value);
-      setNicknameDraft(value);
-      setStartupSelection(createStartupSelection(value));
-    } catch (caught) {
-      if (showError) setMemoryError(caught instanceof Error ? caught.message : 'Could not load your preferred name.');
-    }
-  };
-
   const saveNickname = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = nicknameDraft.trim();
@@ -1191,8 +1200,8 @@ function AgentPage() {
     try {
       const response = await api.agent.profile.update(value || null);
       const saved = response.nickname ?? '';
-      setNickname(saved);
       setNicknameDraft(saved);
+      queryClient.setQueryData(queryKeys.agent.profile, response);
       setStartupSelection(createStartupSelection(saved));
       setNotice(saved ? 'Preferred name updated.' : 'Preferred name cleared.');
     } catch (caught) {
@@ -1296,35 +1305,21 @@ function AgentPage() {
   };
 
   useEffect(() => {
-    void api.periods.list()
-      .then((data) => {
-        const availablePeriods = data as Period[];
-        setPeriods(availablePeriods);
-        const active = availablePeriods.find((period) => period.isActive) ?? availablePeriods[0];
-        if (active) setSelectedPeriodId(String(active.id));
-      })
-      .catch(() => setError('Could not load accounting periods. You can still ask across recorded history.'));
-    void api.categories.list()
-      .then((data) => setCategories(data.map((category) => ({ id: category.id, name: category.name }))))
-      .catch(() => undefined);
-    void api.accounts.list()
-      .then((data) => setAccounts(data.map((account) => ({
-        id: account.id,
-        name: account.name,
-        type: account.type,
-        isActive: account.isActive,
-        liquidityClass: account.liquidityClass,
-      }))))
-      .catch(() => undefined);
-    void loadProfile();
-  }, []);
+    if (selectedPeriodId || periods.length === 0) return;
+    const active = periods.find((period) => period.isActive) ?? periods[0];
+    if (active) setSelectedPeriodId(String(active.id));
+  }, [periods, selectedPeriodId]);
+
+  useEffect(() => {
+    if (periodsQuery.isError) setError('Could not load accounting periods. You can still ask across recorded history.');
+  }, [periodsQuery.isError]);
 
   useEffect(() => {
     if (isMemoryOpen) {
-      void loadMemories();
-      void loadProfile(true);
+      void memoriesQuery.refetch();
+      void profileQuery.refetch();
     }
-  }, [isMemoryOpen]);
+  }, [isMemoryOpen, memoriesQuery.refetch, profileQuery.refetch]);
 
   useEffect(() => {
     if (search.prompt?.trim()) {
@@ -1342,6 +1337,10 @@ function AgentPage() {
   useEffect(() => {
     if (memoriesQuery.isError && isMemoryOpen) setMemoryError('Could not load agent memory.');
   }, [isMemoryOpen, memoriesQuery.isError]);
+
+  useEffect(() => {
+    if (profileQuery.isError && isMemoryOpen) setMemoryError('Could not load your preferred name.');
+  }, [isMemoryOpen, profileQuery.isError]);
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId),

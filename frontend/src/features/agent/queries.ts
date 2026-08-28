@@ -11,3 +11,9 @@ export const useAgentMemoriesQuery = () => useQuery({
   queryFn: () => api.agent.memories.list(),
   placeholderData: (previous) => previous,
 });
+
+export const useAgentProfileQuery = () => useQuery({
+  queryKey: queryKeys.agent.profile,
+  queryFn: () => api.agent.profile.get(),
+  placeholderData: (previous) => previous,
+});

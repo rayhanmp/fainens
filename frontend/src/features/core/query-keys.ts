@@ -37,7 +37,7 @@ export const queryKeys = {
     subscriptions: ["dashboard", "subscriptions"] as const,
     period: (periodId: number) => ["dashboard", "period", periodId] as const,
   },
-  agent: { all: ["agent"] as const, conversations: (archived = false) => ["agent", "conversations", { archived }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const },
+  agent: { all: ["agent"] as const, conversations: (archived = false) => ["agent", "conversations", { archived }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const, profile: ["agent", "profile"] as const },
 } as const;
 
 /** Financial mutations can change every summarized view, even when their local entity key is precise. */
