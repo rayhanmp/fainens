@@ -58,6 +58,10 @@ export const journalFormSchema = z.object({
   categoryAllocations: z.array(categoryAllocationSchema).max(100),
 });
 
+export type JournalFormValues = z.infer<typeof journalFormSchema>;
+export type JournalFormLineValues = JournalFormValues['lines'][number];
+export type CategoryAllocationValues = JournalFormValues['categoryAllocations'][number];
+
 export const editMetadataSchema = z.object({
   date: z.string().trim().min(1, 'Choose a date'),
   time: z.string().trim().min(1, 'Choose a time'),

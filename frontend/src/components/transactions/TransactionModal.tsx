@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -45,6 +45,8 @@ import {
   journalFormSchema,
   simpleTransactionFormSchema,
   type EditMetadataValues,
+  type JournalFormLineValues,
+  type JournalFormValues,
 } from '../../features/transactions/schemas';
 
 export type WalletAccount = {
@@ -91,15 +93,6 @@ type TxLine = {
   credit: number;
   description?: string;
   cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
-};
-
-type CashFlowClass = 'operating' | 'investing' | 'financing' | 'transfer';
-type JournalFormLine = {
-  accountId: string;
-  debit: string;
-  credit: string;
-  description: string;
-  cashFlowClass: CashFlowClass | '';
 };
 
 export type EditingTransaction = {
@@ -326,18 +319,25 @@ export function TransactionModal({
   /** Attachment URLs for thumbnails (id -> url) */
   const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
 
-  const [journalForm, setJournalForm] = useState({
-    dateTime: toDatetimeLocal(),
-    description: '',
-    notes: '',
-    place: '',
-    tagIds: [] as number[],
-    lines: [
-      { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
-      { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
-    ] as JournalFormLine[],
-    categoryAllocations: [] as Array<{ categoryId: string; amount: string }>,
+  const journalForm = useForm<JournalFormValues>({
+    resolver: zodResolver(journalFormSchema),
+    defaultValues: {
+      dateTime: toDatetimeLocal(),
+      description: '',
+      notes: '',
+      place: '',
+      tagIds: [],
+      lines: [
+        { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
+        { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
+      ],
+      categoryAllocations: [],
+    },
+    mode: 'onSubmit',
   });
+  const journalLines = useFieldArray({ control: journalForm.control, name: 'lines' });
+  const journalAllocations = useFieldArray({ control: journalForm.control, name: 'categoryAllocations' });
+  const journalValues = journalForm.watch();
 
   // AI mode state
   const [aiInput, setAiInput] = useState('');
@@ -573,7 +573,7 @@ export function TransactionModal({
         categoryId: editingTransaction.categoryId?.toString() || '',
         tagIds: editingTransaction.tags.map((t) => t.tagId),
       });
-      setJournalForm({
+      journalForm.reset({
         dateTime: toDatetimeLocal(new Date(editingTransaction.date)),
         description: editingTransaction.description,
         notes: editingTransaction.notes || '',
@@ -642,7 +642,7 @@ export function TransactionModal({
       setAttachmentUrls({});
       setPendingAttachments([]);
       setCategoryRecommendation(null);
-      setJournalForm({
+      journalForm.reset({
         dateTime: toDatetimeLocal(),
         description: '',
         notes: '',
@@ -1225,92 +1225,80 @@ export function TransactionModal({
   };
 
   const addJournalLine = () => {
-    setJournalForm({
-      ...journalForm,
-      lines: [...journalForm.lines, { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' }],
-    });
+    journalLines.append({ accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' });
   };
 
   const removeJournalLine = (index: number) => {
-    if (journalForm.lines.length <= 2) {
+    if (journalLines.fields.length <= 2) {
       setFormError('Journal entry must have at least 2 lines');
       return;
     }
-    setJournalForm({
-      ...journalForm,
-      lines: journalForm.lines.filter((_, i) => i !== index),
-    });
+    journalLines.remove(index);
   };
 
-  const updateJournalLine = (index: number, field: keyof JournalFormLine, value: string) => {
-    const newLines = [...journalForm.lines];
-    const line = newLines[index];
+  const updateJournalLine = (index: number, field: keyof JournalFormLineValues, value: string) => {
+    const line = journalValues.lines[index];
+    if (!line) return;
     if (field === 'accountId') {
       const account = accounts.find((item) => item.id.toString() === value);
-      newLines[index] = {
-        ...line,
-        accountId: value,
-        cashFlowClass: account?.liquidityClass === 'cash_equivalent' ? line.cashFlowClass : '',
-      };
+      journalForm.setValue(`lines.${index}.accountId`, value, { shouldDirty: true });
+      journalForm.setValue(
+        `lines.${index}.cashFlowClass`,
+        account?.liquidityClass === 'cash_equivalent' ? line.cashFlowClass : '',
+        { shouldDirty: true },
+      );
     } else {
-      newLines[index] = { ...line, [field]: value };
+      journalForm.setValue(`lines.${index}.${field}`, value, { shouldDirty: true });
     }
-    setJournalForm({ ...journalForm, lines: newLines });
   };
 
-  const calculateJournalTotals = () => {
-    const totalDebit = journalForm.lines.reduce(
+  const calculateJournalTotals = (values: JournalFormValues = journalValues) => {
+    const totalDebit = values.lines.reduce(
       (sum, line) => sum + (parseInt(line.debit, 10) || 0),
       0,
     );
-    const totalCredit = journalForm.lines.reduce(
+    const totalCredit = values.lines.reduce(
       (sum, line) => sum + (parseInt(line.credit, 10) || 0),
       0,
     );
     return { totalDebit, totalCredit, isBalanced: totalDebit === totalCredit && totalDebit > 0 };
   };
 
-  const calculateJournalNetExpense = () => journalForm.lines.reduce((sum, line) => {
+  const calculateJournalNetExpense = (values: JournalFormValues = journalValues) => values.lines.reduce((sum, line) => {
     const account = accounts.find((item) => item.id.toString() === line.accountId);
     if (account?.type !== 'expense') return sum;
     return sum + (parseInt(line.debit, 10) || 0) - (parseInt(line.credit, 10) || 0);
   }, 0);
 
   const updateCategoryAllocation = (index: number, field: 'categoryId' | 'amount', value: string) => {
-    setJournalForm({
-      ...journalForm,
-      categoryAllocations: journalForm.categoryAllocations.map((allocation, allocationIndex) =>
-        allocationIndex === index ? { ...allocation, [field]: value } : allocation,
-      ),
-    });
+    journalForm.setValue(`categoryAllocations.${index}.${field}`, value, { shouldDirty: true });
   };
 
   const addCategoryAllocation = () => {
-    setJournalForm({ ...journalForm, categoryAllocations: [...journalForm.categoryAllocations, { categoryId: '', amount: '' }] });
+    journalAllocations.append({ categoryId: '', amount: '' });
   };
 
   const removeCategoryAllocation = (index: number) => {
-    setJournalForm({ ...journalForm, categoryAllocations: journalForm.categoryAllocations.filter((_, allocationIndex) => allocationIndex !== index) });
+    journalAllocations.remove(index);
   };
 
-  const handleJournalSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleJournalSubmit = journalForm.handleSubmit(async (values) => {
     setFormError('');
 
-    const journalValidation = journalFormSchema.safeParse(journalForm);
+    const journalValidation = journalFormSchema.safeParse(values);
     if (!journalValidation.success) {
       setFormError(formatValidationError(journalValidation.error));
       return;
     }
 
-    const { totalDebit, totalCredit, isBalanced } = calculateJournalTotals();
+    const { totalDebit, totalCredit, isBalanced } = calculateJournalTotals(values);
 
     if (!isBalanced) {
       setFormError(`Journal not balanced: Debits ${totalDebit} ≠ Credits ${totalCredit}`);
       return;
     }
 
-    const validLines = journalForm.lines.filter(
+    const validLines = values.lines.filter(
       (line) =>
         line.accountId && (parseInt(line.debit, 10) > 0 || parseInt(line.credit, 10) > 0),
     );
@@ -1328,8 +1316,8 @@ export function TransactionModal({
       return;
     }
 
-    const netExpense = calculateJournalNetExpense();
-    const allocationRows = journalForm.categoryAllocations.filter((allocation) => allocation.categoryId || allocation.amount);
+    const netExpense = calculateJournalNetExpense(values);
+    const allocationRows = values.categoryAllocations.filter((allocation) => allocation.categoryId || allocation.amount);
     const parsedAllocations = allocationRows.map((allocation) => ({
       categoryId: parseInt(allocation.categoryId, 10),
       amount: parseInt(allocation.amount, 10),
@@ -1350,13 +1338,13 @@ export function TransactionModal({
 
     setIsSubmitting(true);
     try {
-      const dateIso = new Date(journalForm.dateTime).toISOString();
+      const dateIso = new Date(values.dateTime).toISOString();
       await api.transactions.create({
         date: dateIso,
-        description: journalForm.description,
-        notes: journalForm.notes || null,
-        place: journalForm.place || null,
-        tagIds: journalForm.tagIds,
+        description: values.description,
+        notes: values.notes || null,
+        place: values.place || null,
+        tagIds: values.tagIds,
         lines: validLines.map((line) => ({
           accountId: parseInt(line.accountId, 10),
           debit: parseInt(line.debit, 10) || 0,
@@ -1373,7 +1361,7 @@ export function TransactionModal({
     } finally {
       setIsSubmitting(false);
     }
-  };
+  });
 
   const allAccountsForJournal = accounts.filter((a) => !a.systemKey);
 
@@ -2141,8 +2129,8 @@ export function TransactionModal({
               </label>
               <input
                 type="datetime-local"
-                value={journalForm.dateTime}
-                onChange={(e) => setJournalForm({ ...journalForm, dateTime: e.target.value })}
+                value={journalValues.dateTime}
+                onChange={(e) => journalForm.setValue('dateTime', e.target.value, { shouldDirty: true })}
                 className={cn('brutalist-input w-full', stitchSelect)}
                 required
               />
@@ -2150,8 +2138,8 @@ export function TransactionModal({
 
             <Input
               label="Description"
-              value={journalForm.description}
-              onChange={(e) => setJournalForm({ ...journalForm, description: e.target.value })}
+              value={journalValues.description}
+              onChange={(e) => journalForm.setValue('description', e.target.value, { shouldDirty: true })}
               placeholder="e.g., Monthly salary payment"
               className="rounded-xl border-none bg-[var(--ref-surface-container-low)] px-3 py-3"
               required
@@ -2161,8 +2149,9 @@ export function TransactionModal({
               <label className="text-sm font-semibold text-[var(--color-text-primary)]">
                 Journal lines (debits = credits)
               </label>
-              {journalForm.lines.map((line, index) => (
-                <div key={index} className="flex gap-2 items-start flex-wrap">
+              {journalLines.fields.map((field, index) => {
+                const line = journalValues.lines[index] ?? field;
+                return <div key={field.id} className="flex gap-2 items-start flex-wrap">
                   {(() => {
                     const selectedAccount = allAccountsForJournal.find((account) => account.id.toString() === line.accountId);
                     return <>
@@ -2215,8 +2204,8 @@ export function TransactionModal({
                   </button>
                     </>;
                   })()}
-                </div>
-              ))}
+                </div>;
+              })}
               <Button type="button" variant="secondary" onClick={addJournalLine} size="sm" className="rounded-full">
                 <Plus className="w-4 h-4 mr-1" />
                 Add line
@@ -2233,10 +2222,11 @@ export function TransactionModal({
                   <Plus className="mr-1 h-4 w-4" /> Add category
                 </Button>
               </div>
-              {journalForm.categoryAllocations.length === 0 ? (
+              {journalValues.categoryAllocations.length === 0 ? (
                 <p className="text-xs text-[var(--color-muted)]">No split added. Expense journals must add allocations before recording.</p>
-              ) : journalForm.categoryAllocations.map((allocation, index) => (
-                <div key={index} className="flex flex-wrap items-center gap-2">
+              ) : journalAllocations.fields.map((field, index) => {
+                const allocation = journalValues.categoryAllocations[index] ?? field;
+                return <div key={field.id} className="flex flex-wrap items-center gap-2">
                   <Select
                     value={allocation.categoryId}
                     onChange={(e) => updateCategoryAllocation(index, 'categoryId', e.target.value)}
@@ -2253,11 +2243,11 @@ export function TransactionModal({
                   <button type="button" onClick={() => removeCategoryAllocation(index)} className="rounded-lg p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10" aria-label="Remove category allocation">
                     <Trash2 className="h-4 w-4" />
                   </button>
-                </div>
-              ))}
+                </div>;
+              })}
               {(() => {
                 const netExpense = calculateJournalNetExpense();
-                const allocated = journalForm.categoryAllocations.reduce((sum, allocation) => sum + (parseInt(allocation.amount, 10) || 0), 0);
+                const allocated = journalValues.categoryAllocations.reduce((sum, allocation) => sum + (parseInt(allocation.amount, 10) || 0), 0);
                 return <p className={cn('text-xs font-semibold', netExpense === allocated ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]')}>
                   Allocated {formatCurrency(allocated)} · Net expense {formatCurrency(netExpense)}
                 </p>;
@@ -2291,8 +2281,8 @@ export function TransactionModal({
               </h3>
               <Input
                 label="Place (optional)"
-                value={journalForm.place}
-                onChange={(e) => setJournalForm({ ...journalForm, place: e.target.value })}
+                value={journalValues.place}
+                onChange={(e) => journalForm.setValue('place', e.target.value, { shouldDirty: true })}
                 placeholder="e.g. Office, Client Site, Online"
                 className="rounded-xl border-none bg-[var(--ref-surface-container-lowest)] px-3 py-2.5 text-sm"
               />
@@ -2304,8 +2294,8 @@ export function TransactionModal({
                 <textarea
                   className="w-full min-h-[80px] rounded-xl border-none bg-[var(--ref-surface-container-lowest)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
                   placeholder="Write a note..."
-                  value={journalForm.notes}
-                  onChange={(e) => setJournalForm({ ...journalForm, notes: e.target.value })}
+                  value={journalValues.notes}
+                  onChange={(e) => journalForm.setValue('notes', e.target.value, { shouldDirty: true })}
                 />
               </div>
               <div>
@@ -2318,14 +2308,14 @@ export function TransactionModal({
                       key={tag.id}
                       type="button"
                       onClick={() => {
-                        const next = journalForm.tagIds.includes(tag.id)
-                          ? journalForm.tagIds.filter((id) => id !== tag.id)
-                          : [...journalForm.tagIds, tag.id];
-                        setJournalForm({ ...journalForm, tagIds: next });
+                        const next = journalValues.tagIds.includes(tag.id)
+                          ? journalValues.tagIds.filter((id) => id !== tag.id)
+                          : [...journalValues.tagIds, tag.id];
+                        journalForm.setValue('tagIds', next, { shouldDirty: true });
                       }}
                       className={cn(
                         'cursor-pointer px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
-                        journalForm.tagIds.includes(tag.id)
+                        journalValues.tagIds.includes(tag.id)
                           ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
                           : 'border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)]',
                       )}
