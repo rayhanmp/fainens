@@ -460,11 +460,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The coverage body explicitly supports `partial`, `complete`, and `skipped` with a reviewed reason, keeping the long-absence workflow representable without implying zero activity.
 - Period route registration is now fully contract-covered; CSV imports and the remaining domain workflows are the next schema gaps.
 
-### `pending` — agent session route contracts
+### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.
 - Memory limits, nickname bounds, pinned/archive fields, message roles, and timestamp-normalized conversation views are part of the public contract, keeping durable session state separate from live stream transport.
-- Agent tool-call, preparation/approval actions, context, query, streaming, and budget-plan endpoints remain intentionally separate for a follow-up contract slice because they carry polymorphic tool payloads and SSE semantics.
+- Tool execution, durable preparation/approval actions, context retrieval, non-streaming query, SSE query streaming, and budget-plan preview now also declare their request contracts, operation IDs, and bounded response/error envelopes. The streaming endpoint intentionally declares only request/error metadata because its successful response is an SSE event stream rather than JSON.
+- Polymorphic tool payloads remain represented as validated `unknown` values at this boundary; domain services continue to validate each tool's input and enforce read/write authorization. Generated-client adapters should preserve that distinction instead of widening financial records into client-side state.
 
 ### `pending` — budget outlook and template contracts
 

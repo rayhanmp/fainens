@@ -54,6 +54,42 @@ const agentMessageSchema = z.object({ id: z.number().int(), role: z.enum(["user"
 const agentConversationListSchema = z.object({ conversations: z.array(agentConversationSchema), includeArchived: z.boolean() }).passthrough();
 const agentConversationDetailSchema = z.object({ conversation: agentConversationSchema, messages: z.array(agentMessageSchema) }).passthrough();
 const agentActionIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const agentActionKindSchema = z.enum(["budget_plan_upsert", "transaction_journal_create"]);
+const agentActionViewSchema = z.object({
+  pendingActionId: z.number().int(), approvalId: z.number().int(), kind: agentActionKindSchema, status: z.string(), input: z.unknown(),
+  assumptions: z.array(z.string()), missingFields: z.array(z.string()), details: z.unknown(), baseFinancialRevision: z.number().int(),
+  createdAt: z.number(), expiresAt: z.number(), approvalToken: z.string().nullable().optional(), tokenAlreadyIssued: z.boolean(),
+}).passthrough();
+const agentActionListItemSchema = agentActionViewSchema.omit({ details: true, approvalToken: true, tokenAlreadyIssued: true }).extend({ conversationId: z.number().int().nullable() }).passthrough();
+const agentQueryResponseSchema = z.object({
+  answer: z.string().nullable().optional(), llmAvailable: z.boolean(), context: z.unknown().nullable().optional(), scope: z.unknown().optional(), revision: z.number().int().optional(),
+  conversationId: z.number().int().nullable().optional(), userMessageId: z.number().int().nullable().optional(), toolCalls: z.array(z.unknown()), toolResults: z.array(z.unknown()),
+  pendingActions: z.array(z.unknown()).optional(), clarifications: z.array(z.unknown()).optional(), message: z.string().optional(),
+}).passthrough();
+const agentActionPrepareBodySchema = z.object({
+  conversationId: z.number().int().positive().nullable().optional(), kind: agentActionKindSchema, input: z.unknown(),
+  assumptions: z.array(z.string().trim().min(1).max(500)).max(20).optional(), missingFields: z.array(z.string().trim().min(1).max(500)).max(20).optional(), idempotencyKey: z.string().trim().min(8).max(200).optional(),
+}).passthrough();
+const agentQueryBodySchema = z.object({
+  question: z.string().trim().min(2).max(2000), periodId: z.union([z.string(), z.number()]).optional(), startDate: z.union([z.string(), z.number()]).optional(), endDate: z.union([z.string(), z.number()]).optional(),
+  conversationId: z.union([z.string(), z.number()]).optional(), replaceMessageId: z.union([z.string(), z.number()]).optional(),
+  images: z.array(z.object({ filename: z.string(), mimeType: z.string(), data: z.string() }).passthrough()).max(MAX_AGENT_IMAGE_COUNT).optional(),
+}).passthrough();
+const agentApprovalBodySchema = z.object({ token: z.string().min(20).max(200) }).passthrough();
+const agentStatusSchema = z.object({ status: z.string(), approvalId: z.number().int().optional(), receipt: z.unknown().optional(), replay: z.boolean().optional(), restored: z.boolean().optional(), approval: z.unknown().optional(), action: z.unknown().optional() }).passthrough();
+const agentBudgetPlanBodySchema = z.object({
+  periodId: z.union([z.string(), z.number()]).optional(),
+  targetSavingsRate: z.union([z.string(), z.number()]).optional(),
+}).passthrough();
+const agentBudgetPlanResponseSchema = z.object({
+  revision: z.number().int(), period: z.unknown(), targetSavingsRate: z.number(), incomeCents: z.number().int(), targetSpendCents: z.number().int(),
+  recommendations: z.array(z.object({ categoryId: z.number().int().nullable(), category: z.string(), suggestedAmountCents: z.number().int(), basis: z.string() }).passthrough()),
+  requiresConfirmation: z.boolean(), writesPerformed: z.boolean(),
+}).passthrough();
+type AgentRouteErrorStatus = 400 | 401 | 404 | 409 | 410 | 500;
+function agentRouteErrorStatus(status: number): AgentRouteErrorStatus {
+  return status === 400 || status === 401 || status === 404 || status === 409 || status === 410 || status === 500 ? status : 500;
+}
 
 const toolDefinitionMap = new Map(agentToolDefinitions.map((definition) => [definition.name, definition]));
 const modelTools: AgentChatTool[] = agentToolDefinitions.map((definition) => ({
@@ -1214,7 +1250,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/agent/tool-call", async (request, reply) => {
+  fastify.post("/api/agent/tool-call", {
+    schema: { operationId: "executeAgentTool", tags: ["agent"], body: z.object({ name: z.string().min(1), input: z.unknown().optional() }).passthrough(), response: { 200: z.object({ tool: z.string(), revision: z.number().int(), readOnly: z.boolean(), data: z.unknown() }).passthrough(), 400: agentErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as { name?: unknown; input?: unknown };
     if (typeof body?.name !== "string") return reply.code(400).send({ error: "name is required" });
     try {
@@ -1229,7 +1267,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
    * a one-time bearer token; the UI must show the normalized proposal and send
    * that token back only after the user explicitly confirms it.
    */
-  fastify.post("/api/agent/actions/prepare", async (request, reply) => {
+  fastify.post("/api/agent/actions/prepare", {
+    schema: { operationId: "prepareAgentAction", tags: ["agent"], body: agentActionPrepareBodySchema, response: { 201: agentActionViewSchema, 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema, 409: agentErrorSchema, 410: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       conversationId?: unknown;
       kind?: unknown;
@@ -1251,12 +1291,14 @@ export default async function agentRoutes(fastify: FastifyInstance) {
         idempotencyKey: body?.idempotencyKey,
       }));
     } catch (error) {
-      const status = error instanceof AgentActionError ? error.statusCode : 400;
+      const status = agentRouteErrorStatus(error instanceof AgentActionError ? error.statusCode : 400);
       return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not prepare agent action" });
     }
   });
 
-  fastify.get("/api/agent/actions", async (request, reply) => {
+  fastify.get("/api/agent/actions", {
+    schema: { operationId: "listAgentActions", tags: ["agent"], querystring: z.object({ conversationId: z.string().regex(/^\d+$/).optional() }), response: { 200: z.object({ actions: z.array(agentActionListItemSchema) }).passthrough(), 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema, 409: agentErrorSchema, 410: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
       const query = request.query as { conversationId?: string };
@@ -1266,47 +1308,55 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       }
       return { actions: await listAgentActions(ownerEmail, conversationId) };
     } catch (error) {
-      const status = error instanceof AgentActionError ? error.statusCode : 400;
+      const status = agentRouteErrorStatus(error instanceof AgentActionError ? error.statusCode : 400);
       return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not list agent actions" });
     }
   });
 
-  fastify.post("/api/agent/approvals/:id/execute", async (request, reply) => {
+  fastify.post("/api/agent/approvals/:id/execute", {
+    schema: { operationId: "executeAgentApproval", tags: ["agent"], params: agentActionIdParamsSchema, body: agentApprovalBodySchema, response: { 200: agentStatusSchema, 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema, 409: agentErrorSchema, 410: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     const approvalId = Number((request.params as { id?: string }).id);
     const body = request.body as { token?: unknown };
     try {
       const ownerEmail = currentOwnerEmail(request);
       return reply.send(await executeAgentApproval({ ownerEmail, approvalId, token: body?.token }));
     } catch (error) {
-      const status = error instanceof AgentActionError ? error.statusCode : 409;
+      const status = agentRouteErrorStatus(error instanceof AgentActionError ? error.statusCode : 409);
       return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not execute agent approval" });
     }
   });
 
-  fastify.post("/api/agent/approvals/:id/reissue", async (request, reply) => {
+  fastify.post("/api/agent/approvals/:id/reissue", {
+    schema: { operationId: "reissueAgentApproval", tags: ["agent"], params: agentActionIdParamsSchema, response: { 200: agentStatusSchema, 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema, 409: agentErrorSchema, 410: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     const approvalId = Number((request.params as { id?: string }).id);
     try {
       const ownerEmail = currentOwnerEmail(request);
       return reply.send(await reissueAgentApproval({ ownerEmail, approvalId }));
     } catch (error) {
-      const status = error instanceof AgentActionError ? error.statusCode : 409;
+      const status = agentRouteErrorStatus(error instanceof AgentActionError ? error.statusCode : 409);
       return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not restore agent approval" });
     }
   });
 
-  fastify.post("/api/agent/approvals/:id/reject", async (request, reply) => {
+  fastify.post("/api/agent/approvals/:id/reject", {
+    schema: { operationId: "rejectAgentApproval", tags: ["agent"], params: agentActionIdParamsSchema, body: agentApprovalBodySchema, response: { 200: agentStatusSchema, 400: agentErrorSchema, 401: agentErrorSchema, 404: agentErrorSchema, 409: agentErrorSchema, 410: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     const approvalId = Number((request.params as { id?: string }).id);
     const body = request.body as { token?: unknown };
     try {
       const ownerEmail = currentOwnerEmail(request);
       return reply.send(await rejectAgentApproval({ ownerEmail, approvalId, token: body?.token }));
     } catch (error) {
-      const status = error instanceof AgentActionError ? error.statusCode : 409;
+      const status = agentRouteErrorStatus(error instanceof AgentActionError ? error.statusCode : 409);
       return reply.code(status).send({ error: error instanceof Error ? error.message : "Could not reject agent approval" });
     }
   });
 
-  fastify.get("/api/agent/context", async (request, reply) => {
+  fastify.get("/api/agent/context", {
+    schema: { operationId: "getAgentContext", tags: ["agent"], querystring: z.object({ periodId: z.string().regex(/^\d+$/).optional(), startDate: z.string().regex(/^\d+$/).optional(), endDate: z.string().regex(/^\d+$/).optional() }), response: { 200: z.unknown(), 400: agentErrorSchema } },
+  }, async (request, reply) => {
     try {
       const query = request.query as { periodId?: string; startDate?: string; endDate?: string };
       const context = await composeContext(parseAgentScopeInput({
@@ -1320,7 +1370,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/agent/query", async (request, reply) => {
+  fastify.post("/api/agent/query", {
+    schema: { operationId: "queryAgent", tags: ["agent"], body: agentQueryBodySchema, response: { 200: agentQueryResponseSchema, 400: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as AgentQueryBody;
     if (typeof body?.question !== "string" || body.question.trim().length < 2 || body.question.length > 2000) {
       return reply.code(400).send({ error: "question must be between 2 and 2000 characters" });
@@ -1334,7 +1386,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/agent/query/stream", async (request, reply) => {
+  fastify.post("/api/agent/query/stream", {
+    schema: { operationId: "streamAgentQuery", tags: ["agent"], body: agentQueryBodySchema, response: { 400: agentErrorSchema, 500: agentErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as AgentQueryBody;
     if (typeof body?.question !== "string" || body.question.trim().length < 2 || body.question.length > 2000) {
       return reply.code(400).send({ error: "question must be between 2 and 2000 characters" });
@@ -1392,7 +1446,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post("/api/agent/plan-budget", async (request, reply) => {
+  fastify.post("/api/agent/plan-budget", {
+    schema: { operationId: "previewAgentBudgetPlan", tags: ["agent"], body: agentBudgetPlanBodySchema, response: { 200: agentBudgetPlanResponseSchema, 400: agentErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as { periodId?: unknown; targetSavingsRate?: unknown };
     try {
       const result = await executeAgentTool("preview_budget_plan", {
