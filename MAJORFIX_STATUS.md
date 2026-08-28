@@ -269,6 +269,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Category management now loads categories, tags, transaction classification stats, and expense-account mappings through a feature-owned query keyed by the archive filter.
 - Category and tag mutations invalidate classification and financial-summary keys instead of rebuilding a second route-local server cache.
 
+### `0448c2a` — reports query migration
+
+- Income statement, balance sheet, cash-flow, spending, trend, and report-summary reads now use feature-owned React Query hooks with stable scope keys and preserved snapshots during refresh.
+- Report retry actions refetch their query directly, and report caches are included in shared financial-summary invalidation after ledger, budget, or recovery mutations.
+- The reports page no longer uses imperative period/summary loading effects or request-version guards; the selected-period query boundary owns stale-response handling.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
