@@ -501,6 +501,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Wishlist list/detail/create/update/delete, fulfilment, transaction linking, and standard/advanced product scraping routes now declare typed filters, item relationships, fulfilment receipts, SSRF-safe URL inputs, and scraper success/error envelopes.
 - Wishlist fulfilment remains an explicit financial mutation that returns both the updated wishlist state and created transaction; scraping responses keep product data opaque to the route contract so the scraper can evolve without widening financial records.
 
+### `pending` — split-bill and anomaly contracts
+
+- Split-bill receipt scan, split calculation, derived-loan creation, journal reversal, history, and session-detail routes now declare bounded image/assignment inputs, parsed receipt structures, split results, loan receipts, and reversal outcomes.
+- Money-anomaly listing, scanning, and review routes now declare review status filters, candidate counts, linked transaction evidence, and required review notes. Scanning remains read-only and review status changes remain separate from any ledger correction.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.

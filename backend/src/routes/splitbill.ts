@@ -1,5 +1,6 @@
 import { and, eq, desc, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { splitbillSessions, contacts, loans, loanPayments, accounts, auditLogs, transactions } from "../db/schema";
@@ -106,6 +107,22 @@ If you see receipt-like content but cannot extract ANY items (e.g., image is too
 IMPORTANT: Only return error JSON if you are confident the image is not a receipt. If you can see ANY items, prices, or receipt-like content, parse it normally.`;
 
 const USER_PROMPT = `Extract all data from this receipt image. Return JSON with the exact schema specified. Prices must be in Indonesian Rupiah (IDR), NOT cents.`;
+
+const splitbillErrorSchema = z.object({ error: z.string(), message: z.string().optional() }).passthrough();
+const splitbillSessionIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const splitbillTransactionParamsSchema = z.object({ transactionId: z.coerce.number().int().positive() });
+const splitbillReasonBodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).passthrough();
+const parsedReceiptItemSchema = z.object({ name: z.string(), quantity: z.number(), unitPrice: z.number(), totalPrice: z.number(), notes: z.string().nullable().optional() }).passthrough();
+const parsedReceiptSchema = z.object({ merchantName: z.string(), receiptDate: z.string(), expenseCategory: z.string(), items: z.array(parsedReceiptItemSchema), subtotal: z.number(), tax: z.number(), taxPercent: z.number(), serviceFee: z.number(), servicePercent: z.number(), discount: z.number(), discountPercent: z.number(), total: z.number(), paymentMethod: z.string().nullable(), currency: z.string() }).passthrough();
+const splitbillPersonSchema = z.object({ id: z.number().int().optional(), name: z.string().trim().min(1), isNew: z.boolean().optional() }).passthrough();
+const splitbillAssignmentSchema = z.object({ itemIndex: z.number().int().nonnegative(), personIds: z.array(z.number().int()).min(1) }).passthrough();
+const splitbillPersonResultSchema = z.object({ personId: z.number().int(), personName: z.string(), assignedItems: z.array(parsedReceiptItemSchema), subtotal: z.number(), taxShare: z.number(), serviceShare: z.number(), discountShare: z.number(), total: z.number() }).passthrough();
+const splitbillScanBodySchema = z.object({ imageData: z.string().min(1), filename: z.string().trim().min(1).max(255) }).passthrough();
+const splitbillScanResponseSchema = z.object({ parsed: parsedReceiptSchema, r2Key: z.string() }).passthrough();
+const splitbillCalculateBodySchema = z.object({ items: z.array(parsedReceiptItemSchema).min(1), people: z.array(splitbillPersonSchema).min(1), assignments: z.array(splitbillAssignmentSchema), tax: z.number().nonnegative(), serviceFee: z.number().nonnegative(), discount: z.number().nonnegative() }).passthrough();
+const splitbillCreateLoansBodySchema = z.object({ splitResults: z.array(z.object({ personId: z.number().int().nonnegative(), personName: z.string().trim().min(1), total: z.number().nonnegative() }).passthrough()).min(1), isBorrower: z.boolean(), walletAccountId: z.number().int().positive().optional(), expenseCategory: z.string().max(120).optional(), receiptTotal: z.number().int().positive().optional(), merchantName: z.string().max(200).optional(), payerContactId: z.number().int().positive().optional() }).passthrough();
+const splitbillLoanResponseSchema = z.object({ id: z.number().int(), contactId: z.number().int(), direction: z.string(), amountCents: z.number().int(), remainingCents: z.number().int(), status: z.string() }).passthrough();
+const splitbillSessionSchema = z.object({ id: z.number().int(), merchantName: z.string().nullable(), receiptDate: z.union([z.date(), z.string(), z.number()]).nullable(), receiptImageR2Key: z.string().nullable(), parsedItemsJson: z.string().nullable(), subtotalCents: z.number().int().nullable(), taxCents: z.number().int().nullable(), serviceFeeCents: z.number().int().nullable(), discountCents: z.number().int().nullable(), totalCents: z.number().int(), peopleJson: z.string().nullable(), assignmentsJson: z.string().nullable(), splitResultJson: z.string().nullable(), loanIds: z.string().nullable(), status: z.string(), createdAt: z.union([z.date(), z.string(), z.number()]), updatedAt: z.union([z.date(), z.string(), z.number()]) }).passthrough();
 
 interface ParsedReceiptItem {
   name: string;
@@ -295,6 +312,7 @@ export default async function (fastify: FastifyInstance) {
 
   fastify.post<{ Body: { imageData: string; filename: string } }>(
     "/api/splitbill/scan",
+    { schema: { operationId: "scanSplitBillReceipt", tags: ["splitbill"], body: splitbillScanBodySchema, response: { 200: splitbillScanResponseSchema, 400: splitbillErrorSchema, 422: splitbillErrorSchema, 500: splitbillErrorSchema } } },
     async (request, reply) => {
       try {
         const { imageData, filename } = request.body;
@@ -368,6 +386,7 @@ export default async function (fastify: FastifyInstance) {
 
   fastify.post<{ Body: { items: ParsedReceiptItem[]; people: SplitBillPerson[]; assignments: ItemAssignment[]; tax: number; serviceFee: number; discount: number } }>(
     "/api/splitbill/calculate",
+    { schema: { operationId: "calculateSplitBill", tags: ["splitbill"], body: splitbillCalculateBodySchema, response: { 200: z.array(splitbillPersonResultSchema), 400: splitbillErrorSchema, 500: splitbillErrorSchema } } },
     async (request, reply) => {
       try {
         const { items, people, assignments, tax, serviceFee, discount } = request.body;
@@ -395,6 +414,7 @@ export default async function (fastify: FastifyInstance) {
     payerContactId?: number;
   } }>(
     "/api/splitbill/create-loans",
+    { schema: { operationId: "createSplitBillLoans", tags: ["splitbill"], body: splitbillCreateLoansBodySchema, response: { 201: z.array(splitbillLoanResponseSchema), 400: splitbillErrorSchema } } },
     async (request, reply) => {
       try {
         const {
@@ -571,7 +591,9 @@ export default async function (fastify: FastifyInstance) {
   );
 
   /** Reverse a split-bill journal and archive every untouched derived loan. */
-  fastify.post("/api/splitbill/transactions/:transactionId/reverse", async (request, reply) => {
+  fastify.post("/api/splitbill/transactions/:transactionId/reverse", {
+    schema: { operationId: "reverseSplitBill", tags: ["splitbill"], params: splitbillTransactionParamsSchema, body: splitbillReasonBodySchema, response: { 201: z.object({ reversalTransactionId: z.number().int(), reversedLoanIds: z.array(z.number().int()) }).passthrough(), 400: splitbillErrorSchema, 409: splitbillErrorSchema } },
+  }, async (request, reply) => {
     const transactionId = Number((request.params as { transactionId?: string }).transactionId);
     const reason = String((request.body as { reason?: unknown } | undefined)?.reason ?? "").trim();
     if (!Number.isSafeInteger(transactionId) || transactionId <= 0) return reply.code(400).send({ error: "Invalid transaction id" });
@@ -624,7 +646,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/api/splitbill/history", async (request) => {
+  fastify.get("/api/splitbill/history", {
+    schema: { operationId: "listSplitBillHistory", tags: ["splitbill"], response: { 200: z.array(splitbillSessionSchema) } },
+  }, async (request) => {
     const sessions = await db
       .select()
       .from(splitbillSessions)
@@ -634,7 +658,9 @@ export default async function (fastify: FastifyInstance) {
     return sessions;
   });
 
-  fastify.get<{ Params: { id: string } }>("/api/splitbill/:id", async (request, reply) => {
+  fastify.get<{ Params: { id: string } }>("/api/splitbill/:id", {
+    schema: { operationId: "getSplitBillSession", tags: ["splitbill"], params: splitbillSessionIdParamsSchema, response: { 200: splitbillSessionSchema, 404: splitbillErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params;
 
     const [session] = await db
