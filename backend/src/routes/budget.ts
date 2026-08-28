@@ -1,5 +1,6 @@
 import { eq, and, sql, isNull, or, gte, lte, desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 
@@ -11,6 +12,46 @@ import { getBudgetFacts } from "../services/financial-facts";
 import { getPeriodCoverage } from "../services/period-coverage";
 import { getBudgetOutlook } from "../services/budget-outlook";
 import { getBudgetReviewStatus, reviewBudgetOutlook } from "../services/budget-outlook-review";
+
+const budgetErrorSchema = z.object({ error: z.string() }).passthrough();
+const budgetPlanSchema = z.object({
+  id: z.number().int(),
+  periodId: z.number().int(),
+  categoryId: z.number().int(),
+  plannedAmount: z.number(),
+  categoryName: z.string().optional(),
+  actualAmount: z.number().optional(),
+  variance: z.number().optional(),
+  percentUsed: z.number().optional(),
+}).passthrough();
+const budgetCoverageSchema = z.object({
+  complete: z.array(z.number().int()),
+  partial: z.array(z.number().int()),
+  skipped: z.array(z.number().int()),
+  unknown: z.array(z.number().int()),
+  isComparable: z.boolean(),
+  warnings: z.array(z.string()),
+}).passthrough();
+const budgetSummarySchema = z.object({
+  periodId: z.number().int(),
+  income: z.number(),
+  totalPlanned: z.number(),
+  percentOfIncome: z.number(),
+  coverageStatus: z.enum(["complete", "partial", "skipped", "unknown"]),
+  coverageReason: z.string().nullable(),
+  coverage: budgetCoverageSchema,
+  plans: z.array(budgetPlanSchema),
+}).passthrough();
+const budgetListResponseSchema = z.union([budgetSummarySchema, z.array(budgetSummarySchema)]);
+const budgetPeriodQuerySchema = z.object({ periodId: z.string().regex(/^\d+$/).optional() });
+const budgetPeriodParamsSchema = z.object({ periodId: z.coerce.number().int().positive() });
+const budgetPlanIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const budgetCreateBodySchema = z.object({
+  periodId: z.number().int().positive(),
+  categoryId: z.number().int().positive(),
+  plannedAmount: z.number().int().nonnegative(),
+});
+const budgetUpdateBodySchema = z.object({ plannedAmount: z.number().int().nonnegative().optional() });
 
 async function invalidateBudgetMutation(periodIds: number[]): Promise<void> {
   // The caller bumps the revision in the same SQLite transaction as the plan
@@ -26,7 +67,14 @@ async function invalidateBudgetMutation(periodIds: number[]): Promise<void> {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/budgets", async (request) => {
+  fastify.get("/api/budgets", {
+    schema: {
+      operationId: "listBudgets",
+      tags: ["budgets"],
+      querystring: budgetPeriodQuerySchema,
+      response: { 200: budgetListResponseSchema },
+    },
+  }, async (request) => {
     const { periodId } = request.query as { periodId?: string };
 
     // Get all periods with budgets or the requested one
@@ -204,7 +252,14 @@ export default async function (fastify: FastifyInstance) {
     return { updated: true, periodId, transactionId, userWeight: weight };
   });
 
-  fastify.post("/api/budgets", async (request, reply) => {
+  fastify.post("/api/budgets", {
+    schema: {
+      operationId: "createBudget",
+      tags: ["budgets"],
+      body: budgetCreateBodySchema,
+      response: { 201: budgetPlanSchema, 400: budgetErrorSchema, 404: budgetErrorSchema, 409: budgetErrorSchema },
+    },
+  }, async (request, reply) => {
     const body = request.body as {
       periodId: number;
       categoryId: number;
@@ -266,7 +321,15 @@ export default async function (fastify: FastifyInstance) {
     reply.code(201).send(plan);
   });
 
-  fastify.patch("/api/budgets/:id", async (request, reply) => {
+  fastify.patch("/api/budgets/:id", {
+    schema: {
+      operationId: "updateBudget",
+      tags: ["budgets"],
+      params: budgetPlanIdParamsSchema,
+      body: budgetUpdateBodySchema,
+      response: { 200: budgetPlanSchema, 400: budgetErrorSchema, 404: budgetErrorSchema, 409: budgetErrorSchema },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       plannedAmount: number;
@@ -306,7 +369,14 @@ export default async function (fastify: FastifyInstance) {
     return updated;
   });
 
-  fastify.delete("/api/budgets/:id", async (request, reply) => {
+  fastify.delete("/api/budgets/:id", {
+    schema: {
+      operationId: "deleteBudget",
+      tags: ["budgets"],
+      params: budgetPlanIdParamsSchema,
+      response: { 204: z.null(), 404: budgetErrorSchema, 409: budgetErrorSchema },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db
