@@ -460,6 +460,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The coverage body explicitly supports `partial`, `complete`, and `skipped` with a reviewed reason, keeping the long-absence workflow representable without implying zero activity.
 - Period route registration is now fully contract-covered; CSV imports and the remaining domain workflows are the next schema gaps.
 
+### `pending` — authentication route contracts
+
+- CSRF token, OAuth callback outcomes, current-user, onboarding-status, and logout routes now declare stable operation IDs plus typed success/error envelopes. The OAuth provider's generated `/api/auth/google` redirect remains owned by `@fastify/oauth2` and is intentionally not re-registered by the application.
+- Authentication responses are now part of the same OpenAPI boundary as finance routes, so generated clients can distinguish an expired session, a forbidden account, and an onboarding-required state without scraping response text.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.

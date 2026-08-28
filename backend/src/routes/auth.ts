@@ -1,10 +1,17 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { eq } from "drizzle-orm";
 import csrf from "@fastify/csrf-protection";
+import { z } from "zod";
 
 import { env } from "../lib/env";
 import { db } from "../db/client";
 import { accounts, salaryPeriods } from "../db/schema";
+
+const authErrorSchema = z.object({ error: z.string() }).passthrough();
+const csrfResponseSchema = z.object({ csrfToken: z.string().min(1) }).passthrough();
+const authMeResponseSchema = z.object({ email: z.string().email().optional() }).passthrough();
+const onboardingStatusResponseSchema = z.object({ needsOnboarding: z.boolean() }).passthrough();
+const logoutResponseSchema = z.object({ success: z.literal(true) }).passthrough();
 
 export default async function (fastify: FastifyInstance) {
   // Register CSRF protection
@@ -13,7 +20,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // CSRF token endpoint
-  fastify.get("/api/auth/csrf-token", async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get("/api/auth/csrf-token", {
+    schema: { operationId: "getCsrfToken", tags: ["auth"], response: { 200: csrfResponseSchema } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const token = await reply.generateCsrf();
     return { csrfToken: token };
   });
@@ -21,6 +30,7 @@ export default async function (fastify: FastifyInstance) {
   // Google OAuth callback
   fastify.get("/api/auth/google/callback", {
     config: { rateLimit: { max: 10, timeWindow: "5 minutes", groupId: "auth" } },
+    schema: { operationId: "handleGoogleCallback", tags: ["auth"], response: { 302: z.unknown(), 403: authErrorSchema, 500: authErrorSchema } },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // @fastify/oauth2 may return either { token: { access_token } } or a flat shape depending on version
@@ -89,13 +99,13 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get current user
-  fastify.get("/api/auth/me", { onRequest: [fastify.authenticate] }, async (request: FastifyRequest) => {
+  fastify.get("/api/auth/me", { onRequest: [fastify.authenticate], schema: { operationId: "getCurrentUser", tags: ["auth"], response: { 200: authMeResponseSchema, 401: authErrorSchema } } }, async (request: FastifyRequest) => {
     const payload = request.user as { email?: string };
     return { email: payload.email };
   });
 
   /** True until the user has at least one asset (wallet) account and one salary period */
-  fastify.get("/api/auth/onboarding-status", { onRequest: [fastify.authenticate] }, async () => {
+  fastify.get("/api/auth/onboarding-status", { onRequest: [fastify.authenticate], schema: { operationId: "getOnboardingStatus", tags: ["auth"], response: { 200: onboardingStatusResponseSchema, 401: authErrorSchema } } }, async () => {
     const [wallet] = await db
       .select({ id: accounts.id })
       .from(accounts)
@@ -113,7 +123,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Logout - protected by CSRF
-  fastify.post("/api/auth/logout", { preHandler: fastify.csrfProtection }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post("/api/auth/logout", { preHandler: fastify.csrfProtection, schema: { operationId: "logout", tags: ["auth"], response: { 200: logoutResponseSchema, 403: authErrorSchema } } }, async (request: FastifyRequest, reply: FastifyReply) => {
     reply
       .clearCookie("token", { path: "/" })
       .send({ success: true });
