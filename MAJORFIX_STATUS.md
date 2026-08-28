@@ -259,6 +259,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Subscriptions now load subscription rows, renewal previews, payment-account lookups, and category lookups through one feature-owned query with a preserved last snapshot while refreshing.
 - Loan, subscription, renewal, and related financial mutations invalidate the shared financial-summary query families, keeping dashboard/account/period views from retaining stale facts.
 
+### `dcf0774` — PayLater query migration
+
+- PayLater obligations, schedules, provider exposure, outstanding totals, and settlement-wallet lookups now come from a feature-owned React Query hook instead of route-level loading effects.
+- Settlement mutations invalidate the shared financial-summary families, so PayLater, account, dashboard, period, and budget views converge after a payment is posted.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
