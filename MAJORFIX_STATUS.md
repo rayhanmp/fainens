@@ -436,6 +436,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Range, period, and account identifiers are validated at the transport boundary. The spending-trend contract preserves coverage status and bucket metadata so skipped/partial periods cannot be mistaken for zero spending by generated clients.
 - Remaining report/PDF routes and the full generated artifact still need to be expanded from the compatibility pilot.
 
+### `pending` — report and export route contracts
+
+- Income statement, balance sheet, cash flow, spending, monthly report, CSV export, and multi-period trend routes now declare their validated query/param shapes, structured report responses, and error envelopes with stable operation IDs.
+- Report schemas expose coverage evidence, cash-flow classification source, category breakdowns, monthly provenance, and signed statement totals so report consumers do not reconstruct accounting facts from capped transaction lists.
+- Export contracts explicitly retain `asOfDate` alongside period-range filters; the remaining generated contract refresh is still gated on completing legacy route schemas and resolving the pnpm release-age policy.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
