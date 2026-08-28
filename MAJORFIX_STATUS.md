@@ -491,6 +491,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Contact list/detail/create/update/archive/restore routes now declare typed search filters, contact payloads, loan summaries, and archive blockers.
 - Loan list/detail/create/update/delete, payment, origin-reversal, and payment-reversal routes now declare direction/status filters, timestamp-tolerant subledger records, payment receipts, reversal receipts, and explicit conflict responses. Liability/receivable subledger rows remain domain-owned and are not editable through generic transaction mutations.
 
+### `pending` — insights and pending-transaction contracts
+
+- Dashboard/budget insight generation and latest-cache routes now declare period filters and provenance-bearing insight envelopes, including stale cache state and revision numbers.
+- Legacy pending-transaction parse, list, detail, approve, reject, and retry routes now declare bounded messages, parsed payloads, lifecycle statuses, and explicit approval/retry outcomes. These routes remain a compatibility surface alongside the newer durable agent proposal flow.
+
 ### `pending` — agent route contracts
 
 - Agent tool discovery, profile/nickname, personal memories, and conversation list/detail/create/update/delete routes now declare typed request/response contracts and stable operation IDs.

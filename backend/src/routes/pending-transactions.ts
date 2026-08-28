@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { and, eq, desc } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../db/client";
 import { auditLogs, pendingTransactions, transactions, transactionLines, categories, accounts } from "../db/schema";
 import { parseNaturalLanguageTransaction } from "../services/transaction-parser";
@@ -9,11 +10,23 @@ import { invalidateOnTransactionMutation } from "../cache";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 const MAX_PARSE_ATTEMPTS = 3;
+const pendingErrorSchema = z.object({ error: z.string() }).passthrough();
+const pendingIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const pendingTimestampSchema = z.union([z.date(), z.string(), z.number()]);
+const pendingRecordSchema = z.object({ id: z.number().int(), rawMessage: z.string(), parsedData: z.unknown(), status: z.enum(["pending", "approved", "rejected", "failed"]), parseAttempts: z.number().int().nonnegative(), lastError: z.string().nullable(), source: z.string().optional(), userMessageId: z.string().nullable().optional(), createdAt: pendingTimestampSchema, updatedAt: pendingTimestampSchema.optional() }).passthrough();
+const pendingListItemSchema = pendingRecordSchema.omit({ updatedAt: true }).passthrough();
+const pendingParseBodySchema = z.object({ message: z.string().trim().min(1).max(4000), userMessageId: z.string().max(200).optional(), source: z.string().max(80).optional() }).passthrough();
+const pendingParseResponseSchema = z.object({ pendingId: z.number().int(), parsed: z.unknown(), message: z.string().optional(), error: z.string().optional() }).passthrough();
+const pendingApproveResponseSchema = z.object({ success: z.literal(true), transactionId: z.number().int(), message: z.string() }).passthrough();
+const pendingSuccessResponseSchema = z.object({ success: z.literal(true) }).passthrough();
+const pendingRetryResponseSchema = z.object({ success: z.boolean(), parsed: z.unknown().optional(), error: z.string().optional() }).passthrough();
 
 export default async function pendingRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
   // List all pending transactions
-  fastify.get("/api/pending-transactions", async (request, reply) => {
+  fastify.get("/api/pending-transactions", {
+    schema: { operationId: "listPendingTransactions", tags: ["pending-transactions"], response: { 200: z.array(pendingListItemSchema) } },
+  }, async (request, reply) => {
     const pending = await db
       .select()
       .from(pendingTransactions)
@@ -32,7 +45,9 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
   });
 
   // Parse a message and create pending transaction
-  fastify.post("/api/pending-transactions/parse", async (request, reply) => {
+  fastify.post("/api/pending-transactions/parse", {
+    schema: { operationId: "parsePendingTransaction", tags: ["pending-transactions"], body: pendingParseBodySchema, response: { 200: pendingParseResponseSchema, 400: pendingErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       message: string;
       userMessageId?: string;
@@ -89,7 +104,9 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
   });
 
   // Approve pending transaction - creates actual transaction
-  fastify.post("/api/pending-transactions/:id/approve", async (request, reply) => {
+  fastify.post("/api/pending-transactions/:id/approve", {
+    schema: { operationId: "approvePendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingApproveResponseSchema, 400: pendingErrorSchema, 404: pendingErrorSchema, 409: pendingErrorSchema, 422: pendingErrorSchema, 500: pendingErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const pendingId = parseInt(id, 10);
     if (!Number.isInteger(pendingId) || pendingId <= 0) {
@@ -235,7 +252,9 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
   });
 
   // Reject pending transaction
-  fastify.post("/api/pending-transactions/:id/reject", async (request, reply) => {
+  fastify.post("/api/pending-transactions/:id/reject", {
+    schema: { operationId: "rejectPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingSuccessResponseSchema, 404: pendingErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const pendingId = parseInt(id);
 
@@ -258,7 +277,9 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
   });
 
   // Get single pending transaction
-  fastify.get("/api/pending-transactions/:id", async (request, reply) => {
+  fastify.get("/api/pending-transactions/:id", {
+    schema: { operationId: "getPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingRecordSchema, 404: pendingErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const pendingId = parseInt(id);
 
@@ -285,7 +306,9 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
   });
 
   // Retry parsing a failed pending transaction
-  fastify.post("/api/pending-transactions/:id/retry", async (request, reply) => {
+  fastify.post("/api/pending-transactions/:id/retry", {
+    schema: { operationId: "retryPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingRetryResponseSchema, 404: pendingErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const pendingId = parseInt(id);
 

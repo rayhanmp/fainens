@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../db/client";
 import { generateDashboardInsight, generateBudgetInsight } from "../services/insightGenerator";
 import { getRedisClient } from "../cache/redis";
@@ -7,6 +8,10 @@ import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
 
 const CACHE_TTL_SECONDS = 24 * 60 * 60;
+const insightErrorSchema = z.object({ error: z.string() }).passthrough();
+const insightPeriodQuerySchema = z.object({ periodId: z.string().regex(/^\d+$/).optional() });
+const insightResponseSchema = z.object({ insight: z.string(), generatedAt: z.string(), sourceRevision: z.number().int(), stale: z.literal(false) }).passthrough();
+const latestInsightResponseSchema = z.object({ insight: z.string().nullable(), generatedAt: z.string().nullable(), sourceRevision: z.number().int().nullable(), stale: z.boolean() }).passthrough();
 
 function getWeekDistribution(totalDays: number): number[] {
   const base = Math.floor(totalDays / 4);
@@ -174,7 +179,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
   }
 
   // POST /api/insights/dashboard - Generate dashboard insight
-  fastify.post("/api/insights/dashboard", async (request, reply) => {
+  fastify.post("/api/insights/dashboard", {
+    schema: { operationId: "generateDashboardInsight", tags: ["insights"], querystring: insightPeriodQuerySchema, response: { 200: insightResponseSchema, 404: insightErrorSchema, 500: insightErrorSchema } },
+  }, async (request, reply) => {
     const userId = (request.user as { email?: string })?.email || 'anonymous';
     const q = request.query as { periodId?: string };
     const periodId = q.periodId ? parseInt(q.periodId) : undefined;
@@ -371,7 +378,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
   });
 
   // POST /api/insights/budget - Generate budget insight
-  fastify.post("/api/insights/budget", async (request, reply) => {
+  fastify.post("/api/insights/budget", {
+    schema: { operationId: "generateBudgetInsight", tags: ["insights"], body: z.object({ periodId: z.number().int().positive().optional() }).passthrough(), response: { 200: insightResponseSchema, 404: insightErrorSchema, 500: insightErrorSchema } },
+  }, async (request, reply) => {
     const userId = (request.user as { email?: string })?.email || 'anonymous';
     const { periodId } = request.body as { periodId?: number };
     
@@ -518,7 +527,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /api/insights/dashboard/latest - Get cached dashboard insight
-  fastify.get("/api/insights/dashboard/latest", async (request, reply) => {
+  fastify.get("/api/insights/dashboard/latest", {
+    schema: { operationId: "getLatestDashboardInsight", tags: ["insights"], querystring: insightPeriodQuerySchema, response: { 200: latestInsightResponseSchema, 500: insightErrorSchema } },
+  }, async (request, reply) => {
     const userId = (request.user as { email?: string })?.email || 'anonymous';
     const { periodId } = request.query as { periodId?: string };
     
@@ -537,7 +548,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /api/insights/budget/latest - Get cached budget insight
-  fastify.get("/api/insights/budget/latest", async (request, reply) => {
+  fastify.get("/api/insights/budget/latest", {
+    schema: { operationId: "getLatestBudgetInsight", tags: ["insights"], querystring: insightPeriodQuerySchema, response: { 200: latestInsightResponseSchema, 500: insightErrorSchema } },
+  }, async (request, reply) => {
     const userId = (request.user as { email?: string })?.email || 'anonymous';
     const { periodId } = request.query as { periodId?: string };
     
