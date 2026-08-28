@@ -386,6 +386,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Money-anomaly scans and review decisions now use feature-owned mutations. Scan results invalidate anomaly queries; a resolved or dismissed candidate invalidates the broader financial summaries as well.
 - Salary settings updates and salary catch-up posting now use feature-owned mutations. Settings cache updates immediately while posting invalidates ledger-derived views, and route-local refresh duplication is removed.
 
+### `pending` — pending-transaction query and mutation hooks
+
+- Pending transaction approval/rejection, AI parse preview, draft creation, and draft edits now use feature-owned mutations. Approval invalidates the full financial summary set; draft-only actions invalidate the pending queue.
+- The pending-transaction modal now reads through the canonical React Query pending key instead of maintaining a second server-data cache and imperative reload effect.
+- The transaction modal uses the same pending mutation boundary for AI preview, save-and-keep-pending, and approve-after-edit, preserving its existing validation and confirmation behavior.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.

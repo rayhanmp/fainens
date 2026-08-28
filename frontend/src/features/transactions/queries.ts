@@ -64,3 +64,43 @@ export function useImportTransactions() {
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
+
+type PendingTransactionParsed = Parameters<typeof api.pendingTransactions.create>[1];
+
+export function usePreviewPendingTransactionMutation() {
+  return useMutation({
+    mutationFn: (message: string) => api.pendingTransactions.preview(message),
+  });
+}
+
+export function useCreatePendingTransactionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ message, parsed }: { message: string; parsed: PendingTransactionParsed }) => api.pendingTransactions.create(message, parsed),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
+  });
+}
+
+export function useUpdatePendingTransactionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, parsed }: { id: number; parsed: PendingTransactionParsed }) => api.pendingTransactions.update(id, parsed),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
+  });
+}
+
+export function useApprovePendingTransactionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.pendingTransactions.approve(id),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useRejectPendingTransactionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.pendingTransactions.reject(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
+  });
+}

@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { api } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
 import { Check, X, Edit2, Loader2 } from 'lucide-react';
+import {
+  useApprovePendingTransactionMutation,
+  usePendingTransactionsQuery,
+  useRejectPendingTransactionMutation,
+} from '../../features/transactions/queries';
 
 interface PendingTransaction {
   id: number;
@@ -39,33 +43,17 @@ export function PendingTransactionsModal({
   onEdit,
   onRefresh,
 }: PendingTransactionsModalProps) {
-  const [pendingTxs, setPendingTxs] = useState<PendingTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const pendingQuery = usePendingTransactionsQuery();
+  const approveMutation = useApprovePendingTransactionMutation();
+  const rejectMutation = useRejectPendingTransactionMutation();
+  const pendingTxs = (pendingQuery.data ?? []) as PendingTransaction[];
+  const isLoading = pendingQuery.isPending && !pendingQuery.data;
   const [actionLoading, setActionLoading] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadPendingTransactions();
-    }
-  }, [isOpen]);
-
-  const loadPendingTransactions = async () => {
-    setIsLoading(true);
-    try {
-      const data = await api.pendingTransactions.list();
-      setPendingTxs(data);
-    } catch (err) {
-      console.error('Failed to load pending transactions:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleApprove = async (id: number) => {
     setActionLoading(id);
     try {
-      await api.pendingTransactions.approve(id);
-      setPendingTxs((prev) => prev.filter((tx) => tx.id !== id));
+      await approveMutation.mutateAsync(id);
       onRefresh();
     } catch (err) {
       console.error('Failed to approve:', err);
@@ -77,8 +65,7 @@ export function PendingTransactionsModal({
   const handleReject = async (id: number) => {
     setActionLoading(id);
     try {
-      await api.pendingTransactions.reject(id);
-      setPendingTxs((prev) => prev.filter((tx) => tx.id !== id));
+      await rejectMutation.mutateAsync(id);
       onRefresh();
     } catch (err) {
       console.error('Failed to reject:', err);

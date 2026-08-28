@@ -48,7 +48,14 @@ import {
   type JournalFormLineValues,
   type JournalFormValues,
 } from '../../features/transactions/schemas';
-import { useCreateTransaction, useUpdateTransaction } from '../../features/transactions/queries';
+import {
+  useApprovePendingTransactionMutation,
+  useCreatePendingTransactionMutation,
+  useCreateTransaction,
+  usePreviewPendingTransactionMutation,
+  useUpdatePendingTransactionMutation,
+  useUpdateTransaction,
+} from '../../features/transactions/queries';
 
 export type WalletAccount = {
   id: number;
@@ -182,6 +189,10 @@ export function TransactionModal({
 }: TransactionModalProps) {
   const createTransactionMutation = useCreateTransaction();
   const updateTransactionMutation = useUpdateTransaction();
+  const previewPendingMutation = usePreviewPendingTransactionMutation();
+  const createPendingMutation = useCreatePendingTransactionMutation();
+  const updatePendingMutation = useUpdatePendingTransactionMutation();
+  const approvePendingMutation = useApprovePendingTransactionMutation();
   const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
   const [activeDetailField, setActiveDetailField] = useState<string | null>(null);
@@ -2360,7 +2371,7 @@ export function TransactionModal({
                 setIsParsing(true);
                 setParseError('');
                 try {
-                  const result = await api.pendingTransactions.preview(aiInput);
+                  const result = await previewPendingMutation.mutateAsync(aiInput);
                   if (result.parsed && result.parsed.confidence > 0) {
                     setAiParsed(result.parsed);
                   } else {
@@ -2469,7 +2480,7 @@ export function TransactionModal({
                     if (!aiParsed) return;
                     setIsConfirming(true);
                     try {
-                      await api.pendingTransactions.create(aiInput, aiParsed);
+                      await createPendingMutation.mutateAsync({ message: aiInput, parsed: aiParsed });
                       onSaved();
                       onClose();
                     } catch (err) {
@@ -3159,7 +3170,7 @@ export function TransactionModal({
                     if (!pendingTransaction) return;
                     setIsSubmitting(true);
                     try {
-                      await api.pendingTransactions.update(pendingTransaction.id, {
+                      await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {
                         type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
                         amount: parseIdNominalToInt(simpleForm.amount) || 0,
                         description: simpleForm.description,
@@ -3170,7 +3181,7 @@ export function TransactionModal({
                         fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
                         toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
                         confidence: 1,
-                      });
+                      }});
                       onSaved();
                       onClose();
                     } catch (err) {
@@ -3190,7 +3201,7 @@ export function TransactionModal({
                     if (!pendingTransaction) return;
                     setIsSubmitting(true);
                     try {
-                      await api.pendingTransactions.update(pendingTransaction.id, {
+                      await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {
                         type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
                         amount: parseIdNominalToInt(simpleForm.amount) || 0,
                         description: simpleForm.description,
@@ -3201,8 +3212,8 @@ export function TransactionModal({
                         fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
                         toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
                         confidence: 1,
-                      });
-                      await api.pendingTransactions.approve(pendingTransaction.id);
+                      }});
+                      await approvePendingMutation.mutateAsync(pendingTransaction.id);
                       onSaved();
                       onClose();
                     } catch (err) {
