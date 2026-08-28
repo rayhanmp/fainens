@@ -1,21 +1,32 @@
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { tags, transactionTags } from "../db/schema";
+
+const tagIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const tagSchema = z.object({ id: z.number().int(), name: z.string(), color: z.string() }).passthrough();
+const tagBodySchema = z.object({ name: z.string().trim().min(1).max(100), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/) }).passthrough();
+const tagUpdateBodySchema = tagBodySchema.partial().passthrough();
+const tagErrorSchema = z.object({ error: z.string() }).passthrough();
 
 export default async function (fastify: FastifyInstance) {
   // All routes require authentication
   fastify.addHook("onRequest", fastify.authenticate);
 
   // List all tags
-  fastify.get("/api/tags", async () => {
+  fastify.get("/api/tags", {
+    schema: { operationId: "listTags", tags: ["categories"], response: { 200: z.array(tagSchema) } },
+  }, async () => {
     const allTags = await db.select().from(tags);
     return allTags;
   });
 
   // Get single tag with usage count
-  fastify.get("/api/tags/:id", async (request, reply) => {
+  fastify.get("/api/tags/:id", {
+    schema: { operationId: "getTag", tags: ["categories"], params: tagIdParamsSchema, response: { 200: tagSchema.extend({ usageCount: z.number().int() }).passthrough(), 404: tagErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [tag] = await db
@@ -44,7 +55,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Create tag
-  fastify.post("/api/tags", async (request, reply) => {
+  fastify.post("/api/tags", {
+    schema: { operationId: "createTag", tags: ["categories"], body: tagBodySchema, response: { 201: tagSchema, 400: tagErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       color: string;
@@ -69,7 +82,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Update tag
-  fastify.patch("/api/tags/:id", async (request, reply) => {
+  fastify.patch("/api/tags/:id", {
+    schema: { operationId: "updateTag", tags: ["categories"], params: tagIdParamsSchema, body: tagUpdateBodySchema, response: { 200: tagSchema, 400: tagErrorSchema, 404: tagErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;
@@ -109,7 +124,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Delete tag
-  fastify.delete("/api/tags/:id", async (request, reply) => {
+  fastify.delete("/api/tags/:id", {
+    schema: { operationId: "deleteTag", tags: ["categories"], params: tagIdParamsSchema, response: { 204: z.null(), 404: tagErrorSchema } },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [existing] = await db

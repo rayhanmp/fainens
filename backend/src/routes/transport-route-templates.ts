@@ -1,8 +1,47 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { accounts, categories, tags, transportRouteTemplates } from "../db/schema";
 import { db } from "../db/client";
+
+const routeTemplateIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const routeTemplateErrorSchema = z.object({ error: z.string() }).passthrough();
+const nullableText = (max: number) => z.string().max(max).nullable().optional();
+const routeTemplateBodySchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  provider: nullableText(80),
+  service: nullableText(100),
+  originName: nullableText(200),
+  originLat: z.number().min(-90).max(90).nullable().optional(),
+  originLng: z.number().min(-180).max(180).nullable().optional(),
+  destName: nullableText(200),
+  destLat: z.number().min(-90).max(90).nullable().optional(),
+  destLng: z.number().min(-180).max(180).nullable().optional(),
+  categoryId: z.number().int().positive().nullable().optional(),
+  defaultAccountId: z.number().int().positive().nullable().optional(),
+  notes: nullableText(2000),
+  tagIds: z.array(z.number().int().positive()).max(100).optional(),
+}).passthrough();
+const routeTemplateUpdateBodySchema = routeTemplateBodySchema.partial().passthrough();
+const routeTemplateSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  provider: z.string().nullable().optional(),
+  service: z.string().nullable().optional(),
+  originName: z.string().nullable().optional(),
+  originLat: z.number().nullable().optional(),
+  originLng: z.number().nullable().optional(),
+  destName: z.string().nullable().optional(),
+  destLat: z.number().nullable().optional(),
+  destLng: z.number().nullable().optional(),
+  categoryId: z.number().int().nullable().optional(),
+  defaultAccountId: z.number().int().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  tagIds: z.array(z.number().int()),
+  createdAt: z.union([z.date(), z.string(), z.number()]).optional(),
+  updatedAt: z.union([z.date(), z.string(), z.number()]).optional(),
+}).passthrough();
 
 function textValue(value: unknown, field: string, maxLength: number, nullable = true): string | null | undefined {
   if (value == null) return nullable ? null : undefined;
@@ -64,12 +103,16 @@ function view(row: typeof transportRouteTemplates.$inferSelect) {
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/transport-route-templates", async () => {
+  fastify.get("/api/transport-route-templates", {
+    schema: { operationId: "listTransportRouteTemplates", tags: ["transactions"], response: { 200: z.object({ templates: z.array(routeTemplateSchema) }).passthrough() } },
+  }, async () => {
     const rows = await db.select().from(transportRouteTemplates).orderBy(asc(transportRouteTemplates.name));
     return { templates: rows.map(view) };
   });
 
-  fastify.post("/api/transport-route-templates", async (request, reply) => {
+  fastify.post("/api/transport-route-templates", {
+    schema: { operationId: "createTransportRouteTemplate", tags: ["transactions"], body: routeTemplateBodySchema, response: { 201: z.object({ template: routeTemplateSchema.nullable() }).passthrough(), 400: routeTemplateErrorSchema } },
+  }, async (request, reply) => {
     try {
       const body = request.body as Record<string, unknown>;
       const name = textValue(body?.name, "name", 150, false) as string;
@@ -93,7 +136,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.patch("/api/transport-route-templates/:id", async (request, reply) => {
+  fastify.patch("/api/transport-route-templates/:id", {
+    schema: { operationId: "updateTransportRouteTemplate", tags: ["transactions"], params: routeTemplateIdParamsSchema, body: routeTemplateUpdateBodySchema, response: { 200: z.object({ template: routeTemplateSchema.nullable() }).passthrough(), 400: routeTemplateErrorSchema, 404: routeTemplateErrorSchema } },
+  }, async (request, reply) => {
     try {
       const id = Number((request.params as { id?: string }).id);
       if (!Number.isSafeInteger(id) || id <= 0) return reply.code(400).send({ error: "Invalid template ID" });
@@ -125,7 +170,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  fastify.delete("/api/transport-route-templates/:id", async (request, reply) => {
+  fastify.delete("/api/transport-route-templates/:id", {
+    schema: { operationId: "deleteTransportRouteTemplate", tags: ["transactions"], params: routeTemplateIdParamsSchema, response: { 204: z.null(), 400: routeTemplateErrorSchema, 404: routeTemplateErrorSchema } },
+  }, async (request, reply) => {
     const id = Number((request.params as { id?: string }).id);
     if (!Number.isSafeInteger(id) || id <= 0) return reply.code(400).send({ error: "Invalid template ID" });
     const result = await db.delete(transportRouteTemplates).where(eq(transportRouteTemplates.id, id)).run();

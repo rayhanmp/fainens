@@ -442,6 +442,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Report schemas expose coverage evidence, cash-flow classification source, category breakdowns, monthly provenance, and signed statement totals so report consumers do not reconstruct accounting facts from capped transaction lists.
 - Export contracts explicitly retain `asOfDate` alongside period-range filters; the remaining generated contract refresh is still gated on completing legacy route schemas and resolving the pnpm release-age policy.
 
+### `pending` — tag and transport-route contracts
+
+- Tag list/detail/create/update/delete routes now declare typed IDs, tag payloads, hex-color validation, usage counts, and deletion responses.
+- Saved transport route list/create/update/delete routes now declare reusable route metadata, coordinates, category/account references, tag IDs, and timestamp-bearing view responses.
+- The route-template contract preserves the existing “fare varies per trip” model while validating reusable route metadata before it reaches the database. Remaining reconciliation, account lifecycle, period lifecycle, and import contracts are next.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
