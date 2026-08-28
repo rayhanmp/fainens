@@ -317,6 +317,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Period selection still defaults to the active period, while cached context survives navigation and refetches without resetting the composer or conversation view.
 - Profile edits update the canonical profile cache immediately; opening Agent Memory performs an explicit query refetch instead of maintaining a second profile/memory loading path.
 
+### `d2f5f70` — agent conversation detail query migration
+
+- Selecting a saved chat now changes the active conversation and lets a dedicated React Query detail entry own loading, cancellation, and error state.
+- The local message view hydrates only from the matching conversation response, preventing an older detail request from overwriting a newly selected chat.
+- Conversation refreshes reuse the list query's refetch function, removing a duplicate imperative list request while preserving the existing streaming lifecycle.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
