@@ -448,6 +448,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Saved transport route list/create/update/delete routes now declare reusable route metadata, coordinates, category/account references, tag IDs, and timestamp-bearing view responses.
 - The route-template contract preserves the existing “fare varies per trip” model while validating reusable route metadata before it reaches the database. Remaining reconciliation, account lifecycle, period lifecycle, and import contracts are next.
 
+### `pending` — account lifecycle and reconciliation contracts
+
+- Account archive, dependency-preview, and restore routes now declare lifecycle responses and blockers alongside the existing account CRUD contract.
+- Reconciliation history, control snapshots, recovery bridges, and reasoned void actions now declare typed payloads/responses. Recovery responses expose the optional bridge journal explicitly instead of making clients infer whether a ledger mutation occurred.
+- Reconciliation remains a control-evidence snapshot in the contract; only the separate recovery endpoint can return a recovery transaction ID. Period lifecycle tail routes and CSV import contracts remain.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.

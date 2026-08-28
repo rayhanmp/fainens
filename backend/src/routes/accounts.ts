@@ -51,6 +51,68 @@ const accountResponseSchemas = {
   409: z.any(),
   500: z.any(),
 };
+const accountDependencyPreviewSchema = z.object({
+  account: accountRecordSchema,
+  canArchive: z.boolean(),
+  canRestore: z.boolean(),
+  blockers: z.array(z.string()),
+  dependencies: z.object({
+    postedTransactions: z.number().int(),
+    budgetPlans: z.number().int(),
+    childAccounts: z.number().int(),
+    linkedCategories: z.number().int(),
+  }).passthrough(),
+  consequence: z.string(),
+}).passthrough();
+const reconciliationSessionSchema = z.object({
+  id: z.number().int(),
+  asOfDate: z.union([z.date(), z.string(), z.number()]),
+  status: z.enum(["reconciled", "needs_classification"]),
+  lifecycleStatus: z.enum(["active", "voided"]),
+  voidedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
+  voidReason: z.string().nullable().optional(),
+  kind: z.enum(["control", "recovery"]),
+  note: z.string().nullable().optional(),
+  createdAt: z.union([z.date(), z.string(), z.number()]),
+}).passthrough();
+const reconciliationItemSchema = z.object({
+  id: z.number().int().optional(),
+  sessionId: z.number().int().optional(),
+  accountId: z.number().int(),
+  accountName: z.string(),
+  ledgerBalance: z.number(),
+  actualBalance: z.number(),
+  difference: z.number(),
+  status: z.enum(["matched", "needs_classification"]),
+  correctionTransactionId: z.number().int().nullable().optional(),
+}).passthrough();
+const reconciliationHistorySchema = z.object({
+  sessions: z.array(reconciliationSessionSchema.extend({ items: z.array(reconciliationItemSchema) })),
+}).passthrough();
+const reconciliationBodySchema = z.object({
+  balances: z.array(z.object({ accountId: z.number().int().positive(), actualBalance: z.number().int() }).passthrough()).min(1),
+  asOfDate: z.number().int().nonnegative().optional(),
+}).passthrough();
+const reconciliationResultSchema = z.object({
+  success: z.boolean(),
+  requiresClassification: z.boolean(),
+  session: reconciliationSessionSchema,
+  results: z.array(reconciliationItemSchema),
+  message: z.string(),
+}).passthrough();
+const recoveryBodySchema = reconciliationBodySchema.extend({
+  acknowledgement: z.string().optional(),
+  note: z.string().nullable().optional(),
+  confirmed: z.literal(true),
+});
+const recoveryResultSchema = z.object({
+  success: z.literal(true),
+  session: reconciliationSessionSchema,
+  results: z.array(reconciliationItemSchema),
+  recoveryTransactionId: z.number().int().nullable(),
+  message: z.string(),
+}).passthrough();
+const reconciliationErrorSchema = z.object({ error: z.string() }).passthrough();
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -300,7 +362,9 @@ export default async function (fastify: FastifyInstance) {
     return updated;
   });
 
-  fastify.delete("/api/accounts/:id", async (request, reply) => {
+  fastify.delete("/api/accounts/:id", {
+    schema: { operationId: "deleteAccount", tags: ["accounts"], params: accountIdParamsSchema, response: accountResponseSchemas },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const accountId = parseInt(id);
 
@@ -338,7 +402,9 @@ export default async function (fastify: FastifyInstance) {
     reply.code(204).send();
   });
 
-  fastify.get("/api/accounts/:id/dependency-preview", async (request, reply) => {
+  fastify.get("/api/accounts/:id/dependency-preview", {
+    schema: { operationId: "getAccountDependencyPreview", tags: ["accounts"], params: accountIdParamsSchema, response: { 200: accountDependencyPreviewSchema, 400: reconciliationErrorSchema, 404: reconciliationErrorSchema } },
+  }, async (request, reply) => {
     const accountId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(accountId) || accountId <= 0) return reply.code(400).send({ error: "Invalid account id" });
     const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
@@ -373,7 +439,9 @@ export default async function (fastify: FastifyInstance) {
     };
   });
 
-  fastify.post("/api/accounts/:id/restore", async (request, reply) => {
+  fastify.post("/api/accounts/:id/restore", {
+    schema: { operationId: "restoreAccount", tags: ["accounts"], params: accountIdParamsSchema, response: { 200: accountRecordSchema, 400: reconciliationErrorSchema, 404: reconciliationErrorSchema, 409: reconciliationErrorSchema } },
+  }, async (request, reply) => {
     const accountId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(accountId) || accountId <= 0) return reply.code(400).send({ error: "Invalid account id" });
     const [existing] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
@@ -401,7 +469,9 @@ export default async function (fastify: FastifyInstance) {
 
   // Reconciliation history is read-only evidence. It is intentionally
   // separate from transactions and includes voided entries for auditability.
-  fastify.get("/api/reconciliation", async (request, reply) => {
+  fastify.get("/api/reconciliation", {
+    schema: { operationId: "listReconciliation", tags: ["reconciliation"], querystring: z.object({ limit: z.string().regex(/^\d+$/).optional() }), response: { 200: reconciliationHistorySchema, 400: reconciliationErrorSchema } },
+  }, async (request, reply) => {
     const requestedLimit = Number((request.query as { limit?: string }).limit ?? 20);
     if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1) {
       return reply.code(400).send({ error: "limit must be a positive integer" });
@@ -433,7 +503,9 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Reconciliation endpoint
-  fastify.post("/api/reconciliation", async (request, reply) => {
+  fastify.post("/api/reconciliation", {
+    schema: { operationId: "createReconciliation", tags: ["reconciliation"], body: reconciliationBodySchema, response: { 201: reconciliationResultSchema, 400: reconciliationErrorSchema, 500: reconciliationErrorSchema } },
+  }, async (request, reply) => {
     const { balances, asOfDate: requestedAsOf } = request.body as {
       balances: Array<{ accountId: number; actualBalance: number }>;
       asOfDate?: number;
@@ -554,7 +626,9 @@ export default async function (fastify: FastifyInstance) {
   // Return-after-absence recovery is intentionally separate from an ordinary
   // reconciliation. It requires a full asset/liability snapshot and posts an
   // approved equity bridge rather than inventing historical income or spend.
-  fastify.post("/api/reconciliation/recovery", async (request, reply) => {
+  fastify.post("/api/reconciliation/recovery", {
+    schema: { operationId: "createRecoveryReconciliation", tags: ["reconciliation"], body: recoveryBodySchema, response: { 201: recoveryResultSchema, 400: reconciliationErrorSchema, 409: reconciliationErrorSchema } },
+  }, async (request, reply) => {
     const body = request.body as {
       balances?: Array<{ accountId: number; actualBalance: number }>;
       asOfDate?: number;
@@ -591,7 +665,9 @@ export default async function (fastify: FastifyInstance) {
   // A reconciliation is control evidence, not a journal. If an entered bank
   // balance was wrong, retain that evidence and explicitly void it rather than
   // deleting it or manufacturing an accounting reversal.
-  fastify.post("/api/reconciliation/:id/void", async (request, reply) => {
+  fastify.post("/api/reconciliation/:id/void", {
+    schema: { operationId: "voidReconciliation", tags: ["reconciliation"], params: z.object({ id: z.coerce.number().int().positive() }), body: z.object({ reason: z.string().trim().min(1).max(500) }).passthrough(), response: { 200: reconciliationSessionSchema, 400: reconciliationErrorSchema, 404: reconciliationErrorSchema, 409: reconciliationErrorSchema } },
+  }, async (request, reply) => {
     const sessionId = Number((request.params as { id: string }).id);
     const rawReason = (request.body as { reason?: unknown } | undefined)?.reason;
     const reason = typeof rawReason === "string" ? rawReason.trim() : "";
