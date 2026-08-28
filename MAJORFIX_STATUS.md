@@ -295,6 +295,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Split Bills now loads wallet and contact lookups through a feature-owned query with stable cached data while receipt parsing and participant assignment remain local workflow state.
 - Creating contacts invalidates the lookup query; creating split loans invalidates shared financial summaries before navigating back to transactions.
 
+### `de68e44` — wishlist query migration
+
+- Wishlist items and category lookups now use a feature-owned query instead of route-level effects and duplicated server state.
+- Delete, fulfill, and link workflows invalidate the wishlist and shared financial-summary keys so goal status and ledger-derived views stay synchronized.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
