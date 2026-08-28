@@ -412,6 +412,12 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Accounts list/detail/create/update and category list/detail/create/update/archive/dependency/restore routes now declare Fastify Zod params, query, body, and response contracts with stable operation IDs.
 - Account and category record responses are modeled as passthrough records so existing ledger fields remain compatible while the public contract gains useful required identity/type fields. Error status shapes remain permissive until the shared error envelope is standardized.
 
+### `pending` — period lifecycle route contracts
+
+- Period list/detail, return-after-absence preview/backfill, create, and update routes now declare Zod params, query, body, and response contracts with stable operation IDs.
+- Period schemas preserve coverage and open/closed/archive lifecycle fields, tolerate the existing timestamp serialization forms, and include the return workflow's explicit skipped-period response instead of treating missing months as empty data.
+- Contract-only route registration verifies these period paths without opening SQLite. The remaining period lifecycle actions and the broader generated contract still need the same treatment before the pilot contract can be expanded safely.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.

@@ -1,5 +1,6 @@
 import { eq, desc, sql, and } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import { db } from "../db/client";
 import { salaryPeriods, budgetPlans, categories, salarySettings, transactions, auditLogs } from "../db/schema";
@@ -9,6 +10,74 @@ import { inclusivePeriodEnd } from "../services/period-locking";
 import { firstPayrollStartAfter, followingPayrollStart, payrollPeriodEnd } from "../services/period-cadence";
 
 const MAX_RETURN_BACKFILL_PERIODS = 120;
+
+const periodIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+// Keep the wire representation as a string because the legacy handler checks
+// explicitly for `"true"`. `z.coerce.boolean()` would treat the string
+// `"false"` as truthy and accidentally expose archived periods.
+const periodListQuerySchema = z.object({ includeInactive: z.enum(["true", "false"]).optional() });
+const periodErrorSchema = z.object({ error: z.string() }).passthrough();
+const periodSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  startDate: z.number(),
+  endDate: z.number(),
+  status: z.enum(["open", "closed"]),
+  closedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
+  reopenedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
+  isActive: z.boolean(),
+  archivedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
+  coverageStatus: z.enum(["complete", "partial", "skipped", "unknown"]),
+  coverageReason: z.string().nullable().optional(),
+}).passthrough();
+const periodSummarySchema = z.unknown().nullable();
+const periodBudgetSchema = z.object({
+  id: z.number().int(),
+  categoryId: z.number().int(),
+  plannedAmount: z.number(),
+  categoryName: z.string(),
+}).passthrough();
+const periodDetailSchema = periodSchema.extend({
+  summary: periodSummarySchema,
+  budgets: z.array(periodBudgetSchema),
+});
+const returnPreviewSchema = z.object({
+  candidates: z.array(z.object({
+    name: z.string(),
+    startDate: z.number(),
+    endDate: z.number(),
+    isCurrent: z.boolean(),
+  })),
+  payrollDay: z.number().int().optional(),
+  reason: z.string().optional(),
+});
+const returnBackfillBodySchema = z.object({
+  asOfDate: z.number().int().nonnegative().optional(),
+  confirmed: z.literal(true),
+  currentPeriodCoverage: z.enum(["partial", "complete"]).optional(),
+  reviewedCurrentPeriod: z.boolean().optional(),
+});
+const returnBackfillResponseSchema = z.object({
+  periods: z.array(periodSchema),
+  message: z.string(),
+});
+const periodCreateBodySchema = z.object({
+  name: z.string().trim().min(1),
+  startDate: z.string().min(1),
+  endDate: z.string().min(1),
+});
+const periodUpdateBodySchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  startDate: z.string().min(1).optional(),
+  endDate: z.string().min(1).optional(),
+});
+const periodMutationResponses = {
+  200: periodSchema,
+  201: periodSchema,
+  400: periodErrorSchema,
+  404: periodErrorSchema,
+  409: periodErrorSchema,
+};
 
 type ReturnPeriodCandidate = { name: string; startDate: number; endDate: number; isCurrent: boolean };
 
@@ -58,7 +127,14 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   // List all salary periods
-  fastify.get("/api/periods", async (request) => {
+  fastify.get("/api/periods", {
+    schema: {
+      operationId: "listPeriods",
+      tags: ["periods"],
+      querystring: periodListQuerySchema,
+      response: { 200: z.array(periodSchema) },
+    },
+  }, async (request) => {
     const includeInactive = (request.query as { includeInactive?: string }).includeInactive === "true";
     const periods = await db
       .select()
@@ -70,7 +146,14 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Get single period with summary
-  fastify.get("/api/periods/:id", async (request, reply) => {
+  fastify.get("/api/periods/:id", {
+    schema: {
+      operationId: "getPeriod",
+      tags: ["periods"],
+      params: periodIdParamsSchema,
+      response: { 200: periodDetailSchema, 404: periodErrorSchema },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const [period] = await db
@@ -113,7 +196,14 @@ export default async function (fastify: FastifyInstance) {
 
   // Read-only first step of the return-after-absence workflow. Nothing is
   // created merely by opening a screen or calling this endpoint.
-  fastify.get("/api/periods/return-preview", async (request, reply) => {
+  fastify.get("/api/periods/return-preview", {
+    schema: {
+      operationId: "previewPeriodReturn",
+      tags: ["periods"],
+      querystring: z.object({ asOfDate: z.coerce.number().int().nonnegative().optional() }),
+      response: { 200: returnPreviewSchema, 400: periodErrorSchema },
+    },
+  }, async (request, reply) => {
     const rawAsOf = (request.query as { asOfDate?: string }).asOfDate;
     const asOfDate = rawAsOf == null ? Date.now() : Number(rawAsOf);
     if (!Number.isSafeInteger(asOfDate) || asOfDate < 0 || asOfDate > Date.now()) {
@@ -126,7 +216,19 @@ export default async function (fastify: FastifyInstance) {
   // The active return period is normally partial. A user who resumed at its
   // start can explicitly attest that the whole period is captured and mark
   // that one current period complete while creating the return shells.
-  fastify.post("/api/periods/return-backfill", async (request, reply) => {
+  fastify.post("/api/periods/return-backfill", {
+    schema: {
+      operationId: "createPeriodReturnBackfill",
+      tags: ["periods"],
+      body: returnBackfillBodySchema,
+      response: {
+        200: returnBackfillResponseSchema,
+        201: returnBackfillResponseSchema,
+        400: periodErrorSchema,
+        409: periodErrorSchema,
+      },
+    },
+  }, async (request, reply) => {
     const body = request.body as {
       asOfDate?: number;
       confirmed?: boolean;
@@ -198,7 +300,14 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Create salary period
-  fastify.post("/api/periods", async (request, reply) => {
+  fastify.post("/api/periods", {
+    schema: {
+      operationId: "createPeriod",
+      tags: ["periods"],
+      body: periodCreateBodySchema,
+      response: periodMutationResponses,
+    },
+  }, async (request, reply) => {
     const body = request.body as {
       name: string;
       startDate: string;
@@ -230,7 +339,15 @@ export default async function (fastify: FastifyInstance) {
   });
 
   // Update salary period
-  fastify.patch("/api/periods/:id", async (request, reply) => {
+  fastify.patch("/api/periods/:id", {
+    schema: {
+      operationId: "updatePeriod",
+      tags: ["periods"],
+      params: periodIdParamsSchema,
+      body: periodUpdateBodySchema,
+      response: periodMutationResponses,
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;
