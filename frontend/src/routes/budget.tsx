@@ -9,15 +9,20 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../lib/api';
 import { formatCurrency, cn, parseIdNominalToInt } from '../lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  useApplyBudgetTemplateMutation,
   useBudgetCategoriesQuery,
   useBudgetComparisonQuery,
   useBudgetPeriodsQuery,
   useBudgetQuery,
   useBudgetTemplatesQuery,
+  useCreateBudgetMutation,
+  useCreateBudgetTemplateMutation,
+  useDeleteBudgetMutation,
+  useDeleteBudgetTemplateMutation,
+  useUpdateBudgetMutation,
 } from '../features/budgets/queries';
 import { queryKeys } from '../features/core/query-keys';
 import {
@@ -175,6 +180,12 @@ function BudgetPage() {
     comparePeriodId ? parseInt(comparePeriodId, 10) : null,
   );
   const templatesQuery = useBudgetTemplatesQuery();
+  const createBudgetMutation = useCreateBudgetMutation();
+  const updateBudgetMutation = useUpdateBudgetMutation();
+  const deleteBudgetMutation = useDeleteBudgetMutation();
+  const createTemplateMutation = useCreateBudgetTemplateMutation();
+  const applyTemplateMutation = useApplyBudgetTemplateMutation();
+  const deleteTemplateMutation = useDeleteBudgetTemplateMutation();
   const periods = (periodsQuery.data ?? []) as Period[];
   const categories = (categoriesQuery.data ?? []) as Category[];
   const templates = (templatesQuery.data ?? []) as Template[];
@@ -198,10 +209,6 @@ function BudgetPage() {
     ]);
   };
 
-  const loadTemplates = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.budgets.templates });
-  };
-
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
   const isPeriodClosed = selectedPeriod?.status === 'closed';
   const isPeriodTracked = selectedPeriod?.coverageStatus === 'complete' || selectedPeriod?.coverageStatus === 'partial';
@@ -220,12 +227,11 @@ function BudgetPage() {
     }
 
     try {
-      await api.budgets.create({
+      await createBudgetMutation.mutateAsync({
         periodId: parseInt(selectedPeriodId, 10),
         categoryId: parseInt(budgetForm.categoryId, 10),
         plannedAmount: amount,
       });
-      await loadData();
       closeBudgetModal();
     } catch (err) {
       setFormError((err as Error).message);
@@ -250,8 +256,7 @@ function BudgetPage() {
     }
 
     try {
-      await api.budgets.update(editingBudget.id, { plannedAmount: amount });
-      await loadData();
+      await updateBudgetMutation.mutateAsync({ id: editingBudget.id, data: { plannedAmount: amount } });
       closeEditModal();
     } catch (err) {
       setFormError((err as Error).message);
@@ -266,12 +271,11 @@ function BudgetPage() {
 
     setIsSubmitting(true);
     try {
-      await api.budgets.templates.create({
+      await createTemplateMutation.mutateAsync({
         name: templateForm.name,
         description: templateForm.description,
         periodId: parseInt(selectedPeriodId, 10),
       });
-      await loadTemplates();
       closeTemplateModal();
     } catch (err) {
       setFormError((err as Error).message);
@@ -285,11 +289,10 @@ function BudgetPage() {
 
     setIsSubmitting(true);
     try {
-      await api.budgets.templates.apply(templateId, {
+      await applyTemplateMutation.mutateAsync({ templateId, data: {
         periodId: parseInt(selectedPeriodId, 10),
         replaceExisting,
-      });
-      await loadData();
+      } });
       setIsApplyTemplateModalOpen(false);
     } catch (err) {
       alert((err as Error).message);
@@ -307,8 +310,7 @@ function BudgetPage() {
     });
     if (!confirmed) return;
     try {
-      await api.budgets.delete(budgetId);
-      await loadData();
+      await deleteBudgetMutation.mutateAsync(budgetId);
     } catch (err) {
       alert((err as Error).message);
     }
@@ -323,8 +325,7 @@ function BudgetPage() {
     });
     if (!confirmed) return;
     try {
-      await api.budgets.templates.delete(templateId);
-      await loadTemplates();
+      await deleteTemplateMutation.mutateAsync(templateId);
     } catch (err) {
       alert((err as Error).message);
     }
