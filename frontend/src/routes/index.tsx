@@ -26,6 +26,20 @@ import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 import { MonthlyReportModal } from '../components/pdf/MonthlyReportModal';
+import { useAccountsLedgerQuery } from '../features/accounts/queries';
+import { useCategoriesQuery } from '../features/categories/queries';
+import { usePeriodsQuery } from '../features/periods/queries';
+import { useTags } from '../hooks/api';
+import {
+  useDashboardOverviewQuery,
+  useDashboardLoansQuery,
+  useDashboardPayLaterQuery,
+  useDashboardPeriodQueries,
+  useDashboardReconciliationQuery,
+  useDashboardSubscriptionsQuery,
+} from '../features/dashboard/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../features/core/query-keys';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -43,7 +57,6 @@ type Category = Awaited<ReturnType<typeof api.categories.list>>[number];
 type Tag = Awaited<ReturnType<typeof api.tags.list>>[number];
 type DashboardAnalytics = Awaited<ReturnType<typeof api.analytics.dashboard>>;
 type RecentTransaction = Awaited<ReturnType<typeof api.transactions.list>>['data'][number];
-type BudgetRow = BudgetPlan;
 type Facts = AgentFinancialFacts['data'];
 type ReconciliationHistory = Awaited<ReturnType<typeof api.accounts.reconciliationHistory>>;
 type Loan = Awaited<ReturnType<typeof api.loans.list>>[number];
@@ -91,7 +104,7 @@ function formatAsOf(timestamp: number): string {
   });
 }
 
-function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[]): BudgetPlan[] {
+function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[] | undefined): BudgetPlan[] {
   const summary = Array.isArray(payload) ? payload[0] : payload;
   return Array.isArray(summary?.plans) ? summary.plans : [];
 }
@@ -107,113 +120,73 @@ function formatConfidenceLabel(confidence: BudgetOutlook['confidence']): string 
 }
 
 function DashboardPage() {
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
-  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [reconciliation, setReconciliation] = useState<ReconciliationHistory | null>(null);
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [paylater, setPaylater] = useState<PayLaterObligations | null>(null);
-  const [subscriptions, setSubscriptions] = useState<SubscriptionData | null>(null);
-  const [facts, setFacts] = useState<Facts | null>(null);
-  const [budgetRows, setBudgetRows] = useState<BudgetRow[]>([]);
-  const [budgetOutlook, setBudgetOutlook] = useState<BudgetOutlook | null>(null);
-  const [recent, setRecent] = useState<RecentTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPeriodLoading, setIsPeriodLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isAttentionExpanded, setIsAttentionExpanded] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [agentPrompt, setAgentPrompt] = useState('');
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  const periodsQuery = usePeriodsQuery();
+  const accountsQuery = useAccountsLedgerQuery();
+  const categoriesQuery = useCategoriesQuery();
+  const tagsQuery = useTags();
+  const analyticsQuery = useDashboardOverviewQuery();
+  const reconciliationQuery = useDashboardReconciliationQuery(1);
+  const loansQuery = useDashboardLoansQuery();
+  const paylaterQuery = useDashboardPayLaterQuery();
+  const subscriptionsQuery = useDashboardSubscriptionsQuery();
+  const periods = (periodsQuery.data ?? []) as Period[];
+  const accounts = (accountsQuery.data ?? []) as Account[];
+  const categories = (categoriesQuery.data ?? []) as Category[];
+  const tags = (tagsQuery.data ?? []) as Tag[];
+  const analytics = (analyticsQuery.data ?? null) as DashboardAnalytics | null;
+  const reconciliation = (reconciliationQuery.data ?? null) as ReconciliationHistory | null;
+  const loans = (loansQuery.data ?? []) as Loan[];
+  const paylater = (paylaterQuery.data ?? null) as PayLaterObligations | null;
+  const subscriptions = (subscriptionsQuery.data ?? null) as SubscriptionData | null;
+  const overviewQueries = [periodsQuery, accountsQuery, categoriesQuery, tagsQuery, analyticsQuery, reconciliationQuery, loansQuery, paylaterQuery, subscriptionsQuery];
+  const isLoading = overviewQueries.some((query) => query.isLoading);
+  const loadError = overviewQueries.find((query) => query.error)?.error?.message ?? null;
+  const refreshDashboard = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.periods.all });
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setLoadError(null);
-    void (async () => {
-      try {
-        const [periodList, accountList, categoryList, tagList, dashboard, reconciliationHistory, activeLoans, obligations, subscriptionData] = await Promise.all([
-          api.periods.list(),
-          api.accounts.list(),
-          api.categories.list(),
-          api.tags.list(),
-          api.analytics.dashboard(),
-          api.accounts.reconciliationHistory(1),
-          api.loans.list(),
-          api.paylater.obligations(),
-          api.subscriptions.list(),
-        ]);
-        if (cancelled) return;
-        setPeriods(periodList);
-        setAccounts(accountList);
-        setCategories(categoryList);
-        setTags(tagList);
-        setAnalytics(dashboard);
-        setReconciliation(reconciliationHistory);
-        setLoans(activeLoans);
-        setPaylater(obligations);
-        setSubscriptions(subscriptionData);
-        setSelectedPeriodId((current) => {
-          if (current && periodList.some((period) => String(period.id) === current)) return current;
-          const now = Date.now();
-          const currentPeriod = periodList.find((period) => period.startDate <= now && now <= period.endDate + DAY_MS - 1);
-          return String((currentPeriod ?? periodList[0])?.id ?? '');
-        });
-      } catch (error) {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load the financial overview.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [refreshKey]);
+    setSelectedPeriodId((current) => {
+      if (current && periods.some((period) => String(period.id) === current)) return current;
+      const now = Date.now();
+      const currentPeriod = periods.find((period) => period.startDate <= now && now <= period.endDate + DAY_MS - 1);
+      return String((currentPeriod ?? periods[0])?.id ?? '');
+    });
+  }, [periods]);
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId) ?? null,
     [periods, selectedPeriodId],
   );
 
+  const periodQueries = useDashboardPeriodQueries(selectedPeriod?.id ?? null);
+  const facts = (periodQueries.facts.data?.data ?? null) as Facts | null;
+  const budgetRows = useMemo(() => budgetPlansFromPayload(periodQueries.budget.data as BudgetSummary | BudgetSummary[] | undefined), [periodQueries.budget.data]);
+  const recent = periodQueries.recent.data?.data ?? [];
+  const budgetOutlook = periodQueries.outlook.data ?? null;
+  const isPeriodLoading = selectedPeriod != null && [periodQueries.facts, periodQueries.budget, periodQueries.recent, periodQueries.outlook].some((query) => query.isLoading);
+  const periodLoadError = [periodQueries.facts, periodQueries.budget, periodQueries.recent, periodQueries.outlook].find((query) => query.error)?.error?.message ?? null;
+  const combinedLoadError = loadError ?? periodLoadError;
+
   useEffect(() => {
-    if (!selectedPeriod) return;
-    let cancelled = false;
-    setIsPeriodLoading(true);
-    setBudgetOutlook(null);
-    void (async () => {
-      try {
-        const [financialFacts, budgets, recentResult, outlook] = await Promise.all([
-          api.agent.financialFacts({ periodId: selectedPeriod.id }),
-          api.budgets.list(String(selectedPeriod.id)),
-          api.transactions.list({ periodId: String(selectedPeriod.id), limit: '12' }),
-          api.budgets.outlook(selectedPeriod.id),
-        ]);
-        if (cancelled) return;
-        setFacts(financialFacts.data);
-        setBudgetRows(budgetPlansFromPayload(budgets));
-        setRecent(recentResult.data);
-        setBudgetOutlook(outlook);
-        // Render the deterministic outlook immediately. If it contains
-        // candidate outliers, let the optional model review run in the
-        // background and refresh only after validated metadata is stored.
-        if (!outlook.patternReview.applied && outlook.categories.some((row) => row.outlierCount > 0)) {
-          void api.budgets.reviewOutlook(selectedPeriod.id).then(async (review) => {
-            if (cancelled || !review.applied) return;
-            const refreshed = await api.budgets.outlook(selectedPeriod.id);
-            if (!cancelled) setBudgetOutlook(refreshed);
-          }).catch(() => undefined);
-        }
-      } catch (error) {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load selected-period data.');
-      } finally {
-        if (!cancelled) setIsPeriodLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedPeriod]);
+    const outlook = periodQueries.outlook.data;
+    if (!selectedPeriod || !outlook || outlook.patternReview.applied || !outlook.categories.some((row) => row.outlierCount > 0)) return;
+    void api.budgets.reviewOutlook(selectedPeriod.id)
+      .then((review) => {
+        if (review.applied) void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.period(selectedPeriod.id) });
+      })
+      .catch(() => undefined);
+  }, [periodQueries.outlook.data, queryClient, selectedPeriod]);
 
   const budgetSummary = useMemo(() => {
     const totalPlanned = budgetRows.reduce((sum, row) => sum + row.plannedAmount, 0);
@@ -327,7 +300,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        {loadError && <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{loadError}</div>}
+        {combinedLoadError && <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{combinedLoadError}</div>}
         {coverageWarnings.length > 0 && <Link to="/periods" className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Read this period carefully.</strong> {coverageWarnings[0]} <span className="ml-1 font-semibold underline">Review coverage</span></span></Link>}
         {notificationItems.length > 0 && <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm"><div className="flex items-center gap-3"><AlertTriangle className={cn('h-5 w-5 shrink-0', notificationItems[0].tone === 'danger' ? 'text-rose-600' : notificationItems[0].tone === 'warning' ? 'text-amber-600' : 'text-sky-600')} /><p className="min-w-0 flex-1 font-bold">{notificationItems.length} item{notificationItems.length === 1 ? '' : 's'} may need your attention.</p><button type="button" onClick={() => setIsAttentionExpanded((current) => !current)} aria-expanded={isAttentionExpanded} aria-controls="dashboard-attention-details" className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/10">{isAttentionExpanded ? 'Hide details' : 'View details'}<ChevronDown className={cn('h-4 w-4 transition-transform', isAttentionExpanded && 'rotate-180')} /></button></div>{isAttentionExpanded && <div id="dashboard-attention-details" className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">{notificationItems.map((item) => <div key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><p className="min-w-0 flex-1 text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">{item.title}:</span> {item.detail}</p><Link to={item.to} className="shrink-0 font-semibold text-[var(--ref-primary)] hover:underline">{item.action}</Link></div>)}</div>}</div>}
 
@@ -382,7 +355,7 @@ function DashboardPage() {
 
         <section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(selectedPeriodAsOf)} · reconciliation: {reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active') ? 'recent check on record' : 'no current check on record'}.</p></div></div><Link to="/accounts" className="shrink-0 text-sm font-bold text-[var(--ref-primary)] hover:underline">Review accounts <ArrowRight className="inline h-4 w-4" /></Link></div></div></section>
 
-        <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); setRefreshKey((key) => key + 1); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
+        <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         <MonthlyReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
       </PageContainer>
     </RequireAuth>

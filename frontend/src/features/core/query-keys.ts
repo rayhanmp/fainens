@@ -10,7 +10,15 @@ export const queryKeys = {
     detail: (id: number) => ["transactions", "detail", id] as const,
   },
   budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const },
-  dashboard: { all: ["dashboard"] as const, analytics: ["dashboard", "analytics"] as const },
+  dashboard: {
+    all: ["dashboard"] as const,
+    analytics: ["dashboard", "analytics"] as const,
+    reconciliation: ["dashboard", "reconciliation"] as const,
+    loans: ["dashboard", "loans"] as const,
+    paylater: ["dashboard", "paylater"] as const,
+    subscriptions: ["dashboard", "subscriptions"] as const,
+    period: (periodId: number) => ["dashboard", "period", periodId] as const,
+  },
   agent: { all: ["agent"] as const, conversations: (archived = false) => ["agent", "conversations", { archived }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const },
 } as const;
 
