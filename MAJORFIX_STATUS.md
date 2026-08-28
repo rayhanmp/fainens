@@ -213,6 +213,10 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Accounts, categories, periods, and dashboard query adapters now consume the checked-in generated client. Rich legacy fields remain available through the response's additional properties until each endpoint's schema is expanded, with explicit adapter casts at the feature boundary.
 - The period contract now documents coverage, archive, and open/closed lifecycle fields so subsequent generated-client expansion can expose those states without another transport change.
 
+### `8f70aa2` — query cancellation
+
+- Core generated-client query hooks pass React Query's abort signal through the shared transport, so filter changes and unmounts can cancel stale requests.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
