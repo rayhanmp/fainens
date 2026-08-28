@@ -6,10 +6,16 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
 import { useCategoriesPageQuery } from '../features/categories/page-queries';
-import { invalidateFinancialSummaries } from '../features/core/query-keys';
+import {
+  useCreateCategoryMutation,
+  useCreateTagMutation,
+  useDeleteCategoryMutation,
+  useDeleteTagMutation,
+  useRestoreCategoryMutation,
+  useUpdateCategoryMutation,
+  useUpdateTagMutation,
+} from '../features/categories/queries';
 import { cn } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
@@ -65,9 +71,15 @@ const PRESET_COLORS = [
 ];
 
 function CategoriesPage() {
-  const queryClient = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const categoriesQuery = useCategoriesPageQuery(showArchived);
+  const createCategoryMutation = useCreateCategoryMutation();
+  const updateCategoryMutation = useUpdateCategoryMutation();
+  const deleteCategoryMutation = useDeleteCategoryMutation();
+  const restoreCategoryMutation = useRestoreCategoryMutation();
+  const createTagMutation = useCreateTagMutation();
+  const updateTagMutation = useUpdateTagMutation();
+  const deleteTagMutation = useDeleteTagMutation();
   const categories = (categoriesQuery.data?.categories ?? []) as Category[];
   const tags = (categoriesQuery.data?.tags ?? []) as TagRow[];
   const transactions = (categoriesQuery.data?.transactions ?? []) as TxRow[];
@@ -85,8 +97,6 @@ function CategoriesPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
-
-  const loadData = async () => invalidateFinancialSummaries(queryClient);
 
   const stats = useMemo(() => {
     const byCat: Record<number, number> = {};
@@ -120,21 +130,20 @@ function CategoriesPage() {
     setIsSubmitting(true);
     try {
       if (editingCategory) {
-        await api.categories.update(editingCategory.id, {
+        await updateCategoryMutation.mutateAsync({ id: editingCategory.id, data: {
           name: categoryForm.name,
           icon: categoryForm.icon || null,
           color: categoryForm.color || null,
           reportingAccountId: categoryForm.reportingAccountId ? Number(categoryForm.reportingAccountId) : null,
-        });
+        } });
       } else {
-        await api.categories.create({
+        await createCategoryMutation.mutateAsync({
           name: categoryForm.name,
           icon: categoryForm.icon || null,
           color: categoryForm.color || null,
           reportingAccountId: categoryForm.reportingAccountId ? Number(categoryForm.reportingAccountId) : null,
         });
       }
-      await loadData();
       closeCategoryModal();
     } catch (err) {
       setFormError((err as Error).message);
@@ -149,11 +158,10 @@ function CategoriesPage() {
     setIsSubmitting(true);
     try {
       if (editingTag) {
-        await api.tags.update(editingTag.id, tagForm);
+        await updateTagMutation.mutateAsync({ id: editingTag.id, data: tagForm });
       } else {
-        await api.tags.create(tagForm);
+        await createTagMutation.mutateAsync(tagForm);
       }
-      await loadData();
       closeTagModal();
     } catch (err) {
       setFormError((err as Error).message);
@@ -171,8 +179,7 @@ function CategoriesPage() {
     });
     if (!confirmed) return;
     try {
-      await api.categories.delete(id);
-      await loadData();
+      await deleteCategoryMutation.mutateAsync(id);
     } catch (err) {
       alert((err as Error).message);
     }
@@ -180,8 +187,7 @@ function CategoriesPage() {
 
   const handleRestoreCategory = async (id: number) => {
     try {
-      await api.categories.restore(id);
-      await loadData();
+      await restoreCategoryMutation.mutateAsync(id);
     } catch (err) {
       alert((err as Error).message);
     }
@@ -591,8 +597,7 @@ function CategoriesPage() {
                     });
                     if (!confirmed) return;
                     try {
-                      await api.tags.delete(editingTag.id);
-                      await loadData();
+                      await deleteTagMutation.mutateAsync(editingTag.id);
                       closeTagModal();
                     } catch (err) {
                       alert((err as Error).message);
