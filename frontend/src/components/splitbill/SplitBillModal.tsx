@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { useCreateContactMutation } from '../../features/loans/queries';
 
 interface ParsedReceiptItem {
   name: string;
@@ -93,6 +94,7 @@ function allocateLargestRemainder(values: number[], target: number): number[] {
 type Step = 'upload' | 'split';
 
 export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProps) {
+  const createContactMutation = useCreateContactMutation();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('upload');
   const [isLoading, setIsLoading] = useState(false);
@@ -321,7 +323,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     if (!newPersonName.trim()) return;
     
     try {
-      const created = await api.contacts.create({ name: newPersonName.trim() });
+      const created = await createContactMutation.mutateAsync({ name: newPersonName.trim() });
       const newPerson: SplitBillPerson = { id: created.id, name: created.name, isNew: false };
       const newPeople = [...people, newPerson];
       setContacts((current) => [...current, created]);

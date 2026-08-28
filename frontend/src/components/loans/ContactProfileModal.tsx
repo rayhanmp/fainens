@@ -19,6 +19,7 @@ import {
   Save,
   FileText,
 } from 'lucide-react';
+import { useUpdateContactMutation } from '../../features/loans/queries';
 
 
 interface ContactProfileModalProps {
@@ -70,6 +71,7 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
 };
 
 export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfileModalProps) {
+  const updateContactMutation = useUpdateContactMutation();
   const [contact, setContact] = useState<ContactDetails | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -185,14 +187,14 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
 
     setIsSaving(true);
     try {
-      const updated = await api.contacts.update(contactId, {
+      const updated = await updateContactMutation.mutateAsync({ id: contactId, data: {
         name: editForm.name.trim(),
         fullName: editForm.fullName.trim() || null,
         email: editForm.email.trim() || null,
         phone: editForm.phone.trim() || null,
         relationshipType: editForm.relationshipType || null,
         notes: editForm.notes.trim() || null,
-      });
+      }});
       setContact(prev => prev ? { ...prev, ...updated } : null);
       setIsEditing(false);
     } catch (err) {

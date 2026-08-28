@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useSplitLookupsQuery } from '../features/split/queries';
+import { useCreateContactMutation } from '../features/loans/queries';
 import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
 import { formatCurrency } from '../lib/utils';
 import { Button } from '../components/ui/Button';
@@ -103,6 +104,7 @@ export const Route = createFileRoute('/split')({
 function SplitBillPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const createContactMutation = useCreateContactMutation();
   const lookupsQuery = useSplitLookupsQuery();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -371,7 +373,7 @@ function SplitBillPage() {
     
     setIsCreatingContact(true);
     try {
-      const contact = await api.contacts.create({ 
+      const contact = await createContactMutation.mutateAsync({
         name: newContactName.trim(),
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.split.all });

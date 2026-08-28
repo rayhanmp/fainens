@@ -12,9 +12,8 @@ import {
   Plane,
   Heart
 } from 'lucide-react';
-import { api } from '../lib/api';
-import { useWishlistQuery } from '../features/wishlist/queries';
-import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
+import { useDeleteWishlistMutation, useWishlistQuery } from '../features/wishlist/queries';
+import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -61,6 +60,7 @@ export default function WishlistPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const wishlistQuery = useWishlistQuery();
+  const deleteWishlistMutation = useDeleteWishlistMutation();
   const items = (wishlistQuery.data?.items ?? []) as WishlistItem[];
   const categories = wishlistQuery.data?.categories ?? [];
   const isLoading = wishlistQuery.isPending && !wishlistQuery.data;
@@ -90,8 +90,7 @@ export default function WishlistPage() {
 
   async function handleDelete(item: WishlistItem) {
     try {
-      await api.wishlist.delete(item.id);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.wishlist.all });
+      await deleteWishlistMutation.mutateAsync(item.id);
       setDeleteConfirmItem(null);
       setActiveMenuId(null);
     } catch (err) {

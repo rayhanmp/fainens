@@ -32,3 +32,43 @@ export function useDeleteLoanMutation() {
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
+
+export function useCreateLoanMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.loans.create>[0]) => api.loans.create(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useRecordLoanPaymentMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.loans.recordPayment>[1] }) => api.loans.recordPayment(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useUpdateLoanMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.loans.update>[1] }) => api.loans.update(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useCreateContactMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.contacts.create>[0]) => api.contacts.create(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useUpdateContactMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.contacts.update>[1] }) => api.contacts.update(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}

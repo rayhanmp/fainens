@@ -3,6 +3,7 @@ import { X, Link, Search, Calendar } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { formatCurrency } from '../../lib/utils';
+import { useLinkWishlistMutation } from '../../features/wishlist/queries';
 
 interface LinkTransactionModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface LinkTransactionModalProps {
 }
 
 export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkTransactionModalProps) {
+  const linkWishlistMutation = useLinkWishlistMutation();
   const [transactions, setTransactions] = useState<Array<{
     id: number;
     description: string;
@@ -62,7 +64,7 @@ export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkT
 
     try {
       setIsSubmitting(true);
-      await api.wishlist.link(item.id, selectedTransactionId);
+      await linkWishlistMutation.mutateAsync({ id: item.id, transactionId: selectedTransactionId });
       
       onSuccess();
       onClose();

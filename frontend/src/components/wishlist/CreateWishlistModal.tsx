@@ -19,6 +19,7 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { cn } from '../../lib/utils';
+import { useCreateWishlistMutation } from '../../features/wishlist/queries';
 
 interface CreateWishlistModalProps {
   isOpen: boolean;
@@ -61,6 +62,7 @@ interface ScrapingError {
 type Priority = 'low' | 'medium' | 'high';
 
 export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: CreateWishlistModalProps) {
+  const createWishlistMutation = useCreateWishlistMutation();
   // URL scraping states
   const [productUrl, setProductUrl] = useState('');
   const [isScraping, setIsScraping] = useState(false);
@@ -263,7 +265,7 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
 
     try {
       setIsSubmitting(true);
-      await api.wishlist.create({
+      await createWishlistMutation.mutateAsync({
         name: name.trim(),
         description: description.trim() || null,
         amount: Math.round(parseFloat(amount)),

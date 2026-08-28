@@ -3,6 +3,7 @@ import { X, CheckCircle2, Calendar, CreditCard, FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { formatCurrency } from '../../lib/utils';
+import { useFulfillWishlistMutation } from '../../features/wishlist/queries';
 
 interface FulfillWishlistModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ interface FulfillWishlistModalProps {
 }
 
 export function FulfillWishlistModal({ isOpen, onClose, onSuccess, item }: FulfillWishlistModalProps) {
+  const fulfillWishlistMutation = useFulfillWishlistMutation();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [accountId, setAccountId] = useState('');
   const [description, setDescription] = useState(item.name);
@@ -49,12 +51,12 @@ export function FulfillWishlistModal({ isOpen, onClose, onSuccess, item }: Fulfi
 
     try {
       setIsSubmitting(true);
-      await api.wishlist.fulfill(item.id, {
+      await fulfillWishlistMutation.mutateAsync({ id: item.id, data: {
         date,
         accountId: parseInt(accountId),
         description: description.trim() || item.name,
         notes: notes.trim() || undefined,
-      });
+      }});
       
       onSuccess();
       onClose();

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { api } from '../../lib/api';
+import { useCreateContactMutation } from '../../features/loans/queries';
 
 interface NewContactModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ const RELATIONSHIP_TYPES = [
 ];
 
 export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalProps) {
+  const createContactMutation = useCreateContactMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -40,7 +41,7 @@ export function NewContactModal({ isOpen, onClose, onSuccess }: NewContactModalP
     setError('');
 
     try {
-      const contact = await api.contacts.create({
+      const contact = await createContactMutation.mutateAsync({
         name: formData.name.trim(),
         fullName: formData.fullName.trim() || null,
         email: formData.email.trim() || null,

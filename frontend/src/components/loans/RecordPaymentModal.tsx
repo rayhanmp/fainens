@@ -5,6 +5,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { api } from '../../lib/api';
 import { formatCurrency, cn } from '../../lib/utils';
 import { ArrowUpRight, ArrowDownRight, Wallet, Landmark, Banknote, CheckCircle2 } from 'lucide-react';
+import { useRecordLoanPaymentMutation } from '../../features/loans/queries';
 
 interface Loan {
   id: number;
@@ -25,6 +26,7 @@ interface RecordPaymentModalProps {
 const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
 
 export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordPaymentModalProps) {
+  const recordLoanPaymentMutation = useRecordLoanPaymentMutation();
   const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -89,12 +91,12 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
     const paymentDateWithTime = new Date(formData.paymentDate);
     paymentDateWithTime.setHours(hours, minutes, 0, 0);
     
-    await api.loans.recordPayment(loan.id, {
+    await recordLoanPaymentMutation.mutateAsync({ id: loan.id, data: {
         amountCents,
         paymentDate: paymentDateWithTime.getTime(),
         notes: formData.notes || undefined,
         walletAccountId: parseInt(formData.walletAccountId),
-      });
+      }});
       
       onSuccess();
     } catch (err) {

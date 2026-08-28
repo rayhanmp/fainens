@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/utils';
+import { useCreateContactMutation, useCreateLoanMutation } from '../../features/loans/queries';
 import { 
   Plus, 
   Wallet, 
@@ -41,6 +42,8 @@ const RELATIONSHIP_TYPES = [
 const WALLET_ICONS = [Landmark, Wallet, Banknote];
 
 export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) {
+  const createContactMutation = useCreateContactMutation();
+  const createLoanMutation = useCreateLoanMutation();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; balance: number }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,7 +102,7 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
     
     setIsCreatingContact(true);
     try {
-      const contact = await api.contacts.create({ 
+      const contact = await createContactMutation.mutateAsync({
         name: newContactName.trim(),
         fullName: newContactFullName.trim() || null,
         nickname: newContactNickname.trim() || null,
@@ -145,7 +148,7 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
 
     setIsSubmitting(true);
     try {
-      await api.loans.create({
+      await createLoanMutation.mutateAsync({
         contactId: parseInt(formData.contactId),
         direction: formData.direction,
         amountCents,
