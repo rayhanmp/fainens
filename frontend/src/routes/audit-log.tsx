@@ -5,8 +5,8 @@ import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { useCallback, useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { useEffect, useState } from 'react';
+import { useAuditLogQuery } from '../features/audit-log/queries';
 import { formatDateTime, cn } from '../lib/utils';
 import {
   ChevronLeft,
@@ -91,11 +91,8 @@ function entrySummary(entry: AuditEntry): string {
 }
 
 function AuditLogPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState({
     entityType: '',
     action: '',
@@ -113,38 +110,20 @@ function AuditLogPage() {
     setPage(1);
   }, [debouncedSearch]);
 
-  const loadAuditLog = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const params: {
-        page: number;
-        pageSize: number;
-        entityType?: string;
-        action?: string;
-        search?: string;
-      } = { page, pageSize };
-      if (filters.entityType) params.entityType = filters.entityType;
-      if (filters.action) params.action = filters.action;
-      if (debouncedSearch) params.search = debouncedSearch;
-
-      const data = await api.auditLog.list(params);
-      setEntries(
-        data.entries.map((e) => ({
-          ...e,
-          action: e.action as AuditEntry['action'],
-        })),
-      );
-      setTotal(data.total);
-    } catch (err) {
-      console.error('Failed to load audit log:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, pageSize, filters.entityType, filters.action, debouncedSearch]);
-
-  useEffect(() => {
-    void loadAuditLog();
-  }, [loadAuditLog]);
+  const auditQuery = useAuditLogQuery({
+    page,
+    pageSize,
+    ...(filters.entityType ? { entityType: filters.entityType } : {}),
+    ...(filters.action ? { action: filters.action } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+  });
+  const entries = (auditQuery.data?.entries ?? []).map((entry) => ({
+    ...entry,
+    action: entry.action as AuditEntry['action'],
+  }));
+  const total = auditQuery.data?.total ?? 0;
+  const isLoading = auditQuery.isPending && !auditQuery.data;
+  const loadAuditLog = () => auditQuery.refetch();
 
   const getActionIcon = (action: string) => {
     switch (action) {
@@ -289,6 +268,12 @@ function AuditLogPage() {
               </div>
             </div>
           </div>
+
+          {auditQuery.error && (
+            <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {auditQuery.error instanceof Error ? auditQuery.error.message : 'Failed to load audit log.'}
+            </div>
+          )}
 
           {isLoading ? (
             <div className="space-y-0 divide-y divide-[var(--color-border)]">

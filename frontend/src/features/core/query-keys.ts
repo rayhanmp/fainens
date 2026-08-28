@@ -23,6 +23,7 @@ export const queryKeys = {
     summary: ["reports", "summary"] as const,
   },
   anomalies: { all: ["anomalies"] as const, list: (status: string) => ["anomalies", status] as const },
+  auditLog: { all: ["audit-log"] as const, list: (filters: object = {}) => ["audit-log", "list", filters] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
