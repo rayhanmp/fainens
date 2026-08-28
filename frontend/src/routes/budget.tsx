@@ -11,6 +11,15 @@ import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, cn, parseIdNominalToInt } from '../lib/utils';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useBudgetCategoriesQuery,
+  useBudgetComparisonQuery,
+  useBudgetPeriodsQuery,
+  useBudgetQuery,
+  useBudgetTemplatesQuery,
+} from '../features/budgets/queries';
+import { queryKeys } from '../features/core/query-keys';
 import {
   Plus,
   PiggyBank,
@@ -112,16 +121,8 @@ function formatPeriodRange(p: Period) {
 
 function BudgetPage() {
   const search = useSearch({ from: '/budget' }) as { periodId?: string };
-  const [budgetRows, setBudgetRows] = useState<BudgetRow[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>(search.periodId || '');
   const [comparePeriodId, setComparePeriodId] = useState<string>('');
-  const [comparisonData, setComparisonData] = useState<ComparisonData[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [periodIncome, setPeriodIncome] = useState<number>(0);
-  const [budgetPercentOfIncome, setBudgetPercentOfIncome] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -131,7 +132,7 @@ function BudgetPage() {
   const { confirm } = useConfirm();
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const dataRequestVersion = useRef(0);
+  const queryClient = useQueryClient();
 
   // Close menus on outside click
   useEffect(() => {
@@ -166,76 +167,39 @@ function BudgetPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    const version = ++dataRequestVersion.current;
-    setIsLoading(true);
-    setBudgetRows([]);
-    setPeriodIncome(0);
-    setBudgetPercentOfIncome(0);
-    void loadData(version);
-  }, [selectedPeriodId]);
+  const periodsQuery = useBudgetPeriodsQuery();
+  const categoriesQuery = useBudgetCategoriesQuery();
+  const budgetQuery = useBudgetQuery(selectedPeriodId ? parseInt(selectedPeriodId, 10) : undefined);
+  const comparisonQuery = useBudgetComparisonQuery(
+    selectedPeriodId ? parseInt(selectedPeriodId, 10) : null,
+    comparePeriodId ? parseInt(comparePeriodId, 10) : null,
+  );
+  const templatesQuery = useBudgetTemplatesQuery();
+  const periods = (periodsQuery.data ?? []) as Period[];
+  const categories = (categoriesQuery.data ?? []) as Category[];
+  const templates = (templatesQuery.data ?? []) as Template[];
+  const budgetPayload = budgetQuery.data;
+  const budgetSummary = Array.isArray(budgetPayload) ? budgetPayload[0] : budgetPayload;
+  const budgetRows = (budgetSummary?.plans ?? []) as BudgetRow[];
+  const periodIncome = budgetSummary?.income ?? 0;
+  const budgetPercentOfIncome = budgetSummary?.percentOfIncome ?? 0;
+  const comparisonData = (comparisonQuery.data ?? []) as ComparisonData[];
+  const isLoading = periodsQuery.isLoading || categoriesQuery.isLoading || budgetQuery.isLoading || templatesQuery.isLoading;
+  const loadError = periodsQuery.error?.message ?? categoriesQuery.error?.message ?? budgetQuery.error?.message ?? templatesQuery.error?.message ?? null;
 
   useEffect(() => {
-    if (selectedPeriodId && comparePeriodId && selectedPeriodId !== comparePeriodId) {
-      loadComparison();
-    } else {
-      setComparisonData([]);
-    }
-  }, [selectedPeriodId, comparePeriodId]);
+    if (!selectedPeriodId && periods.length > 0) setSelectedPeriodId(periods[0].id.toString());
+  }, [periods, selectedPeriodId]);
 
-  useEffect(() => {
-    loadTemplates();
-  }, []);
-
-  const loadData = async (version = dataRequestVersion.current) => {
-    const requestedPeriodId = selectedPeriodId;
-    try {
-      const [budgetData, periodData, categoryData] = await Promise.all([
-        api.budgets.list(requestedPeriodId || undefined),
-        api.periods.list(),
-        api.categories.list(),
-      ]);
-      if (version !== dataRequestVersion.current) return;
-      
-      // Handle new API response format - can be array or single object
-      const data = budgetData as any;
-      if (Array.isArray(data)) {
-        const firstPeriod = data[0];
-        setBudgetRows(firstPeriod?.plans || []);
-        setPeriodIncome(firstPeriod?.income || 0);
-        setBudgetPercentOfIncome(firstPeriod?.percentOfIncome || 0);
-      } else {
-        setBudgetRows(data.plans || []);
-        setPeriodIncome(data.income || 0);
-        setBudgetPercentOfIncome(data.percentOfIncome || 0);
-      }
-      setPeriods(periodData);
-      setCategories(categoryData);
-
-      if (!requestedPeriodId && periodData.length > 0) {
-        setSelectedPeriodId(periodData[0].id.toString());
-      }
-    } finally {
-      if (version === dataRequestVersion.current) setIsLoading(false);
-    }
-  };
-
-  const loadComparison = async () => {
-    try {
-      const data = await api.budgets.compare(selectedPeriodId, comparePeriodId);
-      setComparisonData(data);
-    } catch (err) {
-      console.error('Failed to load comparison:', err);
-    }
+  const loadData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.periods.all }),
+    ]);
   };
 
   const loadTemplates = async () => {
-    try {
-      const data = await api.budgets.templates.list();
-      setTemplates(data);
-    } catch (err) {
-      console.error('Failed to load templates:', err);
-    }
+    await queryClient.invalidateQueries({ queryKey: queryKeys.budgets.templates });
   };
 
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
@@ -641,6 +605,13 @@ function BudgetPage() {
             </Button>
           </div>
         </div>
+
+        {loadError && (
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10 px-4 py-3 text-sm text-[var(--color-danger)]">
+            <span>Budget data could not be refreshed. Showing the last available snapshot.</span>
+            <button type="button" onClick={() => void loadData()} className="shrink-0 font-semibold underline">Try again</button>
+          </div>
+        )}
 
         {/* Bento summary - Cards at the top */}
         {selectedPeriod && (

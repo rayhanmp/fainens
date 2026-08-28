@@ -9,7 +9,7 @@ export const queryKeys = {
     list: (filters: object = {}) => ["transactions", "list", filters] as const,
     detail: (id: number) => ["transactions", "detail", id] as const,
   },
-  budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const },
+  budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const, comparison: (periodId: number, comparePeriodId: number) => ["budgets", "comparison", periodId, comparePeriodId] as const, templates: ["budgets", "templates"] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
