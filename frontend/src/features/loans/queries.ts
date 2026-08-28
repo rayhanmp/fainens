@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
-import { queryKeys } from '../core/query-keys';
+import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type LoansPageData = {
   loans: Awaited<ReturnType<typeof api.loans.list>>;
@@ -22,5 +22,13 @@ export function useLoansQuery() {
       return { loans: [...activeLoans, ...repaidLoans], contacts, summary };
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useDeleteLoanMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.loans.delete(id),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

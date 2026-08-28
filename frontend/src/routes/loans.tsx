@@ -5,8 +5,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import { useLoansQuery } from '../features/loans/queries';
+import { useDeleteLoanMutation, useLoansQuery } from '../features/loans/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { formatCurrency, cn } from '../lib/utils';
 import { NewLoanModal } from '../components/loans/NewLoanModal';
@@ -77,6 +76,7 @@ function getInitials(name: string): string {
 function LoansPage() {
   const queryClient = useQueryClient();
   const loansQuery = useLoansQuery();
+  const deleteLoanMutation = useDeleteLoanMutation();
   const loans = (loansQuery.data?.loans ?? []) as Loan[];
   const contacts = (loansQuery.data?.contacts ?? []) as ContactSummary[];
   const summary = (loansQuery.data?.summary ?? null) as Summary | null;
@@ -453,7 +453,7 @@ function LoansPage() {
                           });
                           if (confirmed) {
                             try {
-                              await api.loans.delete(loan.id);
+                              await deleteLoanMutation.mutateAsync(loan.id);
                               void loadData();
                             } catch (err) {
                               alert((err as Error).message);
