@@ -370,6 +370,11 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - PayLater settlement now uses a feature-owned typed mutation with shared financial-summary invalidation.
 - The existing outstanding-balance validation and payment modal remain unchanged, while the route no longer performs a second manual refresh after a successful settlement.
 
+### `3075a0e` — loan deletion mutation hook
+
+- Loan deletion now uses a feature-owned typed mutation with shared financial-summary invalidation.
+- The existing confirmation warning remains in place, including the associated-transaction consequence; the route no longer owns a separate delete transport path.
+
 ### `dbdf2f0` and `7d3094f` — high-priority completion wave
 
 - Absence-period coverage now propagates through budget summaries/actuals, dashboard cards, reports and trends, PDF monthly reports, burn-rate averages, and agent comparison/variance tools. Skipped or unknown periods are disclosed as not tracked rather than rendered as zero activity.
