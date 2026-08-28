@@ -4,5 +4,5 @@ import { queryKeys } from '../core/query-keys';
 
 export const useAccountsQuery = () => useQuery({
   queryKey: queryKeys.accounts.all,
-  queryFn: async () => (await listAccounts()).data,
+  queryFn: async ({ signal }) => (await listAccounts({ signal })).data,
 });

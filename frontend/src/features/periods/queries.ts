@@ -4,5 +4,5 @@ import { queryKeys } from '../core/query-keys';
 
 export const usePeriodsQuery = () => useQuery({
   queryKey: queryKeys.periods.all,
-  queryFn: async () => (await listPeriods()).data,
+  queryFn: async ({ signal }) => (await listPeriods({ signal })).data,
 });

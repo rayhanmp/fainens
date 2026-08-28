@@ -4,5 +4,5 @@ import { queryKeys } from '../core/query-keys';
 
 export const useDashboardQuery = () => useQuery({
   queryKey: queryKeys.dashboard.analytics,
-  queryFn: async () => (await getDashboardAnalytics()).data,
+  queryFn: async ({ signal }) => (await getDashboardAnalytics({ signal })).data,
 });

@@ -4,5 +4,5 @@ import { queryKeys } from '../core/query-keys';
 
 export const useCategoriesQuery = () => useQuery({
   queryKey: queryKeys.categories.all,
-  queryFn: async () => (await listCategories()).data,
+  queryFn: async ({ signal }) => (await listCategories({ signal })).data,
 });
