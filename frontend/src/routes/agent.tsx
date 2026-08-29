@@ -30,14 +30,14 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { AgentMessage } from '../components/agent/AgentMessage';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import type { ListAgentConversations200 } from '../generated/client';
 import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory } from '../lib/api';
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
 import { agentCommands } from '../features/agent/commands';
+import { useConversationController } from '../features/agent/conversation-controller';
 import { ConversationList, ConversationTitle, CONVERSATIONS_PAGE_SIZE } from '../features/agent/ConversationList';
-import type { AgentActivityStep, AgentResponse, ChatImage, ChatMessage, Conversation, ConversationDetail, Period } from '../features/agent/types';
+import type { AgentActivityStep, AgentResponse, ChatImage, ChatMessage, ConversationDetail, Period } from '../features/agent/types';
 import { useAgentConversationQuery, useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useCategoriesQuery } from '../features/categories/queries';
@@ -820,12 +820,6 @@ function AgentPage() {
   const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [activityTimeline, setActivityTimeline] = useState<AgentActivityStep[]>([]);
   const [copiedAssistantId, setCopiedAssistantId] = useState<string | null>(null);
-  const [conversationActionId, setConversationActionId] = useState<number | null>(null);
-
-  const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
-  const [conversationMenuPlacement, setConversationMenuPlacement] = useState<'above' | 'below'>('below');
-  const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
-  const [conversationTitleDraft, setConversationTitleDraft] = useState('');
   const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
   const [editingUserMessageText, setEditingUserMessageText] = useState('');
   const [revealedMessageActionsId, setRevealedMessageActionsId] = useState<string | null>(null);
@@ -839,11 +833,31 @@ function AgentPage() {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const conversationController = useConversationController({
+    activeConversationId,
+    onError: setError,
+  });
+  const {
+    conversationListRef,
+    conversationActionId,
+    openConversationMenuId,
+    conversationMenuPlacement,
+    editingConversationId,
+    conversationTitleDraft,
+    setConversationTitleDraft,
+    updateConversationCache,
+    updateConversation,
+    beginConversationRename,
+    cancelConversationRename,
+    saveConversationTitle,
+    toggleConversationMenu,
+    deleteConversation,
+    closeConversationMenu,
+  } = conversationController;
   const imageInputRef = useRef<HTMLInputElement>(null);
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
   const editingUserMessageTextareaRef = useRef<HTMLTextAreaElement>(null);
   const messageActionHoldTimerRef = useRef<number | null>(null);
-  const conversationListRef = useRef<HTMLDivElement>(null);
   const agentRequestRef = useRef<AbortController | null>(null);
   const conversationLoadMoreTimerRef = useRef<number | null>(null);
   const lastProfileNicknameRef = useRef<string | null>(null);
@@ -876,10 +890,6 @@ function AgentPage() {
   useEffect(() => {
     setStartupSelection(createStartupSelection(nickname));
   }, [nickname]);
-
-  const updateConversationCache = (update: (current: Conversation[]) => Conversation[]) => {
-    queryClient.setQueryData<ListAgentConversations200>(queryKeys.agent.conversations(true), (current) => current ? { ...current, conversations: update(current.conversations) } : current);
-  };
 
   // The page keeps its rich streaming view state locally, while these small
   // selectors make the durable draft and transient session lifecycle visible
@@ -922,24 +932,6 @@ function AgentPage() {
     agentRequestRef.current?.abort();
     setSessionStreamStatus('idle');
   }, [setSessionStreamStatus]);
-
-  useEffect(() => {
-    if (openConversationMenuId == null) return undefined;
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest('[data-conversation-menu-root]')) return;
-      setOpenConversationMenuId(null);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenConversationMenuId(null);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePress);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePress);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [openConversationMenuId]);
 
   const beginMessageActionHold = (message: ChatMessage, pointerType: string) => {
     if (message.role !== 'user' || (pointerType !== 'touch' && pointerType !== 'pen')) return;
@@ -1366,70 +1358,8 @@ function AgentPage() {
     setNotice(null);
     setEditingUserMessageId(null);
     setEditingUserMessageText('');
-  };
-
-  const beginConversationRename = () => {
-    if (!activeConversation) return;
-    setEditingConversationId(activeConversation.id);
-    setConversationTitleDraft(activeConversation.title === 'New conversation' ? '' : activeConversation.title);
-    setOpenConversationMenuId(null);
-    setError(null);
-  };
-
-  const updateConversation = async (conversationId: number, data: { title?: string; isPinned?: boolean; archived?: boolean }) => {
-    setConversationActionId(conversationId);
-    setError(null);
-    try {
-      const result = await agentCommands.conversations.update(conversationId, data);
-      updateConversationCache((current) => current.map((conversation) => conversation.id === conversationId ? result.conversation : conversation));
-      return result.conversation;
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not update that conversation.');
-      return null;
-    } finally {
-      setConversationActionId(null);
-    }
-  };
-
-  const saveConversationTitle = async (conversationId: number) => {
-    const title = conversationTitleDraft.trim();
-    if (!title) {
-      setError('Conversation title cannot be empty.');
-      return;
-    }
-    const updated = await updateConversation(conversationId, { title });
-    if (updated) {
-      setEditingConversationId(null);
-      setConversationTitleDraft('');
-    }
-  };
-
-  const toggleConversationMenu = (event: React.MouseEvent<HTMLButtonElement>, conversationId: number) => {
-    if (openConversationMenuId === conversationId) {
-      setOpenConversationMenuId(null);
-      return;
-    }
-    const triggerBottom = event.currentTarget.getBoundingClientRect().bottom;
-    const listBottom = conversationListRef.current?.getBoundingClientRect().bottom;
-    const estimatedMenuHeight = 188;
-    setConversationMenuPlacement(listBottom != null && triggerBottom + estimatedMenuHeight > listBottom ? 'above' : 'below');
-    setOpenConversationMenuId(conversationId);
-  };
-
-  const deleteConversation = async (conversation: Conversation) => {
-    if (!window.confirm(`Delete “${conversation.title}”? This permanently removes the conversation and its messages.`)) return;
-    setConversationActionId(conversation.id);
-    setError(null);
-    try {
-      await agentCommands.conversations.delete(conversation.id);
-      updateConversationCache((current) => current.filter((candidate) => candidate.id !== conversation.id));
-      setOpenConversationMenuId(null);
-      if (activeConversationId === conversation.id) startNewConversation();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not delete that conversation.');
-    } finally {
-      setConversationActionId(null);
-    }
+    cancelConversationRename();
+    closeConversationMenu();
   };
 
   const sortedConversations = useMemo(
@@ -1468,16 +1398,16 @@ function AgentPage() {
                           autoFocus
                           value={conversationTitleDraft}
                           onChange={(event) => setConversationTitleDraft(event.target.value)}
-                          onKeyDown={(event) => { if (event.key === 'Escape') { setEditingConversationId(null); setConversationTitleDraft(''); } }}
+                          onKeyDown={(event) => { if (event.key === 'Escape') cancelConversationRename(); }}
                           maxLength={72}
                           aria-label="Conversation title"
                           className="min-w-0 w-[min(18rem,45vw)] rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1 text-sm font-semibold text-[var(--color-text-primary)] outline-none ring-[var(--ref-primary)] focus:ring-2"
                         />
                         <button type="submit" className="rounded p-1 text-[var(--color-success)] hover:bg-[var(--ref-surface-container-low)]" title="Save title" aria-label="Save title"><Check className="h-4 w-4" /></button>
-                        <button type="button" onClick={() => { setEditingConversationId(null); setConversationTitleDraft(''); }} className="rounded p-1 text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)]" title="Cancel rename" aria-label="Cancel rename"><X className="h-4 w-4" /></button>
+                        <button type="button" onClick={cancelConversationRename} className="rounded p-1 text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)]" title="Cancel rename" aria-label="Cancel rename"><X className="h-4 w-4" /></button>
                       </form>
                     ) : (
-                      <button type="button" onClick={beginConversationRename} className="group flex min-w-0 max-w-full items-center gap-1.5 text-left" title={activeConversation ? 'Rename conversation' : undefined} disabled={!activeConversation}>
+                      <button type="button" onClick={() => beginConversationRename(activeConversation)} className="group flex min-w-0 max-w-full items-center gap-1.5 text-left" title={activeConversation ? 'Rename conversation' : undefined} disabled={!activeConversation}>
                         <h2 className="truncate text-base font-semibold leading-5">{activeConversation ? <ConversationTitle conversation={activeConversation} isActive={false} /> : 'New conversation'}</h2>
                         {activeConversation && <Pencil className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-100" />}
                       </button>
@@ -1825,15 +1755,15 @@ function AgentPage() {
               conversationTitleDraft={conversationTitleDraft}
               onConversationTitleDraftChange={setConversationTitleDraft}
               onSaveConversationTitle={(id) => void saveConversationTitle(id)}
-              onCancelRename={() => { setEditingConversationId(null); setConversationTitleDraft(''); }}
+              onCancelRename={cancelConversationRename}
               openConversationMenuId={openConversationMenuId}
               conversationMenuPlacement={conversationMenuPlacement}
               conversationActionId={conversationActionId}
               onToggleConversationMenu={toggleConversationMenu}
-              onEditConversation={(conversation) => { setEditingConversationId(conversation.id); setConversationTitleDraft(conversation.title); setOpenConversationMenuId(null); setError(null); }}
-              onTogglePin={(conversation) => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); }}
-              onToggleArchive={(conversation) => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { archived: conversation.archivedAt == null }); }}
-              onDeleteConversation={(conversation) => void deleteConversation(conversation)}
+              onEditConversation={(conversation) => beginConversationRename(conversation)}
+              onTogglePin={(conversation) => { closeConversationMenu(); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); }}
+              onToggleArchive={(conversation) => { closeConversationMenu(); void updateConversation(conversation.id, { archived: conversation.archivedAt == null }); }}
+              onDeleteConversation={(conversation) => void deleteConversation(conversation, startNewConversation)}
             />
           </div>
         </div>

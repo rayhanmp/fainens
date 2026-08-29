@@ -70,6 +70,7 @@ import {
   useUpdateTransportRouteTemplateMutation,
   useUpdateTransaction,
 } from '../../features/transactions/queries';
+import type { PendingTransactionParsed } from '../../features/transactions/queries';
 import { useCalculatePaylaterScheduleMutation, usePaylaterQuery, useRecognizePaylaterMutation, useSettlePaylaterMutation } from '../../features/paylater/queries';
 import { useAttachmentDownload, useAttachmentsQuery, useDeleteAttachmentMutation } from '../../features/attachments/queries';
 
@@ -144,18 +145,7 @@ interface TransactionModalProps {
   initialMode?: 'view' | 'edit';
   pendingTransaction?: {
     id: number;
-    parsedData: {
-      type: string;
-      amount: number;
-      description: string;
-      category: string;
-      date?: string;
-      place?: string;
-      memo?: string;
-      fromAccount?: string;
-      toAccount?: string;
-      confidence: number;
-    };
+    parsedData: PendingTransactionParsed;
   } | null;
 }
 
@@ -323,18 +313,7 @@ export function TransactionModal({
 
   // AI mode state
   const [aiInput, setAiInput] = useState('');
-  const [aiParsed, setAiParsed] = useState<{
-    type: string;
-    amount: number;
-    description: string;
-    category: string;
-    date?: string;
-    place?: string;
-    memo?: string;
-    fromAccount?: string;
-    toAccount?: string;
-    confidence: number;
-  } | null>(null);
+  const [aiParsed, setAiParsed] = useState<PendingTransactionParsed | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [parseError, setParseError] = useState('');

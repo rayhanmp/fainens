@@ -15,7 +15,7 @@ import type { api } from '../lib/api';
 import type { ListTransactionsParams } from '../generated/client';
 import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
+import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList, type PendingTransactionListItem } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { fetchPeriods, usePeriodsQuery } from '../features/periods/queries';
@@ -125,7 +125,7 @@ function TransactionsPage() {
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
-  const [editingPendingTx, setEditingPendingTx] = useState<{ id: number; parsedData: { type: string; amount: number; description: string; category: string; date?: string; place?: string; memo?: string; fromAccount?: string; toAccount?: string; confidence: number } } | null>(null);
+  const [editingPendingTx, setEditingPendingTx] = useState<PendingTransactionListItem | null>(null);
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false);
   const [isSplitLoading, setIsSplitLoading] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);

@@ -13,6 +13,8 @@ import {
   setPeriodCoverage,
   suggestNextPeriod,
   updatePeriod,
+  type CreatePeriod200,
+  type CreatePeriod201,
 } from '../../generated/client';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
@@ -71,8 +73,8 @@ export function useReturnPreviewQuery(asOfDate: number | null) {
 
 export function useCreatePeriodMutation() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: Parameters<typeof createPeriod>[0]) => unwrapGenerated(createPeriod(input), [200, 201], 'Failed to create period'),
+  return useMutation<CreatePeriod200 | CreatePeriod201, Error, Parameters<typeof createPeriod>[0]>({
+    mutationFn: async (input) => unwrapGenerated(createPeriod(input), [200, 201], 'Failed to create period') as Promise<CreatePeriod200 | CreatePeriod201>,
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import {
   approvePendingTransaction,
   bulkDeleteTransactions,
   confirmTransactionImport,
+  createPendingTransaction,
   createTransaction,
   createTransportRouteTemplate,
   deleteTransaction,
@@ -13,15 +15,17 @@ import {
   listTransportRouteTemplates,
   parsePendingTransaction,
   previewTransactionImport,
+  recommendTransactionCategory,
   rejectPendingTransaction,
   reverseTransaction,
   retryPendingTransaction,
+  updatePendingTransaction,
   updateTransaction,
   updateTransportRouteTemplate,
   type ListTransactionsParams,
   type PreviewTransactionImport200AnyOfFour,
+  type CreatePendingTransactionBodyParsed,
 } from "../../generated/client";
-import { api } from "../../lib/api";
 import { invalidateFinancialSummaries, queryKeys } from "../core/query-keys";
 import { unwrapGenerated } from "../core/generated-response";
 
@@ -43,7 +47,10 @@ export function usePendingTransactionsQuery() {
     queryFn: async ({ signal }) => {
       const response = await listPendingTransactions({ signal });
       if (response.status !== 200) throw new Error('Failed to load pending transactions');
-      return response.data;
+      return response.data.map((item) => ({
+        ...item,
+        parsedData: pendingParsedTransactionSchema.parse(item.parsedData),
+      })) as PendingTransactionListItem[];
     },
     placeholderData: (previous) => previous,
   });
@@ -162,26 +169,54 @@ export function usePreviewTransactionImportMutation() {
   });
 }
 
-type PendingTransactionParsed = Parameters<typeof api.pendingTransactions.create>[1];
+export type PendingTransactionParsed = CreatePendingTransactionBodyParsed;
+export type PendingTransactionListItem = {
+  id: number;
+  rawMessage: string;
+  parsedData: PendingTransactionParsed;
+  status: 'pending' | 'approved' | 'rejected' | 'failed';
+  parseAttempts: number;
+  lastError: string | null;
+  source?: string;
+  userMessageId?: string | null;
+  createdAt: string | number;
+};
 export type PendingTransactionPreview = { parsed: PendingTransactionParsed };
+
+const pendingParsedTransactionSchema = z.object({
+  type: z.enum(['expense', 'income', 'transfer']),
+  amount: z.number().int().nonnegative(),
+  description: z.string().min(1),
+  category: z.string().min(1),
+  date: z.string().nullable().optional(),
+  place: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+  fromAccount: z.string().nullable().optional(),
+  toAccount: z.string().nullable().optional(),
+  confidence: z.number().min(0).max(1),
+}).passthrough();
 
 export function usePreviewPendingTransactionMutation() {
   return useMutation<PendingTransactionPreview, Error, string>({
-    mutationFn: async (message: string) => unwrapGenerated(parsePendingTransaction({ message }), 200, 'Failed to parse transaction') as Promise<PendingTransactionPreview>,
+    mutationFn: async (message: string) => {
+      const result = await unwrapGenerated(parsePendingTransaction({ message }), 200, 'Failed to parse transaction');
+      return { ...result, parsed: pendingParsedTransactionSchema.parse(result.parsed) } as PendingTransactionPreview;
+    },
   });
 }
 
 /** Legacy recommendation endpoint adapter kept inside the transactions feature until it is in OpenAPI. */
 export function useRecommendCategoryMutation() {
   return useMutation({
-    mutationFn: (description: string) => api.transactions.recommendCategory(description),
+    mutationFn: (name: string) => unwrapGenerated(recommendTransactionCategory({ name }), 200, 'Failed to recommend category'),
   });
 }
 
 export function useCreatePendingTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ message, parsed }: { message: string; parsed: PendingTransactionParsed }) => api.pendingTransactions.create(message, parsed),
+    mutationFn: ({ message, parsed }: { message: string; parsed: PendingTransactionParsed }) => unwrapGenerated(createPendingTransaction({ message, parsed, source: 'web' }), 201, 'Failed to create pending transaction'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
   });
 }
@@ -189,7 +224,7 @@ export function useCreatePendingTransactionMutation() {
 export function useUpdatePendingTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, parsed }: { id: number; parsed: PendingTransactionParsed }) => api.pendingTransactions.update(id, parsed),
+    mutationFn: ({ id, parsed }: { id: number; parsed: PendingTransactionParsed }) => unwrapGenerated(updatePendingTransaction(id, { parsed }), 200, 'Failed to update pending transaction'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
   });
 }

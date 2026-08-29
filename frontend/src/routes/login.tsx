@@ -1,12 +1,13 @@
 import { createFileRoute, redirect, isRedirect } from '@tanstack/react-router';
 import { useAuth } from '../lib/auth';
+import { getCurrentUser } from '../generated/client';
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
   beforeLoad: async () => {
     try {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
-      if (response.ok) {
+      const response = await getCurrentUser();
+      if (response.status === 200) {
         throw redirect({ to: '/' });
       }
     } catch (e) {

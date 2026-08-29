@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
@@ -52,6 +52,10 @@ import {
 } from 'recharts';
 
 export const Route = createFileRoute('/reports')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
+    tab: search.tab === 'balance' || search.tab === 'cashflow' || search.tab === 'spending' || search.tab === 'trends' ? search.tab : 'income',
+  }),
   component: ReportsPage,
 } as any);
 
@@ -62,12 +66,14 @@ function inclusivePeriodEnd(timestamp: number): number {
 }
 
 function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<ReportTab>('income');
+  const navigate = useNavigate();
+  const search = useSearch({ from: '/reports' }) as { periodId?: string; tab?: ReportTab };
+  const activeTab: ReportTab = search.tab ?? 'income';
   const periodsQuery = usePeriodsLedgerQuery();
   const exportReportMutation = useExportReportMutation();
   const periods = periodsQuery.data ?? [];
   // Null means “use the newest period”; an explicit empty string means All Periods.
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  const selectedPeriodId = search.periodId ?? null;
   const effectivePeriodId = selectedPeriodId ?? periods[0]?.id.toString() ?? '';
   const selectedPeriod = periods.find((p) => p.id.toString() === effectivePeriodId);
   const selectedNumericPeriodId = effectivePeriodId ? Number(effectivePeriodId) : null;
@@ -130,7 +136,7 @@ function ReportsPage() {
           />
           <Select
             value={effectivePeriodId}
-            onChange={(e) => setSelectedPeriodId(e.target.value)}
+            onChange={(e) => void navigate({ search: { periodId: e.target.value || undefined, tab: activeTab } } as any)}
             options={[
               { value: '', label: 'All Periods' },
               ...periods.map((p) => ({ value: p.id.toString(), label: p.name })),
@@ -149,31 +155,31 @@ function ReportsPage() {
         <div className="reports-tabs-scroll flex gap-1 sm:gap-2 border-b border-[var(--color-border)] overflow-x-auto pb-px">
           <TabButton
             active={activeTab === 'income'}
-            onClick={() => setActiveTab('income')}
+            onClick={() => void navigate({ search: { periodId: selectedPeriodId ?? undefined, tab: 'income' } } as any)}
             icon={<FileText className="w-4 h-4" />}
             label="Income Statement"
           />
           <TabButton
             active={activeTab === 'balance'}
-            onClick={() => setActiveTab('balance')}
+            onClick={() => void navigate({ search: { periodId: selectedPeriodId ?? undefined, tab: 'balance' } } as any)}
             icon={<Scale className="w-4 h-4" />}
             label="Balance Sheet"
           />
           <TabButton
             active={activeTab === 'cashflow'}
-            onClick={() => setActiveTab('cashflow')}
+            onClick={() => void navigate({ search: { periodId: selectedPeriodId ?? undefined, tab: 'cashflow' } } as any)}
             icon={<ArrowRightLeft className="w-4 h-4" />}
             label="Cash Flow"
           />
           <TabButton
             active={activeTab === 'spending'}
-            onClick={() => setActiveTab('spending')}
+            onClick={() => void navigate({ search: { periodId: selectedPeriodId ?? undefined, tab: 'spending' } } as any)}
             icon={<PieChart className="w-4 h-4" />}
             label="Spending"
           />
           <TabButton
             active={activeTab === 'trends'}
-            onClick={() => setActiveTab('trends')}
+            onClick={() => void navigate({ search: { periodId: selectedPeriodId ?? undefined, tab: 'trends' } } as any)}
             icon={<TrendingUp className="w-4 h-4" />}
             label="Trends"
           />

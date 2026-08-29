@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await getCurrentUser();
       if (response.status !== 200) throw new Error('Not authenticated');
-      setUser(response.data);
+      setUser({ email: response.data.email ?? '' });
       setIsAuthenticated(true);
     } catch {
       setUser(null);

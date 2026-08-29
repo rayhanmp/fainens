@@ -9760,6 +9760,98 @@ export type ListPendingTransactions200Item = {
   [key: string]: unknown;
 };
 
+export type CreatePendingTransactionBodyParsedType = typeof CreatePendingTransactionBodyParsedType[keyof typeof CreatePendingTransactionBodyParsedType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreatePendingTransactionBodyParsedType = {
+  expense: 'expense',
+  income: 'income',
+  transfer: 'transfer',
+} as const;
+
+export type CreatePendingTransactionBodyParsed = {
+  type: CreatePendingTransactionBodyParsedType;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  description: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  category: string;
+  /**
+   * @maxLength 40
+   * @nullable
+   */
+  date?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  place?: string | null;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  notes?: string | null;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  memo?: string | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  fromAccount?: string | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  toAccount?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+  [key: string]: unknown;
+};
+
+export type CreatePendingTransactionBody = {
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  message: string;
+  parsed: CreatePendingTransactionBodyParsed;
+  /** @maxLength 200 */
+  userMessageId?: string;
+  /** @maxLength 80 */
+  source?: string;
+  [key: string]: unknown;
+};
+
+export type CreatePendingTransaction201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  pendingId: number;
+};
+
+export type CreatePendingTransaction400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ParsePendingTransactionBody = {
   /**
    * @minLength 1
@@ -9876,6 +9968,96 @@ export type GetPendingTransaction200 = {
 };
 
 export type GetPendingTransaction404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdatePendingTransactionBodyParsedType = typeof UpdatePendingTransactionBodyParsedType[keyof typeof UpdatePendingTransactionBodyParsedType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePendingTransactionBodyParsedType = {
+  expense: 'expense',
+  income: 'income',
+  transfer: 'transfer',
+} as const;
+
+export type UpdatePendingTransactionBodyParsed = {
+  type: UpdatePendingTransactionBodyParsedType;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  description: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  category: string;
+  /**
+   * @maxLength 40
+   * @nullable
+   */
+  date?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  place?: string | null;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  notes?: string | null;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  memo?: string | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  fromAccount?: string | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  toAccount?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+  [key: string]: unknown;
+};
+
+export type UpdatePendingTransactionBody = {
+  parsed: UpdatePendingTransactionBodyParsed;
+  [key: string]: unknown;
+};
+
+export type UpdatePendingTransaction200 = {
+  success: boolean;
+  [key: string]: unknown;
+};
+
+export type UpdatePendingTransaction400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdatePendingTransaction404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdatePendingTransaction409 = {
   error: string;
   [key: string]: unknown;
 };
@@ -18168,6 +18350,47 @@ export const listPendingTransactions = async ( options?: RequestInit): Promise<l
 
 
 
+export type createPendingTransactionResponse201 = {
+  data: CreatePendingTransaction201
+  status: 201
+}
+
+export type createPendingTransactionResponse400 = {
+  data: CreatePendingTransaction400
+  status: 400
+}
+    
+export type createPendingTransactionResponseSuccess = (createPendingTransactionResponse201) & {
+  headers: Headers;
+};
+export type createPendingTransactionResponseError = (createPendingTransactionResponse400) & {
+  headers: Headers;
+};
+
+export type createPendingTransactionResponse = (createPendingTransactionResponseSuccess | createPendingTransactionResponseError)
+
+export const getCreatePendingTransactionUrl = () => {
+
+
+  
+
+  return `/api/pending-transactions`
+}
+
+export const createPendingTransaction = async (createPendingTransactionBody: CreatePendingTransactionBody, options?: RequestInit): Promise<createPendingTransactionResponse> => {
+  
+  return generatedFetch<createPendingTransactionResponse>(getCreatePendingTransactionUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createPendingTransactionBody,)
+  }
+);}
+
+
+
 export type parsePendingTransactionResponse200 = {
   data: ParsePendingTransaction200
   status: 200
@@ -18344,6 +18567,58 @@ export const getPendingTransaction = async (id: number, options?: RequestInit): 
     method: 'GET'
     
     
+  }
+);}
+
+
+
+export type updatePendingTransactionResponse200 = {
+  data: UpdatePendingTransaction200
+  status: 200
+}
+
+export type updatePendingTransactionResponse400 = {
+  data: UpdatePendingTransaction400
+  status: 400
+}
+
+export type updatePendingTransactionResponse404 = {
+  data: UpdatePendingTransaction404
+  status: 404
+}
+
+export type updatePendingTransactionResponse409 = {
+  data: UpdatePendingTransaction409
+  status: 409
+}
+    
+export type updatePendingTransactionResponseSuccess = (updatePendingTransactionResponse200) & {
+  headers: Headers;
+};
+export type updatePendingTransactionResponseError = (updatePendingTransactionResponse400 | updatePendingTransactionResponse404 | updatePendingTransactionResponse409) & {
+  headers: Headers;
+};
+
+export type updatePendingTransactionResponse = (updatePendingTransactionResponseSuccess | updatePendingTransactionResponseError)
+
+export const getUpdatePendingTransactionUrl = (id: number,) => {
+
+
+  
+
+  return `/api/pending-transactions/${id}`
+}
+
+export const updatePendingTransaction = async (id: number,
+    updatePendingTransactionBody: UpdatePendingTransactionBody, options?: RequestInit): Promise<updatePendingTransactionResponse> => {
+  
+  return generatedFetch<updatePendingTransactionResponse>(getUpdatePendingTransactionUrl(id),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updatePendingTransactionBody,)
   }
 );}
 

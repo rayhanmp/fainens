@@ -18,6 +18,8 @@ async function verifyRouteContract() {
     const operationIds = new Map<string, string>();
     const missingOperationIds: string[] = [];
     const missingResponses: string[] = [];
+    const missingTags: string[] = [];
+    const missingPathParameters: string[] = [];
     let operationCount = 0;
 
     for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
@@ -48,20 +50,40 @@ async function verifyRouteContract() {
         if (!("responses" in operation) || !operation.responses || typeof operation.responses !== "object" || Object.keys(operation.responses).length === 0) {
           missingResponses.push(routeLabel);
         }
+
+        // Tags keep the generated contract navigable and prevent unrelated
+        // features from being silently grouped together in API tooling.
+        if (path.startsWith("/api/") && path !== oauthRedirectPath && !("tags" in operation && Array.isArray(operation.tags) && operation.tags.length > 0)) {
+          missingTags.push(routeLabel);
+        }
+
+        // Every path placeholder must have an explicit required path
+        // parameter. This catches a surprisingly common source of generated
+        // client/runtime mismatches.
+        const placeholders = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
+        const parameters = "parameters" in operation && Array.isArray(operation.parameters) ? operation.parameters : [];
+        for (const placeholder of placeholders) {
+          const declared = parameters.some((parameter) => parameter && typeof parameter === "object"
+            && "name" in parameter && parameter.name === placeholder
+            && "in" in parameter && parameter.in === "path"
+            && "required" in parameter && parameter.required === true);
+          if (!declared) missingPathParameters.push(`${routeLabel} {${placeholder}}`);
+        }
       }
     }
 
     const requiredPaths = ["/api/transactions/import-preview", "/api/transactions/import-confirm"];
     const missingRequiredPaths = requiredPaths.filter((path) => !(path in (document.paths ?? {})));
 
-    if (missingOperationIds.length || missingResponses.length || missingRequiredPaths.length) {
-      throw new Error(JSON.stringify({ missingOperationIds, missingResponses, missingRequiredPaths }, null, 2));
+    if (missingOperationIds.length || missingResponses.length || missingTags.length || missingPathParameters.length || missingRequiredPaths.length) {
+      throw new Error(JSON.stringify({ missingOperationIds, missingResponses, missingTags, missingPathParameters, missingRequiredPaths }, null, 2));
     }
 
     console.info(JSON.stringify({
       paths: Object.keys(document.paths ?? {}).length,
       operations: operationCount,
       operationIds: operationIds.size,
+      taggedOperations: operationCount - missingTags.length,
       oauthRedirectException: oauthRedirectPath,
     }));
   } finally {

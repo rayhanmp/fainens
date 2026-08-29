@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, Search, XCircle } from 'lucide-react';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -9,12 +9,19 @@ import type { api } from '../lib/api';
 import { useMoneyAnomaliesQuery, useReviewMoneyAnomalyMutation, useScanMoneyAnomaliesMutation } from '../features/anomalies/queries';
 import { formatCurrency, formatDate } from '../lib/utils';
 
-export const Route = createFileRoute('/anomalies')({ component: MoneyAnomaliesPage } as any);
+export const Route = createFileRoute('/anomalies')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    status: search.status === 'resolved' || search.status === 'dismissed' ? search.status : 'open',
+  }),
+  component: MoneyAnomaliesPage,
+} as any);
 
 type Review = Awaited<ReturnType<typeof api.anomalies.money>>['reviews'][number];
 
 function MoneyAnomaliesPage() {
-  const [status, setStatus] = useState<'open' | 'resolved' | 'dismissed'>('open');
+  const navigate = useNavigate();
+  const search = useSearch({ from: '/anomalies' }) as { status?: 'open' | 'resolved' | 'dismissed' };
+  const status = search.status ?? 'open';
   const anomaliesQuery = useMoneyAnomaliesQuery(status);
   const scanMutation = useScanMoneyAnomaliesMutation();
   const reviewMutation = useReviewMoneyAnomalyMutation();
@@ -60,7 +67,7 @@ function MoneyAnomaliesPage() {
       <Button onClick={() => void scan()} isLoading={scanning} className="rounded-full"><Search className="mr-2 h-4 w-4" />Scan ledger</Button>
     </div>
     <div className="mt-6 flex flex-wrap items-center gap-2">
-      {(['open', 'resolved', 'dismissed'] as const).map((value) => <button key={value} type="button" onClick={() => setStatus(value)} className={`rounded-full px-4 py-2 text-xs font-bold capitalize ${status === value ? 'bg-[var(--ref-primary)] text-white' : 'bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]'}`}>{value}</button>)}
+      {(['open', 'resolved', 'dismissed'] as const).map((value) => <button key={value} type="button" onClick={() => void navigate({ search: { status: value } } as any)} className={`rounded-full px-4 py-2 text-xs font-bold capitalize ${status === value ? 'bg-[var(--ref-primary)] text-white' : 'bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]'}`}>{value}</button>)}
       <Link to="/transactions" className="ml-auto text-sm font-semibold text-[var(--ref-primary)] hover:underline">Open transactions</Link>
     </div>
     {(error || anomaliesQuery.error) && <div className="mt-5 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error ?? (anomaliesQuery.error instanceof Error ? anomaliesQuery.error.message : 'Could not load anomaly reviews')}</div>}

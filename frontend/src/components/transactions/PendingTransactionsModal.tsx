@@ -5,35 +5,15 @@ import { formatCurrency } from '../../lib/utils';
 import { Check, X, Edit2, Loader2 } from 'lucide-react';
 import {
   useApprovePendingTransactionMutation,
+  type PendingTransactionListItem,
   usePendingTransactionsQuery,
   useRejectPendingTransactionMutation,
 } from '../../features/transactions/queries';
 
-interface PendingTransaction {
-  id: number;
-  rawMessage: string;
-  parsedData: {
-    type: string;
-    amount: number;
-    description: string;
-    category: string;
-    date?: string;
-    place?: string;
-    memo?: string;
-    fromAccount?: string;
-    toAccount?: string;
-    confidence: number;
-  };
-  status: string;
-  parseAttempts: number;
-  lastError: string | null;
-  createdAt: number;
-}
-
 interface PendingTransactionsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEdit: (pendingTx: PendingTransaction) => void;
+  onEdit: (pendingTx: PendingTransactionListItem) => void;
   onRefresh: () => void;
 }
 
@@ -46,7 +26,7 @@ export function PendingTransactionsModal({
   const pendingQuery = usePendingTransactionsQuery();
   const approveMutation = useApprovePendingTransactionMutation();
   const rejectMutation = useRejectPendingTransactionMutation();
-  const pendingTxs = (pendingQuery.data ?? []) as PendingTransaction[];
+  const pendingTxs = pendingQuery.data ?? [];
   const isLoading = pendingQuery.isPending && !pendingQuery.data;
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 

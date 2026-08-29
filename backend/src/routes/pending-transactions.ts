@@ -16,6 +16,26 @@ const pendingTimestampSchema = z.union([z.date(), z.string(), z.number()]);
 const pendingRecordSchema = z.object({ id: z.number().int(), rawMessage: z.string(), parsedData: z.unknown(), status: z.enum(["pending", "approved", "rejected", "failed"]), parseAttempts: z.number().int().nonnegative(), lastError: z.string().nullable(), source: z.string().optional(), userMessageId: z.string().nullable().optional(), createdAt: pendingTimestampSchema, updatedAt: pendingTimestampSchema.optional() }).passthrough();
 const pendingListItemSchema = pendingRecordSchema.omit({ updatedAt: true }).passthrough();
 const pendingParseBodySchema = z.object({ message: z.string().trim().min(1).max(4000), userMessageId: z.string().max(200).optional(), source: z.string().max(80).optional() }).passthrough();
+const pendingParsedTransactionSchema = z.object({
+  type: z.enum(["expense", "income", "transfer"]),
+  amount: z.number().int().nonnegative(),
+  description: z.string().trim().min(1).max(500),
+  category: z.string().trim().min(1).max(200),
+  date: z.string().max(40).nullable().optional(),
+  place: z.string().max(300).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  memo: z.string().max(2000).nullable().optional(),
+  fromAccount: z.string().max(200).nullable().optional(),
+  toAccount: z.string().max(200).nullable().optional(),
+  confidence: z.number().min(0).max(1),
+}).passthrough();
+const pendingCreateBodySchema = z.object({
+  message: z.string().trim().min(1).max(4000),
+  parsed: pendingParsedTransactionSchema,
+  userMessageId: z.string().max(200).optional(),
+  source: z.string().max(80).optional(),
+}).passthrough();
+const pendingUpdateBodySchema = z.object({ parsed: pendingParsedTransactionSchema }).passthrough();
 const pendingParseResponseSchema = z.object({ pendingId: z.number().int(), parsed: z.unknown(), message: z.string().optional(), error: z.string().optional() }).passthrough();
 const pendingApproveResponseSchema = z.object({ success: z.literal(true), transactionId: z.number().int(), message: z.string() }).passthrough();
 const pendingSuccessResponseSchema = z.object({ success: z.literal(true) }).passthrough();
@@ -42,6 +62,35 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       lastError: p.lastError,
       createdAt: p.createdAt,
     }));
+  });
+
+  // Persist a user-confirmed parse from the web editor. This is deliberately
+  // separate from the LLM parse endpoint so edited fields are not overwritten
+  // by a second model call before the user approves them.
+  fastify.post("/api/pending-transactions", {
+    schema: { operationId: "createPendingTransaction", tags: ["pending-transactions"], body: pendingCreateBodySchema, response: { 201: z.object({ pendingId: z.number().int() }), 400: pendingErrorSchema } },
+  }, async (request, reply) => {
+    const body = request.body as {
+      message: string;
+      parsed: z.infer<typeof pendingParsedTransactionSchema>;
+      userMessageId?: string;
+      source?: string;
+    };
+    const parsed = {
+      ...body.parsed,
+      notes: body.parsed.notes ?? body.parsed.memo ?? undefined,
+    };
+    const [created] = await db.insert(pendingTransactions).values({
+      rawMessage: body.message,
+      parsedData: JSON.stringify(parsed),
+      status: "pending",
+      parseAttempts: 1,
+      lastError: null,
+      userMessageId: body.userMessageId ?? null,
+      source: body.source ?? "web",
+    }).returning({ id: pendingTransactions.id });
+    if (!created) return reply.code(400).send({ error: "Failed to save pending transaction" });
+    return reply.code(201).send({ pendingId: created.id });
   });
 
   // Parse a message and create pending transaction
@@ -303,6 +352,30 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       source: pending.source,
       createdAt: pending.createdAt,
     };
+  });
+
+  // Update only the editable parsed fields. Pending rows are the sole mutable
+  // state here; approved/rejected records remain an audit trail.
+  fastify.put("/api/pending-transactions/:id", {
+    schema: { operationId: "updatePendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, body: pendingUpdateBodySchema, response: { 200: pendingSuccessResponseSchema, 400: pendingErrorSchema, 404: pendingErrorSchema, 409: pendingErrorSchema } },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const pendingId = parseInt(id, 10);
+    const body = request.body as { parsed: z.infer<typeof pendingParsedTransactionSchema> };
+    const [pending] = await db.select({ id: pendingTransactions.id, status: pendingTransactions.status })
+      .from(pendingTransactions)
+      .where(eq(pendingTransactions.id, pendingId))
+      .limit(1);
+    if (!pending) return reply.code(404).send({ error: "Pending transaction not found" });
+    if (pending.status !== "pending") return reply.code(409).send({ error: "Pending transaction already processed" });
+    const parsed = {
+      ...body.parsed,
+      notes: body.parsed.notes ?? body.parsed.memo ?? undefined,
+    };
+    await db.update(pendingTransactions)
+      .set({ parsedData: JSON.stringify(parsed), updatedAt: new Date(), lastError: null })
+      .where(eq(pendingTransactions.id, pendingId));
+    return { success: true as const };
   });
 
   // Retry parsing a failed pending transaction

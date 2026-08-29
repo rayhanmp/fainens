@@ -1,11 +1,12 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
-import { api } from '../lib/api';
-import { useQueryClient } from '@tanstack/react-query';
-import { useCategoriesQuery } from '../features/categories/queries';
-import { useSuggestedPeriodQuery } from '../features/periods/queries';
-import { queryKeys } from '../features/core/query-keys';
+import { getCurrentUser } from '../generated/client';
+import { useCategoriesQuery, useCreateCategoryMutation } from '../features/categories/queries';
+import { useCreateAccountMutation } from '../features/accounts/queries';
+import { useCreateBudgetMutation } from '../features/budgets/queries';
+import { useCreatePeriodMutation, useSuggestedPeriodQuery } from '../features/periods/queries';
+import { useOnboardingForm } from '../features/onboarding/controller';
 import {
   Wallet,
   Tag,
@@ -40,8 +41,8 @@ const CATEGORY_PRESETS: Array<{ name: string; icon: string }> = [
 export const Route = createFileRoute('/onboarding')({
   component: OnboardingPage,
   beforeLoad: async () => {
-    const me = await fetch('/api/auth/me', { credentials: 'include' });
-    if (!me.ok) {
+    const me = await getCurrentUser();
+    if (me.status !== 200) {
       throw redirect({ to: '/login' });
     }
     const status = await fetchOnboardingStatus();
@@ -53,79 +54,49 @@ export const Route = createFileRoute('/onboarding')({
 
 function OnboardingPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const categoriesQuery = useCategoriesQuery();
   const suggestedPeriodQuery = useSuggestedPeriodQuery();
+  const createCategoryMutation = useCreateCategoryMutation();
+  const createAccountMutation = useCreateAccountMutation();
+  const createBudgetMutation = useCreateBudgetMutation();
+  const createPeriodMutation = useCreatePeriodMutation();
+  const onboardingForm = useOnboardingForm();
+  const { values, setField, toggleWallet, addCustomWallet, setBudget } = onboardingForm;
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedWallets, setSelectedWallets] = useState<Set<string>>(
-    () => new Set(['Cash', 'BCA']),
-  );
-  const [customWalletName, setCustomWalletName] = useState('');
-
-  const [newCategoryName, setNewCategoryName] = useState('');
-
-  const [periodName, setPeriodName] = useState('');
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
-
-  const [budgets, setBudgets] = useState<Record<number, string>>({});
-
   const [createdPeriodId, setCreatedPeriodId] = useState<number | null>(null);
 
   const categories = categoriesQuery.data ?? [];
+  const selectedWallets = new Set(values.selectedWallets);
 
   useEffect(() => {
-    if (periodName || periodStart || periodEnd) return;
+    if (values.periodName || values.periodStart || values.periodEnd) return;
     const suggestion = suggestedPeriodQuery.data;
     if (suggestion) {
-      setPeriodName(suggestion.suggestedName);
-      setPeriodStart(suggestion.suggestedStartDate.slice(0, 10));
-      setPeriodEnd(suggestion.suggestedEndDate.slice(0, 10));
+      setField('periodName', suggestion.suggestedName);
+      setField('periodStart', suggestion.suggestedStartDate.slice(0, 10));
+      setField('periodEnd', suggestion.suggestedEndDate.slice(0, 10));
       return;
     }
     if (!suggestedPeriodQuery.isError) return;
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    setPeriodName(`${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`);
-    setPeriodStart(start.toISOString().slice(0, 10));
-    setPeriodEnd(end.toISOString().slice(0, 10));
-  }, [periodEnd, periodName, periodStart, suggestedPeriodQuery.data, suggestedPeriodQuery.isError]);
-
-  const toggleWallet = (name: string) => {
-    setSelectedWallets((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
-
-  const addCustomWallet = () => {
-    const n = customWalletName.trim();
-    if (!n) return;
-    setSelectedWallets((prev) => new Set(prev).add(n));
-    setCustomWalletName('');
-  };
+    setField('periodName', `${today.toLocaleString('default', { month: 'long' })} ${today.getFullYear()}`);
+    setField('periodStart', start.toISOString().slice(0, 10));
+    setField('periodEnd', end.toISOString().slice(0, 10));
+  }, [setField, suggestedPeriodQuery.data, suggestedPeriodQuery.isError, values.periodEnd, values.periodName, values.periodStart]);
 
   const addCustomCategory = async () => {
-    const n = newCategoryName.trim();
+    const n = values.newCategoryName.trim();
     if (!n) return;
     setLoading(true);
     setError(null);
     try {
-      const created = (await api.categories.create({ name: n })) as {
-        id: number;
-        name: string;
-      };
-      queryClient.setQueryData<Array<{ id: number; name: string }>>(queryKeys.categories.all, (current) => [
-        ...(current ?? []),
-        { id: created.id, name: created.name },
-      ]);
-      setNewCategoryName('');
+      await createCategoryMutation.mutateAsync({ name: n });
+      setField('newCategoryName', '');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add category');
     } finally {
@@ -144,7 +115,7 @@ function OnboardingPage() {
       setLoading(true);
       try {
         for (const name of selectedWallets) {
-          await api.accounts.create({
+          await createAccountMutation.mutateAsync({
             name,
             type: 'asset',
           });
@@ -158,17 +129,17 @@ function OnboardingPage() {
     }
 
     if (step === 4) {
-      if (!periodName.trim() || !periodStart || !periodEnd) {
+      if (!values.periodName.trim() || !values.periodStart || !values.periodEnd) {
         setError('Please fill in period name and dates.');
         return;
       }
       setLoading(true);
       try {
-        const period = (await api.periods.create({
-          name: periodName.trim(),
-          startDate: periodStart,
-          endDate: periodEnd,
-        })) as { id: number };
+        const period = await createPeriodMutation.mutateAsync({
+          name: values.periodName.trim(),
+          startDate: values.periodStart,
+          endDate: values.periodEnd,
+        });
         setCreatedPeriodId(period.id);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not create period');
@@ -179,14 +150,14 @@ function OnboardingPage() {
     }
 
     if (step === 5 && createdPeriodId != null) {
-      const entries = Object.entries(budgets).filter(([, v]) => v.trim() !== '');
+      const entries = Object.entries(values.budgets).filter(([, v]) => v.trim() !== '');
       if (entries.length > 0) {
         setLoading(true);
         try {
           for (const [catId, raw] of entries) {
             const rupiah = Math.round(parseFloat(raw.replace(/,/g, '')));
             if (!Number.isFinite(rupiah) || rupiah <= 0) continue;
-            await api.budgets.create({
+            await createBudgetMutation.mutateAsync({
               periodId: createdPeriodId,
               categoryId: Number(catId),
               plannedAmount: rupiah,
@@ -210,12 +181,13 @@ function OnboardingPage() {
   }, [
     step,
     selectedWallets,
-    periodName,
-    periodStart,
-    periodEnd,
-    budgets,
+    values,
     createdPeriodId,
     navigate,
+    createAccountMutation,
+    createBudgetMutation,
+    createCategoryMutation,
+    createPeriodMutation,
   ]);
 
   const goBack = () => {
@@ -246,8 +218,8 @@ function OnboardingPage() {
               presets={WALLET_PRESETS}
               selected={selectedWallets}
               onToggle={toggleWallet}
-              customName={customWalletName}
-              onCustomChange={setCustomWalletName}
+              customName={values.customWalletName}
+              onCustomChange={(value) => setField('customWalletName', value)}
               onAddCustom={addCustomWallet}
             />
           )}
@@ -255,28 +227,26 @@ function OnboardingPage() {
             <StepCategories
               presets={CATEGORY_PRESETS}
               categories={categories}
-              newName={newCategoryName}
-              onNewChange={setNewCategoryName}
+              newName={values.newCategoryName}
+              onNewChange={(value) => setField('newCategoryName', value)}
               onAdd={addCustomCategory}
             />
           )}
           {step === 4 && (
             <StepPeriod
-              name={periodName}
-              start={periodStart}
-              end={periodEnd}
-              onName={setPeriodName}
-              onStart={setPeriodStart}
-              onEnd={setPeriodEnd}
+              name={values.periodName}
+              start={values.periodStart}
+              end={values.periodEnd}
+              onName={(value) => setField('periodName', value)}
+              onStart={(value) => setField('periodStart', value)}
+              onEnd={(value) => setField('periodEnd', value)}
             />
           )}
           {step === 5 && (
             <StepBudget
               categories={categories}
-              budgets={budgets}
-              onBudgetChange={(id, v) =>
-                setBudgets((b) => ({ ...b, [id]: v }))
-              }
+              budgets={values.budgets}
+              onBudgetChange={setBudget}
             />
           )}
           {step === 6 && <StepDone />}
@@ -330,7 +300,7 @@ function OnboardingPage() {
                       ? ['Cash']
                       : Array.from(selectedWallets);
                   for (const name of names) {
-                    await api.accounts.create({
+                    await createAccountMutation.mutateAsync({
                       name,
                       type: 'asset',
                     });

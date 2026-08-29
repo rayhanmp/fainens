@@ -1,11 +1,13 @@
-/** Used in route beforeLoad — public fetch, same-origin + cookies */
+import { getOnboardingStatus } from '../generated/client';
+
+/** Used in route beforeLoad — generated transport keeps auth/error handling consistent. */
 export async function fetchOnboardingStatus(): Promise<{
   needsOnboarding: boolean;
 } | null> {
   try {
-    const res = await fetch('/api/auth/onboarding-status', { credentials: 'include' });
-    if (!res.ok) return null;
-    return (await res.json()) as { needsOnboarding: boolean };
+    const response = await getOnboardingStatus();
+    if (response.status !== 200) return null;
+    return response.data;
   } catch {
     return null;
   }

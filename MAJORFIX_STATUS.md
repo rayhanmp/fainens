@@ -54,7 +54,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 ### `7f3322b` — generated-client migration and feature-boundary completion
 
 - Extended the typed generated-client adapters across anomalies, audit logs, loans/contacts, PayLater, salary settings/catch-up, split-bill lookups, subscriptions, wishlist, and the already-migrated financial features. Each adapter now narrows the declared HTTP status before exposing data to React Query.
-- Kept the two intentionally compatibility-bound calls explicit: the custom agent SSE stream and the read-only `get_financial_facts` tool bridge. Pending-transaction draft create/update remain on the legacy adapter because those operations are not present in the committed generated contract; they are isolated to the pending mutation boundary rather than spread through UI code.
+- Kept the two intentionally compatibility-bound calls explicit: the custom agent SSE stream and the read-only `get_financial_facts` tool bridge. Pending-transaction draft create/update are now declared in OpenAPI and go through generated-client feature mutations; the legacy facade is no longer used for those writes.
 - Added a shared generated-response unwrapping helper so error envelopes cannot be cached as successful feature data. Loan deletion and other 204 mutations now use the same status-aware path.
 - Extracted the agent conversation list, scope selector, lazy-loading skeleton, conversation actions, and conversation command boundary into `features/agent`. The route now supplies state and callbacks while the feature owns the list presentation and generated mutation wiring.
 - Extracted the transfer-fee panel from the oversized transaction modal. Fee summary, rule tooltip, payer override, and manual fee controls now have a focused feature component while the modal retains transaction-domain calculation and submission behavior.
@@ -67,6 +67,14 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Added attachment, insight, and settings query modules plus precise attachment/insight keys. Financial mutations invalidate the insight family along with the existing financial summary graph.
 - Adopted `uiStore` for transaction-page cross-panel state and compact-row preference. Panel state is cleared when leaving the page, while server records remain exclusively in React Query and form/transient state stays local to its feature.
 - Verification: the frontend TypeScript check and production Vite build passed after the broad migration. A final hook-only guard/type-only import cleanup is recorded in this wave; the local package runner subsequently hit a Windows `EPERM` lock while reopening the pnpm virtual-store binaries. `git diff --check` passes.
+
+### Phase 1 continuation — write boundaries, onboarding forms, and contract guards
+
+- Added explicit Zod contracts and generated operations for pending-transaction draft creation and editing. The web editor now persists user-approved edits through `useCreatePendingTransactionMutation` and `useUpdatePendingTransactionMutation`, so parsed fields cannot be silently replaced by a second legacy request.
+- Replaced onboarding's server-facing field orchestration with a React Hook Form + Zod controller. Wallets, categories, payroll-cycle dates, and budget inputs remain a recoverable form draft while step navigation and request status stay local UI state.
+- Extracted conversation-list transient state and command orchestration into `features/agent/conversation-controller`. Rename, pin/archive, delete, menu placement, outside-click dismissal, and active-chat cleanup now have one focused controller while conversation records remain in React Query.
+- Strengthened the contract verifier to require operation IDs, response declarations, API tags, and explicit required path parameters for every documented API operation (with only the OAuth redirect exception). OpenAPI and the generated client were refreshed after these changes.
+- Verification: backend and frontend TypeScript checks pass; route-contract verification passes with 146 paths, 190 operations, 189 operation IDs, and all 190 operations tagged. Automated tests were intentionally not run for this migration wave.
 
 ### `29480cb` — audit context
 
