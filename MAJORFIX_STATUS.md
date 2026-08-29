@@ -6,6 +6,14 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
+### `d8ae169` — generated adapter hardening and remaining page migrations
+
+- Finished the remaining generated-client page boundaries for category management and shared tag lookup. Legacy hooks no longer sit on the critical categories/tags query path.
+- Added one timestamp normalizer at the generated-response boundary and applied it to dashboard recent activity, reconciliation history, loan contacts, and other date-shaped payloads. PayLater schedule kinds and account rows are normalized before they reach presentational code, preventing API string/optional fields from leaking into UI calculations.
+- Added typed adapters for agent approval receipts, pending-transaction previews, subscription draft enums, and account/category data. This keeps generated response unions at the feature boundary while preserving the richer legacy UI models where the OpenAPI contract is intentionally narrower.
+- Feature state remains disciplined: React Query owns server records, Zustand owns only transient agent session state, and focused feature modules own conversation-list commands, transaction transfer-fee controls, and form controllers. The route components remain orchestration shells rather than a second API/cache layer.
+- Verification: clean frontend TypeScript (`tsc --noEmit --incremental false`) passes and the production Vite build passes. Vite still reports the existing large-bundle warning; it is not a build failure.
+
 ### `7f3322b` — generated-client migration and feature-boundary completion
 
 - Extended the typed generated-client adapters across anomalies, audit logs, loans/contacts, PayLater, salary settings/catch-up, split-bill lookups, subscriptions, wishlist, and the already-migrated financial features. Each adapter now narrows the declared HTTP status before exposing data to React Query.
