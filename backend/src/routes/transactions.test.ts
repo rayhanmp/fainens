@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Fastify from 'fastify';
+import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import transactionsRoute from './transactions';
 
 // Mock dependencies
@@ -33,6 +34,8 @@ import { db } from '../db/client';
 // Helper to create a fresh Fastify instance with the route registered
 async function createTestServer() {
   const fastify = Fastify();
+  fastify.setValidatorCompiler(validatorCompiler);
+  fastify.setSerializerCompiler(serializerCompiler);
   fastify.decorate('authenticate', async () => {});
   await transactionsRoute(fastify);
   return fastify;

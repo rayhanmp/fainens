@@ -1,4 +1,11 @@
 // Typed API client for Fainens backend
+import {
+  confirmTransactionImport as generatedConfirmTransactionImport,
+  previewTransactionImport as generatedPreviewTransactionImport,
+  type ImportConfirm,
+  type ImportPreviewResponse,
+  type ImportResult,
+} from '../generated/client';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
@@ -626,76 +633,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
-    importPreview: (csvText: string) => fetchApi<{
-      rows: Array<{
-        rowNumber: number;
-        date: string;
-        description: string;
-        amount: number;
-        type: 'expense' | 'income';
-        accountName: string;
-        categoryName: string | null;
-        periodName: string;
-        notes: string | null;
-        reference: string | null;
-        isValid: boolean;
-        errors: string[];
-        warnings: string[];
-        accountMatched: boolean;
-        categoryMatched: boolean;
-        periodMatched: boolean;
-        accountId: number | null;
-        categoryId: number | null;
-        periodId: number | null;
-      }>;
-      summary: {
-        totalRows: number;
-        validRows: number;
-        warningRows: number;
-        errorRows: number;
-        totalIncome: number;
-        totalExpense: number;
-        uniqueAccounts: string[];
-        uniqueCategories: string[];
-        uniquePeriods: string[];
-        missingAccounts: string[];
-        missingCategories: string[];
-        missingPeriods: string[];
-      };
-      existingCategories: Array<{ id: number; name: string }>;
-      existingAccounts: Array<{ id: number; name: string }>;
-      existingPeriods: Array<{ id: number; name: string }>;
-    // Keep these paths aligned with the backend's explicit import route names.
-    // The old nested `/import/preview` form was never registered and returned
-    // a misleading 404 from the frontend import flow.
-    }>('/transactions/import-preview', {
-      method: 'POST',
-      body: JSON.stringify({ csvText }),
-    }),
-    importConfirm: (data: {
-      rows: Array<{
-        date: string;
-        description: string;
-        amount: number;
-        type: 'expense' | 'income';
-        accountId: number;
-        periodId?: number | null;
-        categoryId?: number | null;
-        notes?: string | null;
-        reference?: string | null;
-      }>;
-      categoryMappings?: Record<string, number | null>;
-      accountMappings?: Record<string, number | null>;
-      periodMappings?: Record<string, number | null>;
-    }) => fetchApi<{
-      imported: number;
-      skipped: number;
-      errors: Array<{ row: number; message: string }>;
-      transactions: Array<{ id: number; description: string; amount: number }>;
-    }>('/transactions/import-confirm', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    importPreview: async (csvText: string): Promise<ImportPreviewResponse> => {
+      const response = await generatedPreviewTransactionImport({ csvText });
+      if (response.status !== 200) throw new Error(response.data.message || response.data.error || 'Failed to preview import');
+      return response.data;
+    },
+    importConfirm: async (data: ImportConfirm): Promise<ImportResult> => {
+      const response = await generatedConfirmTransactionImport(data);
+      if (response.status !== 201) throw new Error(response.data.message || response.data.error || 'Failed to import transactions');
+      return response.data;
+    },
   },
 
   // Categories

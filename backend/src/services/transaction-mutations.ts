@@ -6,12 +6,14 @@ import {
   accounts,
   attachments,
   auditLogs,
+  categories,
   loanPayments,
   loans,
   paylaterInstallments,
   salaryPeriods,
   storageDeletionOutbox,
   tags,
+  transactionCategoryAllocations,
   transactionLines,
   transactions,
   transactionTags,
@@ -372,24 +374,41 @@ export interface ImportTransactionRow {
   date: string;
   amount: number;
   description: string;
+  /** Optional explicit sign/type used by the CSV UI. Legacy imports infer
+   * expense for positive values and income for negative values. */
+  type?: "expense" | "income";
+  accountId?: number;
+  periodId?: number | null;
+  categoryId?: number | null;
+  notes?: string | null;
+  reference?: string | null;
 }
 
 export async function importTransactionsAtomically(input: {
   rows: ImportTransactionRow[];
-  accountId: number;
-  defaultDescription: string;
+  accountId?: number;
+  defaultDescription?: string;
   tagIds?: number[];
 }): Promise<Array<{ id: number; transactionId: number }>> {
   if (!Array.isArray(input.rows) || input.rows.length === 0 || input.rows.length > 1000) {
     throw new TransactionMutationError("Import must contain between 1 and 1000 rows", 400);
   }
-  const [wallet] = await db
+  const fallbackAccountId = input.accountId;
+  if (fallbackAccountId != null && (!Number.isInteger(fallbackAccountId) || fallbackAccountId <= 0)) {
+    throw new TransactionMutationError("Import account must be a positive integer", 400);
+  }
+
+  const requestedAccountIds = [...new Set(input.rows.map((row) => row.accountId ?? fallbackAccountId).filter((id): id is number => id != null))];
+  if (requestedAccountIds.length === 0) {
+    throw new TransactionMutationError("Each imported row needs an account, or a default import account is required", 400);
+  }
+  const wallets = await db
     .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
     .from(accounts)
-    .where(eq(accounts.id, input.accountId))
-    .limit(1);
-  if (!wallet || !wallet.isActive || wallet.type !== "asset") {
-    throw new TransactionMutationError("Import account must be an active asset account", 400);
+    .where(inArray(accounts.id, requestedAccountIds));
+  const walletById = new Map(wallets.map((wallet) => [wallet.id, wallet]));
+  if (wallets.length !== requestedAccountIds.length || wallets.some((wallet) => !wallet.isActive || wallet.type !== "asset")) {
+    throw new TransactionMutationError("Every import account must be an active asset account", 400);
   }
 
   const tagIds = [...new Set(input.tagIds ?? [])];
@@ -406,6 +425,23 @@ export async function importTransactionsAtomically(input: {
   const periods = await db
     .select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, status: salaryPeriods.status })
     .from(salaryPeriods);
+  const requestedCategoryIds = [...new Set(input.rows.map((row) => row.categoryId).filter((id): id is number => id != null))];
+  const categoryRows = requestedCategoryIds.length > 0
+    ? await db.select({ id: categories.id, isActive: categories.isActive, reportingAccountId: categories.reportingAccountId }).from(categories).where(inArray(categories.id, requestedCategoryIds))
+    : [];
+  const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
+  if (categoryRows.length !== requestedCategoryIds.length || categoryRows.some((category) => !category.isActive)) {
+    throw new TransactionMutationError("Every import category must be active and exist", 400);
+  }
+  const reportingAccountIds = [...new Set(categoryRows.map((category) => category.reportingAccountId).filter((id): id is number => id != null))];
+  const reportingAccounts = reportingAccountIds.length > 0
+    ? await db.select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive }).from(accounts).where(inArray(accounts.id, reportingAccountIds))
+    : [];
+  const reportingAccountById = new Map(reportingAccounts.map((account) => [account.id, account]));
+  if (reportingAccounts.some((account) => !account.isActive || account.type !== "expense")) {
+    throw new TransactionMutationError("Category reporting accounts must be active expense accounts", 400);
+  }
+
   const normalizedRows = input.rows.map((row, index) => {
     const dateMs = new Date(row.date).getTime();
     if (!Number.isFinite(dateMs)) {
@@ -414,19 +450,42 @@ export async function importTransactionsAtomically(input: {
     if (!Number.isSafeInteger(row.amount) || row.amount === 0) {
       throw new TransactionMutationError(`Row ${index + 1} amount must be a non-zero integer rupiah value`, 400);
     }
-    const description = (row.description || input.defaultDescription).trim();
+    const description = (row.description || input.defaultDescription || "").trim();
     if (!description) {
       throw new TransactionMutationError(`Row ${index + 1} description is required`, 400);
     }
-    const period = findPeriodInCandidates(dateMs, periods);
+    const walletId = row.accountId ?? fallbackAccountId;
+    if (walletId == null || !walletById.has(walletId)) {
+      throw new TransactionMutationError(`Row ${index + 1} has no valid import account`, 400);
+    }
+    const period = row.periodId != null
+      ? periods.find((candidate) => candidate.id === row.periodId) ?? null
+      : findPeriodInCandidates(dateMs, periods);
+    if (row.periodId != null && !period) {
+      throw new TransactionMutationError(`Row ${index + 1} references an unknown period`, 400);
+    }
     if (period?.status === "closed") {
       throw new TransactionMutationError(`Period ${period.id} is closed; reopen it before importing transactions`, 409);
     }
+    const signedAmount = row.type === "income" ? -Math.abs(row.amount) : row.type === "expense" ? Math.abs(row.amount) : row.amount;
+    const category = row.categoryId != null ? categoryById.get(row.categoryId) : undefined;
+    if (row.categoryId != null && !category) {
+      throw new TransactionMutationError(`Row ${index + 1} references an unknown category`, 400);
+    }
+    if (row.type === "income" && row.categoryId != null) {
+      throw new TransactionMutationError(`Row ${index + 1} cannot assign an expense category to income`, 400);
+    }
+    const wallet = walletById.get(walletId)!;
     return {
       dateMs,
-      amount: Math.abs(row.amount),
-      kind: row.amount >= 0 ? "expense" as const : "income" as const,
+      amount: Math.abs(signedAmount),
+      kind: signedAmount >= 0 ? "expense" as const : "income" as const,
       description,
+      notes: row.notes ?? null,
+      reference: row.reference ?? null,
+      wallet,
+      category,
+      reportingAccountId: category?.reportingAccountId != null ? reportingAccountById.get(category.reportingAccountId)?.id ?? null : null,
       periodId: period?.id ?? null,
     };
   });
@@ -445,23 +504,29 @@ export async function importTransactionsAtomically(input: {
       .values({
         date: new Date(row.dateMs),
         description: row.description,
+        notes: row.notes,
+        reference: row.reference,
         txType: `simple_${row.kind}`,
         periodId: row.periodId,
+        categoryId: row.category?.id ?? null,
       })
       .returning({ id: transactions.id })
       .all()[0];
     if (!inserted) throw new Error("Failed to insert imported transaction");
-    const counterpartyId = row.kind === "expense" ? expenseAccount!.id : incomeAccount!.id;
+    const counterpartyId = row.kind === "expense" ? row.reportingAccountId ?? expenseAccount!.id : incomeAccount!.id;
     const lines = row.kind === "expense"
       ? [
           { transactionId: inserted.id, accountId: counterpartyId, debit: row.amount, credit: 0 },
-          { transactionId: inserted.id, accountId: wallet.id, debit: 0, credit: row.amount, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
+          { transactionId: inserted.id, accountId: row.wallet.id, debit: 0, credit: row.amount, cashFlowClass: row.wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
         ]
       : [
-          { transactionId: inserted.id, accountId: wallet.id, debit: row.amount, credit: 0, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
+          { transactionId: inserted.id, accountId: row.wallet.id, debit: row.amount, credit: 0, cashFlowClass: row.wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
           { transactionId: inserted.id, accountId: counterpartyId, debit: 0, credit: row.amount },
         ];
     tx.insert(transactionLines).values(lines).run();
+    if (row.category) {
+      tx.insert(transactionCategoryAllocations).values({ transactionId: inserted.id, categoryId: row.category.id, amount: row.amount }).run();
+    }
     if (tagIds.length > 0) {
       tx.insert(transactionTags)
         .values(tagIds.map((tagId) => ({ transactionId: inserted.id, tagId })))
@@ -486,7 +551,12 @@ export async function importTransactionsAtomically(input: {
     return result;
   });
 
-  const affectedAccountIds = [wallet.id, expenseAccount?.id, incomeAccount?.id]
+  const affectedAccountIds = [...new Set([
+    ...normalizedRows.map((row) => row.wallet.id),
+    expenseAccount?.id,
+    incomeAccount?.id,
+    ...normalizedRows.map((row) => row.reportingAccountId),
+  ])]
     .filter((id): id is number => id != null);
   const affectedPeriodIds = [...new Set(normalizedRows.map((row) => row.periodId).filter((id): id is number => id != null))];
   await invalidateOnTransactionMutation({

@@ -55,6 +55,30 @@ interface PreviewData {
   existingPeriods: Array<{ id: number; name: string }>;
 }
 
+function updateImportRow(row: PreviewRow, updates: Partial<PreviewRow>): PreviewRow {
+  const next = { ...row, ...updates };
+  let errors = row.errors.filter((message) => message !== 'Invalid date' && message !== 'Amount must be a non-zero integer rupiah value' && message !== 'Description is required' && message !== 'Account not found' && message !== 'Type is required' && message !== 'Type must be expense or income');
+  let warnings = row.warnings.filter((message) => message !== 'Category not found; choose one before importing' && message !== 'Period not found; the period will be inferred from the date');
+
+  if (!next.date || !Number.isFinite(new Date(next.date).getTime())) errors.push('Invalid date');
+  if (!Number.isSafeInteger(next.amount) || next.amount === 0) errors.push('Amount must be a non-zero integer rupiah value');
+  if (!next.description.trim()) errors.push('Description is required');
+  if (!next.accountId) errors.push('Account not found');
+  if (next.type !== 'expense' && next.type !== 'income') errors.push('Type must be expense or income');
+  if (next.categoryName && !next.categoryId) warnings.push('Category not found; choose one before importing');
+  if (next.periodName && !next.periodId) warnings.push('Period not found; the period will be inferred from the date');
+
+  return {
+    ...next,
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+    accountMatched: !!next.accountId,
+    categoryMatched: !next.categoryName || !!next.categoryId,
+    periodMatched: !!next.periodId,
+    isValid: errors.length === 0,
+  };
+}
+
 export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalProps) {
   const importTransactionsMutation = useImportTransactions();
   const [step, setStep] = useState<'upload' | 'preview' | 'result'>('upload');
@@ -151,7 +175,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
   const handleRowEdit = (index: number, field: keyof PreviewRow, value: any) => {
     setEditedRows(prev => {
       const newRows = [...prev];
-      newRows[index] = { ...newRows[index], [field]: value };
+      newRows[index] = updateImportRow(newRows[index], { [field]: value });
       return newRows;
     });
   };
@@ -165,7 +189,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
     // Update all rows with this category
     setEditedRows(prev => prev.map(row => {
       if (row.categoryName === categoryName) {
-        return { ...row, categoryId, categoryMatched: !!categoryId };
+        return updateImportRow(row, { categoryId });
       }
       return row;
     }));
@@ -180,7 +204,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
     // Update all rows with this account
     setEditedRows(prev => prev.map(row => {
       if (row.accountName === accountName) {
-        return { ...row, accountId, accountMatched: !!accountId };
+        return updateImportRow(row, { accountId });
       }
       return row;
     }));
@@ -195,7 +219,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
     // Update all rows with this period
     setEditedRows(prev => prev.map(row => {
       if (row.periodName === periodName) {
-        return { ...row, periodId, periodMatched: !!periodId };
+        return updateImportRow(row, { periodId });
       }
       return row;
     }));
@@ -343,8 +367,11 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
   const renderPreviewStep = () => {
     if (!previewData) return null;
 
-    const hasErrors = previewData.summary.errorRows > 0;
-    const canImport = previewData.summary.validRows > 0;
+    const validRowCount = editedRows.filter((row) => row.isValid && row.accountId).length;
+    const warningRowCount = editedRows.filter((row) => row.isValid && row.warnings.length > 0).length;
+    const errorRowCount = editedRows.filter((row) => row.errors.length > 0).length;
+    const hasErrors = errorRowCount > 0;
+    const canImport = validRowCount > 0;
 
     return (
       <div className="space-y-6 max-h-[70vh] overflow-hidden flex flex-col">
@@ -356,15 +383,15 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
           </div>
           <div className="bg-[var(--color-success)]/10 rounded-lg p-3">
             <p className="text-xs text-[var(--color-success)]">Ready</p>
-            <p className="text-xl font-bold text-[var(--color-success)]">{previewData.summary.validRows}</p>
+            <p className="text-xl font-bold text-[var(--color-success)]">{validRowCount}</p>
           </div>
           <div className="bg-[var(--color-warning)]/10 rounded-lg p-3">
             <p className="text-xs text-[var(--color-warning)]">Warnings</p>
-            <p className="text-xl font-bold text-[var(--color-warning)]">{previewData.summary.warningRows}</p>
+            <p className="text-xl font-bold text-[var(--color-warning)]">{warningRowCount}</p>
           </div>
           <div className="bg-[var(--color-danger)]/10 rounded-lg p-3">
             <p className="text-xs text-[var(--color-danger)]">Errors</p>
-            <p className="text-xl font-bold text-[var(--color-danger)]">{previewData.summary.errorRows}</p>
+            <p className="text-xl font-bold text-[var(--color-danger)]">{errorRowCount}</p>
           </div>
         </div>
 
@@ -628,7 +655,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
             disabled={!canImport || hasErrors}
             className="flex-1"
           >
-            Import {previewData.summary.validRows} Transaction{previewData.summary.validRows !== 1 ? 's' : ''}
+            Import {validRowCount} Transaction{validRowCount !== 1 ? 's' : ''}
           </Button>
           <Button variant="secondary" onClick={() => setStep('upload')}>
             Back

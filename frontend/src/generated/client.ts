@@ -104,6 +104,154 @@ export interface TransactionList {
   [key: string]: unknown;
  }
 
+export interface ApiError {
+  error?: string;
+  message?: string;
+  [key: string]: unknown;
+ }
+
+export interface ImportPreview {
+  /**
+   * @minLength 1
+   * @maxLength 2000000
+   */
+  csvText: string;
+  [key: string]: unknown;
+ }
+
+export type ImportPreviewRowType = typeof ImportPreviewRowType[keyof typeof ImportPreviewRowType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ImportPreviewRowType = {
+  expense: 'expense',
+  income: 'income',
+} as const;
+
+export interface ImportPreviewRow {
+  rowNumber: number;
+  date: string;
+  description: string;
+  amount: number;
+  type: ImportPreviewRowType;
+  accountName: string;
+  /** @nullable */
+  categoryName: string | null;
+  periodName: string;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  reference: string | null;
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  accountMatched: boolean;
+  categoryMatched: boolean;
+  periodMatched: boolean;
+  /** @nullable */
+  accountId: number | null;
+  /** @nullable */
+  categoryId: number | null;
+  /** @nullable */
+  periodId: number | null;
+  [key: string]: unknown;
+ }
+
+export interface ImportPreviewSummary {
+  totalRows: number;
+  validRows: number;
+  warningRows: number;
+  errorRows: number;
+  totalIncome: number;
+  totalExpense: number;
+  uniqueAccounts: string[];
+  uniqueCategories: string[];
+  uniquePeriods: string[];
+  missingAccounts: string[];
+  missingCategories: string[];
+  missingPeriods: string[];
+  [key: string]: unknown;
+ }
+
+export interface ImportLookup {
+  id: number;
+  name: string;
+  [key: string]: unknown;
+ }
+
+export interface ImportPreviewResponse {
+  rows: ImportPreviewRow[];
+  summary: ImportPreviewSummary;
+  existingCategories: ImportLookup[];
+  existingAccounts: ImportLookup[];
+  existingPeriods: ImportLookup[];
+  [key: string]: unknown;
+ }
+
+export type ImportConfirmRowType = typeof ImportConfirmRowType[keyof typeof ImportConfirmRowType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ImportConfirmRowType = {
+  expense: 'expense',
+  income: 'income',
+} as const;
+
+export interface ImportConfirmRow {
+  date: string;
+  description: string;
+  amount: number;
+  type: ImportConfirmRowType;
+  accountId: number;
+  /** @nullable */
+  periodId?: number | null;
+  /** @nullable */
+  categoryId?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  reference?: string | null;
+  [key: string]: unknown;
+ }
+
+export type ImportConfirmCategoryMappings = {[key: string]: number | null};
+
+export type ImportConfirmAccountMappings = {[key: string]: number | null};
+
+export type ImportConfirmPeriodMappings = {[key: string]: number | null};
+
+export interface ImportConfirm {
+  /**
+   * @minItems 1
+   * @maxItems 1000
+   */
+  rows: ImportConfirmRow[];
+  categoryMappings?: ImportConfirmCategoryMappings;
+  accountMappings?: ImportConfirmAccountMappings;
+  periodMappings?: ImportConfirmPeriodMappings;
+  [key: string]: unknown;
+ }
+
+export type ImportResultErrorsItem = {
+  row: number;
+  message: string;
+  [key: string]: unknown;
+ };
+
+export type ImportResultTransactionsItem = {
+  id: number;
+  transactionId: number;
+  [key: string]: unknown;
+ };
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: ImportResultErrorsItem[];
+  transactions: ImportResultTransactionsItem[];
+  [key: string]: unknown;
+ }
+
 export interface BudgetPlan {
   id: number;
   periodId: number;
@@ -385,6 +533,88 @@ export const createTransaction = async (createTransaction: CreateTransaction, op
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       createTransaction,)
+  }
+);}
+
+
+
+export type previewTransactionImportResponse200 = {
+  data: ImportPreviewResponse
+  status: 200
+}
+
+export type previewTransactionImportResponse400 = {
+  data: ApiError
+  status: 400
+}
+
+export type previewTransactionImportResponseSuccess = (previewTransactionImportResponse200) & {
+  headers: Headers;
+};
+export type previewTransactionImportResponseError = (previewTransactionImportResponse400) & {
+  headers: Headers;
+};
+
+export type previewTransactionImportResponse = (previewTransactionImportResponseSuccess | previewTransactionImportResponseError)
+
+export const getPreviewTransactionImportUrl = () => {
+
+
+
+
+  return `/api/transactions/import-preview`
+}
+
+export const previewTransactionImport = async (importPreview: ImportPreview, options?: RequestInit): Promise<previewTransactionImportResponse> => {
+
+  return generatedFetch<previewTransactionImportResponse>(getPreviewTransactionImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      importPreview,)
+  }
+);}
+
+
+
+export type confirmTransactionImportResponse201 = {
+  data: ImportResult
+  status: 201
+}
+
+export type confirmTransactionImportResponse400 = {
+  data: ApiError
+  status: 400
+}
+
+export type confirmTransactionImportResponseSuccess = (confirmTransactionImportResponse201) & {
+  headers: Headers;
+};
+export type confirmTransactionImportResponseError = (confirmTransactionImportResponse400) & {
+  headers: Headers;
+};
+
+export type confirmTransactionImportResponse = (confirmTransactionImportResponseSuccess | confirmTransactionImportResponseError)
+
+export const getConfirmTransactionImportUrl = () => {
+
+
+
+
+  return `/api/transactions/import-confirm`
+}
+
+export const confirmTransactionImport = async (importConfirm: ImportConfirm, options?: RequestInit): Promise<confirmTransactionImportResponse> => {
+
+  return generatedFetch<confirmTransactionImportResponse>(getConfirmTransactionImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      importConfirm,)
   }
 );}
 

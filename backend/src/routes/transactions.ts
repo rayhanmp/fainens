@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs } from "../db/schema";
+import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs, salaryPeriods } from "../db/schema";
 import {
   createJournalEntry,
   createSimpleTransaction,
@@ -19,7 +19,7 @@ import {
 } from "../services/transaction-mutations";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { parseIdrInteger } from "../services/money";
-import { findPeriodForDate } from "../services/period-locking";
+import { findPeriodForDate, inclusivePeriodEnd } from "../services/period-locking";
 
 // Pagination constants
 const MAX_LIMIT = 100;
@@ -163,10 +163,30 @@ const importPreviewBodySchema = z.object({
 const importPreviewResponseSchema = z.object({
   preview: z.array(z.object({ rowNumber: z.number().int(), date: z.string().nullable(), amountCents: z.number().int(), description: z.string(), raw: z.record(z.string(), z.string()) }).passthrough()), totalRows: z.number().int().nonnegative(),
 }).passthrough();
+const legacyImportPreviewBodySchema = z.object({ csvText: z.string().min(1).max(2_000_000) }).passthrough();
+const legacyImportPreviewRowSchema = z.object({
+  rowNumber: z.number().int().positive(), date: z.string(), description: z.string(), amount: z.number().int(), type: z.enum(["expense", "income"]),
+  accountName: z.string(), categoryName: z.string().nullable(), periodName: z.string(), notes: z.string().nullable(), reference: z.string().nullable(),
+  isValid: z.boolean(), errors: z.array(z.string()), warnings: z.array(z.string()), accountMatched: z.boolean(), categoryMatched: z.boolean(), periodMatched: z.boolean(),
+  accountId: z.number().int().positive().nullable(), categoryId: z.number().int().positive().nullable(), periodId: z.number().int().positive().nullable(),
+}).passthrough();
+const legacyImportPreviewResponseSchema = z.object({
+  rows: z.array(legacyImportPreviewRowSchema),
+  summary: z.object({ totalRows: z.number().int().nonnegative(), validRows: z.number().int().nonnegative(), warningRows: z.number().int().nonnegative(), errorRows: z.number().int().nonnegative(), totalIncome: z.number().int(), totalExpense: z.number().int(), uniqueAccounts: z.array(z.string()), uniqueCategories: z.array(z.string()), uniquePeriods: z.array(z.string()), missingAccounts: z.array(z.string()), missingCategories: z.array(z.string()), missingPeriods: z.array(z.string()) }).passthrough(),
+  existingCategories: z.array(z.object({ id: z.number().int().positive(), name: z.string() }).passthrough()),
+  existingAccounts: z.array(z.object({ id: z.number().int().positive(), name: z.string() }).passthrough()),
+  existingPeriods: z.array(z.object({ id: z.number().int().positive(), name: z.string() }).passthrough()),
+}).passthrough();
+const importPreviewResponseUnionSchema = z.union([importPreviewResponseSchema, legacyImportPreviewResponseSchema]);
 const importConfirmBodySchema = z.object({
   rows: z.array(z.object({ date: z.string().min(1), amountCents: z.number().int(), description: z.string() }).passthrough()).min(1).max(1000), accountId: z.number().int().positive(), defaultDescription: z.string().trim().min(1).max(500), tagIds: z.array(z.number().int().positive()).max(100).optional(),
 }).passthrough();
-const importConfirmResponseSchema = z.object({ imported: z.number().int().nonnegative(), transactions: z.array(transactionMutationResponseSchema) }).passthrough();
+const legacyImportConfirmBodySchema = z.object({
+  rows: z.array(z.object({ date: z.string().min(1), description: z.string(), amount: z.number().int(), type: z.enum(["expense", "income"]), accountId: z.number().int().positive(), periodId: z.number().int().positive().nullable().optional(), categoryId: z.number().int().positive().nullable().optional(), notes: z.string().nullable().optional(), reference: z.string().nullable().optional() }).passthrough()).min(1).max(1000),
+  categoryMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(), accountMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(), periodMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(),
+}).passthrough();
+const importConfirmBodyUnionSchema = z.union([importConfirmBodySchema, legacyImportConfirmBodySchema]);
+const importConfirmResponseSchema = z.object({ imported: z.number().int().nonnegative(), skipped: z.number().int().nonnegative().default(0), errors: z.array(z.object({ row: z.number().int().positive(), message: z.string() }).passthrough()).default([]), transactions: z.array(transactionMutationResponseSchema) }).passthrough();
 
 type TransactionRouteErrorStatus = 400 | 404 | 409 | 500;
 function transactionRouteErrorStatus(status: number): TransactionRouteErrorStatus {
@@ -238,6 +258,129 @@ function parseIdParam(value: string | undefined): number | null {
   if (!value || value === "undefined") return null;
   const parsed = parseInt(value, 10);
   return isNaN(parsed) ? null : parsed;
+}
+
+function normalizeImportHeader(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function firstImportValue(row: Record<string, string>, aliases: string[]): string {
+  for (const alias of aliases) {
+    const value = row[normalizeImportHeader(alias)];
+    if (value != null && value.trim() !== "") return value.trim();
+  }
+  return "";
+}
+
+function parseLegacyImportDate(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  // CSV exports commonly use DD/MM/YYYY. Parse that shape explicitly before
+  // handing the value to the runtime parser, whose locale-independent
+  // interpretation of slash dates is MM/DD/YYYY.
+  if (/^\d{1,2}[\\/.\-]\d{1,2}[\\/.\-]\d{4}$/.test(trimmed)) {
+    const parsed = parseDateWithFormat(trimmed, "DD/MM/YYYY");
+    if (parsed) return new Date(`${parsed}T00:00:00.000Z`).toISOString();
+  }
+  const iso = new Date(trimmed);
+  if (Number.isFinite(iso.getTime())) return iso.toISOString();
+  return null;
+}
+
+async function buildLegacyImportPreview(csvText: string) {
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) throw new TransactionMutationError("CSV must include a header and at least one data row", 400);
+  if (lines.length - 1 > 1000) throw new TransactionMutationError("Import must contain no more than 1000 rows", 400);
+
+  const headers = parseCSVLine(lines[0]).map(normalizeImportHeader);
+  const existingAccounts = await db.select({ id: accounts.id, name: accounts.name }).from(accounts).where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true)));
+  const existingCategories = await db.select({ id: categories.id, name: categories.name }).from(categories).where(eq(categories.isActive, true));
+  const existingPeriods = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, status: salaryPeriods.status }).from(salaryPeriods);
+  const accountsByName = new Map(existingAccounts.map((account) => [account.name.trim().toLowerCase(), account]));
+  const categoriesByName = new Map(existingCategories.map((category) => [category.name.trim().toLowerCase(), category]));
+  const periodsByName = new Map(existingPeriods.map((period) => [period.name.trim().toLowerCase(), period]));
+
+  const rows = lines.slice(1).map((line, index) => {
+    const values = parseCSVLine(line);
+    const raw: Record<string, string> = {};
+    headers.forEach((header, valueIndex) => { raw[header] = values[valueIndex] ?? ""; });
+    const dateRaw = firstImportValue(raw, ["date", "transaction date", "when"]);
+    const amountRaw = firstImportValue(raw, ["amount", "value", "total"]);
+    const description = firstImportValue(raw, ["description", "transaction", "name", "memo"]);
+    const accountName = firstImportValue(raw, ["account", "account name", "wallet", "payment account"]);
+    const categoryNameRaw = firstImportValue(raw, ["category", "category name"]);
+    const periodNameRaw = firstImportValue(raw, ["period", "period name", "month"]);
+    const typeRaw = firstImportValue(raw, ["type", "transaction type"]).toLowerCase();
+    const notes = firstImportValue(raw, ["notes", "note"]) || null;
+    const reference = firstImportValue(raw, ["reference", "ref"]) || null;
+    const parsedAmount = parseRupiah(amountRaw);
+    const date = parseLegacyImportDate(dateRaw);
+    const type = typeRaw === "income" ? "income" : "expense" as const;
+    const account = accountsByName.get(accountName.toLowerCase());
+    const category = categoryNameRaw ? categoriesByName.get(categoryNameRaw.toLowerCase()) : undefined;
+    const namedPeriod = periodNameRaw ? periodsByName.get(periodNameRaw.toLowerCase()) : undefined;
+    const dateMs = date ? new Date(date).getTime() : NaN;
+    const inferredPeriod = !namedPeriod && Number.isFinite(dateMs)
+      ? existingPeriods.find((period) => dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate)))
+      : undefined;
+    const period = namedPeriod ?? inferredPeriod;
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    if (!date) errors.push("Invalid date");
+    if (parsedAmount == null || parsedAmount === 0) errors.push("Amount must be a non-zero integer rupiah value");
+    if (!description) errors.push("Description is required");
+    if (!account) errors.push("Account not found");
+    if (!typeRaw) errors.push("Type is required");
+    if (typeRaw && typeRaw !== "expense" && typeRaw !== "income") errors.push("Type must be expense or income");
+    if (categoryNameRaw && !category) warnings.push("Category not found; choose one before importing");
+    if (periodNameRaw && !namedPeriod) warnings.push("Period not found; the period will be inferred from the date");
+    if (!period) warnings.push("No matching period; the transaction will remain unassigned");
+    const normalizedType = typeRaw === "income" ? "income" : "expense";
+    const amount = parsedAmount == null ? 0 : Math.abs(parsedAmount);
+    return {
+      rowNumber: index + 2,
+      date: date ?? "",
+      description,
+      amount,
+      type: normalizedType,
+      accountName,
+      categoryName: categoryNameRaw || null,
+      periodName: period?.name ?? periodNameRaw,
+      notes,
+      reference,
+      isValid: errors.length === 0,
+      errors,
+      warnings,
+      accountMatched: !!account,
+      categoryMatched: !categoryNameRaw || !!category,
+      periodMatched: !!period,
+      accountId: account?.id ?? null,
+      categoryId: category?.id ?? null,
+      periodId: period?.id ?? null,
+    };
+  });
+
+  const unique = (values: string[]) => [...new Set(values.filter(Boolean))];
+  return {
+    rows,
+    summary: {
+      totalRows: rows.length,
+      validRows: rows.filter((row) => row.isValid).length,
+      warningRows: rows.filter((row) => row.warnings.length > 0 && row.isValid).length,
+      errorRows: rows.filter((row) => row.errors.length > 0).length,
+      totalIncome: rows.filter((row) => row.type === "income").reduce((sum, row) => sum + row.amount, 0),
+      totalExpense: rows.filter((row) => row.type === "expense").reduce((sum, row) => sum + row.amount, 0),
+      uniqueAccounts: unique(rows.map((row) => row.accountName)),
+      uniqueCategories: unique(rows.map((row) => row.categoryName ?? "")),
+      uniquePeriods: unique(rows.map((row) => row.periodName)),
+      missingAccounts: unique(rows.filter((row) => !row.accountMatched).map((row) => row.accountName)),
+      missingCategories: unique(rows.filter((row) => row.categoryName && !row.categoryMatched).map((row) => row.categoryName ?? "")),
+      missingPeriods: unique(rows.filter((row) => row.periodName && !row.periodMatched).map((row) => row.periodName)),
+    },
+    existingCategories,
+    existingAccounts,
+    existingPeriods: existingPeriods.map(({ id, name }) => ({ id, name })),
+  };
 }
 
 // Build base WHERE conditions for date range, txType, and periodId
@@ -413,7 +556,7 @@ export default async function (fastify: FastifyInstance) {
     schema: {
       operationId: "recommendTransactionCategory",
       tags: ["transactions"],
-      body: z.object({ name: z.string().trim().min(2) }),
+      body: z.object({ name: z.string().trim().min(2) }).passthrough(),
       response: {
         200: z.object({ categoryId: z.number().int(), categoryName: z.string() }).passthrough(),
         400: transactionErrorSchema,
@@ -1089,9 +1232,25 @@ RULES:
   // Import preview endpoint
   fastify.post("/api/transactions/import-preview", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "transaction-import" } },
-    schema: { operationId: "previewTransactionImport", tags: ["transactions"], body: importPreviewBodySchema, response: { 200: importPreviewResponseSchema, 400: transactionErrorSchema } },
+      schema: { operationId: "previewTransactionImport", tags: ["transactions"], body: z.union([importPreviewBodySchema, legacyImportPreviewBodySchema]), response: { 200: importPreviewResponseUnionSchema, 400: transactionErrorSchema } },
   }, async (request, reply) => {
-    const { csvText, mappings, hasHeader, accountId, dateFormat } = request.body as {
+    const body = request.body as {
+      csvText: string;
+      mappings?: Record<string, string>;
+      hasHeader?: boolean;
+      accountId?: number;
+      dateFormat?: string;
+    };
+    if (!body.mappings && body.accountId == null && body.dateFormat == null) {
+      try {
+        return reply.send(await buildLegacyImportPreview(body.csvText));
+      } catch (err) {
+        if (err instanceof TransactionMutationError) return reply.code(400).send({ error: err.message });
+        fastify.log.error(err);
+        return reply.code(400).send({ error: "Failed to preview import" });
+      }
+    }
+    const { csvText, mappings = {}, hasHeader = true, accountId, dateFormat = "DD/MM/YYYY" } = body as {
       csvText: string;
       mappings: Record<string, string>;
       hasHeader: boolean;
@@ -1145,27 +1304,36 @@ RULES:
   // Import confirm endpoint
   fastify.post("/api/transactions/import-confirm", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute", groupId: "transaction-import" } },
-    schema: { operationId: "confirmTransactionImport", tags: ["transactions"], body: importConfirmBodySchema, response: { 201: importConfirmResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema } },
+    schema: { operationId: "confirmTransactionImport", tags: ["transactions"], body: importConfirmBodyUnionSchema, response: { 201: importConfirmResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema } },
   }, async (request, reply) => {
-    const { rows, accountId, defaultDescription, tagIds } = request.body as {
-      rows: Array<{ date: string; amountCents: number; description: string }>;
-      accountId: number;
-      defaultDescription: string;
+    const body = request.body as {
+      rows: Array<{ date: string; amountCents?: number; amount?: number; description: string; type?: "expense" | "income"; accountId?: number; periodId?: number | null; categoryId?: number | null; notes?: string | null; reference?: string | null }>;
+      accountId?: number;
+      defaultDescription?: string;
       tagIds?: number[];
     };
+    const { rows, accountId, defaultDescription = "Imported transaction", tagIds } = body;
+    const hasLegacyRows = rows.some((row) => row.amount != null || row.type != null || row.accountId != null || row.categoryId != null || row.periodId != null);
+    const importRows = rows.map((row) => ({
+      date: row.date,
+      amount: row.amount != null ? row.amount : row.amountCents!,
+      description: row.description,
+      ...(row.type ? { type: row.type } : {}),
+      ...(row.accountId != null ? { accountId: row.accountId } : {}),
+      ...(row.periodId !== undefined ? { periodId: row.periodId } : {}),
+      ...(row.categoryId !== undefined ? { categoryId: row.categoryId } : {}),
+      ...(row.notes !== undefined ? { notes: row.notes } : {}),
+      ...(row.reference !== undefined ? { reference: row.reference } : {}),
+    }));
 
     try {
       const results = await importTransactionsAtomically({
-        rows: rows.map((row) => ({
-          date: row.date,
-          amount: row.amountCents,
-          description: row.description,
-        })),
+        rows: importRows,
         accountId,
         defaultDescription,
         tagIds,
       });
-      return reply.code(201).send({ imported: results.length, transactions: results });
+      return reply.code(201).send({ imported: results.length, skipped: 0, errors: [], transactions: results, legacyRows: hasLegacyRows });
     } catch (err) {
       fastify.log.error(err);
       const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
@@ -1216,9 +1384,14 @@ function parseDateWithFormat(dateStr: string, format: string): string | null {
     const day = parseInt(parts[dayIndex], 10);
     const month = parseInt(parts[monthIndex], 10);
     const year = parseInt(parts[yearIndex], 10);
+    if (![day, month, year].every(Number.isInteger) || month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
 
     const date = new Date(year, month - 1, day);
-    if (isNaN(date.getTime())) return null;
+    if (isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return null;
+    }
 
     return date.toISOString().split("T")[0];
   } catch {
