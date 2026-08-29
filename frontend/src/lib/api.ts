@@ -975,7 +975,7 @@ export const api = {
     burnRate: () => fetchApi('/analytics/burn-rate'),
     runway: () => fetchApi<{ runwayMonths: number | null; isUnbounded: boolean; liquidAssets: number }>('/analytics/runway'),
     accountBalance: (accountId: number) => fetchApi<{ accountId: number; balance: number }>(`/analytics/account-balance/${accountId}`),
-    periodSummaries: () => fetchApi<Array<{
+    periodSummaries: (options?: RequestInit) => fetchApi<Array<{
       periodId: number;
       periodName: string;
       startDate: number;
@@ -983,7 +983,7 @@ export const api = {
       income: number;
       expenses: number;
       net: number;
-    }>>('/analytics/period-summaries'),
+    }>>('/analytics/period-summaries', options),
   },
 
   // Audit Log

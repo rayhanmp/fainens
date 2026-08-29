@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -10,9 +10,9 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Card } from '../ui/Card';
-import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from 'lucide-react';
+import { usePeriodSummariesQuery } from '../../features/analytics/queries';
 
 interface MPCData {
   period: string;
@@ -23,62 +23,33 @@ interface MPCData {
 }
 
 export function LifestyleCreepGauge() {
-  const [data, setData] = useState<MPCData[]>([]);
-  const [currentMPC, setCurrentMPC] = useState(0);
-  const [trend, setTrend] = useState<'increasing' | 'stable' | 'decreasing'>('stable');
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    loadMPCData();
-  }, []);
-
-  const loadMPCData = async () => {
-    try {
-      // This is an average spending ratio, not marginal propensity to consume.
-      // Sort by the authoritative period start rather than API array position.
-      const summaries = (await api.analytics.periodSummaries())
-        .filter((period) => Number.isFinite(period.startDate) && Number.isFinite(period.income) && Number.isFinite(period.expenses))
-        .sort((a, b) => a.startDate - b.startDate);
-      
-      const mpcData: MPCData[] = summaries.map((period) => {
+  const periodSummariesQuery = usePeriodSummariesQuery();
+  const data = useMemo<MPCData[]>(() => {
+    // This is an average spending ratio, not marginal propensity to consume.
+    // Sort by the authoritative period start rather than API array position.
+    return (periodSummariesQuery.data ?? [])
+      .filter((period) => Number.isFinite(period.startDate) && Number.isFinite(period.income) && Number.isFinite(period.expenses))
+      .sort((a, b) => a.startDate - b.startDate)
+      .map((period) => {
         const income = period.income;
-        const expenses = period.expenses;
-        
-        // Discretionary = total expenses (this is simplified - could be refined)
-        const discretionary = expenses;
-        const mpc = income > 0 ? discretionary / income : 0;
-
+        const discretionary = period.expenses;
         return {
           period: period.periodName,
           startDate: period.startDate,
-          mpc: Math.min(mpc, 2), // Cap at 200% for display
+          mpc: Math.min(income > 0 ? discretionary / income : 0, 2),
           income,
           discretionary,
         };
       });
-
-      setData(mpcData);
-
-      // Calculate current MPC and trend
-      if (mpcData.length > 0) {
-        const current = mpcData[mpcData.length - 1].mpc;
-        setCurrentMPC(current);
-
-        if (mpcData.length > 1) {
-          const previous = mpcData[mpcData.length - 2].mpc;
-          const diff = current - previous;
-          
-          if (diff > 0.05) setTrend('increasing');
-          else if (diff < -0.05) setTrend('decreasing');
-          else setTrend('stable');
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load MPC data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [periodSummariesQuery.data]);
+  const currentMPC = data.at(-1)?.mpc ?? 0;
+  const previousMPC = data.length > 1 ? data.at(-2)!.mpc : currentMPC;
+  const trend: 'increasing' | 'stable' | 'decreasing' = currentMPC - previousMPC > 0.05
+    ? 'increasing'
+    : currentMPC - previousMPC < -0.05
+      ? 'decreasing'
+      : 'stable';
+  const isLoading = periodSummariesQuery.isPending && periodSummariesQuery.data == null;
 
   // Determine status based on MPC
   const getStatus = () => {

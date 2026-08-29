@@ -6,6 +6,13 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
+### Pending working wave — analytics query migration
+
+- Net-worth and spending trend charts now read through feature-owned React Query hooks backed by the generated client. Range/scope changes produce stable, independently cacheable keys and preserve previous data while the next range loads.
+- Period summary charts and the lifestyle ratio gauge share one cached React Query adapter. The adapter intentionally uses the legacy endpoint only because the currently committed OpenAPI response omits the income/expense/net fields those views require; the compatibility call is isolated to `features/analytics` until the contract is expanded.
+- Financial mutations now invalidate the analytics query family alongside dashboard, report, account, period, and transaction facts, preventing stale chart data after posting, reversal, recovery, or budget changes.
+- Verification so far: frontend TypeScript and production Vite build pass. The remaining migration work is to expand the period-summary contract, move other direct `api.*` reads behind feature hooks, and add query-level tests for invalidation and placeholder behavior.
+
 ### `d38983e` — authoritative agent session and versioned drafts
 
 - The active agent conversation and stream lifecycle now come directly from the Zustand session store instead of being mirrored from route-local state through synchronization effects. Starting/switching chats and stopping a stream therefore share one source of truth.

@@ -11,10 +11,11 @@ import {
   YAxis,
 } from 'recharts';
 import { SlidersHorizontal } from 'lucide-react';
-import { api } from '../../lib/api';
 import { cn, formatCurrency } from '../../lib/utils';
+import { useSpendingTrendQuery } from '../../features/analytics/queries';
+import type { GetSpendingTrend200 } from '../../generated/client';
 
-type Point = Awaited<ReturnType<typeof api.analytics.spendingTrend>>['series'][number];
+type Point = GetSpendingTrend200['series'][number];
 type ViewMode = 'calendar' | 'weekly' | 'cumulative';
 
 function compactAxisIdr(value: number): string {
@@ -37,37 +38,19 @@ function coverageText(point: Point): string {
 }
 
 export function SpendingTrendChart({ periodId = null }: { periodId?: number | null } = {}) {
-  const [points, setPoints] = useState<Point[]>([]);
-  const [totalSpent, setTotalSpent] = useState(0);
-  const [averageDailySpend, setAverageDailySpend] = useState(0);
-  const [hasIncompleteCoverage, setHasIncompleteCoverage] = useState(false);
   const [dataScope, setDataScope] = useState<'30d' | 'period'>('30d');
-  const [periodName, setPeriodName] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('calendar');
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const periodQuery = dataScope === 'period' && periodId != null ? { periodId } : {};
-    void api.analytics.spendingTrend(periodQuery)
-      .then((result) => {
-        if (cancelled) return;
-        setPoints(result.series);
-        setTotalSpent(result.totalSpent);
-        setAverageDailySpend(result.averageDailySpend);
-        setHasIncompleteCoverage(result.hasIncompleteCoverage);
-        setPeriodName(result.periodName);
-      })
-      .catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load spending trend.');
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [dataScope, periodId]);
+  const spendingQuery = useSpendingTrendQuery({ scope: dataScope, periodId });
+  const result = spendingQuery.data;
+  const points: Point[] = result?.series ?? [];
+  const totalSpent = result?.totalSpent ?? 0;
+  const averageDailySpend = result?.averageDailySpend ?? 0;
+  const hasIncompleteCoverage = result?.hasIncompleteCoverage ?? false;
+  const periodName = result?.periodName ?? null;
+  const isLoading = spendingQuery.isPending && result == null;
+  const loadError = spendingQuery.error instanceof Error ? spendingQuery.error.message : null;
 
   useEffect(() => {
     if (periodId == null && dataScope === 'period') setDataScope('30d');

@@ -39,6 +39,12 @@ export const queryKeys = {
     subscriptions: ["dashboard", "subscriptions"] as const,
     period: (periodId: number) => ["dashboard", "period", periodId] as const,
   },
+  analytics: {
+    all: ["analytics"] as const,
+    netWorthTrend: (range: string) => ["analytics", "net-worth-trend", range] as const,
+    spendingTrend: (scope: "30d" | "period", periodId: number | null) => ["analytics", "spending-trend", scope, periodId] as const,
+    periodSummaries: ["analytics", "period-summaries"] as const,
+  },
   agent: { all: ["agent"] as const, conversations: (archived = false) => ["agent", "conversations", { archived }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const, profile: ["agent", "profile"] as const },
 } as const;
 
@@ -52,6 +58,7 @@ export async function invalidateFinancialSummaries(queryClient: { invalidateQuer
     queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.loans.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.all }),

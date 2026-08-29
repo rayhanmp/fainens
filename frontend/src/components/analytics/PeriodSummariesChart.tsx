@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Bar,
   XAxis,
@@ -11,9 +11,9 @@ import {
   ComposedChart,
 } from 'recharts';
 import { Card } from '../ui/Card';
-import { api } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
 import { PieChart } from 'lucide-react';
+import { usePeriodSummariesQuery } from '../../features/analytics/queries';
 
 interface PeriodData {
   name: string;
@@ -24,39 +24,20 @@ interface PeriodData {
 }
 
 export function PeriodSummariesChart() {
-  const [data, setData] = useState<PeriodData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [totals, setTotals] = useState({ income: 0, expenses: 0, net: 0 });
-
-  useEffect(() => {
-    loadPeriodData();
-  }, []);
-
-  const loadPeriodData = async () => {
-    try {
-      const summaries = await api.analytics.periodSummaries();
-      
-      const periodData: PeriodData[] = summaries.map((period) => ({
-        name: period.periodName,
-        income: period.income,
-        expenses: period.expenses,
-        net: period.net,
-        savingsRate: period.income > 0 ? (period.net / period.income) * 100 : 0,
-      }));
-
-      // Calculate totals
-      const totalIncome = periodData.reduce((sum, p) => sum + p.income, 0);
-      const totalExpenses = periodData.reduce((sum, p) => sum + p.expenses, 0);
-      const totalNet = periodData.reduce((sum, p) => sum + p.net, 0);
-
-      setData(periodData);
-      setTotals({ income: totalIncome, expenses: totalExpenses, net: totalNet });
-    } catch (err) {
-      console.error('Failed to load period data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const periodSummariesQuery = usePeriodSummariesQuery();
+  const data = useMemo<PeriodData[]>(() => (periodSummariesQuery.data ?? []).map((period) => ({
+    name: period.periodName,
+    income: period.income,
+    expenses: period.expenses,
+    net: period.net,
+    savingsRate: period.income > 0 ? (period.net / period.income) * 100 : 0,
+  })), [periodSummariesQuery.data]);
+  const totals = useMemo(() => ({
+    income: data.reduce((sum, period) => sum + period.income, 0),
+    expenses: data.reduce((sum, period) => sum + period.expenses, 0),
+    net: data.reduce((sum, period) => sum + period.net, 0),
+  }), [data]);
+  const isLoading = periodSummariesQuery.isPending && periodSummariesQuery.data == null;
 
   const avgSavingsRate = totals.income > 0 ? (totals.net / totals.income) * 100 : 0;
 

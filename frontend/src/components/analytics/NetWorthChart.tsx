@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -8,11 +8,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { api } from '../../lib/api';
 import { formatCurrency, cn } from '../../lib/utils';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-
-type NetWorthRange = '7d' | '30d' | '3m' | '6m' | '1y';
+import { useNetWorthTrendQuery, type NetWorthRange } from '../../features/analytics/queries';
+import type { GetNetWorthTrend200 } from '../../generated/client';
 
 const RANGE_OPTIONS: Array<{
   range: NetWorthRange;
@@ -35,51 +34,15 @@ function compactAxisIdr(v: number): string {
   return String(Math.round(v));
 }
 
-interface Row {
-  label: string;
-  asOfMs: number;
-  netWorth: number;
-  totalAssets: number;
-  totalLiabilities: number;
-}
+type Row = GetNetWorthTrend200['series'][number];
 
 export function NetWorthChart({ className = '' }: { className?: string } = {}) {
   const gradientId = useId().replace(/:/g, '');
   const [range, setRange] = useState<NetWorthRange>('30d');
-  const [rows, setRows] = useState<Row[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setIsLoading(true);
-      setLoadError(null);
-      try {
-        const res = await api.analytics.netWorthTrend({ range });
-        if (cancelled) return;
-        setRows(
-          res.series.map((p) => ({
-            label: p.label,
-            asOfMs: p.asOfMs,
-            netWorth: p.netWorth,
-            totalAssets: p.totalAssets,
-            totalLiabilities: p.totalLiabilities,
-          })),
-        );
-      } catch (e) {
-        if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : 'Failed to load');
-          setRows([]);
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [range]);
+  const netWorthQuery = useNetWorthTrendQuery(range);
+  const rows: Row[] = netWorthQuery.data?.series ?? [];
+  const isLoading = netWorthQuery.isPending && netWorthQuery.data == null;
+  const loadError = netWorthQuery.error instanceof Error ? netWorthQuery.error.message : null;
 
   const currentNetWorth = rows.length > 0 ? rows[rows.length - 1].netWorth : 0;
   const previousNetWorth = rows.length > 0 ? rows[0].netWorth : currentNetWorth;
