@@ -5,6 +5,7 @@ import {
   createTag,
   deleteTag,
   listCategories,
+  listTags,
   restoreCategory,
   updateCategory,
   updateTag,
@@ -17,6 +18,15 @@ export const useCategoriesQuery = () => useQuery({
   queryFn: async ({ signal }) => {
     const response = await listCategories(undefined, { signal });
     if (response.status !== 200) throw new Error('Failed to load categories');
+    return response.data;
+  },
+});
+
+export const useTagsQuery = () => useQuery({
+  queryKey: queryKeys.tags.all,
+  queryFn: async ({ signal }) => {
+    const response = await listTags({ signal });
+    if (response.status !== 200) throw new Error('Failed to load tags');
     return response.data;
   },
 });

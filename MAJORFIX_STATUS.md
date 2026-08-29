@@ -21,6 +21,8 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 - Settings memory mutations now use the agent feature command boundary instead of calling the handwritten API facade directly. Query invalidation remains local to the memory key, so other server facts are not needlessly refreshed.
 
+- Transaction filters and editor inputs now use the categories feature's typed tag query instead of the legacy `hooks/api` lookup. Tag data therefore shares the same generated response boundary and cache key as category/tag mutations.
+
 ### `d38983e` — authoritative agent session and versioned drafts
 
 - The active agent conversation and stream lifecycle now come directly from the Zustand session store instead of being mirrored from route-local state through synchronization effects. Starting/switching chats and stopping a stream therefore share one source of truth.

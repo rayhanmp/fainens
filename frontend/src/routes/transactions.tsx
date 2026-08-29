@@ -17,10 +17,9 @@ import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
-import { useCategoriesQuery } from '../features/categories/queries';
+import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { usePeriodsQuery } from '../features/periods/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
-import { useTags } from '../hooks/api';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -152,7 +151,7 @@ function TransactionsPage() {
   const accountsQuery = useAccountsQuery();
   const categoriesQuery = useCategoriesQuery();
   const periodsQuery = usePeriodsQuery();
-  const tagsQuery = useTags();
+  const tagsQuery = useTagsQuery();
   const reverseTransactionMutation = useReverseTransaction();
   const deleteTransactionMutation = useDeleteTransaction();
   const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
