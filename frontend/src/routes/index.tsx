@@ -27,9 +27,8 @@ import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 import { MonthlyReportModal } from '../components/pdf/MonthlyReportModal';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
-import { useCategoriesQuery } from '../features/categories/queries';
+import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { usePeriodsQuery } from '../features/periods/queries';
-import { useTags } from '../hooks/api';
 import {
   useDashboardOverviewQuery,
   useDashboardLoansQuery,
@@ -146,7 +145,7 @@ function DashboardPage() {
   const periodsQuery = usePeriodsQuery();
   const accountsQuery = useAccountsLedgerQuery();
   const categoriesQuery = useCategoriesQuery();
-  const tagsQuery = useTags();
+  const tagsQuery = useTagsQuery();
   const analyticsQuery = useDashboardOverviewQuery();
   const reconciliationQuery = useDashboardReconciliationQuery(1);
   const loansQuery = useDashboardLoansQuery();

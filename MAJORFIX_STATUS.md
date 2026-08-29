@@ -22,6 +22,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Settings memory mutations now use the agent feature command boundary instead of calling the handwritten API facade directly. Query invalidation remains local to the memory key, so other server facts are not needlessly refreshed.
 
 - Transaction filters and editor inputs now use the categories feature's typed tag query instead of the legacy `hooks/api` lookup. Tag data therefore shares the same generated response boundary and cache key as category/tag mutations.
+- The dashboard now uses that same tag query, and the obsolete `frontend/src/hooks/api.ts` compatibility hook bundle has been removed after confirming there were no remaining consumers.
 
 ### `d38983e` — authoritative agent session and versioned drafts
 
