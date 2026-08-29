@@ -6,6 +6,13 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
+### `d38983e` — authoritative agent session and versioned drafts
+
+- The active agent conversation and stream lifecycle now come directly from the Zustand session store instead of being mirrored from route-local state through synchronization effects. Starting/switching chats and stopping a stream therefore share one source of truth.
+- Agent unmount cleanup now aborts an in-flight request and resets the transient stream state, preventing a stale “streaming” session after navigation.
+- Persisted composer drafts now carry a schema version and a migration boundary that safely upgrades older localStorage records without treating malformed values as valid drafts. Server messages, balances, and other financial facts remain outside Zustand.
+- Verification: clean frontend TypeScript and the production Vite build pass. The remaining state migration work is intentionally focused on the unused UI store, broader transaction/import draft coverage, and extracting the remaining large route controllers.
+
 ### `d8ae169` — generated adapter hardening and remaining page migrations
 
 - Finished the remaining generated-client page boundaries for category management and shared tag lookup. Legacy hooks no longer sit on the critical categories/tags query path.
