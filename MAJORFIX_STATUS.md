@@ -6,12 +6,13 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
-### `49a4976` — analytics query migration
+### `49a4976` and current contract wave — analytics query migration
 
 - Net-worth and spending trend charts now read through feature-owned React Query hooks backed by the generated client. Range/scope changes produce stable, independently cacheable keys and preserve previous data while the next range loads.
-- Period summary charts and the lifestyle ratio gauge share one cached React Query adapter. The adapter intentionally uses the legacy endpoint only because the currently committed OpenAPI response omits the income/expense/net fields those views require; the compatibility call is isolated to `features/analytics` until the contract is expanded.
+- Period summary charts and the lifestyle ratio gauge share one cached React Query adapter. Item-level computation failures are filtered out explicitly, so an error object cannot masquerade as a zero-valued period.
+- The period-summary route now declares its income, expenses, net, savings-rate, computed-at, and revision fields in OpenAPI, with an explicit item-level error variant. The generated client now exposes those fields and the analytics adapter no longer depends on the handwritten period-summary transport.
 - Financial mutations now invalidate the analytics query family alongside dashboard, report, account, period, and transaction facts, preventing stale chart data after posting, reversal, recovery, or budget changes.
-- Verification so far: frontend TypeScript and production Vite build pass. The remaining migration work is to expand the period-summary contract, move other direct `api.*` reads behind feature hooks, and add query-level tests for invalidation and placeholder behavior.
+- Verification so far: frontend TypeScript and production Vite build pass. The remaining migration work is to move other direct `api.*` reads behind feature hooks and add query-level tests for invalidation and placeholder behavior.
 
 ### `1d0276c` and `0153ad4` — abortable financial facts and command-boundary cleanup
 

@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import {
   getNetWorthTrend,
   getSpendingTrend,
+  listPeriodSummaries,
   type GetNetWorthTrend200,
   type GetSpendingTrend200,
+  type ListPeriodSummaries200Item,
+  type ListPeriodSummaries200ItemAnyOf,
 } from '../../generated/client';
-import { api } from '../../lib/api';
 import { queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
 
@@ -40,18 +42,26 @@ export function useSpendingTrendQuery(input: { scope: SpendingScope; periodId: n
   });
 }
 
-export type PeriodSummary = Awaited<ReturnType<typeof api.analytics.periodSummaries>>[number];
+export type PeriodSummary = ListPeriodSummaries200ItemAnyOf;
+
+function isCompletePeriodSummary(item: ListPeriodSummaries200Item): item is PeriodSummary {
+  return 'income' in item && typeof item.income === 'number'
+    && typeof item.expenses === 'number'
+    && typeof item.net === 'number';
+}
 
 /**
- * The legacy endpoint includes income/expense/net totals that the current
- * generated OpenAPI schema does not yet describe. Keep that adapter isolated
- * here until the contract is expanded, while still giving consumers a typed
- * React Query cache and cancellation lifecycle.
+ * Failed period computations are represented as an item-level error by the
+ * endpoint. Hide those rows from ratio/chart calculations rather than letting
+ * an error object masquerade as a zero-valued financial period.
  */
 export function usePeriodSummariesQuery() {
   return useQuery<PeriodSummary[]>({
     queryKey: queryKeys.analytics.periodSummaries,
-    queryFn: ({ signal }) => api.analytics.periodSummaries({ signal }),
+    queryFn: async ({ signal }) => {
+      const summaries = await unwrapGenerated(listPeriodSummaries({ signal }), 200, 'Failed to load period summaries');
+      return summaries.filter(isCompletePeriodSummary);
+    },
     placeholderData: (previous) => previous,
   });
 }

@@ -25,6 +25,26 @@ const rangeQuerySchema = z.object({ range: z.enum(["7d", "30d", "3m", "6m", "1y"
 const spendingTrendQuerySchema = z.object({ periodId: z.string().regex(/^\d+$/).optional() });
 const analyticsIdParamsSchema = z.object({ accountId: z.coerce.number().int().positive() });
 const periodSummaryParamsSchema = z.object({ periodId: z.coerce.number().int().positive() });
+const periodSummarySuccessSchema = z.object({
+  periodId: z.number().int(),
+  periodName: z.string(),
+  startDate: z.number(),
+  endDate: z.number(),
+  income: z.number(),
+  expenses: z.number(),
+  net: z.number(),
+  savingsRate: z.number(),
+  computedAt: z.number(),
+  revision: z.number().int(),
+}).passthrough();
+const periodSummaryFailureSchema = z.object({
+  periodId: z.number().int(),
+  periodName: z.string(),
+  startDate: z.number(),
+  endDate: z.number(),
+  error: z.string(),
+}).passthrough();
+const periodSummaryItemSchema = z.union([periodSummarySuccessSchema, periodSummaryFailureSchema]);
 const spendingTrendPointSchema = z.object({
   label: z.string(),
   startMs: z.number(),
@@ -225,7 +245,7 @@ export default async function (fastify: FastifyInstance) {
 
   // Get all periods summaries
   fastify.get("/api/analytics/period-summaries", {
-    schema: { operationId: "listPeriodSummaries", tags: ["analytics"], response: { 200: z.array(z.object({ periodId: z.number().int(), periodName: z.string(), startDate: z.number(), endDate: z.number() }).passthrough()) } },
+    schema: { operationId: "listPeriodSummaries", tags: ["analytics"], response: { 200: z.array(periodSummaryItemSchema) } },
   }, async () => {
     const periods = await db.select().from(salaryPeriods).orderBy(asc(salaryPeriods.startDate));
 

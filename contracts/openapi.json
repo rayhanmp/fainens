@@ -12725,30 +12725,90 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "properties": {
-                      "periodId": {
-                        "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "periodId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "periodName": {
+                            "type": "string"
+                          },
+                          "startDate": {
+                            "type": "number"
+                          },
+                          "endDate": {
+                            "type": "number"
+                          },
+                          "income": {
+                            "type": "number"
+                          },
+                          "expenses": {
+                            "type": "number"
+                          },
+                          "net": {
+                            "type": "number"
+                          },
+                          "savingsRate": {
+                            "type": "number"
+                          },
+                          "computedAt": {
+                            "type": "number"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "periodId",
+                          "periodName",
+                          "startDate",
+                          "endDate",
+                          "income",
+                          "expenses",
+                          "net",
+                          "savingsRate",
+                          "computedAt",
+                          "revision"
+                        ],
+                        "additionalProperties": {}
                       },
-                      "periodName": {
-                        "type": "string"
-                      },
-                      "startDate": {
-                        "type": "number"
-                      },
-                      "endDate": {
-                        "type": "number"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "periodId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "periodName": {
+                            "type": "string"
+                          },
+                          "startDate": {
+                            "type": "number"
+                          },
+                          "endDate": {
+                            "type": "number"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "periodId",
+                          "periodName",
+                          "startDate",
+                          "endDate",
+                          "error"
+                        ],
+                        "additionalProperties": {}
                       }
-                    },
-                    "required": [
-                      "periodId",
-                      "periodName",
-                      "startDate",
-                      "endDate"
-                    ],
-                    "additionalProperties": {}
+                    ]
                   }
                 }
               }

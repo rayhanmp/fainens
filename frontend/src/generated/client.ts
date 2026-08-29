@@ -5408,7 +5408,7 @@ export type GetOpportunityCost200 = {
   [key: string]: unknown;
 };
 
-export type ListPeriodSummaries200Item = {
+export type ListPeriodSummaries200ItemAnyOf = {
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5417,8 +5417,33 @@ export type ListPeriodSummaries200Item = {
   periodName: string;
   startDate: number;
   endDate: number;
+  income: number;
+  expenses: number;
+  net: number;
+  savingsRate: number;
+  computedAt: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  revision: number;
   [key: string]: unknown;
 };
+
+export type ListPeriodSummaries200ItemAnyOfTwo = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  periodId: number;
+  periodName: string;
+  startDate: number;
+  endDate: number;
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListPeriodSummaries200Item = ListPeriodSummaries200ItemAnyOf | ListPeriodSummaries200ItemAnyOfTwo;
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const RecognizePaylaterPurchaseBodyInstallmentMonths = {  NUMBER_1: 1,
