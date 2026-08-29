@@ -21,6 +21,12 @@ const optionalAmountString = z
 
 const tagIds = z.array(z.number().int().positive()).max(100);
 
+const transportLocation = z.object({
+  name: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+});
+
 export const simpleTransactionFormSchema = z.object({
   dateTime: z.string().trim().min(1, 'Choose a date and time'),
   type: z.enum(['expense', 'income', 'transfer', 'paylater']),
@@ -29,11 +35,26 @@ export const simpleTransactionFormSchema = z.object({
   fromAccountId: z.string(),
   toAccountId: z.string(),
   categoryId: z.string(),
+  paylaterRecognitionId: z.string(),
+  paylaterExpenseId: z.string(),
+  paylaterLiabilityId: z.string(),
+  paylaterInstallmentMonths: z.enum(['1', '3', '6', '12']),
+  paylaterInterestRate: z.string(),
+  paylaterAdminFee: optionalAmountString,
+  paylaterFirstDueDate: z.string(),
   notes: z.string().max(5000),
   place: z.string().max(500),
   tagIds,
+  origin: transportLocation.nullable(),
+  destination: transportLocation.nullable(),
+  rideProvider: z.enum(['', 'gojek', 'grab', 'others']),
+  rideService: z.string(),
   transferAdminFee: optionalAmountString,
+  transferFeePayerOverride: z.enum(['', 'sender', 'recipient']),
+  subscriptionId: z.string(),
 });
+
+export type SimpleFormValues = z.infer<typeof simpleTransactionFormSchema>;
 
 const journalLineSchema = z.object({
   accountId: z.string(),

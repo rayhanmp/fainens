@@ -36,7 +36,7 @@ import {
   RotateCcw,
   Info,
 } from 'lucide-react';
-import MapPicker, { TransportRoute, type Location as MapLocation, calculateDistance } from '../ui/MapPicker';
+import MapPicker, { TransportRoute, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
 import { loadTransferFeeRules, type TransferFeeRule } from '../../lib/transferFees';
 import {
@@ -47,6 +47,7 @@ import {
   type EditMetadataValues,
   type JournalFormLineValues,
   type JournalFormValues,
+  type SimpleFormValues,
 } from '../../features/transactions/schemas';
 import {
   useApprovePendingTransactionMutation,
@@ -95,8 +96,6 @@ type TransportRouteTemplate = {
   notes: string | null;
   tagIds: number[];
 };
-
-type SimpleTxType = 'expense' | 'income' | 'transfer' | 'paylater';
 
 type TxLine = {
   id: number;
@@ -178,6 +177,35 @@ function startOfLocalDayMs(ms: number) {
   return d.getTime();
 }
 
+function createSimpleFormDefaults(): SimpleFormValues {
+  return {
+    dateTime: toDatetimeLocal(),
+    type: 'expense',
+    fromAccountId: '',
+    toAccountId: '',
+    categoryId: '',
+    paylaterRecognitionId: '',
+    paylaterExpenseId: '',
+    paylaterLiabilityId: '',
+    paylaterInstallmentMonths: '3',
+    paylaterInterestRate: '',
+    paylaterAdminFee: '',
+    paylaterFirstDueDate: '',
+    amount: '',
+    description: '',
+    notes: '',
+    place: '',
+    tagIds: [],
+    origin: null,
+    destination: null,
+    rideProvider: '',
+    rideService: '',
+    transferAdminFee: '',
+    transferFeePayerOverride: '',
+    subscriptionId: '',
+  };
+}
+
 export function TransactionModal({
   isOpen,
   onClose,
@@ -257,39 +285,23 @@ export function TransactionModal({
     }
   }, [inputMode]);
 
-  const [simpleForm, setSimpleForm] = useState({
-    dateTime: toDatetimeLocal(),
-    type: 'expense' as SimpleTxType,
-    fromAccountId: '',
-    toAccountId: '',
-    categoryId: '',
-    /** Recognition tx id for paylater settlement */
-    paylaterRecognitionId: '',
-    paylaterExpenseId: '',
-    paylaterLiabilityId: '',
-    /** Installment options for paylater_buy */
-    paylaterInstallmentMonths: '3' as '1' | '3' | '6' | '12',
-    paylaterInterestRate: '',
-    paylaterAdminFee: '',
-    paylaterFirstDueDate: '',
-    amount: '',
-    description: '',
-    notes: '',
-    place: '',
-    tagIds: [] as number[],
-    /** Transport location fields */
-    origin: null as MapLocation | null,
-    destination: null as MapLocation | null,
-    /** Transport service fields */
-    rideProvider: '' as 'gojek' | 'grab' | 'others' | '',
-    rideService: '',
-    /** Transfer admin fee (in rupiah) */
-    transferAdminFee: '',
-    /** Optional per-transfer payer override */
-    transferFeePayerOverride: '' as '' | 'sender' | 'recipient',
-    /** Subscription this transaction pays for */
-    subscriptionId: '',
+  // Keep server-facing form data in RHF so conditional fields, validation, and
+  // resets share one source of truth. UI-only state (map pickers, previews,
+  // loading indicators) intentionally remains local to this component.
+  const simpleFormMethods = useForm<SimpleFormValues>({
+    resolver: zodResolver(simpleTransactionFormSchema),
+    defaultValues: createSimpleFormDefaults(),
+    mode: 'onSubmit',
   });
+  const simpleForm = simpleFormMethods.watch();
+  type SimpleFormUpdate = SimpleFormValues | ((current: SimpleFormValues) => SimpleFormValues);
+  const setSimpleForm = (update: SimpleFormUpdate) => {
+    const current = simpleFormMethods.getValues();
+    const next = typeof update === 'function' ? update(current) : update;
+    (Object.keys(next) as Array<keyof SimpleFormValues>).forEach((field) => {
+      simpleFormMethods.setValue(field, next[field], { shouldDirty: true, shouldValidate: false });
+    });
+  };
 
   // Map picker modal state
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
@@ -632,32 +644,7 @@ export function TransactionModal({
       setRouteTemplateName('');
       setSelectedRouteTemplateId(null);
       setRouteTemplateEditorMode(null);
-      setSimpleForm({
-        dateTime: toDatetimeLocal(),
-        type: 'expense',
-        fromAccountId: '',
-        toAccountId: '',
-        categoryId: '',
-        paylaterRecognitionId: '',
-        paylaterExpenseId: '',
-        paylaterLiabilityId: '',
-        paylaterInstallmentMonths: '3',
-        paylaterInterestRate: '',
-        paylaterAdminFee: '',
-        paylaterFirstDueDate: '',
-        amount: '',
-        description: '',
-        notes: '',
-        place: '',
-        tagIds: [],
-        origin: null,
-        destination: null,
-        rideProvider: '',
-        rideService: '',
-        transferAdminFee: '',
-        transferFeePayerOverride: '',
-        subscriptionId: '',
-      });
+      setSimpleForm(createSimpleFormDefaults());
       editMetadataForm.reset();
       setInstallmentPreview(null);
       setAttachments([]);
@@ -953,6 +940,13 @@ export function TransactionModal({
   const handleSimpleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+
+    const formIsValid = await simpleFormMethods.trigger();
+    if (!formIsValid) {
+      const firstError = Object.values(simpleFormMethods.formState.errors)[0];
+      setFormError(firstError?.message || 'Please check the form values');
+      return;
+    }
 
     const simpleValidation = simpleTransactionFormSchema.safeParse(simpleForm);
     if (!simpleValidation.success) {
