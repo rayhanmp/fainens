@@ -9,9 +9,11 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "start": "pnpm --filter backend start",
+    "generate:openapi": "pnpm --filter backend generate:openapi",
     "generate:api": "pnpm exec orval --config orval.config.cjs",
+    "generate:all": "pnpm generate:openapi && pnpm generate:api",
     "verify:contract": "pnpm --filter backend verify:contract",
-    "verify:generated": "pnpm generate:api && git diff --exit-code -- contracts/openapi.json frontend/src/generated"
+    "verify:generated": "pnpm generate:all && git diff --exit-code -- contracts/openapi.json frontend/src/generated"
   },
   "keywords": [],
   "author": "",

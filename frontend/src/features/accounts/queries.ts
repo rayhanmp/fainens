@@ -5,7 +5,11 @@ import { api } from '../../lib/api';
 
 export const useAccountsQuery = () => useQuery({
   queryKey: queryKeys.accounts.all,
-  queryFn: async ({ signal }) => (await listAccounts({ signal })).data,
+  queryFn: async ({ signal }) => {
+    const response = await listAccounts(undefined, { signal });
+    if (response.status !== 200) throw new Error('Failed to load accounts');
+    return response.data;
+  },
 });
 
 export type AccountListParams = Parameters<typeof api.accounts.list>[0];

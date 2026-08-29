@@ -1,15 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
+import {
+  getTransaction,
+  listPendingTransactions,
+  listTransactions,
+  listTransportRouteTemplates,
+  type ListTransactionsParams,
+} from "../../generated/client";
 import { invalidateFinancialSummaries, queryKeys } from "../core/query-keys";
 
-export function useTransactionList(filters: Parameters<typeof api.transactions.list>[0] = {}) {
-  return useQuery({ queryKey: queryKeys.transactions.list(filters ?? {}), queryFn: () => api.transactions.list(filters), placeholderData: (previous) => previous });
+export function useTransactionList(filters: ListTransactionsParams = {}) {
+  return useQuery({
+    queryKey: queryKeys.transactions.list(filters ?? {}),
+    queryFn: async ({ signal }) => {
+      const response = await listTransactions(filters, { signal });
+      if (response.status !== 200) throw new Error('Failed to load transactions');
+      return response.data;
+    },
+    placeholderData: (previous) => previous,
+  });
 }
 
 export function usePendingTransactionsQuery() {
   return useQuery({
     queryKey: queryKeys.transactions.pending,
-    queryFn: () => api.pendingTransactions.list(),
+    queryFn: async ({ signal }) => {
+      const response = await listPendingTransactions({ signal });
+      if (response.status !== 200) throw new Error('Failed to load pending transactions');
+      return response.data;
+    },
     placeholderData: (previous) => previous,
   });
 }
@@ -17,7 +36,11 @@ export function usePendingTransactionsQuery() {
 export function useTransactionDetailQuery(id: number | null) {
   return useQuery({
     queryKey: queryKeys.transactions.detail(id ?? 0),
-    queryFn: () => api.transactions.get(id!),
+    queryFn: async ({ signal }) => {
+      const response = await getTransaction(id!, { signal });
+      if (response.status !== 200) throw new Error('Failed to load transaction');
+      return response.data;
+    },
     enabled: id != null,
     placeholderData: (previous) => previous,
   });
@@ -26,7 +49,11 @@ export function useTransactionDetailQuery(id: number | null) {
 export function useTransportRouteTemplatesQuery(enabled = true) {
   return useQuery({
     queryKey: queryKeys.transactions.routeTemplates,
-    queryFn: () => api.transportRouteTemplates.list(),
+    queryFn: async ({ signal }) => {
+      const response = await listTransportRouteTemplates({ signal });
+      if (response.status !== 200) throw new Error('Failed to load route templates');
+      return response.data;
+    },
     enabled,
     placeholderData: (previous) => previous,
   });

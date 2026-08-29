@@ -20,26 +20,47 @@ const categorySchema = z.object({
   reportingAccountId: z.number().int().positive().nullable().optional(),
 });
 
+// Keep input and output contracts separate. Database rows include identity and
+// lifecycle fields which callers need for selections and cache reconciliation.
+const categoryRecordSchema = categorySchema.extend({
+  id: z.number().int().positive(),
+  isActive: z.boolean(),
+}).passthrough();
+
 const categoryUpdateSchema = categorySchema.partial();
 const categoryIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 const categoryListQuerySchema = z.object({
   search: z.string().max(100).optional(),
   includeInactive: z.enum(["true", "false"]).optional(),
 });
-const categoryResponseSchemas = {
-  200: z.union([z.array(categorySchema), categorySchema]),
-  201: categorySchema,
-  204: z.void(),
-  400: z.any(),
-  404: z.any(),
-  500: z.any(),
+const categoryErrorSchema = z.object({ error: z.string() }).passthrough();
+const categoryListResponse = { 200: z.array(categoryRecordSchema), 400: categoryErrorSchema };
+const categoryRecordResponse = { 200: categoryRecordSchema, 400: categoryErrorSchema, 404: categoryErrorSchema };
+const categoryCreateResponse = { 201: categoryRecordSchema, 400: categoryErrorSchema, 500: categoryErrorSchema };
+const categoryUpdateResponse = { 200: categoryRecordSchema, 400: categoryErrorSchema, 404: categoryErrorSchema, 500: categoryErrorSchema };
+const categoryDeleteResponse = { 204: z.void(), 400: categoryErrorSchema, 404: categoryErrorSchema, 409: categoryErrorSchema };
+const categoryDependencyResponse = {
+  200: z.object({
+    category: categoryRecordSchema,
+    canArchive: z.boolean(),
+    canRestore: z.boolean(),
+    dependencies: z.object({
+      transactions: z.number().int(),
+      allocations: z.number().int(),
+      budgetPlans: z.number().int(),
+      budgetTemplates: z.number().int(),
+    }).passthrough(),
+    consequence: z.string(),
+  }).passthrough(),
+  400: categoryErrorSchema,
+  404: categoryErrorSchema,
 };
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   fastify.get("/api/categories", {
-    schema: { operationId: "listCategories", tags: ["categories"], querystring: categoryListQuerySchema, response: categoryResponseSchemas },
+    schema: { operationId: "listCategories", tags: ["categories"], querystring: categoryListQuerySchema, response: categoryListResponse },
   }, async (request) => {
     const { search, includeInactive } = request.query as { search?: string; includeInactive?: string };
 
@@ -60,7 +81,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.get("/api/categories/:id", {
-    schema: { operationId: "getCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+    schema: { operationId: "getCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryRecordResponse },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -75,7 +96,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.post("/api/categories", {
-    schema: { operationId: "createCategory", tags: ["categories"], body: categorySchema, response: categoryResponseSchemas },
+    schema: { operationId: "createCategory", tags: ["categories"], body: categorySchema, response: categoryCreateResponse },
   }, async (request, reply) => {
     const parseResult = categorySchema.safeParse(request.body);
     
@@ -124,7 +145,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.patch("/api/categories/:id", {
-    schema: { operationId: "updateCategory", tags: ["categories"], params: categoryIdParamsSchema, body: categoryUpdateSchema, response: categoryResponseSchemas },
+    schema: { operationId: "updateCategory", tags: ["categories"], params: categoryIdParamsSchema, body: categoryUpdateSchema, response: categoryUpdateResponse },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
     
@@ -177,7 +198,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.delete("/api/categories/:id", {
-    schema: { operationId: "archiveCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+    schema: { operationId: "archiveCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryDeleteResponse },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -209,7 +230,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.get("/api/categories/:id/dependency-preview", {
-    schema: { operationId: "getCategoryDependencyPreview", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+    schema: { operationId: "getCategoryDependencyPreview", tags: ["categories"], params: categoryIdParamsSchema, response: categoryDependencyResponse },
   }, async (request, reply) => {
     const categoryId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return reply.code(400).send({ error: "Invalid category id" });
@@ -236,7 +257,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.post("/api/categories/:id/restore", {
-    schema: { operationId: "restoreCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryResponseSchemas },
+    schema: { operationId: "restoreCategory", tags: ["categories"], params: categoryIdParamsSchema, response: categoryRecordResponse },
   }, async (request, reply) => {
     const categoryId = Number((request.params as { id: string }).id);
     if (!Number.isSafeInteger(categoryId) || categoryId <= 0) return reply.code(400).send({ error: "Invalid category id" });

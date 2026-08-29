@@ -12,6 +12,7 @@ import { PendingTransactionsModal } from '../components/transactions/PendingTran
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import type { ListTransactionsParams } from '../generated/client';
 import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
@@ -129,7 +130,7 @@ function TransactionsPage() {
   const splitFileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
-  const transactionFilters = useMemo(() => ({
+  const transactionFilters = useMemo<ListTransactionsParams>(() => ({
     ...(search.periodId ? { periodId: search.periodId === 'all' ? 'all' : search.periodId } : {}),
     ...(search.accountId ? { accountId: search.accountId } : {}),
     ...(categoryFilter ? { categoryId: categoryFilter } : {}),
@@ -139,7 +140,7 @@ function TransactionsPage() {
     ...(endDate ? { endDate: formatDateInputEnd(endDate) } : {}),
     ...(minAmount ? { minAmount } : {}),
     ...(maxAmount ? { maxAmount } : {}),
-    ...(includeAdjustments ? { includeReversals: 'true' } : {}),
+    ...(includeAdjustments ? { includeReversals: 'true' as const } : {}),
     sort, limit: String(pageSize), offset: String((page - 1) * pageSize),
   }), [search.periodId, search.accountId, categoryFilter, filterQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, page, pageSize]);
   const transactionQuery = useTransactionList(transactionFilters);

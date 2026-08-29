@@ -5,7 +5,11 @@ import { api } from '../../lib/api';
 
 export const usePeriodsQuery = () => useQuery({
   queryKey: queryKeys.periods.all,
-  queryFn: async ({ signal }) => (await listPeriods({ signal })).data,
+  queryFn: async ({ signal }) => {
+    const response = await listPeriods(undefined, { signal });
+    if (response.status !== 200) throw new Error('Failed to load periods');
+    return response.data;
+  },
 });
 
 export function usePeriodsLedgerQuery(includeInactive = false) {

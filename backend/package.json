@@ -8,7 +8,7 @@
     "start": "node dist/server.js",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "generate:openapi": "ts-node src/scripts/generate-openapi.ts",
+    "generate:openapi": "ts-node-dev --transpile-only src/scripts/generate-openapi.ts",
     "worker": "ts-node src/jobs/worker.ts",
     "verify:contract": "ts-node-dev --transpile-only src/scripts/verify-route-contract.ts"
   },

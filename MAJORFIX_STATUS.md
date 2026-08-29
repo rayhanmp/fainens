@@ -397,11 +397,14 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Saved transport routes are now read through a keyed React Query query and created, renamed, or deleted through feature-owned mutations.
 - The transaction modal no longer keeps a second route-template server cache or performs an imperative list fetch on every open. Template changes invalidate only the route-template key while preserving the existing editor state.
 
-### `pending` — generated client refresh
+### `in progress` — generated client and feature-boundary completion
 
-- Regenerated the checked-in Orval client directly from the committed pilot contract. The generated Period types now include coverage and lifecycle enums that were present in the OpenAPI document but missing from the stale client output.
-- The generated pilot now also includes typed CSV import preview/confirm operations and the frontend import adapter consumes those methods; the full 146-path registry is still intentionally gated until its larger response surface is reviewed as one compatibility change.
-- The normal `generate:api` wrapper is currently blocked before Orval by pnpm's minimum-release-age policy on the existing lockfile (`markdown-it@14.3.1`). The direct installed Orval binary produces the same reproducible client output without changing dependency resolution.
+- The checked-in OpenAPI document now covers the complete database-free Fastify registry: 146 paths, 188 operations, and 187 application operation IDs. Wildcard attachment paths are normalized to valid named OpenAPI parameters before generation.
+- Account and category route contracts now distinguish list, detail, create, update, archive, restore, and dependency-preview response shapes. Agent conversation responses constrain `titleSource` to `auto` or `manual`, avoiding generated unions that made feature consumers guess at server data.
+- The checked-in Orval client is regenerated from the full contract. `generate:openapi`, `generate:api`, and `generate:all` are available at workspace level; `verify:generated` regenerates both artifacts and fails on stale committed output.
+- Core generated-client reads now include abort propagation and status narrowing for transactions, pending transactions, route templates, accounts, categories, periods, dashboard analytics, agent conversations, memories, profile, and conversation details. Feature hooks remain the single server-data boundary for these reads.
+- Agent proposal validation, status labels, amount/allocation scaling, journal-line balancing, and transaction draft conversion live in `frontend/src/features/agent/proposal-utils.ts`; transaction modal date/default helpers live in `frontend/src/features/transactions/modal-helpers.ts`. The route and modal retain presentation/interaction responsibilities while the pure feature logic is independently reusable.
+- The normal pnpm wrapper may still be unavailable in environments enforcing the existing minimum-release-age policy. The installed Node/Orval binaries were used for generation without changing dependency resolution.
 
 ### `74a9163` — complete route-contract coverage checkpoint
 

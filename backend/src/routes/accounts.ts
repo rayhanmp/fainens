@@ -42,15 +42,12 @@ const accountRecordSchema = z.object({
   type: z.enum(accountTypeEnum),
   balance: z.number().optional(),
 }).passthrough();
-const accountResponseSchemas = {
-  200: z.union([z.array(accountRecordSchema), accountRecordSchema]),
-  201: accountRecordSchema,
-  204: z.void(),
-  400: z.any(),
-  404: z.any(),
-  409: z.any(),
-  500: z.any(),
-};
+const accountErrorSchema = z.object({ error: z.string() }).passthrough();
+const accountListResponse = { 200: z.array(accountRecordSchema), 400: accountErrorSchema };
+const accountRecordResponse = { 200: accountRecordSchema, 400: accountErrorSchema, 404: accountErrorSchema };
+const accountCreateResponse = { 201: accountRecordSchema, 400: accountErrorSchema, 409: accountErrorSchema, 500: accountErrorSchema };
+const accountUpdateResponse = { 200: accountRecordSchema, 400: accountErrorSchema, 404: accountErrorSchema, 409: accountErrorSchema, 500: accountErrorSchema };
+const accountDeleteResponse = { 204: z.void(), 400: accountErrorSchema, 404: accountErrorSchema, 409: accountErrorSchema };
 const accountDependencyPreviewSchema = z.object({
   account: accountRecordSchema,
   canArchive: z.boolean(),
@@ -124,7 +121,7 @@ export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   fastify.get("/api/accounts", {
-    schema: { operationId: "listAccounts", tags: ["accounts"], querystring: accountListQuerySchema, response: accountResponseSchemas },
+    schema: { operationId: "listAccounts", tags: ["accounts"], querystring: accountListQuerySchema, response: accountListResponse },
   }, async (request) => {
     const { type, search, includeInactive } = request.query as {
       type?: string;
@@ -166,7 +163,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.get("/api/accounts/:id", {
-    schema: { operationId: "getAccount", tags: ["accounts"], params: accountIdParamsSchema, querystring: accountListQuerySchema, response: accountResponseSchemas },
+    schema: { operationId: "getAccount", tags: ["accounts"], params: accountIdParamsSchema, querystring: accountListQuerySchema, response: accountRecordResponse },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const includeChildren = (request.query as { includeChildren?: string }).includeChildren === "true";
@@ -189,7 +186,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.post("/api/accounts", {
-    schema: { operationId: "createAccount", tags: ["accounts"], body: accountBodySchema, response: accountResponseSchemas },
+    schema: { operationId: "createAccount", tags: ["accounts"], body: accountBodySchema, response: accountCreateResponse },
   }, async (request, reply) => {
     const body = request.body as {
       name: string;
@@ -265,7 +262,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.patch("/api/accounts/:id", {
-    schema: { operationId: "updateAccount", tags: ["accounts"], params: accountIdParamsSchema, body: accountUpdateBodySchema, response: accountResponseSchemas },
+    schema: { operationId: "updateAccount", tags: ["accounts"], params: accountIdParamsSchema, body: accountUpdateBodySchema, response: accountUpdateResponse },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
@@ -363,7 +360,7 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.delete("/api/accounts/:id", {
-    schema: { operationId: "deleteAccount", tags: ["accounts"], params: accountIdParamsSchema, response: accountResponseSchemas },
+    schema: { operationId: "deleteAccount", tags: ["accounts"], params: accountIdParamsSchema, response: accountDeleteResponse },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const accountId = parseInt(id);

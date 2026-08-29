@@ -5,7 +5,11 @@ import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export const useCategoriesQuery = () => useQuery({
   queryKey: queryKeys.categories.all,
-  queryFn: async ({ signal }) => (await listCategories({ signal })).data,
+  queryFn: async ({ signal }) => {
+    const response = await listCategories(undefined, { signal });
+    if (response.status !== 200) throw new Error('Failed to load categories');
+    return response.data;
+  },
 });
 
 export function useCreateCategoryMutation() {

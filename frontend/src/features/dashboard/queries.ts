@@ -5,7 +5,11 @@ import { api } from '../../lib/api';
 
 export const useDashboardQuery = () => useQuery({
   queryKey: queryKeys.dashboard.analytics,
-  queryFn: async ({ signal }) => (await getDashboardAnalytics({ signal })).data,
+  queryFn: async ({ signal }) => {
+    const response = await getDashboardAnalytics({ signal });
+    if (response.status !== 200) throw new Error('Failed to load dashboard analytics');
+    return response.data;
+  },
 });
 
 export function useDashboardOverviewQuery() {

@@ -2,10 +2,19 @@
 import {
   confirmTransactionImport as generatedConfirmTransactionImport,
   previewTransactionImport as generatedPreviewTransactionImport,
-  type ImportConfirm,
-  type ImportPreviewResponse,
-  type ImportResult,
+  type ConfirmTransactionImportBody,
+  type ConfirmTransactionImport201,
+  type PreviewTransactionImport200AnyOfFour,
 } from '../generated/client';
+
+// Compatibility aliases keep the handwritten transport facade stable while the
+// generated operation names remain the source of truth for the wire contract.
+type ImportConfirm = ConfirmTransactionImportBody;
+// The legacy csv-only preview is the response shape used by the import modal.
+// The endpoint also accepts a newer preview body, so the generated endpoint
+// correctly exposes a union while this facade narrows the compatibility path.
+type ImportPreviewResponse = PreviewTransactionImport200AnyOfFour;
+type ImportResult = ConfirmTransactionImport201;
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
@@ -635,12 +644,12 @@ export const api = {
     }),
     importPreview: async (csvText: string): Promise<ImportPreviewResponse> => {
       const response = await generatedPreviewTransactionImport({ csvText });
-      if (response.status !== 200) throw new Error(response.data.message || response.data.error || 'Failed to preview import');
-      return response.data;
+      if (response.status !== 200) throw new Error('Failed to preview import');
+      return response.data as ImportPreviewResponse;
     },
     importConfirm: async (data: ImportConfirm): Promise<ImportResult> => {
       const response = await generatedConfirmTransactionImport(data);
-      if (response.status !== 201) throw new Error(response.data.message || response.data.error || 'Failed to import transactions');
+      if (response.status !== 201) throw new Error('Failed to import transactions');
       return response.data;
     },
   },

@@ -1,25 +1,41 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { getAgentConversation, getAgentProfile, listAgentConversations, listAgentMemories } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 
 export const useAgentConversationsQuery = (includeArchived = false) => useQuery({
   queryKey: queryKeys.agent.conversations(includeArchived),
-  queryFn: () => api.agent.conversations.list({ includeArchived }),
+  queryFn: async ({ signal }) => {
+    const response = await listAgentConversations({ includeArchived: includeArchived ? 'true' : 'false' }, { signal });
+    if (response.status !== 200) throw new Error('Failed to load conversations');
+    return response.data;
+  },
 });
 export const useAgentMemoriesQuery = () => useQuery({
   queryKey: queryKeys.agent.memories,
-  queryFn: () => api.agent.memories.list(),
+  queryFn: async ({ signal }) => {
+    const response = await listAgentMemories({ signal });
+    if (response.status !== 200) throw new Error('Failed to load memories');
+    return response.data;
+  },
   placeholderData: (previous) => previous,
 });
 
 export const useAgentProfileQuery = () => useQuery({
   queryKey: queryKeys.agent.profile,
-  queryFn: () => api.agent.profile.get(),
+  queryFn: async ({ signal }) => {
+    const response = await getAgentProfile({ signal });
+    if (response.status !== 200) throw new Error('Failed to load agent profile');
+    return response.data;
+  },
   placeholderData: (previous) => previous,
 });
 
 export const useAgentConversationQuery = (conversationId: number | null) => useQuery({
   queryKey: queryKeys.agent.conversation(conversationId ?? 0),
-  queryFn: () => api.agent.conversations.get(conversationId!),
+  queryFn: async ({ signal }) => {
+    const response = await getAgentConversation(conversationId!, { signal });
+    if (response.status !== 200) throw new Error('Failed to load conversation');
+    return response.data;
+  },
   enabled: conversationId != null,
 });
