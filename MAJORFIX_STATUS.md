@@ -13,7 +13,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Financial mutations now invalidate the analytics query family alongside dashboard, report, account, period, and transaction facts, preventing stale chart data after posting, reversal, recovery, or budget changes.
 - Verification so far: frontend TypeScript and production Vite build pass. The remaining migration work is to expand the period-summary contract, move other direct `api.*` reads behind feature hooks, and add query-level tests for invalidation and placeholder behavior.
 
-### Current working wave — abortable financial-facts bridge
+### `1d0276c` and `0153ad4` — abortable financial facts and command-boundary cleanup
 
 - The compatibility `get_financial_facts` adapter now accepts React Query's abort signal. Dashboard period facts and salary-income history can be cancelled when the user switches scope or leaves the page, rather than allowing an old request to finish against a new view.
 - This remains intentionally a legacy bridge because `get_financial_facts` is an agent tool endpoint, not a public generated REST contract. Its server data still enters the UI through feature-owned queries and remains outside Zustand.
