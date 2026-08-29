@@ -47,7 +47,6 @@ import {
   type EditMetadataValues,
   type JournalFormLineValues,
   type JournalFormValues,
-  type SimpleFormValues,
 } from '../../features/transactions/schemas';
 import {
   createSimpleFormDefaults,
@@ -58,6 +57,7 @@ import {
   toDatetimeLocal,
   toTimeInputLocal,
 } from '../../features/transactions/modal-helpers';
+import { useSimpleTransactionForm } from '../../features/transactions/modal-controller';
 import {
   useApprovePendingTransactionMutation,
   useCreatePendingTransactionMutation,
@@ -241,20 +241,7 @@ export function TransactionModal({
   // Keep server-facing form data in RHF so conditional fields, validation, and
   // resets share one source of truth. UI-only state (map pickers, previews,
   // loading indicators) intentionally remains local to this component.
-  const simpleFormMethods = useForm<SimpleFormValues>({
-    resolver: zodResolver(simpleTransactionFormSchema),
-    defaultValues: createSimpleFormDefaults(),
-    mode: 'onSubmit',
-  });
-  const simpleForm = simpleFormMethods.watch();
-  type SimpleFormUpdate = SimpleFormValues | ((current: SimpleFormValues) => SimpleFormValues);
-  const setSimpleForm = (update: SimpleFormUpdate) => {
-    const current = simpleFormMethods.getValues();
-    const next = typeof update === 'function' ? update(current) : update;
-    (Object.keys(next) as Array<keyof SimpleFormValues>).forEach((field) => {
-      simpleFormMethods.setValue(field, next[field], { shouldDirty: true, shouldValidate: false });
-    });
-  };
+  const { methods: simpleFormMethods, values: simpleForm, update: setSimpleForm } = useSimpleTransactionForm();
 
   // Map picker modal state
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
