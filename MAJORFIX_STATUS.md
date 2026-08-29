@@ -6,12 +6,17 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
-### Pending working wave — analytics query migration
+### `49a4976` — analytics query migration
 
 - Net-worth and spending trend charts now read through feature-owned React Query hooks backed by the generated client. Range/scope changes produce stable, independently cacheable keys and preserve previous data while the next range loads.
 - Period summary charts and the lifestyle ratio gauge share one cached React Query adapter. The adapter intentionally uses the legacy endpoint only because the currently committed OpenAPI response omits the income/expense/net fields those views require; the compatibility call is isolated to `features/analytics` until the contract is expanded.
 - Financial mutations now invalidate the analytics query family alongside dashboard, report, account, period, and transaction facts, preventing stale chart data after posting, reversal, recovery, or budget changes.
 - Verification so far: frontend TypeScript and production Vite build pass. The remaining migration work is to expand the period-summary contract, move other direct `api.*` reads behind feature hooks, and add query-level tests for invalidation and placeholder behavior.
+
+### Current working wave — abortable financial-facts bridge
+
+- The compatibility `get_financial_facts` adapter now accepts React Query's abort signal. Dashboard period facts and salary-income history can be cancelled when the user switches scope or leaves the page, rather than allowing an old request to finish against a new view.
+- This remains intentionally a legacy bridge because `get_financial_facts` is an agent tool endpoint, not a public generated REST contract. Its server data still enters the UI through feature-owned queries and remains outside Zustand.
 
 ### `d38983e` — authoritative agent session and versioned drafts
 

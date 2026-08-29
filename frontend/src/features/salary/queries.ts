@@ -23,12 +23,12 @@ export type SalaryIncomeRow = {
 export function useSalaryIncomeQuery() {
   return useQuery({
     queryKey: queryKeys.salary.income,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime();
       const [factsResult, accounts] = await Promise.all([
-        api.agent.financialFacts({ startDate: start, endDate: Date.now() }),
-        unwrapGenerated(listAccounts(), 200, 'Failed to load accounts'),
+        api.agent.financialFacts({ startDate: start, endDate: Date.now() }, { signal }),
+        unwrapGenerated(listAccounts(undefined, { signal }), 200, 'Failed to load accounts'),
       ]);
       return {
         transactions: factsResult.data.facts.rows

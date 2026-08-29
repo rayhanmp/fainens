@@ -67,7 +67,7 @@ export function useDashboardPeriodQueries(periodId: number | null) {
   const periodKey = periodId ?? 0;
   const facts = useQuery({
     queryKey: [...queryKeys.dashboard.period(periodKey), 'facts'] as const,
-    queryFn: () => api.agent.financialFacts({ periodId: periodId! }),
+    queryFn: ({ signal }) => api.agent.financialFacts({ periodId: periodId! }, { signal }),
     enabled,
     placeholderData: (previous) => previous,
   });

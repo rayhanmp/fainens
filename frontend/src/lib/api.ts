@@ -2034,8 +2034,9 @@ export const api = {
       fetchApi<{ tool: string; revision: number; readOnly: true; data: unknown }>('/agent/tool-call', {
         method: 'POST', body: JSON.stringify(data),
       }),
-    financialFacts: (input: { periodId?: number; startDate?: number; endDate?: number } = {}) =>
+    financialFacts: (input: { periodId?: number; startDate?: number; endDate?: number } = {}, options?: RequestInit) =>
       fetchApi<AgentFinancialFacts>('/agent/tool-call', {
+        ...options,
         method: 'POST', body: JSON.stringify({ name: 'get_financial_facts', input }),
       }),
     searchTransactions: (input: { periodId?: number; startDate?: number; endDate?: number; text?: string; limit?: number } = {}) =>
