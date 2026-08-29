@@ -671,7 +671,7 @@ export async function reversePaylaterTransaction(input: {
   await invalidateOnTransactionMutation({
     transactionId: result.reversalTransactionId,
     affectedAccountIds: reversal.prepared.accountIds,
-    affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+    affectedPeriodIds: [reversal.originalPeriodId, reversal.periodId].filter((id): id is number => id != null),
     revisionBumped: true,
   });
   return result;

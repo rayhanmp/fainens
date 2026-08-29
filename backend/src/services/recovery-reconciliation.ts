@@ -54,8 +54,8 @@ function assertRecoveryInputs(input: {
   if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
     throw new Error("Each recovery account must appear once with a positive integer ID");
   }
-  if (input.balances.some((item) => !Number.isSafeInteger(item.actualBalance) || item.actualBalance < 0)) {
-    throw new Error("Each actual balance must be a non-negative integer-rupiah amount");
+  if (input.balances.some((item) => !Number.isSafeInteger(item.actualBalance))) {
+    throw new Error("Each actual balance must be a signed integer-rupiah amount");
   }
   if (input.acknowledgement.trim().length < 12 || input.acknowledgement.length > 500) {
     throw new Error("A concise acknowledgement of the untracked historical gap is required");
@@ -224,6 +224,9 @@ export async function createRecoveryReconciliation(input: {
       transactionId: result.recoveryTransactionId,
       affectedAccountIds: prepared.accountIds,
       affectedPeriodIds: prepared.periodId != null ? [prepared.periodId] : undefined,
+      // insertPreparedJournalEntrySync already bumped the revision inside the
+      // same SQLite transaction. Do not count the recovery bridge twice.
+      revisionBumped: true,
     });
   }
   return result;

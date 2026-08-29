@@ -652,6 +652,20 @@ export type GetTransaction404 = {
   [key: string]: unknown;
 };
 
+export type UpdateTransactionBodyCategoryAllocationsItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  categoryId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  [key: string]: unknown;
+};
+
 /**
  * @nullable
  */
@@ -707,6 +721,7 @@ export type UpdateTransactionBody = {
    * @nullable
    */
   categoryId?: number | null;
+  categoryAllocations?: UpdateTransactionBodyCategoryAllocationsItem[];
   tagIds?: number[];
   /** @minItems 2 */
   lines?: UpdateTransactionBodyLinesItem[];

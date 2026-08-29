@@ -152,6 +152,7 @@ const transactionUpdateBodySchema = z.object({
   place: z.string().nullable().optional(),
   txType: z.string().optional(),
   categoryId: z.number().int().positive().nullable().optional(),
+  categoryAllocations: z.array(z.object({ categoryId: z.number().int().positive(), amount: z.number().int() }).passthrough()).optional(),
   tagIds: z.array(z.number().int().positive()).optional(),
   lines: z.array(journalLineBodySchema).min(2).optional(),
 }).passthrough();
@@ -1123,7 +1124,7 @@ RULES:
       await invalidateOnTransactionMutation({
         transactionId: result,
         affectedAccountIds: prepared.accountIds,
-        affectedPeriodIds: reversalPeriodId == null ? undefined : [reversalPeriodId],
+        affectedPeriodIds: [original.periodId, reversalPeriodId].filter((id): id is number => id != null),
         revisionBumped: true,
       });
       return reply.code(201).send({ id: result, reversalOfTxId: transactionId });
@@ -1151,6 +1152,7 @@ RULES:
       place?: string | null;
       txType?: string;
       categoryId?: number | null;
+      categoryAllocations?: Array<{ categoryId: number; amount: number }>;
       tagIds?: number[];
       lines?: Array<{
         accountId: number;

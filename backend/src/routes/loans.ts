@@ -575,7 +575,7 @@ export default async function (fastify: FastifyInstance) {
       await invalidateOnTransactionMutation({
         transactionId: result.reversalTransactionId,
         affectedAccountIds: reversal.prepared.accountIds,
-        affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+        affectedPeriodIds: [reversal.originalPeriodId, reversal.periodId].filter((id): id is number => id != null),
         revisionBumped: true,
       });
       return reply.code(201).send(result);
@@ -633,7 +633,7 @@ export default async function (fastify: FastifyInstance) {
       await invalidateOnTransactionMutation({
         transactionId: result.reversalTransactionId,
         affectedAccountIds: reversal.prepared.accountIds,
-        affectedPeriodIds: reversal.periodId == null ? undefined : [reversal.periodId],
+        affectedPeriodIds: [reversal.originalPeriodId, reversal.periodId].filter((id): id is number => id != null),
         revisionBumped: true,
       });
       return reply.code(201).send(result);

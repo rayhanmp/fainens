@@ -14,7 +14,7 @@ export async function prepareDomainReversal(
   originalTransactionId: number,
   reason: string,
   dbLike: any,
-): Promise<{ original: typeof transactions.$inferSelect; prepared: PreparedJournalEntry; periodId: number | null }> {
+): Promise<{ original: typeof transactions.$inferSelect; prepared: PreparedJournalEntry; periodId: number | null; originalPeriodId: number | null }> {
   const [original] = await dbLike.select().from(transactions)
     .where(eq(transactions.id, originalTransactionId)).limit(1);
   if (!original) throw new Error("Transaction not found");
@@ -56,7 +56,7 @@ export async function prepareDomainReversal(
       cashFlowClass: line.cashFlowClass,
     })),
   }, dbLike);
-  return { original, prepared, periodId };
+  return { original, prepared, periodId, originalPeriodId: original.periodId };
 }
 
 /** Insert the inverse journal and make the original immutable as reversed. */

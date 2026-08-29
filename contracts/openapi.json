@@ -1456,6 +1456,29 @@
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
+                  "categoryAllocations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "categoryId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "categoryId",
+                        "amount"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
                   "tagIds": {
                     "type": "array",
                     "items": {

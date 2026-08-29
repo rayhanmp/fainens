@@ -36,6 +36,10 @@ function auditSnapshot(value: unknown): Buffer {
   return Buffer.from(JSON.stringify(value));
 }
 
+function mutationFingerprint(rows: unknown): string {
+  return JSON.stringify(rows);
+}
+
 function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : Number(value);
 }
@@ -118,6 +122,7 @@ export interface UpdateTransactionInput {
   place?: string | null;
   txType?: string;
   categoryId?: number | null;
+  categoryAllocations?: Array<{ categoryId: number; amount: number }>;
   tagIds?: number[];
   lines?: ValidatedJournalLine[];
 }
@@ -141,6 +146,35 @@ export async function updateTransactionAtomically(
     .select({ tagId: transactionTags.tagId })
     .from(transactionTags)
     .where(eq(transactionTags.transactionId, transactionId));
+  const currentAllocations = await db
+    .select({ categoryId: transactionCategoryAllocations.categoryId, amount: transactionCategoryAllocations.amount })
+    .from(transactionCategoryAllocations)
+    .where(eq(transactionCategoryAllocations.transactionId, transactionId));
+
+  const currentLineFingerprint = mutationFingerprint(currentLines.map((line) => ({
+    id: line.id,
+    accountId: line.accountId,
+    debit: line.debit,
+    credit: line.credit,
+    description: line.description,
+    cashFlowClass: line.cashFlowClass,
+  })).sort((a, b) => a.id - b.id));
+  const currentTagFingerprint = mutationFingerprint(currentTags.map((tag) => tag.tagId).sort((a, b) => a - b));
+  const currentAllocationFingerprint = mutationFingerprint(currentAllocations
+    .map((allocation) => ({ categoryId: allocation.categoryId, amount: allocation.amount }))
+    .sort((a, b) => a.categoryId - b.categoryId));
+  const currentHeaderFingerprint = mutationFingerprint({
+    id: current.id,
+    date: toMs(current.date),
+    periodId: current.periodId,
+    description: current.description,
+    reference: current.reference,
+    notes: current.notes,
+    place: current.place,
+    categoryId: current.categoryId,
+    txType: current.txType,
+    status: current.status,
+  });
 
   let effectiveDate = toMs(current.date);
   if (input.date !== undefined) {
@@ -168,11 +202,21 @@ export async function updateTransactionAtomically(
   const hasProtectedAccountingChange = dateChangesPeriod
     || (input.txType !== undefined && input.txType !== current.txType)
     || categoryChanges
+    || input.categoryAllocations !== undefined
     || input.lines !== undefined;
   const periodId = input.date === undefined || !dateChangesPeriod
     ? current.periodId
     : await assertJournalPeriodOpen(effectiveDate, null);
   const validatedLines = input.lines === undefined ? undefined : validateJournalLines(input.lines).lines;
+  const effectiveLines = validatedLines ?? currentLines;
+  const lineAccountIds = [...new Set(effectiveLines.map((line) => line.accountId))];
+  const lineAccounts = await db
+    .select({ id: accounts.id, type: accounts.type })
+    .from(accounts)
+    .where(inArray(accounts.id, lineAccountIds));
+  const accountTypeById = new Map(lineAccounts.map((account) => [account.id, account.type]));
+  const netExpense = effectiveLines.reduce((sum, line) =>
+    accountTypeById.get(line.accountId) === "expense" ? sum + line.debit - line.credit : sum, 0);
   if (validatedLines) {
     const accountIds = [...new Set(validatedLines.map((line) => line.accountId))];
     const validAccounts = await db
@@ -186,6 +230,48 @@ export async function updateTransactionAtomically(
     if (validatedLines.some((line) => liquidityByAccountId.get(line.accountId) === "cash_equivalent" && line.cashFlowClass == null)) {
       throw new TransactionMutationError("Every cash-equivalent journal line requires cashFlowClass", 400);
     }
+  }
+
+  if (input.categoryId != null) {
+    const [category] = await db.select({ id: categories.id }).from(categories)
+      .where(eq(categories.id, input.categoryId)).limit(1);
+    if (!category) throw new TransactionMutationError("Category not found", 400);
+    if (netExpense === 0) {
+      throw new TransactionMutationError("An expense category can only be assigned to a journal with a net expense", 400);
+    }
+  }
+
+  let nextAllocations: Array<{ categoryId: number; amount: number }> | undefined;
+  if (input.categoryAllocations !== undefined) {
+    nextAllocations = input.categoryAllocations.map((allocation) => ({
+      categoryId: Number(allocation.categoryId),
+      amount: Number(allocation.amount),
+    }));
+    if (nextAllocations.some((allocation) => !Number.isInteger(allocation.categoryId) || allocation.categoryId <= 0 || !Number.isSafeInteger(allocation.amount) || allocation.amount === 0)) {
+      throw new TransactionMutationError("categoryAllocations must contain positive category IDs and non-zero integer amounts", 400);
+    }
+    if (new Set(nextAllocations.map((allocation) => allocation.categoryId)).size !== nextAllocations.length) {
+      throw new TransactionMutationError("A category may appear only once per journal allocation", 400);
+    }
+    if (nextAllocations.length > 0) {
+      const validCategories = await db.select({ id: categories.id }).from(categories)
+        .where(inArray(categories.id, nextAllocations.map((allocation) => allocation.categoryId)));
+      if (validCategories.length !== nextAllocations.length) {
+        throw new TransactionMutationError("One or more allocation categories do not exist", 400);
+      }
+    }
+    if (nextAllocations.reduce((sum, allocation) => sum + allocation.amount, 0) !== netExpense) {
+      throw new TransactionMutationError("category allocations must equal the journal's net expense amount", 400);
+    }
+  } else if (input.categoryId !== undefined) {
+    nextAllocations = input.categoryId == null ? [] : [{ categoryId: input.categoryId, amount: netExpense }];
+  } else if (input.lines !== undefined) {
+    if (currentAllocations.length > 1) {
+      throw new TransactionMutationError("Changing journal lines with multiple category allocations requires categoryAllocations", 400);
+    }
+    nextAllocations = currentAllocations.length === 1 && netExpense !== 0
+      ? [{ categoryId: currentAllocations[0].categoryId, amount: netExpense }]
+      : [];
   }
 
   const tagIds = input.tagIds === undefined ? undefined : [...new Set(input.tagIds)];
@@ -206,7 +292,11 @@ export async function updateTransactionAtomically(
     ...(input.reference !== undefined ? { reference: input.reference } : {}),
     ...(input.notes !== undefined ? { notes: input.notes } : {}),
     ...(input.place !== undefined ? { place: input.place } : {}),
-    ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+    ...(input.categoryId !== undefined
+      ? { categoryId: input.categoryId }
+      // An explicit empty/split allocation set is authoritative. Clear the
+      // legacy category fallback so reporting cannot silently reintroduce it.
+      : input.categoryAllocations !== undefined ? { categoryId: null } : {}),
   };
 
   const after = db.transaction((tx) => {
@@ -217,6 +307,40 @@ export async function updateTransactionAtomically(
       .limit(1)
       .all()[0];
     if (!fresh) throw new TransactionMutationError("Transaction not found", 404);
+    const freshLines = tx.select().from(transactionLines)
+      .where(eq(transactionLines.transactionId, transactionId)).all();
+    const freshTags = tx.select({ tagId: transactionTags.tagId })
+      .from(transactionTags).where(eq(transactionTags.transactionId, transactionId)).all();
+    const freshAllocations = tx.select({ categoryId: transactionCategoryAllocations.categoryId, amount: transactionCategoryAllocations.amount })
+      .from(transactionCategoryAllocations).where(eq(transactionCategoryAllocations.transactionId, transactionId)).all();
+    const freshHeaderFingerprint = mutationFingerprint({
+      id: fresh.id,
+      date: toMs(fresh.date),
+      periodId: fresh.periodId,
+      description: fresh.description,
+      reference: fresh.reference,
+      notes: fresh.notes,
+      place: fresh.place,
+      categoryId: fresh.categoryId,
+      txType: fresh.txType,
+      status: fresh.status,
+    });
+    if (
+      freshHeaderFingerprint !== currentHeaderFingerprint
+      ||
+      mutationFingerprint(freshLines.map((line: any) => ({
+        id: line.id,
+        accountId: line.accountId,
+        debit: line.debit,
+        credit: line.credit,
+        description: line.description,
+        cashFlowClass: line.cashFlowClass,
+      })).sort((a: any, b: any) => a.id - b.id)) !== currentLineFingerprint
+      || mutationFingerprint(freshTags.map((tag: any) => tag.tagId).sort((a: number, b: number) => a - b)) !== currentTagFingerprint
+      || mutationFingerprint(freshAllocations.map((allocation: any) => ({ categoryId: allocation.categoryId, amount: allocation.amount })).sort((a: any, b: any) => a.categoryId - b.categoryId)) !== currentAllocationFingerprint
+    ) {
+      throw new TransactionMutationError("Transaction changed while editing; reload it and retry", 409);
+    }
     if (hasProtectedAccountingChange) assertGenericMutationAllowed(fresh, tx);
 
     tx.update(transactions).set(updates).where(eq(transactions.id, transactionId)).run();
@@ -241,6 +365,16 @@ export async function updateTransactionAtomically(
           .run();
       }
     }
+    if (nextAllocations !== undefined) {
+      tx.delete(transactionCategoryAllocations).where(eq(transactionCategoryAllocations.transactionId, transactionId)).run();
+      if (nextAllocations.length > 0) {
+        tx.insert(transactionCategoryAllocations).values(nextAllocations.map((allocation) => ({
+          transactionId,
+          categoryId: allocation.categoryId,
+          amount: allocation.amount,
+        }))).run();
+      }
+    }
 
     const updated = tx
       .select()
@@ -258,15 +392,20 @@ export async function updateTransactionAtomically(
       .from(transactionTags)
       .where(eq(transactionTags.transactionId, transactionId))
       .all();
+    const persistedAllocations = tx
+      .select({ categoryId: transactionCategoryAllocations.categoryId, amount: transactionCategoryAllocations.amount })
+      .from(transactionCategoryAllocations)
+      .where(eq(transactionCategoryAllocations.transactionId, transactionId))
+      .all();
     tx.insert(auditLogs).values({
       entityType: "transaction",
       entityId: transactionId,
       action: "update",
-      beforeSnapshot: auditSnapshot({ transaction: fresh, lines: currentLines, tags: currentTags }),
-      afterSnapshot: auditSnapshot({ transaction: updated, lines: nextLines, tags: nextTags }),
+      beforeSnapshot: auditSnapshot({ transaction: fresh, lines: freshLines, tags: freshTags, categoryAllocations: freshAllocations }),
+      afterSnapshot: auditSnapshot({ transaction: updated, lines: nextLines, tags: nextTags, categoryAllocations: persistedAllocations }),
     }).run();
     bumpFinancialRevisionSync(tx);
-    return { ...updated, lines: nextLines, tagIds: nextTags.map((tag) => tag.tagId) };
+    return { ...updated, lines: nextLines, tagIds: nextTags.map((tag) => tag.tagId), categoryAllocations: persistedAllocations };
   });
 
   const affectedAccountIds = [...new Set([

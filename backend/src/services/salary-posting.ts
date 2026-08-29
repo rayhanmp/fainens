@@ -402,7 +402,7 @@ export async function correctSalaryOccurrence(input: {
   await invalidateOnTransactionMutation({
     transactionId: result.replacementTransactionId,
     affectedAccountIds: [...new Set([...reversal.prepared.accountIds, ...replacement.accountIds])],
-    affectedPeriodIds: [reversal.periodId, replacementPeriodId].filter((id): id is number => id != null),
+    affectedPeriodIds: [reversal.originalPeriodId, reversal.periodId, replacementPeriodId].filter((id): id is number => id != null),
     revisionBumped: true,
   });
   return result;
