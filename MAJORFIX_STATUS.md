@@ -6,6 +6,17 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
+### `ce4efce` and `058afdf` — transaction lifecycle, absence recovery, and cache consistency
+
+- Transaction edits now keep `transaction.category_id` and durable category allocations in sync. Changing a category replaces the allocation, clearing an explicit allocation set clears the legacy category fallback, and line edits preserve a single allocation's new net expense amount. Multi-category journals require an explicit replacement allocation set instead of silently guessing.
+- Transaction updates use an optimistic snapshot of the header, lines, tags, and allocations. A concurrent edit now returns a retryable conflict rather than overwriting newer accounting facts. The update response and audit snapshots include allocations.
+- Generic and domain-owned reversals invalidate both the original journal's period and the period containing the reversal. Older period summaries therefore cannot remain stale after a current-period correction.
+- Recovery snapshots accept signed asset/liability balances, which matches normal-balance accounting and supports valid negative liability balances. Recovery bridge posting no longer double-increments the financial revision.
+- Period create/update, return-after-absence backfill, coverage review, close/reopen, archive, and restore now invalidate period summaries, analytics, and insight caches after their committed revision bump. Historical gap shells remain payroll-cycle based and are explicitly marked skipped while the return period remains partial or reviewed complete.
+- Reconciliation control history and recovery writes now use a feature-owned generated-client mutation boundary. Control checks refresh reconciliation history only; recovery bridges refresh the full financial summary graph.
+- Critical account, period, dashboard, budget, report, and reconciliation queries now pass React Query abort signals through the generated transport. Deleting a transaction also removes its inactive detail cache so browser history cannot resurrect stale detail.
+- Verification: focused backend regression suite passes (4 files, 28 tests), backend and frontend TypeScript checks pass, and OpenAPI/client generation completed successfully. The full backend suite still has pre-existing environment/native-binding failures in `ledger.test.ts` and `routes/transactions.test.ts`.
+
 ### `49a4976` and current contract wave — analytics query migration
 
 - Net-worth and spending trend charts now read through feature-owned React Query hooks backed by the generated client. Range/scope changes produce stable, independently cacheable keys and preserve previous data while the next range loads.
