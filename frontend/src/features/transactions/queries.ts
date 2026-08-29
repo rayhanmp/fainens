@@ -121,7 +121,12 @@ export function useDeleteTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => unwrapGenerated(deleteTransaction(id), 204, 'Failed to delete transaction'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
+    onSuccess: async (_data, id) => {
+      // An inactive detail query must not resurrect a deleted record when a
+      // user opens it again from browser history or a stale view.
+      queryClient.removeQueries({ queryKey: queryKeys.transactions.detail(id) });
+      await invalidateFinancialSummaries(queryClient);
+    },
   });
 }
 
@@ -129,7 +134,10 @@ export function useBulkDeleteTransactions() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (ids: number[]) => unwrapGenerated(bulkDeleteTransactions({ ids }), 200, 'Failed to delete transactions'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
+    onSuccess: async (_data, ids) => {
+      for (const id of ids) queryClient.removeQueries({ queryKey: queryKeys.transactions.detail(id) });
+      await invalidateFinancialSummaries(queryClient);
+    },
   });
 }
 

@@ -19,13 +19,13 @@ import { unwrapGenerated } from '../core/generated-response';
 
 export const useBudgetQuery = (periodId?: number) => useQuery({
   queryKey: periodId == null ? queryKeys.budgets.all : queryKeys.budgets.period(periodId),
-  queryFn: () => unwrapGenerated(listBudgets(periodId == null ? undefined : { periodId: String(periodId) } satisfies ListBudgetsParams), 200, 'Failed to load budgets'),
+  queryFn: ({ signal }) => unwrapGenerated(listBudgets(periodId == null ? undefined : { periodId: String(periodId) } satisfies ListBudgetsParams, { signal }), 200, 'Failed to load budgets'),
   placeholderData: (previous) => previous,
 });
 
 export const useBudgetOutlookQuery = (periodId?: number) => useQuery({
   queryKey: periodId == null ? [...queryKeys.budgets.all, 'outlook'] : queryKeys.budgets.outlook(periodId),
-  queryFn: () => periodId == null ? Promise.resolve(null) : unwrapGenerated(getBudgetOutlook(periodId), 200, 'Failed to load budget outlook'),
+  queryFn: ({ signal }) => periodId == null ? Promise.resolve(null) : unwrapGenerated(getBudgetOutlook(periodId, { signal }), 200, 'Failed to load budget outlook'),
   enabled: periodId != null,
   placeholderData: (previous) => previous,
 });
@@ -33,7 +33,7 @@ export const useBudgetOutlookQuery = (periodId?: number) => useQuery({
 export function useBudgetPeriodsQuery() {
   return useQuery({
     queryKey: queryKeys.periods.all,
-    queryFn: () => unwrapGenerated(listPeriods(), 200, 'Failed to load periods'),
+    queryFn: ({ signal }) => unwrapGenerated(listPeriods(undefined, { signal }), 200, 'Failed to load periods'),
     placeholderData: (previous) => previous,
   });
 }
@@ -41,7 +41,7 @@ export function useBudgetPeriodsQuery() {
 export function useBudgetCategoriesQuery() {
   return useQuery({
     queryKey: queryKeys.categories.all,
-    queryFn: () => unwrapGenerated(listCategories(), 200, 'Failed to load categories'),
+    queryFn: ({ signal }) => unwrapGenerated(listCategories(undefined, { signal }), 200, 'Failed to load categories'),
     placeholderData: (previous) => previous,
   });
 }
@@ -50,7 +50,7 @@ export function useBudgetComparisonQuery(periodId: number | null, comparePeriodI
   const enabled = periodId != null && comparePeriodId != null && periodId !== comparePeriodId;
   return useQuery({
     queryKey: queryKeys.budgets.comparison(periodId ?? 0, comparePeriodId ?? 0),
-    queryFn: () => unwrapGenerated(compareBudgets({ currentPeriodId: String(periodId), comparePeriodId: String(comparePeriodId) }), 200, 'Failed to compare budgets'),
+    queryFn: ({ signal }) => unwrapGenerated(compareBudgets({ currentPeriodId: String(periodId), comparePeriodId: String(comparePeriodId) }, { signal }), 200, 'Failed to compare budgets'),
     enabled,
     placeholderData: (previous) => previous,
   });
@@ -59,7 +59,7 @@ export function useBudgetComparisonQuery(periodId: number | null, comparePeriodI
 export function useBudgetTemplatesQuery() {
   return useQuery({
     queryKey: queryKeys.budgets.templates,
-    queryFn: () => unwrapGenerated(listBudgetTemplates(), 200, 'Failed to load budget templates'),
+    queryFn: ({ signal }) => unwrapGenerated(listBudgetTemplates(undefined, { signal }), 200, 'Failed to load budget templates'),
     placeholderData: (previous) => previous,
   });
 }

@@ -29,7 +29,7 @@ export const usePeriodsQuery = () => useQuery({
 export function usePeriodsLedgerQuery(includeInactive = false) {
   return useQuery({
     queryKey: [...queryKeys.periods.all, { includeInactive }] as const,
-    queryFn: () => unwrapGenerated(listPeriods(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load periods'),
+    queryFn: ({ signal }) => unwrapGenerated(listPeriods(includeInactive ? { includeInactive: 'true' } : undefined, { signal }), 200, 'Failed to load periods'),
     placeholderData: (previous) => previous,
   });
 }
@@ -37,7 +37,7 @@ export function usePeriodsLedgerQuery(includeInactive = false) {
 export function usePeriodDetailQuery(periodId: number | null) {
   return useQuery({
     queryKey: queryKeys.periods.detail(periodId ?? 0),
-    queryFn: () => unwrapGenerated(getPeriod(periodId!), 200, 'Failed to load period'),
+    queryFn: ({ signal }) => unwrapGenerated(getPeriod(periodId!, { signal }), 200, 'Failed to load period'),
     enabled: periodId != null,
     placeholderData: (previous) => previous,
   });
@@ -46,7 +46,7 @@ export function usePeriodDetailQuery(periodId: number | null) {
 export function useSuggestedPeriodQuery() {
   return useQuery({
     queryKey: [...queryKeys.periods.all, 'suggested'] as const,
-    queryFn: () => unwrapGenerated(suggestNextPeriod(), 200, 'Failed to suggest next period'),
+    queryFn: ({ signal }) => unwrapGenerated(suggestNextPeriod({ signal }), 200, 'Failed to suggest next period'),
     placeholderData: (previous) => previous,
   });
 }
@@ -54,7 +54,7 @@ export function useSuggestedPeriodQuery() {
 export function useReturnPreviewQuery(asOfDate: number | null) {
   return useQuery({
     queryKey: [...queryKeys.periods.all, 'return-preview', asOfDate ?? 0] as const,
-    queryFn: () => unwrapGenerated(previewPeriodReturn({ asOfDate: asOfDate! }), 200, 'Failed to preview return'),
+    queryFn: ({ signal }) => unwrapGenerated(previewPeriodReturn({ asOfDate: asOfDate! }, { signal }), 200, 'Failed to preview return'),
     enabled: asOfDate != null,
   });
 }

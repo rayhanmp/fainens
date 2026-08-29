@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { salaryPeriods, budgetPlans, categories, salarySettings, transactions, auditLogs } from "../db/schema";
 import { precomputePeriodSummary } from "../cache/precompute";
+import { invalidateOnPeriodMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { inclusivePeriodEnd } from "../services/period-locking";
 import { firstPayrollStartAfter, followingPayrollStart, payrollPeriodEnd } from "../services/period-cadence";
@@ -300,6 +301,7 @@ export default async function (fastify: FastifyInstance) {
         bumpFinancialRevisionSync(tx);
         return inserted;
       });
+      await invalidateOnPeriodMutation();
       const currentPeriodMessage = currentPeriodCoverage === "complete"
         ? "the current period was marked complete based on your reviewed start-of-period return"
         : "the active return period is partial until reviewed";
@@ -344,6 +346,8 @@ export default async function (fastify: FastifyInstance) {
       bumpFinancialRevisionSync(tx);
       return inserted;
     });
+
+    await invalidateOnPeriodMutation();
 
     reply.code(201).send(period);
   });
@@ -433,8 +437,7 @@ export default async function (fastify: FastifyInstance) {
       return row;
     });
 
-    // Invalidate cache
-    await precomputePeriodSummary(parseInt(id));
+    await invalidateOnPeriodMutation();
 
     return updated;
   });
@@ -476,6 +479,7 @@ export default async function (fastify: FastifyInstance) {
         bumpFinancialRevisionSync(tx);
         return row;
       });
+      await invalidateOnPeriodMutation();
       return reply.send(updated);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to update period coverage";
@@ -524,6 +528,7 @@ export default async function (fastify: FastifyInstance) {
         bumpFinancialRevisionSync(tx);
         return updated;
       });
+      await invalidateOnPeriodMutation();
       return reply.send(closed);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to close period";
@@ -561,6 +566,7 @@ export default async function (fastify: FastifyInstance) {
         bumpFinancialRevisionSync(tx);
         return updated;
       });
+      await invalidateOnPeriodMutation();
       return reply.send(reopened);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to reopen period";
@@ -585,6 +591,7 @@ export default async function (fastify: FastifyInstance) {
         tx.insert(auditLogs).values({ entityType: "salary_period", entityId: periodId, action: "archive", beforeSnapshot: Buffer.from(JSON.stringify(period)), afterSnapshot: Buffer.from(JSON.stringify(updated)) }).run();
         bumpFinancialRevisionSync(tx); return updated;
       });
+      await invalidateOnPeriodMutation();
       return reply.send(archived);
     } catch (error) { const message = error instanceof Error ? error.message : "Failed to archive period"; return reply.code(message === "Period not found" ? 404 : 409).send({ error: message }); }
   });
@@ -605,6 +612,7 @@ export default async function (fastify: FastifyInstance) {
         tx.insert(auditLogs).values({ entityType: "salary_period", entityId: periodId, action: "restore", beforeSnapshot: Buffer.from(JSON.stringify(period)), afterSnapshot: Buffer.from(JSON.stringify(updated)) }).run();
         bumpFinancialRevisionSync(tx); return updated;
       });
+      await invalidateOnPeriodMutation();
       return reply.send(restored);
     } catch (error) { const message = error instanceof Error ? error.message : "Failed to restore period"; return reply.code(message === "Period not found" ? 404 : 409).send({ error: message }); }
   });

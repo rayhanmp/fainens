@@ -2,12 +2,14 @@ import { useState, useMemo, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { api } from '../../lib/api';
 import { formatCurrency, parseSignedIdNominalToInt, cn, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../../lib/utils';
 import { Check, AlertCircle, Wallet, Building2, CreditCard } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useAccountsLedgerQuery, useReconciliationHistoryQuery } from '../../features/accounts/queries';
-import { queryKeys } from '../../features/core/query-keys';
+import {
+  useCreateRecoveryReconciliationMutation,
+  useCreateReconciliationMutation,
+  useVoidReconciliationMutation,
+} from '../../features/reconciliation/queries';
 
 type Account = {
   id: number;
@@ -81,9 +83,11 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const [acknowledgement, setAcknowledgement] = useState('');
   const [recoveryNote, setRecoveryNote] = useState('');
   const [asOfDate, setAsOfDate] = useState(() => toLocalDateInputValue());
-  const queryClient = useQueryClient();
   const historyQuery = useReconciliationHistoryQuery();
   const allAccountsQuery = useAccountsLedgerQuery();
+  const createReconciliationMutation = useCreateReconciliationMutation();
+  const createRecoveryMutation = useCreateRecoveryReconciliationMutation();
+  const voidReconciliationMutation = useVoidReconciliationMutation();
   const history = (historyQuery.data?.sessions ?? []) as ReconciliationSession[];
 
   const reconcilableAccounts = useMemo(() =>
@@ -128,8 +132,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
     setVoidingSessionId(session.id);
     setError(null);
     try {
-      await api.accounts.voidReconciliation(session.id, reason.trim());
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts.reconciliation(25) });
+      await voidReconciliationMutation.mutateAsync({ id: session.id, reason: reason.trim() });
     } catch (err) {
       setError((err as Error).message || 'Failed to void reconciliation');
     } finally {
@@ -140,7 +143,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
   const handleActualBalanceChange = (index: number, value: string) => {
     const actual = parseSignedIdNominalToInt(value);
     const ledger = rows[index].ledgerBalance;
-    const isValid = Number.isSafeInteger(actual) && (!recoveryMode || actual >= 0);
+    const isValid = Number.isSafeInteger(actual);
     const diff = isValid ? actual - ledger : Number.NaN;
 
     const newRows = [...rows];
@@ -192,9 +195,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
 
   const handleSubmit = async () => {
     if (hasInvalid || rows.length === 0) {
-      setError(recoveryMode
-        ? 'Enter a valid non-negative whole-rupiah balance for every account'
-        : 'Enter a valid signed whole-rupiah balance for every account');
+      setError('Enter a valid signed whole-rupiah balance for every account');
       return;
     }
     if (recoveryMode && acknowledgement.trim().length < 12) {
@@ -215,7 +216,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
         if (snapshotAt == null) {
           throw new Error('Choose a current or historical snapshot date');
         }
-        const response = await api.accounts.recoveryReconcile({
+        const response = await createRecoveryMutation.mutateAsync({
           balances,
           asOfDate: snapshotAt,
           acknowledgement: acknowledgement.trim(),
@@ -227,7 +228,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
         onClose();
         return;
       }
-      const response = await api.accounts.reconcile(balances);
+      const response = await createReconciliationMutation.mutateAsync({ balances });
       setResultMessage(response.message);
       if (response.success) {
         onSuccess();

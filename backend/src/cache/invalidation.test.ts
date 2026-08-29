@@ -37,6 +37,7 @@ vi.mock("./precompute", () => ({
 import {
   getAccountBalanceCached,
   invalidateOnTransactionMutation,
+  invalidateOnPeriodMutation,
 } from "./invalidation";
 
 describe("cache invalidation boundaries", () => {
@@ -92,5 +93,13 @@ describe("cache invalidation boundaries", () => {
 
     expect(result).toEqual(999);
     expect(mocks.precomputeAccountBalance).not.toHaveBeenCalled();
+  });
+
+  it("invalidates period-derived views when coverage or lifecycle changes", async () => {
+    await invalidateOnPeriodMutation();
+
+    expect(mocks.cacheDeletePattern).toHaveBeenCalledWith("period:summary:*");
+    expect(mocks.cacheDeletePattern).toHaveBeenCalledWith("analytics:*");
+    expect(mocks.cacheDeletePattern).toHaveBeenCalledWith("insights:*");
   });
 });

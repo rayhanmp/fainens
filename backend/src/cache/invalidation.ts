@@ -40,6 +40,20 @@ export async function invalidateAllInsights(): Promise<boolean> {
   return cacheDeletePattern("insights:*");
 }
 
+/**
+ * Period headers and coverage are financial read-model inputs even when no
+ * journal was posted. A return-backfill, coverage review, close/reopen, or
+ * archive therefore has to invalidate the same derived views as a ledger
+ * mutation. The caller owns the already-committed revision bump.
+ */
+export async function invalidateOnPeriodMutation(): Promise<void> {
+  await Promise.all([
+    invalidateAllPeriodSummaries(),
+    invalidateAllAnalytics(),
+    invalidateAllInsights(),
+  ]);
+}
+
 // Invalidate everything (nuclear option)
 export async function invalidateEverything(): Promise<boolean> {
   const results = await Promise.all([

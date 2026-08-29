@@ -61,13 +61,13 @@ export function useAccountsLedgerQuery(params?: AccountListParams) {
   const normalizedParams = params ?? {};
   return useQuery({
     queryKey: queryKeys.accounts.list(normalizedParams),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const accounts = await unwrapGenerated(
         listAccounts({
         ...(params?.type ? { type: params.type as ListAccountsParams['type'] } : {}),
         ...(params?.search ? { search: params.search } : {}),
         ...(params?.includeInactive !== undefined ? { includeInactive: params.includeInactive ? 'true' : 'false' } : {}),
-        }),
+        }, { signal }),
         200,
         'Failed to load accounts',
       );
@@ -80,8 +80,8 @@ export function useAccountsLedgerQuery(params?: AccountListParams) {
 export function useReconciliationHistoryQuery(limit = 25) {
   return useQuery({
     queryKey: queryKeys.accounts.reconciliation(limit),
-    queryFn: async () => {
-      const payload = await unwrapGenerated(listReconciliation({ limit: String(limit) }), 200, 'Failed to load reconciliation history');
+    queryFn: async ({ signal }) => {
+      const payload = await unwrapGenerated(listReconciliation({ limit: String(limit) }, { signal }), 200, 'Failed to load reconciliation history');
       return { ...payload, sessions: payload.sessions.map((session) => ({
         ...session,
         asOfDate: normalizeTimestamp(session.asOfDate),
@@ -96,7 +96,7 @@ export function useReconciliationHistoryQuery(limit = 25) {
 export function useAccountDashboardQuery() {
   return useQuery({
     queryKey: queryKeys.dashboard.analytics,
-    queryFn: () => unwrapGenerated(getDashboardAnalytics(), 200, 'Failed to load dashboard analytics'),
+    queryFn: ({ signal }) => unwrapGenerated(getDashboardAnalytics({ signal }), 200, 'Failed to load dashboard analytics'),
     placeholderData: (previous) => previous,
   });
 }
