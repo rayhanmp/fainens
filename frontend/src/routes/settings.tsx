@@ -9,8 +9,8 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
 import type { AgentMemory } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useAgentMemoriesQuery } from '../features/agent/queries';
 import { agentCommands } from '../features/agent/commands';
@@ -19,6 +19,7 @@ import { cn } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
+import { useExportDataMutation, type ExportSelection } from '../features/settings/queries';
 import {
   DollarSign,
   Percent,
@@ -99,6 +100,8 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 
 function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { logout } = useAuth();
+  const exportDataMutation = useExportDataMutation();
   const queryClient = useQueryClient();
   const accountsQuery = useAccountsLedgerQuery();
   const memoriesQuery = useAgentMemoriesQuery();
@@ -293,26 +296,9 @@ function SettingsPage() {
     };
 
     try {
-      if (exportOptions.transactions) {
-        const txResponse = await api.transactions.list();
-        exportData.transactions = txResponse.data;
-      }
-      if (exportOptions.accounts) {
-        exportData.accounts = await api.accounts.list();
-      }
-      if (exportOptions.categories) {
-        exportData.categories = await api.categories.list();
-        exportData.tags = []; // TODO: add tags API
-      }
-      if (exportOptions.budgets) {
-        exportData.budgets = await api.budgets.list();
-        exportData.periods = await api.periods.list();
-      }
+      Object.assign(exportData, await exportDataMutation.mutateAsync(exportOptions as ExportSelection));
       if (exportOptions.settings) {
         exportData.settings = settings;
-      }
-      if (exportOptions.memories) {
-        exportData.agentMemories = (await api.agent.memories.list()).memories;
       }
 
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -330,7 +316,7 @@ function SettingsPage() {
     } catch (err) {
       alert('Failed to export data: ' + (err as Error).message);
     }
-  }, [exportOptions, settings]);
+  }, [exportOptions, settings, exportDataMutation]);
 
   const handleImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -906,7 +892,7 @@ function SettingsPage() {
                   variant: 'default',
                 });
                 if (confirmed) {
-                  api.auth.logout();
+                  await logout();
                 }
               }}>
                 Sign Out

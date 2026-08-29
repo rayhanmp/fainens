@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, CheckCircle2, Calendar, CreditCard, FileText } from 'lucide-react';
-import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { formatCurrency } from '../../lib/utils';
+import { useAssetAccountsQuery } from '../../features/accounts/queries';
 import { useFulfillWishlistMutation } from '../../features/wishlist/queries';
 
 interface FulfillWishlistModalProps {
@@ -27,23 +27,9 @@ export function FulfillWishlistModal({ isOpen, onClose, onSuccess, item }: Fulfi
   const [accountId, setAccountId] = useState('');
   const [description, setDescription] = useState(item.name);
   const [notes, setNotes] = useState(item.description || '');
-  const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; balance: number }>>([]);
+  const accountsQuery = useAssetAccountsQuery(isOpen);
+  const accounts = (accountsQuery.data ?? []).filter((account) => account.type === 'asset');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadAccounts();
-    }
-  }, [isOpen]);
-
-  async function loadAccounts() {
-    try {
-      const data = await api.accounts.list();
-      setAccounts(data.filter(a => a.type === 'asset'));
-    } catch (err) {
-      console.error('Failed to load accounts:', err);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

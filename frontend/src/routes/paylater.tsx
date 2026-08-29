@@ -6,7 +6,7 @@ import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { RequireAuth } from '../lib/auth';
 import { useMemo, useState } from 'react';
-import { api } from '../lib/api';
+import type { api } from '../lib/api';
 import { usePaylaterQuery, useSettlePaylaterMutation } from '../features/paylater/queries';
 import { formatCurrency } from '../lib/utils';
 import { PageContainer } from '../components/ui/PageContainer';

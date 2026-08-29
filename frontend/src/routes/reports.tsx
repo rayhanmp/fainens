@@ -6,7 +6,6 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useState } from 'react';
-import { api } from '../lib/api';
 import { usePeriodsLedgerQuery } from '../features/periods/queries';
 import {
   useBalanceSheetQuery,
@@ -15,6 +14,7 @@ import {
   useReportSummaryQuery,
   useSpendingQuery,
   useTrendsQuery,
+  useExportReportMutation,
 } from '../features/reports/queries';
 import { formatCurrency, cn } from '../lib/utils';
 import { CardSkeleton } from '../components/ui/Skeleton';
@@ -64,6 +64,7 @@ function inclusivePeriodEnd(timestamp: number): number {
 function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('income');
   const periodsQuery = usePeriodsLedgerQuery();
+  const exportReportMutation = useExportReportMutation();
   const periods = periodsQuery.data ?? [];
   // Null means “use the newest period”; an explicit empty string means All Periods.
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
@@ -101,10 +102,10 @@ function ReportsPage() {
 
   const handleExport = async (reportType: 'income-statement' | 'balance-sheet' | 'cash-flow') => {
     try {
-      const csv = await api.reports.export(
+      const csv = await exportReportMutation.mutateAsync({
         reportType,
-        effectivePeriodId ? parseInt(effectivePeriodId) : undefined
-      );
+        periodId: effectivePeriodId ? parseInt(effectivePeriodId) : undefined,
+      });
 
       // Download CSV
       const blob = new Blob([csv], { type: 'text/csv' });

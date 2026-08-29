@@ -11,15 +11,17 @@ import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
 import { PendingTransactionsModal } from '../components/transactions/PendingTransactionsModal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
-import { api } from '../lib/api';
+import type { api } from '../lib/api';
 import type { ListTransactionsParams } from '../generated/client';
 import { cn, formatCurrency } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
-import { usePeriodsQuery } from '../features/periods/queries';
+import { fetchPeriods, usePeriodsQuery } from '../features/periods/queries';
+import { useScanSplitBillReceiptMutation } from '../features/split/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
+import { useUiStore } from '../stores/ui-store';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -35,7 +37,7 @@ export const Route = createFileRoute('/transactions')({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   beforeLoad: async ({ search }: { search: any }) => {
     if (search.periodId === 'all' || (search.periodId && Number.isSafeInteger(Number(search.periodId)))) return;
-    const periods = await api.periods.list();
+    const periods = await fetchPeriods();
     const now = Date.now();
     const current = periods.find((period) => period.startDate <= now && now <= period.endDate + DAY_MS - 1);
     if (current) throw redirect({ to: '/transactions', search: { ...search, periodId: String(current.id) }, replace: true });
@@ -115,8 +117,9 @@ function TransactionsPage() {
   const [maxAmount, setMaxAmount] = useState('');
   const [sort, setSort] = useState<'newest' | 'oldest' | 'largest'>('newest');
   const [includeAdjustments, setIncludeAdjustments] = useState(false);
-  const [isToolsOpen, setIsToolsOpen] = useState(false);
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const { compactTables, activePanel, setCompactTables, setActivePanel } = useUiStore();
+  const isToolsOpen = activePanel === 'transactions-tools';
+  const isFiltersOpen = activePanel === 'transactions-filters';
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<EditingTransaction | null>(null);
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('edit');
@@ -152,6 +155,7 @@ function TransactionsPage() {
   const categoriesQuery = useCategoriesQuery();
   const periodsQuery = usePeriodsQuery();
   const tagsQuery = useTagsQuery();
+  const scanReceiptMutation = useScanSplitBillReceiptMutation();
   const reverseTransactionMutation = useReverseTransaction();
   const deleteTransactionMutation = useDeleteTransaction();
   const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
@@ -165,6 +169,8 @@ function TransactionsPage() {
   const summary = transactionQuery.data?.summary ?? { expenseCents: 0, incomeCents: 0 };
 
   useKeyboardShortcuts({ isModalOpen, searchInputRef });
+
+  useEffect(() => () => setActivePanel(null), [setActivePanel]);
 
   const loadData = () => invalidateFinancialSummaries(queryClient);
   useEffect(() => { setCategoryFilter(search.categoryId ?? ''); }, [search.categoryId]);
@@ -219,7 +225,7 @@ function TransactionsPage() {
     reader.onload = async () => {
       try {
         const imageUrl = reader.result as string;
-        const result = await api.splitbill.scan(imageUrl, file.name);
+        const result = await scanReceiptMutation.mutateAsync({ imageData: imageUrl, filename: file.name });
         localStorage.setItem('splitbill_parsed', JSON.stringify({ parsed: result.parsed, imageUrl }));
         navigate({ to: '/split' });
       } catch (error) { setSplitError((error as Error).message || 'Could not scan this receipt'); } finally { setIsSplitLoading(false); }
@@ -236,12 +242,13 @@ function TransactionsPage() {
     <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
       <PageHeader subtext="Recorded activity" title="Transactions" description={isLoading ? 'Loading activity…' : total.toLocaleString() + ' activit' + (total === 1 ? 'y' : 'ies') + ' in ' + periodLabel + '.'} />
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative"><Button variant="secondary" className="rounded-full px-3" onClick={() => setIsToolsOpen((open) => !open)}><MoreHorizontal className="h-4 w-4" /><span className="ml-2">More tools</span></Button>
+        <div className="relative"><Button variant="secondary" className="rounded-full px-3" onClick={() => setActivePanel(isToolsOpen ? null : 'transactions-tools')}><MoreHorizontal className="h-4 w-4" /><span className="ml-2">More tools</span></Button>
           {isToolsOpen && <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">
-            <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setIsToolsOpen(false); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
-            <button type="button" onClick={() => { setIsImportModalOpen(true); setIsToolsOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><FileUp className="h-4 w-4" />Import CSV</button>
-            <button type="button" onClick={() => { setIsSplitBillModalOpen(true); setIsToolsOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
-            <button type="button" onClick={() => { setIsPendingModalOpen(true); setIsToolsOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Clock className="h-4 w-4" />Review pending {pendingCount > 0 ? '(' + pendingCount + ')' : ''}</button>
+            <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setActivePanel(null); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
+            <button type="button" onClick={() => { setIsImportModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><FileUp className="h-4 w-4" />Import CSV</button>
+            <button type="button" onClick={() => { setIsSplitBillModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
+            <button type="button" onClick={() => { setIsPendingModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Clock className="h-4 w-4" />Review pending {pendingCount > 0 ? '(' + pendingCount + ')' : ''}</button>
+            <button type="button" onClick={() => setCompactTables(!compactTables)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><span>Compact rows</span><span className="text-xs text-[var(--ref-on-surface-variant)]">{compactTables ? 'On' : 'Off'}</span></button>
           </div>}
         </div>
         <Button className="rounded-full" onClick={() => openModal()}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
@@ -252,7 +259,7 @@ function TransactionsPage() {
     <section className="mt-6 rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm sm:p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center"><div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ref-outline)]" /><input ref={searchInputRef} type="search" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} placeholder="Search description, place, note, tag, or category… (Press /)" className="w-full rounded-full bg-[var(--ref-surface-container-low)] py-2.5 pl-10 pr-4 text-sm outline-none ring-[var(--ref-primary)] focus:ring-2" /></div>
         <select value={search.periodId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, periodId: event.target.value || undefined }) })} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-sm font-semibold"><option value="all">All periods</option>{periods.map((period) => <option key={period.id} value={String(period.id)}>{period.name}</option>)}</select>
-        <Button variant="secondary" className="rounded-full" onClick={() => setIsFiltersOpen((open) => !open)}><SlidersHorizontal className="mr-2 h-4 w-4" />Filters</Button>
+        <Button variant="secondary" className="rounded-full" onClick={() => setActivePanel(isFiltersOpen ? null : 'transactions-filters')}><SlidersHorizontal className="mr-2 h-4 w-4" />Filters</Button>
       </div>
       {isFiltersOpen && <div className="mt-4 grid gap-3 border-t border-[var(--ref-outline-variant)]/20 pt-4 sm:grid-cols-2 xl:grid-cols-4">
         <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Account<select value={search.accountId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, accountId: event.target.value || undefined }) })} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="">All accounts</option>{accounts.map((account) => <option key={account.id} value={String(account.id)}>{account.name}</option>)}</select></label>
@@ -275,7 +282,7 @@ function TransactionsPage() {
           const walletLine = transaction.lines.find((line) => kind === 'income' ? line.debit > 0 : line.credit > 0) ?? transaction.lines[0];
           const accountName = walletLine?.accountName ?? accounts.find((account) => account.id === walletLine?.accountId)?.name;
           const correction = transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment';
-          return <article key={transaction.id} className={cn('group flex cursor-pointer items-center gap-3 px-4 py-4 transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', correction && 'bg-[var(--ref-surface-container-low)]/60')} onClick={() => openModal(transaction, 'view')}>
+          return <article key={transaction.id} className={cn('group flex cursor-pointer items-center gap-3 px-4 transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', compactTables ? 'py-2.5' : 'py-4', correction && 'bg-[var(--ref-surface-container-low)]/60')} onClick={() => openModal(transaction, 'view')}>
             <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-headline font-bold text-[var(--ref-on-surface)]">{transaction.description}</p>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{formatDateTime(transaction.date)} · {accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p>{transferFee > 0 && <p className="mt-1 text-[11px] font-medium text-[var(--ref-on-surface-variant)]">Includes transfer fee {formatCurrency(transferFee)}</p>}</div>
             <div className="hidden min-w-32 text-right sm:block"><p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">{category ?? (kind === 'income' ? 'Income' : kind === 'transfer' ? 'Transfer' : kind === 'loan' ? 'Loan' : 'Unallocated')}</p>{transaction.categoryAllocations.length > 1 && <p className="mt-0.5 text-[10px] text-[var(--ref-outline)]">Split allocation</p>}</div>

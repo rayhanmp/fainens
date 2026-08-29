@@ -14,12 +14,12 @@ import {
   ChevronUp,
   Bot
 } from 'lucide-react';
-import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { cn } from '../../lib/utils';
-import { useCreateWishlistMutation } from '../../features/wishlist/queries';
+import { useCreateWishlistMutation, useAdvancedScrapeWishlistMutation, useScrapeWishlistMutation } from '../../features/wishlist/queries';
+import { usePeriodsLedgerQuery } from '../../features/periods/queries';
 
 interface CreateWishlistModalProps {
   isOpen: boolean;
@@ -63,6 +63,9 @@ type Priority = 'low' | 'medium' | 'high';
 
 export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: CreateWishlistModalProps) {
   const createWishlistMutation = useCreateWishlistMutation();
+  const scrapeWishlistMutation = useScrapeWishlistMutation();
+  const advancedScrapeWishlistMutation = useAdvancedScrapeWishlistMutation();
+  const periodsQuery = usePeriodsLedgerQuery(false, isOpen);
   // URL scraping states
   const [productUrl, setProductUrl] = useState('');
   const [isScraping, setIsScraping] = useState(false);
@@ -82,13 +85,12 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
   const [categoryId, setCategoryId] = useState<string>('');
   const [periodId, setPeriodId] = useState<string>('');
   const [priority, setPriority] = useState<Priority>('medium');
-  const [periods, setPeriods] = useState<Array<{ id: number; name: string }>>([]);
+  const periods = periodsQuery.data ?? [];
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      loadPeriods();
       resetForm();
     }
   }, [isOpen]);
@@ -105,15 +107,6 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
     
     return () => clearTimeout(timer);
   }, [productUrl, forceAdvancedScraping, useManualEntry]);
-
-  async function loadPeriods() {
-    try {
-      const data = await api.periods.list();
-      setPeriods(data);
-    } catch (err) {
-      console.error('Failed to load periods:', err);
-    }
-  }
 
   function resetForm() {
     setProductUrl('');
@@ -154,7 +147,7 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
       setScrapingAttempts([]);
       setRequiresAdvanced(false);
       
-      const result = await api.wishlist.scrape(url);
+      const result = await scrapeWishlistMutation.mutateAsync({ url });
       
       // Store attempts for display
       if (result.attempts) {
@@ -195,7 +188,7 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
       setScrapeError(null);
       setScrapingAttempts([]);
       
-      const result = await api.wishlist.scrapeAdvanced(productUrl);
+      const result = await advancedScrapeWishlistMutation.mutateAsync({ url: productUrl });
       
       // Store attempts for display
       if (result.attempts) {

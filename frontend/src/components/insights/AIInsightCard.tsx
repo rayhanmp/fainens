@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '../ui/Button';
-import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { Sparkles, RefreshCw, ChevronDown } from 'lucide-react';
+import { useGenerateInsightMutation, useLatestInsightQuery } from '../../features/insights/queries';
 
 interface AIInsightCardProps {
   type: 'dashboard' | 'budget';
@@ -12,72 +12,42 @@ interface AIInsightCardProps {
 
 export function AIInsightCard({ type, periodId, className }: AIInsightCardProps) {
   const [insight, setInsight] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [sourceRevision, setSourceRevision] = useState<number | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const requestVersion = useRef(0);
+  const latestInsightQuery = useLatestInsightQuery(type, periodId);
+  const generateInsightMutation = useGenerateInsightMutation();
+  const isLoading = generateInsightMutation.isPending;
 
   const generateInsight = useCallback(async () => {
-    const version = ++requestVersion.current;
-    setIsLoading(true);
     setError(null);
     
     try {
-      let response;
-      if (type === 'dashboard') {
-        response = await api.insights.generateDashboard(periodId);
-      } else {
-        response = await api.insights.generateBudget(periodId);
-      }
-      
-      if (version === requestVersion.current) {
-        setInsight(response.insight);
-        setGeneratedAt(new Date(response.generatedAt));
-        setSourceRevision(response.sourceRevision);
-        setIsCollapsed(false);
-      }
+      const response = await generateInsightMutation.mutateAsync({ type, periodId });
+      setInsight(response.insight);
+      setGeneratedAt(new Date(response.generatedAt));
+      setSourceRevision(response.sourceRevision);
+      setIsCollapsed(false);
     } catch (err) {
-      if (version === requestVersion.current) {
-        setError(err instanceof Error ? err.message : 'Failed to generate insight');
-      }
-    } finally {
-      if (version === requestVersion.current) setIsLoading(false);
+      setError(err instanceof Error ? err.message : 'Failed to generate insight');
     }
-  }, [type, periodId]);
-
-  const loadCachedInsight = useCallback(async () => {
-    const version = ++requestVersion.current;
-    try {
-      let response;
-      if (type === 'dashboard') {
-        response = await api.insights.getDashboardLatest(periodId);
-      } else {
-        response = await api.insights.getBudgetLatest(periodId);
-      }
-      
-      if (version === requestVersion.current) {
-        setInsight(response.insight);
-        setGeneratedAt(response.generatedAt ? new Date(response.generatedAt) : null);
-        setSourceRevision(response.sourceRevision);
-      }
-    } catch (err) {
-      // Silently fail - no cached insight is okay
-    }
-  }, [type, periodId]);
+  }, [generateInsightMutation, type, periodId]);
 
   useEffect(() => {
     setInsight(null);
     setGeneratedAt(null);
     setSourceRevision(null);
     setError(null);
-    setIsLoading(false);
-    void loadCachedInsight();
-    return () => {
-      requestVersion.current += 1;
-    };
-  }, [loadCachedInsight]);
+  }, [type, periodId]);
+
+  useEffect(() => {
+    const response = latestInsightQuery.data;
+    if (!response) return;
+    setInsight(response.insight);
+    setGeneratedAt(response.generatedAt ? new Date(response.generatedAt) : null);
+    setSourceRevision(response.sourceRevision);
+  }, [latestInsightQuery.data]);
 
   if (error) {
     return (

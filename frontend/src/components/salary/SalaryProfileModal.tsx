@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { api } from '../../lib/api';
+import type { api } from '../../lib/api';
 import { formatCurrency, parseIdNominalToInt, cn } from '../../lib/utils';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Landmark, Wallet, Banknote, ToggleLeft, ToggleRight, Calculator, Info } from 'lucide-react';
-import { useUpdateSalarySettingsMutation } from '../../features/salary/queries';
+import { usePreviewSalaryCalculationMutation, useUpdateSalarySettingsMutation } from '../../features/salary/queries';
 
 type PtkpOption = { code: string; label: string; annualPtkp: number; terCategory: string };
 
@@ -73,6 +73,7 @@ interface Props {
 
 export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, accounts, onSaved }: Props) {
   const updateSalarySettingsMutation = useUpdateSalarySettingsMutation();
+  const previewSalaryCalculationMutation = usePreviewSalaryCalculationMutation();
   const [grossStr, setGrossStr] = useState('');
   const [payrollDay, setPayrollDay] = useState(25);
   const [ptkpCode, setPtkpCode] = useState('TK0');
@@ -95,23 +96,23 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
   const refreshPreview = useCallback(
     async (gross: number, code: string, month: number) => {
       try {
-        const { computed } = await api.salarySettings.preview({
-          grossMonthly: gross,
+        const { computed } = await previewSalaryCalculationMutation.mutateAsync({
+          grossMonthly: String(gross),
           ptkpCode: code,
-          month,
-          jkkRiskGrade: jkkRiskGrade,
-          jkmRate: jkmRate,
-          bpjsKesehatanActive: bpjsKesehatanActive,
-          jpWageCap: jpWageCap,
-          bpjsKesWageCap: bpjsKesWageCap,
-          jhtWageCap: jhtWageCap,
+          month: String(month),
+          jkkRiskGrade: String(jkkRiskGrade),
+          jkmRate: String(jkmRate),
+          bpjsKesehatanActive: bpjsKesehatanActive ? 'true' : 'false',
+          jpWageCap: String(jpWageCap),
+          bpjsKesWageCap: String(bpjsKesWageCap),
+          jhtWageCap: String(jhtWageCap),
         });
         setPreview(computed);
       } catch {
         setPreview(null);
       }
     },
-    [jkkRiskGrade, jkmRate, bpjsKesehatanActive, jpWageCap, bpjsKesWageCap, jhtWageCap],
+    [jkkRiskGrade, jkmRate, bpjsKesehatanActive, jpWageCap, bpjsKesWageCap, jhtWageCap, previewSalaryCalculationMutation],
   );
 
   // Only initialize state when modal opens (isOpen changes from false to true)

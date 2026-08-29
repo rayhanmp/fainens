@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from './api';
+import { getCurrentUser, logout as generatedLogout } from '../generated/client';
 
 // The backend separately refuses this bypass in production. Keep the switch
 // explicit so an OAuth callback configured for production never blocks local
@@ -32,8 +32,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const userData = await api.auth.me();
-      setUser(userData);
+      const response = await getCurrentUser();
+      if (response.status !== 200) throw new Error('Not authenticated');
+      setUser(response.data);
       setIsAuthenticated(true);
     } catch {
       setUser(null);
@@ -64,7 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      await api.auth.logout();
+      const response = await generatedLogout();
+      if (response.status !== 200) throw new Error('Logout failed');
       setUser(null);
       setIsAuthenticated(false);
     } catch (error) {

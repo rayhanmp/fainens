@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { getAgentConversation, getAgentProfile, listAgentConversations, listAgentMemories } from '../../generated/client';
+import { executeAgentTool, getAgentConversation, getAgentProfile, listAgentConversations, listAgentMemories, type ExecuteAgentToolBody } from '../../generated/client';
+import type { AgentFinancialFacts } from '../../lib/api';
+import { unwrapGenerated } from '../core/generated-response';
 import { queryKeys } from '../core/query-keys';
 
 export const useAgentConversationsQuery = (includeArchived = false) => useQuery({
@@ -10,6 +12,22 @@ export const useAgentConversationsQuery = (includeArchived = false) => useQuery(
     return response.data;
   },
 });
+
+export type FinancialFactsInput = { periodId?: number; startDate?: number; endDate?: number };
+
+export async function fetchFinancialFacts(input: FinancialFactsInput = {}, options?: RequestInit): Promise<AgentFinancialFacts> {
+  const payload: ExecuteAgentToolBody = { name: 'get_financial_facts', input };
+  return unwrapGenerated(executeAgentTool(payload, options), 200, 'Failed to load financial facts') as Promise<AgentFinancialFacts>;
+}
+
+export function useFinancialFactsQuery(input: FinancialFactsInput, enabled = true) {
+  return useQuery({
+    queryKey: [...queryKeys.dashboard.all, 'financial-facts', input] as const,
+    queryFn: ({ signal }) => fetchFinancialFacts(input, { signal }),
+    enabled,
+    placeholderData: (previous) => previous,
+  });
+}
 export const useAgentMemoriesQuery = () => useQuery({
   queryKey: queryKeys.agent.memories,
   queryFn: async ({ signal }) => {

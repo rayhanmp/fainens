@@ -26,11 +26,21 @@ export const usePeriodsQuery = () => useQuery({
   },
 });
 
-export function usePeriodsLedgerQuery(includeInactive = false) {
+/** Non-hook adapter for router loaders that run before React mounts. */
+export async function fetchPeriods(includeInactive = false) {
+  return unwrapGenerated(
+    listPeriods(includeInactive ? { includeInactive: 'true' } : undefined),
+    200,
+    'Failed to load periods',
+  );
+}
+
+export function usePeriodsLedgerQuery(includeInactive = false, enabled = true) {
   return useQuery({
     queryKey: [...queryKeys.periods.all, { includeInactive }] as const,
     queryFn: ({ signal }) => unwrapGenerated(listPeriods(includeInactive ? { includeInactive: 'true' } : undefined, { signal }), 200, 'Failed to load periods'),
     placeholderData: (previous) => previous,
+    enabled,
   });
 }
 

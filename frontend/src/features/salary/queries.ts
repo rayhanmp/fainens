@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { fetchFinancialFacts } from '../agent/queries';
 import {
   getSalarySettings,
   listAccounts,
   previewSalaryCatchUp,
+  previewSalaryCalculation,
   processSalaryCatchUp,
   updateSalarySettings,
   type ProcessSalaryCatchUpBody,
   type UpdateSalarySettingsBody,
+  type PreviewSalaryCalculationParams,
 } from '../../generated/client';
 import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
@@ -27,7 +29,7 @@ export function useSalaryIncomeQuery() {
       const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime();
       const [factsResult, accounts] = await Promise.all([
-        api.agent.financialFacts({ startDate: start, endDate: Date.now() }, { signal }),
+        fetchFinancialFacts({ startDate: start, endDate: Date.now() }, { signal }),
         unwrapGenerated(listAccounts(undefined, { signal }), 200, 'Failed to load accounts'),
       ]);
       return {
@@ -52,6 +54,12 @@ export function useSalarySettingsQuery() {
     queryKey: queryKeys.salary.settings,
     queryFn: () => unwrapGenerated(getSalarySettings(), 200, 'Failed to load salary settings'),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function usePreviewSalaryCalculationMutation() {
+  return useMutation({
+    mutationFn: (params: PreviewSalaryCalculationParams) => unwrapGenerated(previewSalaryCalculation(params), 200, 'Failed to preview salary calculation'),
   });
 }
 

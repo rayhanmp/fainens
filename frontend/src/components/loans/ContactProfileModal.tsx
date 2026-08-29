@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
-import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/utils';
 import { 
@@ -19,7 +18,7 @@ import {
   Save,
   FileText,
 } from 'lucide-react';
-import { useUpdateContactMutation } from '../../features/loans/queries';
+import { useContactDetailQuery, useUpdateContactMutation } from '../../features/loans/queries';
 
 
 interface ContactProfileModalProps {
@@ -72,8 +71,8 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
 
 export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfileModalProps) {
   const updateContactMutation = useUpdateContactMutation();
+  const contactQuery = useContactDetailQuery(isOpen ? contactId : null);
   const [contact, setContact] = useState<ContactDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'loans'>('overview');
   const [isEditing, setIsEditing] = useState(false);
@@ -88,35 +87,20 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
   });
 
   useEffect(() => {
-    if (isOpen && contactId) {
-      loadContact();
-    }
-  }, [isOpen, contactId]);
-
-  const loadContact = async () => {
-    if (!contactId) return;
-    
-    setIsLoading(true);
-    setError('');
+    if (!contactQuery.data) return;
+    const data = contactQuery.data as unknown as ContactDetails;
+    setContact(data);
+    setEditForm({
+      name: data.name || '',
+      fullName: data.fullName || '',
+      email: data.email || '',
+      phone: data.phone || '',
+      relationshipType: data.relationshipType || '',
+      notes: data.notes || '',
+    });
     setIsEditing(false);
-    try {
-      const data = await api.contacts.get(contactId);
-      setContact(data);
-      setEditForm({
-        name: data.name || '',
-        fullName: data.fullName || '',
-        email: data.email || '',
-        phone: data.phone || '',
-        relationshipType: data.relationshipType || '',
-        notes: data.notes || '',
-      });
-    } catch (err) {
-      setError('Failed to load contact details');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    setError('');
+  }, [contactQuery.data]);
 
   const getInitials = (name: string) => {
     return name
@@ -215,13 +199,13 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
       size="xl"
       className="max-w-4xl"
     >
-      {isLoading ? (
+      {contactQuery.isLoading && !contact ? (
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-      ) : error ? (
+      ) : error || contactQuery.error ? (
         <div className="p-4 bg-[var(--ref-error-container)] text-[var(--ref-on-error-container)] rounded-xl text-sm font-medium">
-          {error}
+          {error || 'Failed to load contact details'}
         </div>
       ) : contact ? (
         <div className="flex flex-col md:flex-row gap-0">

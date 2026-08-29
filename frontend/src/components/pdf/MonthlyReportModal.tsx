@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { Modal } from '../ui/Modal';
-import { api } from '../../lib/api';
 import { formatCurrency, formatDate, cn } from '../../lib/utils';
 import { MonthlyReportPDF } from './MonthlyReportPDF';
 import { Download, FileText, Loader2 } from 'lucide-react';
+import { usePeriodsLedgerQuery } from '../../features/periods/queries';
+import { useMonthlyReportQuery } from '../../features/reports/queries';
 
 interface MonthlyReportModalProps {
   isOpen: boolean;
@@ -12,29 +13,22 @@ interface MonthlyReportModalProps {
 }
 
 export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps) {
-  const [periods, setPeriods] = useState<Array<{ id: number; name: string; startDate: number; endDate: number }>>([]);
+  const periodsQuery = usePeriodsLedgerQuery();
+  const periods = periodsQuery.data ?? [];
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [reportData, setReportData] = useState<any>(null);
   const [reportError, setReportError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadPeriods();
-  }, []);
+  const monthlyReportQuery = useMonthlyReportQuery(selectedPeriodId ? Number(selectedPeriodId) : null);
 
-  const loadPeriods = async () => {
-    try {
-      const data = await api.periods.list();
-      setPeriods(data);
-      if (data.length > 0) {
-        // Periods are returned newest first; default to the current/latest one.
-        setSelectedPeriodId(data[0].id.toString());
-      }
-    } catch (err) {
-      console.error('Failed to load periods:', err);
+  useEffect(() => {
+    if (periods.length > 0 && !selectedPeriodId) {
+      // Periods are returned newest first; default to the current/latest one.
+      setSelectedPeriodId(periods[0].id.toString());
     }
-  };
+  }, [periods, selectedPeriodId]);
 
   const handleGenerate = async () => {
     if (isPreviewing) return;
@@ -49,7 +43,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
       // The backend returns one canonical period-scoped payload. This avoids
       // txType heuristics, the 100-row transaction cap, and a current-date
       // balance sheet leaking into a historical report.
-      const monthly = await api.reports.monthly(periodId);
+      const monthly = (await monthlyReportQuery.refetch()).data;
+      if (!monthly) throw new Error('Failed to generate report preview');
       const allTransactions = monthly.transactions.map((tx) => ({
         date: formatDate(tx.date),
         description: tx.description || '-',

@@ -8,7 +8,6 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { useConfirm } from '../ui/ConfirmDialog';
-import { api } from '../../lib/api';
 import { formatCurrency, cn, getAccountTypeLabel, parseIdNominalToInt, parseSignedIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
   Plus,
@@ -65,11 +64,14 @@ import {
   useCreateTransportRouteTemplateMutation,
   useDeleteTransportRouteTemplateMutation,
   usePreviewPendingTransactionMutation,
+  useRecommendCategoryMutation,
   useTransportRouteTemplatesQuery,
   useUpdatePendingTransactionMutation,
   useUpdateTransportRouteTemplateMutation,
   useUpdateTransaction,
 } from '../../features/transactions/queries';
+import { useCalculatePaylaterScheduleMutation, usePaylaterQuery, useRecognizePaylaterMutation, useSettlePaylaterMutation } from '../../features/paylater/queries';
+import { useAttachmentDownload, useAttachmentsQuery, useDeleteAttachmentMutation } from '../../features/attachments/queries';
 
 export type WalletAccount = {
   id: number;
@@ -182,6 +184,14 @@ export function TransactionModal({
   const createRouteTemplateMutation = useCreateTransportRouteTemplateMutation();
   const updateRouteTemplateMutation = useUpdateTransportRouteTemplateMutation();
   const deleteRouteTemplateMutation = useDeleteTransportRouteTemplateMutation();
+  const paylaterQuery = usePaylaterQuery(isOpen && !editingTransaction);
+  const calculatePaylaterScheduleMutation = useCalculatePaylaterScheduleMutation();
+  const settlePaylaterMutation = useSettlePaylaterMutation();
+  const recognizePaylaterMutation = useRecognizePaylaterMutation();
+  const recommendCategoryMutation = useRecommendCategoryMutation();
+  const attachmentsQuery = useAttachmentsQuery(isOpen && editingTransaction ? editingTransaction.id : null);
+  const downloadAttachment = useAttachmentDownload();
+  const deleteAttachmentMutation = useDeleteAttachmentMutation();
   const [inputMode, setInputMode] = useState<'simple' | 'ai' | 'journal'>('simple');
   const [viewMode, setViewMode] = useState(initialMode === 'view');
   const [activeDetailField, setActiveDetailField] = useState<string | null>(null);
@@ -259,9 +269,7 @@ export function TransactionModal({
   }> | null>(null);
 
   /** Loaded when add-transaction modal opens — used for Pay later type */
-  const [paylaterObligationsState, setPaylaterObligationsState] = useState<Awaited<
-    ReturnType<typeof api.paylater.obligations>
-  > | null>(null);
+  const paylaterObligationsState = paylaterQuery.data?.obligations ?? null;
 
   /** Attachments for the transaction */
   const [attachments, setAttachments] = useState<Array<{
@@ -350,7 +358,7 @@ export function TransactionModal({
     categoryId: number;
     categoryName: string;
   } | null>(null);
-  const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
+  const isLoadingRecommendation = recommendCategoryMutation.isPending;
 
   // Debounced category recommendation
   useEffect(() => {
@@ -363,19 +371,16 @@ export function TransactionModal({
       // Only recommend if no category is selected yet
       if (simpleForm.categoryId) return;
 
-      setIsLoadingRecommendation(true);
       try {
-        const result = await api.transactions.recommendCategory(simpleForm.description);
+        const result = await recommendCategoryMutation.mutateAsync(simpleForm.description);
         setCategoryRecommendation(result);
       } catch {
         setCategoryRecommendation(null);
-      } finally {
-        setIsLoadingRecommendation(false);
       }
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [simpleForm.description, simpleForm.categoryId]);
+  }, [simpleForm.description, simpleForm.categoryId, recommendCategoryMutation]);
 
   const applyCategoryRecommendation = () => {
     if (categoryRecommendation) {
@@ -565,20 +570,6 @@ export function TransactionModal({
           amount: allocation.amount.toString(),
         })),
       });
-      // Load attachments for editing transaction
-      api.attachments.list(editingTransaction.id.toString())
-        .then((atts) => {
-          setAttachments(atts);
-          // Fetch URLs for image attachments to show thumbnails
-          atts.filter(a => a.mimetype.startsWith('image/')).forEach(att => {
-            api.attachments.getUrl(att.id, 3600).then(({ url }) => {
-              setAttachmentUrls(prev => ({ ...prev, [att.id]: url }));
-            }).catch(() => {
-              // Silently fail - will show placeholder
-            });
-          });
-        })
-        .catch(() => setAttachments([]));
     } else {
       setInputMode('simple');
       setRouteTemplateName('');
@@ -606,6 +597,18 @@ export function TransactionModal({
     }
     setFormError('');
   }, [isOpen, editingTransaction]);
+
+  useEffect(() => {
+    if (!isOpen || !editingTransaction || !attachmentsQuery.data) return;
+    setAttachments(attachmentsQuery.data);
+    attachmentsQuery.data
+      .filter((attachment) => attachment.mimetype.startsWith('image/'))
+      .forEach((attachment) => {
+        void downloadAttachment(attachment.id)
+          .then(({ url }) => setAttachmentUrls((current) => ({ ...current, [attachment.id]: url })))
+          .catch(() => undefined);
+      });
+  }, [isOpen, editingTransaction, attachmentsQuery.data, downloadAttachment]);
 
   useEffect(() => {
     if (isOpen) setTransferFeeRules(loadTransferFeeRules());
@@ -724,22 +727,6 @@ export function TransactionModal({
     }
   };
 
-  useEffect(() => {
-    if (!isOpen || editingTransaction) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const p = await api.paylater.obligations();
-        if (!cancelled) setPaylaterObligationsState(p);
-      } catch {
-        if (!cancelled) setPaylaterObligationsState(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, editingTransaction]);
-
   // Auto-generate a compact, consistent name for transport expenses.
   useEffect(() => {
     const selectedCategory = categories.find(c => c.id.toString() === simpleForm.categoryId);
@@ -771,7 +758,7 @@ export function TransactionModal({
     
     try {
       const amount = parseIdNominalToInt(form.amount);
-      const result = await api.paylater.calculateSchedule({
+      const result = await calculatePaylaterScheduleMutation.mutateAsync({
         principalAmount: amount,
         installmentMonths: parseInt(form.paylaterInstallmentMonths, 10) as 1 | 3 | 6 | 12,
         interestRatePercent: form.paylaterInterestRate ? parseFloat(form.paylaterInterestRate) : undefined,
@@ -929,7 +916,7 @@ export function TransactionModal({
 
       setIsSubmitting(true);
       try {
-        await api.paylater.settle({
+        await settlePaylaterMutation.mutateAsync({
           date: new Date(simpleForm.dateTime).getTime(),
           description: simpleForm.description || 'Paylater payment',
           paymentAmount: amount,
@@ -968,7 +955,7 @@ export function TransactionModal({
         }
         setIsSubmitting(true);
         try {
-          await api.paylater.recognize({
+          await recognizePaylaterMutation.mutateAsync({
             date: new Date(simpleForm.dateTime).getTime(),
             description: simpleForm.description || 'PayLater purchase',
             principalAmount: amount,
@@ -1717,7 +1704,7 @@ export function TransactionModal({
                               });
                             } else {
                               // Fetch URL for non-images or if not cached
-                              const { url } = await api.attachments.getUrl(att.id, 3600);
+                              const { url } = await downloadAttachment(att.id);
                               if (att.mimetype.startsWith('image/')) {
                                 setPreviewAttachment({
                                   id: att.id,
@@ -1778,7 +1765,7 @@ export function TransactionModal({
                             });
                             if (confirmed) {
                               try {
-                                await api.attachments.delete(att.id);
+                                await deleteAttachmentMutation.mutateAsync(att.id);
                                 setAttachments(attachments.filter(a => a.id !== att.id));
                                 setAttachmentUrls(prev => {
                                   const updated = { ...prev };

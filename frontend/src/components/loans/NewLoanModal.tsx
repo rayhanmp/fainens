@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/utils';
-import { useCreateContactMutation, useCreateLoanMutation } from '../../features/loans/queries';
+import { useAssetAccountsQuery } from '../../features/accounts/queries';
+import { useContactsQuery, useCreateContactMutation, useCreateLoanMutation } from '../../features/loans/queries';
 import { 
   Plus, 
   Wallet, 
@@ -20,17 +20,6 @@ interface NewLoanModalProps {
   onSuccess: () => void;
 }
 
-interface Contact {
-  id: number;
-  name: string;
-  fullName?: string | null;
-  nickname?: string | null;
-  relationship?: string;
-  relationshipType?: string | null;
-  phone?: string | null;
-  email?: string | null;
-}
-
 const RELATIONSHIP_TYPES = [
   { value: 'family', label: 'Family' },
   { value: 'friend', label: 'Friend' },
@@ -44,8 +33,8 @@ const WALLET_ICONS = [Landmark, Wallet, Banknote];
 export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) {
   const createContactMutation = useCreateContactMutation();
   const createLoanMutation = useCreateLoanMutation();
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string; balance: number }>>([]);
+  const contactsQuery = useContactsQuery(false, isOpen);
+  const accountsQuery = useAssetAccountsQuery(isOpen);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
@@ -68,34 +57,22 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
     walletAccountId: '',
   });
 
+  const contacts = useMemo(() => (contactsQuery.data ?? []).map((contact, i) => ({
+    ...contact,
+    relationship: ['Close Friend', 'Family member', 'Colleague', 'Friend'][i % 4],
+  })), [contactsQuery.data]);
+  const accounts = useMemo(
+    () => (accountsQuery.data ?? [])
+      .filter((account) => account.type === 'asset' && !account.systemKey)
+      .map((account) => ({ ...account, balance: account.balance ?? 0 })),
+    [accountsQuery.data],
+  );
+
   const filteredContacts = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return contacts;
     return contacts.filter(c => c.name.toLowerCase().includes(query));
   }, [contacts, searchQuery]);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-    }
-  }, [isOpen]);
-
-  const loadData = async () => {
-    try {
-      const [contactsData, accountsData] = await Promise.all([
-        api.contacts.list(),
-        api.accounts.list({ type: 'asset' }),
-      ]);
-      const contactsWithMeta = contactsData.map((c: Contact, i: number) => ({
-        ...c,
-        relationship: ['Close Friend', 'Family member', 'Colleague', 'Friend'][i % 4],
-      }));
-      setContacts(contactsWithMeta);
-      setAccounts(accountsData.filter((a: { type: string; systemKey: string | null }) => a.type === 'asset' && !a.systemKey));
-    } catch (err) {
-      console.error('Failed to load data:', err);
-    }
-  };
 
   const handleCreateContact = async () => {
     if (!newContactName.trim()) return;
@@ -109,10 +86,6 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
         phone: newContactPhone.trim() || null,
         relationshipType: newContactRelationshipType || null,
       });
-      setContacts([...contacts, { 
-        ...contact, 
-        relationship: RELATIONSHIP_TYPES.find(r => r.value === newContactRelationshipType)?.label || 'Contact' 
-      }]);
       setFormData({ ...formData, contactId: contact.id.toString() });
       setIsContactModalOpen(false);
       resetContactForm();

@@ -4,6 +4,7 @@ import {
   createLoan,
   deleteLoan,
   getLoanSummary,
+  getContact,
   listContacts,
   listLoans,
   recordLoanPayment,
@@ -23,6 +24,29 @@ export type LoansPageData = {
   contacts: Awaited<ReturnType<typeof listContacts>>['data'];
   summary: Awaited<ReturnType<typeof getLoanSummary>>['data'];
 };
+
+/** Shared contact lookup for loan and split-bill forms. */
+export function useContactsQuery(includeInactive = false, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.contacts.list({ includeInactive }),
+    queryFn: ({ signal }) => unwrapGenerated(
+      listContacts(includeInactive ? { includeInactive: 'true' } : undefined, { signal }),
+      200,
+      'Failed to load contacts',
+    ),
+    placeholderData: (previous) => previous,
+    enabled,
+  });
+}
+
+/** Detail query used by the contact profile modal. */
+export function useContactDetailQuery(contactId: number | null) {
+  return useQuery({
+    queryKey: queryKeys.contacts.detail(contactId ?? 0),
+    queryFn: ({ signal }) => unwrapGenerated(getContact(contactId!, { signal }), 200, 'Failed to load contact details'),
+    enabled: contactId != null,
+  });
+}
 
 /** Aggregates the records needed by the loans screen into one server-state query. */
 export function useLoansQuery() {

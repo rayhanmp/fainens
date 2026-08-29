@@ -6,11 +6,15 @@ import {
   linkWishlistTransaction,
   listCategories,
   listWishlist,
+  scrapeWishlistProduct,
+  scrapeWishlistProductAdvanced,
   updateWishlistItem,
   type CreateWishlistItemBody,
   type FulfillWishlistItemBody,
   type LinkWishlistTransactionBody,
   type UpdateWishlistItemBody,
+  type ScrapeWishlistProductBody,
+  type ScrapeWishlistProductAdvancedBody,
 } from '../../generated/client';
 import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
@@ -26,6 +30,40 @@ export function useWishlistQuery() {
       return { items, categories: categories.map((category) => ({ ...category, icon: category.icon ?? null, color: category.color ?? null })) };
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+export type WishlistScrapeResult = {
+  success: boolean;
+  data?: {
+    name: string;
+    price: number;
+    description: string;
+    imageUrl: string;
+    source: string;
+    currency: string;
+    url: string;
+    originalPrice?: number;
+    discountPercentage?: number;
+    rating?: number;
+    reviewCount?: number;
+    sellerName?: string;
+    brand?: string;
+  };
+  attempts: Array<{ method: string; success: boolean; timestamp: number; duration: number; error?: string; dataFound?: unknown }>;
+  requiresAdvancedScraping: boolean;
+  error?: { code: string; message: string; suggestions: string[] };
+};
+
+export function useScrapeWishlistMutation() {
+  return useMutation<WishlistScrapeResult, Error, ScrapeWishlistProductBody>({
+    mutationFn: (input) => unwrapGenerated(scrapeWishlistProduct(input), 200, 'Failed to scrape product') as Promise<WishlistScrapeResult>,
+  });
+}
+
+export function useAdvancedScrapeWishlistMutation() {
+  return useMutation<WishlistScrapeResult, Error, ScrapeWishlistProductAdvancedBody>({
+    mutationFn: (input) => unwrapGenerated(scrapeWishlistProductAdvanced(input), 200, 'Failed to scrape product') as Promise<WishlistScrapeResult>,
   });
 }
 

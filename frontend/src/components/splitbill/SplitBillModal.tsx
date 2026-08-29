@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { api } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
 import { useAuth } from '../../lib/auth';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
-import { useCreateContactMutation } from '../../features/loans/queries';
+import { useContactsQuery, useCreateContactMutation } from '../../features/loans/queries';
+import { useCreateSplitBillLoansMutation, useScanSplitBillReceiptMutation } from '../../features/split/queries';
 
 interface ParsedReceiptItem {
   name: string;
@@ -95,6 +95,9 @@ type Step = 'upload' | 'split';
 
 export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProps) {
   const createContactMutation = useCreateContactMutation();
+  const scanReceiptMutation = useScanSplitBillReceiptMutation();
+  const createLoansMutation = useCreateSplitBillLoansMutation();
+  const contactsQuery = useContactsQuery(false, isOpen);
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('upload');
   const [isLoading, setIsLoading] = useState(false);
@@ -112,7 +115,6 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
   
   const [_createdLoans, setCreatedLoans] = useState<Array<{ id: number; direction: string; amountCents: number }>>([]);
   
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [newPersonName, setNewPersonName] = useState('');
   const [showAddPerson, setShowAddPerson] = useState(false);
@@ -132,14 +134,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     }
   }, [isOpen, user]);
 
-  const loadContacts = useCallback(async () => {
-    try {
-      const data = await api.contacts.list() as Contact[];
-      setContacts(data);
-    } catch (err) {
-      console.error('Failed to load contacts:', err);
-    }
-  }, []);
+  const contacts = (contactsQuery.data ?? []) as Contact[];
 
   const resetState = useCallback(() => {
     setStep('upload');
@@ -174,17 +169,18 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
       reader.onload = async () => {
         const base64 = reader.result as string;
         try {
-          const result = await api.splitbill.scan(base64, file.name);
-          setParsedReceipt(result.parsed);
+          const result = await scanReceiptMutation.mutateAsync({ imageData: base64, filename: file.name });
+          const parsed = { ...result.parsed, items: result.parsed.items.map((item) => ({ ...item, notes: item.notes ?? null })) };
+          setParsedReceipt(parsed);
           
-          const defaultAssignments = result.parsed.items.map((_: ParsedReceiptItem, idx: number) => ({
+          const defaultAssignments = parsed.items.map((_: ParsedReceiptItem, idx: number) => ({
             itemIndex: idx,
             personIds: [meId],
             splitType: 'equal' as const,
           }));
           setAssignments(defaultAssignments);
           
-          calculateResults(result.parsed, [{ id: meId, name: 'Me', isNew: false }], defaultAssignments);
+          calculateResults(parsed, [{ id: meId, name: 'Me', isNew: false }], defaultAssignments);
           setStep('split');
         } catch (err) {
           setError((err as Error).message || 'Failed to scan receipt');
@@ -201,7 +197,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
       setError((err as Error).message);
       setIsLoading(false);
     }
-  }, []);
+  }, [scanReceiptMutation]);
 
   const calculateResults = useCallback((
     receipt: ParsedReceipt,
@@ -326,7 +322,6 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
       const created = await createContactMutation.mutateAsync({ name: newPersonName.trim() });
       const newPerson: SplitBillPerson = { id: created.id, name: created.name, isNew: false };
       const newPeople = [...people, newPerson];
-      setContacts((current) => [...current, created]);
       setPeople(newPeople);
       setNewPersonName('');
       setShowAddPerson(false);
@@ -380,7 +375,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     
     setIsLoading(true);
     try {
-      const loans = await api.splitbill.createLoans({
+      const loans = await createLoansMutation.mutateAsync({
         splitResults: splitResults.map(r => ({
           personId: r.personId,
           personName: r.personName,
@@ -399,7 +394,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
     } finally {
       setIsLoading(false);
     }
-  }, [selectedWalletId, splitResults, isBorrower, payerContactId, parsedReceipt, handleClose]);
+  }, [selectedWalletId, splitResults, isBorrower, payerContactId, parsedReceipt, handleClose, createLoansMutation]);
 
   const getAssignedPeople = (itemIndex: number): number[] => {
     const assignment = assignments.find(a => a.itemIndex === itemIndex);
@@ -593,7 +588,6 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
                   onChange={(e) => setContactSearch(e.target.value)}
                   placeholder="Search contacts..."
                   className="flex-1"
-                  onFocus={loadContacts}
                 />
                 <Button size="sm" onClick={handleAddPerson}>Add</Button>
                 <Button size="sm" variant="secondary" onClick={() => setShowAddPerson(false)}>✕</Button>

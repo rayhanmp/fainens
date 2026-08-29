@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import { useSplitLookupsQuery } from '../features/split/queries';
+import { useCreateSplitBillLoansMutation, useScanSplitBillReceiptMutation, useSplitLookupsQuery } from '../features/split/queries';
 import { useCreateContactMutation } from '../features/loans/queries';
 import { invalidateFinancialSummaries, queryKeys } from '../features/core/query-keys';
 import { formatCurrency } from '../lib/utils';
@@ -105,6 +104,8 @@ function SplitBillPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const createContactMutation = useCreateContactMutation();
+  const scanReceiptMutation = useScanSplitBillReceiptMutation();
+  const createLoansMutation = useCreateSplitBillLoansMutation();
   const lookupsQuery = useSplitLookupsQuery();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,10 +205,11 @@ function SplitBillPage() {
         const base64 = reader.result as string;
         setUploadedImageUrl(base64);
         try {
-          const result = await api.splitbill.scan(base64, file.name);
-          setParsedReceipt(result.parsed);
+          const result = await scanReceiptMutation.mutateAsync({ imageData: base64, filename: file.name });
+          const parsed = { ...result.parsed, items: result.parsed.items.map((item) => ({ ...item, notes: item.notes ?? null })) };
+          setParsedReceipt(parsed);
           
-          const defaultAssignments = result.parsed.items.map((_: ParsedReceiptItem, idx: number) => ({
+          const defaultAssignments = parsed.items.map((_: ParsedReceiptItem, idx: number) => ({
             itemIndex: idx,
             personIds: [],
           }));
@@ -233,7 +235,7 @@ function SplitBillPage() {
       setError((err as Error)?.message);
       setIsLoading(false);
     }
-  }, []);
+  }, [scanReceiptMutation]);
 
   const calculateResults = useCallback((
     receipt: ParsedReceipt,
@@ -456,7 +458,7 @@ function SplitBillPage() {
       }
 
       if (splitResultsToSave.length > 0 || payerId !== meId) {
-        await api.splitbill.createLoans({
+        await createLoansMutation.mutateAsync({
           splitResults: splitResultsToSave.map(r => ({
             personId: r.personId,
             personName: r.personName,
@@ -475,7 +477,7 @@ function SplitBillPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeAccountId, payerId, splitResults, navigate, parsedReceipt?.expenseCategory, queryClient]);
+  }, [activeAccountId, payerId, splitResults, navigate, parsedReceipt?.expenseCategory, queryClient, createLoansMutation]);
 
   const getAssignedPeople = (itemIndex: number): number[] => {
     const assignment = assignments.find(a => a.itemIndex === itemIndex);

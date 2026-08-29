@@ -6,6 +6,7 @@ import {
   deleteBudget,
   deleteBudgetTemplate,
   getBudgetOutlook,
+  reviewBudgetOutlook,
   compareBudgets,
   listCategories,
   listBudgetTemplates,
@@ -29,6 +30,23 @@ export const useBudgetOutlookQuery = (periodId?: number) => useQuery({
   enabled: periodId != null,
   placeholderData: (previous) => previous,
 });
+
+/**
+ * Ask the deterministic outlook service to review large purchases and persist
+ * any approved pattern decision. This belongs beside the outlook query so
+ * callers cannot accidentally bypass the feature's invalidation policy.
+ */
+export function useReviewBudgetOutlookMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (periodId: number) => unwrapGenerated(reviewBudgetOutlook(periodId), 200, 'Failed to review budget outlook'),
+    onSuccess: (_result, periodId) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.budgets.outlook(periodId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.period(periodId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.insights.all });
+    },
+  });
+}
 
 export function useBudgetPeriodsQuery() {
   return useQuery({

@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyInput } from '../ui/CurrencyInput';
-import { api } from '../../lib/api';
 import { formatCurrency, cn } from '../../lib/utils';
 import { ArrowUpRight, ArrowDownRight, Wallet, Landmark, Banknote, CheckCircle2 } from 'lucide-react';
+import { useAssetAccountsQuery } from '../../features/accounts/queries';
 import { useRecordLoanPaymentMutation } from '../../features/loans/queries';
 
 interface Loan {
@@ -27,7 +27,8 @@ const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
 
 export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordPaymentModalProps) {
   const recordLoanPaymentMutation = useRecordLoanPaymentMutation();
-  const [accounts, setAccounts] = useState<Array<{ id: number; name: string; type: string }>>([]);
+  const accountsQuery = useAssetAccountsQuery(isOpen);
+  const accounts = (accountsQuery.data ?? []).filter((account) => account.type === 'asset' && !account.systemKey);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   
@@ -39,14 +40,6 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
     notes: '',
     walletAccountId: '',
   });
-
-  useEffect(() => {
-    if (isOpen) {
-      api.accounts.list({ type: 'asset' }).then((data) => {
-        setAccounts(data.filter(a => a.type === 'asset' && !a.systemKey));
-      });
-    }
-  }, [isOpen]);
 
   const handleAmountChange = (value: string) => {
     const rawValue = value.replace(/[^\d]/g, '');

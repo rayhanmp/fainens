@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { X, Link, Search, Calendar } from 'lucide-react';
-import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { formatCurrency } from '../../lib/utils';
 import { useLinkWishlistMutation } from '../../features/wishlist/queries';
+import { useTransactionList } from '../../features/transactions/queries';
 
 interface LinkTransactionModalProps {
   isOpen: boolean;
@@ -18,45 +18,22 @@ interface LinkTransactionModalProps {
 
 export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkTransactionModalProps) {
   const linkWishlistMutation = useLinkWishlistMutation();
-  const [transactions, setTransactions] = useState<Array<{
-    id: number;
-    description: string;
-    amount: number;
-    date: number;
-    accountName: string;
-  }>>([]);
+  const transactionsQuery = useTransactionList({ limit: '50' });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTransactionId, setSelectedTransactionId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadTransactions();
-    }
-  }, [isOpen]);
-
-  async function loadTransactions() {
-    try {
-      setIsLoading(true);
-      const response = await api.transactions.list({ limit: '50' });
-      setTransactions(response.data.map((t) => {
-        // Calculate amount from transaction lines
-        const amount = t.lines?.reduce((sum, line) => sum + (line.debit || 0), 0) || 0;
-        return {
-          id: t.id,
-          description: t.description,
-          amount,
-          date: t.date,
-          accountName: 'Unknown', // Would need to lookup account name
-        };
-      }));
-    } catch (err) {
-      console.error('Failed to load transactions:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const transactions = useMemo(() => (transactionsQuery.data?.data ?? []).map((t) => {
+    // Calculate amount from transaction lines
+    const amount = t.lines?.reduce((sum, line) => sum + (line.debit || 0), 0) || 0;
+    return {
+      id: t.id,
+      description: t.description,
+      amount,
+      date: t.date,
+      accountName: 'Unknown', // Account names are not part of the list contract yet.
+    };
+  }), [transactionsQuery.data]);
+  const isLoading = transactionsQuery.isLoading;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -10,7 +10,7 @@ import {
   listTransactions,
 } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
-import { api } from '../../lib/api';
+import { useFinancialFactsQuery } from '../agent/queries';
 import { normalizeTimestamp, unwrapGenerated } from '../core/generated-response';
 
 export const useDashboardQuery = () => useQuery({
@@ -65,12 +65,7 @@ export function useDashboardSubscriptionsQuery() {
 export function useDashboardPeriodQueries(periodId: number | null) {
   const enabled = periodId != null;
   const periodKey = periodId ?? 0;
-  const facts = useQuery({
-    queryKey: [...queryKeys.dashboard.period(periodKey), 'facts'] as const,
-    queryFn: ({ signal }) => api.agent.financialFacts({ periodId: periodId! }, { signal }),
-    enabled,
-    placeholderData: (previous) => previous,
-  });
+  const facts = useFinancialFactsQuery({ periodId: periodId ?? undefined }, enabled);
   const budget = useQuery({
     queryKey: [...queryKeys.dashboard.period(periodKey), 'budget'] as const,
     queryFn: ({ signal }) => unwrapGenerated(listBudgets({ periodId: String(periodId!) }, { signal }), 200, 'Failed to load period budget'),

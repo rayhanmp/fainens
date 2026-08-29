@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -20,7 +20,7 @@ import { Select } from '../components/ui/Select';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
-import { api, type AgentFinancialFacts, type BudgetOutlook, type BudgetPlan, type BudgetSummary } from '../lib/api';
+import type { api, AgentFinancialFacts, BudgetOutlook, BudgetPlan, BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
@@ -39,6 +39,7 @@ import {
 } from '../features/dashboard/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../features/core/query-keys';
+import { useReviewBudgetOutlookMutation } from '../features/budgets/queries';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -139,8 +140,10 @@ function DashboardPage() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isAttentionExpanded, setIsAttentionExpanded] = useState(false);
   const [agentPrompt, setAgentPrompt] = useState('');
+  const reviewedOutlookPeriodRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const reviewBudgetOutlookMutation = useReviewBudgetOutlookMutation();
 
   const periodsQuery = usePeriodsQuery();
   const accountsQuery = useAccountsLedgerQuery();
@@ -195,12 +198,10 @@ function DashboardPage() {
   useEffect(() => {
     const outlook = periodQueries.outlook.data;
     if (!selectedPeriod || !outlook || outlook.patternReview.applied || !outlook.categories.some((row) => row.outlierCount > 0)) return;
-    void api.budgets.reviewOutlook(selectedPeriod.id)
-      .then((review) => {
-        if (review.applied) void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.period(selectedPeriod.id) });
-      })
-      .catch(() => undefined);
-  }, [periodQueries.outlook.data, queryClient, selectedPeriod]);
+    if (reviewedOutlookPeriodRef.current === selectedPeriod.id) return;
+    reviewedOutlookPeriodRef.current = selectedPeriod.id;
+    void reviewBudgetOutlookMutation.mutateAsync(selectedPeriod.id).catch(() => undefined);
+  }, [periodQueries.outlook.data, reviewBudgetOutlookMutation.mutateAsync, selectedPeriod]);
 
   const budgetSummary = useMemo(() => {
     const totalPlanned = budgetRows.reduce((sum, row) => sum + row.plannedAmount, 0);

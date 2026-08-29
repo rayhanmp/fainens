@@ -30,6 +30,7 @@ export const queryKeys = {
   salary: { all: ["salary"] as const, income: ["salary", "income"] as const, settings: ["salary", "settings"] as const, catchUpPreview: ["salary", "catch-up-preview"] as const },
   split: { all: ["split-bill"] as const },
   wishlist: { all: ["wishlist"] as const },
+  attachments: { all: ["attachments"] as const, transaction: (transactionId: number | null) => ["attachments", "transaction", transactionId] as const, download: (id: number) => ["attachments", "download", id] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
@@ -46,6 +47,7 @@ export const queryKeys = {
     periodSummaries: ["analytics", "period-summaries"] as const,
   },
   agent: { all: ["agent"] as const, conversations: (archived = false) => ["agent", "conversations", { archived }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const, profile: ["agent", "profile"] as const },
+  insights: { all: ["insights"] as const, latest: (type: "dashboard" | "budget", periodId: number | null) => ["insights", type, periodId] as const },
 } as const;
 
 /** Financial mutations can change every summarized view, even when their local entity key is precise. */
@@ -67,5 +69,6 @@ export async function invalidateFinancialSummaries(queryClient: { invalidateQuer
     queryClient.invalidateQueries({ queryKey: queryKeys.salary.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.wishlist.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.split.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.insights.all }),
   ]);
 }

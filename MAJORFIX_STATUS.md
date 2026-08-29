@@ -60,6 +60,14 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Extracted the transfer-fee panel from the oversized transaction modal. Fee summary, rule tooltip, payer override, and manual fee controls now have a focused feature component while the modal retains transaction-domain calculation and submission behavior.
 - Verification: frontend TypeScript (`tsc --noEmit`) and production Vite build pass. Vite still reports the pre-existing large-bundle warning; no build errors were observed.
 
+### Current migration wave — feature-owned reads and UI state
+
+- Finished moving remaining component-level server reads behind feature-owned React Query adapters. Loans, contacts, asset accounts, wishlist periods, split-bill contacts, attachment metadata/download URLs, insights, monthly reports, CSV previews, PayLater calculations, salary previews, and settings exports now use generated-client boundaries owned by their feature modules.
+- Dashboard budget-outlook review now uses a budget mutation hook with scoped invalidation instead of calling the handwritten API facade from the route. The auth context also uses the generated auth client directly, leaving only the intentional agent SSE stream and legacy pending-transaction/recommendation write adapters outside generated feature hooks.
+- Added attachment, insight, and settings query modules plus precise attachment/insight keys. Financial mutations invalidate the insight family along with the existing financial summary graph.
+- Adopted `uiStore` for transaction-page cross-panel state and compact-row preference. Panel state is cleared when leaving the page, while server records remain exclusively in React Query and form/transient state stays local to its feature.
+- Verification: the frontend TypeScript check and production Vite build passed after the broad migration. A final hook-only guard/type-only import cleanup is recorded in this wave; the local package runner subsequently hit a Windows `EPERM` lock while reopening the pnpm virtual-store binaries. `git diff --check` passes.
+
 ### `29480cb` — audit context
 
 - Added the full systematic finance-integrity audit in `BUG_AUDIT.md`.

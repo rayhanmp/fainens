@@ -22,6 +22,15 @@ export const useAccountsQuery = () => useQuery({
   },
 });
 
+export function useAssetAccountsQuery(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.accounts.list({ type: 'asset' }),
+    queryFn: ({ signal }) => unwrapGenerated(listAccounts({ type: 'asset' }, { signal }), 200, 'Failed to load asset accounts'),
+    placeholderData: (previous) => previous,
+    enabled,
+  });
+}
+
 export type AccountLedgerRow = {
   id: number;
   name: string;

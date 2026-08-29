@@ -12,12 +12,14 @@ import {
   listTransactions,
   listTransportRouteTemplates,
   parsePendingTransaction,
+  previewTransactionImport,
   rejectPendingTransaction,
   reverseTransaction,
   retryPendingTransaction,
   updateTransaction,
   updateTransportRouteTemplate,
   type ListTransactionsParams,
+  type PreviewTransactionImport200AnyOfFour,
 } from "../../generated/client";
 import { api } from "../../lib/api";
 import { invalidateFinancialSummaries, queryKeys } from "../core/query-keys";
@@ -149,12 +151,30 @@ export function useImportTransactions() {
   });
 }
 
+/** Parses the richer CSV import format without keeping request state in the modal. */
+export function usePreviewTransactionImportMutation() {
+  return useMutation<PreviewTransactionImport200AnyOfFour, Error, string>({
+    mutationFn: async (csvText: string) => unwrapGenerated(
+      previewTransactionImport({ csvText }),
+      200,
+      'Failed to preview transaction import',
+    ) as Promise<PreviewTransactionImport200AnyOfFour>,
+  });
+}
+
 type PendingTransactionParsed = Parameters<typeof api.pendingTransactions.create>[1];
 export type PendingTransactionPreview = { parsed: PendingTransactionParsed };
 
 export function usePreviewPendingTransactionMutation() {
   return useMutation<PendingTransactionPreview, Error, string>({
     mutationFn: async (message: string) => unwrapGenerated(parsePendingTransaction({ message }), 200, 'Failed to parse transaction') as Promise<PendingTransactionPreview>,
+  });
+}
+
+/** Legacy recommendation endpoint adapter kept inside the transactions feature until it is in OpenAPI. */
+export function useRecommendCategoryMutation() {
+  return useMutation({
+    mutationFn: (description: string) => api.transactions.recommendCategory(description),
   });
 }
 

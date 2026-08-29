@@ -1,10 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   getBalanceSheet,
   getCashFlowStatement,
   getIncomeStatement,
+  getMonthlyReport,
   getReportTrends,
   getSpendingReport,
+  exportReport,
 } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { listCategories } from '../../generated/client';
@@ -53,6 +55,22 @@ export function useTrendsQuery(periodCount = 6) {
     queryKey: [...queryKeys.reports.trends, periodCount] as const,
     queryFn: ({ signal }) => unwrapGenerated(getReportTrends({ periodCount }, { signal }), 200, 'Failed to load report trends'),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useExportReportMutation() {
+  return useMutation({
+    mutationFn: ({ reportType, periodId }: { reportType: 'income-statement' | 'balance-sheet' | 'cash-flow'; periodId?: number }) =>
+      unwrapGenerated(exportReport(reportType, periodId == null ? undefined : { periodId }), 200, 'Failed to export report'),
+  });
+}
+
+/** Explicitly triggered period report query used by the PDF preview modal. */
+export function useMonthlyReportQuery(periodId: number | null) {
+  return useQuery({
+    queryKey: [...queryKeys.reports.all, 'monthly', periodId ?? null] as const,
+    queryFn: ({ signal }) => unwrapGenerated(getMonthlyReport({ periodId: periodId! }, { signal }), 200, 'Failed to load monthly report'),
+    enabled: false,
   });
 }
 

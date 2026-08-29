@@ -5,7 +5,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { RequireAuth } from '../lib/auth';
-import { api } from '../lib/api';
+import type { api } from '../lib/api';
 import { useMoneyAnomaliesQuery, useReviewMoneyAnomalyMutation, useScanMoneyAnomaliesMutation } from '../features/anomalies/queries';
 import { formatCurrency, formatDate } from '../lib/utils';
 

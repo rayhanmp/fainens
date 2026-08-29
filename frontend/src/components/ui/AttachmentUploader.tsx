@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Paperclip, X, FileText, Image, File, Eye, Trash2, Loader2 } from 'lucide-react';
-import { api } from '../../lib/api';
 import { formatFileSize, cn } from '../../lib/utils';
+import { uploadAttachmentRequest, useAttachmentDownload, useDeleteAttachmentMutation } from '../../features/attachments/queries';
 
 interface Attachment {
   id: number;
@@ -66,6 +66,8 @@ export function AttachmentUploader({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [previewFile, setPreviewFile] = useState<PendingAttachment | null>(null);
+  const deleteAttachmentMutation = useDeleteAttachmentMutation();
+  const downloadAttachment = useAttachmentDownload();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,7 +142,7 @@ export function AttachmentUploader({
   const handleDeleteSaved = useCallback(async (attachmentId: number) => {
     setDeletingId(attachmentId);
     try {
-      await api.attachments.delete(attachmentId);
+      await deleteAttachmentMutation.mutateAsync(attachmentId);
       onAttachmentsChange(attachments.filter(a => a.id !== attachmentId));
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Failed to delete attachment');
@@ -151,7 +153,7 @@ export function AttachmentUploader({
 
   const handleDownload = useCallback(async (attachment: Attachment) => {
     try {
-      const { url } = await api.attachments.getUrl(attachment.id, 3600);
+      const { url } = await downloadAttachment(attachment.id);
       const link = document.createElement('a');
       link.href = url;
       link.download = attachment.filename;
@@ -393,7 +395,7 @@ export async function uploadPendingAttachments(
       reader.readAsDataURL(pending.file);
     });
 
-    const response = await api.attachments.upload({
+    const response = await uploadAttachmentRequest({
       transactionId,
       filename: pending.filename,
       contentType: pending.mimetype,
