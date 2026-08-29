@@ -6,6 +6,15 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 
 ## Committed waves
 
+### `7f3322b` — generated-client migration and feature-boundary completion
+
+- Extended the typed generated-client adapters across anomalies, audit logs, loans/contacts, PayLater, salary settings/catch-up, split-bill lookups, subscriptions, wishlist, and the already-migrated financial features. Each adapter now narrows the declared HTTP status before exposing data to React Query.
+- Kept the two intentionally compatibility-bound calls explicit: the custom agent SSE stream and the read-only `get_financial_facts` tool bridge. Pending-transaction draft create/update remain on the legacy adapter because those operations are not present in the committed generated contract; they are isolated to the pending mutation boundary rather than spread through UI code.
+- Added a shared generated-response unwrapping helper so error envelopes cannot be cached as successful feature data. Loan deletion and other 204 mutations now use the same status-aware path.
+- Extracted the agent conversation list, scope selector, lazy-loading skeleton, conversation actions, and conversation command boundary into `features/agent`. The route now supplies state and callbacks while the feature owns the list presentation and generated mutation wiring.
+- Extracted the transfer-fee panel from the oversized transaction modal. Fee summary, rule tooltip, payer override, and manual fee controls now have a focused feature component while the modal retains transaction-domain calculation and submission behavior.
+- Verification: frontend TypeScript (`tsc --noEmit`) and production Vite build pass. Vite still reports the pre-existing large-bundle warning; no build errors were observed.
+
 ### `29480cb` — audit context
 
 - Added the full systematic finance-integrity audit in `BUG_AUDIT.md`.
