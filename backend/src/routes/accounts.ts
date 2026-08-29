@@ -64,7 +64,7 @@ const accountDependencyPreviewSchema = z.object({
 const reconciliationSessionSchema = z.object({
   id: z.number().int(),
   asOfDate: z.union([z.date(), z.string(), z.number()]),
-  status: z.enum(["reconciled", "needs_classification"]),
+  status: z.enum(["reconciled", "needs_classification", "recovered"]),
   lifecycleStatus: z.enum(["active", "voided"]),
   voidedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
   voidReason: z.string().nullable().optional(),

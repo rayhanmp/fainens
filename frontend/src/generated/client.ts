@@ -1889,6 +1889,7 @@ export type ListReconciliation200SessionsItemStatus = typeof ListReconciliation2
 export const ListReconciliation200SessionsItemStatus = {
   reconciled: 'reconciled',
   needs_classification: 'needs_classification',
+  recovered: 'recovered',
 } as const;
 
 export type ListReconciliation200SessionsItemLifecycleStatus = typeof ListReconciliation200SessionsItemLifecycleStatus[keyof typeof ListReconciliation200SessionsItemLifecycleStatus];
@@ -2020,6 +2021,7 @@ export type CreateReconciliation201SessionStatus = typeof CreateReconciliation20
 export const CreateReconciliation201SessionStatus = {
   reconciled: 'reconciled',
   needs_classification: 'needs_classification',
+  recovered: 'recovered',
 } as const;
 
 export type CreateReconciliation201SessionLifecycleStatus = typeof CreateReconciliation201SessionLifecycleStatus[keyof typeof CreateReconciliation201SessionLifecycleStatus];
@@ -2163,6 +2165,7 @@ export type CreateRecoveryReconciliation201SessionStatus = typeof CreateRecovery
 export const CreateRecoveryReconciliation201SessionStatus = {
   reconciled: 'reconciled',
   needs_classification: 'needs_classification',
+  recovered: 'recovered',
 } as const;
 
 export type CreateRecoveryReconciliation201SessionLifecycleStatus = typeof CreateRecoveryReconciliation201SessionLifecycleStatus[keyof typeof CreateRecoveryReconciliation201SessionLifecycleStatus];
@@ -2291,6 +2294,7 @@ export type VoidReconciliation200Status = typeof VoidReconciliation200Status[key
 export const VoidReconciliation200Status = {
   reconciled: 'reconciled',
   needs_classification: 'needs_classification',
+  recovered: 'recovered',
 } as const;
 
 export type VoidReconciliation200LifecycleStatus = typeof VoidReconciliation200LifecycleStatus[keyof typeof VoidReconciliation200LifecycleStatus];
