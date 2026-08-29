@@ -397,7 +397,7 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Saved transport routes are now read through a keyed React Query query and created, renamed, or deleted through feature-owned mutations.
 - The transaction modal no longer keeps a second route-template server cache or performs an imperative list fetch on every open. Template changes invalidate only the route-template key while preserving the existing editor state.
 
-### `in progress` — generated client and feature-boundary completion
+### `2a653c6` — generated client and feature-boundary completion
 
 - The checked-in OpenAPI document now covers the complete database-free Fastify registry: 146 paths, 188 operations, and 187 application operation IDs. Wildcard attachment paths are normalized to valid named OpenAPI parameters before generation.
 - Account and category route contracts now distinguish list, detail, create, update, archive, restore, and dependency-preview response shapes. Agent conversation responses constrain `titleSource` to `auto` or `manual`, avoiding generated unions that made feature consumers guess at server data.
