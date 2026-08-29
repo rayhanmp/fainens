@@ -13,6 +13,7 @@ import { api } from '../lib/api';
 import type { AgentMemory } from '../lib/api';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useAgentMemoriesQuery } from '../features/agent/queries';
+import { agentCommands } from '../features/agent/commands';
 import { queryKeys } from '../features/core/query-keys';
 import { cn } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
@@ -238,9 +239,9 @@ function SettingsPage() {
     setMemoryError(null);
     try {
       if (editingMemoryId == null) {
-        await api.agent.memories.create({ label, content });
+        await agentCommands.memories.create({ label, content });
       } else {
-        await api.agent.memories.update(editingMemoryId, { label, content });
+        await agentCommands.memories.update(editingMemoryId, { label, content });
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       resetMemoryForm();
@@ -268,7 +269,7 @@ function SettingsPage() {
     if (!confirmed) return;
     setMemoryError(null);
     try {
-      await api.agent.memories.delete(memory.id);
+      await agentCommands.memories.delete(memory.id);
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       if (editingMemoryId === memory.id) resetMemoryForm();
     } catch (err) {

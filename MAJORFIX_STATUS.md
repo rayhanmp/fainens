@@ -18,6 +18,8 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - The compatibility `get_financial_facts` adapter now accepts React Query's abort signal. Dashboard period facts and salary-income history can be cancelled when the user switches scope or leaves the page, rather than allowing an old request to finish against a new view.
 - This remains intentionally a legacy bridge because `get_financial_facts` is an agent tool endpoint, not a public generated REST contract. Its server data still enters the UI through feature-owned queries and remains outside Zustand.
 
+- Settings memory mutations now use the agent feature command boundary instead of calling the handwritten API facade directly. Query invalidation remains local to the memory key, so other server facts are not needlessly refreshed.
+
 ### `d38983e` — authoritative agent session and versioned drafts
 
 - The active agent conversation and stream lifecycle now come directly from the Zustand session store instead of being mirrored from route-local state through synchronization effects. Starting/switching chats and stopping a stream therefore share one source of truth.
