@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { queryKeys } from '../features/core/query-keys';
+import { listTags } from '../generated/client';
+import { unwrapGenerated } from '../features/core/generated-response';
 
 // Categories
 export function useCategories() {
@@ -22,7 +24,7 @@ export function useAccounts() {
 export function useTags() {
   return useQuery({
     queryKey: queryKeys.tags.all,
-    queryFn: () => api.tags.list(),
+    queryFn: ({ signal }) => unwrapGenerated(listTags({ signal }), 200, 'Failed to load tags'),
   });
 }
 

@@ -11,7 +11,7 @@ import {
 } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { api } from '../../lib/api';
-import { unwrapGenerated } from '../core/generated-response';
+import { normalizeTimestamp, unwrapGenerated } from '../core/generated-response';
 
 export const useDashboardQuery = () => useQuery({
   queryKey: queryKeys.dashboard.analytics,
@@ -79,7 +79,15 @@ export function useDashboardPeriodQueries(periodId: number | null) {
   });
   const recent = useQuery({
     queryKey: [...queryKeys.dashboard.period(periodKey), 'recent'] as const,
-    queryFn: () => unwrapGenerated(listTransactions({ periodId: String(periodId!), limit: '12' }), 200, 'Failed to load recent activity'),
+    queryFn: async () => {
+      const payload = await unwrapGenerated(listTransactions({ periodId: String(periodId!), limit: '12' }), 200, 'Failed to load recent activity');
+      return { ...payload, data: payload.data.map((transaction) => ({
+        ...transaction,
+        date: normalizeTimestamp(transaction.date),
+        ...(transaction.dueDate == null ? {} : { dueDate: normalizeTimestamp(transaction.dueDate) }),
+        ...(transaction.createdAt == null ? {} : { createdAt: normalizeTimestamp(transaction.createdAt) }),
+      })) };
+    },
     enabled,
     placeholderData: (previous) => previous,
   });

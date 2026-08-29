@@ -56,7 +56,18 @@ type Account = Awaited<ReturnType<typeof api.accounts.list>>[number];
 type Category = Awaited<ReturnType<typeof api.categories.list>>[number];
 type Tag = Awaited<ReturnType<typeof api.tags.list>>[number];
 type DashboardAnalytics = Awaited<ReturnType<typeof api.analytics.dashboard>>;
-type RecentTransaction = Awaited<ReturnType<typeof api.transactions.list>>['data'][number];
+type RecentTransaction = {
+  id: number;
+  date: number;
+  description: string;
+  notes?: string | null;
+  linkedTxId?: number | null;
+  categoryId?: number | null;
+  expenseCents?: number;
+  incomeCents?: number;
+  debitCents?: number;
+  creditCents?: number;
+};
 type Facts = AgentFinancialFacts['data'];
 type ReconciliationHistory = Awaited<ReturnType<typeof api.accounts.reconciliationHistory>>;
 type Loan = Awaited<ReturnType<typeof api.loans.list>>[number];
@@ -73,15 +84,19 @@ type Attention = {
 };
 
 function classifyTx(tx: RecentTransaction): 'expense' | 'income' | 'neutral' {
-  if (tx.expenseCents > 0 && tx.incomeCents <= 0) return 'expense';
-  if (tx.incomeCents > 0 && tx.expenseCents <= 0) return 'income';
+  const expense = tx.expenseCents ?? 0;
+  const income = tx.incomeCents ?? 0;
+  if (expense > 0 && income <= 0) return 'expense';
+  if (income > 0 && expense <= 0) return 'income';
   return 'neutral';
 }
 
 function transactionAmount(tx: RecentTransaction): number {
-  if (tx.expenseCents !== 0) return Math.abs(tx.expenseCents);
-  if (tx.incomeCents !== 0) return Math.abs(tx.incomeCents);
-  return Math.max(tx.debitCents, tx.creditCents);
+  const expense = tx.expenseCents ?? 0;
+  const income = tx.incomeCents ?? 0;
+  if (expense !== 0) return Math.abs(expense);
+  if (income !== 0) return Math.abs(income);
+  return Math.max(tx.debitCents ?? 0, tx.creditCents ?? 0);
 }
 
 function isTransferFee(tx: RecentTransaction): boolean {

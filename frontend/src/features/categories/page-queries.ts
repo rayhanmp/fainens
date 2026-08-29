@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { listAccounts, listCategories, listTags, listTransactions, type ListCategories200Item, type ListTags200Item } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
+import { unwrapGenerated } from '../core/generated-response';
 
 export type CategoriesPageData = {
-  categories: Awaited<ReturnType<typeof api.categories.list>>;
-  tags: Awaited<ReturnType<typeof api.tags.list>>;
-  transactions: Awaited<ReturnType<typeof api.transactions.list>>['data'];
+  categories: ListCategories200Item[];
+  tags: ListTags200Item[];
+  transactions: Array<{ id: number; categoryId: number | null; tags: Array<{ tagId: number; name: string; color: string }> }>;
   expenseAccounts: Array<{
     id: number;
     name: string;
@@ -20,24 +21,29 @@ export function useCategoriesPageQuery(includeInactive: boolean) {
     queryKey: queryKeys.categories.list(includeInactive),
     queryFn: async () => {
       const [categories, tags, transactionResponse, accounts] = await Promise.all([
-        api.categories.list(includeInactive ? { includeInactive: true } : undefined),
-        api.tags.list(),
-        api.transactions.list({ limit: '2000' }),
-        api.accounts.list({ type: 'expense' }),
+        unwrapGenerated(listCategories(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load categories'),
+        unwrapGenerated(listTags(), 200, 'Failed to load tags'),
+        unwrapGenerated(listTransactions({ limit: '2000' }), 200, 'Failed to load transactions'),
+        unwrapGenerated(listAccounts({ type: 'expense' }), 200, 'Failed to load expense accounts'),
       ]);
-      return {
+      const result: CategoriesPageData = {
         categories,
         tags,
-        transactions: transactionResponse.data,
+        transactions: transactionResponse.data.map((transaction) => ({
+          id: transaction.id,
+          categoryId: transaction.categoryId ?? null,
+          tags: transaction.tags ?? [],
+        })),
         expenseAccounts: accounts
           .filter((account) => account.type === 'expense' && account.isActive)
           .map((account) => ({
             id: account.id,
             name: account.name,
             type: account.type,
-            isActive: account.isActive,
+            isActive: true,
           })),
       };
+      return result;
     },
     placeholderData: (previous) => previous,
   });

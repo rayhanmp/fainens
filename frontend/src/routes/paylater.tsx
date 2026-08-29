@@ -25,7 +25,7 @@ export const Route = createFileRoute('/paylater')({
 } as any);
 
 type ObligationRow = Awaited<ReturnType<typeof api.paylater.obligations>>['obligations'][number];
-type ScheduleItem = Awaited<ReturnType<typeof api.paylater.obligations>>['scheduleItems'][number];
+type ScheduleItem = Omit<Awaited<ReturnType<typeof api.paylater.obligations>>['scheduleItems'][number], 'kind'> & { kind: 'recognition' | 'interest' };
 type ExposureRow = Awaited<ReturnType<typeof api.paylater.obligations>>['providerExposure'][number];
 
 function monthGrid(year: number, month: number): (number | null)[] {
@@ -74,7 +74,7 @@ function PaylaterPage() {
 
   const banks = accounts.filter((a) => a.type === 'asset' && !a.systemKey);
 
-  const scheduleItems = obligationsPayload?.scheduleItems ?? [];
+  const scheduleItems = (obligationsPayload?.scheduleItems ?? []) as ScheduleItem[];
   const obligations = obligationsPayload?.obligations ?? [];
   const exposure = obligationsPayload?.providerExposure ?? [];
   const totalOutstanding = obligationsPayload?.totalOutstandingCents ?? 0;

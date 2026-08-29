@@ -18,6 +18,22 @@ import {
 import type { AgentBudgetActionProposal, AgentTransactionActionProposal } from '../../lib/api';
 import { unwrapGenerated } from '../core/generated-response';
 
+export type AgentApprovalExecution = {
+  receipt: {
+    actionId: number;
+    approvalId: number;
+    kind: 'budget_plan_upsert' | 'transaction_journal_create';
+    periodId?: number | null;
+    transactionId?: number;
+    changed?: Array<{ planId: number; categoryId: number; plannedAmountCents: number; operation: 'created' | 'updated' }>;
+    changedCount?: number;
+    auditLogIds: number[];
+    financialRevision: number;
+    executedAt: number;
+  };
+  replay: boolean;
+};
+
 /**
  * The agent route owns interaction state, while all durable agent mutations
  * live behind this feature command boundary. This keeps generated-client
@@ -43,7 +59,7 @@ export const agentCommands = {
     delete: (id: number) => unwrapGenerated(deleteAgentConversation(id), 204, 'Could not delete that conversation.'),
   },
   approvals: {
-    execute: (id: number, token: string) => unwrapGenerated(executeAgentApproval(id, { token }), 200, 'Could not execute this approval.'),
+    execute: (id: number, token: string) => unwrapGenerated(executeAgentApproval(id, { token }), 200, 'Could not execute this approval.') as Promise<AgentApprovalExecution>,
     reissue: (id: number) => unwrapGenerated(reissueAgentApproval(id), 200, 'Could not restore this approval.'),
     reject: (id: number, token: string) => unwrapGenerated(rejectAgentApproval(id, { token }), 200, 'Could not dismiss this approval.'),
   },

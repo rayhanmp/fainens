@@ -18,12 +18,15 @@ export function usePaylaterQuery() {
         unwrapGenerated(listAccounts(), 200, 'Failed to load accounts'),
       ]);
       return {
-        obligations,
+        obligations: {
+          ...obligations,
+          scheduleItems: obligations.scheduleItems.map((item) => ({ ...item, kind: item.kind === 'interest' ? 'interest' as const : 'recognition' as const })),
+        },
         accounts: accounts.map((account) => ({
           id: account.id,
           name: account.name,
-          type: account.type,
-          systemKey: account.systemKey,
+          type: String(account.type),
+          systemKey: typeof account.systemKey === 'string' ? account.systemKey : null,
         })),
       };
     },

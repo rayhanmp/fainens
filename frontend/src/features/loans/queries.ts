@@ -15,7 +15,7 @@ import {
   type UpdateContactBody,
   type UpdateLoanBody,
 } from '../../generated/client';
-import { unwrapGenerated } from '../core/generated-response';
+import { normalizeTimestamp, unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type LoansPageData = {
@@ -84,7 +84,10 @@ export function useCreateContactMutation() {
 export function useUpdateContactMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: UpdateContactBody }) => unwrapGenerated(updateContact(id, data), 200, 'Failed to update contact'),
+    mutationFn: async ({ id, data }: { id: number; data: UpdateContactBody }) => {
+      const updated = await unwrapGenerated(updateContact(id, data), 200, 'Failed to update contact');
+      return { ...updated, createdAt: normalizeTimestamp(updated.createdAt), updatedAt: normalizeTimestamp(updated.updatedAt) };
+    },
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

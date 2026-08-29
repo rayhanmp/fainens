@@ -20,7 +20,7 @@ export function useSplitLookupsQuery() {
       return {
         accounts: accounts
           .filter((account) => account.type === 'asset')
-          .map((account) => ({ id: account.id, name: account.name, type: account.type, balance: account.balance })),
+          .map((account) => ({ id: account.id, name: account.name, type: String(account.type), balance: account.balance ?? 0 })),
         contacts,
       };
     },

@@ -19,7 +19,7 @@ function conversationGroup(updatedAt: number, nowMs = Date.now()): string {
   return 'Older';
 }
 
-function ConversationTitle({ conversation, isActive }: { conversation: Conversation; isActive: boolean }) {
+export function ConversationTitle({ conversation, isActive }: { conversation: Conversation; isActive: boolean }) {
   const isAutoTitlePending = conversation.titleSource === 'auto' && conversation.title === 'New conversation';
   if (isAutoTitlePending) {
     return <span aria-label="Conversation title loading" className={cn('inline-block h-4 w-32 max-w-full animate-pulse rounded', isActive ? 'bg-white/35' : 'bg-[var(--ref-surface-container-highest)]')} />;

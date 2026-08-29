@@ -142,10 +142,11 @@ export function useImportTransactions() {
 }
 
 type PendingTransactionParsed = Parameters<typeof api.pendingTransactions.create>[1];
+export type PendingTransactionPreview = { parsed: PendingTransactionParsed };
 
 export function usePreviewPendingTransactionMutation() {
-  return useMutation({
-    mutationFn: (message: string) => unwrapGenerated(parsePendingTransaction({ message }), 200, 'Failed to parse transaction'),
+  return useMutation<PendingTransactionPreview, Error, string>({
+    mutationFn: async (message: string) => unwrapGenerated(parsePendingTransaction({ message }), 200, 'Failed to parse transaction') as Promise<PendingTransactionPreview>,
   });
 }
 

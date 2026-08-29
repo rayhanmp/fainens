@@ -679,7 +679,7 @@ export function TransactionModal({
         notes: simpleForm.notes || null,
         tagIds: simpleForm.tagIds,
       });
-      setSelectedRouteTemplateId((created as TransportRouteTemplate).id);
+      setSelectedRouteTemplateId((created as unknown as TransportRouteTemplate).id);
       setRouteTemplateName(name);
       setRouteTemplateEditorMode(null);
     } catch (error) {

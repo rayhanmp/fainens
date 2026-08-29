@@ -7,19 +7,48 @@ import {
   listReconciliation,
   restoreAccount,
   updateAccount,
+  type ListAccounts200Item,
   type ListAccountsParams,
 } from '../../generated/client';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
-import { unwrapGenerated } from '../core/generated-response';
+import { normalizeTimestamp, unwrapGenerated } from '../core/generated-response';
 
 export const useAccountsQuery = () => useQuery({
   queryKey: queryKeys.accounts.all,
   queryFn: async ({ signal }) => {
     const response = await listAccounts(undefined, { signal });
     if (response.status !== 200) throw new Error('Failed to load accounts');
-    return response.data;
+    return response.data.map(normalizeAccount);
   },
 });
+
+export type AccountLedgerRow = {
+  id: number;
+  name: string;
+  type: string;
+  balance: number;
+  isActive: boolean;
+  systemKey: string | null;
+  liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
+  [key: string]: unknown;
+};
+
+function normalizeAccount(account: ListAccounts200Item): AccountLedgerRow {
+  const raw = account as Record<string, unknown>;
+  const liquidityClass = raw.liquidityClass === 'cash_equivalent' || raw.liquidityClass === 'receivable' || raw.liquidityClass === 'investment' || raw.liquidityClass === 'non_cash'
+    ? raw.liquidityClass
+    : 'non_cash';
+  return {
+    ...raw,
+    id: account.id,
+    name: account.name,
+    type: account.type,
+    balance: typeof account.balance === 'number' ? account.balance : 0,
+    isActive: raw.isActive !== false,
+    systemKey: typeof raw.systemKey === 'string' ? raw.systemKey : null,
+    liquidityClass,
+  };
+}
 
 export type AccountListParams = {
   type?: ListAccountsParams['type'] | string;
@@ -32,15 +61,18 @@ export function useAccountsLedgerQuery(params?: AccountListParams) {
   const normalizedParams = params ?? {};
   return useQuery({
     queryKey: queryKeys.accounts.list(normalizedParams),
-    queryFn: () => unwrapGenerated(
-      listAccounts({
+    queryFn: async () => {
+      const accounts = await unwrapGenerated(
+        listAccounts({
         ...(params?.type ? { type: params.type as ListAccountsParams['type'] } : {}),
         ...(params?.search ? { search: params.search } : {}),
         ...(params?.includeInactive !== undefined ? { includeInactive: params.includeInactive ? 'true' : 'false' } : {}),
-      }),
-      200,
-      'Failed to load accounts',
-    ),
+        }),
+        200,
+        'Failed to load accounts',
+      );
+      return accounts.map(normalizeAccount);
+    },
     placeholderData: (previous) => previous,
   });
 }
@@ -48,7 +80,15 @@ export function useAccountsLedgerQuery(params?: AccountListParams) {
 export function useReconciliationHistoryQuery(limit = 25) {
   return useQuery({
     queryKey: queryKeys.accounts.reconciliation(limit),
-    queryFn: () => unwrapGenerated(listReconciliation({ limit: String(limit) }), 200, 'Failed to load reconciliation history'),
+    queryFn: async () => {
+      const payload = await unwrapGenerated(listReconciliation({ limit: String(limit) }), 200, 'Failed to load reconciliation history');
+      return { ...payload, sessions: payload.sessions.map((session) => ({
+        ...session,
+        asOfDate: normalizeTimestamp(session.asOfDate),
+        createdAt: normalizeTimestamp(session.createdAt),
+        voidedAt: session.voidedAt == null ? null : normalizeTimestamp(session.voidedAt),
+      })) };
+    },
     placeholderData: (previous) => previous,
   });
 }

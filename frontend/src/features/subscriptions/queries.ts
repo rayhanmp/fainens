@@ -21,6 +21,37 @@ export type SubscriptionsPageData = {
   categories: Array<{ id: number; name: string }>;
 };
 
+type SubscriptionDraft = Omit<CreateSubscriptionBody, 'billingCycle' | 'status' | 'iconKey'> & {
+  billingCycle?: string;
+  status?: string;
+  iconKey?: string;
+};
+type SubscriptionUpdateDraft = Omit<UpdateSubscriptionBody, 'billingCycle' | 'status' | 'iconKey'> & {
+  billingCycle?: string;
+  status?: string;
+  iconKey?: string;
+};
+
+function normalizeSubscriptionDraft(input: SubscriptionDraft): CreateSubscriptionBody {
+  return {
+    ...input,
+    billingCycle: input.billingCycle === 'annual' ? 'annual' : 'monthly',
+    status: input.status === 'paused' ? 'paused' : 'active',
+    iconKey: ['car', 'film', 'music', 'signal', 'sparkles', 'default'].includes(input.iconKey ?? '')
+      ? input.iconKey as CreateSubscriptionBody['iconKey']
+      : 'default',
+  } as CreateSubscriptionBody;
+}
+
+function normalizeSubscriptionUpdate(input: SubscriptionUpdateDraft): UpdateSubscriptionBody {
+  return {
+    ...input,
+    ...(input.billingCycle ? { billingCycle: input.billingCycle === 'annual' ? 'annual' : 'monthly' } : {}),
+    ...(input.status ? { status: input.status === 'paused' ? 'paused' : 'active' } : {}),
+    ...(input.iconKey ? { iconKey: ['car', 'film', 'music', 'signal', 'sparkles', 'default'].includes(input.iconKey) ? input.iconKey as UpdateSubscriptionBody['iconKey'] : 'default' } : {}),
+  } as UpdateSubscriptionBody;
+}
+
 /** Loads subscription records and the lookup lists used by its editor. */
 export function useSubscriptionsQuery() {
   return useQuery<SubscriptionsPageData>({
@@ -45,7 +76,7 @@ export function useSubscriptionsQuery() {
 export function useCreateSubscriptionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateSubscriptionBody) => unwrapGenerated(createSubscription(input), 201, 'Failed to create subscription'),
+    mutationFn: (input: SubscriptionDraft) => unwrapGenerated(createSubscription(normalizeSubscriptionDraft(input)), 201, 'Failed to create subscription'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -53,7 +84,7 @@ export function useCreateSubscriptionMutation() {
 export function useUpdateSubscriptionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: UpdateSubscriptionBody }) => unwrapGenerated(updateSubscription(id, data), 200, 'Failed to update subscription'),
+    mutationFn: ({ id, data }: { id: number; data: SubscriptionUpdateDraft }) => unwrapGenerated(updateSubscription(id, normalizeSubscriptionUpdate(data)), 200, 'Failed to update subscription'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

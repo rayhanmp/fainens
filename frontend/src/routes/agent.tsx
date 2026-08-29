@@ -36,7 +36,7 @@ import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
 import { agentCommands } from '../features/agent/commands';
-import { ConversationList, CONVERSATIONS_PAGE_SIZE } from '../features/agent/ConversationList';
+import { ConversationList, ConversationTitle, CONVERSATIONS_PAGE_SIZE } from '../features/agent/ConversationList';
 import type { AgentActivityStep, AgentResponse, ChatImage, ChatMessage, Conversation, ConversationDetail, Period } from '../features/agent/types';
 import { useAgentConversationQuery, useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';

@@ -23,7 +23,7 @@ export function useWishlistQuery() {
         unwrapGenerated(listWishlist(), 200, 'Failed to load wishlist'),
         unwrapGenerated(listCategories(), 200, 'Failed to load categories'),
       ]);
-      return { items, categories };
+      return { items, categories: categories.map((category) => ({ ...category, icon: category.icon ?? null, color: category.color ?? null })) };
     },
     placeholderData: (previous) => previous,
   });
