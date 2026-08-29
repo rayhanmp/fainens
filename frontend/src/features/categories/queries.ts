@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listCategories } from '../../generated/client';
-import { api } from '../../lib/api';
+import {
+  archiveCategory,
+  createCategory,
+  createTag,
+  deleteTag,
+  listCategories,
+  restoreCategory,
+  updateCategory,
+  updateTag,
+} from '../../generated/client';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
+import { unwrapGenerated } from '../core/generated-response';
 
 export const useCategoriesQuery = () => useQuery({
   queryKey: queryKeys.categories.all,
@@ -15,7 +24,7 @@ export const useCategoriesQuery = () => useQuery({
 export function useCreateCategoryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.categories.create>[0]) => api.categories.create(input),
+    mutationFn: (input: Parameters<typeof createCategory>[0]) => unwrapGenerated(createCategory(input), 201, 'Failed to create category'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -23,7 +32,7 @@ export function useCreateCategoryMutation() {
 export function useUpdateCategoryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.categories.update>[1] }) => api.categories.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateCategory>[1] }) => unwrapGenerated(updateCategory(id, data), 200, 'Failed to update category'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -31,7 +40,7 @@ export function useUpdateCategoryMutation() {
 export function useDeleteCategoryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.categories.delete(id),
+    mutationFn: (id: number) => unwrapGenerated(archiveCategory(id), 204, 'Failed to archive category'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -39,7 +48,7 @@ export function useDeleteCategoryMutation() {
 export function useRestoreCategoryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.categories.restore(id),
+    mutationFn: (id: number) => unwrapGenerated(restoreCategory(id), 200, 'Failed to restore category'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -47,7 +56,7 @@ export function useRestoreCategoryMutation() {
 export function useCreateTagMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.tags.create>[0]) => api.tags.create(input),
+    mutationFn: (input: Parameters<typeof createTag>[0]) => unwrapGenerated(createTag(input), 201, 'Failed to create tag'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -55,7 +64,7 @@ export function useCreateTagMutation() {
 export function useUpdateTagMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.tags.update>[1] }) => api.tags.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateTag>[1] }) => unwrapGenerated(updateTag(id, data), 200, 'Failed to update tag'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -63,7 +72,7 @@ export function useUpdateTagMutation() {
 export function useDeleteTagMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.tags.delete(id),
+    mutationFn: (id: number) => unwrapGenerated(deleteTag(id), 204, 'Failed to delete tag'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

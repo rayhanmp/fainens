@@ -1,11 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import {
+  getBalanceSheet,
+  getCashFlowStatement,
+  getIncomeStatement,
+  getReportTrends,
+  getSpendingReport,
+} from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
+import { listCategories } from '../../generated/client';
+import { unwrapGenerated } from '../core/generated-response';
 
 export function useIncomeStatementQuery(periodId?: number) {
   return useQuery({
     queryKey: [...queryKeys.reports.income, periodId ?? null] as const,
-    queryFn: () => api.reports.incomeStatement(periodId),
+    queryFn: () => unwrapGenerated(getIncomeStatement(periodId == null ? undefined : { periodId }), 200, 'Failed to load income statement'),
     placeholderData: (previous) => previous,
   });
 }
@@ -13,7 +21,7 @@ export function useIncomeStatementQuery(periodId?: number) {
 export function useBalanceSheetQuery(asOfDate?: number) {
   return useQuery({
     queryKey: [...queryKeys.reports.balance, asOfDate ?? null] as const,
-    queryFn: () => api.reports.balanceSheet(asOfDate),
+    queryFn: () => unwrapGenerated(getBalanceSheet(asOfDate == null ? undefined : { asOfDate }), 200, 'Failed to load balance sheet'),
     placeholderData: (previous) => previous,
   });
 }
@@ -21,7 +29,7 @@ export function useBalanceSheetQuery(asOfDate?: number) {
 export function useCashFlowQuery(periodId?: number) {
   return useQuery({
     queryKey: [...queryKeys.reports.cashflow, periodId ?? null] as const,
-    queryFn: () => api.reports.cashFlow(periodId),
+    queryFn: () => unwrapGenerated(getCashFlowStatement(periodId == null ? undefined : { periodId }), 200, 'Failed to load cash flow'),
     placeholderData: (previous) => previous,
   });
 }
@@ -31,8 +39,8 @@ export function useSpendingQuery(periodId?: number) {
     queryKey: [...queryKeys.reports.spending, periodId ?? null] as const,
     queryFn: async () => {
       const [report, categories] = await Promise.all([
-        api.reports.spending(periodId),
-        api.categories.list(),
+        unwrapGenerated(getSpendingReport(periodId == null ? undefined : { periodId }), 200, 'Failed to load spending report'),
+        unwrapGenerated(listCategories(), 200, 'Failed to load categories'),
       ]);
       return { report, categories };
     },
@@ -43,7 +51,7 @@ export function useSpendingQuery(periodId?: number) {
 export function useTrendsQuery(periodCount = 6) {
   return useQuery({
     queryKey: [...queryKeys.reports.trends, periodCount] as const,
-    queryFn: () => api.reports.trends(periodCount),
+    queryFn: () => unwrapGenerated(getReportTrends({ periodCount }), 200, 'Failed to load report trends'),
     placeholderData: (previous) => previous,
   });
 }
@@ -69,17 +77,15 @@ export function useReportSummaryQuery(input: {
     enabled: periodId != null,
     queryFn: async () => {
       const [income, balance] = await Promise.all([
-        api.reports.incomeStatement(periodId!),
-        api.reports.balanceSheet(
-          periodEndDate == null
-            ? undefined
-            : (periodEndDate % 86_400_000 === 0 ? periodEndDate + 86_400_000 - 1 : periodEndDate),
-        ),
+        unwrapGenerated(getIncomeStatement({ periodId: periodId! }), 200, 'Failed to load income statement'),
+        unwrapGenerated(getBalanceSheet({
+          asOfDate: periodEndDate == null ? undefined : (periodEndDate % 86_400_000 === 0 ? periodEndDate + 86_400_000 - 1 : periodEndDate),
+        }), 200, 'Failed to load balance sheet'),
       ]);
       let previous: Pick<ReportSummary, 'previousPeriodRevenue' | 'previousPeriodExpenses'> = {};
       if (previousPeriodId != null) {
         try {
-          const previousIncome = await api.reports.incomeStatement(previousPeriodId);
+          const previousIncome = await unwrapGenerated(getIncomeStatement({ periodId: previousPeriodId }), 200, 'Failed to load comparison income statement');
           previous = {
             previousPeriodRevenue: previousIncome.totalRevenue,
             previousPeriodExpenses: previousIncome.totalExpenses,

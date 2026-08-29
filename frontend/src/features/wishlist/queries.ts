@@ -1,5 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import {
+  createWishlistItem,
+  deleteWishlistItem,
+  fulfillWishlistItem,
+  linkWishlistTransaction,
+  listCategories,
+  listWishlist,
+  updateWishlistItem,
+  type CreateWishlistItemBody,
+  type FulfillWishlistItemBody,
+  type LinkWishlistTransactionBody,
+  type UpdateWishlistItemBody,
+} from '../../generated/client';
+import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export function useWishlistQuery() {
@@ -7,8 +20,8 @@ export function useWishlistQuery() {
     queryKey: queryKeys.wishlist.all,
     queryFn: async () => {
       const [items, categories] = await Promise.all([
-        api.wishlist.list(),
-        api.categories.list(),
+        unwrapGenerated(listWishlist(), 200, 'Failed to load wishlist'),
+        unwrapGenerated(listCategories(), 200, 'Failed to load categories'),
       ]);
       return { items, categories };
     },
@@ -25,21 +38,24 @@ function useWishlistMutation<TInput>(mutationFn: (input: TInput) => Promise<unkn
 }
 
 export function useCreateWishlistMutation() {
-  return useWishlistMutation((input: Parameters<typeof api.wishlist.create>[0]) => api.wishlist.create(input));
+  return useWishlistMutation((input: CreateWishlistItemBody) => unwrapGenerated(createWishlistItem(input), 201, 'Failed to create wishlist item'));
 }
 
 export function useUpdateWishlistMutation() {
-  return useWishlistMutation(({ id, data }: { id: number; data: Parameters<typeof api.wishlist.update>[1] }) => api.wishlist.update(id, data));
+  return useWishlistMutation(({ id, data }: { id: number; data: UpdateWishlistItemBody }) => unwrapGenerated(updateWishlistItem(id, data), 200, 'Failed to update wishlist item'));
 }
 
 export function useDeleteWishlistMutation() {
-  return useWishlistMutation((id: number) => api.wishlist.delete(id));
+  return useWishlistMutation((id: number) => unwrapGenerated(deleteWishlistItem(id), 204, 'Failed to delete wishlist item'));
 }
 
 export function useFulfillWishlistMutation() {
-  return useWishlistMutation(({ id, data }: { id: number; data: Parameters<typeof api.wishlist.fulfill>[1] }) => api.wishlist.fulfill(id, data));
+  return useWishlistMutation(({ id, data }: { id: number; data: FulfillWishlistItemBody }) => unwrapGenerated(fulfillWishlistItem(id, data), 200, 'Failed to fulfill wishlist item'));
 }
 
 export function useLinkWishlistMutation() {
-  return useWishlistMutation(({ id, transactionId }: { id: number; transactionId: number }) => api.wishlist.link(id, transactionId));
+  return useWishlistMutation(({ id, transactionId }: { id: number; transactionId: number }) => {
+    const body: LinkWishlistTransactionBody = { transactionId };
+    return unwrapGenerated(linkWishlistTransaction(id, body), 200, 'Failed to link wishlist transaction');
+  });
 }

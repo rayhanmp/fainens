@@ -1,5 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
+import {
+  getSalarySettings,
+  listAccounts,
+  previewSalaryCatchUp,
+  processSalaryCatchUp,
+  updateSalarySettings,
+  type ProcessSalaryCatchUpBody,
+  type UpdateSalarySettingsBody,
+} from '../../generated/client';
+import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type SalaryIncomeRow = {
@@ -18,7 +28,7 @@ export function useSalaryIncomeQuery() {
       const start = new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime();
       const [factsResult, accounts] = await Promise.all([
         api.agent.financialFacts({ startDate: start, endDate: Date.now() }),
-        api.accounts.list(),
+        unwrapGenerated(listAccounts(), 200, 'Failed to load accounts'),
       ]);
       return {
         transactions: factsResult.data.facts.rows
@@ -40,7 +50,7 @@ export function useSalaryIncomeQuery() {
 export function useSalarySettingsQuery() {
   return useQuery({
     queryKey: queryKeys.salary.settings,
-    queryFn: () => api.salarySettings.get(),
+    queryFn: () => unwrapGenerated(getSalarySettings(), 200, 'Failed to load salary settings'),
     placeholderData: (previous) => previous,
   });
 }
@@ -48,7 +58,7 @@ export function useSalarySettingsQuery() {
 export function useSalaryCatchUpPreviewQuery() {
   return useQuery({
     queryKey: queryKeys.salary.catchUpPreview,
-    queryFn: () => api.salarySettings.catchUpPreview(),
+    queryFn: () => unwrapGenerated(previewSalaryCatchUp(), 200, 'Failed to preview salary catch-up'),
     enabled: false,
   });
 }
@@ -56,7 +66,7 @@ export function useSalaryCatchUpPreviewQuery() {
 export function useUpdateSalarySettingsMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.salarySettings.update>[0]) => api.salarySettings.update(input),
+    mutationFn: (input: UpdateSalarySettingsBody) => unwrapGenerated(updateSalarySettings(input), 200, 'Failed to update salary settings'),
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.salary.settings, data);
       void invalidateFinancialSummaries(queryClient);
@@ -67,7 +77,7 @@ export function useUpdateSalarySettingsMutation() {
 export function useSalaryCatchUpMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.salarySettings.catchUp>[0]) => api.salarySettings.catchUp(input),
+    mutationFn: (input: ProcessSalaryCatchUpBody) => unwrapGenerated(processSalaryCatchUp(input), 200, 'Failed to process salary catch-up'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

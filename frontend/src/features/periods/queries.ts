@@ -1,7 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listPeriods } from '../../generated/client';
+import {
+  archivePeriod,
+  autoCreatePeriod,
+  closePeriod,
+  createPeriod,
+  createPeriodReturnBackfill,
+  getPeriod,
+  listPeriods,
+  previewPeriodReturn,
+  reopenPeriod,
+  restorePeriod,
+  setPeriodCoverage,
+  suggestNextPeriod,
+  updatePeriod,
+} from '../../generated/client';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
-import { api } from '../../lib/api';
+import { unwrapGenerated } from '../core/generated-response';
 
 export const usePeriodsQuery = () => useQuery({
   queryKey: queryKeys.periods.all,
@@ -15,7 +29,7 @@ export const usePeriodsQuery = () => useQuery({
 export function usePeriodsLedgerQuery(includeInactive = false) {
   return useQuery({
     queryKey: [...queryKeys.periods.all, { includeInactive }] as const,
-    queryFn: () => api.periods.list(includeInactive ? { includeInactive: true } : undefined),
+    queryFn: () => unwrapGenerated(listPeriods(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load periods'),
     placeholderData: (previous) => previous,
   });
 }
@@ -23,7 +37,7 @@ export function usePeriodsLedgerQuery(includeInactive = false) {
 export function usePeriodDetailQuery(periodId: number | null) {
   return useQuery({
     queryKey: queryKeys.periods.detail(periodId ?? 0),
-    queryFn: () => api.periods.get(periodId!),
+    queryFn: () => unwrapGenerated(getPeriod(periodId!), 200, 'Failed to load period'),
     enabled: periodId != null,
     placeholderData: (previous) => previous,
   });
@@ -32,7 +46,7 @@ export function usePeriodDetailQuery(periodId: number | null) {
 export function useSuggestedPeriodQuery() {
   return useQuery({
     queryKey: [...queryKeys.periods.all, 'suggested'] as const,
-    queryFn: () => api.periods.suggestNext(),
+    queryFn: () => unwrapGenerated(suggestNextPeriod(), 200, 'Failed to suggest next period'),
     placeholderData: (previous) => previous,
   });
 }
@@ -40,7 +54,7 @@ export function useSuggestedPeriodQuery() {
 export function useReturnPreviewQuery(asOfDate: number | null) {
   return useQuery({
     queryKey: [...queryKeys.periods.all, 'return-preview', asOfDate ?? 0] as const,
-    queryFn: () => api.periods.returnPreview(asOfDate!),
+    queryFn: () => unwrapGenerated(previewPeriodReturn({ asOfDate: asOfDate! }), 200, 'Failed to preview return'),
     enabled: asOfDate != null,
   });
 }
@@ -48,7 +62,7 @@ export function useReturnPreviewQuery(asOfDate: number | null) {
 export function useCreatePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.periods.create>[0]) => api.periods.create(input),
+    mutationFn: (input: Parameters<typeof createPeriod>[0]) => unwrapGenerated(createPeriod(input), [200, 201], 'Failed to create period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -56,7 +70,7 @@ export function useCreatePeriodMutation() {
 export function useUpdatePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.periods.update>[1] }) => api.periods.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updatePeriod>[1] }) => unwrapGenerated(updatePeriod(id, data), [200, 201], 'Failed to update period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -64,7 +78,7 @@ export function useUpdatePeriodMutation() {
 export function useAutoCreatePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.periods.autoCreate(),
+    mutationFn: () => unwrapGenerated(autoCreatePeriod(), 200, 'Failed to create current period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -72,7 +86,7 @@ export function useAutoCreatePeriodMutation() {
 export function useClosePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.periods.close(id),
+    mutationFn: (id: number) => unwrapGenerated(closePeriod(id), 200, 'Failed to close period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -80,7 +94,7 @@ export function useClosePeriodMutation() {
 export function useReopenPeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.periods.reopen(id),
+    mutationFn: (id: number) => unwrapGenerated(reopenPeriod(id), 200, 'Failed to reopen period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -88,7 +102,7 @@ export function useReopenPeriodMutation() {
 export function useArchivePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.periods.archive(id),
+    mutationFn: (id: number) => unwrapGenerated(archivePeriod(id), 200, 'Failed to archive period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -96,7 +110,7 @@ export function useArchivePeriodMutation() {
 export function useRestorePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.periods.restore(id),
+    mutationFn: (id: number) => unwrapGenerated(restorePeriod(id), 200, 'Failed to restore period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -104,7 +118,7 @@ export function useRestorePeriodMutation() {
 export function useReturnBackfillMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ asOfDate, currentPeriodCoverage }: { asOfDate: number; currentPeriodCoverage: 'partial' | 'complete' }) => api.periods.createReturnBackfill(asOfDate, currentPeriodCoverage),
+    mutationFn: ({ asOfDate, currentPeriodCoverage }: { asOfDate: number; currentPeriodCoverage: 'partial' | 'complete' }) => unwrapGenerated(createPeriodReturnBackfill({ asOfDate, confirmed: true, currentPeriodCoverage, reviewedCurrentPeriod: currentPeriodCoverage === 'complete' }), [200, 201], 'Failed to create return periods'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -112,7 +126,7 @@ export function useReturnBackfillMutation() {
 export function useSetPeriodCoverageMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.periods.setCoverage>[1] }) => api.periods.setCoverage(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof setPeriodCoverage>[1] }) => unwrapGenerated(setPeriodCoverage(id, data), 200, 'Failed to update period coverage'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

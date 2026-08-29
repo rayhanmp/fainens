@@ -2,11 +2,8 @@ import { createFileRoute, useSearch } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Archive,
-  ArchiveRestore,
   Brain,
   Bot,
-  CalendarDays,
   Check,
   ChevronDown,
   ChevronUp,
@@ -16,10 +13,7 @@ import {
   HelpCircle,
   ImagePlus,
   LoaderCircle,
-  MoreHorizontal,
   Pencil,
-  Pin,
-  PinOff,
   RefreshCw,
   Send,
   Sparkles,
@@ -36,10 +30,14 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { AgentMessage } from '../components/agent/AgentMessage';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import type { ListAgentConversations200 } from '../generated/client';
 import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory } from '../lib/api';
 import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
+import { agentCommands } from '../features/agent/commands';
+import { ConversationList, CONVERSATIONS_PAGE_SIZE } from '../features/agent/ConversationList';
+import type { AgentActivityStep, AgentResponse, ChatImage, ChatMessage, Conversation, ConversationDetail, Period } from '../features/agent/types';
 import { useAgentConversationQuery, useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useCategoriesQuery } from '../features/categories/queries';
@@ -70,14 +68,6 @@ export const Route = createFileRoute('/agent')({
   component: AgentPage,
 } as any);
 
-type Period = {
-  id: number;
-  name: string;
-  startDate: number;
-  endDate: number;
-  isActive?: boolean;
-};
-
 type AccountOption = {
   id: number;
   name: string;
@@ -85,17 +75,6 @@ type AccountOption = {
   isActive: boolean;
   liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
 };
-
-type AgentResponse = Awaited<ReturnType<typeof api.agent.query>>;
-type Conversation = Awaited<ReturnType<typeof api.agent.conversations.list>>['conversations'][number];
-type ConversationDetail = Awaited<ReturnType<typeof api.agent.conversations.get>>;
-type ChatImage = { id: string; filename: string; mimeType: string; dataUrl: string; fileSize: number };
-
-type ChatMessage =
-  | { id: string; serverId?: number; role: 'user'; text: string; createdAt: number; images?: ChatImage[] }
-  | { id: string; role: 'assistant'; text: string; createdAt: number; response?: AgentResponse };
-
-type AgentActivityStep = { id: string; label: string; status: 'active' | 'done'; detail?: string };
 
 function hasAgentResponse(message: ChatMessage): message is Extract<ChatMessage, { role: 'assistant' }> & { response: AgentResponse } {
   return message.role === 'assistant' && message.response != null;
@@ -106,71 +85,6 @@ function toChatMessages(detail: ConversationDetail): ChatMessage[] {
     ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
     : { id: String(message.id), serverId: message.id, role: 'user', text: message.content, createdAt: message.createdAt },
   );
-}
-
-function ConversationTitle({ conversation, isActive }: { conversation: Conversation; isActive: boolean }) {
-  const isAutoTitlePending = conversation.titleSource === 'auto' && conversation.title === 'New conversation';
-  if (isAutoTitlePending) {
-    return <span aria-label="Conversation title loading" className={cn('inline-block h-4 w-32 max-w-full animate-pulse rounded', isActive ? 'bg-white/35' : 'bg-[var(--ref-surface-container-highest)]')} />;
-  }
-  return <span className="truncate">{conversation.title}</span>;
-}
-
-function PeriodScopeDropdown({ periods, value, onChange }: { periods: Period[]; value: string; onChange: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const selected = value ? periods.find((period) => String(period.id) === value) : null;
-  const options = [{ id: '', label: 'All recorded history' }, ...periods.map((period) => ({ id: String(period.id), label: period.name }))];
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePress);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePress);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [open]);
-
-  return <div ref={rootRef} className="relative min-w-0 flex-1">
-    <button
-      type="button"
-      role="combobox"
-      aria-expanded={open}
-      aria-haspopup="listbox"
-      onClick={() => setOpen((current) => !current)}
-      onKeyDown={(event) => { if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(true); } }}
-      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg px-1 text-left text-sm font-semibold text-[var(--color-text-primary)] outline-none transition-colors hover:text-[var(--ref-primary)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]"
-    >
-      <span className="truncate">{selected?.name ?? 'All recorded history'}</span>
-      <ChevronDown className={cn('h-4 w-4 shrink-0 text-[var(--color-text-secondary)] transition-transform', open && 'rotate-180')} />
-    </button>
-    {open && <div role="listbox" className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 text-[var(--color-text-primary)] shadow-lg">
-      {options.map((option) => <button
-        key={option.id || 'all'}
-        type="button"
-        role="option"
-        aria-selected={option.id === value}
-        onClick={() => { onChange(option.id); setOpen(false); }}
-        className={cn('flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--ref-surface-container-low)]', option.id === value && 'bg-[var(--ref-primary)]/10 font-semibold text-[var(--ref-primary)]')}
-      ><span className="truncate">{option.label}</span>{option.id === value && <Check className="h-4 w-4 shrink-0" />}</button>)}
-    </div>}
-  </div>;
-}
-
-function ConversationListSkeleton({ count = 3 }: { count?: number }) {
-  return <div className="space-y-2 px-2 py-2" aria-label="Loading more conversations" aria-live="polite">
-    {Array.from({ length: count }, (_, index) => <div key={index} className="animate-pulse space-y-2 rounded-lg px-2 py-2">
-      <div className="h-4 w-4/5 rounded bg-[var(--ref-surface-container-highest)]" />
-      <div className="h-3 w-1/3 rounded bg-[var(--ref-surface-container)]" />
-    </div>)}
-  </div>;
 }
 
 const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -373,21 +287,6 @@ function createStartupSelection(nickname = ''): StartupSelection {
   };
 }
 
-const CONVERSATIONS_PAGE_SIZE = 10;
-
-function conversationGroup(updatedAt: number, nowMs = Date.now()): string {
-  const now = new Date(nowMs);
-  const date = new Date(updatedAt);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const dayDifference = Math.floor((today - day) / 86_400_000);
-  if (dayDifference <= 0) return 'Today';
-  if (dayDifference === 1) return 'Yesterday';
-  const weekStart = today - ((now.getDay() + 6) % 7) * 86_400_000;
-  if (day >= weekStart) return 'Earlier this week';
-  return 'Older';
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -560,7 +459,7 @@ function BudgetProposalCard({ proposal, periods }: { proposal: AgentBudgetAction
     restorationAttempted.current = true;
     setStatus('restoring');
     setMessage(null);
-    void api.agent.actions.reissue(proposal.approvalId)
+    void agentCommands.approvals.reissue(proposal.approvalId)
       .then((refreshed) => {
         if (!isBudgetProposal(refreshed)) throw new Error('The restored approval was not a budget proposal.');
         setCurrentProposal(refreshed);
@@ -578,7 +477,7 @@ function BudgetProposalCard({ proposal, periods }: { proposal: AgentBudgetAction
     setStatus('executing');
     setMessage(null);
     try {
-      const result = await api.agent.actions.execute(currentProposal.approvalId, currentProposal.approvalToken);
+      const result = await agentCommands.approvals.execute(currentProposal.approvalId, currentProposal.approvalToken);
       setStatus('executed');
       setMessage(`Budget saved. ${result.receipt.changedCount ?? 0} categor${(result.receipt.changedCount ?? 0) === 1 ? 'y' : 'ies'} changed.`);
     } catch (caught) {
@@ -592,7 +491,7 @@ function BudgetProposalCard({ proposal, periods }: { proposal: AgentBudgetAction
     setStatus('executing');
     setMessage(null);
     try {
-      await api.agent.actions.reject(currentProposal.approvalId, currentProposal.approvalToken);
+      await agentCommands.approvals.reject(currentProposal.approvalId, currentProposal.approvalToken);
       setStatus('rejected');
       setMessage('Budget proposal dismissed. Nothing changed.');
     } catch (caught) {
@@ -684,7 +583,7 @@ function TransactionProposalCard({
     restorationAttempted.current = true;
     setStatus('restoring');
     setMessage(null);
-    void api.agent.actions.reissue(proposal.approvalId)
+    void agentCommands.approvals.reissue(proposal.approvalId)
       .then((refreshed) => {
         if (!isTransactionProposal(refreshed)) throw new Error('The restored approval was not a transaction proposal.');
         setCurrentProposal(refreshed);
@@ -772,7 +671,7 @@ function TransactionProposalCard({
           nextInput.categoryAllocations = [{ categoryId: nextCategoryId, amount: allocatedAmount }];
         }
       }
-      const refreshed = await api.agent.actions.prepareTransaction({
+      const refreshed = await agentCommands.actions.prepareTransaction({
         conversationId,
         input: nextInput,
         assumptions: currentProposal.assumptions,
@@ -781,7 +680,7 @@ function TransactionProposalCard({
       // replacement is prepared first so a transient network failure does not
       // strand the user without a valid review option.
       if (currentProposal.approvalToken) {
-        await api.agent.actions.reject(currentProposal.approvalId, currentProposal.approvalToken).catch(() => undefined);
+        await agentCommands.approvals.reject(currentProposal.approvalId, currentProposal.approvalToken).catch(() => undefined);
       }
       setCurrentProposal(refreshed);
       setDraft(draftFromProposal(refreshed));
@@ -798,7 +697,7 @@ function TransactionProposalCard({
     setStatus('executing');
     setMessage(null);
     try {
-      const result = await api.agent.actions.execute(currentProposal.approvalId, currentProposal.approvalToken);
+      const result = await agentCommands.approvals.execute(currentProposal.approvalId, currentProposal.approvalToken);
       setStatus('executed');
       setMessage(`Posted successfully as transaction #${result.receipt.transactionId ?? '—'}.`);
     } catch (caught) {
@@ -812,7 +711,7 @@ function TransactionProposalCard({
     setStatus('executing');
     setMessage(null);
     try {
-      await api.agent.actions.reject(currentProposal.approvalId, currentProposal.approvalToken);
+      await agentCommands.approvals.reject(currentProposal.approvalId, currentProposal.approvalToken);
       setStatus('rejected');
       setMessage('Transaction proposal dismissed; nothing was posted.');
     } catch (caught) {
@@ -945,13 +844,13 @@ function AgentPage() {
   const [visibleConversationCount, setVisibleConversationCount] = useState(CONVERSATIONS_PAGE_SIZE);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
 
-  const conversations = conversationsQuery.data?.conversations ?? [];
+  const conversations = useMemo(() => conversationsQuery.data?.conversations ?? [], [conversationsQuery.data?.conversations]);
   const memories = memoriesQuery.data?.memories ?? [];
   const memoryLimits = memoriesQuery.data?.limits ?? { maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 };
   const isLoadingMemories = memoriesQuery.isLoading;
   const isLoadingConversation = activeConversationId != null && conversationQuery.isFetching && !conversationQuery.data;
   const nickname = profileQuery.data?.nickname ?? '';
-  const periods = (periodsQuery.data ?? []) as Period[];
+  const periods = useMemo(() => (periodsQuery.data ?? []) as Period[], [periodsQuery.data]);
   const categories = useMemo(
     () => (categoriesQuery.data ?? []).map((category) => ({ id: category.id, name: category.name })),
     [categoriesQuery.data],
@@ -971,9 +870,8 @@ function AgentPage() {
     setStartupSelection(createStartupSelection(nickname));
   }, [nickname]);
 
-  type ConversationsResponse = Awaited<ReturnType<typeof api.agent.conversations.list>>;
   const updateConversationCache = (update: (current: Conversation[]) => Conversation[]) => {
-    queryClient.setQueryData<ConversationsResponse>(queryKeys.agent.conversations(true), (current) => current ? { ...current, conversations: update(current.conversations) } : current);
+    queryClient.setQueryData<ListAgentConversations200>(queryKeys.agent.conversations(true), (current) => current ? { ...current, conversations: update(current.conversations) } : current);
   };
 
   // The page keeps its rich streaming view state locally, while these small
@@ -1081,7 +979,7 @@ function AgentPage() {
     setIsSavingNickname(true);
     setMemoryError(null);
     try {
-      const response = await api.agent.profile.update(value || null);
+      const response = await agentCommands.profile.update(value || null);
       const saved = response.nickname ?? '';
       setNicknameDraft(saved);
       queryClient.setQueryData(queryKeys.agent.profile, response);
@@ -1112,9 +1010,9 @@ function AgentPage() {
     setMemoryError(null);
     try {
       if (editingMemoryId == null) {
-        await api.agent.memories.create({ label, content });
+        await agentCommands.memories.create({ label, content });
       } else {
-        await api.agent.memories.update(editingMemoryId, { label, content });
+        await agentCommands.memories.update(editingMemoryId, { label, content });
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       resetMemoryForm();
@@ -1136,7 +1034,7 @@ function AgentPage() {
     if (!window.confirm('Delete “' + memory.label + '” from Fainens memory?')) return;
     setMemoryError(null);
     try {
-      await api.agent.memories.delete(memory.id);
+      await agentCommands.memories.delete(memory.id);
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       if (editingMemoryId === memory.id) resetMemoryForm();
     } catch (caught) {
@@ -1310,7 +1208,7 @@ function AgentPage() {
     try {
       let conversationId = activeConversationId;
       if (conversationId == null) {
-        const created = await api.agent.conversations.create();
+        const created = await agentCommands.conversations.create();
         conversationId = created.conversation.id;
         setActiveConversationId(conversationId);
         updateConversationCache((current) => [created.conversation, ...current.filter((candidate) => candidate.id !== created.conversation.id)]);
@@ -1483,7 +1381,7 @@ function AgentPage() {
     setConversationActionId(conversationId);
     setError(null);
     try {
-      const result = await api.agent.conversations.update(conversationId, data);
+      const result = await agentCommands.conversations.update(conversationId, data);
       updateConversationCache((current) => current.map((conversation) => conversation.id === conversationId ? result.conversation : conversation));
       return result.conversation;
     } catch (caught) {
@@ -1524,7 +1422,7 @@ function AgentPage() {
     setConversationActionId(conversation.id);
     setError(null);
     try {
-      await api.agent.conversations.delete(conversation.id);
+      await agentCommands.conversations.delete(conversation.id);
       updateConversationCache((current) => current.filter((candidate) => candidate.id !== conversation.id));
       setOpenConversationMenuId(null);
       if (activeConversationId === conversation.id) startNewConversation();
@@ -1535,8 +1433,6 @@ function AgentPage() {
     }
   };
 
-  const activeConversations = conversations.filter((conversation) => conversation.archivedAt == null);
-  const archivedConversations = conversations.filter((conversation) => conversation.archivedAt != null);
   const sortedConversations = useMemo(
     () => [...conversations].sort((left, right) => {
       const leftArchived = left.archivedAt != null;
@@ -1905,136 +1801,41 @@ function AgentPage() {
               </div>
             )}
 
-            <div className="space-y-4">
-              <Card
-                title="Conversations"
-                action={<span className="whitespace-nowrap text-xs text-[var(--color-text-secondary)]">{activeConversations.length} active · {archivedConversations.length} archived</span>}
-              >
-                <div className="-mx-4 -mt-4 mb-3 border-b border-[var(--color-border)] px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><CalendarDays className="h-4 w-4" /></span>
-                    <div className="relative min-w-0 flex-1">
-                      <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-muted)]">Chat scope</span>
-                      <PeriodScopeDropdown periods={periods} value={selectedPeriodId} onChange={setSelectedPeriodId} />
-                    </div>
-                  </div>
-                  <p className="mt-1.5 pl-[2.6rem] text-[11px] text-[var(--color-text-secondary)]">{selectedPeriod ? `${formatDate(selectedPeriod.startDate)} – ${formatDate(selectedPeriod.endDate)}` : 'New questions can use all recorded history.'}</p>
-                </div>
-                <div
-                  ref={conversationListRef}
-                  onScroll={(event) => {
-                    const element = event.currentTarget;
-                    if (element.scrollHeight - element.scrollTop - element.clientHeight < 80 && !isLoadingMoreConversations && visibleConversationCount < sortedConversations.length) {
-                      setIsLoadingMoreConversations(true);
-                      conversationLoadMoreTimerRef.current = window.setTimeout(() => {
-                        setVisibleConversationCount((current) => Math.min(current + CONVERSATIONS_PAGE_SIZE, sortedConversations.length));
-                        setIsLoadingMoreConversations(false);
-                        conversationLoadMoreTimerRef.current = null;
-                      }, 650);
-                    }
-                  }}
-                  className="max-h-[32rem] space-y-1 overflow-y-auto lg:max-h-[calc(100vh-18rem)]"
-                >
-                  {sortedConversations.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">Your conversations will appear here.</p>}
-                  {visibleConversations.map((conversation, index) => {
-                    const isActive = conversation.id === activeConversationId;
-                    const isArchived = conversation.archivedAt != null;
-                    const isBusy = conversationActionId === conversation.id;
-                    const group = isArchived ? 'Archived' : conversation.isPinned ? 'Pinned' : conversationGroup(conversation.updatedAt);
-                    const previousConversation = visibleConversations[index - 1];
-                    const previousGroup = previousConversation
-                      ? (previousConversation.archivedAt != null ? 'Archived' : previousConversation.isPinned ? 'Pinned' : conversationGroup(previousConversation.updatedAt))
-                      : null;
-                    return (
-                      <div key={conversation.id}>
-                        {group !== previousGroup && <p className="px-2 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-muted)] first:pt-0">{group}</p>}
-                        <div className={cn(
-                          'group rounded-lg px-2 py-2 transition-colors',
-                          isActive ? 'bg-[var(--ref-primary-container)] text-white' : 'hover:bg-[var(--ref-surface-container-low)]',
-                        )}>
-                        {editingConversationId === conversation.id ? (
-                          <form
-                            className="flex items-center gap-1"
-                            onSubmit={(event) => { event.preventDefault(); void saveConversationTitle(conversation.id); }}
-                          >
-                            <input
-                              autoFocus
-                              value={conversationTitleDraft}
-                              onChange={(event) => setConversationTitleDraft(event.target.value)}
-                              onKeyDown={(event) => { if (event.key === 'Escape') { setEditingConversationId(null); setConversationTitleDraft(''); } }}
-                              maxLength={72}
-                              aria-label="Conversation title"
-                              className="min-w-0 flex-1 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1 text-sm text-[var(--color-text-primary)]"
-                            />
-                            <button type="submit" className="rounded p-1 text-[var(--color-success)] hover:bg-black/10" title="Save title" aria-label="Save title"><Check className="h-4 w-4" /></button>
-                            <button type="button" onClick={() => { setEditingConversationId(null); setConversationTitleDraft(''); }} className="rounded p-1 hover:bg-black/10" title="Cancel rename" aria-label="Cancel rename"><X className="h-4 w-4" /></button>
-                          </form>
-                        ) : (
-                          <div className="flex items-start gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void selectConversation(conversation.id)}
-                              className="min-w-0 flex-1 text-left"
-                            >
-                              <span className="flex items-center gap-1 truncate text-sm font-medium">
-                                {conversation.isPinned && <Pin className="h-3 w-3 shrink-0" aria-label="Pinned" />}
-                                <ConversationTitle conversation={conversation} isActive={isActive} />
-                              </span>
-                              <span className={cn('mt-0.5 block text-xs', isActive ? 'text-white/80' : 'text-[var(--color-text-secondary)]')}>
-                                {isArchived ? `Archived · ${formatDate(conversation.archivedAt ?? conversation.updatedAt)}` : formatDate(conversation.updatedAt)}
-                              </span>
-                            </button>
-                            <div className="relative shrink-0 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100" data-conversation-menu-root>
-                              <button
-                                type="button"
-                                disabled={isBusy}
-                                onClick={(event) => toggleConversationMenu(event, conversation.id)}
-                                className={cn('rounded p-1 hover:bg-black/10', isActive ? 'text-white' : 'text-[var(--color-text-secondary)]')}
-                                title="Conversation actions"
-                                aria-label={`Actions for ${conversation.title}`}
-                                aria-expanded={openConversationMenuId === conversation.id}
-                              ><MoreHorizontal className="h-4 w-4" /></button>
-                              {openConversationMenuId === conversation.id && (
-                                <div role="menu" className={cn('absolute right-0 z-20 min-w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1 text-[var(--color-text-primary)] shadow-lg', conversationMenuPlacement === 'above' ? 'bottom-8' : 'top-8')}>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => { setEditingConversationId(conversation.id); setConversationTitleDraft(conversation.title); setOpenConversationMenuId(null); setError(null); }}
-                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--ref-surface-container-low)]"
-                                  ><Pencil className="h-3.5 w-3.5" /> Edit title</button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); }}
-                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--ref-surface-container-low)]"
-                                  >{conversation.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />} {conversation.isPinned ? 'Unpin conversation' : 'Pin conversation'}</button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { archived: !isArchived }); }}
-                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--ref-surface-container-low)]"
-                                  >{isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />} {isArchived ? 'Restore conversation' : 'Archive conversation'}</button>
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => void deleteConversation(conversation)}
-                                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                                  ><Trash2 className="h-3.5 w-3.5" /> Delete conversation</button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {isLoadingMoreConversations && <ConversationListSkeleton count={Math.min(CONVERSATIONS_PAGE_SIZE, sortedConversations.length - visibleConversationCount)} />}
-                </div>
-                {isLoadingConversation && <p className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Loading conversation…</p>}
-              </Card>
-
-            </div>
+            <ConversationList
+              conversations={conversations}
+              periods={periods}
+              selectedPeriodId={selectedPeriodId}
+              onSelectPeriod={setSelectedPeriodId}
+              activeConversationId={activeConversationId}
+              visibleConversations={visibleConversations}
+              visibleConversationCount={visibleConversationCount}
+              isLoadingMoreConversations={isLoadingMoreConversations}
+              isLoadingConversation={isLoadingConversation}
+              conversationListRef={conversationListRef}
+              onNearEnd={() => {
+                if (isLoadingMoreConversations || visibleConversationCount >= sortedConversations.length) return;
+                setIsLoadingMoreConversations(true);
+                conversationLoadMoreTimerRef.current = window.setTimeout(() => {
+                  setVisibleConversationCount((current) => Math.min(current + CONVERSATIONS_PAGE_SIZE, sortedConversations.length));
+                  setIsLoadingMoreConversations(false);
+                  conversationLoadMoreTimerRef.current = null;
+                }, 650);
+              }}
+              onSelectConversation={(id) => void selectConversation(id)}
+              editingConversationId={editingConversationId}
+              conversationTitleDraft={conversationTitleDraft}
+              onConversationTitleDraftChange={setConversationTitleDraft}
+              onSaveConversationTitle={(id) => void saveConversationTitle(id)}
+              onCancelRename={() => { setEditingConversationId(null); setConversationTitleDraft(''); }}
+              openConversationMenuId={openConversationMenuId}
+              conversationMenuPlacement={conversationMenuPlacement}
+              conversationActionId={conversationActionId}
+              onToggleConversationMenu={toggleConversationMenu}
+              onEditConversation={(conversation) => { setEditingConversationId(conversation.id); setConversationTitleDraft(conversation.title); setOpenConversationMenuId(null); setError(null); }}
+              onTogglePin={(conversation) => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); }}
+              onToggleArchive={(conversation) => { setOpenConversationMenuId(null); void updateConversation(conversation.id, { archived: conversation.archivedAt == null }); }}
+              onDeleteConversation={(conversation) => void deleteConversation(conversation)}
+            />
           </div>
         </div>
       </PageContainer>

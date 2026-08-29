@@ -34,7 +34,6 @@ import {
   Check,
   Pencil,
   RotateCcw,
-  Info,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -58,6 +57,7 @@ import {
   toTimeInputLocal,
 } from '../../features/transactions/modal-helpers';
 import { useSimpleTransactionForm } from '../../features/transactions/modal-controller';
+import { TransferFeePanel, type TransferFeeDetails } from '../../features/transactions/TransferFeePanel';
 import {
   useApprovePendingTransactionMutation,
   useCreatePendingTransactionMutation,
@@ -1729,7 +1729,7 @@ export function TransactionModal({
                                 window.open(url, '_blank');
                               }
                             }
-                          } catch (err) {
+                          } catch {
                             alert('Failed to load attachment');
                           }
                         }}
@@ -1785,7 +1785,7 @@ export function TransactionModal({
                                   delete updated[att.id];
                                   return updated;
                                 });
-                              } catch (err) {
+                              } catch {
                                 alert('Failed to delete attachment');
                               }
                             }
@@ -1992,52 +1992,6 @@ export function TransactionModal({
   const transferWalletAccounts = walletAccounts.filter((account) => !isPaylaterAccount(account.id.toString()));
   const transferAccountChoices = (_selectedId: string, showAll: boolean) =>
     showAll ? transferWalletAccounts : transferWalletAccounts.slice(0, 3);
-
-  const renderTransferFeePanel = () => {
-    const details = calculateTransferDetails();
-    if (!details) return null;
-    if ('error' in details) {
-      return <div className="rounded-xl border border-[var(--color-danger)]/20 bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]">{details.error}</div>;
-    }
-    const ruleLabel = simpleForm.transferFeePayerOverride
-      ? 'Manual payer override'
-      : details.source === 'manual'
-        ? 'Manual override'
-        : details.source === 'default'
-          ? 'Settings default'
-          : details.source === 'provider'
-            ? 'Provider default'
-            : 'No fee rule';
-    const defaultPayer = details.senderPays ? 'sender' : 'recipient';
-    const alternatePayer = defaultPayer === 'sender' ? 'recipient' : 'sender';
-    const feeSummary = details.fee > 0
-      ? `${formatCurrency(details.fee)} · ${details.senderPays ? 'Sender pays' : 'Recipient pays'}`
-      : 'No fee';
-    return (
-      <div className="space-y-2">
-        <label className="block text-sm font-semibold text-[var(--color-text-primary)]">Transfer fee</label>
-        <button type="button" onClick={() => setTransferFeeControlsOpen((open) => !open)} className="flex w-full items-center justify-between gap-3 rounded-xl border-none bg-[var(--ref-surface-container-low)] px-3 py-3 text-left text-sm text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20" aria-expanded={transferFeeControlsOpen}>
-          <span className="min-w-0 truncate">{feeSummary}</span>
-          <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-[var(--color-accent)]">
-            <span className="group relative inline-flex" tabIndex={0} aria-label="Show transfer fee details">
-              <Info className="h-4 w-4" />
-              <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 hidden w-72 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs font-normal leading-relaxed text-[var(--color-text-primary)] shadow-lg group-hover:block group-focus-within:block">
-                {formatCurrency(details.fromAmount)} deducted from the source and {formatCurrency(details.toAmount)} received. Applied rule: {ruleLabel}.
-              </span>
-            </span>
-            <span>{transferFeeControlsOpen ? 'Done' : 'Adjust'}</span>
-          </span>
-        </button>
-        {transferFeeControlsOpen && <>
-          <div className="space-y-2 rounded-xl bg-[var(--ref-surface-container-low)] p-3">
-            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Override the fee or who incurs it for this transfer only.</p>
-            <Input label="Fee override (IDR)" type="number" min="0" step="1" value={simpleForm.transferAdminFee} onChange={(event) => setSimpleForm({ ...simpleForm, transferAdminFee: event.target.value })} placeholder={details.fee > 0 ? String(details.fee) : '0'} className="mt-2 rounded-xl" />
-            <Select label="Fee incurred by" value={simpleForm.transferFeePayerOverride === defaultPayer ? '' : simpleForm.transferFeePayerOverride} onChange={(event) => setSimpleForm({ ...simpleForm, transferFeePayerOverride: event.target.value as '' | 'sender' | 'recipient' })} options={[{ value: '', label: `${defaultPayer === 'sender' ? 'Sender' : 'Recipient'} (default)` }, { value: alternatePayer, label: alternatePayer === 'sender' ? 'Sender' : 'Recipient' }]} className="mt-2 rounded-xl" />
-          </div>
-        </>}
-      </div>
-    );
-  };
 
   return (
     <Modal
@@ -2527,7 +2481,17 @@ export function TransactionModal({
                   required
                 />
               </div>
-              {simpleForm.type === 'transfer' && <div className="md:absolute md:left-1/2 md:right-0 md:top-0 md:z-20">{renderTransferFeePanel()}</div>}
+              {simpleForm.type === 'transfer' && <div className="md:absolute md:left-1/2 md:right-0 md:top-0 md:z-20">
+                <TransferFeePanel
+                  details={calculateTransferDetails() as TransferFeeDetails | { error: string } | null}
+                  manualPayerOverride={simpleForm.transferFeePayerOverride}
+                  controlsOpen={transferFeeControlsOpen}
+                  transferAdminFee={simpleForm.transferAdminFee}
+                  onToggleControls={() => setTransferFeeControlsOpen((open) => !open)}
+                  onFeeChange={(value) => setSimpleForm({ ...simpleForm, transferAdminFee: value })}
+                  onPayerChange={(value) => setSimpleForm({ ...simpleForm, transferFeePayerOverride: value })}
+                />
+              </div>}
               {(simpleForm.type === 'expense' && isPaylaterAccount(simpleForm.fromAccountId)) && (
                 <>
                   {/* Installment Term */}

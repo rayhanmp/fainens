@@ -1,13 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
 import {
+  approvePendingTransaction,
+  bulkDeleteTransactions,
+  confirmTransactionImport,
+  createTransaction,
+  createTransportRouteTemplate,
+  deleteTransaction,
+  deleteTransportRouteTemplate,
   getTransaction,
   listPendingTransactions,
   listTransactions,
   listTransportRouteTemplates,
+  parsePendingTransaction,
+  rejectPendingTransaction,
+  reverseTransaction,
+  retryPendingTransaction,
+  updateTransaction,
+  updateTransportRouteTemplate,
   type ListTransactionsParams,
 } from "../../generated/client";
+import { api } from "../../lib/api";
 import { invalidateFinancialSummaries, queryKeys } from "../core/query-keys";
+import { unwrapGenerated } from "../core/generated-response";
 
 export function useTransactionList(filters: ListTransactionsParams = {}) {
   return useQuery({
@@ -68,31 +82,37 @@ function useRouteTemplateMutation<TInput>(mutationFn: (input: TInput) => Promise
 }
 
 export function useCreateTransportRouteTemplateMutation() {
-  return useRouteTemplateMutation((input: Parameters<typeof api.transportRouteTemplates.create>[0]) => api.transportRouteTemplates.create(input));
+  return useRouteTemplateMutation(async (input: Parameters<typeof createTransportRouteTemplate>[0]) => {
+    const result = await unwrapGenerated(createTransportRouteTemplate(input), 201, 'Failed to save route template');
+    return result.template;
+  });
 }
 
 export function useUpdateTransportRouteTemplateMutation() {
-  return useRouteTemplateMutation(({ id, data }: { id: number; data: Parameters<typeof api.transportRouteTemplates.update>[1] }) => api.transportRouteTemplates.update(id, data));
+  return useRouteTemplateMutation(async ({ id, data }: { id: number; data: Parameters<typeof updateTransportRouteTemplate>[1] }) => {
+    const result = await unwrapGenerated(updateTransportRouteTemplate(id, data), 200, 'Failed to update route template');
+    return result.template;
+  });
 }
 
 export function useDeleteTransportRouteTemplateMutation() {
-  return useRouteTemplateMutation((id: number) => api.transportRouteTemplates.delete(id));
+  return useRouteTemplateMutation((id: number) => unwrapGenerated(deleteTransportRouteTemplate(id), 204, 'Failed to delete route template'));
 }
 
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: Parameters<typeof api.transactions.create>[0]) => api.transactions.create(input), onSuccess: () => invalidateFinancialSummaries(queryClient) });
+  return useMutation({ mutationFn: (input: Parameters<typeof createTransaction>[0]) => unwrapGenerated(createTransaction(input), 201, 'Failed to create transaction'), onSuccess: () => invalidateFinancialSummaries(queryClient) });
 }
 
 export function useReverseTransaction() {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (id: number) => api.transactions.reverse(id), onSuccess: () => invalidateFinancialSummaries(queryClient) });
+  return useMutation({ mutationFn: (id: number) => unwrapGenerated(reverseTransaction(id), 201, 'Failed to reverse transaction'), onSuccess: () => invalidateFinancialSummaries(queryClient) });
 }
 
 export function useUpdateTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.transactions.update>[1] }) => api.transactions.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateTransaction>[1] }) => unwrapGenerated(updateTransaction(id, data), 200, 'Failed to update transaction'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -100,7 +120,7 @@ export function useUpdateTransaction() {
 export function useDeleteTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.transactions.delete(id),
+    mutationFn: (id: number) => unwrapGenerated(deleteTransaction(id), 204, 'Failed to delete transaction'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -108,7 +128,7 @@ export function useDeleteTransaction() {
 export function useBulkDeleteTransactions() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (ids: number[]) => api.transactions.bulkDelete(ids),
+    mutationFn: (ids: number[]) => unwrapGenerated(bulkDeleteTransactions({ ids }), 200, 'Failed to delete transactions'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -116,7 +136,7 @@ export function useBulkDeleteTransactions() {
 export function useImportTransactions() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.transactions.importConfirm>[0]) => api.transactions.importConfirm(input),
+    mutationFn: (input: Parameters<typeof confirmTransactionImport>[0]) => unwrapGenerated(confirmTransactionImport(input), 201, 'Failed to import transactions'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -125,7 +145,7 @@ type PendingTransactionParsed = Parameters<typeof api.pendingTransactions.create
 
 export function usePreviewPendingTransactionMutation() {
   return useMutation({
-    mutationFn: (message: string) => api.pendingTransactions.preview(message),
+    mutationFn: (message: string) => unwrapGenerated(parsePendingTransaction({ message }), 200, 'Failed to parse transaction'),
   });
 }
 
@@ -148,7 +168,7 @@ export function useUpdatePendingTransactionMutation() {
 export function useApprovePendingTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.pendingTransactions.approve(id),
+    mutationFn: (id: number) => unwrapGenerated(approvePendingTransaction(id), 200, 'Failed to approve transaction'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -156,7 +176,15 @@ export function useApprovePendingTransactionMutation() {
 export function useRejectPendingTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.pendingTransactions.reject(id),
+    mutationFn: (id: number) => unwrapGenerated(rejectPendingTransaction(id), 200, 'Failed to reject transaction'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
+  });
+}
+
+export function useRetryPendingTransactionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => unwrapGenerated(retryPendingTransaction(id), 200, 'Failed to retry transaction parsing'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
   });
 }

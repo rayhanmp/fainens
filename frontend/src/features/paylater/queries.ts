@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { getPaylaterObligations, listAccounts, settlePaylaterPayment, type SettlePaylaterPaymentBody } from '../../generated/client';
+import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type PaylaterPageData = {
-  obligations: Awaited<ReturnType<typeof api.paylater.obligations>>;
+  obligations: Awaited<ReturnType<typeof getPaylaterObligations>>['data'];
   accounts: Array<{ id: number; name: string; type: string; systemKey: string | null }>;
 };
 
@@ -13,8 +14,8 @@ export function usePaylaterQuery() {
     queryKey: queryKeys.paylater.all,
     queryFn: async () => {
       const [obligations, accounts] = await Promise.all([
-        api.paylater.obligations(),
-        api.accounts.list(),
+        unwrapGenerated(getPaylaterObligations(), 200, 'Failed to load PayLater obligations'),
+        unwrapGenerated(listAccounts(), 200, 'Failed to load accounts'),
       ]);
       return {
         obligations,
@@ -33,7 +34,7 @@ export function usePaylaterQuery() {
 export function useSettlePaylaterMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.paylater.settle>[0]) => api.paylater.settle(input),
+    mutationFn: (input: SettlePaylaterPaymentBody) => unwrapGenerated(settlePaylaterPayment(input), 201, 'Failed to settle PayLater payment'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

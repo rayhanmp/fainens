@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { listAccounts, listContacts } from '../../generated/client';
+import { unwrapGenerated } from '../core/generated-response';
 import { queryKeys } from '../core/query-keys';
 
 export type SplitLookups = {
@@ -12,7 +13,10 @@ export function useSplitLookupsQuery() {
   return useQuery<SplitLookups>({
     queryKey: queryKeys.split.all,
     queryFn: async () => {
-      const [accounts, contacts] = await Promise.all([api.accounts.list(), api.contacts.list()]);
+      const [accounts, contacts] = await Promise.all([
+        unwrapGenerated(listAccounts(), 200, 'Failed to load accounts'),
+        unwrapGenerated(listContacts(), 200, 'Failed to load contacts'),
+      ]);
       return {
         accounts: accounts
           .filter((account) => account.type === 'asset')

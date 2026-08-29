@@ -1,11 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import {
+  createContact,
+  createLoan,
+  deleteLoan,
+  getLoanSummary,
+  listContacts,
+  listLoans,
+  recordLoanPayment,
+  updateContact,
+  updateLoan,
+  type CreateContactBody,
+  type CreateLoanBody,
+  type RecordLoanPaymentBody,
+  type UpdateContactBody,
+  type UpdateLoanBody,
+} from '../../generated/client';
+import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 
 export type LoansPageData = {
-  loans: Awaited<ReturnType<typeof api.loans.list>>;
-  contacts: Awaited<ReturnType<typeof api.contacts.list>>;
-  summary: Awaited<ReturnType<typeof api.loans.summary>>;
+  loans: Awaited<ReturnType<typeof listLoans>>['data'];
+  contacts: Awaited<ReturnType<typeof listContacts>>['data'];
+  summary: Awaited<ReturnType<typeof getLoanSummary>>['data'];
 };
 
 /** Aggregates the records needed by the loans screen into one server-state query. */
@@ -14,10 +30,10 @@ export function useLoansQuery() {
     queryKey: queryKeys.loans.all,
     queryFn: async () => {
       const [activeLoans, repaidLoans, contacts, summary] = await Promise.all([
-        api.loans.list({ status: 'active' }),
-        api.loans.list({ status: 'repaid' }),
-        api.contacts.list(),
-        api.loans.summary(),
+        unwrapGenerated(listLoans({ status: 'active' }), 200, 'Failed to load active loans'),
+        unwrapGenerated(listLoans({ status: 'repaid' }), 200, 'Failed to load repaid loans'),
+        unwrapGenerated(listContacts(), 200, 'Failed to load contacts'),
+        unwrapGenerated(getLoanSummary(), 200, 'Failed to load loan summary'),
       ]);
       return { loans: [...activeLoans, ...repaidLoans], contacts, summary };
     },
@@ -28,7 +44,7 @@ export function useLoansQuery() {
 export function useDeleteLoanMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api.loans.delete(id),
+    mutationFn: (id: number) => unwrapGenerated(deleteLoan(id), 204, 'Failed to delete loan'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -36,7 +52,7 @@ export function useDeleteLoanMutation() {
 export function useCreateLoanMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.loans.create>[0]) => api.loans.create(input),
+    mutationFn: (input: CreateLoanBody) => unwrapGenerated(createLoan(input), 201, 'Failed to create loan'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -44,7 +60,7 @@ export function useCreateLoanMutation() {
 export function useRecordLoanPaymentMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.loans.recordPayment>[1] }) => api.loans.recordPayment(id, data),
+    mutationFn: ({ id, data }: { id: number; data: RecordLoanPaymentBody }) => unwrapGenerated(recordLoanPayment(id, data), 201, 'Failed to record loan payment'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -52,7 +68,7 @@ export function useRecordLoanPaymentMutation() {
 export function useUpdateLoanMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.loans.update>[1] }) => api.loans.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: UpdateLoanBody }) => unwrapGenerated(updateLoan(id, data), 200, 'Failed to update loan'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -60,7 +76,7 @@ export function useUpdateLoanMutation() {
 export function useCreateContactMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof api.contacts.create>[0]) => api.contacts.create(input),
+    mutationFn: (input: CreateContactBody) => unwrapGenerated(createContact(input), 201, 'Failed to create contact'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -68,7 +84,7 @@ export function useCreateContactMutation() {
 export function useUpdateContactMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.contacts.update>[1] }) => api.contacts.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: UpdateContactBody }) => unwrapGenerated(updateContact(id, data), 200, 'Failed to update contact'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

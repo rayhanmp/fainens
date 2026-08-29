@@ -1,7 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { getDashboardAnalytics } from '../../generated/client';
+import {
+  getBudgetOutlook,
+  getDashboardAnalytics,
+  getPaylaterObligations,
+  listBudgets,
+  listLoans,
+  listReconciliation,
+  listSubscriptions,
+  listTransactions,
+} from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { api } from '../../lib/api';
+import { unwrapGenerated } from '../core/generated-response';
 
 export const useDashboardQuery = () => useQuery({
   queryKey: queryKeys.dashboard.analytics,
@@ -15,7 +25,7 @@ export const useDashboardQuery = () => useQuery({
 export function useDashboardOverviewQuery() {
   return useQuery({
     queryKey: queryKeys.dashboard.analytics,
-    queryFn: () => api.analytics.dashboard(),
+    queryFn: () => unwrapGenerated(getDashboardAnalytics(), 200, 'Failed to load dashboard analytics'),
     placeholderData: (previous) => previous,
   });
 }
@@ -23,7 +33,7 @@ export function useDashboardOverviewQuery() {
 export function useDashboardReconciliationQuery(limit = 1) {
   return useQuery({
     queryKey: [...queryKeys.dashboard.reconciliation, limit] as const,
-    queryFn: () => api.accounts.reconciliationHistory(limit),
+    queryFn: () => unwrapGenerated(listReconciliation({ limit: String(limit) }), 200, 'Failed to load reconciliation history'),
     placeholderData: (previous) => previous,
   });
 }
@@ -31,7 +41,7 @@ export function useDashboardReconciliationQuery(limit = 1) {
 export function useDashboardLoansQuery() {
   return useQuery({
     queryKey: queryKeys.dashboard.loans,
-    queryFn: () => api.loans.list(),
+    queryFn: () => unwrapGenerated(listLoans(), 200, 'Failed to load loans'),
     placeholderData: (previous) => previous,
   });
 }
@@ -39,7 +49,7 @@ export function useDashboardLoansQuery() {
 export function useDashboardPayLaterQuery() {
   return useQuery({
     queryKey: queryKeys.dashboard.paylater,
-    queryFn: () => api.paylater.obligations(),
+    queryFn: () => unwrapGenerated(getPaylaterObligations(), 200, 'Failed to load PayLater obligations'),
     placeholderData: (previous) => previous,
   });
 }
@@ -47,7 +57,7 @@ export function useDashboardPayLaterQuery() {
 export function useDashboardSubscriptionsQuery() {
   return useQuery({
     queryKey: queryKeys.dashboard.subscriptions,
-    queryFn: () => api.subscriptions.list(),
+    queryFn: () => unwrapGenerated(listSubscriptions(), 200, 'Failed to load subscriptions'),
     placeholderData: (previous) => previous,
   });
 }
@@ -63,19 +73,19 @@ export function useDashboardPeriodQueries(periodId: number | null) {
   });
   const budget = useQuery({
     queryKey: [...queryKeys.dashboard.period(periodKey), 'budget'] as const,
-    queryFn: () => api.budgets.list(String(periodId!)),
+    queryFn: () => unwrapGenerated(listBudgets({ periodId: String(periodId!) }), 200, 'Failed to load period budget'),
     enabled,
     placeholderData: (previous) => previous,
   });
   const recent = useQuery({
     queryKey: [...queryKeys.dashboard.period(periodKey), 'recent'] as const,
-    queryFn: () => api.transactions.list({ periodId: String(periodId!), limit: '12' }),
+    queryFn: () => unwrapGenerated(listTransactions({ periodId: String(periodId!), limit: '12' }), 200, 'Failed to load recent activity'),
     enabled,
     placeholderData: (previous) => previous,
   });
   const outlook = useQuery({
     queryKey: [...queryKeys.dashboard.period(periodKey), 'outlook'] as const,
-    queryFn: () => api.budgets.outlook(periodId!),
+    queryFn: () => unwrapGenerated(getBudgetOutlook(periodId!), 200, 'Failed to load budget outlook'),
     enabled,
     placeholderData: (previous) => previous,
   });
