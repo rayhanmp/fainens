@@ -801,7 +801,11 @@ function AgentPage() {
   const accountsQuery = useAccountsLedgerQuery();
   const [startupSelection, setStartupSelection] = useState<StartupSelection>(() => createStartupSelection());
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  // The active conversation is session state, not server data. Keep one
+  // authoritative value so the composer, detail query, and sidebar cannot
+  // drift apart while switching chats or starting a new one.
+  const activeConversationId = useAgentSessionStore((state) => state.activeConversationId);
+  const setActiveConversationId = useAgentSessionStore((state) => state.setActiveConversationId);
   const conversationQuery = useAgentConversationQuery(activeConversationId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -809,7 +813,10 @@ function AgentPage() {
   const [previewImage, setPreviewImage] = useState<ChatImage | null>(null);
   const [isDraggingImages, setIsDraggingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
+  const streamStatus = useAgentSessionStore((state) => state.streamStatus);
+  const setSessionStreamStatus = useAgentSessionStore((state) => state.setStreamStatus);
+  const isSending = streamStatus === 'streaming' || streamStatus === 'cancelling';
+  const setIsSending = (sending: boolean) => setSessionStreamStatus(sending ? 'streaming' : 'idle');
   const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [activityTimeline, setActivityTimeline] = useState<AgentActivityStep[]>([]);
   const [copiedAssistantId, setCopiedAssistantId] = useState<string | null>(null);
@@ -877,22 +884,12 @@ function AgentPage() {
   // The page keeps its rich streaming view state locally, while these small
   // selectors make the durable draft and transient session lifecycle visible
   // to other agent UI components without putting server facts in Zustand.
-  const setSessionConversationId = useAgentSessionStore((state) => state.setActiveConversationId);
-  const setSessionStreamStatus = useAgentSessionStore((state) => state.setStreamStatus);
   const setSessionAttachmentIds = useAgentSessionStore((state) => state.setPendingAttachmentIds);
   const persistDraft = useDraftStore((state) => state.setDraft);
   const clearDraft = useDraftStore((state) => state.clearDraft);
   const draftKey = `agent:${activeConversationId ?? 'new'}`;
   const storedDraft = useDraftStore((state) => state.drafts[draftKey]?.value ?? '');
   const lastDraftKeyRef = useRef(draftKey);
-
-  useEffect(() => {
-    setSessionConversationId(activeConversationId);
-  }, [activeConversationId, setSessionConversationId]);
-
-  useEffect(() => {
-    setSessionStreamStatus(isSending ? 'streaming' : 'idle');
-  }, [isSending, setSessionStreamStatus]);
 
   useEffect(() => {
     setSessionAttachmentIds(pendingImages.map((image) => image.id));
@@ -922,7 +919,9 @@ function AgentPage() {
   useEffect(() => () => {
     if (messageActionHoldTimerRef.current != null) window.clearTimeout(messageActionHoldTimerRef.current);
     if (conversationLoadMoreTimerRef.current != null) window.clearTimeout(conversationLoadMoreTimerRef.current);
-  }, []);
+    agentRequestRef.current?.abort();
+    setSessionStreamStatus('idle');
+  }, [setSessionStreamStatus]);
 
   useEffect(() => {
     if (openConversationMenuId == null) return undefined;

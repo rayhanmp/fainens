@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type StreamStatus = "idle" | "streaming" | "cancelling" | "failed";
+export type StreamStatus = "idle" | "streaming" | "cancelling" | "failed";
 type AgentSessionStore = {
   activeConversationId: number | null;
   streamStatus: StreamStatus;
@@ -8,6 +8,7 @@ type AgentSessionStore = {
   setActiveConversationId: (id: number | null) => void;
   setStreamStatus: (status: StreamStatus) => void;
   setPendingAttachmentIds: (ids: string[]) => void;
+  reset: () => void;
 };
 
 /** Intentionally transient: messages and conversation facts remain React Query data. */
@@ -18,4 +19,5 @@ export const useAgentSessionStore = create<AgentSessionStore>((set) => ({
   setActiveConversationId: (activeConversationId) => set({ activeConversationId }),
   setStreamStatus: (streamStatus) => set({ streamStatus }),
   setPendingAttachmentIds: (pendingAttachmentIds) => set({ pendingAttachmentIds }),
+  reset: () => set({ activeConversationId: null, streamStatus: "idle", pendingAttachmentIds: [] }),
 }));
