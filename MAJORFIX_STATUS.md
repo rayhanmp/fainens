@@ -406,6 +406,10 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Agent proposal validation, status labels, amount/allocation scaling, journal-line balancing, and transaction draft conversion live in `frontend/src/features/agent/proposal-utils.ts`; transaction modal date/default helpers live in `frontend/src/features/transactions/modal-helpers.ts`. The route and modal retain presentation/interaction responsibilities while the pure feature logic is independently reusable.
 - The normal pnpm wrapper may still be unavailable in environments enforcing the existing minimum-release-age policy. The installed Node/Orval binaries were used for generation without changing dependency resolution.
 
+### `a65864f` — transaction form controller extraction
+
+- The transaction modal's server-facing simple form now comes from `useSimpleTransactionForm` in the transactions feature. React Hook Form setup, recoverable defaults, field updates, and validation stay in the feature boundary while map, attachment, and presentation state remains local to the modal.
+
 ### `74a9163` — complete route-contract coverage checkpoint
 
 - The contract-only app registry now exposes **146 paths and 188 operations**. Every application-owned operation has an explicit stable `operationId`; the only unlabeled operation is the redirect route generated internally by `@fastify/oauth2` (`/api/auth/google`).
