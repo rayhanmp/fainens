@@ -19,7 +19,16 @@ export default async function (fastify: FastifyInstance) {
   fastify.get("/api/tags", {
     schema: { operationId: "listTags", tags: ["categories"], response: { 200: z.array(tagSchema) } },
   }, async () => {
-    const allTags = await db.select().from(tags);
+    const allTags = await db
+      .select({
+        id: tags.id,
+        name: tags.name,
+        color: tags.color,
+        usageCount: sql<number>`count(${transactionTags.transactionId})`,
+      })
+      .from(tags)
+      .leftJoin(transactionTags, eq(tags.id, transactionTags.tagId))
+      .groupBy(tags.id, tags.name, tags.color);
     return allTags;
   });
 

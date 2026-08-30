@@ -80,7 +80,13 @@ const transactionListResponseSchema = z.object({
     offset: z.number().int(),
     hasMore: z.boolean(),
   }).passthrough(),
-  summary: z.object({ expenseCents: z.number(), incomeCents: z.number() }).passthrough(),
+  summary: z.object({
+    expenseCents: z.number(),
+    incomeCents: z.number(),
+    averageExpenseCents: z.number().optional(),
+    largestExpenseCents: z.number().optional(),
+    topCategoryName: z.string().nullable().optional(),
+  }).passthrough(),
 }).passthrough();
 const transactionListQuerySchema = z.object({
   startDate: z.string().optional(),
@@ -450,6 +456,85 @@ function activityKindCondition(kind: string): SQL | null {
 /** The largest journal line is a display/filter convenience, not a statement calculation. */
 const transactionDisplayAmount = sql<number>`coalesce((select max(case when amount_line.debit > amount_line.credit then amount_line.debit else amount_line.credit end) from transaction_line amount_line where amount_line.transaction_id = ${transactions.id}), 0)`;
 
+type TransactionInsights = {
+  averageExpenseCents: number;
+  largestExpenseCents: number;
+  topCategoryName: string | null;
+};
+
+/**
+ * Calculate insight values across the complete filtered result set. The list
+ * endpoint is paginated, so these must not be derived from the current page.
+ */
+async function fetchTransactionInsights(whereCondition: SQL | undefined): Promise<TransactionInsights> {
+  const expenseRows = await db
+    .select({
+      transactionId: transactions.id,
+      expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
+      legacyCategoryName: categories.name,
+    })
+    .from(transactions)
+    .leftJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
+    .leftJoin(accounts, eq(transactionLines.accountId, accounts.id))
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(whereCondition || sql`1=1`)
+    .groupBy(transactions.id, categories.name);
+
+  const allocationRows = await db
+    .select({
+      transactionId: transactionCategoryAllocations.transactionId,
+      categoryName: categories.name,
+      amount: transactionCategoryAllocations.amount,
+    })
+    .from(transactionCategoryAllocations)
+    .innerJoin(transactions, eq(transactionCategoryAllocations.transactionId, transactions.id))
+    .innerJoin(categories, eq(transactionCategoryAllocations.categoryId, categories.id))
+    .where(whereCondition || sql`1=1`);
+
+  const allocationsByTransactionId = new Map<number, typeof allocationRows>();
+  for (const row of allocationRows) {
+    const rows = allocationsByTransactionId.get(row.transactionId) ?? [];
+    rows.push(row);
+    allocationsByTransactionId.set(row.transactionId, rows);
+  }
+
+  const categoryTotals = new Map<string, number>();
+  let expenseTotal = 0;
+  let expenseCount = 0;
+  let largestExpense = 0;
+
+  for (const row of expenseRows) {
+    const expenseCents = Math.max(0, Number(row.expenseCents ?? 0));
+    if (expenseCents === 0) continue;
+
+    expenseTotal += expenseCents;
+    expenseCount += 1;
+    largestExpense = Math.max(largestExpense, expenseCents);
+
+    const allocations = allocationsByTransactionId.get(row.transactionId) ?? [];
+    if (allocations.length > 0) {
+      for (const allocation of allocations) {
+        const amount = Math.max(0, Number(allocation.amount ?? 0));
+        if (amount === 0) continue;
+        const categoryName = allocation.categoryName ?? 'Unallocated';
+        categoryTotals.set(categoryName, (categoryTotals.get(categoryName) ?? 0) + amount);
+      }
+    } else {
+      const categoryName = row.legacyCategoryName ?? 'Unallocated';
+      categoryTotals.set(categoryName, (categoryTotals.get(categoryName) ?? 0) + expenseCents);
+    }
+  }
+
+  const topCategoryName = [...categoryTotals.entries()]
+    .sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
+
+  return {
+    averageExpenseCents: expenseCount > 0 ? Math.round(expenseTotal / expenseCount) : 0,
+    largestExpenseCents: largestExpense,
+    topCategoryName,
+  };
+}
+
 // Fetch transaction details (lines and tags) in bulk to avoid N+1
 async function fetchTransactionDetails(txIds: number[]) {
   if (txIds.length === 0) {
@@ -782,12 +867,13 @@ RULES:
     };
 
     const whereCondition = baseConditions.length > 0 ? and(...baseConditions) : undefined;
-    const [countRows, summaryRows] = await Promise.all([
+    const [countRows, summaryRows, transactionInsights] = await Promise.all([
       db.select({ count: count() }).from(transactions).where(whereCondition || sql`1=1`),
       db.select({
         expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
         incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${transactionLines.credit} - ${transactionLines.debit} else 0 end), 0)`,
       }).from(transactions).innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId)).innerJoin(accounts, eq(transactionLines.accountId, accounts.id)).where(whereCondition || sql`1=1`),
+      fetchTransactionInsights(whereCondition),
     ]);
     const totalCount = countRows[0]?.count || 0;
     const orderBy = sort === 'oldest'
@@ -822,6 +908,7 @@ RULES:
       summary: {
         expenseCents: Number(summaryRows[0]?.expenseCents ?? 0),
         incomeCents: Number(summaryRows[0]?.incomeCents ?? 0),
+        ...transactionInsights,
       },
     };
   });

@@ -389,6 +389,36 @@ export const cacheInvalidationOutbox = sqliteTable("cache_invalidation_outbox", 
   statusIdx: index("idx_cache_invalidation_outbox_status").on(table.status, table.createdAt),
 }));
 
+/** Durable receipt for asynchronous, non-financial work.  Financial records
+ * remain in their domain tables and must never rely on a BullMQ job as their
+ * only source of truth.  The task row lets the dispatcher recover a job when
+ * SQLite commits successfully but Redis is temporarily unavailable. */
+export const backgroundTasks: any = sqliteTable("background_task", {
+  id: text("id").primaryKey(),
+  queueName: text("queue_name").notNull(),
+  jobName: text("job_name").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  ownerEmail: text("owner_email"),
+  subjectType: text("subject_type"),
+  subjectId: text("subject_id"),
+  payloadJson: text("payload_json").notNull().default("{}"),
+  resultJson: text("result_json"),
+  status: text("status").notNull().default("queued"), // queued | running | retrying | completed | failed | cancelled
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  availableAt: integer("available_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  completedAt: integer("completed_at", { mode: "timestamp_ms" }),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  dedupeIdx: uniqueIndex("idx_background_task_queue_dedupe").on(table.queueName, table.dedupeKey),
+  statusIdx: index("idx_background_task_status_available").on(table.status, table.availableAt),
+  ownerIdx: index("idx_background_task_owner_created").on(table.ownerEmail, table.createdAt),
+  subjectIdx: index("idx_background_task_subject").on(table.subjectType, table.subjectId),
+}));
+
 export const auditLogs = sqliteTable("audit_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   entityType: text("entity_type").notNull(),
@@ -688,11 +718,36 @@ export const agentMessages = sqliteTable("agent_message", {
   role: text("role").notNull(), // user | assistant
   content: text("content").notNull(),
   responseJson: text("response_json"),
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
+  totalTokens: integer("total_tokens"),
+  estimatedCostUsd: real("estimated_cost_usd"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
 }, (table) => ({
   conversationCreatedIdx: index("idx_agent_message_conversation_created").on(table.conversationId, table.createdAt),
+}));
+
+/** Image attachments retained with an Agent user message for conversation reloads. */
+export const agentMessageAttachments = sqliteTable("agent_message_attachment", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  messageId: integer("message_id")
+    .notNull()
+    .references(() => agentMessages.id, { onDelete: "cascade" }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => agentConversations.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  mimetype: text("mimetype").notNull(),
+  r2Key: text("r2_key").notNull(),
+  fileSize: integer("file_size").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  messageIdIdx: index("idx_agent_message_attachment_message_id").on(table.messageId),
+  conversationIdIdx: index("idx_agent_message_attachment_conversation_id").on(table.conversationId),
 }));
 
 /**

@@ -73,6 +73,7 @@ import {
 import type { PendingTransactionParsed } from '../../features/transactions/queries';
 import { useCalculatePaylaterScheduleMutation, usePaylaterQuery, useRecognizePaylaterMutation, useSettlePaylaterMutation } from '../../features/paylater/queries';
 import { useAttachmentDownload, useAttachmentsQuery, useDeleteAttachmentMutation } from '../../features/attachments/queries';
+import { TagPicker, type TagRow } from './TagPicker';
 
 export type WalletAccount = {
   id: number;
@@ -89,8 +90,6 @@ export type CategoryRow = {
   icon?: string | null;
   color?: string | null;
 };
-
-export type TagRow = { id: number; name: string; color: string };
 
 type TransportRouteTemplate = {
   id: number;
@@ -115,6 +114,8 @@ type TxLine = {
   debit: number;
   credit: number;
   description?: string;
+  accountName?: string | null;
+  accountType?: string | null;
   cashFlowClass?: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null;
 };
 
@@ -1333,9 +1334,23 @@ export function TransactionModal({
     if (viewMode) {
       const category = editingTransaction.categoryId ? categories.find(c => c.id === editingTransaction.categoryId) : null;
       const amount = editingTransaction.lines?.length ? Math.max(...editingTransaction.lines.map(l => Math.max(l.debit, l.credit))) : 0;
-      const isTransfer = editingTransaction.txType?.includes('transfer');
-      const isExpense = editingTransaction.txType?.includes('expense');
-      const isIncome = editingTransaction.txType?.includes('income');
+      const accountForLine = (line: TxLine) => accounts.find((account) => account.id === line.accountId);
+      const hasExpenseLine = editingTransaction.lines.some((line) =>
+        (accountForLine(line)?.type ?? line.accountType) === 'expense' && line.debit > line.credit,
+      );
+      const hasIncomeLine = editingTransaction.lines.some((line) =>
+        (accountForLine(line)?.type ?? line.accountType) === 'revenue' && line.credit > line.debit,
+      );
+      const cashWalletLines = editingTransaction.lines.filter((line) =>
+        accountForLine(line)?.liquidityClass === 'cash_equivalent',
+      );
+      const isTransfer = editingTransaction.txType?.includes('transfer') || (
+        editingTransaction.lines.length === 2 && cashWalletLines.length === 2
+      );
+      // Agent-posted journals have txType "manual". Infer their display type
+      // from the balanced ledger lines so the wallet (for example BNI) remains visible.
+      const isExpense = !isTransfer && (editingTransaction.txType?.includes('expense') || hasExpenseLine);
+      const isIncome = !isTransfer && (editingTransaction.txType?.includes('income') || hasIncomeLine);
       const detailDate = editMeta.date
         ? new Date(`${editMeta.date}T${editMeta.time || '00:00'}:00`)
         : new Date(editingTransaction.date);
@@ -1346,7 +1361,8 @@ export function TransactionModal({
         if (isIncome) return l.debit > 0;
         return false;
       });
-      const account = walletAccount ? accounts.find(a => a.id === walletAccount.accountId) : null;
+      const account = walletAccount ? accountForLine(walletAccount) : null;
+      const accountName = account?.name ?? walletAccount?.accountName ?? null;
       
       // For transfer, we need both accounts
       const fromAccount = accounts.find(a => editingTransaction.lines[0]?.accountId === a.id);
@@ -1603,8 +1619,8 @@ export function TransactionModal({
                     <div className="p-1 bg-[var(--color-primary-container)]/10 text-[var(--color-primary)] rounded-md">
                       <Landmark className="w-3.5 h-3.5" />
                     </div>
-                    {account ? (
-                      <p className="font-headline font-semibold text-base">{account.name}</p>
+                    {accountName ? (
+                      <p className="font-headline font-semibold text-base">{accountName}</p>
                     ) : (
                       <span className="text-[var(--color-muted)] text-sm">—</span>
                     )}
@@ -1615,7 +1631,7 @@ export function TransactionModal({
                 {/* Tags */}
                 <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
                   <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Tags</p>
-                  {activeDetailField === 'tags' ? <div className="flex flex-wrap gap-1.5 pt-1">{tags.map((tag) => <button key={tag.id} type="button" onClick={() => setEditMeta({ ...editMeta, tagIds: editMeta.tagIds.includes(tag.id) ? editMeta.tagIds.filter((id) => id !== tag.id) : [...editMeta.tagIds, tag.id] })} className={cn('rounded-full border px-2 py-1 text-xs font-semibold transition-colors', editMeta.tagIds.includes(tag.id) ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white' : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--color-text-secondary)]')}>{tag.name}</button>)}<button type="button" onClick={() => setActiveDetailField(null)} className="px-1.5 text-xs font-bold text-[var(--ref-primary)]">Done</button></div> : <button type="button" onClick={() => setActiveDetailField('tags')} className="group flex flex-wrap items-center gap-1.5 text-left">{editMeta.tagIds.length > 0 ? tags.filter((tag) => editMeta.tagIds.includes(tag.id)).map((tag) => <span key={tag.id} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-secondary)]">{tag.name}</span>) : <span className="text-sm text-[var(--color-muted)]">Add tags</span>}<Pencil className="h-3.5 w-3.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
+                  {activeDetailField === 'tags' ? <div className="pt-1"><TagPicker tags={tags} selectedTagIds={editMeta.tagIds} onChange={(tagIds) => setEditMeta({ ...editMeta, tagIds })} /><button type="button" onClick={() => setActiveDetailField(null)} className="mt-2 px-1.5 text-xs font-bold text-[var(--ref-primary)]">Done</button></div> : <button type="button" onClick={() => setActiveDetailField('tags')} className="group flex flex-wrap items-center gap-1.5 text-left">{editMeta.tagIds.length > 0 ? tags.filter((tag) => editMeta.tagIds.includes(tag.id)).map((tag) => <span key={tag.id} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-secondary)]">{tag.name}</span>) : <span className="text-sm text-[var(--color-muted)]">Add tags</span>}<Pencil className="h-3.5 w-3.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                 </div>
 
                 {/* Location */}
@@ -1893,31 +1909,7 @@ export function TransactionModal({
                 <TagIcon className="w-3.5 h-3.5" />
                 Tags
               </label>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => {
-                      const next = editMetadataTagIds.includes(tag.id)
-                        ? editMetadataTagIds.filter((id) => id !== tag.id)
-                        : [...editMetadataTagIds, tag.id];
-                      editMetadataForm.setValue('tagIds', next, { shouldDirty: true });
-                    }}
-                    className={cn(
-                      'cursor-pointer px-2.5 py-1 text-xs rounded-full border transition-all',
-                      editMetadataTagIds.includes(tag.id)
-                        ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)] shadow-sm'
-                        : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/40 bg-[var(--ref-surface-container)]',
-                    )}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-                {tags.length === 0 && (
-                  <span className="text-xs text-[var(--color-muted)]">No tags available</span>
-                )}
-              </div>
+              <TagPicker tags={tags} selectedTagIds={editMetadataTagIds} onChange={(tagIds) => editMetadataForm.setValue('tagIds', tagIds, { shouldDirty: true })} />
             </div>
 
             {/* Notes - Full Width */}
@@ -1970,15 +1962,12 @@ export function TransactionModal({
         <button
           type="button"
           onClick={() => {
-            if (inputMode === 'simple') setInputMode('ai');
-            else if (inputMode === 'ai') setInputMode('journal');
-            else setInputMode('simple');
+            setInputMode(inputMode === 'simple' ? 'journal' : 'simple');
           }}
           className="cursor-pointer group inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
-          title="Cycle through input modes"
+          title="Switch between simple and journal entry"
         >
-          {inputMode === 'simple' && <><Sparkles className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> AI</>}
-          {inputMode === 'ai' && <><Calculator className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> Journal</>}
+          {inputMode === 'simple' && <><Calculator className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> Journal</>}
           {inputMode === 'journal' && <><ArrowRightLeft className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> Simple</>}
         </button>
       }
@@ -2166,29 +2155,7 @@ export function TransactionModal({
                 <label className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 block">
                   Tags
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      onClick={() => {
-                        const next = journalValues.tagIds.includes(tag.id)
-                          ? journalValues.tagIds.filter((id) => id !== tag.id)
-                          : [...journalValues.tagIds, tag.id];
-                        journalForm.setValue('tagIds', next, { shouldDirty: true });
-                      }}
-                      className={cn(
-                        'cursor-pointer px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
-                        journalValues.tagIds.includes(tag.id)
-                          ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                          : 'border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)]',
-                      )}
-                    >
-                      <TagIcon className="w-3 h-3 inline mr-1" />
-                      {tag.name}
-                    </button>
-                  ))}
-                </div>
+                <TagPicker tags={tags} selectedTagIds={journalValues.tagIds} onChange={(tagIds) => journalForm.setValue('tagIds', tagIds, { shouldDirty: true })} />
               </div>
             </div>
           </div>
@@ -2970,29 +2937,7 @@ export function TransactionModal({
                   <label className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 block">
                     Tags
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => {
-                          const newTagIds = simpleForm.tagIds.includes(tag.id)
-                            ? simpleForm.tagIds.filter((id) => id !== tag.id)
-                            : [...simpleForm.tagIds, tag.id];
-                          setSimpleForm({ ...simpleForm, tagIds: newTagIds });
-                        }}
-                        className={cn(
-                          'px-3 py-1.5 text-xs rounded-full border-2 transition-colors',
-                          simpleForm.tagIds.includes(tag.id)
-                            ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                            : 'border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--ref-surface-container)] hover:border-[var(--color-accent)]/30',
-                        )}
-                      >
-                        <TagIcon className="w-3 h-3 inline mr-1" />
-                        {tag.name}
-                      </button>
-                    ))}
-                  </div>
+                  <TagPicker tags={tags} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
                 </div>
               ) : (
                 <p className="text-xs text-[var(--color-text-secondary)]">

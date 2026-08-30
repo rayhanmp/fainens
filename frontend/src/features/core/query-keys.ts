@@ -11,7 +11,7 @@ export const queryKeys = {
     detail: (id: number) => ["transactions", "detail", id] as const,
     routeTemplates: ["transactions", "route-templates"] as const,
   },
-  budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const, comparison: (periodId: number, comparePeriodId: number) => ["budgets", "comparison", periodId, comparePeriodId] as const, templates: ["budgets", "templates"] as const },
+  budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const, review: (periodId: number) => ["budgets", periodId, "outlook", "review"] as const, comparison: (periodId: number, comparePeriodId: number) => ["budgets", "comparison", periodId, comparePeriodId] as const, templates: ["budgets", "templates"] as const },
   loans: { all: ["loans"] as const, list: (filters: object = {}) => ["loans", "list", filters] as const, summary: ["loans", "summary"] as const },
   contacts: { all: ["contacts"] as const, list: (filters: object = {}) => ["contacts", "list", filters] as const, detail: (id: number) => ["contacts", id] as const },
   subscriptions: { all: ["subscriptions"] as const, list: ["subscriptions", "list"] as const },
@@ -46,7 +46,8 @@ export const queryKeys = {
     spendingTrend: (scope: "30d" | "period", periodId: number | null) => ["analytics", "spending-trend", scope, periodId] as const,
     periodSummaries: ["analytics", "period-summaries"] as const,
   },
-  agent: { all: ["agent"] as const, conversations: (archived = false) => ["agent", "conversations", { archived }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const, profile: ["agent", "profile"] as const },
+  agent: { all: ["agent"] as const, conversations: (archived = false, timezoneOffsetMinutes = 0) => ["agent", "conversations", { archived, timezoneOffsetMinutes }] as const, conversation: (id: number) => ["agent", "conversation", id] as const, memories: ["agent", "memories"] as const, profile: ["agent", "profile"] as const },
+  jobs: { all: ["jobs"] as const, detail: (id: string) => ["jobs", id] as const, list: (filters: object = {}) => ["jobs", "list", filters] as const },
   insights: { all: ["insights"] as const, latest: (type: "dashboard" | "budget", periodId: number | null) => ["insights", type, periodId] as const },
 } as const;
 

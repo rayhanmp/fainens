@@ -3,10 +3,13 @@ import { bootstrapDb } from "./db/migrate";
 import { closeRedisConnection, getRedisClient } from "./cache/redis";
 import { precomputeEverything } from "./cache/precompute";
 import { processCacheInvalidationOutbox } from "./services/cache-invalidation-outbox";
+import { processStorageDeletionOutbox } from "./services/storage-cleanup";
+import { processDueBackgroundTasks } from "./services/background-tasks";
 import { processDueSubscriptionRenewals } from "./services/subscription-renewals";
 import { db } from "./db/client";
 import { env } from "./lib/env";
-import { enqueueMaintenance } from "./jobs/queue";
+import { enqueueMaintenance, enqueueRecurring, maintenanceQueue } from "./jobs/queue";
+import { configureJobSchedulers } from "./jobs/schedulers";
 
 async function start() {
   const app = await buildApp();
@@ -21,12 +24,14 @@ async function start() {
   try {
     await bootstrapDb();
     getRedisClient();
-    app.log.info("Precomputing analytics...");
-    try {
-      await precomputeEverything();
-      app.log.info("Analytics precomputed successfully");
-    } catch (err) {
-      app.log.warn({ err }, "Analytics precompute skipped; API will compute on demand");
+    if (env.JOB_RUNNER_MODE !== "queue") {
+      app.log.info("Precomputing analytics...");
+      try {
+        await precomputeEverything();
+        app.log.info("Analytics precomputed successfully");
+      } catch (err) {
+        app.log.warn({ err }, "Analytics precompute skipped; API will compute on demand");
+      }
     }
     const runCacheOutbox = async () => {
       try {
@@ -47,15 +52,41 @@ async function start() {
         if (result.posted) app.log.info({ result }, "salary posted");
       } catch (err) { app.log.warn({ err }, "salary posting failed"); }
     };
+    const runStorageCleanup = async () => {
+      try {
+        const result = await processStorageDeletionOutbox();
+        if (result.processed || result.failed) app.log.info({ storageCleanup: result }, "storage deletion outbox processed");
+      } catch (err) { app.log.warn({ err }, "storage deletion outbox failed"); }
+    };
+    const runBackgroundTasks = async () => {
+      try {
+        const result = await processDueBackgroundTasks();
+        if (result.processed || result.failed) app.log.info({ backgroundTasks: result }, "agent background tasks processed");
+      } catch (err) { app.log.warn({ err }, "agent background tasks failed"); }
+    };
     if (env.JOB_RUNNER_MODE === "queue") {
-      app.log.info("BullMQ background mode enabled; start `pnpm --filter backend worker` separately");
-      await Promise.all([enqueueMaintenance("cache-invalidation-outbox"), enqueueMaintenance("subscription-renewals"), enqueueMaintenance("salary-posting")]);
-      intervals.push(setInterval(() => void enqueueMaintenance("cache-invalidation-outbox"), 60_000));
-      intervals.push(setInterval(() => void enqueueMaintenance("subscription-renewals"), 60 * 60 * 1000));
-      intervals.push(setInterval(() => void enqueueMaintenance("salary-posting"), 60 * 60 * 1000));
+      app.log.info("BullMQ background mode enabled; scheduler and worker own background execution");
+      try {
+        await configureJobSchedulers();
+        await Promise.all([
+          enqueueMaintenance("dispatch-background-tasks"),
+          enqueueMaintenance("cache-invalidation-outbox"),
+          enqueueMaintenance("storage-deletion-outbox"),
+          maintenanceQueue.add("precompute-warmup", undefined, { jobId: "maintenance:precompute-warmup" }),
+          enqueueRecurring("subscription-renewals"),
+          enqueueRecurring("salary-posting"),
+        ]);
+      } catch (err) {
+        // SQLite remains authoritative. If Redis is down, keep the API online
+        // for normal financial reads/writes and let the worker/dispatcher
+        // recover the durable outboxes and tasks once Redis returns.
+        app.log.warn({ err }, "BullMQ unavailable; background work will be retried by the worker");
+      }
     } else {
-      await Promise.all([runCacheOutbox(), runRenewals(), runSalaryPosting()]);
+      await Promise.all([runCacheOutbox(), runStorageCleanup(), runRenewals(), runSalaryPosting(), runBackgroundTasks()]);
       intervals.push(setInterval(() => void runCacheOutbox(), 60_000));
+      intervals.push(setInterval(() => void runStorageCleanup(), 5 * 60_000));
+      intervals.push(setInterval(() => void runBackgroundTasks(), 30_000));
       intervals.push(setInterval(() => void runRenewals(), 60 * 60 * 1000));
       intervals.push(setInterval(() => void runSalaryPosting(), 60 * 60 * 1000));
     }

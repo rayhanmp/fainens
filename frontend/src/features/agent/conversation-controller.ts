@@ -28,7 +28,7 @@ export function useConversationController({
   const [conversationTitleDraft, setConversationTitleDraft] = useState('');
 
   const updateConversationCache = useCallback((update: (current: Conversation[]) => Conversation[]) => {
-    queryClient.setQueryData<ListAgentConversations200>(queryKeys.agent.conversations(true), (current) => current
+    queryClient.setQueryData<ListAgentConversations200>(queryKeys.agent.conversations(true, new Date().getTimezoneOffset()), (current) => current
       ? { ...current, conversations: update(current.conversations) }
       : current);
   }, [queryClient]);

@@ -1,9 +1,8 @@
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChevronLeft, ChevronRight, CircleAlert, Clock, Download, FileUp, Landmark, MoreHorizontal, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Upload, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronLeft, ChevronRight, CircleAlert, Clock, Download, FileUp, Landmark, MoreHorizontal, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Modal } from '../components/ui/Modal';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { TransactionModal, type EditingTransaction, type WalletAccount } from '../components/transactions/TransactionModal';
@@ -19,7 +18,6 @@ import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransactio
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { fetchPeriods, usePeriodsQuery } from '../features/periods/queries';
-import { useScanSplitBillReceiptMutation } from '../features/split/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { useUiStore } from '../stores/ui-store';
 
@@ -48,6 +46,13 @@ export const Route = createFileRoute('/transactions')({
 
 interface Category { id: number; name: string; icon?: string | null; color?: string | null; }
 interface Period { id: number; name: string; startDate: number; endDate: number; coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown'; coverageReason: string | null; }
+interface TransactionSummary {
+  expenseCents: number;
+  incomeCents: number;
+  averageExpenseCents?: number;
+  largestExpenseCents?: number;
+  topCategoryName?: string | null;
+}
 type TransactionRow = Awaited<ReturnType<typeof api.transactions.list>>['data'][number];
 type ActivityKind = 'expense' | 'income' | 'transfer' | 'loan' | 'other';
 
@@ -126,10 +131,6 @@ function TransactionsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
   const [editingPendingTx, setEditingPendingTx] = useState<PendingTransactionListItem | null>(null);
-  const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false);
-  const [isSplitLoading, setIsSplitLoading] = useState(false);
-  const [splitError, setSplitError] = useState<string | null>(null);
-  const splitFileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
   const transactionFilters = useMemo<ListTransactionsParams>(() => ({
@@ -155,7 +156,6 @@ function TransactionsPage() {
   const categoriesQuery = useCategoriesQuery();
   const periodsQuery = usePeriodsQuery();
   const tagsQuery = useTagsQuery();
-  const scanReceiptMutation = useScanSplitBillReceiptMutation();
   const reverseTransactionMutation = useReverseTransaction();
   const deleteTransactionMutation = useDeleteTransaction();
   const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
@@ -166,7 +166,7 @@ function TransactionsPage() {
   const pendingCount = pendingQuery.data?.length ?? 0;
   const isLoading = transactionQuery.isLoading || accountsQuery.isLoading || categoriesQuery.isLoading || periodsQuery.isLoading || tagsQuery.isLoading;
   const total = transactionQuery.data?.pagination?.total ?? 0;
-  const summary = transactionQuery.data?.summary ?? { expenseCents: 0, incomeCents: 0 };
+  const summary = (transactionQuery.data?.summary ?? { expenseCents: 0, incomeCents: 0 }) as TransactionSummary;
 
   useKeyboardShortcuts({ isModalOpen, searchInputRef });
 
@@ -203,7 +203,6 @@ function TransactionsPage() {
       .filter((transaction) => !isTransferFee(transaction))
       .map((transaction) => ({ transaction, transferFee: feesByParentId.get(transaction.id) ?? 0 }));
   }, [transactions]);
-
   const openModal = (transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit') => {
     setModalInitialMode(mode);
     setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, reference: transaction.reference ?? undefined, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
@@ -218,21 +217,6 @@ function TransactionsPage() {
     if (!await confirm({ title: 'Delete draft', message: 'This draft has not affected reports or balances. Delete it?', confirmLabel: 'Delete draft', variant: 'danger' })) return;
     try { await deleteTransactionMutation.mutateAsync(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
   };
-  const handleSplitFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]; if (!file) return;
-    setIsSplitLoading(true); setSplitError(null);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const imageUrl = reader.result as string;
-        const result = await scanReceiptMutation.mutateAsync({ imageData: imageUrl, filename: file.name });
-        localStorage.setItem('splitbill_parsed', JSON.stringify({ parsed: result.parsed, imageUrl }));
-        navigate({ to: '/split' });
-      } catch (error) { setSplitError((error as Error).message || 'Could not scan this receipt'); } finally { setIsSplitLoading(false); }
-    };
-    reader.onerror = () => { setSplitError('Could not read this receipt'); setIsSplitLoading(false); };
-    reader.readAsDataURL(file);
-  };
   const clearFilters = () => {
     setFilterQuery(''); setKindFilter(''); setCategoryFilter(''); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); setSort('newest'); setIncludeAdjustments(false);
     navigate({ search: (previous) => ({ ...previous, accountId: undefined, categoryId: undefined }) });
@@ -246,7 +230,7 @@ function TransactionsPage() {
           {isToolsOpen && <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">
             <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setActivePanel(null); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
             <button type="button" onClick={() => { setIsImportModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><FileUp className="h-4 w-4" />Import CSV</button>
-            <button type="button" onClick={() => { setIsSplitBillModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
+            <button type="button" onClick={() => { setActivePanel(null); navigate({ to: '/agent', search: { prompt: 'Help me split a bill. I will attach the receipt and tell you who shared it.' } }); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
             <button type="button" onClick={() => { setIsPendingModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Clock className="h-4 w-4" />Review pending {pendingCount > 0 ? '(' + pendingCount + ')' : ''}</button>
             <button type="button" onClick={() => setCompactTables(!compactTables)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><span>Compact rows</span><span className="text-xs text-[var(--ref-on-surface-variant)]">{compactTables ? 'On' : 'Off'}</span></button>
           </div>}
@@ -273,7 +257,7 @@ function TransactionsPage() {
         <div className="flex items-end"><button type="button" onClick={clearFilters} className="inline-flex items-center gap-1.5 pb-2 text-sm font-bold text-[var(--ref-primary)] hover:underline"><X className="h-4 w-4" />Clear filters</button></div>
       </div>}
     </section>
-    <section className="mt-4 flex flex-col gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Spending in this view</p><p className="mt-1 font-headline text-2xl font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(summary.expenseCents)}</p></div><p className="max-w-md text-sm text-[var(--ref-on-surface-variant)]">{selectedPeriod?.coverageStatus === 'complete' || !selectedPeriod ? 'Based on the full active filter scope, not just this page.' : 'Recorded spending only; period coverage is incomplete.'}</p></section>
+    <section className="mt-4 grid gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-4 sm:px-5 lg:grid-cols-[minmax(15rem,1.1fr)_minmax(0,1.9fr)] lg:items-center"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Spending in this view</p><p className="mt-1 font-headline text-2xl font-extrabold tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(summary.expenseCents)}</p><p className="mt-1 max-w-sm text-xs text-[var(--ref-on-surface-variant)]">{selectedPeriod?.coverageStatus === 'complete' || !selectedPeriod ? 'Full active filter scope, not just this page.' : 'Recorded spending only; period coverage is incomplete.'}</p></div><div className="grid grid-cols-2 gap-x-5 gap-y-3 border-t border-[var(--ref-outline-variant)]/30 pt-3 sm:grid-cols-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0"><div><p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Average spend</p><p className="mt-1 whitespace-nowrap text-base font-bold tabular-nums text-[var(--ref-on-surface)]">{(summary.averageExpenseCents ?? 0) > 0 ? formatCurrency(summary.averageExpenseCents ?? 0) : '—'}</p><p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">Across this view</p></div><div><p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Largest expense</p><p className="mt-1 whitespace-nowrap text-base font-bold tabular-nums text-[var(--ref-on-surface)]">{(summary.largestExpenseCents ?? 0) > 0 ? formatCurrency(summary.largestExpenseCents ?? 0) : '—'}</p><p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">Across this view</p></div><div className="col-span-2 sm:col-span-1"><p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Top category</p><p className="mt-1 truncate text-base font-bold text-[var(--ref-on-surface)]" title={summary.topCategoryName ?? '—'}>{summary.topCategoryName ?? '—'}</p><p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">By spending</p></div></div></section>
     <section className="mt-4 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] shadow-sm">
       <div className="flex flex-col gap-3 border-b border-[var(--ref-outline-variant)]/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-headline font-bold text-[var(--ref-on-surface)]">Activity</p><p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">Normal day-to-day transactions</p></div><button type="button" role="switch" aria-checked={includeAdjustments} title="Include accounting corrections and recovery adjustments" onClick={() => setIncludeAdjustments((current) => !current)} className="inline-flex w-fit shrink-0 items-center gap-2.5 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs font-bold whitespace-nowrap text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--ref-primary)]/40 hover:text-[var(--ref-on-surface)]"><span className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', includeAdjustments ? 'bg-[var(--ref-primary)]' : 'bg-[var(--ref-outline-variant)]')}><span className={cn('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform', includeAdjustments ? 'translate-x-4' : 'translate-x-0')} /></span><span>{includeAdjustments ? 'Showing corrections' : 'Show corrections'}</span></button></div>
       {isLoading ? <div className="p-12 text-center text-sm text-[var(--ref-on-surface-variant)]">Loading activity…</div> : total === 0 ? <div className="p-12 text-center"><Wallet className="mx-auto mb-3 h-10 w-10 text-[var(--ref-outline)]" /><p className="font-headline font-bold">No activity in this view</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Try changing filters or add a transaction.</p></div> : <div className="divide-y divide-[var(--ref-outline-variant)]/20">
@@ -296,6 +280,5 @@ function TransactionsPage() {
     <TransactionModal isOpen={isModalOpen} onClose={closeModal} onSaved={loadData} onSuccess={() => { void loadData(); setEditingPendingTx(null); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={editingTransaction} periodId={search.periodId && search.periodId !== 'all' ? Number(search.periodId) : null} initialMode={modalInitialMode} pendingTransaction={editingPendingTx} />
     <ImportCSVModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onSuccess={loadData} />
     <PendingTransactionsModal isOpen={isPendingModalOpen} onClose={() => setIsPendingModalOpen(false)} onEdit={(pending) => { setEditingPendingTx(pending); setIsPendingModalOpen(false); openModal(); }} onRefresh={() => { void pendingQuery.refetch(); }} />
-    <Modal isOpen={isSplitBillModalOpen} onClose={() => setIsSplitBillModalOpen(false)} title="Split bill" subtitle="Upload a receipt to start a shared bill."><div className="flex flex-col items-center"><div className="w-full cursor-pointer rounded-2xl border-2 border-dashed border-[var(--color-border)] p-8 text-center hover:bg-[var(--ref-surface-container-low)]" onClick={() => splitFileInputRef.current?.click()}><input ref={splitFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleSplitFileSelect} />{isSplitLoading ? <div className="py-4"><div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[var(--ref-primary)] border-t-transparent" /><p className="mt-3 text-sm">Scanning receipt…</p></div> : <><Upload className="mx-auto mb-3 h-8 w-8 text-[var(--ref-primary)]" /><p className="font-bold">Upload receipt</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">PNG or JPG</p></>}</div>{splitError && <p className="mt-3 text-sm text-[var(--ref-error)]">{splitError}</p>}</div></Modal>
   </PageContainer></RequireAuth>;
 }

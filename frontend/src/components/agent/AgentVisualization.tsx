@@ -1,6 +1,7 @@
 import { BarChart3, CalendarDays, CircleDollarSign, Gauge, PieChart, TrendingUp, Wallet } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { formatCurrency } from '../../lib/utils';
+import { SplitBillCard, parseSplitBillVisualization, type SplitBillAccount, type SplitBillVisualization } from './SplitBillCard';
 
 type VisualizationUnit = 'IDR' | 'number' | 'percent' | 'months';
 type VisualizationTone = 'positive' | 'negative' | 'neutral';
@@ -162,7 +163,8 @@ type AgentVisualization =
   | AllocationEditorVisualization
   | TimeSeriesExplorerVisualization
   | GoalTrackerVisualization
-  | WorksheetVisualization;
+  | WorksheetVisualization
+  | SplitBillVisualization;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -209,6 +211,8 @@ function parseVisualization(value: string): AgentVisualization | null {
     return null;
   }
   if (!isRecord(parsed)) return null;
+  const splitBill = parseSplitBillVisualization(parsed);
+  if (splitBill) return splitBill;
   const type = parsed.type;
   const title = readString(parsed.title);
   if (!title || typeof type !== 'string') return null;
@@ -535,21 +539,86 @@ function ComparisonCard({ visualization }: { visualization: ComparisonVisualizat
 }
 
 const VIZ_COLORS = ['var(--ref-primary)', 'var(--ref-secondary)', 'var(--ref-tertiary)', 'var(--color-warning)', 'var(--color-danger)', 'var(--ref-primary-container)', 'var(--ref-on-secondary-container)', 'var(--color-muted)'];
+const COMPOSITION_COLORS = ['var(--ref-primary)', 'var(--color-warning)', 'var(--ref-secondary)', 'var(--color-danger)', 'var(--ref-tertiary)', 'var(--ref-primary-container)', 'var(--ref-on-secondary-container)', 'var(--color-muted)'];
+
+function donutSegmentPath(startFraction: number, endFraction: number): string {
+  const center = 60;
+  const outerRadius = 48;
+  const innerRadius = 32;
+  const startAngle = startFraction * Math.PI * 2 - Math.PI / 2;
+  const endAngle = endFraction * Math.PI * 2 - Math.PI / 2;
+  const point = (radius: number, angle: number) => [center + radius * Math.cos(angle), center + radius * Math.sin(angle)];
+  const [outerStartX, outerStartY] = point(outerRadius, startAngle);
+  const [outerEndX, outerEndY] = point(outerRadius, endAngle);
+  const [innerStartX, innerStartY] = point(innerRadius, startAngle);
+  const [innerEndX, innerEndY] = point(innerRadius, endAngle);
+  const largeArc = endFraction - startFraction > 0.5 ? 1 : 0;
+  return `M ${outerStartX} ${outerStartY} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEndX} ${outerEndY} L ${innerEndX} ${innerEndY} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStartX} ${innerStartY} Z`;
+}
 
 function DonutCard({ visualization }: { visualization: DonutVisualization }) {
-  const total = visualization.items.reduce((sum, item) => sum + item.value, 0) || 1;
+  const items = [...visualization.items].sort((left, right) => right.value - left.value);
+  const total = items.reduce((sum, item) => sum + item.value, 0) || 1;
+  const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState<number | null>(null);
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(null);
   let cursor = 0;
-  const stops = visualization.items.map((item, index) => {
+  const segments = items.map((item, index) => {
     const start = cursor;
-    cursor += item.value / total * 100;
-    return `${VIZ_COLORS[index % VIZ_COLORS.length]} ${start}% ${cursor}%`;
-  }).join(', ');
+    cursor += item.value / total;
+    return { item, index, start, end: cursor, percentage: item.value / total * 100, color: COMPOSITION_COLORS[index % COMPOSITION_COLORS.length] };
+  });
+  const highlightedSegmentIndex = hoveredSegmentIndex ?? selectedSegmentIndex;
+  const highlightedSegment = highlightedSegmentIndex == null ? null : segments[highlightedSegmentIndex] ?? null;
   return <article className="agent-viz-card" aria-label={visualization.title}>
-    <VizHeader title={visualization.title} icon={<PieChart className="h-4 w-4" />} />
-    <div className="mt-4 flex items-center gap-5">
-      <div className="agent-viz-donut shrink-0" style={{ background: `conic-gradient(${stops})` }} role="img" aria-label={`${visualization.title} composition`}><span>{formatValue(total, visualization.unit)}</span></div>
-      <div className="min-w-0 flex-1 space-y-2" role="list">
-        {visualization.items.map((item, index) => <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-2 text-xs" role="listitem"><span className="flex min-w-0 items-center gap-2 truncate text-[var(--color-text-secondary)]"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: VIZ_COLORS[index % VIZ_COLORS.length] }} />{item.label}</span><span className="shrink-0 font-semibold text-[var(--color-text-primary)]">{(item.value / total * 100).toLocaleString('en-US', { maximumFractionDigits: 1 })}%</span></div>)}
+    <div className="flex items-center justify-between gap-3"><VizHeader title={visualization.title} icon={<PieChart className="h-4 w-4" />} /><span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">{items.length} categories</span></div>
+    <div className="mt-4 grid gap-5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-center">
+      <div className="flex items-center gap-4 sm:flex-col sm:items-start sm:gap-2">
+        <div className="agent-viz-donut shrink-0">
+          <svg viewBox="0 0 120 120" role="group" aria-label={`${visualization.title} composition`}>
+            <title>{visualization.title} composition</title>
+            {segments.map((segment) => <path
+              key={`${segment.item.label}-${segment.index}`}
+              d={donutSegmentPath(segment.start, segment.end)}
+              fill={segment.color}
+              opacity={highlightedSegmentIndex == null || highlightedSegmentIndex === segment.index ? 1 : 0.35}
+              role="button"
+              tabIndex={0}
+              aria-label={`${segment.item.label}: ${formatValue(segment.item.value, visualization.unit)}, ${segment.percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`}
+              aria-pressed={selectedSegmentIndex === segment.index}
+              onMouseEnter={() => setHoveredSegmentIndex(segment.index)}
+              onMouseLeave={() => setHoveredSegmentIndex(null)}
+              onFocus={() => setHoveredSegmentIndex(segment.index)}
+              onBlur={() => setHoveredSegmentIndex(null)}
+              onClick={() => setSelectedSegmentIndex((current) => current === segment.index ? null : segment.index)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedSegmentIndex((current) => current === segment.index ? null : segment.index);
+                }
+              }}
+            />)}
+          </svg>
+          <span>{highlightedSegment ? <><strong>{highlightedSegment.percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%</strong><small>{highlightedSegment.item.label}</small></> : 'Total'}</span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{highlightedSegment ? 'Selected category' : 'Total spent'}</p>
+          <p className="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums tracking-tight text-[var(--color-text-primary)]">{formatValue(highlightedSegment?.item.value ?? total, visualization.unit)}</p>
+          <p className="mt-0.5 max-w-36 truncate text-[11px] text-[var(--color-text-secondary)]">{highlightedSegment ? `${highlightedSegment.item.label} · ${highlightedSegment.percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%` : `Across ${items.length} categories`}</p>
+        </div>
+      </div>
+      <div className="min-w-0 space-y-2.5" role="list" aria-label={`${visualization.title} breakdown`}>
+        {items.map((item, index) => {
+          const percentage = item.value / total * 100;
+          const color = COMPOSITION_COLORS[index % COMPOSITION_COLORS.length];
+          const isHighlighted = highlightedSegmentIndex == null || highlightedSegmentIndex === index;
+          return <div key={`${item.label}-${index}`} role="listitem" aria-label={`${item.label}: ${formatValue(item.value, visualization.unit)}, ${percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`} className={`transition-opacity ${isHighlighted ? 'opacity-100' : 'opacity-45'}`}>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="flex min-w-0 items-center gap-2 font-medium text-[var(--color-text-primary)]"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} /> <span className="truncate">{item.label}</span></span>
+              <span className="shrink-0 text-right tabular-nums"><strong className="font-semibold text-[var(--color-text-primary)]">{formatValue(item.value, visualization.unit)}</strong><span className="ml-1.5 text-[var(--color-text-secondary)]">{percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%</span></span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]" role="presentation"><div className="h-full rounded-full" style={{ width: `${Math.max(2, percentage)}%`, backgroundColor: color }} /></div>
+          </div>;
+        })}
       </div>
     </div>
   </article>;
@@ -788,9 +857,10 @@ function SparklineCard({ visualization }: { visualization: SparklineVisualizatio
   </article>;
 }
 
-export function AgentVisualizationBlock({ source }: { source: string }) {
+export function AgentVisualizationBlock({ source, accounts = [] }: { source: string; accounts?: SplitBillAccount[] }) {
   const visualization = parseVisualization(source);
   if (!visualization) return null;
+  if (visualization.type === 'split_bill') return <SplitBillCard visualization={visualization} accounts={accounts} />;
   if (visualization.type === 'metric') return <MetricCard visualization={visualization} />;
   if (visualization.type === 'ranked_bar') return <RankedBarCard visualization={visualization} />;
   if (visualization.type === 'comparison') return <ComparisonCard visualization={visualization} />;

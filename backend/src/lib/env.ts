@@ -2,9 +2,11 @@ import { z } from "zod";
 import { config } from "dotenv";
 import { resolve } from "path";
 
-// This file is also imported by route/plugin tests, which may not execute the
-// server bootstrap that loads .env. Apply ignored developer overrides here so
-// LOCAL_AUTH_BYPASS works consistently in the local process only.
+// This file is also imported by workers, route/plugin tests, and contract
+// generation, none of which necessarily execute the HTTP server bootstrap.
+// Load the shared environment first, then apply ignored developer overrides so
+// a standalone worker has the same validated configuration as the API.
+config({ path: resolve(__dirname, "../../../.env") });
 config({ path: resolve(__dirname, "../../../.env.local"), override: true });
 
 const envSchema = z.object({
@@ -46,6 +48,10 @@ const envSchema = z.object({
   // Intervals remain the compatibility default. Set queue only when the
   // standalone BullMQ worker is deployed and healthy.
   JOB_RUNNER_MODE: z.enum(["interval", "queue"]).default("interval"),
+  WORKER_MAINTENANCE_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(2),
+  WORKER_RECURRING_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(1),
+  WORKER_AGENT_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
+  WORKER_AGENT_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(45_000),
 
   /**
    * Where to send the browser after successful Google OAuth (must match the origin you use in the browser).

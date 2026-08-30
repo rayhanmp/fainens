@@ -1,4 +1,4 @@
-import { createFileRoute, useSearch } from '@tanstack/react-router';
+import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import {
   LoaderCircle,
   Pencil,
   RefreshCw,
+  ReceiptText,
   Send,
   Sparkles,
   Square,
@@ -64,6 +65,11 @@ import {
 export const Route = createFileRoute('/agent')({
   validateSearch: (search: Record<string, unknown>) => ({
     prompt: typeof search.prompt === 'string' ? search.prompt : undefined,
+    conversationId: (() => {
+      const value = search.conversationId;
+      const parsed = typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : NaN;
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    })(),
   }),
   component: AgentPage,
 } as any);
@@ -81,10 +87,14 @@ function hasAgentResponse(message: ChatMessage): message is Extract<ChatMessage,
 }
 
 function toChatMessages(detail: ConversationDetail): ChatMessage[] {
-  return detail.messages.map((message) => message.role === 'assistant'
-    ? { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined }
-    : { id: String(message.id), serverId: message.id, role: 'user', text: message.content, createdAt: message.createdAt },
-  );
+  return detail.messages.map((message) => {
+    if (message.role === 'assistant') {
+      return { id: String(message.id), role: 'assistant', text: message.content, createdAt: message.createdAt, response: isRecord(message.response) ? message.response as AgentResponse : undefined };
+    }
+    const images = persistedMessageImages(message.attachments, message.id);
+    const text = message.content.replace(/\n\n\[\d+ image attachments? provided for this turn; attachments are retained for conversation display\.\]$/, '');
+    return { id: String(message.id), serverId: message.id, role: 'user', text, createdAt: message.createdAt, ...(images.length > 0 ? { images } : {}) };
+  });
 }
 
 const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -289,6 +299,20 @@ function createStartupSelection(nickname = ''): StartupSelection {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function persistedMessageImages(value: unknown, messageId: number): ChatImage[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate, index) => {
+    if (!isRecord(candidate)) return [];
+    const id = typeof candidate.id === 'number' ? candidate.id : index;
+    const filename = typeof candidate.filename === 'string' ? candidate.filename : `image-${index + 1}`;
+    const mimeType = typeof candidate.mimetype === 'string' ? candidate.mimetype : 'image/*';
+    const downloadUrl = typeof candidate.downloadUrl === 'string' ? candidate.downloadUrl : '';
+    const fileSize = typeof candidate.fileSize === 'number' ? candidate.fileSize : 0;
+    if (!downloadUrl) return [];
+    return [{ id: `attachment-${messageId}-${id}`, filename, mimeType, dataUrl: downloadUrl, fileSize }];
+  });
 }
 
 function scopeLabel(scope: unknown, periods: Period[]): string {
@@ -791,7 +815,8 @@ function TransactionProposalCard({
 }
 
 function AgentPage() {
-  const search = useSearch({ from: '/agent' }) as { prompt?: string };
+  const navigate = useNavigate({ from: '/agent' });
+  const search = useSearch({ from: '/agent' }) as { prompt?: string; conversationId?: number };
   const queryClient = useQueryClient();
   const conversationsQuery = useAgentConversationsQuery(true);
   const memoriesQuery = useAgentMemoriesQuery();
@@ -861,6 +886,7 @@ function AgentPage() {
   const agentRequestRef = useRef<AbortController | null>(null);
   const conversationLoadMoreTimerRef = useRef<number | null>(null);
   const lastProfileNicknameRef = useRef<string | null>(null);
+  const hydratedConversationIdRef = useRef<number | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [visibleConversationCount, setVisibleConversationCount] = useState(CONVERSATIONS_PAGE_SIZE);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
@@ -880,6 +906,8 @@ function AgentPage() {
     () => (accountsQuery.data ?? []).map((account) => ({
       id: account.id,
       name: account.name,
+      provider: typeof account.provider === 'string' ? account.provider : null,
+      accountNumber: typeof account.accountNumber === 'string' ? account.accountNumber : null,
       type: account.type,
       isActive: account.isActive,
       liquidityClass: account.liquidityClass,
@@ -900,6 +928,7 @@ function AgentPage() {
   const draftKey = `agent:${activeConversationId ?? 'new'}`;
   const storedDraft = useDraftStore((state) => state.drafts[draftKey]?.value ?? '');
   const lastDraftKeyRef = useRef(draftKey);
+  const draftWasEditedRef = useRef(false);
 
   useEffect(() => {
     setSessionAttachmentIds(pendingImages.map((image) => image.id));
@@ -916,15 +945,21 @@ function AgentPage() {
   useEffect(() => {
     if (lastDraftKeyRef.current !== draftKey) {
       lastDraftKeyRef.current = draftKey;
+      draftWasEditedRef.current = false;
       setDraft(storedDraft);
       return;
     }
-    if (!draft.trim() && storedDraft) {
+    // Restore a persisted draft only until the user edits this field. Without
+    // this guard, deleting all text causes the old persisted value to be
+    // written back immediately, making Backspace appear broken.
+    if (!draftWasEditedRef.current && !draft && storedDraft) {
       setDraft(storedDraft);
       return;
     }
+    if (!draftWasEditedRef.current) return;
     if (draft.trim()) persistDraft(draftKey, draft);
-  }, [draft, draftKey, persistDraft, storedDraft]);
+    else clearDraft(draftKey);
+  }, [clearDraft, draft, draftKey, persistDraft, storedDraft]);
 
   useEffect(() => () => {
     if (messageActionHoldTimerRef.current != null) window.clearTimeout(messageActionHoldTimerRef.current);
@@ -1055,19 +1090,43 @@ function AgentPage() {
     if (conversationId === activeConversationId || isLoadingConversation) return;
     setError(null);
     setNotice(null);
+    hydratedConversationIdRef.current = null;
     setActiveConversationId(conversationId);
+    void navigate({ search: (previous) => ({ ...previous, conversationId, prompt: undefined }) } as any);
     setMessages([]);
     setPendingImages([]);
     setImageError(null);
   };
 
+  // The URL is the durable selection state. Zustand remains useful for the
+  // in-flight stream, but a refresh or a copied link must be able to restore
+  // the same conversation without depending on that transient store.
+  useEffect(() => {
+    const conversationId = search.conversationId ?? null;
+    if (useAgentSessionStore.getState().activeConversationId === conversationId) return;
+    hydratedConversationIdRef.current = null;
+    setActiveConversationId(conversationId);
+    setMessages([]);
+    setPendingImages([]);
+    setImageError(null);
+    setError(null);
+    setNotice(null);
+  }, [search.conversationId, setActiveConversationId]);
+
   useEffect(() => {
     if (activeConversationId == null || !conversationQuery.data) return;
     if (conversationQuery.data.conversation.id !== activeConversationId) return;
+    // A conversation switch can briefly expose stale cached data while the
+    // detail request is refetching. More importantly, a brand-new
+    // conversation is being streamed optimistically and its first GET can
+    // still be empty. Wait for the fetch and hydrate each selection once so
+    // that server data cannot erase the live message.
+    if (conversationQuery.isFetching || hydratedConversationIdRef.current === activeConversationId) return;
+    hydratedConversationIdRef.current = activeConversationId;
     setMessages(toChatMessages(conversationQuery.data));
     setPendingImages([]);
     setImageError(null);
-  }, [activeConversationId, conversationQuery.data]);
+  }, [activeConversationId, conversationQuery.data, conversationQuery.isFetching]);
 
   useEffect(() => {
     if (selectedPeriodId || periods.length === 0) return;
@@ -1092,8 +1151,11 @@ function AgentPage() {
       setMessages([]);
       setPendingImages([]);
       setDraft(search.prompt.trim());
+      if (search.conversationId != null) {
+        void navigate({ search: (previous) => ({ ...previous, conversationId: undefined }) } as any);
+      }
     }
-  }, [search.prompt]);
+  }, [navigate, search.conversationId, search.prompt, setActiveConversationId]);
 
   useEffect(() => {
     if (conversationsQuery.isError) setError('Could not load saved conversations.');
@@ -1167,14 +1229,27 @@ function AgentPage() {
     setImageError(errors.length > 0 ? errors.join('\n') : null);
   };
 
+  const handleComposerPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isSending) return;
+    const imageFiles = Array.from(event.clipboardData.files).filter((file) => AGENT_IMAGE_TYPES.includes(file.type));
+    if (imageFiles.length === 0) return;
+    event.preventDefault();
+    void addImageFiles(imageFiles);
+  };
+
   const submitQuestion = async (question = draft, replacement?: { localId: string; serverId: number }) => {
     const text = question.trim();
-    if (text.length < 2 || isSending) return;
-    const composerDraftKey = draftKey;
     const attachedImages = replacement ? [] : pendingImages;
+    if ((text.length < 2 && attachedImages.length === 0) || isSending) return;
+    const questionForAgent = text || 'Please analyze the attached image.';
+    const composerDraftKey = draftKey;
     const createdAt = Date.now();
     const userLocalId = replacement?.localId ?? `user-${createdAt}`;
     setDraft('');
+    // Clear the persisted composer value at send time as well. Otherwise the
+    // draft hydration effect sees the old value while streaming and restores
+    // it into the input immediately after the local state is cleared.
+    clearDraft(composerDraftKey);
     setError(null);
     setNotice(null);
     setImageError(null);
@@ -1196,14 +1271,23 @@ function AgentPage() {
     const requestController = new AbortController();
     agentRequestRef.current = requestController;
     let streamedAssistantId: string | null = null;
+    // Keep a newly-created conversation out of the detail-query hydration
+    // path until this first turn has settled. Otherwise the empty detail GET
+    // can race the stream and replace the optimistic first message.
+    let requestConversationId = activeConversationId;
     try {
-      let conversationId = activeConversationId;
-      if (conversationId == null) {
+      if (requestConversationId == null) {
         const created = await agentCommands.conversations.create();
-        conversationId = created.conversation.id;
-        setActiveConversationId(conversationId);
+        requestConversationId = created.conversation.id;
         updateConversationCache((current) => [created.conversation, ...current.filter((candidate) => candidate.id !== created.conversation.id)]);
+        // Mark the optimistic first turn as already hydrated. The detail
+        // query may race it with an empty conversation response.
+        hydratedConversationIdRef.current = requestConversationId;
+        setActiveConversationId(requestConversationId);
+        void navigate({ search: (previous) => ({ ...previous, conversationId: requestConversationId, prompt: undefined }) } as any);
       }
+      const conversationId = requestConversationId;
+      if (conversationId == null) throw new Error('Could not establish a conversation. Please try again.');
       const assistantId = `assistant-${Date.now()}`;
       streamedAssistantId = assistantId;
       setMessages((current) => [...current, {
@@ -1213,7 +1297,7 @@ function AgentPage() {
         createdAt: Date.now(),
       }]);
       const response = await api.agent.streamQuery({
-        question: text,
+        question: questionForAgent,
         ...(selectedPeriodId ? { periodId: Number(selectedPeriodId) } : {}),
         conversationId,
         ...(replacement ? { replaceMessageId: replacement.serverId } : {}),
@@ -1255,8 +1339,16 @@ function AgentPage() {
       ));
       setPendingImages([]);
       clearDraft(composerDraftKey);
+      if (response.conversationId != null && activeConversationId == null) setActiveConversationId(response.conversationId);
+      else if (activeConversationId == null && requestConversationId != null) setActiveConversationId(requestConversationId);
       void refreshConversations().catch(() => undefined);
     } catch (caught) {
+      // Preserve the newly created session after a failed first provider
+      // request so retrying continues the same conversation and does not
+      // create an orphaned second chat.
+      if (activeConversationId == null && requestConversationId != null) {
+        setActiveConversationId(requestConversationId);
+      }
       const wasCancelled = requestController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError');
       if (wasCancelled) {
         setMessages((current) => current.filter((message) => message.id !== streamedAssistantId || message.role !== 'assistant' || message.text.trim().length > 0));
@@ -1349,7 +1441,9 @@ function AgentPage() {
   };
 
   const startNewConversation = () => {
+    hydratedConversationIdRef.current = null;
     setActiveConversationId(null);
+    void navigate({ search: (previous) => ({ ...previous, conversationId: undefined, prompt: undefined }) } as any);
     setMessages([]);
     setDraft('');
     setPendingImages([]);
@@ -1430,6 +1524,13 @@ function AgentPage() {
                     <span className="startup-empty-icon mx-auto grid h-10 w-10 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><Bot className="h-5 w-5" /></span>
                     <h3 className="startup-empty-greeting mt-3 font-semibold">{startupSelection.greeting}</h3>
                     <p className="startup-empty-subtitle mt-1 text-sm text-[var(--color-text-secondary)]">{startupSelection.subtitle}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setDraft('Help me split a bill. I will attach the receipt and tell you who shared it.'); questionInputRef.current?.focus(); }}
+                      className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--ref-primary)] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5"
+                    >
+                      <ReceiptText className="h-4 w-4" /> Split a receipt
+                    </button>
                     <div className="mx-auto mt-5 flex max-w-2xl flex-wrap justify-center gap-2">
                       {startupSelection.prompts.map((suggestion, index) => (
                         <button key={suggestion} type="button" onClick={() => void submitQuestion(suggestion)} style={{ animationDelay: String(index * 70) + 'ms' }} className="startup-prompt rounded-full border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)] hover:text-[var(--ref-primary)]">
@@ -1443,7 +1544,7 @@ function AgentPage() {
                 {messages.map((message) => (
                   <div key={message.id} className={cn('flex gap-3', message.role === 'user' && 'justify-end')}>
                     <div
-                      className={cn('group min-w-0', message.role === 'assistant' ? 'min-w-0 flex-1' : editingUserMessageId === message.id ? 'w-full max-w-[90%]' : 'w-fit max-w-[50%]')}
+                      className={cn('group min-w-0', message.role === 'assistant' ? 'min-w-0 flex-1' : editingUserMessageId === message.id ? 'w-full max-w-[90%]' : 'relative w-fit max-w-[min(32rem,85%)] pb-7')}
                       onPointerDown={(event) => beginMessageActionHold(message, event.pointerType)}
                       onPointerUp={endMessageActionHold}
                       onPointerCancel={endMessageActionHold}
@@ -1453,7 +1554,7 @@ function AgentPage() {
                       <div className={cn('text-sm', message.role === 'user'
                         ? editingUserMessageId === message.id
                           ? 'px-0 py-0 text-[var(--color-text-primary)]'
-                          : 'rounded-xl border border-transparent bg-[var(--ref-primary-container)] px-4 py-3 text-white'
+                          : 'w-fit max-w-full break-words rounded-xl border border-transparent bg-[var(--ref-primary-container)] px-4 py-3 text-white'
                         : 'w-full px-0 py-1 text-[var(--color-text-primary)]')}>
                       {message.role === 'user' && message.images && message.images.length > 0 && (
                         <div className="mb-3 flex flex-wrap gap-2">
@@ -1465,10 +1566,10 @@ function AgentPage() {
                         </div>
                       )}
                       {message.role === 'assistant'
-                        ? <AgentMessage>{message.text || '…'}</AgentMessage>
+                        ? <AgentMessage accounts={accounts}>{message.text || '…'}</AgentMessage>
                         : editingUserMessageId === message.id
                           ? <div className="space-y-2"><textarea ref={editingUserMessageTextareaRef} value={editingUserMessageText} onChange={(event) => setEditingUserMessageText(event.target.value)} className="brutalist-input max-h-40 min-h-12 w-full resize-none overflow-y-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)]" maxLength={2000} autoFocus /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => { setEditingUserMessageId(null); setEditingUserMessageText(''); }} disabled={isSending}>Cancel</Button><Button size="sm" onClick={() => void saveEditedLastUserMessage(message)} disabled={isSending}>Send</Button></div></div>
-                          : <p className="whitespace-pre-wrap leading-6">{message.text}</p>}
+                          : <p className="whitespace-pre-wrap break-words leading-6">{message.text}</p>}
                       {message.role === 'assistant' && message.text.trim() && !isSending && (
                         <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-[var(--color-border)] pt-2">
                           <button type="button" onClick={() => void copyAssistantResponse(message)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)]" title="Copy response">
@@ -1507,7 +1608,7 @@ function AgentPage() {
                       )}
                       </div>
                       {message.role === 'user' && editingUserMessageId !== message.id && (message.text.trim() || (message.id === latestUserMessageId && !message.images?.length)) && (
-                        <div className={cn('flex min-h-7 justify-end gap-1 pt-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-focus-within:pointer-events-auto group-hover:pointer-events-auto pointer-events-none', revealedMessageActionsId === message.id && 'pointer-events-auto opacity-100')}>
+                        <div className={cn('absolute bottom-0 right-0 flex h-7 justify-end gap-1 pt-1 whitespace-nowrap opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-focus-within:pointer-events-auto group-hover:pointer-events-auto pointer-events-none', revealedMessageActionsId === message.id && 'pointer-events-auto opacity-100')}>
                           {message.text.trim() && <button type="button" onClick={() => void copyMessageText(message)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)]" title="Copy message">
                             {copiedAssistantId === message.id ? <Check className="h-3.5 w-3.5 text-[var(--color-success)]" /> : <Copy className="h-3.5 w-3.5" />} {copiedAssistantId === message.id ? 'Copied' : 'Copy'}
                           </button>}
@@ -1584,7 +1685,8 @@ function AgentPage() {
                     ref={questionInputRef}
                     id="agent-question"
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
+                    onChange={(event) => { draftWasEditedRef.current = true; setDraft(event.target.value); }}
+                    onPaste={handleComposerPaste}
                     onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); } }}
                     placeholder="Ask Fainens anything…"
                     rows={1}
@@ -1609,7 +1711,7 @@ function AgentPage() {
                         <Square className="h-3.5 w-3.5 fill-current" />
                       </button>
                     ) : (
-                      <Button type="submit" disabled={draft.trim().length < 2} className="h-9 w-9 shrink-0 rounded-full p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
+                      <Button type="submit" disabled={draft.trim().length < 2 && pendingImages.length === 0} className="h-9 w-9 shrink-0 rounded-full p-0" aria-label="Send question" title="Send message"><Send className="mx-auto h-4 w-4" /></Button>
                     )}
                   </div>
                 </div>
@@ -1732,6 +1834,7 @@ function AgentPage() {
 
             <ConversationList
               conversations={conversations}
+              dailyUsage={conversationsQuery.data?.dailyUsage ?? null}
               periods={periods}
               selectedPeriodId={selectedPeriodId}
               onSelectPeriod={setSelectedPeriodId}

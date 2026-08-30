@@ -24,7 +24,13 @@ export interface AgentChatMessage {
 
 export interface AgentChatResponse {
   message: AgentChatMessage;
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    /** OpenRouter includes this when the provider exposes request pricing. */
+    cost?: number;
+  };
 }
 
 type StreamDelta = {
@@ -42,8 +48,8 @@ const DEFAULT_MODEL = "google/gemini-3.7-flash";
 // several requests, so this is per model response rather than per chat.
 const MAX_AGENT_OUTPUT_TOKENS = 4096;
 
-function providerFailure(operation: "request" | "stream", status: number): Error {
-  const detail = status === 401
+function providerFailure(operation: "request" | "stream", status: number, providerDetail?: string): Error {
+  const reason = status === 401
     ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
     : status === 403
       ? "OpenRouter denied this request. Check account credits, model access, and API key permissions."
@@ -54,7 +60,55 @@ function providerFailure(operation: "request" | "stream", status: number): Error
           : status >= 500
             ? "OpenRouter is temporarily unavailable. Try again shortly."
             : "OpenRouter returned an unexpected error.";
-  return new Error(`Agent model ${operation} failed (${status}): ${detail}`);
+  return new Error(`Agent model ${operation} failed (${status}): ${reason}${providerDetail ? ` (${providerDetail})` : ""}`);
+}
+
+const PROVIDER_RETRY_ATTEMPTS = 2;
+const RETRYABLE_PROVIDER_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function retryDelay(attempt: number): Promise<void> {
+  // Keep the retry short enough that a chat still feels responsive while
+  // allowing a provider's first cold/overloaded endpoint selection to settle.
+  await new Promise<void>((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+}
+
+async function openRouterFetch(input: RequestInit, signal: AbortSignal | undefined): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < PROVIDER_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { ...input, signal });
+      if (response.ok || !RETRYABLE_PROVIDER_STATUSES.has(response.status) || attempt === PROVIDER_RETRY_ATTEMPTS - 1) {
+        return response;
+      }
+      // The body is not needed for a retry. Releasing it avoids keeping the
+      // failed provider connection alive while the next attempt starts.
+      await response.body?.cancel();
+    } catch (error) {
+      if (isAbortError(error) || attempt === PROVIDER_RETRY_ATTEMPTS - 1) throw error;
+      lastError = error;
+    }
+    await retryDelay(attempt);
+  }
+  throw lastError instanceof Error ? lastError : new Error("OpenRouter request failed");
+}
+
+async function providerErrorDetail(response: Response): Promise<string | undefined> {
+  try {
+    const payload = await response.clone().json() as { error?: { message?: unknown } | string; message?: unknown };
+    const raw = typeof payload.error === "string"
+      ? payload.error
+      : payload.error && typeof payload.error === "object" && typeof payload.error.message === "string"
+        ? payload.error.message
+        : typeof payload.message === "string" ? payload.message : undefined;
+    if (!raw) return undefined;
+    return raw.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim().slice(0, 240) || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -67,8 +121,9 @@ export async function callOpenRouterAgent(input: {
   messages: AgentChatMessage[];
   tools: AgentChatTool[];
   model?: string;
+  signal?: AbortSignal;
 }): Promise<AgentChatResponse> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await openRouterFetch({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -82,10 +137,10 @@ export async function callOpenRouterAgent(input: {
       temperature: 0.2,
       max_tokens: MAX_AGENT_OUTPUT_TOKENS,
     }),
-  });
+  }, input.signal);
 
   if (!response.ok) {
-    throw providerFailure("request", response.status);
+    throw providerFailure("request", response.status, await providerErrorDetail(response));
   }
 
   const payload = await response.json() as {
@@ -112,7 +167,7 @@ export async function streamOpenRouterAgent(input: {
   onTextDelta: (text: string) => void;
   signal?: AbortSignal;
 }): Promise<AgentChatResponse> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await openRouterFetch({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -125,19 +180,22 @@ export async function streamOpenRouterAgent(input: {
       tools: input.tools,
       ...(input.tools.length > 0 ? { tool_choice: "auto" } : {}),
       stream: true,
+      // Ask OpenRouter to include the final usage chunk. Without this,
+      // streaming responses have no reliable token accounting.
+      stream_options: { include_usage: true },
       temperature: 0.2,
       max_tokens: MAX_AGENT_OUTPUT_TOKENS,
     }),
-    signal: input.signal,
-  });
+  }, input.signal);
   if (!response.ok || !response.body) {
-    throw providerFailure("stream", response.status);
+    throw providerFailure("stream", response.status, await providerErrorDetail(response));
   }
 
   const decoder = new TextDecoder();
   const calls = new Map<number, NonNullable<AgentChatMessage["tool_calls"]>[number]>();
   let buffer = "";
   let content = "";
+  let usage: AgentChatResponse["usage"];
 
   const consumeEvent = (event: string) => {
     const data = event
@@ -146,12 +204,13 @@ export async function streamOpenRouterAgent(input: {
       .map((line) => line.slice(5).trimStart())
       .join("\n");
     if (!data || data === "[DONE]") return;
-    let payload: { choices?: Array<{ delta?: StreamDelta }> };
+    let payload: { choices?: Array<{ delta?: StreamDelta }>; usage?: AgentChatResponse["usage"] };
     try {
-      payload = JSON.parse(data) as { choices?: Array<{ delta?: StreamDelta }> };
+      payload = JSON.parse(data) as { choices?: Array<{ delta?: StreamDelta }>; usage?: AgentChatResponse["usage"] };
     } catch {
       return;
     }
+    if (payload.usage) usage = payload.usage;
     const delta = payload.choices?.[0]?.delta;
     if (!delta) return;
     if (typeof delta.content === "string" && delta.content) {
@@ -187,5 +246,6 @@ export async function streamOpenRouterAgent(input: {
       content,
       ...(calls.size > 0 ? { tool_calls: [...calls.values()] } : {}),
     },
+    ...(usage ? { usage } : {}),
   };
 }

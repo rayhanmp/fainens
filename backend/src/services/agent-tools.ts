@@ -31,7 +31,7 @@ import { assignedPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getPeriodCoverage } from "./period-coverage";
 import { prepareAgentAction } from "./agent-actions";
 import { listMoneyAnomalyReviews } from "./money-anomaly-review";
-import { reviewBudgetOutlook } from "./budget-outlook-review";
+import { requestBudgetOutlierReview } from "./budget-outlook-review";
 import { updateTransactionAtomically } from "./transaction-mutations";
 
 const DAY_MS = 86_400_000;
@@ -319,7 +319,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "review_budget_patterns",
-    description: "Ask the configured model to classify deterministic budget outliers as one-off, unusual, recurring, or normal. The validated result is stored as revision-bound analytical metadata and never changes ledger facts, balances, or budget amounts.",
+    description: "Queue a model review of deterministic budget outliers as one-off, unusual, recurring, or normal. The validated result is stored as revision-bound analytical metadata and never changes ledger facts, balances, or budget amounts. Returns immediately with a task receipt; use the budget outlook/status tools to inspect the result later.",
     inputSchema: {
       type: "object",
       properties: { periodId: { type: "integer", minimum: 1, description: "Salary-period ID to review." } },
@@ -1516,7 +1516,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       break;
     case "review_budget_patterns":
       if (!isRecord(input) || typeof input.periodId !== "number") throw new Error("periodId is required");
-      data = await reviewBudgetOutlook(input.periodId);
+      data = await requestBudgetOutlierReview(input.periodId, executionContext?.ownerEmail);
       break;
     case "get_account_health":
       data = await getAccountHealthTool(input);

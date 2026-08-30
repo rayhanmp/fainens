@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   getBudgetOutlook,
+  getBudgetOutlookReview,
   getDashboardAnalytics,
   getPaylaterObligations,
   listBudgets,
@@ -92,5 +93,15 @@ export function useDashboardPeriodQueries(periodId: number | null) {
     enabled,
     placeholderData: (previous) => previous,
   });
-  return { facts, budget, recent, outlook };
+  const review = useQuery({
+    queryKey: queryKeys.budgets.review(periodKey),
+    queryFn: ({ signal }) => unwrapGenerated(getBudgetOutlookReview(periodId!, { signal }), 200, 'Failed to load budget review status'),
+    enabled,
+    placeholderData: (previous) => previous,
+    refetchInterval: (query) => {
+      const task = (query.state.data as { task?: { status?: string } } | undefined)?.task;
+      return task && ['queued', 'running', 'retrying'].includes(task.status ?? '') ? 3_000 : false;
+    },
+  });
+  return { facts, budget, recent, outlook, review };
 }

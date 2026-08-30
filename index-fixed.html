@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=UTF-8>
+<meta name=viewport content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Fainens</title>
+<script>
+var msgs=[];
+function log(m) { msgs.push(typeof m==='object'?JSON.stringify(m):String(m)); document.getElementById('diag').textContent=msgs.join('\n'); }
+log('1-init');
+window.onerror=function(m,s,l,c,e){ log('ERR:'+(m||'no-msg')+' line:'+l) };
+window.addEventListener('unhandledrejection',function(e){ log('REJECT:'+e.reason) });
+</script>
+</head>
+<body>
+<div id=root style="min-height:100vh;background:#fff;display:flex;align-items:center;justify-content:center">
+  <pre id=diag style="font-size:13px;font-family:monospace;white-space:pre-wrap;text-align:left"></pre>
+</div>
+<script>log('2-module-start')</script>
+<script type=module src=/assets/index-BlkfiUHW.js?v=5></script>
+<script>
+log('3-done');
+var s=document.querySelectorAll('script[type=module]')[0];
+s.onload=function(){ log('4-MODULE-LOADED') };
+s.onerror=function(e){ log('4-MODULE-FAILED') };
+</script>
+</body>
+</html>

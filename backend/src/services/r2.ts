@@ -23,6 +23,11 @@ const isR2Configured = () => {
   return !!(hasAccountId && hasAccessKey && hasSecretKey);
 };
 
+/** Whether uploaded objects are backed by R2 rather than local development storage. */
+export function isObjectStorageConfigured(): boolean {
+  return isR2Configured();
+}
+
 // Local storage path for when R2 is not configured
 const LOCAL_STORAGE_PATH = join(process.cwd(), "data", "attachments");
 
@@ -168,6 +173,16 @@ export function generateAttachmentKey(
   const timestamp = Date.now();
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
   return `attachments/${transactionId}/${timestamp}_${sanitizedFilename}`;
+}
+
+export function generateAgentAttachmentKey(
+  conversationId: number,
+  messageId: number,
+  filename: string,
+): string {
+  const timestamp = Date.now();
+  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+  return `agent-conversations/${conversationId}/${messageId}/${timestamp}_${sanitizedFilename}`;
 }
 
 // Get local file path for serving files stored locally

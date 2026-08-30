@@ -11,7 +11,7 @@ import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary 
 import { getBudgetFacts } from "../services/financial-facts";
 import { getPeriodCoverage } from "../services/period-coverage";
 import { getBudgetOutlook } from "../services/budget-outlook";
-import { getBudgetReviewStatus, reviewBudgetOutlook } from "../services/budget-outlook-review";
+import { getBudgetReviewStatus, requestBudgetOutlierReview } from "../services/budget-outlook-review";
 
 const budgetErrorSchema = z.object({ error: z.string() }).passthrough();
 const budgetPlanSchema = z.object({
@@ -69,7 +69,7 @@ const budgetOutlookSchema = z.object({
   categories: z.array(budgetOutlookCategorySchema),
 }).passthrough();
 const budgetReviewStatusSchema = z.object({ periodId: z.number().int(), evidenceRevision: z.number().int(), reviews: z.array(z.unknown()) }).passthrough();
-const budgetReviewResultSchema = z.object({ applied: z.boolean(), reason: z.string(), reviews: z.array(z.unknown()), largePurchaseCount: z.number().int().optional(), detail: z.string().optional() }).passthrough();
+const budgetReviewAcceptedSchema = z.object({ taskId: z.string(), periodId: z.number().int(), status: z.string(), expectedRevision: z.number().int() }).passthrough();
 const budgetTemplateSchema = z.object({
   id: z.number().int(), name: z.string(), description: z.string().nullable().optional(), isActive: z.boolean().optional(),
   createdAt: z.union([z.date(), z.string(), z.number()]).optional(),
@@ -251,20 +251,19 @@ export default async function (fastify: FastifyInstance) {
   });
 
   fastify.post("/api/budgets/:periodId/outlook/review", {
-    schema: { operationId: "reviewBudgetOutlook", tags: ["budgets"], params: budgetPeriodParamsSchema, response: { 200: budgetReviewResultSchema, 400: budgetErrorSchema } },
+    // Keep the existing 200 contract while returning an asynchronous task
+    // receipt. Clients can adopt 202 later without making the current UI
+    // reject a successfully queued review.
+    schema: { operationId: "reviewBudgetOutlook", tags: ["budgets"], params: budgetPeriodParamsSchema, response: { 200: budgetReviewAcceptedSchema, 400: budgetErrorSchema } },
   }, async (request, reply) => {
     const periodId = Number((request.params as { periodId?: string }).periodId);
     if (!Number.isInteger(periodId) || periodId <= 0) return reply.code(400).send({ error: "A valid period ID is required" });
     try {
-      return await reviewBudgetOutlook(periodId);
+      const ownerEmail = (request.user as { email?: string } | undefined)?.email ?? null;
+      return reply.send(await requestBudgetOutlierReview(periodId, ownerEmail));
     } catch (error) {
-      // Forecast review is optional. A provider outage must not make the
-      // deterministic dashboard unavailable.
-      request.log.warn({ err: error }, "Budget pattern review unavailable");
-      const detail = error instanceof Error && error.message.length < 300
-        ? error.message
-        : "The optional pattern-review provider could not be reached";
-      return { applied: false, reason: "provider_error", detail, reviews: [] };
+      request.log.warn({ err: error }, "Budget pattern review task unavailable");
+      return reply.code(400).send({ error: error instanceof Error ? error.message : "Could not queue budget pattern review" });
     }
   });
 

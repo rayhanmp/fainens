@@ -204,6 +204,13 @@ export type AgentQueryResponse = {
   pendingActions?: AgentActionProposal[];
   clarifications?: AgentClarification[];
   message?: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    estimatedCostUsd: number | null;
+    calls: number;
+  };
 };
 
 export type AgentClarificationChoice = {
@@ -222,6 +229,7 @@ export type AgentClarification = {
 export type AgentStreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'progress'; phase: 'understand' | 'retrieve' | 'compare' | 'calculate' | 'prepare'; label: string; status: 'started' | 'completed'; detail?: string }
+  | { type: 'heartbeat' }
   | { type: 'tool'; name: string }
   | { type: 'complete'; response: AgentQueryResponse }
   | { type: 'error'; error: string };

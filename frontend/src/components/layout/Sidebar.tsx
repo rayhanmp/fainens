@@ -15,8 +15,10 @@ import {
   Calculator,
   Sparkles,
   AlertTriangle,
+  ChevronDown,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../lib/auth';
 import { cn } from '../../lib/utils';
 import { useConfirm } from '../ui/ConfirmDialog';
@@ -30,20 +32,22 @@ type NavIcon = ComponentType<{ className?: string }>;
 
 type NavItem = { to: string; label: string; icon: NavIcon };
 
-/** With Dashboard above: accounts, transactions, pay later */
+/** Core destinations stay visible, including the Agent. */
 const topNav: NavItem[] = [
   { to: '/accounts', label: 'Accounts', icon: Wallet },
   { to: '/transactions', label: 'Transactions', icon: Receipt },
-  { to: '/paylater', label: 'Pay later', icon: CreditCard },
+  { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
   { to: '/loans', label: 'Loans', icon: Users },
 ];
 
-/** Everything after the divider */
-const restNav: NavItem[] = [
-  { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
+const planningNav: NavItem[] = [
+  { to: '/paylater', label: 'Pay later', icon: CreditCard },
   { to: '/salary-income', label: 'Salary & income', icon: Banknote },
   { to: '/periods', label: 'Salary periods', icon: Calendar },
   { to: '/budget', label: 'Budget', icon: PiggyBank },
+];
+
+const toolsNav: NavItem[] = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/anomalies', label: 'Data quality', icon: AlertTriangle },
   { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
@@ -57,7 +61,16 @@ export function Sidebar() {
   const isActive = (to: string) =>
     to === '/' ? location.pathname === '/' : pathMatches(location.pathname, to);
 
-  const renderLink = (item: NavItem) => {
+  const [openSections, setOpenSections] = useState({ planning: false, tools: false });
+
+  useEffect(() => {
+    setOpenSections((current) => ({
+      planning: current.planning || planningNav.some((item) => pathMatches(location.pathname, item.to)),
+      tools: current.tools || toolsNav.some((item) => pathMatches(location.pathname, item.to)),
+    }));
+  }, [location.pathname]);
+
+  const renderLink = (item: NavItem, quiet = false) => {
     const active = isActive(item.to);
     const Icon = item.icon;
     return (
@@ -65,12 +78,36 @@ export function Sidebar() {
         <Link
           to={item.to}
           aria-current={active ? 'page' : undefined}
-          className={cn('sidebar-item flex items-center gap-3', active && 'sidebar-item--active')}
+          className={cn(
+            'sidebar-item flex items-center gap-3',
+            quiet && 'sidebar-item--quiet',
+            active && 'sidebar-item--active',
+          )}
         >
           <Icon className="w-5 h-5 shrink-0" />
           <span>{item.label}</span>
         </Link>
       </li>
+    );
+  };
+
+  const renderSection = (key: 'planning' | 'tools', label: string, items: NavItem[]) => {
+    const open = openSections[key];
+    return (
+      <>
+        <li>
+          <button
+            type="button"
+            aria-expanded={open}
+            className="sidebar-section-toggle sidebar-section-label"
+            onClick={() => setOpenSections((current) => ({ ...current, [key]: !current[key] }))}
+          >
+            <span>{label}</span>
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !open && '-rotate-90')} />
+          </button>
+        </li>
+        {open && items.map((item) => renderLink(item, true))}
+      </>
     );
   };
 
@@ -102,13 +139,15 @@ export function Sidebar() {
             </Link>
           </li>
 
-          {topNav.map(renderLink)}
+          {topNav.map((item) => renderLink(item))}
 
           <li className="py-3 px-1" aria-hidden>
             <div className="h-px bg-[var(--color-border)]" />
           </li>
 
-          {restNav.map(renderLink)}
+          {renderSection('planning', 'Planning', planningNav)}
+          <li className="sidebar-section-label--spaced" aria-hidden />
+          {renderSection('tools', 'Tools', toolsNav)}
         </ul>
       </nav>
 

@@ -295,6 +295,9 @@ export type ListTransactions200Pagination = {
 export type ListTransactions200Summary = {
   expenseCents: number;
   incomeCents: number;
+  averageExpenseCents?: number;
+  largestExpenseCents?: number;
+  topCategoryName?: string | null;
   [key: string]: unknown;
 };
 
@@ -2724,6 +2727,7 @@ export type ListTags200Item = {
   id: number;
   name: string;
   color: string;
+  usageCount?: number;
   [key: string]: unknown;
 };
 
@@ -4646,15 +4650,18 @@ export type GetBudgetOutlookReview400 = {
 };
 
 export type ReviewBudgetOutlook200 = {
-  applied: boolean;
-  reason: string;
-  reviews: unknown[];
+  taskId: string;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
-  largePurchaseCount?: number;
-  detail?: string;
+  periodId: number;
+  status: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  expectedRevision: number;
   [key: string]: unknown;
 };
 
@@ -10667,6 +10674,7 @@ export type DeleteAgentMemory404 = {
 
 export type ListAgentConversationsParams = {
 includeArchived?: ListAgentConversationsIncludeArchived;
+timezoneOffsetMinutes?: number;
 };
 
 export type ListAgentConversationsIncludeArchived = typeof ListAgentConversationsIncludeArchived[keyof typeof ListAgentConversationsIncludeArchived];
@@ -10677,6 +10685,16 @@ export const ListAgentConversationsIncludeArchived = {
   true: 'true',
   false: 'false',
 } as const;
+
+export type AgentUsageSummary = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  /** @nullable */
+  estimatedCostUsd: number | null;
+  calls: number;
+  [key: string]: unknown;
+};
 
 export type ListAgentConversations200ConversationsItemTitleSource = typeof ListAgentConversations200ConversationsItemTitleSource[keyof typeof ListAgentConversations200ConversationsItemTitleSource];
 
@@ -10700,12 +10718,14 @@ export type ListAgentConversations200ConversationsItem = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
+  usage?: AgentUsageSummary;
   [key: string]: unknown;
 };
 
 export type ListAgentConversations200 = {
   conversations: ListAgentConversations200ConversationsItem[];
   includeArchived: boolean;
+  dailyUsage: AgentUsageSummary | null;
   [key: string]: unknown;
 };
 
@@ -10742,6 +10762,7 @@ export type CreateAgentConversation201Conversation = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
+  usage?: AgentUsageSummary;
   [key: string]: unknown;
 };
 
@@ -10777,6 +10798,7 @@ export type GetAgentConversation200Conversation = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
+  usage?: AgentUsageSummary;
   [key: string]: unknown;
 };
 
@@ -10798,7 +10820,18 @@ export type GetAgentConversation200MessagesItem = {
   role: GetAgentConversation200MessagesItemRole;
   content: string;
   response?: unknown;
+  usage?: AgentUsageSummary;
+  attachments?: GetAgentConversation200MessagesItemAttachmentsItem[];
   createdAt: number;
+  [key: string]: unknown;
+};
+
+export type GetAgentConversation200MessagesItemAttachmentsItem = {
+  id: number;
+  filename: string;
+  mimetype: string;
+  fileSize: number;
+  downloadUrl: string;
   [key: string]: unknown;
 };
 
@@ -11727,6 +11760,359 @@ export type ReviewMoneyAnomaly404 = {
 export type ReviewMoneyAnomaly409 = {
   error: string;
   [key: string]: unknown;
+};
+
+export type ListBackgroundTasksParams = {
+status?: ListBackgroundTasksStatus;
+queue?: ListBackgroundTasksQueue;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListBackgroundTasksStatus = typeof ListBackgroundTasksStatus[keyof typeof ListBackgroundTasksStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListBackgroundTasksStatus = {
+  queued: 'queued',
+  running: 'running',
+  retrying: 'retrying',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type ListBackgroundTasksQueue = typeof ListBackgroundTasksQueue[keyof typeof ListBackgroundTasksQueue];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListBackgroundTasksQueue = {
+  'fainens-maintenance': 'fainens-maintenance',
+  'fainens-recurring': 'fainens-recurring',
+  'fainens-agent': 'fainens-agent',
+} as const;
+
+export type ListBackgroundTasks200TasksItemQueueName = typeof ListBackgroundTasks200TasksItemQueueName[keyof typeof ListBackgroundTasks200TasksItemQueueName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListBackgroundTasks200TasksItemQueueName = {
+  'fainens-maintenance': 'fainens-maintenance',
+  'fainens-recurring': 'fainens-recurring',
+  'fainens-agent': 'fainens-agent',
+} as const;
+
+export type ListBackgroundTasks200TasksItemJobName = typeof ListBackgroundTasks200TasksItemJobName[keyof typeof ListBackgroundTasks200TasksItemJobName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListBackgroundTasks200TasksItemJobName = {
+  'dispatch-background-tasks': 'dispatch-background-tasks',
+  'cache-invalidation-outbox': 'cache-invalidation-outbox',
+  'storage-deletion-outbox': 'storage-deletion-outbox',
+  'precompute-warmup': 'precompute-warmup',
+  'subscription-renewals': 'subscription-renewals',
+  'salary-posting': 'salary-posting',
+  'conversation-title': 'conversation-title',
+  'budget-outlier-review': 'budget-outlier-review',
+} as const;
+
+export type ListBackgroundTasks200TasksItemStatus = typeof ListBackgroundTasks200TasksItemStatus[keyof typeof ListBackgroundTasks200TasksItemStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListBackgroundTasks200TasksItemStatus = {
+  queued: 'queued',
+  running: 'running',
+  retrying: 'retrying',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type ListBackgroundTasks200TasksItem = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  queueName: ListBackgroundTasks200TasksItemQueueName;
+  jobName: ListBackgroundTasks200TasksItemJobName;
+  dedupeKey: string;
+  /** @nullable */
+  ownerEmail: string | null;
+  /** @nullable */
+  subjectType: string | null;
+  /** @nullable */
+  subjectId: string | null;
+  status: ListBackgroundTasks200TasksItemStatus;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  attempts: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  maxAttempts: number;
+  availableAt: number;
+  /** @nullable */
+  startedAt: number | null;
+  /** @nullable */
+  completedAt: number | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  resultJson: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ListBackgroundTasks200 = {
+  tasks: ListBackgroundTasks200TasksItem[];
+};
+
+export type GetBackgroundTask200QueueName = typeof GetBackgroundTask200QueueName[keyof typeof GetBackgroundTask200QueueName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetBackgroundTask200QueueName = {
+  'fainens-maintenance': 'fainens-maintenance',
+  'fainens-recurring': 'fainens-recurring',
+  'fainens-agent': 'fainens-agent',
+} as const;
+
+export type GetBackgroundTask200JobName = typeof GetBackgroundTask200JobName[keyof typeof GetBackgroundTask200JobName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetBackgroundTask200JobName = {
+  'dispatch-background-tasks': 'dispatch-background-tasks',
+  'cache-invalidation-outbox': 'cache-invalidation-outbox',
+  'storage-deletion-outbox': 'storage-deletion-outbox',
+  'precompute-warmup': 'precompute-warmup',
+  'subscription-renewals': 'subscription-renewals',
+  'salary-posting': 'salary-posting',
+  'conversation-title': 'conversation-title',
+  'budget-outlier-review': 'budget-outlier-review',
+} as const;
+
+export type GetBackgroundTask200Status = typeof GetBackgroundTask200Status[keyof typeof GetBackgroundTask200Status];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetBackgroundTask200Status = {
+  queued: 'queued',
+  running: 'running',
+  retrying: 'retrying',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type GetBackgroundTask200 = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  queueName: GetBackgroundTask200QueueName;
+  jobName: GetBackgroundTask200JobName;
+  dedupeKey: string;
+  /** @nullable */
+  ownerEmail: string | null;
+  /** @nullable */
+  subjectType: string | null;
+  /** @nullable */
+  subjectId: string | null;
+  status: GetBackgroundTask200Status;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  attempts: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  maxAttempts: number;
+  availableAt: number;
+  /** @nullable */
+  startedAt: number | null;
+  /** @nullable */
+  completedAt: number | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  resultJson: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GetBackgroundTask404 = {
+  error: string;
+};
+
+export type RetryBackgroundTask200QueueName = typeof RetryBackgroundTask200QueueName[keyof typeof RetryBackgroundTask200QueueName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const RetryBackgroundTask200QueueName = {
+  'fainens-maintenance': 'fainens-maintenance',
+  'fainens-recurring': 'fainens-recurring',
+  'fainens-agent': 'fainens-agent',
+} as const;
+
+export type RetryBackgroundTask200JobName = typeof RetryBackgroundTask200JobName[keyof typeof RetryBackgroundTask200JobName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const RetryBackgroundTask200JobName = {
+  'dispatch-background-tasks': 'dispatch-background-tasks',
+  'cache-invalidation-outbox': 'cache-invalidation-outbox',
+  'storage-deletion-outbox': 'storage-deletion-outbox',
+  'precompute-warmup': 'precompute-warmup',
+  'subscription-renewals': 'subscription-renewals',
+  'salary-posting': 'salary-posting',
+  'conversation-title': 'conversation-title',
+  'budget-outlier-review': 'budget-outlier-review',
+} as const;
+
+export type RetryBackgroundTask200Status = typeof RetryBackgroundTask200Status[keyof typeof RetryBackgroundTask200Status];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const RetryBackgroundTask200Status = {
+  queued: 'queued',
+  running: 'running',
+  retrying: 'retrying',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type RetryBackgroundTask200 = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  queueName: RetryBackgroundTask200QueueName;
+  jobName: RetryBackgroundTask200JobName;
+  dedupeKey: string;
+  /** @nullable */
+  ownerEmail: string | null;
+  /** @nullable */
+  subjectType: string | null;
+  /** @nullable */
+  subjectId: string | null;
+  status: RetryBackgroundTask200Status;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  attempts: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  maxAttempts: number;
+  availableAt: number;
+  /** @nullable */
+  startedAt: number | null;
+  /** @nullable */
+  completedAt: number | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  resultJson: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type RetryBackgroundTask404 = {
+  error: string;
+};
+
+export type RetryBackgroundTask409 = {
+  error: string;
+};
+
+export type CancelBackgroundTask200QueueName = typeof CancelBackgroundTask200QueueName[keyof typeof CancelBackgroundTask200QueueName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CancelBackgroundTask200QueueName = {
+  'fainens-maintenance': 'fainens-maintenance',
+  'fainens-recurring': 'fainens-recurring',
+  'fainens-agent': 'fainens-agent',
+} as const;
+
+export type CancelBackgroundTask200JobName = typeof CancelBackgroundTask200JobName[keyof typeof CancelBackgroundTask200JobName];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CancelBackgroundTask200JobName = {
+  'dispatch-background-tasks': 'dispatch-background-tasks',
+  'cache-invalidation-outbox': 'cache-invalidation-outbox',
+  'storage-deletion-outbox': 'storage-deletion-outbox',
+  'precompute-warmup': 'precompute-warmup',
+  'subscription-renewals': 'subscription-renewals',
+  'salary-posting': 'salary-posting',
+  'conversation-title': 'conversation-title',
+  'budget-outlier-review': 'budget-outlier-review',
+} as const;
+
+export type CancelBackgroundTask200Status = typeof CancelBackgroundTask200Status[keyof typeof CancelBackgroundTask200Status];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CancelBackgroundTask200Status = {
+  queued: 'queued',
+  running: 'running',
+  retrying: 'retrying',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type CancelBackgroundTask200 = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  queueName: CancelBackgroundTask200QueueName;
+  jobName: CancelBackgroundTask200JobName;
+  dedupeKey: string;
+  /** @nullable */
+  ownerEmail: string | null;
+  /** @nullable */
+  subjectType: string | null;
+  /** @nullable */
+  subjectId: string | null;
+  status: CancelBackgroundTask200Status;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  attempts: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  maxAttempts: number;
+  availableAt: number;
+  /** @nullable */
+  startedAt: number | null;
+  /** @nullable */
+  completedAt: number | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  resultJson: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CancelBackgroundTask404 = {
+  error: string;
+};
+
+export type CancelBackgroundTask409 = {
+  error: string;
 };
 
 export type ServeLocalAttachment404 = {
@@ -20127,6 +20513,176 @@ export const reviewMoneyAnomaly = async (id: number,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       reviewMoneyAnomalyBody,)
+  }
+);}
+
+
+
+export type listBackgroundTasksResponse200 = {
+  data: ListBackgroundTasks200
+  status: 200
+}
+    
+export type listBackgroundTasksResponseSuccess = (listBackgroundTasksResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listBackgroundTasksResponse = (listBackgroundTasksResponseSuccess)
+
+export const getListBackgroundTasksUrl = (params?: ListBackgroundTasksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/internal/jobs?${stringifiedParams}` : `/api/internal/jobs`
+}
+
+export const listBackgroundTasks = async (params?: ListBackgroundTasksParams, options?: RequestInit): Promise<listBackgroundTasksResponse> => {
+  
+  return generatedFetch<listBackgroundTasksResponse>(getListBackgroundTasksUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getBackgroundTaskResponse200 = {
+  data: GetBackgroundTask200
+  status: 200
+}
+
+export type getBackgroundTaskResponse404 = {
+  data: GetBackgroundTask404
+  status: 404
+}
+    
+export type getBackgroundTaskResponseSuccess = (getBackgroundTaskResponse200) & {
+  headers: Headers;
+};
+export type getBackgroundTaskResponseError = (getBackgroundTaskResponse404) & {
+  headers: Headers;
+};
+
+export type getBackgroundTaskResponse = (getBackgroundTaskResponseSuccess | getBackgroundTaskResponseError)
+
+export const getGetBackgroundTaskUrl = (id: string,) => {
+
+
+  
+
+  return `/api/internal/jobs/${id}`
+}
+
+export const getBackgroundTask = async (id: string, options?: RequestInit): Promise<getBackgroundTaskResponse> => {
+  
+  return generatedFetch<getBackgroundTaskResponse>(getGetBackgroundTaskUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type retryBackgroundTaskResponse200 = {
+  data: RetryBackgroundTask200
+  status: 200
+}
+
+export type retryBackgroundTaskResponse404 = {
+  data: RetryBackgroundTask404
+  status: 404
+}
+
+export type retryBackgroundTaskResponse409 = {
+  data: RetryBackgroundTask409
+  status: 409
+}
+    
+export type retryBackgroundTaskResponseSuccess = (retryBackgroundTaskResponse200) & {
+  headers: Headers;
+};
+export type retryBackgroundTaskResponseError = (retryBackgroundTaskResponse404 | retryBackgroundTaskResponse409) & {
+  headers: Headers;
+};
+
+export type retryBackgroundTaskResponse = (retryBackgroundTaskResponseSuccess | retryBackgroundTaskResponseError)
+
+export const getRetryBackgroundTaskUrl = (id: string,) => {
+
+
+  
+
+  return `/api/internal/jobs/${id}/retry`
+}
+
+export const retryBackgroundTask = async (id: string, options?: RequestInit): Promise<retryBackgroundTaskResponse> => {
+  
+  return generatedFetch<retryBackgroundTaskResponse>(getRetryBackgroundTaskUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type cancelBackgroundTaskResponse200 = {
+  data: CancelBackgroundTask200
+  status: 200
+}
+
+export type cancelBackgroundTaskResponse404 = {
+  data: CancelBackgroundTask404
+  status: 404
+}
+
+export type cancelBackgroundTaskResponse409 = {
+  data: CancelBackgroundTask409
+  status: 409
+}
+    
+export type cancelBackgroundTaskResponseSuccess = (cancelBackgroundTaskResponse200) & {
+  headers: Headers;
+};
+export type cancelBackgroundTaskResponseError = (cancelBackgroundTaskResponse404 | cancelBackgroundTaskResponse409) & {
+  headers: Headers;
+};
+
+export type cancelBackgroundTaskResponse = (cancelBackgroundTaskResponseSuccess | cancelBackgroundTaskResponseError)
+
+export const getCancelBackgroundTaskUrl = (id: string,) => {
+
+
+  
+
+  return `/api/internal/jobs/${id}/cancel`
+}
+
+export const cancelBackgroundTask = async (id: string, options?: RequestInit): Promise<cancelBackgroundTaskResponse> => {
+  
+  return generatedFetch<cancelBackgroundTaskResponse>(getCancelBackgroundTaskUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
   }
 );}
 

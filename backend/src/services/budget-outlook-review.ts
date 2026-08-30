@@ -1,11 +1,12 @@
 import { and, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { accounts, categories, forecastPurchaseReviews, salaryPeriods, transactionCategoryAllocations, transactions, transactionLines } from "../db/schema";
+import { accounts, backgroundTasks, categories, forecastPurchaseReviews, salaryPeriods, transactionCategoryAllocations, transactions, transactionLines } from "../db/schema";
 import { env } from "../lib/env";
 import { callOpenRouterAgent } from "./agent-llm";
 import { getFinancialRevision } from "./financial-revision";
 import { getBudgetOutlook } from "./budget-outlook";
+import { createBackgroundTask } from "./background-tasks";
 
 export const BUDGET_REVIEW_PROMPT_VERSION = "budget-pattern-review.v1";
 
@@ -131,8 +132,26 @@ function parseReview(content: unknown): ReviewDecision[] {
 
 /** Ask the model to classify only deterministic outlier candidates, then persist
  * the validated conclusion. Failure is intentionally non-fatal to forecasting. */
-export async function reviewBudgetOutlook(periodId: number) {
+export async function requestBudgetOutlierReview(periodId: number, ownerEmail?: string | null) {
+  const expectedRevision = await getFinancialRevision();
+  const task = await createBackgroundTask({
+    queueName: "fainens-agent",
+    jobName: "budget-outlier-review",
+    dedupeKey: `budget-outlier-review:${periodId}:${expectedRevision}:${BUDGET_REVIEW_PROMPT_VERSION}`,
+    ownerEmail,
+    subjectType: "salary_period",
+    subjectId: periodId,
+    payload: { periodId, expectedRevision, promptVersion: BUDGET_REVIEW_PROMPT_VERSION },
+    maxAttempts: 3,
+  });
+  return { taskId: task.id, periodId, status: task.status, expectedRevision };
+}
+
+export async function reviewBudgetOutlook(periodId: number, options: { expectedRevision?: number; signal?: AbortSignal } = {}) {
   if (!env.OPENROUTER_API_KEY) return { applied: false, reason: "provider_unavailable", reviews: [] };
+  if (options.expectedRevision != null && await getFinancialRevision() !== options.expectedRevision) {
+    return { applied: false, reason: "stale_revision", reviews: [] };
+  }
   const outlook = await getBudgetOutlook(periodId);
   const largePurchases = await findLargeHistoricalPurchases(outlook);
   const candidates = outlook.categories
@@ -174,6 +193,7 @@ export async function reviewBudgetOutlook(periodId: number) {
     apiKey: env.OPENROUTER_API_KEY,
     model: env.OPENROUTER_MODEL,
     tools: [],
+    signal: options.signal,
     messages: [
       { role: "system", content: "You review individually large historical purchases for a personal-finance forecast. Return JSON only, with no markdown and no chain-of-thought, in the shape {purchaseReviews:[{transactionId,periodId,categoryId,amount,classification,weight,confidence,rationale}]}. Only return supplied purchase IDs that are genuine pattern flags. Classify flagged purchases only as one_off or unusual. Do not return recurring subscriptions, normal purchases, or uncertain purchases at all, even if their amount is large. Those remain part of the ordinary baseline and are not attention items. weight is that individual purchase's influence in the deterministic historical sample: one_off usually 0.05-0.25 and unusual 0.25-0.6. A large purchase is not automatically a flag. Never invent facts. rationale must be one short evidence-based sentence." },
       { role: "user", content: JSON.stringify({ promptVersion: BUDGET_REVIEW_PROMPT_VERSION, periodId, candidates }) },
@@ -182,6 +202,9 @@ export async function reviewBudgetOutlook(periodId: number) {
   const decisions = parseReview(response.message.content);
   const validPurchases = new Map(largePurchases.map((purchase) => [purchase.id, purchase]));
   const revision = await getFinancialRevision();
+  if (options.expectedRevision != null && revision !== options.expectedRevision) {
+    return { applied: false, reason: "stale_revision", reviews: [] };
+  }
   const reviews = decisions.filter((decision) => {
     // The model may still mention a recurring/normal purchase for context,
     // but those are explicitly not review flags and must not be persisted or
@@ -238,8 +261,17 @@ export async function getBudgetReviewStatus(periodId: number) {
   const rows = await db.select({ transactionId: forecastPurchaseReviews.transactionId, periodId: forecastPurchaseReviews.periodId, categoryId: forecastPurchaseReviews.categoryId, amount: forecastPurchaseReviews.amount, classification: forecastPurchaseReviews.classification, weight: forecastPurchaseReviews.weight, userWeight: forecastPurchaseReviews.userWeight, confidence: forecastPurchaseReviews.confidence, rationale: forecastPurchaseReviews.rationale, evidenceRevision: forecastPurchaseReviews.evidenceRevision, status: forecastPurchaseReviews.status })
     .from(forecastPurchaseReviews)
     .where(and(
+      eq(forecastPurchaseReviews.periodId, periodId),
       or(eq(forecastPurchaseReviews.status, "active"), eq(forecastPurchaseReviews.status, "user_override")),
       inArray(forecastPurchaseReviews.classification, ["one_off", "unusual"]),
     ));
-  return { periodId, evidenceRevision: revision, reviews: rows.map((row) => ({ ...row, isCurrent: row.evidenceRevision === revision })) };
+  const task = (await db.select({ id: backgroundTasks.id, status: backgroundTasks.status, attempts: backgroundTasks.attempts, maxAttempts: backgroundTasks.maxAttempts, lastError: backgroundTasks.lastError, createdAt: backgroundTasks.createdAt, updatedAt: backgroundTasks.updatedAt, completedAt: backgroundTasks.completedAt })
+    .from(backgroundTasks)
+    .where(and(
+      eq(backgroundTasks.jobName, "budget-outlier-review"),
+      eq(backgroundTasks.subjectType, "salary_period"),
+      eq(backgroundTasks.subjectId, String(periodId)),
+    ))
+    .orderBy(sql`${backgroundTasks.createdAt} DESC`).limit(1))[0] ?? null;
+  return { periodId, evidenceRevision: revision, reviews: rows.map((row) => ({ ...row, isCurrent: row.evidenceRevision === revision })), task };
 }

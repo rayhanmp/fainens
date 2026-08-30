@@ -36,6 +36,8 @@ import pendingTransactionsRoutes from "./routes/pending-transactions";
 import splitbillRoutes from "./routes/splitbill";
 import agentRoutes from "./routes/agent";
 import moneyAnomalyRoutes from "./routes/money-anomalies";
+import jobsRoutes from "./routes/jobs";
+import { closeQueues, getJobQueueHealth } from "./jobs/queue";
 
 export type AppRuntime = "server" | "contract";
 
@@ -70,6 +72,17 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register((instance) => limitScope(instance, 10, "1 minute", "Scraper rate limit exceeded."), { prefix: "/wishlist" });
 
   app.get("/health", { schema: { tags: ["system"], response: { 200: z.object({ status: z.literal("ok"), timestamp: z.number() }) } } }, async () => ({ status: "ok" as const, timestamp: Date.now() }));
+  app.get("/health/worker", { schema: { tags: ["system"], response: { 200: z.object({ status: z.literal("ok"), workerCount: z.number().int().nonnegative(), queues: z.array(z.unknown()), timestamp: z.number() }).passthrough(), 503: z.object({ status: z.literal("degraded"), error: z.string(), timestamp: z.number() }).passthrough() } } }, async (_request, reply) => {
+    try {
+      const health = await getJobQueueHealth();
+      if (health.workerCount < 1) {
+        return reply.code(503).send({ status: "degraded" as const, error: "No BullMQ worker heartbeat is visible", timestamp: Date.now() });
+      }
+      return reply.send({ status: "ok" as const, ...health, timestamp: Date.now() });
+    } catch (error) {
+      return reply.code(503).send({ status: "degraded" as const, error: error instanceof Error ? error.message : "Queue unavailable", timestamp: Date.now() });
+    }
+  });
   app.get("/", { schema: { tags: ["system"], response: { 200: z.object({ ok: z.literal(true) }) } } }, async () => ({ ok: true as const }));
   app.register(authPlugin);
   app.register(authRoutes);
@@ -95,5 +108,12 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(splitbillRoutes);
   app.register(agentRoutes);
   app.register(moneyAnomalyRoutes);
+  app.register(jobsRoutes);
+  // Queue instances are module-level so feature code shares one producer
+  // connection. Close them with the app as well, including contract-only
+  // OpenAPI generation, so one-shot tooling never leaves Redis handles alive.
+  app.addHook("onClose", async () => {
+    await closeQueues();
+  });
   return app;
 }

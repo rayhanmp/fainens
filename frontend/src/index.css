@@ -403,8 +403,8 @@ h6 {
 
 .agent-viz-donut {
   display: grid;
-  width: 7rem;
-  height: 7rem;
+  width: 8rem;
+  height: 8rem;
   place-items: center;
   border-radius: 999px;
 }
@@ -412,23 +412,60 @@ h6 {
 .agent-viz-donut::before {
   content: '';
   grid-area: 1 / 1;
-  width: 4.7rem;
-  height: 4.7rem;
+  width: 5.35rem;
+  height: 5.35rem;
   border-radius: 999px;
   background: var(--color-background);
+}
+
+.agent-viz-donut > svg {
+  z-index: 0;
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.agent-viz-donut path {
+  cursor: pointer;
+  outline: none;
+  stroke: var(--color-background);
+  stroke-width: 1.5;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+.agent-viz-donut path:hover,
+.agent-viz-donut path:focus-visible {
+  filter: brightness(1.12);
 }
 
 .agent-viz-donut > span {
   z-index: 1;
   grid-area: 1 / 1;
-  max-width: 4.2rem;
-  overflow: hidden;
+  display: flex;
+  max-width: 5rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
   color: var(--color-text-primary);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
+  line-height: 1.1;
   text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.agent-viz-donut > span strong {
+  font-size: 0.85rem;
+}
+
+.agent-viz-donut > span small {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1.1;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .agent-viz-heat-cell {
@@ -671,6 +708,60 @@ button[data-variant="danger"]:focus-visible,
   animation: slideInIndicator 0.3s ease-out;
 }
 
+.sidebar-item--quiet {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  padding-left: 1.125rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.sidebar-item--quiet.sidebar-item--active {
+  color: var(--ref-primary);
+  font-weight: 600;
+}
+
+.sidebar-item--quiet svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  opacity: 0.82;
+}
+
+.sidebar-section-label {
+  padding: 0.35rem 1rem 0.25rem 1.125rem;
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1rem;
+  text-transform: uppercase;
+}
+
+.sidebar-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-section-toggle:hover {
+  color: var(--color-text-primary);
+}
+
+.sidebar-section-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-section-label--spaced {
+  margin-top: 0.65rem;
+}
+
 @keyframes slideInIndicator {
   from {
     transform: translateY(-50%) scaleY(0);
@@ -774,6 +865,34 @@ button[data-variant="danger"]:focus-visible,
 }
 .reports-tabs-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* Keep the agent conversation history easy to scan without leaving the
+ * browser's default scrollbar competing with the list. */
+.conversation-list-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  scrollbar-gutter: stable;
+}
+
+.conversation-list-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.conversation-list-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-list-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--color-border);
+  background-clip: padding-box;
+}
+
+.conversation-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--ref-primary);
+  background-clip: padding-box;
 }
 
 /* Dark mode fixes */

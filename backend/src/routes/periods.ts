@@ -92,6 +92,31 @@ const periodSuggestionSchema = z.object({
 
 type ReturnPeriodCandidate = { name: string; startDate: number; endDate: number; isCurrent: boolean };
 
+/**
+ * Date inputs from the period form are calendar dates, not UTC instants.
+ * `new Date("2026-07-24")` means midnight UTC, which shifts the date in
+ * Jakarta and can make an otherwise adjacent period look overlapping.
+ */
+function parsePeriodDate(value: string): number | null {
+  const trimmed = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return date.getTime();
+  }
+  const parsed = new Date(trimmed).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function localCalendarDay(ms: number): number {
+  const date = new Date(ms);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 function payrollPeriod(startDate: number, payrollDay: number, asOfDate: number): ReturnPeriodCandidate {
   const endDate = payrollPeriodEnd(startDate, payrollDay);
   const end = new Date(endDate);
@@ -128,8 +153,11 @@ async function buildReturnBackfillPreview(asOfDate: number): Promise<{ candidate
 async function assertNoPeriodOverlap(startMs: number, endMs: number, excludeId?: number): Promise<void> {
   const periods = await db.select({ id: salaryPeriods.id, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
     .from(salaryPeriods);
+  const startDay = localCalendarDay(startMs);
+  const endDay = localCalendarDay(endMs);
   const overlap = periods.find((period) => period.id !== excludeId &&
-    startMs <= inclusivePeriodEnd(Number(period.endDate)) && Number(period.startDate) <= inclusivePeriodEnd(endMs));
+    startDay <= localCalendarDay(Number(period.endDate)) &&
+    localCalendarDay(Number(period.startDate)) <= endDay);
   if (overlap) throw new Error(`Period overlaps existing period ${overlap.id}`);
 }
 
@@ -326,10 +354,10 @@ export default async function (fastify: FastifyInstance) {
       endDate: string;
     };
 
-    const startMs = new Date(body.startDate).getTime();
-    const endMs = new Date(body.endDate).getTime();
+    const startMs = parsePeriodDate(body.startDate);
+    const endMs = parsePeriodDate(body.endDate);
 
-    if (!body.name?.trim() || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    if (!body.name?.trim() || startMs == null || endMs == null || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
       reply.code(400).send({ error: "name, startDate, and endDate are required; endDate must be after startDate" });
       return;
     }
@@ -393,8 +421,8 @@ export default async function (fastify: FastifyInstance) {
       }
       updates.name = body.name.trim();
     }
-    if (body.startDate) updates.startDate = new Date(body.startDate).getTime();
-    if (body.endDate) updates.endDate = new Date(body.endDate).getTime();
+    if (body.startDate) updates.startDate = parsePeriodDate(body.startDate);
+    if (body.endDate) updates.endDate = parsePeriodDate(body.endDate);
 
     // Validate date range if both dates are being updated or one is updated
     const startMs = updates.startDate ?? existing.startDate;

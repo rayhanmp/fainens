@@ -39,6 +39,7 @@ export async function generateConversationTitle(input: {
   model?: string;
   question: string;
   assistantAnswer?: string | null;
+  signal?: AbortSignal;
 }): Promise<{ title: string; generatedBy: "llm" | "fallback" }> {
   const fallback = fallbackConversationTitle(input.question);
   if (!input.apiKey) return { title: fallback, generatedBy: "fallback" };
@@ -67,6 +68,7 @@ export async function generateConversationTitle(input: {
       model: input.model,
       messages,
       tools: [],
+      signal: input.signal,
     });
     const title = normalizeGeneratedTitle(response.message.content);
     if (title) return { title, generatedBy: "llm" };

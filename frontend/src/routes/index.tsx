@@ -140,7 +140,7 @@ function DashboardPage() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isAttentionExpanded, setIsAttentionExpanded] = useState(false);
   const [agentPrompt, setAgentPrompt] = useState('');
-  const reviewedOutlookPeriodRef = useRef<number | null>(null);
+  const reviewedOutlookRevisionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const reviewBudgetOutlookMutation = useReviewBudgetOutlookMutation();
@@ -198,10 +198,18 @@ function DashboardPage() {
   useEffect(() => {
     const outlook = periodQueries.outlook.data;
     if (!selectedPeriod || !outlook || outlook.patternReview.applied || !outlook.categories.some((row) => row.outlierCount > 0)) return;
-    if (reviewedOutlookPeriodRef.current === selectedPeriod.id) return;
-    reviewedOutlookPeriodRef.current = selectedPeriod.id;
+    const reviewRevision = outlook.patternReview.evidenceRevision;
+    const reviewKey = `${selectedPeriod.id}:${reviewRevision}`;
+    if (reviewedOutlookRevisionRef.current === reviewKey) return;
+    reviewedOutlookRevisionRef.current = reviewKey;
     void reviewBudgetOutlookMutation.mutateAsync(selectedPeriod.id).catch(() => undefined);
   }, [periodQueries.outlook.data, reviewBudgetOutlookMutation.mutateAsync, selectedPeriod]);
+
+  useEffect(() => {
+    const task = (periodQueries.review.data as { task?: { status?: string } } | undefined)?.task;
+    if (task?.status !== 'completed' || !selectedPeriod) return;
+    void queryClient.invalidateQueries({ queryKey: [...queryKeys.dashboard.period(selectedPeriod.id), 'outlook'] });
+  }, [periodQueries.review.data, queryClient, selectedPeriod]);
 
   const budgetSummary = useMemo(() => {
     const totalPlanned = budgetRows.reduce((sum, row) => sum + row.plannedAmount, 0);

@@ -263,6 +263,16 @@ This file is the durable hand-off for the implementation wave driven by `BUG_AUD
 - Zod validator/serializer compilers and a checked-in finance-pilot OpenAPI document are in place. Orval generation is reproducible through `generate:api` and `verify:generated`, with one shared credential/error/204-aware fetch transport.
 - BullMQ queue and worker foundations cover cache invalidation, subscription renewal, and salary-posting maintenance. Interval mode remains the default until queue-mode equivalence is rehearsed in deployment.
 
+### Current working tree — BullMQ Phase 2 durable-worker implementation (not yet committed)
+
+- Added the durable `background_task` table and migration with dedupe keys, owner/subject scope, attempts, retry timing, compact results, and explicit cancellation/retry states. Task claims are atomic, stale running work is recoverable, and Redis delivery is treated as a trigger rather than the source of truth.
+- Reworked the queue layer into typed maintenance, recurring, and agent queues with stable BullMQ job IDs, bounded retries/backoff, BullMQ 6 schedulers, worker heartbeats, graceful shutdown, configurable concurrency, and an explicit agent-provider timeout.
+- Moved automatic conversation-title generation and budget-outlier review behind durable agent tasks. The budget review endpoint remains HTTP 200 for compatibility but returns a task receipt, while the dashboard polls the task-backed review status before showing the stored review.
+- Budget-review results are scoped to the requested period, stale-revision tasks are cancelled instead of reported as successful, and task receipts expose only bounded metadata rather than provider-facing payloads.
+- Queue mode no longer runs API maintenance intervals. The standalone worker owns scheduled maintenance and recurring ledger scans; interval mode remains available as a rollout fallback and drains the same durable task handlers locally.
+- Added owner-scoped internal task list/detail/retry/cancel routes, `/health/worker`, Docker Compose worker wiring, worker-container health checks, and regenerated OpenAPI/frontend client artifacts. Financial journal writes remain in existing domain services and are not performed merely because a queue job runs.
+- Verification: backend TypeScript build, frontend production build, OpenAPI generation, and route-contract verification pass (150 paths, 194 operations). A local isolated migration smoke test is still blocked by the host's missing native `better-sqlite3` binding, so production-image rehearsal remains pending.
+
 ### `62f84a8` — feature-owned query foundations
 
 - Added canonical query-key factories and feature-owned React Query hooks for accounts, categories, periods, transactions, budgets, dashboard analytics, and agent conversations/memories.

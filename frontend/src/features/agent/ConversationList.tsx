@@ -2,9 +2,27 @@ import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 're
 import { Archive, ArchiveRestore, CalendarDays, Check, ChevronDown, MoreHorizontal, Pencil, Pin, PinOff, Trash2, X } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { cn, formatDate } from '../../lib/utils';
+import type { AgentUsageSummary } from '../../generated/client';
 import type { Conversation, Period } from './types';
 
 export const CONVERSATIONS_PAGE_SIZE = 10;
+
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}m`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+  return String(value);
+}
+
+function formatEstimatedCost(value: number | null): string {
+  if (value == null) return 'cost unavailable';
+  if (value === 0) return '$0.00';
+  if (value < 0.01) return '<$0.01';
+  return `$${value.toFixed(2)}`;
+}
+
+function usageLabel(usage: AgentUsageSummary): string {
+  return `${formatTokenCount(usage.totalTokens)} tokens · est. ${formatEstimatedCost(usage.estimatedCostUsd)}`;
+}
 
 function conversationGroup(updatedAt: number, nowMs = Date.now()): string {
   const now = new Date(nowMs);
@@ -108,6 +126,7 @@ export type ConversationListProps = {
   onTogglePin: (conversation: Conversation) => void;
   onToggleArchive: (conversation: Conversation) => void;
   onDeleteConversation: (conversation: Conversation) => void;
+  dailyUsage: AgentUsageSummary | null;
 };
 
 export function ConversationList({
@@ -136,13 +155,14 @@ export function ConversationList({
   onTogglePin,
   onToggleArchive,
   onDeleteConversation,
+  dailyUsage,
 }: ConversationListProps) {
   const activeConversations = conversations.filter((conversation) => conversation.archivedAt == null);
   const archivedConversations = conversations.filter((conversation) => conversation.archivedAt != null);
 
   return <Card
     title="Conversations"
-    action={<span className="whitespace-nowrap text-xs text-[var(--color-text-secondary)]">{activeConversations.length} active · {archivedConversations.length} archived</span>}
+    action={<div className="text-right text-xs text-[var(--color-text-secondary)]"><span className="block whitespace-nowrap">{activeConversations.length} active · {archivedConversations.length} archived</span><span className="mt-0.5 block whitespace-nowrap text-[10px]">Today · {dailyUsage ? usageLabel(dailyUsage) : 'no usage yet'}</span></div>}
   >
     <div className="-mx-4 -mt-4 mb-3 border-b border-[var(--color-border)] px-4 py-3">
       <div className="flex min-w-0 items-center gap-2.5">
@@ -160,7 +180,7 @@ export function ConversationList({
         const element = event.currentTarget;
         if (element.scrollHeight - element.scrollTop - element.clientHeight < 80) onNearEnd();
       }}
-      className="max-h-[32rem] space-y-1 overflow-y-auto lg:max-h-[calc(100vh-18rem)]"
+      className="conversation-list-scroll max-h-[32rem] space-y-1 overflow-y-auto lg:max-h-[calc(100vh-18rem)]"
     >
       {visibleConversations.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">Your conversations will appear here.</p>}
       {visibleConversations.map((conversation, index) => {
@@ -183,6 +203,7 @@ export function ConversationList({
               <button type="button" onClick={() => onSelectConversation(conversation.id)} className="min-w-0 flex-1 text-left">
                 <span className="flex items-center gap-1 truncate text-sm font-medium">{conversation.isPinned && <Pin className="h-3 w-3 shrink-0" aria-label="Pinned" />}<ConversationTitle conversation={conversation} isActive={isActive} /></span>
                 <span className={cn('mt-0.5 block text-xs', isActive ? 'text-white/80' : 'text-[var(--color-text-secondary)]')}>{isArchived ? `Archived · ${formatDate(conversation.archivedAt ?? conversation.updatedAt)}` : formatDate(conversation.updatedAt)}</span>
+                {conversation.usage && <span className={cn('mt-0.5 block text-[10px]', isActive ? 'text-white/70' : 'text-[var(--color-muted)]')}>{usageLabel(conversation.usage)}</span>}
               </button>
               <div className="relative shrink-0 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100" data-conversation-menu-root>
                 <button type="button" disabled={isBusy} onClick={(event) => onToggleConversationMenu(event, conversation.id)} className={cn('rounded p-1 hover:bg-black/10', isActive ? 'text-white' : 'text-[var(--color-text-secondary)]')} title="Conversation actions" aria-label={`Actions for ${conversation.title}`} aria-expanded={openConversationMenuId === conversation.id}><MoreHorizontal className="h-4 w-4" /></button>

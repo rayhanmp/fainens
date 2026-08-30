@@ -4,12 +4,25 @@ import type { AgentFinancialFacts } from '../../lib/api';
 import { unwrapGenerated } from '../core/generated-response';
 import { queryKeys } from '../core/query-keys';
 
+const CONVERSATION_TITLE_POLL_INTERVAL_MS = 2_000;
+
 export const useAgentConversationsQuery = (includeArchived = false) => useQuery({
-  queryKey: queryKeys.agent.conversations(includeArchived),
+  queryKey: queryKeys.agent.conversations(includeArchived, new Date().getTimezoneOffset()),
   queryFn: async ({ signal }) => {
-    const response = await listAgentConversations({ includeArchived: includeArchived ? 'true' : 'false' }, { signal });
+    const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+    const response = await listAgentConversations({ includeArchived: includeArchived ? 'true' : 'false', timezoneOffsetMinutes }, { signal });
     if (response.status !== 200) throw new Error('Failed to load conversations');
     return response.data;
+  },
+  // Auto titles are generated asynchronously after the assistant response.
+  // Keep the list fresh only while one is still waiting, then stop polling as
+  // soon as the worker persists the generated title.
+  refetchInterval: (query) => {
+    const conversations = query.state.data?.conversations ?? [];
+    const hasPendingTitle = conversations.some((conversation) => (
+      conversation.titleSource === 'auto' && conversation.title === 'New conversation'
+    ));
+    return hasPendingTitle ? CONVERSATION_TITLE_POLL_INTERVAL_MS : false;
   },
 });
 

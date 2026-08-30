@@ -650,7 +650,8 @@ export async function executeAgentApproval(args: { ownerEmail: string; approvalI
   if (approvalHint[0]) {
     const actionHint = await db.select().from(agentPendingActions).where(eq(agentPendingActions.id, approvalHint[0].pendingActionId)).limit(1);
     if (actionHint[0]?.kind === AGENT_TRANSACTION_ACTION_KIND) {
-      return executeTransactionApproval({ ownerEmail: args.ownerEmail, approvalId: args.approvalId, suppliedHash, approvalHint: approvalHint[0], actionHint: actionHint[0] });
+      const result = await executeTransactionApproval({ ownerEmail: args.ownerEmail, approvalId: args.approvalId, suppliedHash, approvalHint: approvalHint[0], actionHint: actionHint[0] });
+      return { status: "executed" as const, ...result };
     }
   }
   const result = db.transaction((tx) => {
@@ -718,7 +719,7 @@ export async function executeAgentApproval(args: { ownerEmail: string; approvalI
     await invalidateAllAnalytics();
     await invalidateAllInsights();
   }
-  return result;
+  return { status: "executed" as const, ...result };
 }
 
 export async function rejectAgentApproval(args: { ownerEmail: string; approvalId: number; token: unknown }) {

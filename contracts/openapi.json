@@ -763,6 +763,16 @@
                         },
                         "incomeCents": {
                           "type": "number"
+                        },
+                        "averageExpenseCents": {
+                          "type": "number"
+                        },
+                        "largestExpenseCents": {
+                          "type": "number"
+                        },
+                        "topCategoryName": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -2141,6 +2151,18 @@
                     },
                     "message": {
                       "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "promptTokens": { "type": "integer" },
+                        "completionTokens": { "type": "integer" },
+                        "totalTokens": { "type": "integer" },
+                        "estimatedCostUsd": { "nullable": true, "type": "number" },
+                        "calls": { "type": "integer" }
+                      },
+                      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                      "additionalProperties": {}
                     }
                   },
                   "required": [
@@ -5911,6 +5933,11 @@
                       },
                       "color": {
                         "type": "string"
+                      },
+                      "usageCount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -10384,29 +10411,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "applied": {
-                      "type": "boolean"
-                    },
-                    "reason": {
+                    "taskId": {
                       "type": "string"
                     },
-                    "reviews": {
-                      "type": "array",
-                      "items": {}
-                    },
-                    "largePurchaseCount": {
+                    "periodId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
-                    "detail": {
+                    "status": {
                       "type": "string"
+                    },
+                    "expectedRevision": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
-                    "applied",
-                    "reason",
-                    "reviews"
+                    "taskId",
+                    "periodId",
+                    "status",
+                    "expectedRevision"
                   ],
                   "additionalProperties": {}
                 }
@@ -25138,6 +25164,16 @@
             "in": "query",
             "name": "includeArchived",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": -840,
+              "maximum": 840
+            },
+            "in": "query",
+            "name": "timezoneOffsetMinutes",
+            "required": false
           }
         ],
         "responses": {
@@ -25180,6 +25216,18 @@
                           "archivedAt": {
                             "nullable": true,
                             "type": "number"
+                          },
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "promptTokens": { "type": "integer" },
+                              "completionTokens": { "type": "integer" },
+                              "totalTokens": { "type": "integer" },
+                              "estimatedCostUsd": { "nullable": true, "type": "number" },
+                              "calls": { "type": "integer" }
+                            },
+                            "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
@@ -25196,11 +25244,25 @@
                     },
                     "includeArchived": {
                       "type": "boolean"
+                    },
+                    "dailyUsage": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "promptTokens": { "type": "integer" },
+                        "completionTokens": { "type": "integer" },
+                        "totalTokens": { "type": "integer" },
+                        "estimatedCostUsd": { "nullable": true, "type": "number" },
+                        "calls": { "type": "integer" }
+                      },
+                      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                      "additionalProperties": {}
                     }
                   },
                   "required": [
                     "conversations",
-                    "includeArchived"
+                    "includeArchived",
+                    "dailyUsage"
                   ],
                   "additionalProperties": {}
                 }
@@ -25388,6 +25450,18 @@
                         "archivedAt": {
                           "nullable": true,
                           "type": "number"
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "promptTokens": { "type": "integer" },
+                            "completionTokens": { "type": "integer" },
+                            "totalTokens": { "type": "integer" },
+                            "estimatedCostUsd": { "nullable": true, "type": "number" },
+                            "calls": { "type": "integer" }
+                          },
+                          "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -25422,6 +25496,49 @@
                             "type": "string"
                           },
                           "response": {},
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "promptTokens": { "type": "integer" },
+                              "completionTokens": { "type": "integer" },
+                              "totalTokens": { "type": "integer" },
+                              "estimatedCostUsd": { "nullable": true, "type": "number" },
+                              "calls": { "type": "integer" }
+                            },
+                            "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                            "additionalProperties": {}
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "filename": {
+                                  "type": "string"
+                                },
+                                "mimetype": {
+                                  "type": "string"
+                                },
+                                "fileSize": {
+                                  "type": "integer"
+                                },
+                                "downloadUrl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "filename",
+                                "mimetype",
+                                "fileSize",
+                                "downloadUrl"
+                              ],
+                              "additionalProperties": {}
+                            }
+                          },
                           "createdAt": {
                             "type": "number"
                           }
@@ -27068,6 +27185,18 @@
                     },
                     "message": {
                       "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "promptTokens": { "type": "integer" },
+                        "completionTokens": { "type": "integer" },
+                        "totalTokens": { "type": "integer" },
+                        "estimatedCostUsd": { "nullable": true, "type": "number" },
+                        "calls": { "type": "integer" }
+                      },
+                      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                      "additionalProperties": {}
                     }
                   },
                   "required": [
@@ -27970,6 +28099,706 @@
                     "error"
                   ],
                   "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/jobs": {
+      "get": {
+        "operationId": "listBackgroundTasks",
+        "tags": [
+          "system"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "running",
+                "retrying",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fainens-maintenance",
+                "fainens-recurring",
+                "fainens-agent"
+              ]
+            },
+            "in": "query",
+            "name": "queue",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "queueName": {
+                            "type": "string",
+                            "enum": [
+                              "fainens-maintenance",
+                              "fainens-recurring",
+                              "fainens-agent"
+                            ]
+                          },
+                          "jobName": {
+                            "type": "string",
+                            "enum": [
+                              "dispatch-background-tasks",
+                              "cache-invalidation-outbox",
+                              "storage-deletion-outbox",
+                              "precompute-warmup",
+                              "subscription-renewals",
+                              "salary-posting",
+                              "conversation-title",
+                              "budget-outlier-review"
+                            ]
+                          },
+                          "dedupeKey": {
+                            "type": "string"
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "subjectType": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "subjectId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "running",
+                              "retrying",
+                              "completed",
+                              "failed",
+                              "cancelled"
+                            ]
+                          },
+                          "attempts": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "availableAt": {
+                            "type": "number"
+                          },
+                          "startedAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "completedAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "lastError": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "resultJson": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "updatedAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "queueName",
+                          "jobName",
+                          "dedupeKey",
+                          "ownerEmail",
+                          "subjectType",
+                          "subjectId",
+                          "status",
+                          "attempts",
+                          "maxAttempts",
+                          "availableAt",
+                          "startedAt",
+                          "completedAt",
+                          "lastError",
+                          "resultJson",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tasks"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/jobs/{id}": {
+      "get": {
+        "operationId": "getBackgroundTask",
+        "tags": [
+          "system"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "queueName": {
+                      "type": "string",
+                      "enum": [
+                        "fainens-maintenance",
+                        "fainens-recurring",
+                        "fainens-agent"
+                      ]
+                    },
+                    "jobName": {
+                      "type": "string",
+                      "enum": [
+                        "dispatch-background-tasks",
+                        "cache-invalidation-outbox",
+                        "storage-deletion-outbox",
+                        "precompute-warmup",
+                        "subscription-renewals",
+                        "salary-posting",
+                        "conversation-title",
+                        "budget-outlier-review"
+                      ]
+                    },
+                    "dedupeKey": {
+                      "type": "string"
+                    },
+                    "ownerEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subjectType": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subjectId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "retrying",
+                        "completed",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "availableAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "completedAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "resultJson": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "queueName",
+                    "jobName",
+                    "dedupeKey",
+                    "ownerEmail",
+                    "subjectType",
+                    "subjectId",
+                    "status",
+                    "attempts",
+                    "maxAttempts",
+                    "availableAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError",
+                    "resultJson",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/jobs/{id}/retry": {
+      "post": {
+        "operationId": "retryBackgroundTask",
+        "tags": [
+          "system"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "queueName": {
+                      "type": "string",
+                      "enum": [
+                        "fainens-maintenance",
+                        "fainens-recurring",
+                        "fainens-agent"
+                      ]
+                    },
+                    "jobName": {
+                      "type": "string",
+                      "enum": [
+                        "dispatch-background-tasks",
+                        "cache-invalidation-outbox",
+                        "storage-deletion-outbox",
+                        "precompute-warmup",
+                        "subscription-renewals",
+                        "salary-posting",
+                        "conversation-title",
+                        "budget-outlier-review"
+                      ]
+                    },
+                    "dedupeKey": {
+                      "type": "string"
+                    },
+                    "ownerEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subjectType": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subjectId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "retrying",
+                        "completed",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "availableAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "completedAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "resultJson": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "queueName",
+                    "jobName",
+                    "dedupeKey",
+                    "ownerEmail",
+                    "subjectType",
+                    "subjectId",
+                    "status",
+                    "attempts",
+                    "maxAttempts",
+                    "availableAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError",
+                    "resultJson",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelBackgroundTask",
+        "tags": [
+          "system"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "queueName": {
+                      "type": "string",
+                      "enum": [
+                        "fainens-maintenance",
+                        "fainens-recurring",
+                        "fainens-agent"
+                      ]
+                    },
+                    "jobName": {
+                      "type": "string",
+                      "enum": [
+                        "dispatch-background-tasks",
+                        "cache-invalidation-outbox",
+                        "storage-deletion-outbox",
+                        "precompute-warmup",
+                        "subscription-renewals",
+                        "salary-posting",
+                        "conversation-title",
+                        "budget-outlier-review"
+                      ]
+                    },
+                    "dedupeKey": {
+                      "type": "string"
+                    },
+                    "ownerEmail": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subjectType": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "subjectId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "retrying",
+                        "completed",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "availableAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "completedAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "resultJson": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "queueName",
+                    "jobName",
+                    "dedupeKey",
+                    "ownerEmail",
+                    "subjectType",
+                    "subjectId",
+                    "status",
+                    "attempts",
+                    "maxAttempts",
+                    "availableAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError",
+                    "resultJson",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
