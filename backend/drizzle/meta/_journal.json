@@ -218,6 +218,13 @@
       "when": 1787942000000,
       "tag": "0030_agent_token_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788079900000,
+      "tag": "0031_agent_conversation_summary",
+      "breakpoints": true
     }
   ]
 }

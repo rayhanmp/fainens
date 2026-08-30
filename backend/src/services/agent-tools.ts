@@ -209,7 +209,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_account_balances",
-    description: "Read all active account balances, types, and liquidity classes as of a timestamp. Use this to resolve named accounts/IDs before a proposal; use get_account_health for one account's reconciliation evidence. cash_equivalent lines require a cash-flow class, while non-cash lines must leave it null.",
+    description: "Read active account balances, IDs, types, and liquidity classes as of a timestamp. Use before preparing a transaction or answering a balance question. For reconciliation evidence on one account use get_account_health.",
     inputSchema: {
       type: "object",
       properties: {
@@ -358,7 +358,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "update_transaction_tags",
-    description: "Update descriptive tags on one exact posted transaction. Tags are metadata only and do not change categories, budgets, reports, balances, or cash flow. Use search_transactions or get_transaction_details first to resolve the exact transaction and get_tags to resolve tag IDs, then add, remove, or replace existing tag IDs. This explicit metadata update executes immediately and returns an audit receipt; it does not require accounting confirmation.",
+    description: "Immediately apply an explicitly requested tag change to one exact posted transaction. Resolve the transaction and tag IDs first. Returns an audit receipt and never changes categories, budgets, balances, reporting, or cash flow.",
     inputSchema: {
       type: "object",
       properties: {
@@ -396,7 +396,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "create_tag",
-    description: "Create one new global descriptive tag for labeling transactions. Tags are metadata only and do not affect accounting or reporting. Use this only when the user explicitly asks for a new tag; then use the returned ID with update_transaction_tags or update_transaction_metadata. The tag is created immediately and returns an audit receipt without accounting confirmation.",
+    description: "Immediately create one descriptive tag only when the user explicitly requests it. Returns its ID and an audit receipt. A tag is metadata and never changes accounting or reporting.",
     inputSchema: {
       type: "object",
       properties: {
@@ -409,7 +409,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "update_transaction_metadata",
-    description: "Update descriptive notes and/or tags on one or more exact posted transactions (up to 20). Metadata changes do not affect categories, budgets, reports, balances, or cash flow. Resolve exact transaction IDs with search_transactions and tag IDs with get_tags first. Each item must provide notes (a string or null to clear) and/or tagIds with tagOperation add, remove, or replace. Explicit metadata requests execute immediately and return per-transaction audit receipts without accounting confirmation.",
+    description: "Immediately apply explicitly requested note or tag changes to up to 20 exact posted transactions. Resolve transaction and tag IDs first. Returns per-transaction audit receipts and never changes accounting, categories, budgets, balances, reporting, or cash flow.",
     inputSchema: {
       type: "object",
       properties: {
@@ -499,7 +499,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_categories",
-    description: "Read active category IDs, names, and reporting-account links for classifying a standard spending expense. Call without search to load the small local list. Do not call for pure income, wallet transfers, loan/debt movements, or uncategorized transfer fees.",
+    description: "Read active category IDs and reporting links for an expense or budget proposal. Load the full small list when classification is needed. Do not use for income, wallet transfers, debt movements, or other non-expense entries.",
     inputSchema: {
       type: "object",
       properties: {
@@ -511,7 +511,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "prepare_transaction",
-    description: "Prepare one explicit, balanced, non-posting review proposal. Supports a standard expense, income, or two-wallet transfer. First resolve account IDs and liquidity with get_account_balances; load categories only for a categorised expense. Use a timezone-aware ISO date and an intent that the backend validates. Nothing is posted until the user confirms the resulting card.",
+    description: "Prepare one review proposal for a standard expense, income, or transfer between two cash-equivalent wallets. Expense debits expense and credits its source; income debits its wallet and credits revenue; transfer debits destination and credits source. Resolve account IDs first and use categories only for expenses. Does not post; confirmation is required. Do not use for debt, reimbursement, investment, reconciliation, or recovery adjustments.",
     inputSchema: {
       type: "object",
       properties: transactionProposalProperties,
@@ -521,7 +521,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "prepare_transactions",
-    description: "Prepare 1-20 independent, balanced, non-posting review proposals from one message. Each item has the same contract as prepare_transaction and becomes its own confirmable card. Do not merge unrelated events. If a transfer has a fee, prepare the fee as a separate expense item rather than merging it into the transfer journal.",
+    description: "Prepare 1-20 independent review proposals using the same contract as prepare_transaction. Each receives its own confirmation card. Never merge unrelated events; represent a transfer fee as a separate expense proposal.",
     inputSchema: {
       type: "object",
       properties: {

@@ -297,6 +297,7 @@ export type ListTransactions200Summary = {
   incomeCents: number;
   averageExpenseCents?: number;
   largestExpenseCents?: number;
+  /** @nullable */
   topCategoryName?: string | null;
   [key: string]: unknown;
 };
@@ -2727,7 +2728,6 @@ export type ListTags200Item = {
   id: number;
   name: string;
   color: string;
-  usageCount?: number;
   [key: string]: unknown;
 };
 
@@ -10471,6 +10471,8 @@ export type GetSplitBillSession404 = {
   [key: string]: unknown;
 };
 
+export type ListAgentTools200ToolGroups = {[key: string]: string[]};
+
 export type ListAgentTools200Policy = {
   readOnly: boolean;
   writesRequireExplicitConfirmation: boolean;
@@ -10490,6 +10492,8 @@ export type ListAgentTools200 = {
    */
   revision: number;
   tools: unknown[];
+  presentationTools: unknown[];
+  toolGroups: ListAgentTools200ToolGroups;
   policy: ListAgentTools200Policy;
   [key: string]: unknown;
 };
@@ -10674,6 +10678,10 @@ export type DeleteAgentMemory404 = {
 
 export type ListAgentConversationsParams = {
 includeArchived?: ListAgentConversationsIncludeArchived;
+/**
+ * @minimum -840
+ * @maximum 840
+ */
 timezoneOffsetMinutes?: number;
 };
 
@@ -10686,16 +10694,6 @@ export const ListAgentConversationsIncludeArchived = {
   false: 'false',
 } as const;
 
-export type AgentUsageSummary = {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  /** @nullable */
-  estimatedCostUsd: number | null;
-  calls: number;
-  [key: string]: unknown;
-};
-
 export type ListAgentConversations200ConversationsItemTitleSource = typeof ListAgentConversations200ConversationsItemTitleSource[keyof typeof ListAgentConversations200ConversationsItemTitleSource];
 
 
@@ -10704,6 +10702,35 @@ export const ListAgentConversations200ConversationsItemTitleSource = {
   auto: 'auto',
   manual: 'manual',
 } as const;
+
+export type ListAgentConversations200ConversationsItemUsage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+};
 
 export type ListAgentConversations200ConversationsItem = {
   /**
@@ -10718,14 +10745,47 @@ export type ListAgentConversations200ConversationsItem = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
-  usage?: AgentUsageSummary;
+  usage?: ListAgentConversations200ConversationsItemUsage;
   [key: string]: unknown;
 };
+
+/**
+ * @nullable
+ */
+export type ListAgentConversations200DailyUsage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+} | null;
 
 export type ListAgentConversations200 = {
   conversations: ListAgentConversations200ConversationsItem[];
   includeArchived: boolean;
-  dailyUsage: AgentUsageSummary | null;
+  /** @nullable */
+  dailyUsage: ListAgentConversations200DailyUsage;
   [key: string]: unknown;
 };
 
@@ -10749,6 +10809,35 @@ export const CreateAgentConversation201ConversationTitleSource = {
   manual: 'manual',
 } as const;
 
+export type CreateAgentConversation201ConversationUsage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+};
+
 export type CreateAgentConversation201Conversation = {
   /**
    * @minimum -9007199254740991
@@ -10762,7 +10851,7 @@ export type CreateAgentConversation201Conversation = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
-  usage?: AgentUsageSummary;
+  usage?: CreateAgentConversation201ConversationUsage;
   [key: string]: unknown;
 };
 
@@ -10785,6 +10874,35 @@ export const GetAgentConversation200ConversationTitleSource = {
   manual: 'manual',
 } as const;
 
+export type GetAgentConversation200ConversationUsage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+};
+
 export type GetAgentConversation200Conversation = {
   /**
    * @minimum -9007199254740991
@@ -10798,7 +10916,7 @@ export type GetAgentConversation200Conversation = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
-  usage?: AgentUsageSummary;
+  usage?: GetAgentConversation200ConversationUsage;
   [key: string]: unknown;
 };
 
@@ -10811,6 +10929,52 @@ export const GetAgentConversation200MessagesItemRole = {
   assistant: 'assistant',
 } as const;
 
+export type GetAgentConversation200MessagesItemUsage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+};
+
+export type GetAgentConversation200MessagesItemAttachmentsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  filename: string;
+  mimetype: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  fileSize: number;
+  downloadUrl: string;
+  [key: string]: unknown;
+};
+
 export type GetAgentConversation200MessagesItem = {
   /**
    * @minimum -9007199254740991
@@ -10820,18 +10984,9 @@ export type GetAgentConversation200MessagesItem = {
   role: GetAgentConversation200MessagesItemRole;
   content: string;
   response?: unknown;
-  usage?: AgentUsageSummary;
+  usage?: GetAgentConversation200MessagesItemUsage;
   attachments?: GetAgentConversation200MessagesItemAttachmentsItem[];
   createdAt: number;
-  [key: string]: unknown;
-};
-
-export type GetAgentConversation200MessagesItemAttachmentsItem = {
-  id: number;
-  filename: string;
-  mimetype: string;
-  fileSize: number;
-  downloadUrl: string;
   [key: string]: unknown;
 };
 
@@ -10876,6 +11031,35 @@ export const UpdateAgentConversation200ConversationTitleSource = {
   manual: 'manual',
 } as const;
 
+export type UpdateAgentConversation200ConversationUsage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+};
+
 export type UpdateAgentConversation200Conversation = {
   /**
    * @minimum -9007199254740991
@@ -10889,6 +11073,7 @@ export type UpdateAgentConversation200Conversation = {
   isPinned: boolean;
   /** @nullable */
   archivedAt: number | null;
+  usage?: UpdateAgentConversation200ConversationUsage;
   [key: string]: unknown;
 };
 
@@ -10928,6 +11113,11 @@ export type DeleteAgentConversation401 = {
 };
 
 export type DeleteAgentConversation404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ServeLocalAgentAttachment404 = {
   error: string;
   [key: string]: unknown;
 };
@@ -11349,6 +11539,35 @@ export type QueryAgentBody = {
  */
 export type QueryAgent200Context = unknown | null;
 
+export type QueryAgent200Usage = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  promptTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  completionTokens: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  totalTokens: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  estimatedCostUsd: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  calls: number;
+  [key: string]: unknown;
+};
+
 export type QueryAgent200 = {
   /** @nullable */
   answer?: string | null;
@@ -11377,7 +11596,9 @@ export type QueryAgent200 = {
   toolResults: unknown[];
   pendingActions?: unknown[];
   clarifications?: unknown[];
+  presentations?: unknown[];
   message?: string;
+  usage?: QueryAgent200Usage;
   [key: string]: unknown;
 };
 
@@ -12129,7 +12350,7 @@ export type getApiAuthGoogleResponse200 = {
   data: void
   status: 200
 }
-    
+
 export type getApiAuthGoogleResponseSuccess = (getApiAuthGoogleResponse200) & {
   headers: Headers;
 };
@@ -12140,7 +12361,7 @@ export type getApiAuthGoogleResponse = (getApiAuthGoogleResponseSuccess)
 export const getGetApiAuthGoogleUrl = () => {
 
 
-  
+
 
   return `/api/auth/google`
 }
@@ -19830,6 +20051,39 @@ export const deleteAgentConversation = async (id: number, options?: RequestInit)
     method: 'DELETE'
     
     
+  }
+);}
+
+
+
+export type serveLocalAgentAttachmentResponse404 = {
+  data: ServeLocalAgentAttachment404
+  status: 404
+}
+
+;
+export type serveLocalAgentAttachmentResponseError = (serveLocalAgentAttachmentResponse404) & {
+  headers: Headers;
+};
+
+export type serveLocalAgentAttachmentResponse = (serveLocalAgentAttachmentResponseError)
+
+export const getServeLocalAgentAttachmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/agent/attachments/${id}`
+}
+
+export const serveLocalAgentAttachment = async (id: number, options?: RequestInit): Promise<serveLocalAgentAttachmentResponse> => {
+
+  return generatedFetch<serveLocalAgentAttachmentResponse>(getServeLocalAgentAttachmentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

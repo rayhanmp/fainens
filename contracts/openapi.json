@@ -771,8 +771,8 @@
                           "type": "number"
                         },
                         "topCategoryName": {
-                          "type": "string",
-                          "nullable": true
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -2151,18 +2151,6 @@
                     },
                     "message": {
                       "type": "string"
-                    },
-                    "usage": {
-                      "type": "object",
-                      "properties": {
-                        "promptTokens": { "type": "integer" },
-                        "completionTokens": { "type": "integer" },
-                        "totalTokens": { "type": "integer" },
-                        "estimatedCostUsd": { "nullable": true, "type": "number" },
-                        "calls": { "type": "integer" }
-                      },
-                      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
-                      "additionalProperties": {}
                     }
                   },
                   "required": [
@@ -5933,11 +5921,6 @@
                       },
                       "color": {
                         "type": "string"
-                      },
-                      "usageCount": {
-                        "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -24569,6 +24552,19 @@
                       "type": "array",
                       "items": {}
                     },
+                    "presentationTools": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "toolGroups": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
                     "policy": {
                       "type": "object",
                       "properties": {
@@ -24597,6 +24593,8 @@
                     "schemaVersion",
                     "revision",
                     "tools",
+                    "presentationTools",
+                    "toolGroups",
                     "policy"
                   ],
                   "additionalProperties": {}
@@ -25220,13 +25218,39 @@
                           "usage": {
                             "type": "object",
                             "properties": {
-                              "promptTokens": { "type": "integer" },
-                              "completionTokens": { "type": "integer" },
-                              "totalTokens": { "type": "integer" },
-                              "estimatedCostUsd": { "nullable": true, "type": "number" },
-                              "calls": { "type": "integer" }
+                              "promptTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "completionTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "totalTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "estimatedCostUsd": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "calls": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
                             },
-                            "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                            "required": [
+                              "promptTokens",
+                              "completionTokens",
+                              "totalTokens",
+                              "estimatedCostUsd",
+                              "calls"
+                            ],
                             "additionalProperties": {}
                           }
                         },
@@ -25249,13 +25273,39 @@
                       "nullable": true,
                       "type": "object",
                       "properties": {
-                        "promptTokens": { "type": "integer" },
-                        "completionTokens": { "type": "integer" },
-                        "totalTokens": { "type": "integer" },
-                        "estimatedCostUsd": { "nullable": true, "type": "number" },
-                        "calls": { "type": "integer" }
+                        "promptTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "completionTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "estimatedCostUsd": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "calls": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
                       },
-                      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                      "required": [
+                        "promptTokens",
+                        "completionTokens",
+                        "totalTokens",
+                        "estimatedCostUsd",
+                        "calls"
+                      ],
                       "additionalProperties": {}
                     }
                   },
@@ -25350,6 +25400,44 @@
                         "archivedAt": {
                           "nullable": true,
                           "type": "number"
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "promptTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "completionTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "totalTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "estimatedCostUsd": {
+                              "nullable": true,
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "calls": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "promptTokens",
+                            "completionTokens",
+                            "totalTokens",
+                            "estimatedCostUsd",
+                            "calls"
+                          ],
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -25454,13 +25542,39 @@
                         "usage": {
                           "type": "object",
                           "properties": {
-                            "promptTokens": { "type": "integer" },
-                            "completionTokens": { "type": "integer" },
-                            "totalTokens": { "type": "integer" },
-                            "estimatedCostUsd": { "nullable": true, "type": "number" },
-                            "calls": { "type": "integer" }
+                            "promptTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "completionTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "totalTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "estimatedCostUsd": {
+                              "nullable": true,
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "calls": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
                           },
-                          "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                          "required": [
+                            "promptTokens",
+                            "completionTokens",
+                            "totalTokens",
+                            "estimatedCostUsd",
+                            "calls"
+                          ],
                           "additionalProperties": {}
                         }
                       },
@@ -25499,13 +25613,39 @@
                           "usage": {
                             "type": "object",
                             "properties": {
-                              "promptTokens": { "type": "integer" },
-                              "completionTokens": { "type": "integer" },
-                              "totalTokens": { "type": "integer" },
-                              "estimatedCostUsd": { "nullable": true, "type": "number" },
-                              "calls": { "type": "integer" }
+                              "promptTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "completionTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "totalTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "estimatedCostUsd": {
+                                "nullable": true,
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "calls": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
                             },
-                            "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                            "required": [
+                              "promptTokens",
+                              "completionTokens",
+                              "totalTokens",
+                              "estimatedCostUsd",
+                              "calls"
+                            ],
                             "additionalProperties": {}
                           },
                           "attachments": {
@@ -25514,7 +25654,9 @@
                               "type": "object",
                               "properties": {
                                 "id": {
-                                  "type": "integer"
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
                                 },
                                 "filename": {
                                   "type": "string"
@@ -25523,7 +25665,9 @@
                                   "type": "string"
                                 },
                                 "fileSize": {
-                                  "type": "integer"
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
                                 },
                                 "downloadUrl": {
                                   "type": "string"
@@ -25700,6 +25844,44 @@
                         "archivedAt": {
                           "nullable": true,
                           "type": "number"
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "promptTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "completionTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "totalTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "estimatedCostUsd": {
+                              "nullable": true,
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "calls": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "promptTokens",
+                            "completionTokens",
+                            "totalTokens",
+                            "estimatedCostUsd",
+                            "calls"
+                          ],
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -25832,6 +26014,47 @@
               }
             }
           },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/attachments/{id}": {
+      "get": {
+        "operationId": "serveLocalAgentAttachment",
+        "tags": [
+          "agent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
           "404": {
             "description": "Default Response",
             "content": {
@@ -27183,19 +27406,49 @@
                       "type": "array",
                       "items": {}
                     },
+                    "presentations": {
+                      "type": "array",
+                      "items": {}
+                    },
                     "message": {
                       "type": "string"
                     },
                     "usage": {
                       "type": "object",
                       "properties": {
-                        "promptTokens": { "type": "integer" },
-                        "completionTokens": { "type": "integer" },
-                        "totalTokens": { "type": "integer" },
-                        "estimatedCostUsd": { "nullable": true, "type": "number" },
-                        "calls": { "type": "integer" }
+                        "promptTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "completionTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "estimatedCostUsd": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "calls": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
                       },
-                      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "calls"],
+                      "required": [
+                        "promptTokens",
+                        "completionTokens",
+                        "totalTokens",
+                        "estimatedCostUsd",
+                        "calls"
+                      ],
                       "additionalProperties": {}
                     }
                   },

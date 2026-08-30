@@ -1092,7 +1092,7 @@ function AgentPage() {
     setNotice(null);
     hydratedConversationIdRef.current = null;
     setActiveConversationId(conversationId);
-    void navigate({ search: (previous) => ({ ...previous, conversationId, prompt: undefined }) } as any);
+    void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId, prompt: undefined }) } as any);
     setMessages([]);
     setPendingImages([]);
     setImageError(null);
@@ -1152,7 +1152,7 @@ function AgentPage() {
       setPendingImages([]);
       setDraft(search.prompt.trim());
       if (search.conversationId != null) {
-        void navigate({ search: (previous) => ({ ...previous, conversationId: undefined }) } as any);
+        void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: undefined }) } as any);
       }
     }
   }, [navigate, search.conversationId, search.prompt, setActiveConversationId]);
@@ -1284,7 +1284,7 @@ function AgentPage() {
         // query may race it with an empty conversation response.
         hydratedConversationIdRef.current = requestConversationId;
         setActiveConversationId(requestConversationId);
-        void navigate({ search: (previous) => ({ ...previous, conversationId: requestConversationId, prompt: undefined }) } as any);
+        void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: requestConversationId, prompt: undefined }) } as any);
       }
       const conversationId = requestConversationId;
       if (conversationId == null) throw new Error('Could not establish a conversation. Please try again.');
@@ -1443,7 +1443,7 @@ function AgentPage() {
   const startNewConversation = () => {
     hydratedConversationIdRef.current = null;
     setActiveConversationId(null);
-    void navigate({ search: (previous) => ({ ...previous, conversationId: undefined, prompt: undefined }) } as any);
+    void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: undefined, prompt: undefined }) } as any);
     setMessages([]);
     setDraft('');
     setPendingImages([]);
@@ -1566,7 +1566,7 @@ function AgentPage() {
                         </div>
                       )}
                       {message.role === 'assistant'
-                        ? <AgentMessage accounts={accounts}>{message.text || '…'}</AgentMessage>
+                        ? <AgentMessage accounts={accounts} presentations={message.response?.presentations}>{message.text || '…'}</AgentMessage>
                         : editingUserMessageId === message.id
                           ? <div className="space-y-2"><textarea ref={editingUserMessageTextareaRef} value={editingUserMessageText} onChange={(event) => setEditingUserMessageText(event.target.value)} className="brutalist-input max-h-40 min-h-12 w-full resize-none overflow-y-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)]" maxLength={2000} autoFocus /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => { setEditingUserMessageId(null); setEditingUserMessageText(''); }} disabled={isSending}>Cancel</Button><Button size="sm" onClick={() => void saveEditedLastUserMessage(message)} disabled={isSending}>Send</Button></div></div>
                           : <p className="whitespace-pre-wrap break-words leading-6">{message.text}</p>}

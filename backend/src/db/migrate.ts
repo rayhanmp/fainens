@@ -334,6 +334,7 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     "0027_agent_conversation_titles": has("agent_conversation", "title_source"),
     "0029_agent_message_attachments": has("agent_message_attachment", "id", "message_id", "conversation_id", "filename", "mimetype", "r2_key", "file_size", "created_at"),
     "0030_agent_token_usage": has("agent_message", "prompt_tokens", "completion_tokens", "total_tokens", "estimated_cost_usd"),
+    "0031_agent_conversation_summary": has("agent_conversation", "summary", "summary_through_message_id"),
   };
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
@@ -468,7 +469,7 @@ function assertRequiredSchema(): void {
     financial_state: ["id", "revision", "updated_at"],
     cache_invalidation_outbox: ["id", "operation", "revision", "status", "attempts", "created_at"],
     background_task: ["id", "queue_name", "job_name", "dedupe_key", "status", "attempts", "max_attempts", "available_at", "created_at", "updated_at"],
-    agent_conversation: ["id", "owner_email", "title", "title_source", "created_at", "updated_at", "is_pinned", "archived_at"],
+    agent_conversation: ["id", "owner_email", "title", "title_source", "created_at", "updated_at", "is_pinned", "archived_at", "summary", "summary_through_message_id"],
     agent_message: ["id", "conversation_id", "role", "content", "created_at", "prompt_tokens", "completion_tokens", "total_tokens", "estimated_cost_usd"],
     agent_message_attachment: ["id", "message_id", "conversation_id", "filename", "mimetype", "r2_key", "file_size", "created_at"],
     agent_pending_action: ["id", "owner_email", "conversation_id", "kind", "normalized_input", "batch_id", "base_financial_revision", "status", "expires_at", "created_at", "updated_at"],

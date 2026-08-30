@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 're
 import { Archive, ArchiveRestore, CalendarDays, Check, ChevronDown, MoreHorizontal, Pencil, Pin, PinOff, Trash2, X } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { cn, formatDate } from '../../lib/utils';
-import type { AgentUsageSummary } from '../../generated/client';
 import type { Conversation, Period } from './types';
+
+type AgentUsageSummary = NonNullable<Conversation['usage']>;
 
 export const CONVERSATIONS_PAGE_SIZE = 10;
 

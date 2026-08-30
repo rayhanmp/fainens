@@ -113,6 +113,15 @@ export async function uploadFile(
   };
 }
 
+/** Read a private object for an internal server-side workflow such as
+ * rehydrating a retained Agent image into a later multimodal request. */
+export async function downloadFile(key: string): Promise<Buffer> {
+  if (!isR2Configured()) return fs.readFile(resolveLocalStorageKey(key));
+  const response = await getR2Client().send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
+  if (!response.Body) throw new Error("Stored object has no body");
+  return Buffer.from(await response.Body.transformToByteArray());
+}
+
 export async function generatePresignedDownloadUrl(
   key: string,
   expiresInSeconds: number = 3600,

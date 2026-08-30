@@ -203,6 +203,7 @@ export type AgentQueryResponse = {
   toolResults: Array<{ id: string; name: string; result: unknown }>;
   pendingActions?: AgentActionProposal[];
   clarifications?: AgentClarification[];
+  presentations?: unknown[];
   message?: string;
   usage?: {
     promptTokens: number;

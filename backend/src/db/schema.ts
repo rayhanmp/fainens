@@ -672,6 +672,9 @@ export const agentConversations = sqliteTable("agent_conversation", {
     .default(sql`(unixepoch('now') * 1000)`),
   isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
   archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+  /** Deterministic compact context for messages older than the recent window. */
+  summary: text("summary"),
+  summaryThroughMessageId: integer("summary_through_message_id").notNull().default(0),
 }, (table) => ({
   ownerUpdatedIdx: index("idx_agent_conversation_owner_updated").on(table.ownerEmail, table.updatedAt),
   ownerStateIdx: index("idx_agent_conversation_owner_state").on(table.ownerEmail, table.archivedAt, table.isPinned, table.updatedAt),
