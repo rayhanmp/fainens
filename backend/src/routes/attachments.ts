@@ -5,12 +5,13 @@ import { createReadStream } from "fs";
 import { promises as fs } from "fs";
 
 import { db } from "../db/client";
-import { attachments, auditLogs, storageDeletionOutbox, transactions } from "../db/schema";
+import { attachments, auditLogs, storageDeletionOutbox, transactions, wishlist } from "../db/schema";
 import {
   uploadFile,
   generatePresignedDownloadUrl,
   generateAttachmentKey,
   getLocalFilePath,
+  isObjectStorageConfigured,
 } from "../services/r2";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 
@@ -342,6 +343,20 @@ export default async function (fastify: FastifyInstance) {
     try {
       const key = request.url.replace('/api/wishlist-images/', '');
       const decodedKey = decodeURIComponent(key);
+      const [wishlistItem] = await db
+        .select({ id: wishlist.id })
+        .from(wishlist)
+        .where(eq(wishlist.imageUrl, decodedKey))
+        .limit(1);
+      if (!wishlistItem) return reply.code(404).send({ error: "Image not found" });
+
+      if (/^https?:\/\//i.test(decodedKey)) return reply.redirect(decodedKey);
+
+      if (isObjectStorageConfigured()) {
+        const signedUrl = await generatePresignedDownloadUrl(decodedKey, 3600);
+        return reply.redirect(signedUrl);
+      }
+
       const filePath = getLocalFilePath(decodedKey);
       const stats = await fs.stat(filePath);
       if (!stats.isFile()) {

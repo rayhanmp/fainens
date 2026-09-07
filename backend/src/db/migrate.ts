@@ -335,6 +335,14 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     "0029_agent_message_attachments": has("agent_message_attachment", "id", "message_id", "conversation_id", "filename", "mimetype", "r2_key", "file_size", "created_at"),
     "0030_agent_token_usage": has("agent_message", "prompt_tokens", "completion_tokens", "total_tokens", "estimated_cost_usd"),
     "0031_agent_conversation_summary": has("agent_conversation", "summary", "summary_through_message_id"),
+    "0034_reimbursements": has("contact", "kind")
+      && has("reimbursement_claim", "contact_id", "status", "version")
+      && has("reimbursement_claim_source", "claim_id", "expense_line_id", "recognition_transaction_id")
+      && has("reimbursement_receipt", "transaction_id", "status", "reversal_transaction_id")
+      && has("reimbursement_receipt_allocation", "receipt_id", "claim_id", "amount")
+      && has("reimbursement_operation", "idempotency_key", "operation", "request_hash", "result_json"),
+    "0035_reimbursement_writeoff_reversal": has("reimbursement_claim", "writeoff_transaction_id"),
+    "0036_agent_models": has("agent_model", "id", "name", "model", "base_url", "is_default"),
   };
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
@@ -479,6 +487,12 @@ function assertRequiredSchema(): void {
     forecast_review: ["period_id", "category_id", "evidence_revision", "classification", "weight", "confidence", "rationale", "status"],
     forecast_purchase_review: ["transaction_id", "transaction_date", "period_id", "category_id", "amount", "evidence_revision", "classification", "weight", "confidence", "rationale", "status"],
     transport_route_template: ["id", "name", "provider", "service", "origin_name", "origin_lat", "origin_lng", "dest_name", "dest_lat", "dest_lng", "category_id", "default_account_id", "notes", "tag_ids", "created_at", "updated_at"],
+    contact: ["id", "name", "kind", "is_active"],
+    reimbursement_claim: ["id", "contact_id", "title", "status", "version", "writeoff_transaction_id", "created_at", "updated_at"],
+    reimbursement_claim_source: ["id", "claim_id", "source_transaction_id", "expense_line_id", "category_id", "amount", "recognition_transaction_id"],
+    reimbursement_receipt: ["id", "transaction_id", "receipt_date", "amount", "status", "reversal_transaction_id"],
+    reimbursement_receipt_allocation: ["id", "receipt_id", "claim_id", "amount"],
+    reimbursement_operation: ["id", "idempotency_key", "operation", "request_hash", "result_json"],
   };
   const missing = Object.entries(requirements).flatMap(([table, columns]) => {
     if (!tableExists(table)) return [`table ${table}`];

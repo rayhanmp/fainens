@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { desc, eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { db } from "../db/client";
@@ -86,6 +87,11 @@ const monthlyReportSchema = z.object({
   period: z.object({ id: z.number().int(), name: z.string(), startDate: z.number(), endDate: z.number() }).passthrough(),
   incomeStatement: incomeStatementSchema,
   balanceSheet: balanceSheetSchema,
+  previousBalance: z.number(),
+  totalIncoming: z.number(),
+  totalOutgoing: z.number(),
+  closingBalance: z.number(),
+  reportHash: z.string().regex(/^[a-f0-9]{64}$/),
   incomeBySource: z.array(z.object({ name: z.string(), amount: z.number() }).passthrough()),
   expensesByCategory: z.array(z.object({ name: z.string(), amount: z.number() }).passthrough()),
   budgetComparison: z.array(z.object({ category: z.string(), budget: z.number(), actual: z.number(), variance: z.number() }).passthrough()),
@@ -214,10 +220,11 @@ export default async function (fastify: FastifyInstance) {
       const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
         .from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1);
       if (!period) return reply.code(404).send({ error: "Period not found" });
-      const [facts, incomeStatement, balanceSheet, budgets, revision, coverage] = await Promise.all([
+      const [facts, incomeStatement, balanceSheet, cashFlow, budgets, revision, coverage] = await Promise.all([
         getFinancialFacts({ startMs: period.startDate, endMs: inclusiveEnd(period.endDate), asOfMs: inclusiveEnd(period.endDate), periodId }),
         generateIncomeStatement(periodId),
         generateBalanceSheet(inclusiveEnd(period.endDate)),
+        generateCashFlowStatement(periodId),
         getBudgetFacts(periodId),
         getFinancialRevision(),
         getPeriodCoverage(period.startDate, inclusiveEnd(period.endDate)),
@@ -235,11 +242,23 @@ export default async function (fastify: FastifyInstance) {
           };
         })
         .filter((row) => row.amountCents > 0);
-      return {
+      const cashFlowAmounts = [
+        ...cashFlow.operating,
+        ...cashFlow.investing,
+        ...cashFlow.financing,
+        ...(cashFlow.historicalRecoveryBridge ? [{ amount: cashFlow.historicalRecoveryBridge }] : []),
+      ].map((item) => item.amount);
+      const totalIncoming = cashFlowAmounts.reduce((sum, amount) => sum + (amount > 0 ? amount : 0), 0);
+      const totalOutgoing = cashFlowAmounts.reduce((sum, amount) => sum + (amount < 0 ? Math.abs(amount) : 0), 0);
+      const reportBody = {
         revision,
         period,
         incomeStatement,
         balanceSheet,
+        previousBalance: cashFlow.beginningCash,
+        totalIncoming,
+        totalOutgoing,
+        closingBalance: cashFlow.endingCash,
         incomeBySource: incomeStatement.revenue.filter((row) => row.amount !== 0).map((row) => ({ name: row.name, amount: row.amount })),
         expensesByCategory: facts.byCategory.filter((row) => row.spentCents !== 0).map((row) => ({ name: row.category, amount: row.spentCents })),
         budgetComparison: budgets.map((row) => ({
@@ -252,6 +271,8 @@ export default async function (fastify: FastifyInstance) {
         coverage,
         provenance: { source: "canonical-financial-facts", asOfMs: inclusiveEnd(period.endDate), includesDrafts: false },
       };
+      const reportHash = createHash("sha256").update(JSON.stringify(reportBody)).digest("hex");
+      return { ...reportBody, reportHash };
     } catch (err) {
       return reportError(fastify, reply, err, "Failed to generate monthly report");
     }

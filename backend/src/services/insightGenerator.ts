@@ -1,5 +1,5 @@
 import { callOpenRouter } from './openrouter';
-import { env } from '../lib/env';
+import { getAgentProviderConfig } from './agent-provider-config';
 
 const DASHBOARD_SYSTEM_PROMPT = `You analyze transaction data and give spending insights.
 
@@ -234,21 +234,23 @@ ${budgetSummary}`;
 }
 
 export async function generateDashboardInsight(data: DashboardData): Promise<string> {
-  const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
+  const providerConfig = await getAgentProviderConfig();
+  const apiKey = providerConfig.apiKey;
   if (!apiKey) {
     throw new Error('OpenRouter API key not configured');
   }
 
   const userPrompt = formatDashboardPrompt(data);
-  return callOpenRouter(DASHBOARD_SYSTEM_PROMPT, userPrompt, apiKey);
+  return callOpenRouter(DASHBOARD_SYSTEM_PROMPT, userPrompt, apiKey, providerConfig.model, providerConfig.baseUrl);
 }
 
 export async function generateBudgetInsight(data: BudgetData): Promise<string> {
-  const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
+  const providerConfig = await getAgentProviderConfig();
+  const apiKey = providerConfig.apiKey;
   if (!apiKey) {
     throw new Error('OpenRouter API key not configured');
   }
 
   const userPrompt = formatBudgetPrompt(data);
-  return callOpenRouter(BUDGET_SYSTEM_PROMPT, userPrompt, apiKey);
+  return callOpenRouter(BUDGET_SYSTEM_PROMPT, userPrompt, apiKey, providerConfig.model, providerConfig.baseUrl);
 }

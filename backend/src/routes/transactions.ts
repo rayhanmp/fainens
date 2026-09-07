@@ -1,9 +1,10 @@
+import { aggregateTransactionActivity, type DailyTransactionActivity } from "../services/transaction-activity";
 import { eq, and, asc, desc, sql, inArray, count, ne, notInArray, or, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs, salaryPeriods } from "../db/schema";
+import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs, reimbursementClaimSources, reimbursementClaims, salaryPeriods } from "../db/schema";
 import {
   createJournalEntry,
   createSimpleTransaction,
@@ -68,6 +69,8 @@ const transactionRecordSchema = z.object({
   creditCents: z.number().optional(),
   expenseCents: z.number().optional(),
   incomeCents: z.number().optional(),
+  activityKind: z.enum(["expense", "income", "transfer", "loan", "reimbursement", "other"]).optional(),
+  remainingReimbursableExpense: z.number().int().nonnegative().optional(),
   lines: z.array(transactionLineSchema).optional(),
   tags: z.array(transactionTagSchema).optional(),
   categoryAllocations: z.array(transactionAllocationSchema).optional(),
@@ -86,6 +89,12 @@ const transactionListResponseSchema = z.object({
     averageExpenseCents: z.number().optional(),
     largestExpenseCents: z.number().optional(),
     topCategoryName: z.string().nullable().optional(),
+    dailyActivity: z.array(z.object({
+      date: z.string(), expenseCents: z.number(), incomeCents: z.number(), transactionCount: z.number().int(),
+    })).optional(),
+    categoryBreakdown: z.array(z.object({
+      name: z.string(), amountCents: z.number(), share: z.number(),
+    })).optional(),
   }).passthrough(),
 }).passthrough();
 const transactionListQuerySchema = z.object({
@@ -97,7 +106,7 @@ const transactionListQuerySchema = z.object({
   categoryId: z.string().regex(/^\d+$/).optional(),
   tagId: z.string().regex(/^\d+$/).optional(),
   search: z.string().max(120).optional(),
-  kind: z.enum(["expense", "income", "transfer", "loan"]).optional(),
+  kind: z.enum(["expense", "income", "transfer", "loan", "reimbursement"]).optional(),
   minAmount: z.string().optional(),
   maxAmount: z.string().optional(),
   sort: z.enum(["newest", "oldest", "largest"]).optional(),
@@ -450,6 +459,7 @@ function activityKindCondition(kind: string): SQL | null {
   }
   if (kind === "transfer") return sql`${transactions.txType} in ('simple_transfer', 'transfer')`;
   if (kind === "loan") return sql`${transactions.txType} like '%loan%'`;
+  if (kind === "reimbursement") return sql`${transactions.txType} like 'reimbursement_%'`;
   return null;
 }
 
@@ -457,6 +467,8 @@ function activityKindCondition(kind: string): SQL | null {
 const transactionDisplayAmount = sql<number>`coalesce((select max(case when amount_line.debit > amount_line.credit then amount_line.debit else amount_line.credit end) from transaction_line amount_line where amount_line.transaction_id = ${transactions.id}), 0)`;
 
 type TransactionInsights = {
+  dailyActivity: DailyTransactionActivity[];
+  categoryBreakdown: Array<{ name: string; amountCents: number; share: number }>;
   averageExpenseCents: number;
   largestExpenseCents: number;
   topCategoryName: string | null;
@@ -470,6 +482,8 @@ async function fetchTransactionInsights(whereCondition: SQL | undefined): Promis
   const expenseRows = await db
     .select({
       transactionId: transactions.id,
+      date: transactions.date,
+      incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${transactionLines.credit} - ${transactionLines.debit} else 0 end), 0)`,
       expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
       legacyCategoryName: categories.name,
     })
@@ -527,8 +541,28 @@ async function fetchTransactionInsights(whereCondition: SQL | undefined): Promis
 
   const topCategoryName = [...categoryTotals.entries()]
     .sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
+  const sortedCategoryTotals = [...categoryTotals.entries()]
+    .sort((left, right) => right[1] - left[1]);
+  const categoryBreakdown = sortedCategoryTotals
+    .slice(0, 3)
+    .map(([name, amountCents]) => ({
+      name,
+      amountCents,
+      share: expenseTotal > 0 ? amountCents / expenseTotal : 0,
+    }));
+  const topCategoryCents = categoryBreakdown.reduce((sum, item) => sum + item.amountCents, 0);
+  const remainingCategoryCents = Math.max(0, expenseTotal - topCategoryCents);
+  if (remainingCategoryCents > 0) {
+    categoryBreakdown.push({
+      name: 'Other categories',
+      amountCents: remainingCategoryCents,
+      share: expenseTotal > 0 ? remainingCategoryCents / expenseTotal : 0,
+    });
+  }
 
   return {
+    dailyActivity: aggregateTransactionActivity(expenseRows),
+    categoryBreakdown,
     averageExpenseCents: expenseCount > 0 ? Math.round(expenseTotal / expenseCount) : 0,
     largestExpenseCents: largestExpense,
     topCategoryName,
@@ -635,6 +669,28 @@ async function fetchTransactionEffects(txIds: number[]) {
   }]));
 }
 
+async function fetchRemainingReimbursableExpenses(txIds: number[], effects: Map<number, { expenseCents: number }>) {
+  if (txIds.length === 0) return new Map<number, number>();
+  const rows = await db.select({
+    transactionId: reimbursementClaimSources.sourceTransactionId,
+    amount: sql<number>`coalesce(sum(${reimbursementClaimSources.amount}), 0)`,
+  }).from(reimbursementClaimSources)
+    .innerJoin(reimbursementClaims, eq(reimbursementClaimSources.claimId, reimbursementClaims.id))
+    .where(and(inArray(reimbursementClaimSources.sourceTransactionId, txIds), sql`${reimbursementClaims.status} IN ('approved', 'partially_paid', 'settled')`))
+    .groupBy(reimbursementClaimSources.sourceTransactionId);
+  const claimed = new Map(rows.map((row) => [row.transactionId, Number(row.amount ?? 0)]));
+  return new Map(txIds.map((id) => [id, Math.max(0, Number(effects.get(id)?.expenseCents ?? 0) - Number(claimed.get(id) ?? 0))]));
+}
+
+function reimbursementActivityKind(txType: string, expenseCents: number, incomeCents: number) {
+  if (txType.startsWith("reimbursement_")) return "reimbursement" as const;
+  if (txType.includes("loan")) return "loan" as const;
+  if (txType === "simple_transfer" || txType === "transfer") return "transfer" as const;
+  if (expenseCents > 0) return "expense" as const;
+  if (incomeCents > 0) return "income" as const;
+  return "other" as const;
+}
+
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
@@ -680,15 +736,16 @@ RULES:
 
     try {
       const { callOpenRouter } = await import('../services/openrouter');
-      const { env } = await import('../lib/env');
-      const apiKey = env.OPENROUTER_API_KEY;
+      const { getAgentProviderConfig } = await import('../services/agent-provider-config');
+      const providerConfig = await getAgentProviderConfig();
+      const apiKey = providerConfig.apiKey;
       
       if (!apiKey) {
         reply.code(500).send({ error: "OpenRouter API key not configured" });
         return;
       }
 
-      const recommendedName = await callOpenRouter(systemPrompt, userPrompt, apiKey);
+      const recommendedName = await callOpenRouter(systemPrompt, userPrompt, apiKey, providerConfig.model, providerConfig.baseUrl);
       const matchedCategory = allCategories.find(
         c => c.name.toLowerCase() === recommendedName.trim().toLowerCase()
       );
@@ -887,15 +944,21 @@ RULES:
     const txIds = txList.map((tx) => tx.id).filter(Boolean);
     const { linesByTxId, tagsByTxId, allocationsByTxId } = await fetchTransactionDetails(txIds);
     const effectsByTxId = await fetchTransactionEffects(txIds);
+    const remainingReimbursableByTxId = await fetchRemainingReimbursableExpenses(txIds, effectsByTxId);
 
     // Map transactions with their details
-    const transactionsWithDetails = txList.map((tx) => ({
-      ...tx,
-      lines: linesByTxId.get(tx.id) || [],
-      tags: tagsByTxId.get(tx.id) || [],
-      categoryAllocations: allocationsByTxId.get(tx.id) || [],
-      ...(effectsByTxId.get(tx.id) || { debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 }),
-    }));
+    const transactionsWithDetails = txList.map((tx) => {
+      const effects = effectsByTxId.get(tx.id) || { debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 };
+      return {
+        ...tx,
+        lines: linesByTxId.get(tx.id) || [],
+        tags: tagsByTxId.get(tx.id) || [],
+        categoryAllocations: allocationsByTxId.get(tx.id) || [],
+        ...effects,
+        activityKind: reimbursementActivityKind(tx.txType, effects.expenseCents, effects.incomeCents),
+        remainingReimbursableExpense: remainingReimbursableByTxId.get(tx.id) ?? 0,
+      };
+    });
 
     return {
       data: transactionsWithDetails,
@@ -967,12 +1030,18 @@ RULES:
       .innerJoin(categories, eq(transactionCategoryAllocations.categoryId, categories.id))
       .where(eq(transactionCategoryAllocations.transactionId, tx.id));
 
+    const [claimed] = await db.select({ amount: sql<number>`coalesce(sum(${reimbursementClaimSources.amount}), 0)` })
+      .from(reimbursementClaimSources).innerJoin(reimbursementClaims, eq(reimbursementClaimSources.claimId, reimbursementClaims.id))
+      .where(and(eq(reimbursementClaimSources.sourceTransactionId, tx.id), sql`${reimbursementClaims.status} IN ('approved', 'partially_paid', 'settled')`));
+
     return {
       ...tx,
       lines,
       tags: txTagRows,
       categoryAllocations: categoryAllocationRows,
       ...effects,
+      activityKind: reimbursementActivityKind(tx.txType, effects.expenseCents, effects.incomeCents),
+      remainingReimbursableExpense: Math.max(0, effects.expenseCents - Number(claimed?.amount ?? 0)),
     };
   });
 

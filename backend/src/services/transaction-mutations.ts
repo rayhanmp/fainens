@@ -10,6 +10,9 @@ import {
   loanPayments,
   loans,
   paylaterInstallments,
+  reimbursementClaimSources,
+  reimbursementClaims,
+  reimbursementReceipts,
   salaryPeriods,
   storageDeletionOutbox,
   tags,
@@ -105,6 +108,37 @@ function assertGenericMutationAllowed(tx: any, executor: any): void {
     .limit(1)
     .all()[0];
   if (wishlistItem) reasons.push(`wishlist item ${wishlistItem.id}`);
+
+  const reimbursementSource = executor
+    .select({ id: reimbursementClaimSources.id })
+    .from(reimbursementClaimSources)
+    .innerJoin(reimbursementClaims, eq(reimbursementClaimSources.claimId, reimbursementClaims.id))
+    .where(or(
+      and(eq(reimbursementClaimSources.sourceTransactionId, tx.id), inArray(reimbursementClaims.status, ["approved", "partially_paid", "settled"])),
+      eq(reimbursementClaimSources.recognitionTransactionId, tx.id),
+    ))
+    .limit(1)
+    .all()[0];
+  if (reimbursementSource) reasons.push(`reimbursement claim source ${reimbursementSource.id}`);
+
+  const reimbursementWriteoff = executor
+    .select({ id: reimbursementClaims.id })
+    .from(reimbursementClaims)
+    .where(eq(reimbursementClaims.writeoffTransactionId, tx.id))
+    .limit(1)
+    .all()[0];
+  if (reimbursementWriteoff) reasons.push(`reimbursement claim write-off ${reimbursementWriteoff.id}`);
+
+  const reimbursementReceipt = executor
+    .select({ id: reimbursementReceipts.id })
+    .from(reimbursementReceipts)
+    .where(or(
+      eq(reimbursementReceipts.transactionId, tx.id),
+      eq(reimbursementReceipts.reversalTransactionId, tx.id),
+    ))
+    .limit(1)
+    .all()[0];
+  if (reimbursementReceipt) reasons.push(`reimbursement receipt ${reimbursementReceipt.id}`);
 
   if (reasons.length > 0) {
     throw new TransactionMutationError(

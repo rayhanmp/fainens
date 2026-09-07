@@ -229,14 +229,14 @@ export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<Ne
   let totalAssets = 0;
 
   for (const account of assetAccounts) {
-    const balance = await computeAccountBalanceAsOf(account.id, asOfInclusiveMs, db);
+    const balance = await computeAccountBalanceAsOf(account.id, asOfInclusiveMs, db, { restateReversals: true });
     totalAssets += balance;
     if (account.liquidityClass === 'cash_equivalent') liquidAssets += balance;
   }
 
   let totalLiabilities = 0;
   for (const account of liabilityAccounts) {
-    totalLiabilities += await computeAccountBalanceAsOf(account.id, asOfInclusiveMs, db);
+    totalLiabilities += await computeAccountBalanceAsOf(account.id, asOfInclusiveMs, db, { restateReversals: true });
   }
 
   const illiquidAssets = totalAssets - liquidAssets;

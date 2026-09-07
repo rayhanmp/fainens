@@ -22,11 +22,13 @@ import transportRouteTemplateRoutes from "./routes/transport-route-templates";
 import periodRoutes from "./routes/periods";
 import budgetRoutes from "./routes/budget";
 import attachmentRoutes from "./routes/attachments";
+import galleryRoutes from "./routes/gallery";
 import analyticsRoutes from "./routes/analytics";
 import paylaterRoutes from "./routes/paylater";
 import auditLogRoutes from "./routes/audit-log";
 import reportsRoutes from "./routes/reports";
 import salarySettingsRoutes from "./routes/salary-settings";
+import agentProviderSettingsRoutes from "./routes/agent-provider-settings";
 import subscriptionRoutes from "./routes/subscriptions";
 import wishlistRoutes from "./routes/wishlist";
 import loanRoutes from "./routes/loans";
@@ -36,6 +38,7 @@ import pendingTransactionsRoutes from "./routes/pending-transactions";
 import splitbillRoutes from "./routes/splitbill";
 import agentRoutes from "./routes/agent";
 import moneyAnomalyRoutes from "./routes/money-anomalies";
+import reimbursementRoutes from "./routes/reimbursements";
 import jobsRoutes from "./routes/jobs";
 import { closeQueues, getJobQueueHealth } from "./jobs/queue";
 
@@ -49,11 +52,15 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(swagger, {
     openapi: {
       info: { title: "Fainens API", version: "1.0.0", description: "Personal finance ledger API" },
-      tags: ["accounts", "transactions", "categories", "periods", "budgets", "analytics", "agent"].map((name) => ({ name })),
+      tags: ["accounts", "transactions", "categories", "periods", "budgets", "analytics", "agent", "gallery", "reimbursements"].map((name) => ({ name })),
     },
     transform: jsonSchemaTransform,
   });
-  const allowedOrigins = env.NODE_ENV === "production" ? ["https://fins.rayhan.id"] : ["http://localhost:8080", "http://localhost:3000"];
+  const allowedOrigins = env.CORS_ORIGINS.length > 0
+    ? env.CORS_ORIGINS
+    : env.FRONTEND_URL
+      ? [env.FRONTEND_URL]
+      : ["http://localhost:8080", "http://localhost:3000"];
   app.register(cors, { origin: allowedOrigins, credentials: true });
   app.register(helmet, { contentSecurityPolicy: { directives: {
     defaultSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", "data:", "https:"], scriptSrc: ["'self'"], connectSrc: ["'self'", "https://openrouter.ai"],
@@ -94,15 +101,18 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(periodRoutes);
   app.register(budgetRoutes);
   app.register(attachmentRoutes);
+  app.register(galleryRoutes);
   app.register(analyticsRoutes);
   app.register(paylaterRoutes);
   app.register(auditLogRoutes);
   app.register(reportsRoutes);
   app.register(salarySettingsRoutes);
+  app.register(agentProviderSettingsRoutes);
   app.register(subscriptionRoutes);
   app.register(wishlistRoutes);
   app.register(loanRoutes);
   app.register(contactRoutes);
+  app.register(reimbursementRoutes);
   app.register(insightsRoutes);
   app.register(pendingTransactionsRoutes);
   app.register(splitbillRoutes);

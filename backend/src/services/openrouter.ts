@@ -1,3 +1,5 @@
+import { env } from "../lib/env";
+
 interface OpenRouterResponse {
   id: string;
   choices: Array<{
@@ -20,14 +22,15 @@ export async function callOpenRouter(
   systemPrompt: string,
   userPrompt: string,
   apiKey: string,
-  model: string = DEFAULT_MODEL
+  model: string = DEFAULT_MODEL,
+  baseUrl: string = 'https://openrouter.ai/api/v1'
 ): Promise<string> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': process.env.FRONTEND_URL || 'http://localhost:8080',
+      'HTTP-Referer': env.OPENROUTER_HTTP_REFERER ?? env.FRONTEND_URL ?? 'http://localhost:8080',
     },
     body: JSON.stringify({
       model,
@@ -63,7 +66,8 @@ export async function callOpenRouterVision(
   imageUrl: string,
   userPrompt: string,
   apiKey: string,
-  model: string = DEFAULT_MODEL
+  model: string = DEFAULT_MODEL,
+  baseUrl: string = 'https://openrouter.ai/api/v1'
 ): Promise<string> {
   const messages: Array<{ role: string; content: VisionMessageContent[] }> = [
     { role: 'system', content: [{ type: 'text', text: systemPrompt }] },
@@ -76,12 +80,12 @@ export async function callOpenRouterVision(
     }
   ];
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': process.env.FRONTEND_URL || 'http://localhost:8080',
+      'HTTP-Referer': env.OPENROUTER_HTTP_REFERER ?? env.FRONTEND_URL ?? 'http://localhost:8080',
     },
     body: JSON.stringify({
       model,

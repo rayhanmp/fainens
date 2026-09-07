@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { auditLogs, moneyAnomalyReviews, transactionLines, transactions } from "../db/schema";
@@ -106,9 +106,12 @@ export async function scanMoneyAnomalies(): Promise<{ created: number; candidate
   return { created, candidates: candidates.length };
 }
 
-export async function listMoneyAnomalyReviews(status?: "open" | "resolved" | "dismissed") {
+export async function listMoneyAnomalyReviews(status?: "open" | "resolved" | "dismissed", reviewId?: number) {
   const reviews = await db.select().from(moneyAnomalyReviews)
-    .where(status ? eq(moneyAnomalyReviews.status, status) : undefined)
+    .where(and(
+      status ? eq(moneyAnomalyReviews.status, status) : undefined,
+      reviewId == null ? undefined : eq(moneyAnomalyReviews.id, reviewId),
+    ))
     .orderBy(desc(moneyAnomalyReviews.createdAt), desc(moneyAnomalyReviews.id));
   const ids = [...new Set(reviews.flatMap((review) => [review.transactionId, review.relatedTransactionId]).filter((id): id is number => id != null))];
   const transactionRows = ids.length === 0 ? [] : await db.select({ id: transactions.id, date: transactions.date, description: transactions.description, txType: transactions.txType, status: transactions.status })

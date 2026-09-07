@@ -24,4 +24,17 @@ describe("agent tool routing", () => {
     const groups = selectInitialToolGroups("change that to Tuesday", "PENDING TRANSACTION PROPOSALS");
     expect(groups.has("transactions")).toBe(true);
   });
+
+  it("makes charts available for an analytical request without requiring the word chart", () => {
+    const groups = selectInitialToolGroups("give me a spending breakdown for this month");
+    expect(groups.has("overview")).toBe(true);
+    expect(groups.has("charts")).toBe(true);
+  });
+
+  it("keeps a simple named-account balance request free of chart tools", () => {
+    const groups = selectInitialToolGroups("what is my BNI balance?");
+    expect(groups.has("accounts")).toBe(true);
+    expect(groups.has("charts")).toBe(false);
+    expect([...toolNamesForGroups(groups)]).toEqual(["get_account_balances"]);
+  });
 });

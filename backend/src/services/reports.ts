@@ -79,6 +79,12 @@ export interface SpendingBreakdown {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const periodMembership = (periodId?: number) => assignedPeriodMembership(periodId, transactions.periodId);
+// Reversal journals and their reversed source journals are correction metadata,
+// not reportable activity. Keep this predicate shared across every statement.
+const reportableTransaction = () => sql`
+  ${transactions.status} NOT IN ('draft', 'reversed')
+  AND ${transactions.txType} NOT IN ('reversal', 'domain_reversal')
+`;
 
 /** Salary-period end dates are commonly stored as midnight from an HTML date input. */
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
@@ -93,7 +99,7 @@ async function allPostedReportRange(): Promise<{ start: number; end: number }> {
     })
     .from(transactions)
     .where(and(
-      sql`${transactions.status} <> 'draft'`,
+      reportableTransaction(),
       sql`${transactions.date} <= ${now}`,
     ));
   return {
@@ -167,7 +173,7 @@ export async function generateIncomeStatement(
       and(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
-        sql`${transactions.status} <> 'draft'`,
+        reportableTransaction(),
         periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           revenueAccounts.map((a) => a.id.toString()),
@@ -190,7 +196,7 @@ export async function generateIncomeStatement(
       and(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
-        sql`${transactions.status} <> 'draft'`,
+        reportableTransaction(),
         periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           expenseAccounts.map((a) => a.id.toString()),
@@ -293,7 +299,7 @@ export async function generateBalanceSheet(asOfDate?: number): Promise<BalanceSh
         and(
           eq(transactionLines.accountId, account.id),
           sql`${transactions.date} <= ${date}`,
-          sql`${transactions.status} <> 'draft'`,
+          reportableTransaction(),
         )
       );
 
@@ -431,7 +437,7 @@ export async function generateCashFlowStatement(
     .where(
       and(
         sql`${transactions.date} < ${periodStart}`,
-        sql`${transactions.status} <> 'draft'`,
+        reportableTransaction(),
         sql`${transactionLines.accountId} IN (${sql.join(
           cashAccountIds.map(String),
           sql`, `
@@ -480,7 +486,7 @@ export async function generateCashFlowStatement(
       and(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
-        sql`${transactions.status} <> 'draft'`,
+        reportableTransaction(),
         periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           cashAccountIds.map(String),

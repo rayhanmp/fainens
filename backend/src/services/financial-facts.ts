@@ -32,7 +32,8 @@ export interface FinancialFacts {
  * Canonical read model for narrative/reporting consumers. Amounts come from
  * account normal balances, never from a transaction's arbitrary line side:
  * expense = expense debits minus credits and income = revenue credits minus
- * debits, so refunds and reversals net correctly.
+ * debits. Reversal journals are correction metadata, not new activity, so
+ * both reversed originals and their reversal entries are omitted.
  */
 export async function getFinancialFacts(input: {
   startMs: number;
@@ -64,7 +65,8 @@ export async function getFinancialFacts(input: {
     WHERE t.date >= ${input.startMs}
       AND t.date <= ${input.endMs}
       AND t.date <= ${asOfMs}
-      AND t.status <> 'draft'
+      AND t.status NOT IN ('draft', 'reversed')
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal')
       ${input.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(input.periodId, sql`t.period_id`)}`}
       ${input.excludeTxTypes?.length ? sql`AND t.tx_type NOT IN (${sql.join(input.excludeTxTypes.map((txType) => sql`${txType}`), sql`, `)})` : sql``}
     GROUP BY t.id, t.date, t.description, t.status, t.category_id, c.name, t.tx_type
@@ -125,7 +127,8 @@ export async function getFinancialFacts(input: {
     INNER JOIN "transaction" t ON t.id = tl.transaction_id
     INNER JOIN account a ON a.id = tl.account_id
     WHERE t.date <= ${asOfMs}
-      AND t.status <> 'draft'
+      AND t.status NOT IN ('draft', 'reversed')
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal')
       AND a.type = 'asset'
       AND a.liquidity_class = 'cash_equivalent'
   `);

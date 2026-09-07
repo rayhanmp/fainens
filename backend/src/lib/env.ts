@@ -29,11 +29,17 @@ const envSchema = z.object({
   // Redis — use redis://127.0.0.1:6379 for local dev; in Docker Compose use redis://redis:6379
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
 
+  // HTTP server and browser access
+  HOST: z.string().default("0.0.0.0"),
+  PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
+  // Comma-separated browser origins. Keep this explicit in production.
+  CORS_ORIGINS: z.string().default("").transform((value) => value.split(",").map((origin) => origin.trim()).filter(Boolean)),
+
   // OpenRouter API for LLM insights
   OPENROUTER_API_KEY: z.string().optional(),
   // Model used by the interactive finance agent. Keep this configurable so a
   // provider/account can be changed without silently disagreeing with the UI.
-  OPENROUTER_MODEL: z.string().min(1).default("google/gemini-3.7-flash"),
+  OPENROUTER_MODEL: z.string().min(1).default("z-ai/glm-5.3-flash"),
 
   // App
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -44,6 +50,7 @@ const envSchema = z.object({
    * production regardless of this value.
    */
   LOCAL_AUTH_BYPASS: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  LOCAL_AUTH_EMAIL: z.string().email().default("local-dev@fainens.test"),
 
   // Intervals remain the compatibility default. Set queue only when the
   // standalone BullMQ worker is deployed and healthy.
@@ -59,6 +66,7 @@ const envSchema = z.object({
    * If unset, callback uses reply.redirect("/") which stays on the API host — wrong when API is :3000 and UI is :8080.
    */
   FRONTEND_URL: z.string().url().optional(),
+  OPENROUTER_HTTP_REFERER: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

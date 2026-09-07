@@ -37,6 +37,7 @@ function normalizeGeneratedTitle(value: unknown): string | null {
 export async function generateConversationTitle(input: {
   apiKey?: string;
   model?: string;
+  baseUrl?: string;
   question: string;
   assistantAnswer?: string | null;
   signal?: AbortSignal;
@@ -66,6 +67,7 @@ export async function generateConversationTitle(input: {
     const response = await callOpenRouterAgent({
       apiKey: input.apiKey,
       model: input.model,
+      baseUrl: input.baseUrl,
       messages,
       tools: [],
       signal: input.signal,

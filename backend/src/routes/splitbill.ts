@@ -6,15 +6,13 @@ import { db } from "../db/client";
 import { splitbillSessions, contacts, loans, loanPayments, accounts, auditLogs, transactions } from "../db/schema";
 import { uploadFile, generatePresignedDownloadUrl } from "../services/r2";
 import { callOpenRouterVision } from "../services/openrouter";
-import { env } from "../lib/env";
+import { getAgentProviderConfig } from "../services/agent-provider-config";
 import {
   insertPreparedJournalEntrySync,
   prepareJournalEntry,
 } from "../services/ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { insertDomainReversalSync, prepareDomainReversal } from "../services/domain-reversal";
-
-const GEMINI_MODEL = "google/gemini-3.1-flash-lite-preview";
 
 const SYSTEM_PROMPT = `You are an expert receipt parser specializing in Indonesian restaurant receipts (nota/restoran).
 
@@ -332,7 +330,8 @@ export default async function (fastify: FastifyInstance) {
 
         const imageUrl = await generatePresignedDownloadUrl(key, 3600);
 
-        if (!env.OPENROUTER_API_KEY) {
+        const providerConfig = await getAgentProviderConfig();
+        if (!providerConfig.apiKey) {
           reply.code(500).send({ error: "OpenRouter API key not configured" });
           return;
         }
@@ -341,8 +340,9 @@ export default async function (fastify: FastifyInstance) {
           SYSTEM_PROMPT,
           imageUrl,
           USER_PROMPT,
-          env.OPENROUTER_API_KEY,
-          GEMINI_MODEL
+          providerConfig.apiKey,
+          providerConfig.model,
+          providerConfig.baseUrl
         );
 
         let parsed: ParsedReceipt;

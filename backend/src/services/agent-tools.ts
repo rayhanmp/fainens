@@ -33,6 +33,7 @@ import { prepareAgentAction } from "./agent-actions";
 import { listMoneyAnomalyReviews } from "./money-anomaly-review";
 import { requestBudgetOutlierReview } from "./budget-outlook-review";
 import { updateTransactionAtomically } from "./transaction-mutations";
+import { listReimbursementClaims } from "./reimbursements";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
@@ -150,8 +151,20 @@ const transactionProposalRequired = ["intent", "date", "description", "lines"];
 
 export const agentToolDefinitions: AgentToolDefinition[] = [
   {
+    name: "get_reimbursement_claims",
+    description: "Read reimbursement claims, outstanding receivable amounts, payer, source journals, and receipt allocations. Claims are not income; only approved claim balances affect net worth.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["draft", "submitted", "approved", "partially_paid", "settled", "rejected", "cancelled", "written_off"], description: "Optional exact lifecycle status." },
+        contactId: { type: "integer", minimum: 1, description: "Optional payer contact ID." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "get_financial_facts",
-    description: "Period-level canonical overview of posted income, spending, net result, category totals, and coverage. Use for broad questions such as 'how am I doing?'; use search_transactions for an itemized/filtered list and get_account_balances for individual accounts.",
+    description: "Compact period-level overview of posted income, spending, net result, cash-equivalent balance, category totals, and coverage. Use for broad questions such as 'how am I doing?'. This intentionally excludes transaction rows: use search_transactions for itemized activity and get_account_balances for an individual account.",
     inputSchema: scopeSchema(),
   },
   {
@@ -209,11 +222,14 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_account_balances",
-    description: "Read active account balances, IDs, types, and liquidity classes as of a timestamp. Use before preparing a transaction or answering a balance question. For reconciliation evidence on one account use get_account_health.",
+    description: "Read the minimum account identity and balance data needed for a question or proposal. When the user names an account (for example BNI), always pass query so only matching accounts are returned. Omit filters only when a full wallet overview is genuinely needed. For reconciliation evidence on one known account use get_account_health.",
     inputSchema: {
       type: "object",
       properties: {
         asOfDate: { type: "integer", minimum: 0, description: "Inclusive UTC timestamp in milliseconds; defaults to now." },
+        query: { type: "string", minLength: 1, maxLength: 120, description: "Case-insensitive account-name filter. Use an account name supplied by the user, such as BNI or GoPay. Never falls back to all accounts when no match exists." },
+        accountIds: { type: "array", minItems: 1, maxItems: 20, items: { type: "integer", minimum: 1 }, description: "Optional exact account IDs when already known. May be combined with query to narrow further." },
+        limit: { type: "integer", minimum: 1, maximum: 20, description: "Maximum matching accounts. Defaults to 6 for a query and 20 for an unfiltered overview." },
       },
       additionalProperties: false,
     },
@@ -252,7 +268,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "search_transactions",
-    description: "Search effective posted transaction summaries by text, period, date range, or limit. Use for itemized or filtered activity; drafts and internal correction mechanics are excluded. Use get_transaction_details after you know the exact journal ID.",
+    description: "Search compact effective posted transaction summaries by text, period, date range, or limit. Supply text whenever the user names a merchant or transaction. Defaults to a small result set; request a larger limit only when needed. Drafts and internal correction mechanics are excluded. Use get_transaction_details after you know the exact journal ID.",
     inputSchema: {
       type: "object",
       properties: {
@@ -265,8 +281,14 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_category_spending",
-    description: "Read canonical posted spending by category, sorted by amount with percentage shares and coverage. Use for category rankings such as top spending; it is not a transaction list.",
-    inputSchema: scopeSchema(),
+    description: "Read the top canonical spending categories with percentage shares and coverage. Defaults to the most important 10 categories and reports the remainder as Other; request a larger limit only when needed. Use for category rankings, not transaction lists.",
+    inputSchema: {
+      ...scopeSchema(),
+      properties: {
+        ...scopeProperties,
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum named categories to return; defaults to 10." },
+      },
+    },
   },
   {
     name: "find_similar_transactions",
@@ -372,12 +394,12 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_tags",
-    description: "Read available descriptive tags and IDs for transaction labeling. Tags are metadata only and do not affect categories, budgets, reports, balances, or cash flow.",
+    description: "Read compact descriptive tag IDs and names for transaction labeling. Use search when the user names a tag; defaults to a small candidate set. Tags are metadata only and do not affect categories, budgets, reports, balances, or cash flow.",
     inputSchema: {
       type: "object",
       properties: {
         search: { type: "string", maxLength: 100, description: "Optional case-insensitive tag-name search." },
-        limit: { type: "integer", minimum: 1, maximum: MAX_TAGS, description: "Maximum tags; defaults to all up to 200." },
+        limit: { type: "integer", minimum: 1, maximum: MAX_TAGS, description: "Maximum tags; defaults to 20." },
       },
       additionalProperties: false,
     },
@@ -499,12 +521,12 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_categories",
-    description: "Read active category IDs and reporting links for an expense or budget proposal. Load the full small list when classification is needed. Do not use for income, wallet transfers, debt movements, or other non-expense entries.",
+    description: "Read compact active category IDs and names. Use search whenever the user named or implied a category; IDs are required for transaction and budget proposals. Defaults to a small candidate set. Do not use for income, wallet transfers, debt movements, or other non-expense entries.",
     inputSchema: {
       type: "object",
       properties: {
         search: { type: "string", maxLength: 100, description: "Optional case-insensitive category-name search." },
-        limit: { type: "integer", minimum: 1, maximum: MAX_CATEGORIES, description: "Maximum categories; defaults to all up to 200." },
+        limit: { type: "integer", minimum: 1, maximum: MAX_CATEGORIES, description: "Maximum categories; defaults to 30." },
       },
       additionalProperties: false,
     },
@@ -713,8 +735,9 @@ export async function getFinancialFactsTool(input: AgentScopeInput): Promise<{ s
     asOfMs,
     periodId: scope.periodId ?? undefined,
   });
-  // Totals must include correction journals so they reconcile to the ledger,
-  // but raw bookkeeping mechanics do not belong in a normal assistant answer.
+  // Preserve the public executor's existing result contract. The model-only
+  // registry projects this full result to totals/coverage and never forwards
+  // these rows to Gemini.
   const visibleRows = facts.rows.filter((row) => row.status !== "reversed" && !INTERNAL_CORRECTION_TX_TYPES.includes(row.txType as typeof INTERNAL_CORRECTION_TX_TYPES[number]));
   return { scope, facts: { ...facts, rows: visibleRows }, coverage: await getPeriodCoverage(scope.startMs, scope.endMs) };
 }
@@ -845,36 +868,95 @@ export async function getBudgetFactsTool(input: unknown) {
   const period = (await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
     .from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1))[0];
   if (!period) throw new Error("Period not found");
+  const budgets = await getBudgetFacts(periodId);
+  const selection = isRecord(input.selection) ? input.selection : null;
+  const selectionMode = selection?.mode;
+  if (selectionMode != null && selectionMode !== "all" && selectionMode !== "top") throw new Error("selection.mode must be all or top");
+  const requestedCount = selectionMode === "top" ? optionalInteger(selection?.count, "selection.count", { min: 1 }) : undefined;
+  if (selectionMode === "top" && requestedCount == null) throw new Error("selection.count is required for top selection");
+  const selectedBudgets = selectionMode === "top"
+    ? budgets.slice().sort((a, b) => b.spentCents - a.spentCents).slice(0, requestedCount)
+    : budgets;
   return {
     period: { periodId: period.id, name: period.name, startMs: period.startDate, endMs: period.endDate },
-    budgets: await getBudgetFacts(periodId),
+    budgets: selectedBudgets,
     coverage: await getPeriodCoverage(period.startDate, inclusiveEndOfSelectedDay(period.endDate)),
+    selectionApplied: selectionMode == null ? { mode: "all" } : { mode: selectionMode, ...(selectionMode === "top" ? { count: selectedBudgets.length } : {}) },
+    availableCount: budgets.length,
+    complete: selectedBudgets.length >= budgets.length,
   };
 }
 
 export async function getAccountBalancesTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const asOfMs = parseAsOfDate(input.asOfDate);
-  const rows = await db.select({
+  const query = optionalText(input.query, "query", 120);
+  const accountName = optionalText(input.accountName, "accountName", 120);
+  const exactAccountName = accountName?.toLowerCase() ?? null;
+  const accountId = optionalInteger(input.accountId, "accountId", { min: 1 });
+  const requestedIds = input.accountIds;
+  if (requestedIds != null && (!Array.isArray(requestedIds) || requestedIds.length === 0 || requestedIds.length > 20)) {
+    throw new Error("accountIds must contain 1 to 20 account IDs");
+  }
+  const accountIds = requestedIds == null ? undefined : requestedIds.map((value, index) => {
+    const id = optionalInteger(value, `accountIds[${index}]`, { min: 1 });
+    if (id == null) throw new Error(`accountIds[${index}] is required`);
+    return id;
+  });
+  const selection = isRecord(input.selection) ? input.selection : null;
+  const selectionMode = selection?.mode;
+  if (selectionMode != null && selectionMode !== "all" && selectionMode !== "filter" && selectionMode !== "total") throw new Error("selection.mode must be total, all, or filter");
+  const selectionType = selection && typeof selection.type === "string" ? selection.type.trim() : null;
+  const selectionLiquidityClass = selection && typeof selection.liquidityClass === "string" ? selection.liquidityClass.trim() : null;
+  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 });
+  // Explicit model selections use the actual account table rather than an
+  // arbitrary top-N default. Legacy callers retain their small default.
+  const limit = requestedLimit ?? (selectionMode === "all" ? 500 : accountName || accountId != null || query ? 20 : 20);
+  const pattern = query ? `%${query.toLowerCase().replace(/[%_]/g, "\\$&")}%` : null;
+  const conditions = [eq(accounts.isActive, true)];
+  if (pattern != null) conditions.push(like(sql`lower(${accounts.name})`, pattern));
+  if (accountName != null) conditions.push(eq(sql`lower(${accounts.name})`, exactAccountName));
+  if (accountId != null) conditions.push(eq(accounts.id, accountId));
+  if (accountIds != null) conditions.push(inArray(accounts.id, accountIds));
+  if (selectionType != null) conditions.push(eq(accounts.type, selectionType));
+  if (selectionLiquidityClass != null) conditions.push(eq(accounts.liquidityClass, selectionLiquidityClass));
+  if (selectionMode === "total") {
+    // A total balance means funds currently available across cash wallets, not
+    // the zero-sum total of every ledger account (income/expense/liability).
+    conditions.push(eq(accounts.type, "asset"));
+    conditions.push(eq(accounts.liquidityClass, "cash_equivalent"));
+  }
+  const accountQuery = db.select({
     id: accounts.id,
     name: accounts.name,
     type: accounts.type,
     liquidityClass: accounts.liquidityClass,
-    isActive: accounts.isActive,
-    provider: accounts.provider,
-    systemKey: accounts.systemKey,
-  }).from(accounts).where(eq(accounts.isActive, true));
+  }).from(accounts).where(and(...conditions)).orderBy(accounts.name);
+  const rows = selectionMode != null && requestedLimit == null ? await accountQuery : await accountQuery.limit(limit);
   const balances = await Promise.all(rows.map(async (row) => ({
     ...row,
     balanceCents: await computeAccountBalanceAsOf(row.id, asOfMs),
   })));
-  return { asOfMs, accounts: balances };
+  if (selectionMode === "total") {
+    return {
+      asOfMs,
+      selection,
+      totalBalanceCents: balances.reduce((sum, account) => sum + account.balanceCents, 0),
+      accountCount: balances.length,
+      basis: "active cash-equivalent asset wallets",
+      // Preserve the public account-tool result shape; the model projection
+      // deliberately omits this empty field for total mode.
+      accounts: [],
+    };
+  }
+  return { asOfMs, query: query ?? null, accountName: accountName ?? null, accountId: accountId ?? null, selection: selection ?? null, accounts: balances, ...(requestedLimit != null ? { limit: requestedLimit } : {}) };
 }
 
 export async function getLoanBalancesTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const status = input.status == null ? "active" : input.status;
   if (status !== "active" && status !== "all" && status !== "closed") throw new Error("status must be active, all, or closed");
+  const loanId = optionalInteger(input.loanId, "loanId", { min: 1 });
   const rows = await db.select({
     id: loans.id,
     contactId: loans.contactId,
@@ -887,18 +969,23 @@ export async function getLoanBalancesTool(input: unknown) {
     status: loans.status,
     description: loans.description,
     sourceType: loans.sourceType,
-  }).from(loans).leftJoin(contacts, eq(loans.contactId, contacts.id)).where(
+  }).from(loans).leftJoin(contacts, eq(loans.contactId, contacts.id)).where(and(
     status === "active" ? eq(loans.status, "active") : status === "closed" ? sql`${loans.status} <> 'active'` : undefined,
-  );
+    loanId == null ? undefined : eq(loans.id, loanId),
+  ));
   return {
     loans: rows,
+    loanId: loanId ?? null,
     totalReceivableCents: rows.filter((row) => row.direction === "lent").reduce((sum, row) => sum + row.remainingCents, 0),
     totalPayableCents: rows.filter((row) => row.direction === "borrowed").reduce((sum, row) => sum + row.remainingCents, 0),
   };
 }
 
-export async function getPaylaterObligationsTool() {
-  return getPaylaterObligations();
+export async function getPaylaterObligationsTool(input: unknown = {}) {
+  if (!isRecord(input)) throw new Error("Tool input must be an object");
+  const accountId = optionalInteger(input.accountId, "accountId", { min: 1 });
+  const recognitionTxId = optionalInteger(input.recognitionTxId, "recognitionTxId", { min: 1 });
+  return getPaylaterObligations({ liabilityAccountId: accountId, recognitionTxId });
 }
 
 export async function getDueRecurringTool(input: unknown) {
@@ -906,6 +993,45 @@ export async function getDueRecurringTool(input: unknown) {
   const asOfMs = parseAsOfDate(input.asOfDate);
   const preview = await previewDueSubscriptionRenewals(asOfMs);
   return { asOfMs, ...preview, writesPerformed: false };
+}
+
+export async function getDueRecurringSummaryTool(input: unknown) {
+  const result = await getDueRecurringTool(input);
+  return { asOfMs: result.asOfMs, occurrenceCount: result.occurrences.length, truncated: result.truncated, writesPerformed: false };
+}
+
+export async function findDueRecurringTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be an object");
+  const asOfMs = parseAsOfDate(input.asOfDate);
+  const pageSize = optionalInteger(input.pageSize, "pageSize", { min: 1 });
+  if (pageSize == null || pageSize > 100) throw new Error("pageSize must be between 1 and 100");
+  const subscriptionId = optionalInteger(input.subscriptionId, "subscriptionId", { min: 1 });
+  const cursor = input.cursor == null ? null : optionalText(input.cursor, "cursor", 200);
+  let offset = 0;
+  if (cursor != null) {
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { offset?: unknown };
+      if (!Number.isSafeInteger(parsed.offset) || Number(parsed.offset) < 0) throw new Error("invalid");
+      offset = Number(parsed.offset);
+    } catch {
+      throw new Error("cursor is invalid");
+    }
+  }
+  const preview = await previewDueSubscriptionRenewals(asOfMs);
+  const matching = subscriptionId == null ? preview.occurrences : preview.occurrences.filter((occurrence) => occurrence.subscriptionId === subscriptionId);
+  const occurrences = matching.slice(offset, offset + pageSize);
+  const complete = !preview.truncated && offset + occurrences.length >= matching.length;
+  return {
+    asOfMs,
+    occurrences,
+    pageSize,
+    subscriptionId: subscriptionId ?? null,
+    availableCount: matching.length,
+    complete,
+    ...(complete || offset + occurrences.length >= matching.length ? {} : { nextCursor: Buffer.from(JSON.stringify({ offset: offset + occurrences.length }), "utf8").toString("base64url") }),
+    truncated: preview.truncated,
+    writesPerformed: false,
+  };
 }
 
 export async function getSalaryCatchUpTool() {
@@ -917,9 +1043,35 @@ export async function searchTransactionsTool(input: unknown) {
   const scopeInput = parseAgentScopeInput(input);
   const scope = await resolveAgentScope(scopeInput);
   const text = optionalText(input.text, "text", 200);
-  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 }) ?? 50;
-  const limit = Math.min(requestedLimit, MAX_TRANSACTION_SEARCH);
-  const pattern = text ? `%${text.toLowerCase().replace(/[%_]/g, "\\$&")}%` : null;
+  const filters = isRecord(input.filters) ? input.filters : input;
+  const requestedPageSize = optionalInteger(input.pageSize, "pageSize", { min: 1 });
+  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 });
+  const pageSize = requestedPageSize ?? Math.min(requestedLimit ?? 20, MAX_TRANSACTION_SEARCH);
+  if (pageSize > MAX_TRANSACTION_SEARCH) throw new Error(`pageSize must be at most ${MAX_TRANSACTION_SEARCH}`);
+  const cursor = input.cursor == null ? null : optionalText(input.cursor, "cursor", 300);
+  let cursorDate: number | null = null;
+  let cursorId: number | null = null;
+  if (cursor != null) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { date?: unknown; id?: unknown };
+      cursorDate = typeof decoded.date === "number" ? decoded.date : null;
+      cursorId = typeof decoded.id === "number" ? decoded.id : null;
+      if (cursorDate == null || cursorId == null || !Number.isSafeInteger(cursorDate) || !Number.isSafeInteger(cursorId)) throw new Error("invalid");
+    } catch {
+      throw new Error("cursor is invalid");
+    }
+  }
+  const filterText = optionalText(filters.text, "filters.text", 200);
+  const accountIdFilter = optionalInteger(filters.accountId, "filters.accountId", { min: 1 });
+  const categoryIdFilter = optionalInteger(filters.categoryId, "filters.categoryId", { min: 1 });
+  const minAmount = optionalInteger(filters.minAmount, "filters.minAmount", { min: 0 });
+  const maxAmount = optionalInteger(filters.maxAmount, "filters.maxAmount", { min: 0 });
+  const transactionType = optionalText(filters.transactionType, "filters.transactionType", 80);
+  const direction = optionalText(filters.direction, "filters.direction", 20);
+  if (direction != null && direction !== "inflow" && direction !== "outflow") throw new Error("filters.direction must be inflow or outflow");
+  if (minAmount != null && maxAmount != null && minAmount > maxAmount) throw new Error("filters.minAmount cannot exceed filters.maxAmount");
+  const limit = pageSize;
+  const pattern = (filterText ?? text) ? `%${(filterText ?? text)!.toLowerCase().replace(/[%_]/g, "\\$&")}%` : null;
   const rows = await db.all(sql`
     SELECT
       t.id,
@@ -944,48 +1096,169 @@ export async function searchTransactionsTool(input: unknown) {
       AND t.date <= ${scope.endMs}
       AND t.status = 'posted'
       AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
+      ${accountIdFilter == null ? sql`` : sql`AND EXISTS (SELECT 1 FROM transaction_line filter_line WHERE filter_line.transaction_id = t.id AND filter_line.account_id = ${accountIdFilter})`}
+      ${categoryIdFilter == null ? sql`` : sql`AND t.category_id = ${categoryIdFilter}`}
+      ${transactionType == null ? sql`` : sql`AND t.tx_type = ${transactionType}`}
+      ${direction == null ? sql`` : direction === "inflow" ? sql`AND EXISTS (SELECT 1 FROM transaction_line direction_line INNER JOIN account direction_account ON direction_account.id = direction_line.account_id WHERE direction_line.transaction_id = t.id AND direction_account.type = 'revenue' AND direction_line.credit > direction_line.debit)` : sql`AND EXISTS (SELECT 1 FROM transaction_line direction_line INNER JOIN account direction_account ON direction_account.id = direction_line.account_id WHERE direction_line.transaction_id = t.id AND direction_account.type = 'expense' AND direction_line.debit > direction_line.credit)`}
+      ${cursorDate == null || cursorId == null ? sql`` : sql`AND (t.date < ${cursorDate} OR (t.date = ${cursorDate} AND t.id < ${cursorId}))`}
       ${scope.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(scope.periodId, sql`t.period_id`)}`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
     GROUP BY t.id, t.date, t.description, t.reference, t.notes, t.tx_type, t.status, t.period_id, t.category_id, c.name
+    ${minAmount == null && maxAmount == null ? sql`` : minAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0)) <= ${maxAmount}` : maxAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0)) >= ${minAmount}` : sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0)) BETWEEN ${minAmount} AND ${maxAmount}`}
     ORDER BY t.date DESC, t.id DESC
-    LIMIT ${limit}
+    LIMIT ${limit + 1}
   `) as unknown as Array<Record<string, unknown>>;
+  const complete = rows.length <= pageSize;
+  const page = complete ? rows : rows.slice(0, pageSize);
+  const pageTransactions = page.map((row) => ({
+    id: Number(row.id),
+    date: Number(row.date),
+    description: String(row.description ?? ""),
+    reference: row.reference == null ? null : String(row.reference),
+    notes: row.notes == null ? null : String(row.notes),
+    txType: String(row.tx_type ?? "manual"),
+    status: String(row.status ?? "posted"),
+    periodId: row.period_id == null ? null : Number(row.period_id),
+    categoryId: row.category_id == null ? null : Number(row.category_id),
+    category: row.category == null ? null : String(row.category),
+    debitCents: Number(row.debit_cents ?? 0),
+    creditCents: Number(row.credit_cents ?? 0),
+    expenseCents: Number(row.expense_cents ?? 0),
+    incomeCents: Number(row.income_cents ?? 0),
+  }));
+  const last = page[page.length - 1];
+  const nextCursor = !complete && last
+    ? Buffer.from(JSON.stringify({ date: Number(last.date), id: Number(last.id) }), "utf8").toString("base64url")
+    : undefined;
   return {
     scope,
-    transactions: rows.map((row) => ({
-      id: Number(row.id),
-      date: Number(row.date),
-      description: String(row.description ?? ""),
-      reference: row.reference == null ? null : String(row.reference),
-      notes: row.notes == null ? null : String(row.notes),
-      txType: String(row.tx_type ?? "manual"),
-      status: String(row.status ?? "posted"),
-      periodId: row.period_id == null ? null : Number(row.period_id),
-      categoryId: row.category_id == null ? null : Number(row.category_id),
-      category: row.category == null ? null : String(row.category),
-      debitCents: Number(row.debit_cents ?? 0),
-      creditCents: Number(row.credit_cents ?? 0),
+    transactions: pageTransactions,
+    matchedCount: pageTransactions.length,
+    totalAmountCents: pageTransactions.reduce((sum, row) => sum + Math.abs(row.expenseCents || row.incomeCents || row.debitCents || row.creditCents), 0),
+    appliedFilters: { ...filters, ...(scope.periodId != null ? { periodId: scope.periodId } : {}) },
+    inclusiveBoundary: true,
+    limit,
+    pageSize,
+    complete,
+    ...(nextCursor ? { nextCursor } : {}),
+  };
+}
+
+export async function summarizeTransactionsTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be an object");
+  const groupBy = input.groupBy;
+  if (groupBy !== "category" && groupBy !== "account" && groupBy !== "merchant" && groupBy !== "day" && groupBy !== "month") {
+    throw new Error("groupBy must be category, account, merchant, day, or month");
+  }
+  const scope = await resolveAgentScope(parseAgentScopeInput(input));
+  const filters = isRecord(input.filters) ? input.filters : {};
+  const text = optionalText(filters.text, "filters.text", 200);
+  const accountId = optionalInteger(filters.accountId, "filters.accountId", { min: 1 });
+  const categoryId = optionalInteger(filters.categoryId, "filters.categoryId", { min: 1 });
+  const minAmount = optionalInteger(filters.minAmount, "filters.minAmount", { min: 0 });
+  const maxAmount = optionalInteger(filters.maxAmount, "filters.maxAmount", { min: 0 });
+  const transactionType = optionalText(filters.transactionType, "filters.transactionType", 80);
+  const direction = optionalText(filters.direction, "filters.direction", 20);
+  if (direction != null && direction !== "inflow" && direction !== "outflow") throw new Error("filters.direction must be inflow or outflow");
+  if (minAmount != null && maxAmount != null && minAmount > maxAmount) throw new Error("filters.minAmount cannot exceed filters.maxAmount");
+  const pattern = text == null ? null : `%${text.toLowerCase().replace(/[%_]/g, "\\$&")}%`;
+  const groupExpression = groupBy === "category"
+    ? "coalesce(c.name, 'Uncategorized')"
+    : groupBy === "account"
+      ? "a.name"
+      : groupBy === "merchant"
+        ? "t.description"
+        : groupBy === "day"
+          ? "date(t.date / 1000, 'unixepoch')"
+          : "strftime('%Y-%m', t.date / 1000, 'unixepoch')";
+  const rows = await db.all(sql`
+    SELECT ${sql.raw(groupExpression)} AS group_key,
+      COUNT(DISTINCT t.id) AS transaction_count,
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit - tl.debit ELSE 0 END), 0) AS income_cents
+    FROM "transaction" t
+    LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
+    LEFT JOIN account a ON a.id = tl.account_id
+    LEFT JOIN category c ON c.id = t.category_id
+    WHERE t.date >= ${scope.startMs}
+      AND t.date <= ${scope.endMs}
+      AND t.status = 'posted'
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
+      ${scope.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(scope.periodId, sql`t.period_id`)}`}
+      ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
+      ${accountId == null ? sql`` : sql`AND EXISTS (SELECT 1 FROM transaction_line filter_line WHERE filter_line.transaction_id = t.id AND filter_line.account_id = ${accountId})`}
+      ${categoryId == null ? sql`` : sql`AND t.category_id = ${categoryId}`}
+      ${transactionType == null ? sql`` : sql`AND t.tx_type = ${transactionType}`}
+      ${direction == null ? sql`` : direction === "inflow" ? sql`AND EXISTS (SELECT 1 FROM transaction_line direction_line INNER JOIN account direction_account ON direction_account.id = direction_line.account_id WHERE direction_line.transaction_id = t.id AND direction_account.type = 'revenue' AND direction_line.credit > direction_line.debit)` : sql`AND EXISTS (SELECT 1 FROM transaction_line direction_line INNER JOIN account direction_account ON direction_account.id = direction_line.account_id WHERE direction_line.transaction_id = t.id AND direction_account.type = 'expense' AND direction_line.debit > direction_line.credit)`}
+      ${minAmount == null && maxAmount == null ? sql`` : sql`AND t.id IN (
+        SELECT filter_line.transaction_id
+        FROM transaction_line filter_line
+        INNER JOIN account filter_account ON filter_account.id = filter_line.account_id
+        GROUP BY filter_line.transaction_id
+        ${minAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN filter_line.debit - filter_line.credit ELSE 0 END), 0)) <= ${maxAmount}` : maxAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN filter_line.debit - filter_line.credit ELSE 0 END), 0)) >= ${minAmount}` : sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN filter_line.debit - filter_line.credit ELSE 0 END), 0)) BETWEEN ${minAmount} AND ${maxAmount}`}
+      )`}
+    GROUP BY ${sql.raw(groupExpression)}
+    ORDER BY expense_cents DESC, group_key ASC
+  `) as unknown as Array<Record<string, unknown>>;
+  if (rows.length > 500) throw new Error("Requested aggregation is too large; narrow the scope or add a filter");
+  return {
+    scope,
+    groupBy,
+    transactionCount: rows.reduce((sum, row) => sum + Number(row.transaction_count ?? 0), 0),
+    matchedCount: rows.reduce((sum, row) => sum + Number(row.transaction_count ?? 0), 0),
+    totalAmountCents: rows.reduce((sum, row) => sum + Math.abs(Number(row.expense_cents ?? 0) || Number(row.income_cents ?? 0)), 0),
+    appliedFilters: { ...filters, ...(scope.periodId != null ? { periodId: scope.periodId } : {}) },
+    inclusiveBoundary: true,
+    groups: rows.map((row) => ({
+      key: String(row.group_key ?? ""),
+      label: String(row.group_key ?? ""),
+      transactionCount: Number(row.transaction_count ?? 0),
       expenseCents: Number(row.expense_cents ?? 0),
       incomeCents: Number(row.income_cents ?? 0),
+      netCents: Number(row.income_cents ?? 0) - Number(row.expense_cents ?? 0),
     })),
-    limit,
+    complete: true,
   };
 }
 
 export async function getCategorySpendingTool(input: unknown) {
   const { scope, facts, coverage } = await getFinancialFactsTool(parseAgentScopeInput(input));
   const totalSpentCents = facts.totalSpentCents;
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const rankedCategories = facts.byCategory
+    .filter((row) => row.spentCents !== 0)
+    .sort((left, right) => right.spentCents - left.spentCents);
+  const categoryId = optionalInteger(input.categoryId, "categoryId", { min: 1 });
+  const categoryName = optionalText(input.categoryName, "categoryName", 120);
+  const filteredCategories = categoryId == null && categoryName == null
+    ? rankedCategories
+    : rankedCategories.filter((row) =>
+      (categoryId == null || row.categoryId === categoryId)
+      && (categoryName == null || row.category.toLowerCase() === categoryName.toLowerCase()));
+  const selection = isRecord(input.selection) ? input.selection : null;
+  const selectionMode = selection?.mode;
+  if (selectionMode != null && selectionMode !== "all" && selectionMode !== "top") throw new Error("selection.mode must be all or top");
+  const requestedCount = selectionMode === "top" ? optionalInteger(selection?.count, "selection.count", { min: 1 }) : undefined;
+  const legacyLimit = optionalInteger(input.limit, "limit", { min: 1 });
+  if (selectionMode === "top" && requestedCount == null) throw new Error("selection.count is required for top selection");
+  const limit = selectionMode === "all" ? filteredCategories.length : requestedCount ?? legacyLimit ?? 10;
+  if (selectionMode !== "all" && limit > 200) throw new Error("selection.count must be at most 200");
+  const visibleCategories = filteredCategories.slice(0, limit);
+  const filteredTotalSpentCents = filteredCategories.reduce((sum, row) => sum + row.spentCents, 0);
   return {
     scope,
-    totalSpentCents,
-    categories: facts.byCategory
-      .filter((row) => row.spentCents !== 0)
-      .sort((left, right) => right.spentCents - left.spentCents)
+    totalSpentCents: categoryId == null && categoryName == null ? totalSpentCents : filteredTotalSpentCents,
+    categoryCount: filteredCategories.length,
+    otherSpentCents: filteredCategories.slice(limit).reduce((sum, row) => sum + row.spentCents, 0),
+    categories: visibleCategories
       .map((row) => ({
         ...row,
-        sharePercent: totalSpentCents === 0 ? 0 : Math.round((row.spentCents / totalSpentCents) * 10_000) / 100,
+        sharePercent: filteredTotalSpentCents === 0 ? 0 : Math.round((row.spentCents / filteredTotalSpentCents) * 10_000) / 100,
       })),
     coverage,
+    selectionApplied: selectionMode == null ? { mode: "top", count: limit, legacyDefault: legacyLimit == null } : { mode: selectionMode, ...(selectionMode === "top" ? { count: limit } : {}) },
+    availableCount: filteredCategories.length,
+    complete: limit >= filteredCategories.length,
   };
 }
 
@@ -1018,10 +1291,16 @@ export async function findSimilarTransactionsTool(input: unknown) {
       AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
     GROUP BY t.id, t.date, t.description, t.category_id, c.name
     ORDER BY t.date DESC, t.id DESC
-    LIMIT 500
   `) as unknown as Array<Record<string, unknown>>;
-  const limit = Math.min(optionalInteger(input.limit, "limit", { min: 1 }) ?? 20, 50);
-  const candidates = rows.map((row) => {
+  const selection = isRecord(input.selection) ? input.selection : null;
+  const selectionMode = selection?.mode;
+  if (selectionMode != null && selectionMode !== "all" && selectionMode !== "top") throw new Error("selection.mode must be all or top");
+  const requestedCount = selectionMode === "top" ? optionalInteger(selection?.count, "selection.count", { min: 1 }) : undefined;
+  if (selectionMode === "top" && requestedCount == null) throw new Error("selection.count is required for top selection");
+  const legacyLimit = optionalInteger(input.limit, "limit", { min: 1 });
+  const limit = selectionMode === "all" ? rows.length : requestedCount ?? legacyLimit ?? 20;
+  if (selectionMode !== "all" && limit > 500) throw new Error("selection.count must be at most 500");
+  const matchingCandidates = rows.map((row) => {
     const description = String(row.description ?? "");
     const haystack = description.toLowerCase();
     const matchingTokens = tokens.filter((token) => haystack.includes(token));
@@ -1030,8 +1309,9 @@ export async function findSimilarTransactionsTool(input: unknown) {
     const categoryMatch = seedCategoryId != null && Number(row.category_id ?? 0) === seedCategoryId;
     const score = matchingTokens.length * 3 + (categoryMatch ? 2 : 0) + (amountDelta != null && amountDelta <= 0.1 ? 1 : 0);
     return { id: Number(row.id), date: Number(row.date), description, categoryId: row.category_id == null ? null : Number(row.category_id), category: row.category == null ? null : String(row.category), amountCents: candidateAmount, score, matchReasons: [...(matchingTokens.length ? [`description matched: ${matchingTokens.join(", ")}`] : []), ...(categoryMatch ? ["same category"] : []), ...(amountDelta != null && amountDelta <= 0.1 ? ["amount within 10%"] : [])] };
-  }).filter((row) => row.id !== transactionId && row.score > 0).sort((a, b) => b.score - a.score || b.date - a.date).slice(0, limit);
-  return { seed: { transactionId: transactionId ?? null, query: query ?? null, amountCents: amountCents ?? null }, candidates, deterministic: true };
+  }).filter((row) => row.id !== transactionId && row.score > 0).sort((a, b) => b.score - a.score || b.date - a.date);
+  const candidates = matchingCandidates.slice(0, limit);
+  return { seed: { transactionId: transactionId ?? null, query: query ?? null, amountCents: amountCents ?? null }, candidates, deterministic: true, selectionApplied: selectionMode == null ? { mode: "top", count: limit, legacyDefault: legacyLimit == null } : { mode: selectionMode, ...(selectionMode === "top" ? { count: limit } : {}) }, availableCount: matchingCandidates.length, complete: limit >= matchingCandidates.length };
 }
 
 export async function getCashFlowTool(input: unknown) {
@@ -1054,14 +1334,31 @@ export async function getCategoryVarianceTool(input: unknown) {
 
 export async function comparePeriodsTool(input: unknown) {
   if (!isRecord(input) || !Array.isArray(input.periodIds) || input.periodIds.length < 2) throw new Error("periodIds must contain at least two period IDs");
-  const periodIds = input.periodIds.map((value, index) => optionalInteger(value, `periodIds[${index}]`, { min: 1 })).filter((value): value is number => value != null).slice(0, 6);
+  if (input.periodIds.length > 12) throw new Error("periodIds must contain at most 12 period IDs");
+  const periodIds = input.periodIds.map((value, index) => optionalInteger(value, `periodIds[${index}]`, { min: 1 })).filter((value): value is number => value != null);
+  if (periodIds.length !== input.periodIds.length) throw new Error("periodIds must contain valid positive integers");
   const periods = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus, coverageReason: salaryPeriods.coverageReason }).from(salaryPeriods).where(inArray(salaryPeriods.id, periodIds));
   if (periods.length !== periodIds.length) throw new Error("One or more periods not found");
   const results = await Promise.all(periods.map(async (period) => {
     const facts = await getFinancialFacts({ startMs: period.startDate, endMs: inclusivePeriodEnd(period.endDate), periodId: period.id });
     return { period, incomeCents: facts.totalIncomeCents, spentCents: facts.totalSpentCents, netCents: facts.totalIncomeCents - facts.totalSpentCents, byCategory: facts.byCategory, coverage: await getPeriodCoverage(period.startDate, inclusivePeriodEnd(period.endDate)) };
   }));
-  return { periods: results, comparable: results.every((result) => result.coverage.isComparable), warnings: results.flatMap((result) => result.coverage.warnings) };
+  const selection = isRecord(input.selection) ? input.selection : null;
+  const selectionMode = selection?.mode;
+  if (selectionMode != null && selectionMode !== "all" && selectionMode !== "top" && selectionMode !== "ids") throw new Error("selection.mode must be all, top, or ids");
+  const allCategories = [...new Map(results.flatMap((result) => result.byCategory.map((row) => [row.categoryId, row] as const))).values()];
+  const requestedCount = selectionMode === "top" ? optionalInteger(selection?.count, "selection.count", { min: 1 }) : undefined;
+  if (selectionMode === "top" && requestedCount == null) throw new Error("selection.count is required for top selection");
+  const requestedIds = selectionMode === "ids" ? selection?.ids : undefined;
+  const selectedIds = selectionMode === "all" || selectionMode == null
+    ? null
+    : selectionMode === "ids"
+      ? new Set(Array.isArray(requestedIds) ? requestedIds.map((id, index) => optionalInteger(id, "selection.ids[" + index + "]", { min: 1 })).filter((id): id is number => id != null) : [])
+      : new Set(allCategories.slice().sort((a, b) => b.spentCents - a.spentCents).slice(0, requestedCount).map((row) => row.categoryId));
+  const visibleResults = selectedIds == null ? results : results.map((result) => ({ ...result, byCategory: result.byCategory.filter((row) => selectedIds.has(row.categoryId)) }));
+  const first = results[0];
+  const last = results[results.length - 1];
+  return { periods: visibleResults, comparable: results.every((result) => result.coverage.isComparable), warnings: results.flatMap((result) => result.coverage.warnings), delta: { incomeCents: last!.incomeCents - first!.incomeCents, spentCents: last!.spentCents - first!.spentCents, netCents: last!.netCents - first!.netCents }, ...(selection ? { selectionApplied: selectionMode === "top" ? { mode: "top", count: selectedIds?.size ?? 0 } : { mode: selectionMode }, availableCount: allCategories.length, complete: selectedIds == null || selectedIds.size >= allCategories.length } : {}) };
 }
 
 export async function forecastCashPositionTool(input: unknown) {
@@ -1088,10 +1385,55 @@ export async function getAccountHealthTool(input: unknown) {
 export async function getMoneyAnomaliesTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
   const status = input.status == null ? "open" : input.status;
-  if (status !== "open" && status !== "resolved" && status !== "dismissed") throw new Error("status must be open, resolved, or dismissed");
+  if (status !== "open" && status !== "resolved" && status !== "dismissed" && status !== "all") throw new Error("status must be open, resolved, dismissed, or all");
+  const anomalyId = optionalInteger(input.anomalyId, "anomalyId", { min: 1 });
   const limit = Math.min(optionalInteger(input.limit, "limit", { min: 1 }) ?? 50, 100);
+  const reviews = await listMoneyAnomalyReviews(status === "all" ? undefined : status, anomalyId);
+  return {
+    status,
+    reviews: anomalyId == null ? reviews.slice(0, limit) : reviews,
+    writesPerformed: false,
+    ...(anomalyId != null ? { anomalyId, complete: reviews.length <= 1, availableCount: reviews.length } : {}),
+  };
+}
+
+export async function getMoneyAnomalySummaryTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be an object");
+  const status = input.status == null ? "open" : input.status;
+  if (status !== "open" && status !== "resolved" && status !== "dismissed") throw new Error("status must be open, resolved, or dismissed");
   const reviews = await listMoneyAnomalyReviews(status);
-  return { status, reviews: reviews.slice(0, limit), writesPerformed: false };
+  return { status, reviewCount: reviews.length, writesPerformed: false };
+}
+
+export async function findMoneyAnomaliesTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be an object");
+  const status = input.status == null ? "open" : input.status;
+  if (status !== "open" && status !== "resolved" && status !== "dismissed") throw new Error("status must be open, resolved, or dismissed");
+  const pageSize = optionalInteger(input.pageSize, "pageSize", { min: 1 });
+  if (pageSize == null || pageSize > 100) throw new Error("pageSize must be between 1 and 100");
+  const cursor = input.cursor == null ? null : optionalText(input.cursor, "cursor", 200);
+  let offset = 0;
+  if (cursor != null) {
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { offset?: unknown };
+      if (!Number.isSafeInteger(parsed.offset) || Number(parsed.offset) < 0) throw new Error("invalid");
+      offset = Number(parsed.offset);
+    } catch {
+      throw new Error("cursor is invalid");
+    }
+  }
+  const reviews = await listMoneyAnomalyReviews(status);
+  const page = reviews.slice(offset, offset + pageSize);
+  const complete = offset + page.length >= reviews.length;
+  return {
+    status,
+    reviews: page,
+    pageSize,
+    availableCount: reviews.length,
+    complete,
+    ...(complete ? {} : { nextCursor: Buffer.from(JSON.stringify({ offset: offset + page.length }), "utf8").toString("base64url") }),
+    writesPerformed: false,
+  };
 }
 
 export async function getCategoriesTool(input: unknown) {
@@ -1402,9 +1744,17 @@ export async function getReconciliationStatusTool(input: unknown) {
 
 export async function listPeriodsTool(input: unknown) {
   if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
-  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 }) ?? 24;
-  const limit = Math.min(requestedLimit, 100);
-  const periods = await db.select({
+  const selection = isRecord(input.selection) ? input.selection : null;
+  const selectionMode = selection?.mode;
+  if (selectionMode != null && selectionMode !== "all" && selectionMode !== "ids" && selectionMode !== "status") throw new Error("selection.mode must be all, ids, or status");
+  const selectionIds = selectionMode === "ids" && Array.isArray(selection?.ids)
+    ? selection.ids.map((id, index) => optionalInteger(id, "selection.ids[" + index + "]", { min: 1 })).filter((id): id is number => id != null)
+    : null;
+  const selectionStatus = selectionMode === "status" && typeof selection?.status === "string" ? selection.status : null;
+  if (selectionMode === "ids" && (!selectionIds || selectionIds.length === 0)) throw new Error("selection.ids is required");
+  if (selectionMode === "status" && !selectionStatus) throw new Error("selection.status is required");
+  const requestedLimit = optionalInteger(input.limit, "limit", { min: 1 });
+  const periodQuery = db.select({
     id: salaryPeriods.id,
     name: salaryPeriods.name,
     startDate: salaryPeriods.startDate,
@@ -1415,14 +1765,20 @@ export async function listPeriodsTool(input: unknown) {
     closedAt: salaryPeriods.closedAt,
     reopenedAt: salaryPeriods.reopenedAt,
   })
-    .from(salaryPeriods).orderBy(desc(salaryPeriods.endDate)).limit(limit);
+    .from(salaryPeriods)
+    .where(selectionIds != null ? inArray(salaryPeriods.id, selectionIds) : selectionStatus != null ? eq(salaryPeriods.status, selectionStatus) : undefined)
+    .orderBy(desc(salaryPeriods.endDate));
+  const limit = selectionMode === "all" || selectionMode === "ids" ? null : Math.min(requestedLimit ?? 24, 100);
+  const periods = limit == null ? await periodQuery : await periodQuery.limit(limit);
   const periodIds = periods.map((period) => period.id);
   const budgets = periodIds.length === 0 ? [] : await db.select({ periodId: budgetPlans.periodId, plannedCents: sql<number>`coalesce(sum(${budgetPlans.plannedAmount}), 0)` })
     .from(budgetPlans).where(inArray(budgetPlans.periodId, periodIds)).groupBy(budgetPlans.periodId);
   const plannedByPeriod = new Map(budgets.map((row) => [row.periodId, Number(row.plannedCents ?? 0)]));
   return {
     periods: periods.map((period) => ({ ...period, plannedCents: plannedByPeriod.get(period.id) ?? 0 })),
-    limit,
+    ...(limit == null ? {} : { limit }),
+    selectionApplied: selectionMode == null ? { mode: "limited", limit: limit ?? periods.length } : { mode: selectionMode },
+    complete: limit == null ? true : periods.length < limit,
   };
 }
 
@@ -1454,6 +1810,20 @@ export async function previewBudgetPlanTool(input: unknown) {
   };
 }
 
+export async function getReimbursementClaimsTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const status = optionalText(input.status, "status", 40);
+  const contactId = optionalInteger(input.contactId, "contactId", { min: 1 });
+  const claims = await listReimbursementClaims({ status: status ?? undefined, contactId: contactId ?? undefined });
+  return {
+    claims,
+    totals: {
+      outstandingAmount: claims.reduce((sum, claim: any) => sum + Number(claim.outstandingAmount ?? 0), 0),
+      approvedCount: claims.filter((claim: any) => ["approved", "partially_paid", "settled"].includes(claim.status)).length,
+    },
+  };
+}
+
 export async function executeAgentTool(name: unknown, input: unknown, executionContext?: AgentToolExecutionContext): Promise<AgentToolResult> {
   if (typeof name !== "string" || !agentToolDefinitions.some((definition) => definition.name === name)) {
     throw new Error("Unknown or unavailable agent tool");
@@ -1462,6 +1832,9 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
   switch (name) {
     case "get_financial_facts":
       data = await getFinancialFactsTool(parseAgentScopeInput(input));
+      break;
+    case "get_reimbursement_claims":
+      data = await getReimbursementClaimsTool(input);
       break;
     case "calculate":
       data = calculateTool(input);
@@ -1485,7 +1858,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       data = await getLoanBalancesTool(input);
       break;
     case "get_paylater_obligations":
-      data = await getPaylaterObligationsTool();
+      data = await getPaylaterObligationsTool(input);
       break;
     case "get_due_recurring":
       data = await getDueRecurringTool(input);

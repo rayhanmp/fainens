@@ -771,11 +771,22 @@ export interface PaylaterObligationsPayload {
 }
 
 /** Per-obligation balances (each recognition is one installment plan root) + calendar schedule items. */
-export async function getPaylaterObligations(): Promise<PaylaterObligationsPayload> {
+export async function getPaylaterObligations(query: { liabilityAccountId?: number; recognitionTxId?: number } = {}): Promise<PaylaterObligationsPayload> {
+  const recognitionConditions = [
+    eq(transactions.txType, "paylater_recognition"),
+    eq(transactions.status, "posted"),
+    query.recognitionTxId == null ? undefined : eq(transactions.id, query.recognitionTxId),
+    query.liabilityAccountId == null ? undefined : sql`EXISTS (
+      SELECT 1 FROM transaction_line obligation_line
+      WHERE obligation_line.transaction_id = ${transactions.id}
+        AND obligation_line.account_id = ${query.liabilityAccountId}
+        AND obligation_line.credit > obligation_line.debit
+    )`,
+  ];
   const recognitions = await db
     .select()
     .from(transactions)
-    .where(and(eq(transactions.txType, "paylater_recognition"), eq(transactions.status, "posted")))
+    .where(and(...recognitionConditions))
     .orderBy(desc(transactions.date));
 
   const obligations: PaylaterObligation[] = [];

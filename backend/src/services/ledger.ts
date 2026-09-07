@@ -400,11 +400,19 @@ export async function computeAccountBalance(
   return sign === 1 ? debitSum - creditSum : creditSum - debitSum;
 }
 
-/** Balance including only transaction lines on or before `asOfInclusiveMs`. */
+/**
+ * Balance including only transaction lines on or before `asOfInclusiveMs`.
+ *
+ * `restateReversals` is used by historical trend views that should reflect
+ * the corrected ledger consistently across every point. It removes both a
+ * reversed source journal and its linked reversal journal, while leaving the
+ * default as-of behavior unchanged for callers that need the event timeline.
+ */
 export async function computeAccountBalanceAsOf(
   accountId: number,
   asOfInclusiveMs: number,
   dbLike: any = defaultDb,
+  options: { restateReversals?: boolean } = {},
 ): Promise<number> {
   const [account] = await dbLike
     .select({ type: accounts.type })
@@ -425,6 +433,9 @@ export async function computeAccountBalanceAsOf(
         eq(transactionLines.accountId, accountId),
         sql`${transactions.date} <= ${asOfInclusiveMs}`,
         sql`${transactions.status} <> 'draft'`,
+        options.restateReversals
+          ? sql`${transactions.status} <> 'reversed' AND NOT (${transactions.txType} IN ('reversal', 'domain_reversal') AND ${transactions.reversalOfTxId} IS NOT NULL)`
+          : undefined,
       ),
     );
 
@@ -452,21 +463,29 @@ export async function prepareJournalEntry(
 
   const { lines: validatedLines, totalDebit, totalCredit } = validateJournalLines(input.lines);
   const accountIds = Array.from(new Set(validatedLines.map((l) => l.accountId)));
-  const accountById = new Map<number, { type: string; liquidityClass: string }>();
+  const accountById = new Map<number, { type: string; liquidityClass: string; systemKey: string | null }>();
   for (const accountId of accountIds) {
     const rows = await dbLike
-    .select({ id: accounts.id, isActive: accounts.isActive, type: accounts.type, liquidityClass: accounts.liquidityClass })
+    .select({ id: accounts.id, isActive: accounts.isActive, type: accounts.type, liquidityClass: accounts.liquidityClass, systemKey: accounts.systemKey })
       .from(accounts)
       .where(eq(accounts.id, accountId))
       .limit(1);
     const account = rows[0];
     if (!account) throw new Error(`Account not found: ${accountId}`);
     if (!account.isActive) throw new Error(`Account is not active: ${accountId}`);
-    accountById.set(account.id, { type: account.type, liquidityClass: account.liquidityClass });
+    accountById.set(account.id, { type: account.type, liquidityClass: account.liquidityClass, systemKey: account.systemKey });
   }
 
   for (const line of validatedLines) {
     const account = accountById.get(line.accountId);
+    if (account?.systemKey === "reimbursements-receivable" && ![
+      "reimbursement_recognition",
+      "reimbursement_receipt",
+      "reimbursement_writeoff",
+      "domain_reversal",
+    ].includes(input.txType ?? "manual")) {
+      throw new Error("Reimbursements Receivable is controlled by the reimbursement workflow");
+    }
     if (account?.liquidityClass === "cash_equivalent" && line.cashFlowClass == null) {
       throw new Error(`Cash-equivalent account line ${line.accountId} requires cashFlowClass`);
     }

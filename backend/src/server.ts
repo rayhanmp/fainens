@@ -90,7 +90,7 @@ async function start() {
       intervals.push(setInterval(() => void runRenewals(), 60 * 60 * 1000));
       intervals.push(setInterval(() => void runSalaryPosting(), 60 * 60 * 1000));
     }
-    await app.listen({ port: 3000, host: "0.0.0.0" });
+    await app.listen({ port: env.PORT, host: env.HOST });
   } catch (err) {
     app.log.error(err);
     await stop();

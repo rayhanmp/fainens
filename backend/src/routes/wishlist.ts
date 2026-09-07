@@ -3,12 +3,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { accounts, auditLogs, wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
+import { accounts, auditLogs, storageDeletionOutbox, wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
 import { getOrCreateAutoExpenseAccount } from "../services/ledger";
 import { findPeriodIdForDate } from "../services/transaction-mutations";
 import { invalidateOnTransactionMutation } from "../cache";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
+import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 
 // SSRF Protection: Allowed domains for web scraping
 const ALLOWED_SCRAPE_DOMAINS = [
@@ -334,9 +335,22 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    await db.delete(wishlist).where(eq(wishlist.id, parseInt(id)));
+    const cleanupId = db.transaction((tx) => {
+      let queuedId: number | null = null;
+      if (existing.imageUrl && !/^https?:\/\//i.test(existing.imageUrl)) {
+        const [queued] = tx.insert(storageDeletionOutbox).values({
+          r2Key: existing.imageUrl,
+          entityType: "wishlist_image",
+          entityId: existing.id,
+        }).returning({ id: storageDeletionOutbox.id }).all();
+        queuedId = queued?.id ?? null;
+      }
+      tx.delete(wishlist).where(eq(wishlist.id, parseInt(id))).run();
+      return queuedId;
+    });
 
     await auditDelete("wishlist", parseInt(id), existing);
+    if (cleanupId != null) void processStorageDeletionOutbox([cleanupId]);
 
     reply.code(204).send();
   });

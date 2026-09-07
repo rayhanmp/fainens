@@ -1,4 +1,4 @@
-import { eq, like, desc, and, inArray, sql } from "drizzle-orm";
+import { eq, like, desc, and, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
@@ -129,7 +129,10 @@ export default async function (fastify: FastifyInstance) {
       includeInactive?: string;
     };
 
-    const conditions = includeInactive === "true" ? [] : [eq(accounts.isActive, true)];
+    // The reimbursement control account remains part of net worth and reports,
+    // but users operate claims rather than posting directly to that account.
+    const conditions = [or(isNull(accounts.systemKey), ne(accounts.systemKey, "reimbursements-receivable"))];
+    if (includeInactive !== "true") conditions.push(eq(accounts.isActive, true));
     if (type && accountTypeEnum.includes(type as (typeof accountTypeEnum)[number])) {
       conditions.push(eq(accounts.type, type));
     }

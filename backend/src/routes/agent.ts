@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import { z } from "zod";
 import { createReadStream } from "fs";
 import { promises as fs } from "fs";
+import { randomUUID } from "node:crypto";
 
-import { env } from "../lib/env";
 import { db } from "../db/client";
-import { agentApprovals, agentConversations, agentMemories, agentMessageAttachments, agentMessages, agentPendingActions, agentProfiles, storageDeletionOutbox } from "../db/schema";
+import { accounts, agentApprovals, agentConversations, agentConversationInsights, agentMemories, agentMessageAttachments, agentMessages, agentPendingActions, agentProfiles, storageDeletionOutbox } from "../db/schema";
 import {
   agentToolDefinitions,
   executeAgentTool,
@@ -23,16 +23,30 @@ import {
 } from "../services/agent-tools";
 import { callOpenRouterAgent, streamOpenRouterAgent, type AgentChatContentPart, type AgentChatMessage, type AgentChatResponse, type AgentChatTool } from "../services/agent-llm";
 import { buildAgentSystemPrompt } from "../services/agent-prompt";
-import { parseAgentPresentation, presentationToolNames, presentationTools, type AgentPresentation } from "../services/agent-presentations";
+import { presentationTools, type AgentPresentation } from "../services/agent-presentations";
 import {
   agentToolGroups,
-  loadToolGroupTool,
-  parseAgentToolGroup,
-  selectInitialToolGroups,
-  toolNamesForGroups,
-  type AgentToolGroup,
 } from "../services/agent-tool-routing";
+import {
+  agentModelToolMap,
+  agentReadToolNames,
+  agentToolCatalog,
+  ModelToolInputValidationError,
+  modelPresentationToolNames,
+  modelToolsForNames,
+  projectModelToolResult,
+  validateModelToolInput,
+} from "../services/agent-model-tools";
+import {
+  AGENT_EVIDENCE_HARD_CHARS,
+  compactToolTranscript,
+  evidenceStateSize,
+  normalizeEvidenceKey,
+  releaseEvidence,
+  type ModelEvidence,
+} from "../services/agent-evidence";
 import { getFinancialRevision } from "../services/financial-revision";
+import { getAgentProviderConfig } from "../services/agent-provider-config";
 import { createBackgroundTask } from "../services/background-tasks";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { deleteFile, downloadFile, generateAgentAttachmentKey, generatePresignedDownloadUrl, getLocalFilePath, isObjectStorageConfigured, uploadFile } from "../services/r2";
@@ -52,7 +66,7 @@ const MAX_TOOL_ROUNDS = 30;
 const HISTORY_RECENT_MESSAGE_LIMIT = 6;
 const HISTORY_SUMMARY_MAX_CHARS = 1_600;
 const MAX_PRESENTATIONS_PER_RESPONSE = 2;
-const IMMEDIATE_METADATA_TOOLS = new Set(["create_tag", "update_transaction_tags", "update_transaction_metadata"]);
+const MAX_SINGLE_MODEL_EVIDENCE_CHARS = 32_000;
 const MAX_AGENT_IMAGE_COUNT = 3;
 const MAX_AGENT_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_AGENT_IMAGE_TOTAL_BYTES = 8 * 1024 * 1024;
@@ -111,15 +125,6 @@ function agentRouteErrorStatus(status: number): AgentRouteErrorStatus {
   return status === 400 || status === 401 || status === 404 || status === 409 || status === 410 || status === 500 ? status : 500;
 }
 
-const toolDefinitionMap = new Map(agentToolDefinitions.map((definition) => [definition.name, definition]));
-const modelTools: AgentChatTool[] = agentToolDefinitions.map((definition) => ({
-  type: "function",
-  function: {
-    name: definition.name,
-    description: definition.description,
-    parameters: definition.inputSchema,
-  },
-}));
 
 type AgentClarificationChoice = {
   id: string;
@@ -172,20 +177,103 @@ const clarificationTool: AgentChatTool = {
   },
 };
 
-const modelToolMap = new Map(modelTools.map((tool) => [tool.function.name, tool]));
-const presentationToolMap = new Map(presentationTools.map((tool) => [tool.function.name, tool]));
+const loadToolSchemasTool: AgentChatTool = {
+  type: "function",
+  function: {
+    name: "load_tool_schemas",
+    description: "Load the exact schemas for the capability names you need. The catalog is metadata only. Loaded schemas are available for the next assistant turn and then expire.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["names"],
+      properties: {
+        names: { type: "array", minItems: 1, maxItems: 12, items: { type: "string", minLength: 1, maxLength: 80 } },
+      },
+    },
+  },
+};
 
-function modelToolsForGroups(groups: Iterable<AgentToolGroup>): AgentChatTool[] {
-  const selected: AgentChatTool[] = [clarificationTool, loadToolGroupTool];
-  for (const name of toolNamesForGroups(groups)) {
-    const tool = modelToolMap.get(name) ?? presentationToolMap.get(name);
-    if (tool && !selected.some((candidate) => candidate.function.name === name)) selected.push(tool);
-  }
-  return selected;
+/**
+ * Read tools are safe to dispatch through one small, stable provider schema.
+ * This removes the otherwise mandatory discovery round for ordinary lookups,
+ * while the backend still validates the selected tool's canonical schema.
+ */
+const invokeReadTool: AgentChatTool = {
+  type: "function",
+  function: {
+    name: "invoke_read_tool",
+    description: "Run one catalogued read with backend validation.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "arguments"],
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 80 },
+        arguments: { type: "object", additionalProperties: true },
+      },
+    },
+  },
+};
+
+const invokeReadTools: AgentChatTool = {
+  type: "function",
+  function: {
+    name: "invoke_read_tools",
+    description: "Run 2-4 independent reads concurrently with unique keys; no sibling dependencies.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["calls"],
+      properties: {
+        calls: {
+          type: "array", minItems: 2, maxItems: 4,
+          items: {
+            type: "object", additionalProperties: false, required: ["key", "name", "arguments"],
+            properties: {
+              key: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_-]{0,39}$" },
+              name: { type: "string", minLength: 1, maxLength: 80 },
+              arguments: { type: "object", additionalProperties: true },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const updateContextTool: AgentChatTool = {
+  type: "function",
+  function: {
+    name: "update_context",
+    description: "Retain a concise non-obvious insight with evidence IDs, or release evidence you no longer need. Evidence IDs must come from the current run.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        retainInsights: {
+          type: "array", maxItems: 3,
+          items: {
+            type: "object", additionalProperties: false, required: ["claim", "evidenceIds"],
+            properties: { claim: { type: "string", minLength: 1, maxLength: 400 }, evidenceIds: { type: "array", minItems: 1, maxItems: 12, items: { type: "string", minLength: 1, maxLength: 100 } } },
+          },
+        },
+        releaseEvidenceIds: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 100 } },
+      },
+    },
+  },
+};
+
+const runtimeTools: AgentChatTool[] = [clarificationTool, invokeReadTool, invokeReadTools, loadToolSchemasTool, updateContextTool];
+
+export function getAgentProviderSchemaMetrics() {
+  return {
+    runtimeSchemaSize: JSON.stringify(runtimeTools.map((tool) => tool.function)).length,
+    catalogSize: JSON.stringify(agentToolCatalog).length,
+  };
 }
 
-function historyRoutingText(history: AgentChatMessage[]): string {
-  return history.flatMap((message) => typeof message.content === "string" ? [message.content] : []).join("\n");
+function modelToolsForLease(names: Iterable<string>): AgentChatTool[] {
+  return [...runtimeTools, ...modelToolsForNames(names)];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -435,6 +523,18 @@ async function ownerNickname(ownerEmail: string): Promise<string | null> {
   return parseNickname(profile?.nickname);
 }
 
+/**
+ * Tiny routing reference for the model. Account values remain tool-only; the
+ * prompt receives names solely so it can make an exact, targeted lookup.
+ */
+async function activeAccountNamesForAgent(): Promise<string[]> {
+  const rows = await db.select({ name: accounts.name })
+    .from(accounts)
+    .where(and(eq(accounts.isActive, true), isNull(accounts.systemKey)))
+    .orderBy(asc(accounts.sortOrder), asc(accounts.name));
+  return rows.map((row) => row.name).filter((name): name is string => typeof name === "string" && name.trim() !== "");
+}
+
 async function ownedConversation(conversationId: number, ownerEmail: string) {
   const [conversation] = await db
     .select()
@@ -442,6 +542,43 @@ async function ownedConversation(conversationId: number, ownerEmail: string) {
     .where(and(eq(agentConversations.id, conversationId), eq(agentConversations.ownerEmail, ownerEmail)))
     .limit(1);
   return conversation;
+}
+
+async function conversationInsightPrompt(conversationId: number, revision: number, question: string): Promise<string[]> {
+  await db.update(agentConversationInsights)
+    .set({ status: "stale", updatedAt: new Date() })
+    .where(and(eq(agentConversationInsights.conversationId, conversationId), eq(agentConversationInsights.status, "active"), ne(agentConversationInsights.financialRevision, revision)));
+  const rows = await db.select({ claim: agentConversationInsights.claim })
+    .from(agentConversationInsights)
+    .where(and(eq(agentConversationInsights.conversationId, conversationId), eq(agentConversationInsights.status, "active"), eq(agentConversationInsights.financialRevision, revision)))
+    .orderBy(desc(agentConversationInsights.updatedAt))
+    .limit(12);
+  const tokens = new Set(question.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3));
+  const applicable = rows.filter((row) => {
+    if (tokens.size === 0) return true;
+    const claimTokens = row.claim.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3);
+    return claimTokens.some((token) => tokens.has(token));
+  });
+  return (applicable.length > 0 ? applicable : rows).slice(0, 8).map((row) => row.claim);
+}
+
+async function persistConversationInsights(conversationId: number | null | undefined, revision: number, insights: Array<{ claim: string; evidenceIds: string[] }>): Promise<void> {
+  if (conversationId == null || insights.length === 0) return;
+  const active = await db.select({ id: agentConversationInsights.id })
+    .from(agentConversationInsights)
+    .where(and(eq(agentConversationInsights.conversationId, conversationId), eq(agentConversationInsights.status, "active")))
+    .limit(12);
+  const remaining = Math.max(0, 12 - active.length);
+  for (const insight of insights.slice(0, remaining)) {
+    await db.insert(agentConversationInsights).values({
+      conversationId,
+      claim: insight.claim.slice(0, 400),
+      evidenceIds: JSON.stringify(insight.evidenceIds),
+      financialRevision: revision,
+      status: "active",
+      updatedAt: new Date(),
+    }).run();
+  }
 }
 
 type StoredHistoryRow = { role: string; content: string; responseJson: string | null };
@@ -619,6 +756,361 @@ function parseToolArguments(raw: string | undefined): unknown {
   }
 }
 
+function parseLoadToolSchemaArguments(value: unknown): string[] {
+  if (!isRecord(value) || !Array.isArray(value.names) || value.names.length < 1 || value.names.length > 12) {
+    throw new Error("names must contain 1-12 tool names");
+  }
+  const names = [...new Set(value.names.map((name) => {
+    if (typeof name !== "string" || name.trim() === "" || name.length > 80) throw new Error("each schema name must be a non-empty string");
+    return name.trim();
+  }))];
+  const unknown = names.filter((name) => !agentModelToolMap.has(name));
+  if (unknown.length > 0) throw new Error("Unknown capability: " + unknown.join(", "));
+  return names;
+}
+
+type OptimisticReadInvocation = {
+  name: string;
+  arguments: Record<string, unknown>;
+};
+
+type OptimisticReadBatchInvocation = {
+  calls: Array<OptimisticReadInvocation & { key: string }>;
+};
+
+function parseOptimisticReadInvocation(value: unknown): OptimisticReadInvocation {
+  if (!isRecord(value)) throw new Error("read invocation must be an object");
+  const name = typeof value.name === "string" ? value.name.trim() : "";
+  if (!name || !agentReadToolNames.has(name)) {
+    throw new Error("name must identify a catalogued read-only capability");
+  }
+  if (!isRecord(value.arguments)) throw new Error("arguments must be a JSON object");
+  return { name, arguments: value.arguments };
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (isRecord(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+export function parseOptimisticReadBatchInvocation(value: unknown): OptimisticReadBatchInvocation {
+  if (!isRecord(value) || !Array.isArray(value.calls) || value.calls.length < 2 || value.calls.length > 4) {
+    throw new Error("calls must contain 2-4 read-only invocations");
+  }
+  const keys = new Set<string>();
+  const normalizedCalls = new Set<string>();
+  const calls = value.calls.map((candidate) => {
+    if (!isRecord(candidate) || typeof candidate.key !== "string" || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(candidate.key)) {
+      throw new Error("each call key must be unique and match ^[A-Za-z][A-Za-z0-9_-]{0,39}$");
+    }
+    if (keys.has(candidate.key)) throw new Error(`duplicate batch key: ${candidate.key}`);
+    keys.add(candidate.key);
+    const invocation = parseOptimisticReadInvocation(candidate);
+    const normalized = normalizeOptimisticReadInput(invocation.name, invocation.arguments);
+    const signature = `${invocation.name}:${canonicalJson(normalized)}`;
+    if (normalizedCalls.has(signature)) throw new Error("identical normalized calls are not allowed in one batch");
+    normalizedCalls.add(signature);
+    return { key: candidate.key, name: invocation.name, arguments: normalized };
+  });
+  return { calls };
+}
+
+/**
+ * The catalog intentionally does not carry every JSON Schema detail. Accept
+ * a small set of unambiguous, natural argument aliases on the optimistic read
+ * path so common requests do not burn a provider round merely to learn a
+ * spelling difference. Scope and selection semantics remain unchanged.
+ */
+export function normalizeOptimisticReadInput(name: string, value: Record<string, unknown>): Record<string, unknown> {
+  const input = { ...value };
+  const nestedScope = isRecord(input.scope) ? input.scope : null;
+  if (nestedScope) {
+    for (const key of ["periodId", "startDate", "endDate", "startMs", "endMs"]) {
+      if (input[key] == null && nestedScope[key] != null) input[key] = nestedScope[key];
+    }
+    delete input.scope;
+  }
+  if ("selection" in input) input.selection = normalizeSelectionAlias(input.selection);
+
+  if (name === "get_period_summary" && isRecord(input.selection) && input.periodId == null && typeof input.selection.periodId === "number") {
+    input.periodId = input.selection.periodId;
+    delete input.selection;
+  }
+  if (name === "get_transaction") {
+    if (input.transactionId == null && typeof input.id === "number") input.transactionId = input.id;
+    delete input.id;
+  }
+  if (name === "find_similar_transactions") {
+    if (input.transactionId == null && typeof input.referenceTransactionId === "number") input.transactionId = input.referenceTransactionId;
+    if (input.transactionId == null && typeof input.id === "number") input.transactionId = input.id;
+    if (input.query == null && typeof input.description === "string") input.query = input.description;
+    if (input.selection == null && typeof input.limit === "number") input.selection = { mode: "top", count: input.limit };
+    delete input.referenceTransactionId;
+    delete input.id;
+    delete input.description;
+    delete input.limit;
+  }
+  if (name === "find_transactions" || name === "summarize_transactions") {
+    const legacyFilters = isRecord(input.filter) ? input.filter : {};
+    const filters = { ...legacyFilters, ...(isRecord(input.filters) ? input.filters : {}) };
+    if (input.periodId == null && typeof filters.periodId === "number") input.periodId = filters.periodId;
+    if (filters.amountMin == null && typeof input.amountMin === "number") filters.amountMin = input.amountMin;
+    if (filters.amountMax == null && typeof input.amountMax === "number") filters.amountMax = input.amountMax;
+    if (filters.minAmount == null && typeof filters.amountMin === "number") filters.minAmount = filters.amountMin;
+    if (filters.maxAmount == null && typeof filters.amountMax === "number") filters.maxAmount = filters.amountMax;
+    delete input.filter;
+    if (filters.text == null && typeof filters.query === "string") filters.text = filters.query;
+    if (filters.text == null && typeof input.description === "string") filters.text = input.description;
+    if (filters.accountName == null && typeof input.accountName === "string") filters.accountName = input.accountName;
+    if (filters.categoryName == null && typeof input.categoryName === "string") filters.categoryName = input.categoryName;
+    if (filters.transactionType == null && typeof filters.kind === "string") filters.transactionType = filters.kind;
+    if (filters.transactionType == null && typeof filters.type === "string") filters.transactionType = filters.type;
+    if (filters.minAmount == null && typeof filters.minAmountCents === "number") filters.minAmount = filters.minAmountCents;
+    if (filters.maxAmount == null && typeof filters.maxAmountCents === "number") filters.maxAmount = filters.maxAmountCents;
+    const range = isRecord(filters.dateRange) ? filters.dateRange
+      : isRecord(filters.range) ? filters.range
+        : isRecord(input.dateRange) ? input.dateRange
+          : isRecord(input.range) ? input.range
+            : null;
+    if (range) {
+      const start = range.startMs ?? range.startDate ?? range.occurredAfter;
+      const end = range.endMs ?? range.endDate ?? range.occurredBefore ?? range.throughDate;
+      if (input.startDate == null && start != null) input.startDate = start;
+      if (input.endDate == null && end != null) input.endDate = end;
+    }
+    const start = input.startMs ?? filters.startMs ?? filters.startDate ?? filters.occurredAfter;
+    const end = input.endMs ?? filters.endMs ?? filters.endDate ?? filters.occurredBefore ?? filters.throughDate;
+    if (input.startDate == null && start != null) input.startDate = start;
+    if (input.endDate == null && end != null) input.endDate = end;
+    if (input.startDate != null) input.startDate = normalizeScopeBoundary(input.startDate, "start");
+    if (input.endDate != null) input.endDate = normalizeScopeBoundary(input.endDate, "end");
+    delete input.startMs;
+    delete input.endMs;
+    delete input.dateRange;
+    delete input.range;
+    delete input.description;
+    delete input.accountName;
+    delete input.categoryName;
+    for (const key of ["query", "kind", "type", "minAmountCents", "maxAmountCents", "amountMin", "amountMax", "periodId", "dateRange", "range", "startMs", "endMs", "startDate", "endDate", "occurredAfter", "occurredBefore", "throughDate"]) delete filters[key];
+    if (Object.keys(filters).length > 0) input.filters = filters;
+    else delete input.filters;
+
+    if (name === "summarize_transactions" && input.groupBy == null) {
+      input.groupBy = typeof filters.text === "string" ? "merchant"
+        : filters.accountId != null || filters.accountName != null ? "account"
+          : "category";
+    }
+    if (name === "find_transactions") {
+      const page = isRecord(input.page) ? input.page : isRecord(input.pagination) ? input.pagination : isRecord(input.paging) ? input.paging : null;
+      if (page && page.offset == null) {
+        if (input.pageSize == null && typeof (page.pageSize ?? page.limit) === "number") input.pageSize = page.pageSize ?? page.limit;
+        if (input.cursor == null && typeof page.cursor === "string") input.cursor = page.cursor;
+        delete input.page;
+        delete input.pagination;
+        delete input.paging;
+      }
+      if (input.pageSize == null && typeof input.limit === "number") input.pageSize = input.limit;
+      delete input.limit;
+      if (isRecord(input.selection) && (input.selection.mode === "page" || input.selection.mode === "top")) {
+        if (input.pageSize == null && typeof (input.selection.limit ?? input.selection.count) === "number") input.pageSize = input.selection.limit ?? input.selection.count;
+        if (isRecord(input.selection.filter)) input.filters = { ...input.selection.filter, ...asRecord(input.filters) };
+        delete input.selection;
+      }
+      if (isDefaultNewestOrder(input.order)) delete input.order;
+      if (isDefaultNewestOrder(input.sort)) delete input.sort;
+    }
+  }
+  if (name === "get_tags" || name === "get_categories" || name === "get_transport_route_templates") {
+    if (input.search == null && typeof input.name === "string") input.search = input.name;
+    if (input.search == null && typeof input.query === "string") input.search = input.query;
+    delete input.name;
+    delete input.query;
+  }
+  if (name === "get_account_balance") {
+    if (input.accountName == null && typeof input.name === "string") input.accountName = input.name;
+    if (input.accountName == null && typeof input.search === "string") input.accountName = input.search;
+    delete input.name;
+    delete input.search;
+  }
+  if (name === "get_category_spending" && input.categoryName == null && typeof input.name === "string") { input.categoryName = input.name; delete input.name; }
+  if (name === "get_account_balance" && input.accountName == null && typeof input.name === "string") input.accountName = input.name;
+  if ((name === "get_spending_breakdown" || name === "get_category_spending" || name === "get_budget_breakdown" || name === "compare_category_spending") && input.selection == null && typeof input.limit === "number") {
+    input.selection = { mode: "top", count: input.limit };
+    delete input.limit;
+  }
+  if (name === "get_transaction") {
+    for (const alias of ["id", "transaction_id", "transactionID", "referenceTransactionId", "referenceId"]) {
+      if (input.transactionId == null && typeof input[alias] === "number") input.transactionId = input[alias];
+      delete input[alias];
+    }
+  }
+  if (name === "find_similar_transactions" && input.transactionId == null) {
+    for (const alias of ["transaction_id", "transactionID", "referenceId"]) {
+      if (typeof input[alias] === "number") input.transactionId = input[alias];
+      delete input[alias];
+    }
+  }
+  if (isRecord(input.orderBy) && String(input.orderBy.field ?? input.orderBy.by ?? "").toLowerCase() === "date" && String(input.orderBy.direction ?? "desc").toLowerCase() === "desc") delete input.orderBy;
+  if (typeof input.orderBy === "string" && /^date\s+desc$/i.test(input.orderBy.trim())) delete input.orderBy;
+  if (name === "list_periods") {
+    // Periods are a bounded entity set; selection, rather than pagination,
+    // determines completeness for this tool.
+    delete input.pageSize;
+    delete input.cursor;
+    if (input.selection == null && typeof input.periodId === "number") input.selection = { mode: "ids", ids: [input.periodId] };
+    delete input.periodId;
+  }
+  if (name === "get_category_spending" && input.selection == null && (input.categoryId != null || input.categoryName != null)) input.selection = { mode: "all" };
+  if (name === "get_budget_breakdown" && input.selection == null && input.periodId != null) input.selection = { mode: "all" };
+  return input;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+type DispatchedRead = {
+  name: string;
+  input: Record<string, unknown>;
+  modelTool: NonNullable<ReturnType<typeof agentModelToolMap.get>>;
+  result: unknown;
+};
+
+async function dispatchCanonicalRead(name: string, input: Record<string, unknown>, context?: AgentToolExecutionContext): Promise<DispatchedRead> {
+  const modelTool = agentModelToolMap.get(name);
+  if (!modelTool || modelTool.kind !== "read") throw new Error("Unknown read-only capability");
+  const normalized = normalizeOptimisticReadInput(name, input);
+  validateModelToolInput(modelTool, normalized);
+  return { name, input: normalized, modelTool, result: await modelTool.execute(normalized, context) };
+}
+
+type BatchReadChild = {
+  key: string;
+  name: string;
+  input: Record<string, unknown>;
+  modelTool?: NonNullable<ReturnType<typeof agentModelToolMap.get>>;
+  result?: unknown;
+  error?: ReturnType<typeof typedToolError>;
+};
+
+async function dispatchCanonicalReadBatch(value: unknown, context?: AgentToolExecutionContext): Promise<{
+  revisionBefore: number;
+  revisionAfter: number;
+  stable: boolean;
+  children: BatchReadChild[];
+}> {
+  const batch = parseOptimisticReadBatchInvocation(value);
+  const revisionBefore = await getFinancialRevision();
+  const settled = await Promise.allSettled(batch.calls.map(async (call): Promise<BatchReadChild> => {
+    try {
+      const dispatched = await dispatchCanonicalRead(call.name, call.arguments, context);
+      return { key: call.key, ...dispatched };
+    } catch (error) {
+      return { key: call.key, name: call.name, input: call.arguments, error: typedToolError(error, "Read execution failed", error instanceof ModelToolInputValidationError ? "validation_failed" : undefined, call.arguments) };
+    }
+  }));
+  const children = settled.map((item, index): BatchReadChild => item.status === "fulfilled" ? item.value : ({
+    key: batch.calls[index]!.key,
+    name: batch.calls[index]!.name,
+    input: batch.calls[index]!.arguments,
+    error: typedToolError(item.reason, "Read execution failed"),
+  }));
+  const revisionAfter = await getFinancialRevision();
+  return { revisionBefore, revisionAfter, stable: revisionBefore === revisionAfter, children };
+}
+
+function normalizeSelectionAlias(value: unknown): unknown {
+  if (value === "all" || value === "total") return { mode: value };
+  if (typeof value !== "string") return value;
+  const top = /^top\s*:?\s*(\d+)$/i.exec(value.trim());
+  if (top) return { mode: "top", count: Number(top[1]) };
+  if (value.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(value);
+      if (isRecord(parsed)) return parsed;
+    } catch {
+      // Leave malformed shorthand for canonical schema validation.
+    }
+  }
+  return value;
+}
+
+function normalizeScopeBoundary(value: unknown, edge: "start" | "end"): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+  const normalized = dateOnly
+    ? `${trimmed}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}+07:00`
+    : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(trimmed) ? `${trimmed}+07:00` : trimmed;
+  const parsed = Date.parse(normalized);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : value;
+}
+
+function isDefaultNewestOrder(value: unknown): boolean {
+  if (typeof value === "string") return /^(desc|descending|newest|date_desc)$/i.test(value.trim());
+  if (!isRecord(value)) return false;
+  const field = typeof value.field === "string" ? value.field.toLowerCase() : "date";
+  const direction = typeof value.direction === "string" ? value.direction.toLowerCase() : "desc";
+  return (field === "date" || field === "occurredat") && (direction === "desc" || direction === "descending");
+}
+
+function normalizeTransactionDateInput(value: Record<string, unknown>): Record<string, unknown> {
+  const input = { ...value };
+  if (typeof input.date !== "string") return input;
+  const trimmed = input.date.trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(trimmed)) return { ...input, date: trimmed };
+  if (typeof input.dateMs === "number" && Number.isSafeInteger(input.dateMs) && input.dateMs >= 0) {
+    return { ...input, date: new Date(input.dateMs).toISOString() };
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return { ...input, date: `${trimmed}T12:00:00+07:00` };
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(trimmed)) return { ...input, date: `${trimmed}+07:00` };
+  return input;
+}
+
+export function normalizeLeasedToolInput(name: string, value: Record<string, unknown>): Record<string, unknown> {
+  if (name === "prepare_expense" || name === "prepare_income" || name === "prepare_transfer") return normalizeTransactionDateInput(value);
+  if (name === "prepare_expense_batch" && Array.isArray(value.transactions)) {
+    return { ...value, transactions: value.transactions.map((item) => isRecord(item) ? normalizeTransactionDateInput(item) : item) };
+  }
+  return value;
+}
+
+function parseUpdateContextArguments(value: unknown): { retainInsights: Array<{ claim: string; evidenceIds: string[] }>; releaseEvidenceIds: string[] } {
+  if (!isRecord(value)) throw new Error("context update must be an object");
+  const releaseEvidenceIds = Array.isArray(value.releaseEvidenceIds)
+    ? value.releaseEvidenceIds.map((id) => {
+      if (typeof id !== "string" || id.trim() === "" || id.length > 100) throw new Error("releaseEvidenceIds must contain valid evidence IDs");
+      return id.trim();
+    })
+    : [];
+  const retainInsights = Array.isArray(value.retainInsights)
+    ? value.retainInsights.map((item, index) => {
+      if (!isRecord(item) || typeof item.claim !== "string" || item.claim.trim() === "" || item.claim.length > 400 || !Array.isArray(item.evidenceIds) || item.evidenceIds.length < 1 || item.evidenceIds.length > 12) {
+        throw new Error("retainInsights[" + index + "] must include a claim of at most 400 characters and evidenceIds");
+      }
+      const evidenceIds = item.evidenceIds.map((id) => {
+        if (typeof id !== "string" || id.trim() === "" || id.length > 100) throw new Error("insight evidenceIds must contain valid evidence IDs");
+        return id.trim();
+      });
+      return { claim: item.claim.trim(), evidenceIds };
+    })
+    : [];
+  if (retainInsights.length > 3) throw new Error("At most 3 insights may be retained per turn");
+  return { retainInsights, releaseEvidenceIds };
+}
+
+function providerToolsForLease(leasedNames: Set<string>): AgentChatTool[] {
+  const tools = modelToolsForLease(leasedNames);
+  const serializedSchemaSize = JSON.stringify(tools.map((tool) => tool.function)).length;
+  console.info("[agent] provider tool schemas", {
+    loaded: [...leasedNames],
+    serializedSchemaSize,
+    ...getAgentProviderSchemaMetrics(),
+  });
+  return tools;
+}
+
 function parseClarificationArguments(value: unknown): AgentClarification {
   if (!isRecord(value)) throw new Error("clarification arguments must be an object");
   const question = typeof value.question === "string" ? value.question.trim() : "";
@@ -651,23 +1143,55 @@ function parseClarificationArguments(value: unknown): AgentClarification {
 
 function safeToolResult(value: unknown): string {
   try {
-    const serialized = JSON.stringify(value);
-    return serialized.length > 120_000 ? `${serialized.slice(0, 120_000)}…` : serialized;
+    // Model-facing domain results go through allowlisted projections. This
+    // fallback is reserved for tiny runtime/control results, so never emit a
+    // syntactically broken JSON prefix as a substitute for compaction.
+    return JSON.stringify(value);
   } catch {
     return JSON.stringify({ error: "Tool result could not be serialized" });
   }
 }
 
-function typedToolError(error: unknown, fallback: string, forcedCode?: string) {
+function typedToolError(error: unknown, fallback: string, forcedCode?: string, canonicalArguments?: unknown) {
   const message = error instanceof Error ? error.message : fallback;
   const lower = message.toLowerCase();
   const code = forcedCode
     ?? (lower.includes("ambiguous") ? "ambiguous_match"
       : lower.includes("not found") ? "not_found"
+        : lower.includes("too large") ? "scope_too_large"
         : lower.includes("revision") || lower.includes("stale") ? "stale_revision"
           : lower.includes("required") || lower.includes("invalid") || lower.includes("must") ? "validation_failed"
             : "tool_failed");
-  return { status: "error", error: { code, message: message.slice(0, 500) } };
+  return { status: "error", error: { code, message: message.slice(0, 500), ...(code === "validation_failed" && canonicalArguments != null ? { canonicalArguments } : {}) } };
+}
+
+function isFailedToolResult(value: unknown): boolean {
+  const record = asRecord(value);
+  return record.status === "error" || isRecord(record.error);
+}
+
+export function requestedToolCost(name: string, input: unknown): number {
+  if (name !== invokeReadTools.function.name || !isRecord(input) || !Array.isArray(input.calls)) return 1;
+  return Math.max(1, Math.min(4, input.calls.length));
+}
+
+export function retainEvidenceBatch(
+  state: Map<string, ModelEvidence>,
+  byId: Map<string, ModelEvidence>,
+  entries: Array<{ key: string; evidence: ModelEvidence }>,
+): { code: string; message: string } | null {
+  if (entries.some(({ evidence }) => JSON.stringify(evidence).length > MAX_SINGLE_MODEL_EVIDENCE_CHARS)) {
+    return { code: "scope_too_large", message: "A batched result is too large. Request a narrower filter, aggregation, or next page." };
+  }
+  const candidate = new Map(state);
+  for (const entry of entries) candidate.set(entry.key, entry.evidence);
+  if (evidenceStateSize(candidate) >= AGENT_EVIDENCE_HARD_CHARS) {
+    return { code: "context_budget_exceeded", message: "This batch is too large to retain with current evidence. Release evidence or narrow the selection." };
+  }
+  state.clear();
+  for (const [key, evidence] of candidate) state.set(key, evidence);
+  for (const { evidence } of entries) byId.set(evidence.evidenceId, evidence);
+  return null;
 }
 
 function collectPendingActions(result: unknown, target: unknown[]): void {
@@ -739,7 +1263,8 @@ async function answerWithTools(
   nickname: string | null = null,
   executionContext?: AgentToolExecutionContext,
 ) {
-  if (!env.OPENROUTER_API_KEY) {
+  const providerConfig = await getAgentProviderConfig();
+  if (!providerConfig.apiKey) {
     const context = await composeContext(scopeInput);
     return {
       answer: null,
@@ -755,9 +1280,10 @@ async function answerWithTools(
   }
 
   const promptNowMs = Date.now();
-  const scope = await resolveAgentScope(scopeInput);
-  const messages: AgentChatMessage[] = [
-    { role: "system", content: buildAgentSystemPrompt(promptNowMs, memories, nickname) },
+  const [scope, availableAccountNames] = await Promise.all([resolveAgentScope(scopeInput), activeAccountNamesForAgent()]);
+  const catalog = JSON.stringify(agentToolCatalog);
+  let messages: AgentChatMessage[] = [
+    { role: "system", content: buildAgentSystemPrompt(promptNowMs, memories, nickname, catalog, null, [], availableAccountNames) },
     ...history,
     {
       role: "user",
@@ -769,8 +1295,10 @@ async function answerWithTools(
   const pendingActions: unknown[] = [];
   const clarifications: AgentClarification[] = [];
   const presentations: AgentPresentation[] = [];
-  const initialGroups = selectInitialToolGroups(question, historyRoutingText(history), images.length > 0);
-  const loadedGroups = new Set(initialGroups);
+  let leasedToolNames = new Set<string>();
+  const evidenceState = new Map<string, ModelEvidence>();
+  const evidenceById = new Map<string, ModelEvidence>();
+  const activeInsights: string[] = [];
   let lastContent = "";
   let callsUsed = 0;
   let completedWithAnswer = false;
@@ -780,10 +1308,11 @@ async function answerWithTools(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
     const response = await callOpenRouterAgent({
-      apiKey: env.OPENROUTER_API_KEY,
+      apiKey: providerConfig.apiKey,
       messages,
-      tools: modelToolsForGroups(loadedGroups),
-      model: env.OPENROUTER_MODEL,
+      tools: providerToolsForLease(leasedToolNames),
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
     });
     addProviderUsage(usageAccumulator, response.usage);
     const assistantMessage = response.message;
@@ -797,20 +1326,26 @@ async function answerWithTools(
       }
       if (emptyCompletionRetries < 1) {
         emptyCompletionRetries += 1;
+        // A lease belongs to the assistant turn that requested it. An empty
+        // completion still ends that turn, so the retry must rediscover any
+        // domain schemas it needs.
+        leasedToolNames = new Set<string>();
         messages.push({ role: "user", content: "Your last response was blank. Continue from the available tool results and return either a useful answer or the next required tool call; do not return an empty message." });
         continue;
       }
       break;
     }
-    if (callsUsed + requestedCalls.length > MAX_TOOL_CALLS_PER_QUERY) {
-      throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
-    }
-
     messages.push(assistantMessage);
+    let nextLeasedToolNames = new Set<string>();
     let clarificationRequested = false;
     for (const requested of requestedCalls) {
       const input = parseToolArguments(requested.function.arguments);
-      toolCalls.push({ id: requested.id, name: requested.function.name, input });
+      const callCost = requestedToolCost(requested.function.name, input);
+      if (callsUsed + callCost > MAX_TOOL_CALLS_PER_QUERY) throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
+      let effectiveToolName = requested.function.name;
+      let effectiveInput = input;
+      const recordedCall = { id: requested.id, name: effectiveToolName, input: effectiveInput };
+      if (requested.function.name !== invokeReadTools.function.name) toolCalls.push(recordedCall);
       let result: unknown;
       if (requested.function.name === clarificationTool.function.name) {
         try {
@@ -821,47 +1356,164 @@ async function answerWithTools(
         } catch (error) {
           result = typedToolError(error, "Invalid clarification", "validation_failed");
         }
-      } else if (requested.function.name === loadToolGroupTool.function.name) {
+      } else if (requested.function.name === loadToolSchemasTool.function.name) {
         try {
-          const group = parseAgentToolGroup(isRecord(input) ? input.group : undefined);
-          const alreadyLoaded = loadedGroups.has(group);
-          loadedGroups.add(group);
-          result = { status: alreadyLoaded ? "already_loaded" : "loaded", group, tools: agentToolGroups[group] };
+          const names = parseLoadToolSchemaArguments(input);
+          for (const name of names) nextLeasedToolNames.add(name);
+          result = { loaded: names };
         } catch (error) {
-          result = typedToolError(error, "Invalid tool group", "validation_failed");
+          result = typedToolError(error, "Invalid tool schema request", "validation_failed");
         }
-      } else if (presentationToolNames.has(requested.function.name)) {
+      } else if (requested.function.name === invokeReadTool.function.name) {
         try {
+          const invocation = parseOptimisticReadInvocation(input);
+          effectiveToolName = invocation.name;
+          effectiveInput = normalizeOptimisticReadInput(effectiveToolName, invocation.arguments);
+          const dispatched = await dispatchCanonicalRead(effectiveToolName, effectiveInput as Record<string, unknown>, executionContext);
+          effectiveInput = dispatched.input;
+          recordedCall.name = effectiveToolName;
+          recordedCall.input = effectiveInput;
+          result = dispatched.result;
+        } catch (error) {
+          if (error instanceof ModelToolInputValidationError && effectiveToolName !== invokeReadTool.function.name) {
+            nextLeasedToolNames.add(effectiveToolName);
+            result = { ...typedToolError(error, "Invalid read arguments", "validation_failed", effectiveInput), loadedSchema: effectiveToolName };
+          } else {
+            result = typedToolError(error, "Invalid read invocation", "validation_failed");
+          }
+        }
+      } else if (requested.function.name === invokeReadTools.function.name) {
+        try {
+          const batch = await dispatchCanonicalReadBatch(input, executionContext);
+          const childResults: Array<Record<string, unknown>> = [];
+          const batchEvidence: Array<{ key: string; evidence: ModelEvidence }> = [];
+          for (const child of batch.children) {
+            toolCalls.push({ id: `${requested.id}:${child.key}`, name: child.name, input: child.input });
+            if (child.error) {
+              toolResults.push({ id: `${requested.id}:${child.key}`, name: child.name, result: child.error });
+              if (asRecord(child.error).error && child.error.error.code === "validation_failed") nextLeasedToolNames.add(child.name);
+              childResults.push({ key: child.key, name: child.name, status: "error", error: child.error.error });
+              continue;
+            }
+            toolResults.push({ id: `${requested.id}:${child.key}`, name: child.name, result: child.result });
+            if (isFailedToolResult(child.result)) {
+              childResults.push({ key: child.key, name: child.name, status: "error", error: asRecord(child.result).error ?? { code: "tool_error", message: "Read failed" } });
+              continue;
+            }
+            if (!batch.stable || !child.modelTool) continue;
+            const evidenceId = randomUUID();
+            const evidence = projectModelToolResult(child.modelTool, child.result, child.input, evidenceId, batch.revisionAfter);
+            batchEvidence.push({ key: normalizeEvidenceKey(child.name, child.input, batch.revisionAfter), evidence });
+            childResults.push({ key: child.key, name: child.name, status: "ok", evidence });
+          }
+          const retentionError = batch.stable ? retainEvidenceBatch(evidenceState, evidenceById, batchEvidence) : null;
+          result = batch.stable && !retentionError
+            ? { status: "batch_complete", revision: batch.revisionAfter, results: childResults }
+            : retentionError
+              ? { status: "error", error: retentionError }
+            : { status: "error", error: { code: "stale_revision", message: "Financial data changed while this batch was executing; none of its evidence was retained." }, revisionBefore: batch.revisionBefore, revisionAfter: batch.revisionAfter };
+        } catch (error) {
+          result = typedToolError(error, "Invalid read batch", "validation_failed");
+        }
+      } else if (requested.function.name === updateContextTool.function.name) {
+        try {
+          const update = parseUpdateContextArguments(input);
+          const unknownIds = update.releaseEvidenceIds.filter((id) => !evidenceById.has(id));
+          const retained = update.retainInsights.flatMap((insight) => insight.evidenceIds);
+          const unknownRetainedIds = retained.filter((id) => !evidenceById.has(id));
+          if (unknownIds.length > 0 || unknownRetainedIds.length > 0) throw new Error("Every evidence ID must come from the current run");
+          releaseEvidence(evidenceState, update.releaseEvidenceIds);
+          for (const insight of update.retainInsights) activeInsights.push(insight.claim);
+          await persistConversationInsights(executionContext?.conversationId, await getFinancialRevision(), update.retainInsights);
+          result = { status: "context_updated", releasedEvidenceIds: update.releaseEvidenceIds, retainedInsights: update.retainInsights.length };
+        } catch (error) {
+          result = typedToolError(error, "Invalid context update", "validation_failed");
+        }
+      } else if (modelPresentationToolNames.has(requested.function.name)) {
+        try {
+          if (!leasedToolNames.has(requested.function.name)) throw new Error("Load this presentation schema before calling it");
           if (presentations.length >= MAX_PRESENTATIONS_PER_RESPONSE) throw new Error(`At most ${MAX_PRESENTATIONS_PER_RESPONSE} presentation cards are allowed`);
-          const presentation = parseAgentPresentation(requested.function.name, input);
+          const modelTool = agentModelToolMap.get(requested.function.name);
+          if (!modelTool) throw new Error("Unknown presentation tool");
+          const presentation = await modelTool.execute(input) as AgentPresentation;
           presentations.push(presentation);
-          result = { status: "presented", presentationIndex: presentations.length - 1, type: presentation.type };
+          result = {
+            status: "presented",
+            presentationIndex: presentations.length - 1,
+            type: presentation.type,
+            ...(presentation.type === "split_bill" ? { title: presentation.title, calculation: presentation.calculation } : {}),
+          };
         } catch (error) {
-          result = typedToolError(error, "Invalid presentation", "validation_failed");
+          const failure = typedToolError(error, "Invalid presentation", "validation_failed");
+          if (leasedToolNames.has(requested.function.name)) nextLeasedToolNames.add(requested.function.name);
+          result = failure;
         }
-      } else if (!toolDefinitionMap.has(requested.function.name)) {
+      } else if (!agentModelToolMap.has(requested.function.name)) {
         result = typedToolError(new Error("Unknown or unavailable agent tool"), "Unknown agent tool", "unavailable_tool");
-      } else if (IMMEDIATE_METADATA_TOOLS.has(requested.function.name) && !initialGroups.has("metadata")) {
-        result = typedToolError(new Error("Immediate metadata changes require an explicit note or tag request from the user"), "Explicit metadata request required", "explicit_intent_required");
       } else {
         try {
-          result = await executeAgentTool(requested.function.name, input, executionContext);
+          const modelTool = agentModelToolMap.get(effectiveToolName);
+          if (!modelTool) throw new Error("Unknown or unavailable agent tool");
+          if (modelTool.kind === "read") {
+            effectiveInput = normalizeOptimisticReadInput(effectiveToolName, input as Record<string, unknown>);
+            recordedCall.input = effectiveInput;
+            validateModelToolInput(modelTool, effectiveInput);
+            result = await modelTool.execute(effectiveInput, executionContext);
+          } else {
+            if (!leasedToolNames.has(effectiveToolName)) throw new Error("Load this capability schema before calling it");
+            effectiveInput = normalizeLeasedToolInput(effectiveToolName, input as Record<string, unknown>);
+            recordedCall.input = effectiveInput;
+            result = await modelTool.execute(effectiveInput, executionContext);
+          }
         } catch (error) {
-          result = typedToolError(error, "Tool execution failed");
+          if (error instanceof ModelToolInputValidationError && agentReadToolNames.has(effectiveToolName)) {
+            nextLeasedToolNames.add(effectiveToolName);
+            result = { ...typedToolError(error, "Invalid read arguments", "validation_failed", effectiveInput), loadedSchema: effectiveToolName };
+          } else {
+            const failure = typedToolError(error, "Tool execution failed");
+            if (leasedToolNames.has(effectiveToolName) && failure.error.code === "validation_failed") nextLeasedToolNames.add(effectiveToolName);
+            result = failure;
+          }
         }
       }
-      const isPrepareTool = requested.function.name === "prepare_budget" || requested.function.name === "prepare_transaction" || requested.function.name === "prepare_transactions";
+      const isPrepareTool = effectiveToolName === "prepare_expense" || effectiveToolName === "prepare_income" || effectiveToolName === "prepare_transfer" || effectiveToolName === "prepare_expense_batch";
       const modelResult = isPrepareTool ? redactApprovalTokens(result) : result;
       if (isPrepareTool) collectPendingActions(result, pendingActions);
-      toolResults.push({ id: requested.id, name: requested.function.name, result: modelResult });
-      messages.push({
-        role: "tool",
-        tool_call_id: requested.id,
-        content: safeToolResult(modelResult),
-      });
-      callsUsed += 1;
+      if (requested.function.name !== invokeReadTools.function.name) toolResults.push({ id: requested.id, name: effectiveToolName, result: modelResult });
+      const modelTool = agentModelToolMap.get(effectiveToolName);
+      const evidenceId = randomUUID();
+      if (requested.function.name === invokeReadTools.function.name) {
+        messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(modelResult) });
+      } else if (modelTool?.kind === "presentation" && !isFailedToolResult(modelResult)) {
+        const revision = await getFinancialRevision();
+        messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(projectModelToolResult(modelTool, modelResult, effectiveInput, evidenceId, revision)) });
+      } else if (modelTool && !isFailedToolResult(modelResult)) {
+        const revision = isRecord(result) && typeof result.revision === "number" ? result.revision : await getFinancialRevision();
+        const evidence = projectModelToolResult(modelTool, modelResult, effectiveInput, evidenceId, revision);
+        const candidateState = new Map(evidenceState);
+        candidateState.set(normalizeEvidenceKey(effectiveToolName, effectiveInput, revision), evidence);
+        if (JSON.stringify(evidence).length > MAX_SINGLE_MODEL_EVIDENCE_CHARS) {
+          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify({ status: "error", error: { code: "scope_too_large", message: "The requested selection is too large for the model context. Request a narrower filter, an explicit top count, an aggregation, or the next page." } }) });
+        } else if (evidenceStateSize(candidateState) >= AGENT_EVIDENCE_HARD_CHARS) {
+          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify({ status: "error", error: { code: "context_budget_exceeded", message: "This result is too large to retain with current evidence. Release evidence or request a narrower selection." } }) });
+        } else {
+          evidenceState.clear();
+          for (const [key, value] of candidateState) evidenceState.set(key, value);
+          evidenceById.set(evidenceId, evidence);
+          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(evidence) });
+        }
+      } else {
+        messages.push({
+          role: "tool",
+          tool_call_id: requested.id,
+          content: safeToolResult(modelResult),
+        });
+      }
+      callsUsed += callCost;
       if (clarificationRequested) break;
     }
+    leasedToolNames = nextLeasedToolNames;
+    messages = compactToolTranscript(messages, evidenceState, activeInsights);
     if (clarificationRequested) break;
   }
 
@@ -870,7 +1522,7 @@ async function answerWithTools(
   // unexplained empty tool-call transcript.
   if (clarifications.length === 0 && (!completedWithAnswer || !lastContent.trim())) {
     const finalResponse = await callOpenRouterAgent({
-      apiKey: env.OPENROUTER_API_KEY,
+      apiKey: providerConfig.apiKey,
       messages: [
         ...messages,
         {
@@ -879,7 +1531,8 @@ async function answerWithTools(
         },
       ],
       tools: [],
-      model: env.OPENROUTER_MODEL,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
     });
     addProviderUsage(usageAccumulator, finalResponse.usage);
     if (typeof finalResponse.message.content === "string" && finalResponse.message.content.trim()) {
@@ -912,29 +1565,28 @@ type AgentProgressEvent = {
 
 function progressForTool(name: string): Pick<AgentProgressEvent, "phase" | "label"> {
   if (name === "ask_clarification") return { phase: "understand", label: "Clarifying a detail" };
-  if (name === "load_tool_group") return { phase: "understand", label: "Loading the right finance tools" };
-  if (name === "show_chart" || name === "show_scenario" || name === "show_worksheet" || name === "show_split_bill") return { phase: "calculate", label: "Preparing a useful visual" };
-  if (name === "search_transactions") return { phase: "retrieve", label: "Checking matching transactions" };
-  if (name === "get_transaction_details") return { phase: "retrieve", label: "Checking transaction details" };
+  if (name === "load_tool_schemas") return { phase: "understand", label: "Loading the right finance tools" };
+  if (name.startsWith("show_")) return { phase: "calculate", label: "Preparing a useful visual" };
+  if (name === "find_transactions" || name === "summarize_transactions") return { phase: "retrieve", label: "Checking matching transactions" };
+  if (name === "get_transaction") return { phase: "retrieve", label: "Checking transaction details" };
   if (name === "get_tags") return { phase: "retrieve", label: "Checking available tags" };
   if (name === "get_transport_route_templates") return { phase: "retrieve", label: "Checking saved routes" };
   if (name === "create_tag") return { phase: "prepare", label: "Creating a new tag" };
   if (name === "update_transaction_tags") return { phase: "prepare", label: "Updating transaction tags" };
   if (name === "update_transaction_metadata") return { phase: "prepare", label: "Updating transaction details" };
-  if (name === "get_account_balances" || name === "get_account_health") return { phase: "retrieve", label: "Checking account balances" };
+  if (name === "get_account_balance" || name === "get_account_balances" || name === "get_account_health") return { phase: "retrieve", label: "Checking account balances" };
   if (name === "get_reconciliation_status") return { phase: "retrieve", label: "Checking reconciliation status" };
-  if (name === "get_loan_balances" || name === "get_paylater_obligations" || name === "get_due_recurring") return { phase: "retrieve", label: "Checking obligations" };
+  if (name.startsWith("get_loan") || name.startsWith("get_paylater") || name.startsWith("get_due_recurring") || name === "find_loans" || name === "find_due_recurring") return { phase: "retrieve", label: "Checking obligations" };
   if (name === "get_categories") return { phase: "retrieve", label: "Checking available categories" };
-  if (name === "get_financial_facts" || name === "get_cash_flow") return { phase: "retrieve", label: "Checking recorded finances" };
+  if (name === "get_period_summary" || name.startsWith("get_cash_flow")) return { phase: "retrieve", label: "Checking recorded finances" };
   if (name === "find_similar_transactions") return { phase: "compare", label: "Comparing similar transactions" };
-  if (name === "compare_periods" || name === "get_category_variance") return { phase: "compare", label: "Comparing periods" };
-  if (name === "get_category_spending") return { phase: "compare", label: "Comparing spending categories" };
-  if (name === "get_budget_facts" || name === "preview_budget_plan") return { phase: "calculate", label: "Checking budget progress" };
+  if (name.startsWith("compare_") || name === "get_budget_category") return { phase: "compare", label: "Comparing periods" };
+  if (name === "get_spending_breakdown" || name === "get_category_spending") return { phase: "compare", label: "Comparing spending categories" };
+  if (name.startsWith("get_budget_")) return { phase: "calculate", label: "Checking budget progress" };
   if (name === "forecast_cash_position") return { phase: "calculate", label: "Projecting cash position" };
   if (name === "calculate" || name === "calculate_date_difference" || name === "get_currency_exchange_rate") return { phase: "calculate", label: "Calculating the answer" };
-  if (name === "prepare_budget") return { phase: "prepare", label: "Preparing budget changes" };
-  if (name === "prepare_transaction" || name === "prepare_transactions") return { phase: "prepare", label: "Preparing transaction details" };
-  if (name === "get_salary_catch_up" || name === "list_periods") return { phase: "retrieve", label: "Checking period coverage" };
+  if (name.startsWith("prepare_")) return { phase: "prepare", label: "Preparing transaction details" };
+  if (name === "list_periods") return { phase: "retrieve", label: "Checking period coverage" };
   return { phase: "retrieve", label: "Checking relevant financial records" };
 }
 
@@ -973,7 +1625,8 @@ async function answerWithToolsStreaming(
   executionContext?: AgentToolExecutionContext,
   signal?: AbortSignal,
 ) {
-  if (!env.OPENROUTER_API_KEY) {
+  const providerConfig = await getAgentProviderConfig();
+  if (!providerConfig.apiKey) {
     const result = await answerWithTools(question, scopeInput, history, images, memories, nickname, executionContext);
     const text = result.answer ?? result.message ?? "I could not complete the analysis from the available ledger tools.";
     onTextDelta(text);
@@ -981,9 +1634,10 @@ async function answerWithToolsStreaming(
   }
 
   const promptNowMs = Date.now();
-  const scope = await resolveAgentScope(scopeInput);
-  const messages: AgentChatMessage[] = [
-    { role: "system", content: buildAgentSystemPrompt(promptNowMs, memories, nickname) },
+  const [scope, availableAccountNames] = await Promise.all([resolveAgentScope(scopeInput), activeAccountNamesForAgent()]);
+  const catalog = JSON.stringify(agentToolCatalog);
+  let messages: AgentChatMessage[] = [
+    { role: "system", content: buildAgentSystemPrompt(promptNowMs, memories, nickname, catalog, null, [], availableAccountNames) },
     ...history,
     { role: "user", content: agentUserContent(`Question: ${question}\nRequested scope (the tools may refine this): ${JSON.stringify(scope)}`, images) },
   ];
@@ -992,8 +1646,10 @@ async function answerWithToolsStreaming(
   const pendingActions: unknown[] = [];
   const clarifications: AgentClarification[] = [];
   const presentations: AgentPresentation[] = [];
-  const initialGroups = selectInitialToolGroups(question, historyRoutingText(history), images.length > 0);
-  const loadedGroups = new Set(initialGroups);
+  let leasedToolNames = new Set<string>();
+  const evidenceState = new Map<string, ModelEvidence>();
+  const evidenceById = new Map<string, ModelEvidence>();
+  const activeInsights: string[] = [];
   let lastContent = "";
   let callsUsed = 0;
   let completedWithAnswer = false;
@@ -1004,10 +1660,11 @@ async function answerWithToolsStreaming(
     if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
     let roundContent = "";
     const response = await streamOpenRouterAgent({
-      apiKey: env.OPENROUTER_API_KEY,
+      apiKey: providerConfig.apiKey,
       messages,
-      tools: modelToolsForGroups(loadedGroups),
-      model: env.OPENROUTER_MODEL,
+      tools: providerToolsForLease(leasedToolNames),
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
       onTextDelta: (text) => { roundContent += text; lastContent += text; onTextDelta(text); },
       signal,
     });
@@ -1021,20 +1678,23 @@ async function answerWithToolsStreaming(
       }
       if (emptyCompletionRetries < 1) {
         emptyCompletionRetries += 1;
+        leasedToolNames = new Set<string>();
         messages.push({ role: "user", content: "Your last response was blank. Continue from the available tool results and return either a useful answer or the next required tool call; do not return an empty message." });
         continue;
       }
       break;
     }
-    if (callsUsed + requestedCalls.length > MAX_TOOL_CALLS_PER_QUERY) {
-      throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
-    }
-
     messages.push(assistantMessage);
+    let nextLeasedToolNames = new Set<string>();
     let clarificationRequested = false;
     for (const requested of requestedCalls) {
       const input = parseToolArguments(requested.function.arguments);
-      toolCalls.push({ id: requested.id, name: requested.function.name, input });
+      const callCost = requestedToolCost(requested.function.name, input);
+      if (callsUsed + callCost > MAX_TOOL_CALLS_PER_QUERY) throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
+      let effectiveToolName = requested.function.name;
+      let effectiveInput = input;
+      const recordedCall = { id: requested.id, name: effectiveToolName, input: effectiveInput };
+      if (requested.function.name !== invokeReadTools.function.name) toolCalls.push(recordedCall);
       const progress = progressForTool(requested.function.name);
       onProgress({ ...progress, status: "started" });
       let result: unknown;
@@ -1047,54 +1707,171 @@ async function answerWithToolsStreaming(
         } catch (error) {
           result = typedToolError(error, "Invalid clarification", "validation_failed");
         }
-      } else if (requested.function.name === loadToolGroupTool.function.name) {
+      } else if (requested.function.name === loadToolSchemasTool.function.name) {
         try {
-          const group = parseAgentToolGroup(isRecord(input) ? input.group : undefined);
-          const alreadyLoaded = loadedGroups.has(group);
-          loadedGroups.add(group);
-          result = { status: alreadyLoaded ? "already_loaded" : "loaded", group, tools: agentToolGroups[group] };
+          const names = parseLoadToolSchemaArguments(input);
+          for (const name of names) nextLeasedToolNames.add(name);
+          result = { loaded: names };
         } catch (error) {
-          result = typedToolError(error, "Invalid tool group", "validation_failed");
+          result = typedToolError(error, "Invalid tool schema request", "validation_failed");
         }
-      } else if (presentationToolNames.has(requested.function.name)) {
+      } else if (requested.function.name === invokeReadTool.function.name) {
         try {
+          const invocation = parseOptimisticReadInvocation(input);
+          effectiveToolName = invocation.name;
+          effectiveInput = normalizeOptimisticReadInput(effectiveToolName, invocation.arguments);
+          const dispatched = await dispatchCanonicalRead(effectiveToolName, effectiveInput as Record<string, unknown>, executionContext);
+          effectiveInput = dispatched.input;
+          recordedCall.name = effectiveToolName;
+          recordedCall.input = effectiveInput;
+          result = dispatched.result;
+        } catch (error) {
+          if (error instanceof ModelToolInputValidationError && effectiveToolName !== invokeReadTool.function.name) {
+            nextLeasedToolNames.add(effectiveToolName);
+            result = { ...typedToolError(error, "Invalid read arguments", "validation_failed", effectiveInput), loadedSchema: effectiveToolName };
+          } else {
+            result = typedToolError(error, "Invalid read invocation", "validation_failed");
+          }
+        }
+      } else if (requested.function.name === invokeReadTools.function.name) {
+        try {
+          const batch = await dispatchCanonicalReadBatch(input, executionContext);
+          const childResults: Array<Record<string, unknown>> = [];
+          const batchEvidence: Array<{ key: string; evidence: ModelEvidence }> = [];
+          for (const child of batch.children) {
+            toolCalls.push({ id: `${requested.id}:${child.key}`, name: child.name, input: child.input });
+            if (child.error) {
+              toolResults.push({ id: `${requested.id}:${child.key}`, name: child.name, result: child.error });
+              if (child.error.error.code === "validation_failed") nextLeasedToolNames.add(child.name);
+              childResults.push({ key: child.key, name: child.name, status: "error", error: child.error.error });
+              continue;
+            }
+            toolResults.push({ id: `${requested.id}:${child.key}`, name: child.name, result: child.result });
+            if (isFailedToolResult(child.result)) {
+              childResults.push({ key: child.key, name: child.name, status: "error", error: asRecord(child.result).error ?? { code: "tool_error", message: "Read failed" } });
+              continue;
+            }
+            if (!batch.stable || !child.modelTool) continue;
+            const evidenceId = randomUUID();
+            const evidence = projectModelToolResult(child.modelTool, child.result, child.input, evidenceId, batch.revisionAfter);
+            batchEvidence.push({ key: normalizeEvidenceKey(child.name, child.input, batch.revisionAfter), evidence });
+            childResults.push({ key: child.key, name: child.name, status: "ok", evidence });
+          }
+          const retentionError = batch.stable ? retainEvidenceBatch(evidenceState, evidenceById, batchEvidence) : null;
+          result = batch.stable && !retentionError
+            ? { status: "batch_complete", revision: batch.revisionAfter, results: childResults }
+            : retentionError
+              ? { status: "error", error: retentionError }
+            : { status: "error", error: { code: "stale_revision", message: "Financial data changed while this batch was executing; none of its evidence was retained." }, revisionBefore: batch.revisionBefore, revisionAfter: batch.revisionAfter };
+        } catch (error) {
+          result = typedToolError(error, "Invalid read batch", "validation_failed");
+        }
+      } else if (requested.function.name === updateContextTool.function.name) {
+        try {
+          const update = parseUpdateContextArguments(input);
+          const unknownIds = update.releaseEvidenceIds.filter((id) => !evidenceById.has(id));
+          const unknownRetainedIds = update.retainInsights.flatMap((insight) => insight.evidenceIds).filter((id) => !evidenceById.has(id));
+          if (unknownIds.length > 0 || unknownRetainedIds.length > 0) throw new Error("Every evidence ID must come from the current run");
+          releaseEvidence(evidenceState, update.releaseEvidenceIds);
+          for (const insight of update.retainInsights) activeInsights.push(insight.claim);
+          await persistConversationInsights(executionContext?.conversationId, await getFinancialRevision(), update.retainInsights);
+          result = { status: "context_updated", releasedEvidenceIds: update.releaseEvidenceIds, retainedInsights: update.retainInsights.length };
+        } catch (error) {
+          result = typedToolError(error, "Invalid context update", "validation_failed");
+        }
+      } else if (modelPresentationToolNames.has(requested.function.name)) {
+        try {
+          if (!leasedToolNames.has(requested.function.name)) throw new Error("Load this presentation schema before calling it");
           if (presentations.length >= MAX_PRESENTATIONS_PER_RESPONSE) throw new Error(`At most ${MAX_PRESENTATIONS_PER_RESPONSE} presentation cards are allowed`);
-          const presentation = parseAgentPresentation(requested.function.name, input);
+          const modelTool = agentModelToolMap.get(requested.function.name);
+          if (!modelTool) throw new Error("Unknown presentation tool");
+          const presentation = await modelTool.execute(input) as AgentPresentation;
           presentations.push(presentation);
-          result = { status: "presented", presentationIndex: presentations.length - 1, type: presentation.type };
+          result = {
+            status: "presented",
+            presentationIndex: presentations.length - 1,
+            type: presentation.type,
+            ...(presentation.type === "split_bill" ? { title: presentation.title, calculation: presentation.calculation } : {}),
+          };
         } catch (error) {
-          result = typedToolError(error, "Invalid presentation", "validation_failed");
+          const failure = typedToolError(error, "Invalid presentation", "validation_failed");
+          if (leasedToolNames.has(requested.function.name)) nextLeasedToolNames.add(requested.function.name);
+          result = failure;
         }
-      } else if (!toolDefinitionMap.has(requested.function.name)) {
+      } else if (!agentModelToolMap.has(requested.function.name)) {
         result = typedToolError(new Error("Unknown or unavailable agent tool"), "Unknown agent tool", "unavailable_tool");
-      } else if (IMMEDIATE_METADATA_TOOLS.has(requested.function.name) && !initialGroups.has("metadata")) {
-        result = typedToolError(new Error("Immediate metadata changes require an explicit note or tag request from the user"), "Explicit metadata request required", "explicit_intent_required");
       } else {
         try {
-          result = await executeAgentTool(requested.function.name, input, executionContext);
+          const modelTool = agentModelToolMap.get(effectiveToolName);
+          if (!modelTool) throw new Error("Unknown or unavailable agent tool");
+          if (modelTool.kind === "read") {
+            effectiveInput = normalizeOptimisticReadInput(effectiveToolName, input as Record<string, unknown>);
+            recordedCall.input = effectiveInput;
+            validateModelToolInput(modelTool, effectiveInput);
+            result = await modelTool.execute(effectiveInput, executionContext);
+          } else {
+            if (!leasedToolNames.has(effectiveToolName)) throw new Error("Load this capability schema before calling it");
+            effectiveInput = normalizeLeasedToolInput(effectiveToolName, input as Record<string, unknown>);
+            recordedCall.input = effectiveInput;
+            result = await modelTool.execute(effectiveInput, executionContext);
+          }
         } catch (error) {
-          result = typedToolError(error, "Tool execution failed");
+          if (error instanceof ModelToolInputValidationError && agentReadToolNames.has(effectiveToolName)) {
+            nextLeasedToolNames.add(effectiveToolName);
+            result = { ...typedToolError(error, "Invalid read arguments", "validation_failed", effectiveInput), loadedSchema: effectiveToolName };
+          } else {
+            const failure = typedToolError(error, "Tool execution failed");
+            if (leasedToolNames.has(effectiveToolName) && failure.error.code === "validation_failed") nextLeasedToolNames.add(effectiveToolName);
+            result = failure;
+          }
         }
       }
-      const detail = progressDetail(requested.function.name, result);
+      const detail = progressDetail(effectiveToolName, result);
       onProgress({ ...progress, status: "completed", ...(detail ? { detail } : {}) });
-      const isPrepareTool = requested.function.name === "prepare_budget" || requested.function.name === "prepare_transaction" || requested.function.name === "prepare_transactions";
+      const isPrepareTool = effectiveToolName === "prepare_expense" || effectiveToolName === "prepare_income" || effectiveToolName === "prepare_transfer" || effectiveToolName === "prepare_expense_batch";
       const modelResult = isPrepareTool ? redactApprovalTokens(result) : result;
       if (isPrepareTool) collectPendingActions(result, pendingActions);
-      toolResults.push({ id: requested.id, name: requested.function.name, result: modelResult });
-      messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(modelResult) });
-      callsUsed += 1;
+      if (requested.function.name !== invokeReadTools.function.name) toolResults.push({ id: requested.id, name: effectiveToolName, result: modelResult });
+      const modelTool = agentModelToolMap.get(effectiveToolName);
+      const evidenceId = randomUUID();
+      if (requested.function.name === invokeReadTools.function.name) {
+        messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(modelResult) });
+      } else if (modelTool?.kind === "presentation" && !isFailedToolResult(modelResult)) {
+        const revision = await getFinancialRevision();
+        messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(projectModelToolResult(modelTool, modelResult, effectiveInput, evidenceId, revision)) });
+      } else if (modelTool && !isFailedToolResult(modelResult)) {
+        const revision = isRecord(result) && typeof result.revision === "number" ? result.revision : await getFinancialRevision();
+        const evidence = projectModelToolResult(modelTool, modelResult, effectiveInput, evidenceId, revision);
+        const candidateState = new Map(evidenceState);
+        candidateState.set(normalizeEvidenceKey(effectiveToolName, effectiveInput, revision), evidence);
+        if (JSON.stringify(evidence).length > MAX_SINGLE_MODEL_EVIDENCE_CHARS) {
+          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify({ status: "error", error: { code: "scope_too_large", message: "The requested selection is too large for the model context. Request a narrower filter, an explicit top count, an aggregation, or the next page." } }) });
+        } else if (evidenceStateSize(candidateState) >= AGENT_EVIDENCE_HARD_CHARS) {
+          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify({ status: "error", error: { code: "context_budget_exceeded", message: "This result is too large to retain with current evidence. Release evidence or request a narrower selection." } }) });
+        } else {
+          evidenceState.clear();
+          for (const [key, value] of candidateState) evidenceState.set(key, value);
+          evidenceById.set(evidenceId, evidence);
+          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(evidence) });
+        }
+      } else {
+        messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(modelResult) });
+      }
+      callsUsed += callCost;
       if (clarificationRequested) break;
     }
+    leasedToolNames = nextLeasedToolNames;
+    messages = compactToolTranscript(messages, evidenceState, activeInsights);
     if (clarificationRequested) break;
   }
 
   if (clarifications.length === 0 && (!completedWithAnswer || !lastContent.trim())) {
     const finalResponse = await streamOpenRouterAgent({
-      apiKey: env.OPENROUTER_API_KEY,
+      apiKey: providerConfig.apiKey,
       messages: [...messages, { role: "user", content: "Synthesize a useful, direct answer from the tool results already provided. Do not request another tool and do not return an empty message." }],
       tools: [],
-      model: env.OPENROUTER_MODEL,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
       onTextDelta: (text) => { lastContent += text; onTextDelta(text); },
       signal,
     });
@@ -1204,6 +1981,11 @@ async function executeAgentQuery(
         }
       }
     }
+    const currentRevision = await getFinancialRevision();
+    const insights = await conversationInsightPrompt(conversationId, currentRevision, question);
+    if (insights.length > 0) {
+      history = [{ role: "system", content: "Active conversation insights (derived and revision-bound; verify with fresh tools):\n" + insights.map((claim) => "- " + claim).join("\n") }, ...history];
+    }
     await db.update(agentConversations)
       .set({ updatedAt: new Date() })
       .where(eq(agentConversations.id, conversationId));
@@ -1275,7 +2057,7 @@ export default async function agentRoutes(fastify: FastifyInstance) {
   fastify.get("/api/agent/tools", {
     schema: { operationId: "listAgentTools", tags: ["agent"], response: { 200: z.object({ schemaVersion: z.number().int(), revision: z.number().int(), tools: z.array(z.unknown()), presentationTools: z.array(z.unknown()), toolGroups: z.record(z.string(), z.array(z.string())), policy: z.object({ readOnly: z.boolean(), writesRequireExplicitConfirmation: z.boolean(), guardedActions: z.array(z.string()) }).passthrough() }).passthrough() } },
   }, async () => ({
-    schemaVersion: 7,
+    schemaVersion: 8,
     revision: await getFinancialRevision(),
     tools: agentToolDefinitions,
     presentationTools,

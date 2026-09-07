@@ -1,5 +1,5 @@
 import { callOpenRouter } from "./openrouter";
-import { env } from "../lib/env";
+import { getAgentProviderConfig } from "./agent-provider-config";
 
 export interface ParsedTransaction {
   /** Transaction type: expense, income, transfer */
@@ -68,7 +68,8 @@ Rules:
 Respond ONLY with valid JSON, no explanation.`;
 
 export async function parseNaturalLanguageTransaction(message: string): Promise<ParsedTransaction> {
-  const apiKey = env.OPENROUTER_API_KEY;
+  const providerConfig = await getAgentProviderConfig();
+  const apiKey = providerConfig.apiKey;
   
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY not configured");
@@ -76,7 +77,7 @@ export async function parseNaturalLanguageTransaction(message: string): Promise<
 
   const userPrompt = `Parse this transaction message: "${message}"`;
 
-  const result = await callOpenRouter(SYSTEM_PROMPT, userPrompt, apiKey);
+  const result = await callOpenRouter(SYSTEM_PROMPT, userPrompt, apiKey, providerConfig.model, providerConfig.baseUrl);
 
   try {
     // Try to extract JSON from the response

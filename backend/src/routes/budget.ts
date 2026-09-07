@@ -51,7 +51,10 @@ const budgetCreateBodySchema = z.object({
   categoryId: z.number().int().positive(),
   plannedAmount: z.number().int().nonnegative(),
 });
-const budgetUpdateBodySchema = z.object({ plannedAmount: z.number().int().nonnegative().optional() });
+const budgetUpdateBodySchema = z.object({
+  plannedAmount: z.number().int().nonnegative().optional(),
+  periodId: z.number().int().positive().optional(),
+});
 const budgetOutlookCategorySchema = z.object({
   categoryId: z.number().int(), categoryName: z.string(), plannedAmount: z.number(), actualAmount: z.number(),
   remainingAmount: z.number(), scheduledRemainingAmount: z.number(), historicalRemainingAmount: z.number().nullable(),
@@ -368,6 +371,7 @@ export default async function (fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       plannedAmount: number;
+      periodId: number;
     }>;
 
     const [existing] = await db
@@ -380,16 +384,30 @@ export default async function (fastify: FastifyInstance) {
       reply.code(404).send({ error: "Budget plan not found" });
       return;
     }
-    const [period] = await db.select({ status: salaryPeriods.status }).from(salaryPeriods)
+    const [period] = await db.select({ id: salaryPeriods.id, status: salaryPeriods.status }).from(salaryPeriods)
       .where(eq(salaryPeriods.id, existing.periodId)).limit(1);
     if (!period) return reply.code(409).send({ error: "Budget plan has no valid period" });
     if (period.status === "closed") {
       return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
     }
 
+    const targetPeriodId = body.periodId ?? existing.periodId;
+    const [targetPeriod] = await db.select({ id: salaryPeriods.id, status: salaryPeriods.status }).from(salaryPeriods)
+      .where(eq(salaryPeriods.id, targetPeriodId)).limit(1);
+    if (!targetPeriod) return reply.code(404).send({ error: "Target salary period not found" });
+    if (targetPeriod.status === "closed") {
+      return reply.code(409).send({ error: "Target period is closed; choose an open period" });
+    }
+    if (targetPeriodId !== existing.periodId) {
+      const [duplicate] = await db.select({ id: budgetPlans.id }).from(budgetPlans)
+        .where(and(eq(budgetPlans.periodId, targetPeriodId), eq(budgetPlans.categoryId, existing.categoryId))).limit(1);
+      if (duplicate) return reply.code(409).send({ error: "Target period already has a budget line for this category" });
+    }
+
     const updated = db.transaction((tx) => {
       const row = tx.update(budgetPlans)
         .set({
+          periodId: targetPeriodId,
           ...(body.plannedAmount !== undefined && { plannedAmount: body.plannedAmount }),
         })
         .where(eq(budgetPlans.id, parseInt(id)))
@@ -399,7 +417,7 @@ export default async function (fastify: FastifyInstance) {
       return row;
     });
 
-    await invalidateBudgetMutation([existing.periodId]);
+    await invalidateBudgetMutation([...new Set([existing.periodId, targetPeriodId])]);
 
     return updated;
   });

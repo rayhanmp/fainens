@@ -225,6 +225,41 @@
       "when": 1788079900000,
       "tag": "0031_agent_conversation_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788080000000,
+      "tag": "0032_agent_conversation_insights",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788081000000,
+      "tag": "0033_agent_provider_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788082000000,
+      "tag": "0034_reimbursements",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788083000000,
+      "tag": "0035_reimbursement_writeoff_reversal",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788084000000,
+      "tag": "0036_agent_models",
+      "breakpoints": true
     }
   ]
 }

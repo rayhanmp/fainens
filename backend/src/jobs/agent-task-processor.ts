@@ -2,8 +2,8 @@ import { asc, and, eq } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { agentConversations, agentMessages } from "../db/schema";
-import { env } from "../lib/env";
 import { generateConversationTitle } from "../services/agent-title";
+import { getAgentProviderConfig } from "../services/agent-provider-config";
 import { reviewBudgetOutlook } from "../services/budget-outlook-review";
 import type { BackgroundTask } from "../services/background-tasks";
 
@@ -29,13 +29,15 @@ export async function processAgentTask(task: BackgroundTask, signal?: AbortSigna
       .where(and(eq(agentMessages.conversationId, conversationId), eq(agentMessages.role, "user")))
       .orderBy(asc(agentMessages.id)).limit(1))[0];
     if (!firstUserMessage) return { skipped: "no_user_message" };
+    const providerConfig = await getAgentProviderConfig();
     const assistantMessageId = Number(payload.assistantMessageId);
     const assistantMessage = Number.isInteger(assistantMessageId)
       ? (await db.select({ content: agentMessages.content }).from(agentMessages).where(and(eq(agentMessages.id, assistantMessageId), eq(agentMessages.conversationId, conversationId), eq(agentMessages.role, "assistant"))).limit(1))[0]
       : undefined;
     const generated = await generateConversationTitle({
-      apiKey: env.OPENROUTER_API_KEY,
-      model: env.OPENROUTER_MODEL,
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
       question: firstUserMessage.content,
       assistantAnswer: assistantMessage?.content ?? null,
       signal,

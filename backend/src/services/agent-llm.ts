@@ -1,3 +1,5 @@
+import { env } from "../lib/env";
+
 export interface AgentChatTool {
   type: "function";
   function: {
@@ -43,23 +45,23 @@ type StreamDelta = {
   }>;
 };
 
-const DEFAULT_MODEL = "google/gemini-3.7-flash";
+const DEFAULT_MODEL = "z-ai/glm-5.3-flash";
 // Completion budget for each provider request. Tool-assisted turns can make
 // several requests, so this is per model response rather than per chat.
 const MAX_AGENT_OUTPUT_TOKENS = 4096;
 
 function providerFailure(operation: "request" | "stream", status: number, providerDetail?: string): Error {
   const reason = status === 401
-    ? "OpenRouter rejected the API key. Check OPENROUTER_API_KEY."
+    ? "The configured provider rejected the API key. Check the saved model credentials."
     : status === 403
       ? "OpenRouter denied this request. Check account credits, model access, and API key permissions."
-      : status === 404
-        ? "The configured model was not found. Check OPENROUTER_MODEL."
+            : status === 404
+            ? "The configured model or endpoint was not found. Check the saved model ID and base URL."
         : status === 429
           ? "OpenRouter rate-limited the request. Try again shortly."
           : status >= 500
             ? "OpenRouter is temporarily unavailable. Try again shortly."
-            : "OpenRouter returned an unexpected error.";
+            : "The configured provider returned an unexpected error.";
   return new Error(`Agent model ${operation} failed (${status}): ${reason}${providerDetail ? ` (${providerDetail})` : ""}`);
 }
 
@@ -76,11 +78,11 @@ async function retryDelay(attempt: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
 }
 
-async function openRouterFetch(input: RequestInit, signal: AbortSignal | undefined): Promise<Response> {
+async function openRouterFetch(input: RequestInit, signal: AbortSignal | undefined, baseUrl = "https://openrouter.ai/api/v1"): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt < PROVIDER_RETRY_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { ...input, signal });
+      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, { ...input, signal });
       if (response.ok || !RETRYABLE_PROVIDER_STATUSES.has(response.status) || attempt === PROVIDER_RETRY_ATTEMPTS - 1) {
         return response;
       }
@@ -121,6 +123,7 @@ export async function callOpenRouterAgent(input: {
   messages: AgentChatMessage[];
   tools: AgentChatTool[];
   model?: string;
+  baseUrl?: string;
   signal?: AbortSignal;
 }): Promise<AgentChatResponse> {
   const response = await openRouterFetch({
@@ -128,7 +131,7 @@ export async function callOpenRouterAgent(input: {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${input.apiKey}`,
-      "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:8080",
+      "HTTP-Referer": env.OPENROUTER_HTTP_REFERER ?? env.FRONTEND_URL ?? "http://localhost:8080",
     },
     body: JSON.stringify({
       model: input.model ?? DEFAULT_MODEL,
@@ -137,7 +140,7 @@ export async function callOpenRouterAgent(input: {
       temperature: 0.2,
       max_tokens: MAX_AGENT_OUTPUT_TOKENS,
     }),
-  }, input.signal);
+  }, input.signal, input.baseUrl);
 
   if (!response.ok) {
     throw providerFailure("request", response.status, await providerErrorDetail(response));
@@ -164,6 +167,7 @@ export async function streamOpenRouterAgent(input: {
   messages: AgentChatMessage[];
   tools: AgentChatTool[];
   model?: string;
+  baseUrl?: string;
   onTextDelta: (text: string) => void;
   signal?: AbortSignal;
 }): Promise<AgentChatResponse> {
@@ -172,7 +176,7 @@ export async function streamOpenRouterAgent(input: {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${input.apiKey}`,
-      "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:8080",
+      "HTTP-Referer": env.OPENROUTER_HTTP_REFERER ?? env.FRONTEND_URL ?? "http://localhost:8080",
     },
     body: JSON.stringify({
       model: input.model ?? DEFAULT_MODEL,
@@ -186,7 +190,7 @@ export async function streamOpenRouterAgent(input: {
       temperature: 0.2,
       max_tokens: MAX_AGENT_OUTPUT_TOKENS,
     }),
-  }, input.signal);
+  }, input.signal, input.baseUrl);
   if (!response.ok || !response.body) {
     throw providerFailure("stream", response.status, await providerErrorDetail(response));
   }

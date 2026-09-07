@@ -71,7 +71,7 @@ export default fp(async function (fastify: FastifyInstance) {
   // Auth middleware decorator
   fastify.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
     if (localAuthBypass) {
-      request.user = { email: "local-dev@fainens.test" };
+      request.user = { email: env.LOCAL_AUTH_EMAIL };
       return;
     }
     try {

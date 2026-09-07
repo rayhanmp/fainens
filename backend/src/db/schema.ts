@@ -477,6 +477,31 @@ export const salarySettings = sqliteTable("salary_settings", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** Server-only agent provider configuration. The API key is encrypted and is
+ * never serialized to the browser; environment variables remain the fallback. */
+export const agentProviderSettings = sqliteTable("agent_provider_settings", {
+  id: integer("id").primaryKey(),
+  model: text("model").notNull(),
+  apiKeyCiphertext: text("api_key_ciphertext"),
+  apiKeyUpdatedAt: integer("api_key_updated_at", { mode: "timestamp_ms" }),
+});
+
+/** User-managed OpenAI-compatible Agent model definitions. API keys are
+ * encrypted at rest and never serialized to the client. */
+export const agentModels = sqliteTable("agent_model", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  model: text("model").notNull(),
+  baseUrl: text("base_url").notNull(),
+  apiKeyCiphertext: text("api_key_ciphertext"),
+  apiKeyUpdatedAt: integer("api_key_updated_at", { mode: "timestamp_ms" }),
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  defaultIdx: index("idx_agent_model_default").on(table.isDefault),
+}));
+
 /** Recurring subscriptions / bills (amounts in whole IDR, same as formatCurrency in app). */
 export const subscriptions = sqliteTable("subscription", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -555,6 +580,8 @@ export const subscriptionsLinkedAccountIdx = index("idx_subscriptions_account_id
 export const contacts = sqliteTable("contact", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
+  /** A contact can be a person (loans/split bills) or an organization (for example an employer). */
+  kind: text("kind").notNull().default("person"), // person | organization
   fullName: text("full_name"),
   email: text("email"),
   phone: text("phone"),
@@ -653,6 +680,84 @@ export const loanPaymentAttachments = sqliteTable("loan_payment_attachment", {
   loanPaymentIdIdx: index("idx_loan_payment_attachment_payment_id").on(table.loanPaymentId),
 }));
 
+/**
+ * A reimbursement is a claim against a contact, not a transaction category.
+ * Draft/submitted claims are planning records; only approved claims have a GL
+ * balance in the Reimbursements Receivable control account.
+ */
+export const reimbursementClaims = sqliteTable("reimbursement_claim", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("draft"), // draft | submitted | approved | partially_paid | settled | rejected | cancelled | written_off
+  dueDate: integer("due_date", { mode: "timestamp_ms" }),
+  notes: text("notes"),
+  submittedAt: integer("submitted_at", { mode: "timestamp_ms" }),
+  approvedAt: integer("approved_at", { mode: "timestamp_ms" }),
+  writtenOffAt: integer("written_off_at", { mode: "timestamp_ms" }),
+  writeoffTransactionId: integer("writeoff_transaction_id").references(() => transactions.id, { onDelete: "restrict" }),
+  version: integer("version").notNull().default(1),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  contactIdx: index("idx_reimbursement_claim_contact").on(table.contactId),
+  statusIdx: index("idx_reimbursement_claim_status").on(table.status),
+  dueDateIdx: index("idx_reimbursement_claim_due_date").on(table.dueDate),
+}));
+
+/** Exact expense/category portions claimed from an original posted transaction. */
+export const reimbursementClaimSources = sqliteTable("reimbursement_claim_source", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  claimId: integer("claim_id").notNull().references(() => reimbursementClaims.id, { onDelete: "cascade" }),
+  sourceTransactionId: integer("source_transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+  expenseLineId: integer("expense_line_id").notNull().references(() => transactionLines.id, { onDelete: "restrict" }),
+  categoryId: integer("category_id").references(() => categories.id, { onDelete: "restrict" }),
+  amount: integer("amount").notNull(),
+  recognitionTransactionId: integer("recognition_transaction_id").references(() => transactions.id, { onDelete: "restrict" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  claimIdx: index("idx_reimbursement_source_claim").on(table.claimId),
+  sourceTxIdx: index("idx_reimbursement_source_transaction").on(table.sourceTransactionId),
+  expenseLineIdx: index("idx_reimbursement_source_expense_line").on(table.expenseLineId),
+}));
+
+/** A posted cash receipt may be allocated across several claims. */
+export const reimbursementReceipts = sqliteTable("reimbursement_receipt", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  transactionId: integer("transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+  receiptDate: integer("receipt_date", { mode: "timestamp_ms" }).notNull(),
+  amount: integer("amount").notNull(),
+  status: text("status").notNull().default("posted"), // posted | reversed
+  reversalTransactionId: integer("reversal_transaction_id").references(() => transactions.id, { onDelete: "restrict" }),
+  reversalReason: text("reversal_reason"),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  transactionIdx: index("idx_reimbursement_receipt_transaction").on(table.transactionId),
+  dateIdx: index("idx_reimbursement_receipt_date").on(table.receiptDate),
+}));
+
+export const reimbursementReceiptAllocations = sqliteTable("reimbursement_receipt_allocation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  receiptId: integer("receipt_id").notNull().references(() => reimbursementReceipts.id, { onDelete: "cascade" }),
+  claimId: integer("claim_id").notNull().references(() => reimbursementClaims.id, { onDelete: "restrict" }),
+  amount: integer("amount").notNull(),
+}, (table) => ({
+  receiptIdx: index("idx_reimbursement_receipt_allocation_receipt").on(table.receiptId),
+  claimIdx: index("idx_reimbursement_receipt_allocation_claim").on(table.claimId),
+  receiptClaimUnique: uniqueIndex("idx_reimbursement_receipt_claim_unique").on(table.receiptId, table.claimId),
+}));
+
+/** Durable replay protection for commands that create financial journals. */
+export const reimbursementOperations = sqliteTable("reimbursement_operation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  operation: text("operation").notNull(),
+  requestHash: text("request_hash").notNull(),
+  resultJson: text("result_json").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+});
+
 // Additional indexes for contacts
 export const contactsNameIdx = index("idx_contacts_name").on(contacts.name);
 export const contactsIsActiveIdx = index("idx_contacts_is_active").on(contacts.isActive);
@@ -730,6 +835,27 @@ export const agentMessages = sqliteTable("agent_message", {
     .default(sql`(unixepoch('now') * 1000)`),
 }, (table) => ({
   conversationCreatedIdx: index("idx_agent_message_conversation_created").on(table.conversationId, table.createdAt),
+}));
+
+/** Compact, user-conversation-scoped insights explicitly retained by the
+ * model. They are derived context and become stale after a revision change. */
+export const agentConversationInsights = sqliteTable("agent_conversation_insight", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => agentConversations.id, { onDelete: "cascade" }),
+  claim: text("claim").notNull(),
+  evidenceIds: text("evidence_ids").notNull(),
+  financialRevision: integer("financial_revision").notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  conversationStatusIdx: index("idx_agent_conversation_insight_status").on(table.conversationId, table.status, table.updatedAt),
 }));
 
 /** Image attachments retained with an Agent user message for conversation reloads. */

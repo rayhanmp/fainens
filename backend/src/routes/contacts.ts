@@ -3,16 +3,17 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { auditLogs, contacts, loans } from "../db/schema";
+import { auditLogs, contacts, loans, reimbursementClaims } from "../db/schema";
 
 const contactErrorSchema = z.object({ error: z.string() }).passthrough();
 const contactIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 const contactQuerySchema = z.object({ search: z.string().max(120).optional(), includeInactive: z.enum(["true", "false"]).optional() });
 const contactTimestampSchema = z.union([z.date(), z.string(), z.number()]);
-const contactSchema = z.object({ id: z.number().int(), name: z.string(), fullName: z.string().nullable(), email: z.string().nullable(), phone: z.string().nullable(), relationshipType: z.string().nullable(), notes: z.string().nullable(), isActive: z.boolean(), createdAt: contactTimestampSchema, updatedAt: contactTimestampSchema }).passthrough();
+const contactKindSchema = z.enum(["person", "organization"]);
+const contactSchema = z.object({ id: z.number().int(), name: z.string(), kind: contactKindSchema, fullName: z.string().nullable(), email: z.string().nullable(), phone: z.string().nullable(), relationshipType: z.string().nullable(), notes: z.string().nullable(), isActive: z.boolean(), createdAt: contactTimestampSchema, updatedAt: contactTimestampSchema }).passthrough();
 const contactSummarySchema = z.object({ totalLent: z.number(), totalBorrowed: z.number(), netBalance: z.number(), activeLoansCount: z.number().int(), repaidLoansCount: z.number().int().optional(), totalLentAllTime: z.number().optional(), totalBorrowedAllTime: z.number().optional() }).passthrough();
 const contactListItemSchema = contactSchema.extend({ totalLent: z.number(), totalBorrowed: z.number(), netBalance: z.number(), activeLoansCount: z.number().int() }).passthrough();
-const contactBodySchema = z.object({ name: z.string().trim().min(1).max(200), fullName: z.string().max(200).nullable().optional(), email: z.string().email().nullable().optional(), phone: z.string().max(80).nullable().optional(), relationshipType: z.string().max(100).nullable().optional(), notes: z.string().max(2000).nullable().optional() }).passthrough();
+const contactBodySchema = z.object({ name: z.string().trim().min(1).max(200), kind: contactKindSchema.optional(), fullName: z.string().max(200).nullable().optional(), email: z.string().email().nullable().optional(), phone: z.string().max(80).nullable().optional(), relationshipType: z.string().max(100).nullable().optional(), notes: z.string().max(2000).nullable().optional() }).passthrough();
 const contactUpdateBodySchema = contactBodySchema.partial().passthrough();
 
 // Sanitize search input to prevent SQL injection
@@ -146,6 +147,7 @@ export default async function (fastify: FastifyInstance) {
   }, async (request, reply) => {
     const body = request.body as {
       name: string;
+      kind?: "person" | "organization";
       fullName?: string | null;
       email?: string | null;
       phone?: string | null;
@@ -162,6 +164,7 @@ export default async function (fastify: FastifyInstance) {
       .insert(contacts)
       .values({
         name: body.name.trim(),
+        kind: body.kind ?? "person",
         fullName: body.fullName ?? null,
         email: body.email ?? null,
         phone: body.phone ?? null,
@@ -180,6 +183,7 @@ export default async function (fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<{
       name: string;
+      kind: "person" | "organization";
       fullName: string | null;
       email: string | null;
       phone: string | null;
@@ -202,6 +206,7 @@ export default async function (fastify: FastifyInstance) {
       .update(contacts)
       .set({
         ...(body.name !== undefined && { name: body.name }),
+        ...(body.kind !== undefined && { kind: body.kind }),
         ...(body.fullName !== undefined && { fullName: body.fullName }),
         ...(body.email !== undefined && { email: body.email }),
         ...(body.phone !== undefined && { phone: body.phone }),
@@ -237,6 +242,12 @@ export default async function (fastify: FastifyInstance) {
           .all();
         if (activeLoans.length > 0) {
           throw new Error(`Contact has ${activeLoans.length} active loan(s); settle, write off, or transfer them before archiving`);
+        }
+        const activeClaims = tx.select({ id: reimbursementClaims.id }).from(reimbursementClaims)
+          .where(and(eq(reimbursementClaims.contactId, contactId), sql`${reimbursementClaims.status} IN ('draft', 'submitted', 'approved', 'partially_paid')`))
+          .all();
+        if (activeClaims.length > 0) {
+          throw new Error(`Contact has ${activeClaims.length} active reimbursement claim(s); resolve them before archiving`);
         }
         const updated = tx.update(contacts)
           .set({ isActive: false, updatedAt: sql`(unixepoch('now') * 1000)` })

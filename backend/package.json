@@ -8,6 +8,9 @@
     "start": "node dist/server.js",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
+    "eval:agent": "node evals/run.mjs",
+    "eval:agent:stream": "node evals/run.mjs --transport stream",
+    "eval:agent:typecheck": "tsc -p evals/tsconfig.json",
     "generate:openapi": "ts-node-dev --transpile-only src/scripts/generate-openapi.ts",
     "worker": "ts-node src/jobs/worker.ts",
     "verify:contract": "ts-node-dev --transpile-only src/scripts/verify-route-contract.ts"

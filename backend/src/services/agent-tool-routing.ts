@@ -1,14 +1,17 @@
 import type { AgentChatTool } from "./agent-llm";
 
-export const agentToolGroupNames = ["records", "transactions", "planning", "metadata", "obligations", "audit", "currency", "charts", "scenarios", "split_bill"] as const;
+export const agentToolGroupNames = ["overview", "accounts", "transaction_history", "transactions", "planning", "metadata", "obligations", "reimbursements", "audit", "currency", "charts", "scenarios", "split_bill"] as const;
 export type AgentToolGroup = typeof agentToolGroupNames[number];
 
 export const agentToolGroups: Record<AgentToolGroup, readonly string[]> = {
-  records: ["get_financial_facts", "search_transactions", "get_transaction_details", "get_account_balances", "get_category_spending", "list_periods"],
+  overview: ["get_financial_facts", "get_category_spending"],
+  accounts: ["get_account_balances"],
+  transaction_history: ["search_transactions", "get_transaction_details", "find_similar_transactions"],
   transactions: ["get_account_balances", "get_categories", "get_transport_route_templates", "get_tags", "prepare_transaction", "prepare_transactions"],
   planning: ["get_budget_facts", "get_category_variance", "compare_periods", "forecast_cash_position", "preview_budget_plan", "review_budget_patterns", "list_periods", "get_categories", "prepare_budget"],
   metadata: ["search_transactions", "get_transaction_details", "get_tags", "create_tag", "update_transaction_tags", "update_transaction_metadata"],
   obligations: ["get_loan_balances", "get_paylater_obligations", "get_due_recurring", "get_salary_catch_up", "list_periods"],
+  reimbursements: ["get_reimbursement_claims"],
   audit: ["get_account_balances", "get_account_health", "get_money_anomalies", "get_reconciliation_status", "find_similar_transactions", "get_transaction_details"],
   currency: ["get_currency_exchange_rate", "calculate", "get_current_datetime", "calculate_date_difference"],
   charts: ["show_chart"],
@@ -29,7 +32,7 @@ export const loadToolGroupTool: AgentChatTool = {
         group: {
           type: "string",
           enum: agentToolGroupNames,
-          description: "records=ledger facts; transactions=prepare entries; planning=budgets/forecast; metadata=notes/tags; obligations=loans/pay-later/recurring; audit=reconciliation/anomalies; currency=rates/date math; charts=static charts; scenarios=editable what-ifs; split_bill=editable receipt split.",
+          description: "overview=period totals/categories; accounts=focused account balances; transaction_history=posted activity lookup; transactions=prepare entries; planning=budgets/forecast; metadata=notes/tags; obligations=loans/pay-later/recurring; reimbursements=claims and receivable state; audit=reconciliation/anomalies; currency=rates/date math; charts=static charts; scenarios=editable what-ifs; split_bill=editable receipt split.",
         },
       },
     },
@@ -46,28 +49,43 @@ export function selectInitialToolGroups(question: string, historyText = "", hasI
   const text = `${question}\n${historyText.slice(-4_000)}`.toLowerCase();
   const groups = new Set<AgentToolGroup>();
   const splitRequested = matches(text, /\b(split\s*bill|split the bill|bill split|split receipt|receipt split|patungan|bagi (?:bill|tagihan)|service charge)\b/);
+  const analyticalRequest = matches(text, /\b(summary|summarise|summarize|overview|breakdown|top\b|most\b|least\b|where did|spending by|income by|category|categories|trend|compare|comparison|versus|composition|budget|forecast|projection|goal|runway|cash flow|how am i doing)\b/);
+  const preparingTransaction = (hasImages && !splitRequested)
+    || matches(text, /\b(record|log|add|create|bought|purchase|paid|received|transfer|top[ -]?up)\b/)
+    || historyText.includes("PENDING TRANSACTION PROPOSALS");
+  const accountRequest = matches(text, /\b(balance|wallet|account|bank|bni|gopay|dana|ovo|jago)\b/);
+  const transactionHistoryRequest = matches(text, /\b(find|search|list|history|history|transaction|merchant|receipt|charge|what did|when did|where did)\b/);
 
   if (splitRequested) {
     groups.add("split_bill");
   }
-  if ((hasImages && !splitRequested) || matches(text, /\b(record|log|add|create|spent|spend|bought|purchase|paid|received|income|salary|expense|transaction|transfer|top[ -]?up|wallet|account)\b/)) {
+  if (preparingTransaction) {
     groups.add("transactions");
-    groups.add("records");
   }
+  if (accountRequest) groups.add("accounts");
+  if (transactionHistoryRequest && !preparingTransaction) groups.add("transaction_history");
   if (matches(text, /\b(tag|tags|note|notes|annotate|annotation|label|metadata)\b/)) groups.add("metadata");
   if (matches(text, /\b(budget|plan|planning|saving|savings|forecast|project|projection|goal|runway|variance|compare|comparison|versus|trend|scenario|allocation|what if)\b/)) {
     groups.add("planning");
     groups.add("scenarios");
-    groups.add("records");
+    groups.add("overview");
   }
   if (matches(text, /\b(chart|graph|visuali[sz]|donut|composition|breakdown|heatmap|sparkline)\b/)) {
     groups.add("charts");
-    groups.add("records");
+    groups.add("overview");
+  }
+  // Have presentation contracts ready before retrieved facts arrive. This
+  // makes a helpful visual the default for analysis, without adding a card to
+  // a single-fact balance or action answer.
+  if (analyticalRequest && !splitRequested) {
+    groups.add("charts");
+    groups.add("overview");
   }
   if (matches(text, /\b(loan|borrow|borrowed|debt|lent|lending|pay\s*later|paylater|installment|subscription|recurring|renewal|obligation|due)\b/)) groups.add("obligations");
+  if (matches(text, /\b(reimburse|reimbursement|claim|employer|receivable|pass[ -]?through)\b/)) groups.add("reimbursements");
   if (matches(text, /\b(reconcile|reconciliation|anomal|duplicate|audit|trace|provenance|account health|wrong transaction|incorrect transaction)\b/)) groups.add("audit");
   if (matches(text, /\b(currency|exchange|convert|conversion|exchange rate|usd|idr|jpy|eur|sgd|aud|gbp)\b/)) groups.add("currency");
-  if (matches(text, /\b(balance|financial|finance|money|cash|spending|category|period|how am i doing|how much|transaction)\b/)) groups.add("records");
+  if (matches(text, /\b(financial|finance|money|cash|spending|category|period|how am i doing|how much)\b/)) groups.add("overview");
 
   return groups;
 }

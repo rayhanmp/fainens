@@ -2,8 +2,8 @@ import { and, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { accounts, backgroundTasks, categories, forecastPurchaseReviews, salaryPeriods, transactionCategoryAllocations, transactions, transactionLines } from "../db/schema";
-import { env } from "../lib/env";
 import { callOpenRouterAgent } from "./agent-llm";
+import { getAgentProviderConfig } from "./agent-provider-config";
 import { getFinancialRevision } from "./financial-revision";
 import { getBudgetOutlook } from "./budget-outlook";
 import { createBackgroundTask } from "./background-tasks";
@@ -148,7 +148,8 @@ export async function requestBudgetOutlierReview(periodId: number, ownerEmail?: 
 }
 
 export async function reviewBudgetOutlook(periodId: number, options: { expectedRevision?: number; signal?: AbortSignal } = {}) {
-  if (!env.OPENROUTER_API_KEY) return { applied: false, reason: "provider_unavailable", reviews: [] };
+  const providerConfig = await getAgentProviderConfig();
+  if (!providerConfig.apiKey) return { applied: false, reason: "provider_unavailable", reviews: [] };
   if (options.expectedRevision != null && await getFinancialRevision() !== options.expectedRevision) {
     return { applied: false, reason: "stale_revision", reviews: [] };
   }
@@ -190,8 +191,9 @@ export async function reviewBudgetOutlook(periodId: number, options: { expectedR
   if (candidates.length === 0) return { applied: false, reason: "no_candidates", reviews: [], largePurchaseCount: largePurchases.length };
 
   const response = await callOpenRouterAgent({
-    apiKey: env.OPENROUTER_API_KEY,
-    model: env.OPENROUTER_MODEL,
+    apiKey: providerConfig.apiKey,
+    model: providerConfig.model,
+    baseUrl: providerConfig.baseUrl,
     tools: [],
     signal: options.signal,
     messages: [
@@ -225,7 +227,7 @@ export async function reviewBudgetOutlook(periodId: number, options: { expectedR
       weight: review.weight,
       confidence: review.confidence,
       rationale: review.rationale,
-      model: env.OPENROUTER_MODEL,
+      model: providerConfig.model,
       promptVersion: BUDGET_REVIEW_PROMPT_VERSION,
       status: "active",
       updatedAt: new Date(),
@@ -241,7 +243,7 @@ export async function reviewBudgetOutlook(periodId: number, options: { expectedR
         weight: review.weight,
         confidence: review.confidence,
         rationale: review.rationale,
-        model: env.OPENROUTER_MODEL,
+      model: providerConfig.model,
         promptVersion: BUDGET_REVIEW_PROMPT_VERSION,
         status: "active",
         updatedAt: new Date(),
