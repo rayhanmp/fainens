@@ -1,152 +1,113 @@
 import { Link, useLocation } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 import {
-  LayoutDashboard,
-  Calendar,
-  Wallet,
-  Receipt,
-  CreditCard,
-  Users,
   Banknote,
-  PiggyBank,
   BarChart3,
-  Shield,
-  Calculator,
-  X,
+  CircleHelp,
+  CreditCard,
+  HandCoins,
+  Images,
+  Landmark,
+  PiggyBank,
   Settings,
-  LogOut,
-  Sparkles,
+  ShieldAlert,
+  Target,
+  Users,
+  X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useAuth } from '../../lib/auth';
-import { useConfirm } from '../ui/ConfirmDialog';
+import { ProfileMenu } from './Sidebar';
+import { navigationActive } from './navigation';
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/accounts', label: 'Accounts', icon: Wallet },
-  { to: '/transactions', label: 'Transactions', icon: Receipt },
-  { to: '/paylater', label: 'Pay Later', icon: CreditCard },
-  { to: '/loans', label: 'Loans', icon: Users },
-  { to: '/salary-income', label: 'Salary & Income', icon: Banknote },
-  { to: '/periods', label: 'Salary Periods', icon: Calendar },
-  { to: '/budget', label: 'Budget', icon: PiggyBank },
-  { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
+const groups = [
+  {
+    label: 'Your money',
+    items: [
+      { to: '/accounts', label: 'Accounts', description: 'Balances and net worth', icon: Landmark },
+      { to: '/budget', label: 'Budget', description: 'Plan this period', icon: PiggyBank },
+      { to: '/salary-income', label: 'Income', description: 'Salary and pay periods', icon: Banknote },
+      { to: '/reports', label: 'Reports', description: 'Trends and exports', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Plan ahead',
+    items: [
+      { to: '/savings-simulator', label: 'Savings', description: 'Test a savings plan', icon: Target },
+      { to: '/loans', label: 'Loans', description: 'Track money owed', icon: Users },
+      { to: '/paylater', label: 'Pay later', description: 'Upcoming settlements', icon: CreditCard },
+      { to: '/reimbursements', label: 'Reimbursements', description: 'Recover shared costs', icon: HandCoins },
+    ],
+  },
 ] as const;
 
-const bottomItems = [
-  { to: '/audit-log', label: 'Security Audit', icon: Shield },
+const supportItems = [
+  { to: '/gallery', label: 'Image storage', icon: Images },
+  { to: '/anomalies', label: 'Data quality', icon: ShieldAlert },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/help', label: 'Help', icon: CircleHelp },
 ] as const;
 
-function isNavActive(pathname: string, to: string) {
-  if (to === '/') return pathname === '/';
-  return pathname === to || pathname.startsWith(`${to}/`);
-}
+export function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const { pathname } = useLocation();
 
-interface MobileMenuProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
-  const location = useLocation();
-  const { logout } = useAuth();
-  const { confirm } = useConfirm();
-
-  const handleLinkClick = () => onClose();
-
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) {
+      dialog.current?.close();
+      return;
+    }
+    dialog.current?.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isOpen]);
 
   return (
-    <div className="fixed inset-0 z-50 md:hidden">
+    <dialog ref={dialog} className="finance-mobile-menu" aria-label="More navigation" onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
-      <div className="absolute inset-0 bg-[var(--color-surface)] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] pt-[env(safe-area-inset-top)]">
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Menu</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] cursor-pointer"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+        className="finance-mobile-inner"
+        onPointerDown={(event) => { if (event.pointerType !== 'mouse') swipeStart.current = { x: event.clientX, y: event.clientY }; }}
+        onPointerUp={(event) => {
+          const start = swipeStart.current;
+          swipeStart.current = null;
+          if (start && event.clientY - start.y > 72 && Math.abs(event.clientX - start.x) < 56) onClose();
+        }}
+        onPointerCancel={() => { swipeStart.current = null; }}
+      >
+        <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-[var(--ref-outline-variant)]" aria-hidden="true" />
+        <header className="flex items-start justify-between gap-4 px-5 pb-4 pt-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-primary)]">Explore Fainens</p>
+            <h2 className="mt-1 font-headline text-2xl font-extrabold text-[var(--ref-on-surface)]">More</h2>
+          </div>
+          <button type="button" className="grid h-11 w-11 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]" aria-label="Close menu" onClick={onClose}><X className="h-5 w-5" /></button>
+        </header>
 
-        <nav className="flex-1 overflow-y-auto p-3">
-          <ul className="space-y-1">
-            {navItems.map(({ to, label, icon: Icon }) => {
-              const active = isNavActive(location.pathname, to);
-              return (
-                <li key={to}>
-                  <Link
-                    to={to}
-                    onClick={handleLinkClick}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
-                      active
-                        ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--color-text-primary)]'
-                    )}
-                  >
-                    <Icon className="w-6 h-6 shrink-0" />
-                    <span>{label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="my-4 h-px bg-[var(--color-border)]" />
-
-          <ul className="space-y-1">
-            {bottomItems.map(({ to, label, icon: Icon }) => {
-              const active = isNavActive(location.pathname, to);
-              return (
-                <li key={to}>
-                  <Link
-                    to={to}
-                    onClick={handleLinkClick}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
-                      active
-                        ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--color-text-primary)]'
-                    )}
-                  >
-                    <Icon className="w-6 h-6 shrink-0" />
-                    <span>{label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+        <nav aria-label="More destinations" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5">
+          {groups.map((group) => (
+            <section key={group.label} className="mb-6">
+              <h3 className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ref-outline)]">{group.label}</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {group.items.map(({ to, label, description, icon: Icon }) => {
+                  const active = navigationActive(pathname, to);
+                  return <Link key={to} to={to} onClick={onClose} aria-current={active ? 'page' : undefined} className={cn('min-h-24 rounded-2xl border p-3 transition-transform active:scale-[0.98]', active ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface)]')}><Icon className="h-5 w-5" /><strong className="mt-2 block text-sm">{label}</strong><span className="mt-0.5 block text-[11px] leading-4 text-[var(--ref-on-surface-variant)]">{description}</span></Link>;
+                })}
+              </div>
+            </section>
+          ))}
+          <section>
+            <h3 className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ref-outline)]">App & support</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {supportItems.map(({ to, label, icon: Icon }) => {
+                const active = navigationActive(pathname, to);
+                return <Link key={to} to={to} onClick={onClose} aria-current={active ? 'page' : undefined} className={cn('flex min-h-12 items-center gap-2 rounded-xl px-3 text-sm font-semibold', active ? 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]')}><Icon className="h-4 w-4 shrink-0" />{label}</Link>;
+              })}
+            </div>
+          </section>
         </nav>
-
-        <div className="p-3 border-t border-[var(--color-border)] pb-[env(safe-area-inset-bottom)]">
-          <button
-            type="button"
-            onClick={async () => {
-              const confirmed = await confirm({
-                title: 'Sign Out',
-                message: 'Are you sure you want to sign out?',
-                confirmLabel: 'Sign Out',
-                variant: 'default',
-              });
-              if (confirmed) {
-                logout();
-              }
-            }}
-            className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-base font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-6 h-6" />
-            <span>Sign Out</span>
-          </button>
-        </div>
+        <div className="finance-footer shrink-0"><ProfileMenu onNavigate={onClose} /></div>
       </div>
-    </div>
+    </dialog>
   );
 }

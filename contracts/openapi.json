@@ -443,7 +443,8 @@
                 "expense",
                 "income",
                 "transfer",
-                "loan"
+                "loan",
+                "reimbursement"
               ]
             },
             "in": "query",
@@ -616,6 +617,22 @@
                           "incomeCents": {
                             "type": "number"
                           },
+                          "activityKind": {
+                            "type": "string",
+                            "enum": [
+                              "expense",
+                              "income",
+                              "transfer",
+                              "loan",
+                              "reimbursement",
+                              "other"
+                            ]
+                          },
+                          "remainingReimbursableExpense": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "lines": {
                             "type": "array",
                             "items": {
@@ -773,6 +790,48 @@
                         "topCategoryName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "dailyActivity": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string"
+                              },
+                              "expenseCents": {
+                                "type": "number"
+                              },
+                              "incomeCents": {
+                                "type": "number"
+                              },
+                              "transactionCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "date",
+                              "expenseCents",
+                              "incomeCents",
+                              "transactionCount"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "categoryBreakdown": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": { "type": "string" },
+                              "amountCents": { "type": "number" },
+                              "share": { "type": "number" }
+                            },
+                            "required": ["name", "amountCents", "share"],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -1268,6 +1327,22 @@
                     "incomeCents": {
                       "type": "number"
                     },
+                    "activityKind": {
+                      "type": "string",
+                      "enum": [
+                        "expense",
+                        "income",
+                        "transfer",
+                        "loan",
+                        "reimbursement",
+                        "other"
+                      ]
+                    },
+                    "remainingReimbursableExpense": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "lines": {
                       "type": "array",
                       "items": {
@@ -1659,6 +1734,22 @@
                     },
                     "incomeCents": {
                       "type": "number"
+                    },
+                    "activityKind": {
+                      "type": "string",
+                      "enum": [
+                        "expense",
+                        "income",
+                        "transfer",
+                        "loan",
+                        "reimbursement",
+                        "other"
+                      ]
+                    },
+                    "remainingReimbursableExpense": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "lines": {
                       "type": "array",
@@ -9841,6 +9932,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "periodId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -10588,6 +10684,11 @@
                   "plannedAmount": {
                     "type": "integer",
                     "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "periodId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
                 }
@@ -11978,6 +12079,402 @@
                     "error"
                   ],
                   "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gallery/images": {
+      "get": {
+        "operationId": "listGalleryImages",
+        "tags": [
+          "gallery"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transaction",
+                "agent",
+                "wishlist"
+              ]
+            },
+            "in": "query",
+            "name": "source",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "transaction",
+                          "agent",
+                          "wishlist"
+                        ]
+                      },
+                      "filename": {
+                        "type": "string"
+                      },
+                      "mimetype": {
+                        "type": "string"
+                      },
+                      "fileSize": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "downloadUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "context": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "relatedId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "relatedLabel": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "storageManaged": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "source",
+                      "filename",
+                      "mimetype",
+                      "fileSize",
+                      "createdAt",
+                      "downloadUrl",
+                      "context",
+                      "relatedId",
+                      "relatedLabel",
+                      "storageManaged"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gallery/images/{source}/{id}/attach": {
+      "post": {
+        "operationId": "attachGalleryImageToAgent",
+        "tags": [
+          "gallery"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transaction",
+                "agent",
+                "wishlist"
+              ]
+            },
+            "in": "path",
+            "name": "source",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "filename": {
+                      "type": "string"
+                    },
+                    "mimeType": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "data": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "filename",
+                    "mimeType",
+                    "fileSize",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gallery/images/{source}/{id}": {
+      "delete": {
+        "operationId": "deleteGalleryImage",
+        "tags": [
+          "gallery"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transaction",
+                "agent",
+                "wishlist"
+              ]
+            },
+            "in": "path",
+            "name": "source",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "cleanupPending": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "cleanupPending",
+                    "message"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [
+                    null
+                  ]
                 }
               }
             }
@@ -15408,6 +15905,22 @@
                       ],
                       "additionalProperties": {}
                     },
+                    "previousBalance": {
+                      "type": "number"
+                    },
+                    "totalIncoming": {
+                      "type": "number"
+                    },
+                    "totalOutgoing": {
+                      "type": "number"
+                    },
+                    "closingBalance": {
+                      "type": "number"
+                    },
+                    "reportHash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
                     "incomeBySource": {
                       "type": "array",
                       "items": {
@@ -15596,6 +16109,11 @@
                     "period",
                     "incomeStatement",
                     "balanceSheet",
+                    "previousBalance",
+                    "totalIncoming",
+                    "totalOutgoing",
+                    "closingBalance",
+                    "reportHash",
                     "incomeBySource",
                     "expensesByCategory",
                     "budgetComparison",
@@ -17170,6 +17688,211 @@
             }
           },
           "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/agent-provider": {
+      "get": {
+        "operationId": "getAgentProviderSettings",
+        "tags": [
+          "agent"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string"
+                    },
+                    "apiKeyConfigured": {
+                      "type": "boolean"
+                    },
+                    "apiKeySource": {
+                      "type": "string",
+                      "enum": [
+                        "database",
+                        "environment",
+                        "none"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "apiKeyConfigured",
+                    "apiKeySource"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateAgentProviderSettings",
+        "tags": [
+          "agent"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "apiKey": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "clearApiKey": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string"
+                    },
+                    "apiKeyConfigured": {
+                      "type": "boolean"
+                    },
+                    "apiKeySource": {
+                      "type": "string",
+                      "enum": [
+                        "database",
+                        "environment",
+                        "none"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "apiKeyConfigured",
+                    "apiKeySource"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/agent-provider/test": {
+      "post": {
+        "operationId": "testAgentProviderSettings",
+        "tags": [
+          "agent"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "modelAvailable": {
+                      "nullable": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "model",
+                    "modelAvailable"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -21366,6 +22089,13 @@
                       "name": {
                         "type": "string"
                       },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "person",
+                          "organization"
+                        ]
+                      },
                       "fullName": {
                         "nullable": true,
                         "type": "string"
@@ -21435,6 +22165,7 @@
                     "required": [
                       "id",
                       "name",
+                      "kind",
                       "fullName",
                       "email",
                       "phone",
@@ -21472,6 +22203,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "person",
+                      "organization"
+                    ]
                   },
                   "fullName": {
                     "nullable": true,
@@ -21523,6 +22261,13 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "person",
+                        "organization"
+                      ]
                     },
                     "fullName": {
                       "nullable": true,
@@ -21579,6 +22324,7 @@
                   "required": [
                     "id",
                     "name",
+                    "kind",
                     "fullName",
                     "email",
                     "phone",
@@ -21648,6 +22394,13 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "person",
+                        "organization"
+                      ]
                     },
                     "fullName": {
                       "nullable": true,
@@ -21745,6 +22498,7 @@
                   "required": [
                     "id",
                     "name",
+                    "kind",
                     "fullName",
                     "email",
                     "phone",
@@ -21798,6 +22552,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "person",
+                      "organization"
+                    ]
                   },
                   "fullName": {
                     "nullable": true,
@@ -21859,6 +22620,13 @@
                     "name": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "person",
+                        "organization"
+                      ]
+                    },
                     "fullName": {
                       "nullable": true,
                       "type": "string"
@@ -21914,6 +22682,7 @@
                   "required": [
                     "id",
                     "name",
+                    "kind",
                     "fullName",
                     "email",
                     "phone",
@@ -22075,6 +22844,13 @@
                     "name": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "person",
+                        "organization"
+                      ]
+                    },
                     "fullName": {
                       "nullable": true,
                       "type": "string"
@@ -22130,6 +22906,7 @@
                   "required": [
                     "id",
                     "name",
+                    "kind",
                     "fullName",
                     "email",
                     "phone",
@@ -22140,6 +22917,2190 @@
                     "updatedAt"
                   ],
                   "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements": {
+      "get": {
+        "operationId": "listReimbursements",
+        "tags": [
+          "reimbursements"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "contactId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "contactId": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "notes": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "proposedAmount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "recognisedAmount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "outstandingAmount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "sources": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "receipts": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "contactId",
+                      "title",
+                      "status",
+                      "dueDate",
+                      "notes",
+                      "proposedAmount",
+                      "recognisedAmount",
+                      "outstandingAmount",
+                      "sources",
+                      "receipts"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contactId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "dueDate": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "sources": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sourceTransactionId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "expenseLineId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "categoryId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "sourceTransactionId",
+                        "expenseLineId",
+                        "amount"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  }
+                },
+                "required": [
+                  "contactId",
+                  "title",
+                  "sources"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "contactId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "proposedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognisedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "contactId",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "notes",
+                    "proposedAmount",
+                    "recognisedAmount",
+                    "outstandingAmount",
+                    "sources",
+                    "receipts"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}": {
+      "get": {
+        "operationId": "getReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "contactId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "proposedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognisedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "contactId",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "notes",
+                    "proposedAmount",
+                    "recognisedAmount",
+                    "outstandingAmount",
+                    "sources",
+                    "receipts"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contactId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "dueDate": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "sources": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sourceTransactionId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "expenseLineId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "categoryId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "sourceTransactionId",
+                        "expenseLineId",
+                        "amount"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  }
+                },
+                "required": [
+                  "contactId",
+                  "title",
+                  "sources"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "contactId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "proposedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognisedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "contactId",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "notes",
+                    "proposedAmount",
+                    "recognisedAmount",
+                    "outstandingAmount",
+                    "sources",
+                    "receipts"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/submit": {
+      "post": {
+        "operationId": "submitReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "contactId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "proposedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognisedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "contactId",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "notes",
+                    "proposedAmount",
+                    "recognisedAmount",
+                    "outstandingAmount",
+                    "sources",
+                    "receipts"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/reject": {
+      "post": {
+        "operationId": "rejectReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "contactId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "proposedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognisedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "contactId",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "notes",
+                    "proposedAmount",
+                    "recognisedAmount",
+                    "outstandingAmount",
+                    "sources",
+                    "receipts"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/cancel": {
+      "post": {
+        "operationId": "cancelReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "contactId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "proposedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognisedAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingAmount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "contactId",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "notes",
+                    "proposedAmount",
+                    "recognisedAmount",
+                    "outstandingAmount",
+                    "sources",
+                    "receipts"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/approve": {
+      "post": {
+        "operationId": "approveReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "idempotencyKey"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "claimId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognitionTransactionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "required": [
+                    "claimId",
+                    "recognitionTransactionIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/amend-approval": {
+      "post": {
+        "operationId": "amendReimbursementApproval",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sources": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sourceTransactionId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "expenseLineId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "categoryId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "sourceTransactionId",
+                        "expenseLineId",
+                        "amount"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "sources",
+                  "idempotencyKey"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "claimId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recognitionTransactionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "required": [
+                    "claimId",
+                    "recognitionTransactionIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursement-receipts": {
+      "post": {
+        "operationId": "recordReimbursementReceipt",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "walletAccountId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  },
+                  "allocations": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "claimId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "claimId",
+                        "amount"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "date",
+                  "walletAccountId",
+                  "idempotencyKey",
+                  "allocations"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "receiptId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "transactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "receiptId",
+                    "transactionId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursement-receipts/{id}/reverse": {
+      "post": {
+        "operationId": "reverseReimbursementReceipt",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "reason",
+                  "idempotencyKey"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reversalTransactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "reversalTransactionId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/write-off": {
+      "post": {
+        "operationId": "writeOffReimbursement",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "date",
+                  "idempotencyKey"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "claimId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "transactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "amount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "claimId",
+                    "transactionId",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/reverse-approval": {
+      "post": {
+        "operationId": "reverseReimbursementApproval",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "reason",
+                  "idempotencyKey"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "claimId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "reversalTransactionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "required": [
+                    "claimId",
+                    "reversalTransactionIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reimbursements/{id}/reverse-write-off": {
+      "post": {
+        "operationId": "reverseReimbursementWriteOff",
+        "tags": [
+          "reimbursements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "reason",
+                  "idempotencyKey"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "claimId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "reversalTransactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "claimId",
+                    "reversalTransactionId"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -29175,6 +32136,12 @@
     },
     {
       "name": "agent"
+    },
+    {
+      "name": "gallery"
+    },
+    {
+      "name": "reimbursements"
     }
   ]
 }

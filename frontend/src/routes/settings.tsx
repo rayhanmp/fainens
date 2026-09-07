@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -9,7 +9,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AgentMemory } from '../lib/api';
+import { api, type AgentMemory } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useAgentMemoriesQuery } from '../features/agent/queries';
@@ -17,6 +17,7 @@ import { agentCommands } from '../features/agent/commands';
 import { queryKeys } from '../features/core/query-keys';
 import { cn } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
+import { birthdayPassword, passwordFormatDescription, type PdfPasswordFormat } from '../lib/reportSecurity';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
 import { useExportDataMutation, type ExportSelection } from '../features/settings/queries';
@@ -44,6 +45,7 @@ import {
   Pencil,
   ArrowRightLeft,
   Plus,
+  LockKeyhole,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
@@ -60,6 +62,9 @@ interface AppSettings {
   defaultIncomeAccountId: number | null;
   theme: 'light' | 'dark' | 'auto';
   transferFeeRules: TransferFeeRule[];
+  pdfPasswordEnabled: boolean;
+  birthDate: string;
+  pdfPasswordFormat: PdfPasswordFormat;
 }
 
 interface ExportOptions {
@@ -71,7 +76,19 @@ interface ExportOptions {
   memories: boolean;
 }
 
-type TabType = 'general' | 'accounts' | 'appearance' | 'memory' | 'data';
+type TabType = 'general' | 'accounts' | 'appearance' | 'memory' | 'agent' | 'data';
+
+type AgentModel = {
+  id: number;
+  name: string;
+  model: string;
+  baseUrl: string;
+  isDefault: boolean;
+  apiKeyConfigured: boolean;
+  apiKeySource: 'database' | 'environment' | 'none';
+  createdAt: number | string;
+  updatedAt: number | string;
+};
 
 const CURRENCIES = [
   { value: 'IDR', label: 'Rp (IDR - Indonesian Rupiah)', symbol: 'Rp' },
@@ -95,12 +112,13 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
   { id: 'accounts', label: 'Accounts', icon: CreditCard },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'memory', label: 'Agent memory', icon: Brain },
+  { id: 'agent', label: 'Agent provider', icon: Brain },
   { id: 'data', label: 'Data', icon: Database },
 ];
 
 function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const exportDataMutation = useExportDataMutation();
   const queryClient = useQueryClient();
   const accountsQuery = useAccountsLedgerQuery();
@@ -115,7 +133,11 @@ function SettingsPage() {
     defaultIncomeAccountId: null,
     theme: 'auto',
     transferFeeRules: [],
+    pdfPasswordEnabled: false,
+    birthDate: '',
+    pdfPasswordFormat: 'DDMMYYYY',
   });
+  const reportPassword = birthdayPassword(settings.birthDate, settings.pdfPasswordFormat);
   const accounts = (accountsQuery.data ?? []).map(({ id, name, type, systemKey }) => ({ id, name, type, systemKey }));
   const memories = memoriesQuery.data?.memories ?? [];
   const memoryLimits = memoriesQuery.data?.limits ?? { maxItems: 50, maxLabelLength: 80, maxContentLength: 1000 };
@@ -131,6 +153,11 @@ function SettingsPage() {
   const [showClearCacheModal, setShowClearCacheModal] = useState(false);
   const [showDeleteDataModal, setShowDeleteDataModal] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
+  const [agentProviderBusy, setAgentProviderBusy] = useState(false);
+  const [agentProviderNotice, setAgentProviderNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [agentModels, setAgentModels] = useState<AgentModel[]>([]);
+  const [agentModelDraft, setAgentModelDraft] = useState({ name: '', model: '', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '' });
+  const [editingAgentModelId, setEditingAgentModelId] = useState<number | null>(null);
   const [feeRuleFrom, setFeeRuleFrom] = useState('');
   const [feeRuleTo, setFeeRuleTo] = useState('');
   const [feeRuleAmount, setFeeRuleAmount] = useState('');
@@ -150,7 +177,55 @@ function SettingsPage() {
 
   useEffect(() => {
     loadSettings();
+    void api.agentProvider.models.list().then(setAgentModels).catch(() => setAgentProviderNotice({ tone: 'error', text: 'Could not load Agent models.' }));
   }, []);
+
+  const resetAgentModelDraft = () => {
+    setEditingAgentModelId(null);
+    setAgentModelDraft({ name: '', model: '', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '' });
+  };
+
+  const saveAgentModel = async () => {
+    if (!agentModelDraft.name.trim() || !agentModelDraft.model.trim() || !agentModelDraft.baseUrl.trim()) return;
+    setAgentProviderBusy(true);
+    setAgentProviderNotice(null);
+    try {
+      if (editingAgentModelId == null) {
+        await api.agentProvider.models.create({ name: agentModelDraft.name, model: agentModelDraft.model, baseUrl: agentModelDraft.baseUrl, ...(agentModelDraft.apiKey.trim() ? { apiKey: agentModelDraft.apiKey.trim() } : {}) });
+      } else {
+        await api.agentProvider.models.update(editingAgentModelId, { name: agentModelDraft.name, model: agentModelDraft.model, baseUrl: agentModelDraft.baseUrl, ...(agentModelDraft.apiKey.trim() ? { apiKey: agentModelDraft.apiKey.trim() } : {}) });
+      }
+      setAgentModels(await api.agentProvider.models.list());
+      resetAgentModelDraft();
+      setAgentProviderNotice({ tone: 'success', text: 'Agent model saved.' });
+    } catch (error) { setAgentProviderNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not save Agent model.' }); }
+    finally { setAgentProviderBusy(false); }
+  };
+
+  const makeAgentModelDefault = async (id: number) => {
+    setAgentProviderBusy(true);
+    try { await api.agentProvider.models.setDefault(id); setAgentModels(await api.agentProvider.models.list()); setAgentProviderNotice({ tone: 'success', text: 'Default Agent model updated.' }); }
+    catch (error) { setAgentProviderNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not set the default model.' }); }
+    finally { setAgentProviderBusy(false); }
+  };
+
+  const clearAgentModelKey = async (id: number) => {
+    setAgentProviderBusy(true);
+    try { await api.agentProvider.models.update(id, { clearApiKey: true }); setAgentModels(await api.agentProvider.models.list()); setAgentProviderNotice({ tone: 'success', text: 'Stored key cleared. The environment fallback remains available.' }); }
+    catch (error) { setAgentProviderNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not clear the stored key.' }); }
+    finally { setAgentProviderBusy(false); }
+  };
+
+  const removeAgentModel = async (id: number) => {
+    const model = agentModels.find((item) => item.id === id);
+    if (!model) return;
+    const confirmed = await confirm({ title: 'Delete Agent model?', message: `Remove “${model.name}” from your saved models?`, confirmLabel: 'Delete', variant: 'danger' });
+    if (!confirmed) return;
+    setAgentProviderBusy(true);
+    try { await api.agentProvider.models.remove(id); setAgentModels(await api.agentProvider.models.list()); setAgentProviderNotice({ tone: 'success', text: 'Agent model deleted.' }); }
+    catch (error) { setAgentProviderNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not delete the model.' }); }
+    finally { setAgentProviderBusy(false); }
+  };
 
   // Auto-save with 500ms debounce
   useEffect(() => {
@@ -195,6 +270,9 @@ function SettingsPage() {
         defaultIncomeAccountId: parsed.defaultIncomeAccountId || null,
         theme: parsed.theme || 'auto',
         transferFeeRules: loadTransferFeeRules(),
+        pdfPasswordEnabled: parsed.pdfPasswordEnabled === true,
+        birthDate: typeof parsed.birthDate === 'string' ? parsed.birthDate : '',
+        pdfPasswordFormat: parsed.pdfPasswordFormat === 'YYYYMMDD' ? 'YYYYMMDD' : 'DDMMYYYY',
       });
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -664,6 +742,26 @@ function SettingsPage() {
             </div>
           )}
 
+          {/* Agent provider Tab */}
+          {activeTab === 'agent' && (
+            <div className="max-w-3xl space-y-6 animate-in fade-in duration-300">
+              <Card title={<div className="flex items-center gap-2"><Brain className="w-5 h-5" /> Agent models</div>}>
+                <div className="space-y-5">
+                  <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">Save the models you use with a friendly name and an OpenAI-compatible base URL. API keys are optional, encrypted on the server, and never returned to this page. If a model has no stored key, the server environment key is used when available.</p>
+                  <div className="space-y-3">
+                    {agentModels.length === 0 && <p className="rounded-lg bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--color-text-secondary)]">No saved models yet. Add one below; the first model becomes the default.</p>}
+                    {agentModels.map((model) => <div key={model.id} className="flex flex-col gap-3 rounded-xl border border-[var(--color-border)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{model.name}</p>{model.isDefault && <span className="rounded-full bg-[var(--ref-primary)]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--ref-primary)]">Default</span>}</div><p className="mt-1 truncate font-mono text-xs text-[var(--color-text-secondary)]">{model.model}</p><p className="mt-1 truncate text-xs text-[var(--color-muted)]">{model.baseUrl} · key {model.apiKeyConfigured ? `configured via ${model.apiKeySource}` : 'not configured'}</p></div>
+                      <div className="flex shrink-0 flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => { setEditingAgentModelId(model.id); setAgentModelDraft({ name: model.name, model: model.model, baseUrl: model.baseUrl, apiKey: '' }); }}>Edit</Button>{model.apiKeySource === 'database' && <Button type="button" size="sm" variant="secondary" onClick={() => void clearAgentModelKey(model.id)} disabled={agentProviderBusy}>Clear key</Button>}{!model.isDefault && <Button type="button" size="sm" variant="secondary" onClick={() => void makeAgentModelDefault(model.id)} disabled={agentProviderBusy}>Make default</Button>}<Button type="button" size="sm" variant="danger" onClick={() => void removeAgentModel(model.id)} disabled={agentProviderBusy}>Delete</Button></div>
+                    </div>)}
+                  </div>
+                  <div className="border-t border-[var(--color-border)] pt-5"><p className="mb-3 text-sm font-bold">{editingAgentModelId == null ? 'Add model' : 'Edit model'}</p><div className="grid gap-3 sm:grid-cols-2"><Input label="Name" value={agentModelDraft.name} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="e.g. Fast daily model" maxLength={120} /><Input label="Model ID" value={agentModelDraft.model} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, model: event.target.value }))} placeholder="e.g. z-ai/glm-5.3-flash" maxLength={200} /><div className="sm:col-span-2"><Input label="Base URL" value={agentModelDraft.baseUrl} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, baseUrl: event.target.value }))} placeholder="https://openrouter.ai/api/v1" maxLength={500} /></div><div className="sm:col-span-2 space-y-1"><label htmlFor="agent-model-api-key" className="block text-sm font-medium text-[var(--color-text-secondary)]">API key (optional)</label><input id="agent-model-api-key" type="password" value={agentModelDraft.apiKey} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, apiKey: event.target.value }))} placeholder={editingAgentModelId == null ? 'Leave blank to use the server environment key' : 'Leave blank to keep the stored key'} autoComplete="new-password" className="brutalist-input" /></div></div><div className="mt-4 flex flex-wrap gap-2"><Button type="button" onClick={() => void saveAgentModel()} disabled={agentProviderBusy || !agentModelDraft.name.trim() || !agentModelDraft.model.trim() || !agentModelDraft.baseUrl.trim()}>{agentProviderBusy ? 'Saving…' : editingAgentModelId == null ? 'Add model' : 'Save changes'}</Button>{editingAgentModelId != null && <Button type="button" variant="secondary" onClick={resetAgentModelDraft}>Cancel</Button>}</div></div>
+                  {agentProviderNotice && <p role="status" className={cn('rounded-lg border p-3 text-sm', agentProviderNotice.tone === 'success' ? 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 text-[var(--color-danger)]')}>{agentProviderNotice.text}</p>}
+                </div>
+              </Card>
+            </div>
+          )}
+
           {/* Agent memory Tab */}
           {activeTab === 'memory' && (
             <div className="max-w-3xl space-y-6 animate-in fade-in duration-300">
@@ -747,6 +845,69 @@ function SettingsPage() {
           {/* Data Tab */}
           {activeTab === 'data' && (
             <div className="space-y-6 animate-in fade-in duration-300">
+              <Card title="Data & security tools">
+                <div className="divide-y divide-[var(--color-border)]">
+                  {[
+                    { to: '/anomalies', label: 'Data quality', description: 'Review issues and inconsistencies in your records.' },
+                    { to: '/gallery', label: 'Image storage', description: 'Manage receipt, conversation, and wishlist images.' },
+                    { to: '/audit-log', label: 'Security audit', description: 'Review account activity and security events.' },
+                  ].map(item => <Link key={item.to} to={item.to} className="flex items-center justify-between gap-4 py-4 text-sm hover:text-[var(--color-accent)]"><span><strong className="block font-semibold">{item.label}</strong><span className="mt-1 block text-[var(--color-text-secondary)]">{item.description}</span></span><ChevronRight className="h-4 w-4 shrink-0" /></Link>)}
+                </div>
+              </Card>
+              <Card
+                title={
+                  <div className="flex items-center gap-2">
+                    <LockKeyhole className="h-5 w-5" />
+                    PDF report security
+                  </div>
+                }
+              >
+                <div className="space-y-5">
+                  <label className="flex cursor-pointer items-start justify-between gap-5">
+                    <span>
+                      <span className="block text-sm font-semibold text-[var(--color-text-primary)]">Password-protect monthly reports</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-[var(--color-text-secondary)]">Applies AES-256 encryption in your browser before the PDF is downloaded.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={settings.pdfPasswordEnabled}
+                      onChange={(event) => setSettings({ ...settings, pdfPasswordEnabled: event.target.checked })}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Birthday"
+                      type="date"
+                      value={settings.birthDate}
+                      onChange={(event) => setSettings({ ...settings, birthDate: event.target.value })}
+                      disabled={!settings.pdfPasswordEnabled}
+                    />
+                    <Select
+                      label="Password format"
+                      value={settings.pdfPasswordFormat}
+                      onChange={(event) => setSettings({ ...settings, pdfPasswordFormat: event.target.value as PdfPasswordFormat })}
+                      disabled={!settings.pdfPasswordEnabled}
+                      options={[
+                        { value: 'DDMMYYYY', label: 'DDMMYYYY (day first)' },
+                        { value: 'YYYYMMDD', label: 'YYYYMMDD (year first)' },
+                      ]}
+                    />
+                  </div>
+
+                  {settings.pdfPasswordEnabled && (
+                    <div className={cn('border-l-4 px-3 py-2 text-xs leading-relaxed', reportPassword ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/5 text-[var(--color-text-secondary)]' : 'border-[var(--color-danger)] bg-[var(--color-danger)]/5 text-[var(--color-danger)]')}>
+                      {reportPassword
+                        ? `Your PDF password will be your birthday in ${passwordFormatDescription(settings.pdfPasswordFormat)} format (${reportPassword.length} digits).`
+                        : 'Add a valid birthday before downloading a protected report.'}
+                    </div>
+                  )}
+
+                  <p className="text-xs leading-relaxed text-[var(--color-muted)]">Birthday-based passwords are convenient but easier to guess than a unique password. The birthday is stored only in this browser's local settings.</p>
+                </div>
+              </Card>
+
               {/* Export Section */}
               <Card
                 title={
@@ -880,7 +1041,7 @@ function SettingsPage() {
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-[var(--color-muted)]">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4" />
-              <span>Logged in as rayhanmpramanda@gmail.com</span>
+              <span>Logged in as {user?.email || "Unknown user"}</span>
             </div>
             <div className="flex items-center gap-4">
               <span>Fainens v1.0.0</span>

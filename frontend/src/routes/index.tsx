@@ -40,6 +40,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../features/core/query-keys';
 import { useReviewBudgetOutlookMutation } from '../features/budgets/queries';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -135,6 +136,7 @@ function formatConfidenceLabel(confidence: BudgetOutlook['confidence']): string 
 }
 
 function DashboardPage() {
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -318,8 +320,8 @@ function DashboardPage() {
           <PageHeader subtext="Decision centre" title="Your financial position" description={`Current position as of ${formatAsOf(Date.now())}${selectedPeriod ? ` · period view: ${selectedPeriod.name}` : ''}`} />
           <div className="flex flex-wrap items-center gap-2">
             {periods.length > 0 && <Select value={selectedPeriodId} onChange={(event) => setSelectedPeriodId(event.target.value)} options={periods.map((period) => ({ value: String(period.id), label: period.name }))} className="min-w-[170px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold" />}
-            <button type="button" onClick={() => setIsReportOpen(true)} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-xs font-bold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-surface-container-low)]">Export report</button>
-            <Button className="rounded-full" onClick={() => setIsTransactionOpen(true)}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
+            <button type="button" onClick={() => setIsReportOpen(true)} className="hidden rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-xs font-bold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-surface-container-low)] md:inline-flex">Export report</button>
+            <Button className="hidden rounded-full md:inline-flex" onClick={() => setIsTransactionOpen(true)}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
           </div>
         </div>
 
@@ -327,7 +329,24 @@ function DashboardPage() {
         {coverageWarnings.length > 0 && <Link to="/periods" className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Read this period carefully.</strong> {coverageWarnings[0]} <span className="ml-1 font-semibold underline">Review coverage</span></span></Link>}
         {notificationItems.length > 0 && <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm"><div className="flex items-center gap-3"><AlertTriangle className={cn('h-5 w-5 shrink-0', notificationItems[0].tone === 'danger' ? 'text-rose-600' : notificationItems[0].tone === 'warning' ? 'text-amber-600' : 'text-sky-600')} /><p className="min-w-0 flex-1 font-bold">{notificationItems.length} item{notificationItems.length === 1 ? '' : 's'} may need your attention.</p><button type="button" onClick={() => setIsAttentionExpanded((current) => !current)} aria-expanded={isAttentionExpanded} aria-controls="dashboard-attention-details" className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/10">{isAttentionExpanded ? 'Hide details' : 'View details'}<ChevronDown className={cn('h-4 w-4 transition-transform', isAttentionExpanded && 'rotate-180')} /></button></div>{isAttentionExpanded && <div id="dashboard-attention-details" className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">{notificationItems.map((item) => <div key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><p className="min-w-0 flex-1 text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">{item.title}:</span> {item.detail}</p><Link to={item.to} className="shrink-0 font-semibold text-[var(--ref-primary)] hover:underline">{item.action}</Link></div>)}</div>}</div>}
 
-        <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="mt-5 space-y-4 md:hidden" aria-label="Today">
+          <div className="rounded-[1.75rem] bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]">
+            <p className="text-[11px] font-bold uppercase tracking-widest opacity-75">Available today</p>
+            <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/10 pt-4 text-sm">
+              <Link to="/budget" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatCurrency(budgetRemaining) : 'Review period'}</strong></Link>
+              <Link to="/accounts" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatCurrency(analytics.netWorth.netWorth) : '—'}</strong></Link>
+            </div>
+          </div>
+          {dailyBudget != null && <Link to="/budget" className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-3"><span><span className="block text-xs text-[var(--ref-on-surface-variant)]">Safe daily pace</span><strong className="text-sm">{formatCurrency(dailyBudget)} per day</strong></span><ArrowRight className="h-4 w-4 text-[var(--ref-primary)]" /></Link>}
+          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4">
+            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="font-headline text-lg font-extrabold">Latest recorded</h2></div><Link to="/transactions" className="rounded-full px-3 py-2 text-xs font-bold text-[var(--ref-primary)]">See all</Link></div>
+            <div className="mt-2 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity in this period.</p> : visibleRecent.slice(0, 4).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="flex items-center justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-sm">{tx.description}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {formatDate(tx.date)}</span></span><strong className={cn('shrink-0 text-sm tabular-nums', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : '')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatCurrency(transactionAmount(tx))}</strong></Link>; })}</div>
+          </div>
+        </section>
+
+        {!isMobile && <div>
+        <section className="mt-6 hidden grid-cols-1 gap-4 md:grid md:grid-cols-2 xl:grid-cols-4">
           <article className="relative overflow-hidden rounded-3xl bg-[var(--ref-primary-container)] p-6 text-[var(--ref-on-primary-container)]"><Wallet className="h-5 w-5" /><p className="mt-4 text-xs font-bold uppercase tracking-widest">Available cash</p><p className="mt-3 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</p><p className="mt-4 text-xs">Cash-equivalent assets only · current balance</p></article>
           <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><Landmark className="h-5 w-5 text-[var(--ref-primary)]" /><p className="mt-4 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Net worth</p><p className="mt-2 font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{analytics ? formatCurrency(analytics.netWorth.netWorth) : '—'}</p><p className="mt-3 text-xs text-[var(--ref-on-surface-variant)]">Assets {analytics ? formatCurrency(analytics.netWorth.totalAssets) : '—'} · Liabilities {analytics ? formatCurrency(analytics.netWorth.totalLiabilities) : '—'}</p></article>
           <article className="relative rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><CalendarClock className="h-5 w-5 text-[var(--ref-primary)]" />{analytics?.runway && <div className="group relative"><button type="button" aria-label="Show runway calculation" title="Show runway calculation" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-4 w-4" /></button><div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Runway calculation</p>{analytics.runway.isUnbounded ? <p className="mt-1 leading-relaxed">No recorded monthly burn, so the estimate is unbounded.</p> : <p className="mt-1 leading-relaxed">{formatCurrency(analytics.runway.liquidAssets)} cash ÷ {formatCurrency(analytics.runway.grossBurnRate)} average monthly burn = {analytics.runway.runwayMonths?.toLocaleString('en-US', { maximumFractionDigits: 1 })} months.</p>}<p className="mt-2 text-[var(--ref-on-surface-variant)]">Based on recorded operating expenses over the last three months.</p></div></div>}</div><p className="mt-4 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Cash runway</p><p className="mt-2 font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>{analytics?.runway && <p className="mt-3 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{analytics.runway.isUnbounded ? `${formatCurrency(analytics.runway.liquidAssets)} available · no recorded burn` : 'Covers spending at current burn.'}</p>}</article>
@@ -380,6 +399,8 @@ function DashboardPage() {
 
         <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         <MonthlyReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
+        </div>}
+        {isMobile && <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />}
       </PageContainer>
     </RequireAuth>
   );

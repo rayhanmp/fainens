@@ -5,7 +5,12 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDeleteLoanMutation, useLoansQuery } from '../features/loans/queries';
+import {
+  useArchiveContactMutation,
+  useDeleteLoanMutation,
+  useLoansQuery,
+  useRestoreContactMutation,
+} from '../features/loans/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { formatCurrency, cn } from '../lib/utils';
 import { NewLoanModal } from '../components/loans/NewLoanModal';
@@ -21,9 +26,10 @@ import {
   History,
   AlertCircle,
   User,
-  ChevronRight,
   Clock,
   Trash2,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/loans')({
@@ -52,6 +58,7 @@ type ContactSummary = {
   totalBorrowed: number;
   netBalance: number;
   activeLoansCount: number;
+  isActive: boolean;
 };
 
 type Summary = {
@@ -75,10 +82,14 @@ function getInitials(name: string): string {
 
 function LoansPage() {
   const queryClient = useQueryClient();
-  const loansQuery = useLoansQuery();
+  const [showArchived, setShowArchived] = useState(false);
+  const loansQuery = useLoansQuery(showArchived);
   const deleteLoanMutation = useDeleteLoanMutation();
+  const archiveContactMutation = useArchiveContactMutation();
+  const restoreContactMutation = useRestoreContactMutation();
   const loans = (loansQuery.data?.loans ?? []) as Loan[];
-  const contacts = (loansQuery.data?.contacts ?? []) as ContactSummary[];
+  const contacts = (loansQuery.data?.contacts ?? [])
+    .filter((contact) => showArchived || contact.isActive) as ContactSummary[];
   const summary = (loansQuery.data?.summary ?? null) as Summary | null;
   const isLoading = loansQuery.isPending && !loansQuery.data;
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false);
@@ -125,6 +136,30 @@ function LoansPage() {
   const handleContactCreated = () => {
     setIsNewContactModalOpen(false);
     void loadData();
+  };
+
+  const handleContactLifecycle = async (contact: ContactSummary) => {
+    const isArchiving = contact.isActive;
+    const confirmed = await confirm({
+      title: isArchiving ? 'Archive contact' : 'Restore contact',
+      message: isArchiving
+        ? `Archive ${contact.name}? Their loan history will be kept, but they will be hidden from active contact lists.`
+        : `Restore ${contact.name} to your active contact lists?`,
+      confirmLabel: isArchiving ? 'Archive' : 'Restore',
+      variant: isArchiving ? 'danger' : 'default',
+    });
+    if (!confirmed) return;
+
+    try {
+      if (isArchiving) {
+        await archiveContactMutation.mutateAsync(contact.id);
+      } else {
+        await restoreContactMutation.mutateAsync(contact.id);
+      }
+      await loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
   };
 
   const handlePaymentRecorded = () => {
@@ -251,46 +286,60 @@ function LoansPage() {
 
         {/* Contact Network Grid */}
         <section className="mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-2xl font-bold text-[var(--color-text-primary)]">Contact Network</h3>
-            <span className="text-[var(--color-muted)] flex items-center gap-1 text-sm">
-              View all contacts
-              <ChevronRight className="w-4 h-4" />
-            </span>
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-2xl font-bold text-[var(--color-text-primary)]">Contact Network</h3>
+              <p className="mt-1 text-sm text-[var(--color-muted)]">
+                {showArchived ? 'Active and archived contacts' : 'Active contacts'}
+              </p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 self-start text-sm font-semibold text-[var(--color-muted)] sm:self-auto">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(event) => setShowArchived(event.target.checked)}
+                className="h-4 w-4 rounded border-[var(--color-border)] text-[var(--ref-primary)] focus:ring-[var(--ref-primary)]"
+              />
+              Show archived
+            </label>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {contactsWithLoans.map((contact) => (
               <div
                 key={contact.id}
-                className="bg-[var(--ref-surface-container-lowest)] rounded-2xl p-6 editorial-shadow border border-[var(--color-border)] hover:shadow-lg transition-shadow"
+                className={cn(
+                  'rounded-2xl border bg-[var(--ref-surface-container-lowest)] p-6 editorial-shadow transition-shadow hover:shadow-lg',
+                  !contact.isActive && 'border-dashed opacity-85',
+                )}
               >
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-14 h-14 rounded-full bg-[var(--ref-primary-container)] flex items-center justify-center text-white font-bold text-lg">
-                    {getInitials(contact.name)}
+                <div className="mb-6 flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--ref-primary-container)] text-lg font-bold text-white">
+                      {getInitials(contact.name)}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-[var(--color-text-primary)]">{contact.name}</h4>
+                      <p className="flex items-center gap-1 text-sm text-[var(--color-muted)]">
+                        <span
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            contact.netBalance > 0
+                              ? 'bg-[var(--ref-secondary)]'
+                              : contact.netBalance < 0
+                              ? 'bg-[var(--ref-error)]'
+                              : 'bg-[var(--color-muted)]',
+                          )}
+                        />
+                        {contact.netBalance > 0 ? 'Owes You' : contact.netBalance < 0 ? 'You Owe' : 'Settled'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-lg text-[var(--color-text-primary)]">
-                      {contact.name}
-                    </h4>
-                    <p className="text-sm text-[var(--color-muted)] flex items-center gap-1">
-                      <span
-                        className={cn(
-                          'w-2 h-2 rounded-full',
-                          contact.netBalance > 0
-                            ? 'bg-[var(--ref-secondary)]'
-                            : contact.netBalance < 0
-                            ? 'bg-[var(--ref-error)]'
-                            : 'bg-[var(--color-muted)]'
-                        )}
-                      />
-                      {contact.netBalance > 0
-                        ? 'Owes You'
-                        : contact.netBalance < 0
-                        ? 'You Owe'
-                        : 'Settled'}
-                    </p>
-                  </div>
+                  {!contact.isActive && (
+                    <span className="shrink-0 rounded-full bg-[var(--ref-surface-container-high)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                      Archived
+                    </span>
+                  )}
                 </div>
 
                 <div className="mb-6 bg-[var(--ref-surface-container-low)] p-4 rounded-xl">
@@ -335,6 +384,20 @@ function LoansPage() {
                     Details
                   </Button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void handleContactLifecycle(contact)}
+                  disabled={archiveContactMutation.isPending || restoreContactMutation.isPending}
+                  className={cn(
+                    'mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                    contact.isActive
+                      ? 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--ref-error)]/40 hover:bg-[var(--ref-error)]/5 hover:text-[var(--ref-error)]'
+                      : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--ref-primary)]/40 hover:bg-[var(--ref-primary)]/5 hover:text-[var(--ref-primary)]',
+                  )}
+                >
+                  {contact.isActive ? <Archive className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                  {contact.isActive ? 'Archive contact' : 'Restore contact'}
+                </button>
               </div>
             ))}
 

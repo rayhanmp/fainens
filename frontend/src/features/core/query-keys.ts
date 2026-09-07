@@ -13,6 +13,7 @@ export const queryKeys = {
   },
   budgets: { all: ["budgets"] as const, period: (periodId: number) => ["budgets", periodId] as const, outlook: (periodId: number) => ["budgets", periodId, "outlook"] as const, review: (periodId: number) => ["budgets", periodId, "outlook", "review"] as const, comparison: (periodId: number, comparePeriodId: number) => ["budgets", "comparison", periodId, comparePeriodId] as const, templates: ["budgets", "templates"] as const },
   loans: { all: ["loans"] as const, list: (filters: object = {}) => ["loans", "list", filters] as const, summary: ["loans", "summary"] as const },
+  reimbursements: { all: ["reimbursements"] as const, list: (filters: object = {}) => ["reimbursements", "list", filters] as const, detail: (id: number) => ["reimbursements", id] as const },
   contacts: { all: ["contacts"] as const, list: (filters: object = {}) => ["contacts", "list", filters] as const, detail: (id: number) => ["contacts", id] as const },
   subscriptions: { all: ["subscriptions"] as const, list: ["subscriptions", "list"] as const },
   paylater: { all: ["paylater"] as const },
@@ -31,6 +32,7 @@ export const queryKeys = {
   split: { all: ["split-bill"] as const },
   wishlist: { all: ["wishlist"] as const },
   attachments: { all: ["attachments"] as const, transaction: (transactionId: number | null) => ["attachments", "transaction", transactionId] as const, download: (id: number) => ["attachments", "download", id] as const },
+  gallery: { all: ["gallery"] as const, images: (source: string, search: string) => ["gallery", "images", source, search] as const },
   dashboard: {
     all: ["dashboard"] as const,
     analytics: ["dashboard", "analytics"] as const,
@@ -63,6 +65,7 @@ export async function invalidateFinancialSummaries(queryClient: { invalidateQuer
     queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.loans.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.reimbursements.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.paylater.all }),

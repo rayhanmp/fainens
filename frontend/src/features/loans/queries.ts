@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContact,
+  archiveContact,
   createLoan,
   deleteLoan,
   getLoanSummary,
@@ -8,6 +9,7 @@ import {
   listContacts,
   listLoans,
   recordLoanPayment,
+  restoreContact,
   updateContact,
   updateLoan,
   type CreateContactBody,
@@ -49,14 +51,14 @@ export function useContactDetailQuery(contactId: number | null) {
 }
 
 /** Aggregates the records needed by the loans screen into one server-state query. */
-export function useLoansQuery() {
+export function useLoansQuery(includeInactive = false) {
   return useQuery<LoansPageData>({
-    queryKey: queryKeys.loans.all,
+    queryKey: queryKeys.loans.list({ includeInactive }),
     queryFn: async () => {
       const [activeLoans, repaidLoans, contacts, summary] = await Promise.all([
         unwrapGenerated(listLoans({ status: 'active' }), 200, 'Failed to load active loans'),
         unwrapGenerated(listLoans({ status: 'repaid' }), 200, 'Failed to load repaid loans'),
-        unwrapGenerated(listContacts(), 200, 'Failed to load contacts'),
+        unwrapGenerated(listContacts(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load contacts'),
         unwrapGenerated(getLoanSummary(), 200, 'Failed to load loan summary'),
       ]);
       return { loans: [...activeLoans, ...repaidLoans], contacts, summary };
@@ -101,6 +103,22 @@ export function useCreateContactMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateContactBody) => unwrapGenerated(createContact(input), 201, 'Failed to create contact'),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useArchiveContactMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => unwrapGenerated(archiveContact(id), 204, 'Failed to archive contact'),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useRestoreContactMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => unwrapGenerated(restoreContact(id), 200, 'Failed to restore contact'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

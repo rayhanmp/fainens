@@ -11,6 +11,7 @@ import { App } from './App';
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  scrollRestoration: true,
 });
 
 // Register the router instance for type safety
@@ -29,4 +30,8 @@ if (!rootElement.innerHTML) {
       <App router={router} />
     </React.StrictMode>
   );
+}
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => { void navigator.serviceWorker.register('/sw.js'); });
 }

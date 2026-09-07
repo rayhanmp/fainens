@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@pdfsmaller/pdf-encrypt": "1.1.0",
     "@react-pdf/renderer": "^4.3.2",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5.95.2",
@@ -24,6 +25,7 @@
     "katex": "^0.18.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
+    "pdf-lib": "1.17.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.2",

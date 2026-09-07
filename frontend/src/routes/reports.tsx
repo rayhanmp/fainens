@@ -89,20 +89,94 @@ function ReportsPage() {
   const summaryData = summaryQuery.data ?? null;
 
   const handleExportPDF = (reportTitle: string, data: any[]) => {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text(reportTitle, 14, 22);
-    doc.setFontSize(11);
-    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 14, 30);
-    
-    autoTable(doc, {
-      startY: 40,
-      head: [Object.keys(data[0] || {})],
-      body: data.map(row => Object.values(row)),
-      theme: 'grid',
-      headStyles: { fillColor: [41, 128, 185] },
-    });
-    
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    doc.setProperties({ title: reportTitle, subject: 'Confidential personal financial report', author: 'Fainens', creator: 'Fainens' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 42;
+    const navy: [number, number, number] = [16, 42, 67];
+    const blue: [number, number, number] = [33, 85, 197];
+    const muted: [number, number, number] = [98, 125, 152];
+    const pale: [number, number, number] = [245, 248, 252];
+
+    const moneyKey = (key: string) => /amount|total|revenue|expense|income|variance|budget|actual|balance|net/i.test(key) && !/id/i.test(key);
+    const formatCell = (value: unknown, key: string) => {
+      if (typeof value === 'number' && moneyKey(key)) return formatCurrency(value);
+      if (value == null || value === '') return '-';
+      return String(value);
+    };
+    const keys = Object.keys(data[0] || {});
+    const title = reportTitle.replace(/\s+-\s+[^-]+$/, '');
+    const period = reportTitle.includes(' - ') ? reportTitle.split(' - ').slice(1).join(' - ') : 'Fainens report';
+
+    const drawPageChrome = (pageNumber: number, totalPages?: number) => {
+      doc.setFillColor(...navy);
+      doc.rect(0, 0, pageWidth, 10, 'F');
+      doc.setTextColor(...navy);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.text('Fainens', margin, 48);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...muted);
+      doc.text('Personal finance, made clearer', margin, 64);
+      doc.setDrawColor(217, 226, 236);
+      doc.line(margin, 78, pageWidth - margin, 78);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+      doc.text('Confidential - generated ' + new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date()), margin, pageHeight - 25);
+      doc.text(`${pageNumber}${totalPages ? ` / ${totalPages}` : ''}`, pageWidth - margin, pageHeight - 25, { align: 'right' });
+    };
+
+    drawPageChrome(1);
+    doc.setFillColor(...pale);
+    doc.roundedRect(margin, 102, pageWidth - margin * 2, 104, 12, 12, 'F');
+    doc.setTextColor(...muted);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('REPORT EXPORT', margin + 18, 126);
+    doc.setTextColor(...navy);
+    doc.setFontSize(19);
+    doc.text(title, margin + 18, 154);
+    doc.setTextColor(...muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(period, margin + 18, 174);
+    doc.setFontSize(8.5);
+    doc.text('Prepared for personal record-keeping and planning. Not professional advice.', margin + 18, 191);
+    doc.setFillColor(...blue);
+    doc.roundedRect(pageWidth - margin - 110, 132, 92, 28, 14, 14, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`${data.length} rows`, pageWidth - margin - 64, 150, { align: 'center' });
+
+    if (keys.length > 0) {
+      autoTable(doc, {
+        startY: 230,
+        margin: { left: margin, right: margin, bottom: 42 },
+        head: [keys.map((key) => key.replace(/([a-z])([A-Z])/g, '$1 $2'))],
+        body: data.map((row) => keys.map((key) => formatCell(row[key], key))),
+        theme: 'plain',
+        styles: { font: 'helvetica', fontSize: 9, textColor: [51, 78, 104], cellPadding: { top: 8, right: 8, bottom: 8, left: 8 }, lineColor: [237, 242, 247], lineWidth: 0.5 },
+        headStyles: { fillColor: navy, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, cellPadding: { top: 9, right: 8, bottom: 9, left: 8 } },
+        alternateRowStyles: { fillColor: pale },
+        columnStyles: keys.reduce<Record<string, { halign?: 'left' | 'right' }>>((styles, key, index) => {
+          if (moneyKey(key)) styles[index] = { halign: 'right' };
+          return styles;
+        }, {}),
+        didDrawPage: (hookData) => {
+          drawPageChrome(hookData.pageNumber);
+        },
+      });
+    } else {
+      doc.setTextColor(...muted);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.text('No rows were available for this export.', margin, 250);
+    }
+
     doc.save(`${reportTitle.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.pdf`);
   };
 
@@ -128,31 +202,35 @@ function ReportsPage() {
   return (
     <RequireAuth>
       <PageContainer>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <PageHeader
             subtext="Analytics & insights"
             title="Financial Reports"
-            description="Income statements, balance sheets, and analytics"
+            description="A clear view of your income, balances, cash movement, and spending patterns."
           />
-          <Select
-            value={effectivePeriodId}
-            onChange={(e) => void navigate({ search: { periodId: e.target.value || undefined, tab: activeTab } } as any)}
-            options={[
-              { value: '', label: 'All Periods' },
-              ...periods.map((p) => ({ value: p.id.toString(), label: p.name })),
-            ]}
-            className="w-48"
-          />
+          <div className="w-full lg:w-64">
+            <label htmlFor="reports-period" className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Reporting period</label>
+            <Select
+              id="reports-period"
+              value={effectivePeriodId}
+              onChange={(e) => void navigate({ search: { periodId: e.target.value || undefined, tab: activeTab } } as any)}
+              options={[
+                { value: '', label: 'All Periods' },
+                ...periods.map((p) => ({ value: p.id.toString(), label: p.name })),
+              ]}
+              className="w-full"
+            />
+          </div>
         </div>
         {selectedPeriod && selectedPeriod.coverageStatus !== 'complete' && (
-          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span><strong>{selectedPeriod.coverageStatus} coverage.</strong> {selectedPeriod.coverageReason ?? 'Recorded figures do not establish complete activity for this period; empty totals are not zero activity.'}</span>
+          <div role="status" className="flex items-start gap-3 rounded-2xl border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-[var(--color-text-primary)]">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--color-warning)]/15 text-[var(--color-warning)]"><AlertTriangle className="h-4 w-4" /></span>
+            <span className="pt-1"><strong className="font-semibold">{selectedPeriod.coverageStatus} coverage.</strong> {selectedPeriod.coverageReason ?? 'Recorded figures do not establish complete activity for this period; empty totals are not zero activity.'}</span>
           </div>
         )}
 
         {/* Report Tabs — scroll on small screens */}
-        <div className="reports-tabs-scroll flex gap-1 sm:gap-2 border-b border-[var(--color-border)] overflow-x-auto pb-px">
+        <div className="reports-tabs-scroll sticky top-3 z-20 -mx-2 flex gap-1 overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]/90 p-1.5 shadow-sm backdrop-blur-md sm:gap-1.5">
           <TabButton
             active={activeTab === 'income'}
             onClick={() => void navigate({ search: { periodId: selectedPeriodId ?? undefined, tab: 'income' } } as any)}
@@ -187,7 +265,7 @@ function ReportsPage() {
 
         {/* Summary Dashboard */}
         {summaryData && effectivePeriodId && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <SummaryCard
               title="Total Revenue"
               amount={summaryData.totalRevenue}
@@ -218,7 +296,7 @@ function ReportsPage() {
         )}
 
         {/* Report Content */}
-        <div className="mt-6">
+        <div className="mt-2">
           {activeTab === 'income' && (
             <IncomeStatementReport
               periodId={effectivePeriodId ? parseInt(effectivePeriodId) : undefined}
@@ -273,19 +351,19 @@ function SummaryCard({
     : null;
 
   return (
-    <div className="bg-[var(--ref-surface-container-lowest)] p-5 rounded-xl border border-[var(--color-border)] editorial-shadow">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-[var(--color-text-secondary)]">{title}</span>
-        <div className={cn('p-2 rounded-lg border', colorClasses[color])}>
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm transition-shadow hover:shadow-md">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <span className="pt-1 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">{title}</span>
+        <div className={cn('rounded-xl border p-2.5', colorClasses[color])}>
           {icon}
         </div>
       </div>
-      <p className="text-2xl font-bold font-mono text-[var(--color-text-primary)]">
+      <p className="font-headline text-2xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
         {formatCurrency(amount)}
       </p>
       {percentageChange !== null && (
         <div className={cn(
-          'flex items-center gap-1 text-xs mt-2',
+          'mt-3 flex items-center gap-1 text-xs font-medium',
           percentageChange >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
         )}>
           {percentageChange >= 0 ? (
@@ -316,10 +394,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'cursor-pointer flex shrink-0 items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+        'flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors sm:px-4',
         active
-          ? 'border-[var(--color-accent)] text-[var(--color-text-primary)]'
-          : 'border-transparent text-[var(--color-muted)] hover:text-[var(--color-text-primary)]'
+          ? 'bg-[var(--ref-primary-container)] text-white shadow-sm'
+          : 'text-[var(--color-muted)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]'
       )}
     >
       {icon}
@@ -361,7 +439,7 @@ function IncomeStatementReport({
     <Card className="p-8 text-center">
       <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
       <p className="text-[var(--color-danger)] mb-4">{error}</p>
-      <Button variant="secondary" onClick={loadData}>
+      <Button variant="secondary" className="rounded-full" onClick={loadData}>
         <RefreshCw className="w-4 h-4 mr-2" />
         Retry
       </Button>
@@ -372,7 +450,7 @@ function IncomeStatementReport({
       <FileText className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
       <p className="text-[var(--color-text-secondary)] mb-4">No income statement data available for this period</p>
       <Link to="/transactions">
-        <Button>
+        <Button className="rounded-full">
           <Plus className="w-4 h-4 mr-2" />
           Add Transaction
         </Button>
@@ -382,39 +460,40 @@ function IncomeStatementReport({
 
   return (
     <Card
+      className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6"
       title={`Income Statement - ${data.periodName || 'All Periods'}`}
       action={
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={handlePDFExport}>
+          <Button variant="secondary" size="sm" className="rounded-full" onClick={handlePDFExport}>
             <FileDown className="w-4 h-4 mr-2" />
             PDF
           </Button>
-          <Button variant="secondary" size="sm" onClick={onExport}>
+          <Button variant="secondary" size="sm" className="rounded-full" onClick={onExport}>
             <Download className="w-4 h-4 mr-2" />
             CSV
           </Button>
         </div>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-8 text-sm">
         {/* Revenue Section */}
         <div>
-          <h3 className="font-mono font-bold text-lg border-b-2 border-[var(--color-border)] pb-2 mb-3">
+          <h3 className="mb-3 border-b border-[var(--color-border)] pb-2 text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-muted)]">
             Revenue
           </h3>
           {data.revenue.map((item, i) => (
             <div
               key={i}
               className={cn(
-                'flex justify-between py-1',
-                item.level === 0 ? 'font-medium' : 'pl-6 text-sm'
+                'flex items-center justify-between gap-4 border-b border-[var(--color-border)]/70 py-2.5 last:border-0',
+                item.level === 0 ? 'font-medium text-[var(--color-text-primary)]' : 'pl-6 text-[var(--color-text-secondary)]'
               )}
             >
               <span>{item.name}</span>
               <span className="font-mono">{formatCurrency(item.amount)}</span>
             </div>
           ))}
-          <div className="flex justify-between py-2 font-bold border-t-2 border-[var(--color-border)] mt-2">
+          <div className="mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 font-bold">
             <span>Total Revenue</span>
             <span className="font-mono text-[var(--color-success)]">
               {formatCurrency(data.totalRevenue)}
@@ -424,22 +503,22 @@ function IncomeStatementReport({
 
         {/* Expenses Section */}
         <div>
-          <h3 className="font-mono font-bold text-lg border-b-2 border-[var(--color-border)] pb-2 mb-3">
+          <h3 className="mb-3 border-b border-[var(--color-border)] pb-2 text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-muted)]">
             Expenses
           </h3>
           {data.expenses.map((item, i) => (
             <div
               key={i}
               className={cn(
-                'flex justify-between py-1',
-                item.level === 0 ? 'font-medium' : 'pl-6 text-sm'
+                'flex items-center justify-between gap-4 border-b border-[var(--color-border)]/70 py-2.5 last:border-0',
+                item.level === 0 ? 'font-medium text-[var(--color-text-primary)]' : 'pl-6 text-[var(--color-text-secondary)]'
               )}
             >
               <span>{item.name}</span>
               <span className="font-mono">{formatCurrency(item.amount)}</span>
             </div>
           ))}
-          <div className="flex justify-between py-2 font-bold border-t-2 border-[var(--color-border)] mt-2">
+          <div className="mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 font-bold">
             <span>Total Expenses</span>
             <span className="font-mono text-[var(--color-danger)]">
               {formatCurrency(data.totalExpenses)}
@@ -448,7 +527,7 @@ function IncomeStatementReport({
         </div>
 
         {/* Net Income */}
-        <div className="flex justify-between py-3 font-bold text-lg border-t-4 border-[var(--color-border)]">
+        <div className="flex justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-4 text-base font-bold">
           <span>Net Income</span>
           <span
             className={cn(
@@ -485,7 +564,7 @@ function BalanceSheetReport({
     <Card className="p-8 text-center">
       <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
       <p className="text-[var(--color-danger)] mb-4">{error}</p>
-      <Button variant="secondary" onClick={loadData}>
+      <Button variant="secondary" className="rounded-full" onClick={loadData}>
         <RefreshCw className="w-4 h-4 mr-2" />
         Retry
       </Button>
@@ -495,7 +574,7 @@ function BalanceSheetReport({
     <Card className="p-8 text-center">
       <p className="text-[var(--color-text-secondary)] mb-4">No data available</p>
       <Link to="/transactions">
-        <Button>
+        <Button className="rounded-full">
           <Plus className="w-4 h-4 mr-2" />
           Add Transaction
         </Button>
@@ -516,8 +595,8 @@ function BalanceSheetReport({
     color: string;
     icon: React.ReactNode;
   }) => (
-    <div className="mb-6">
-      <h3 className="font-mono font-bold text-lg border-b-2 border-[var(--color-border)] pb-2 mb-3 flex items-center gap-2">
+    <div className="mb-8 last:mb-0">
+      <h3 className="mb-3 flex items-center gap-2 border-b border-[var(--color-border)] pb-2 text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-muted)]">
         {icon}
         {title}
       </h3>
@@ -525,8 +604,8 @@ function BalanceSheetReport({
         <div
           key={i}
           className={cn(
-            'flex justify-between py-1',
-            item.level === 0 ? 'font-medium' : 'pl-6 text-sm'
+            'flex items-center justify-between gap-4 border-b border-[var(--color-border)]/70 py-2.5 last:border-0',
+            item.level === 0 ? 'font-medium text-[var(--color-text-primary)]' : 'pl-6 text-[var(--color-text-secondary)]'
           )}
         >
           <span>
@@ -536,7 +615,7 @@ function BalanceSheetReport({
           <span className="font-mono">{formatCurrency(item.balance)}</span>
         </div>
       ))}
-      <div className={cn('flex justify-between py-2 font-bold border-t-2 border-[var(--color-border)] mt-2', color)}>
+      <div className={cn('mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 font-bold', color)}>
         <span>Total {title}</span>
         <span className="font-mono">{formatCurrency(total)}</span>
       </div>
@@ -545,9 +624,10 @@ function BalanceSheetReport({
 
   return (
     <Card
+      className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6"
       title={`Balance Sheet - As of ${data.asOfDate}`}
       action={
-        <Button variant="secondary" size="sm" onClick={onExport}>
+        <Button variant="secondary" size="sm" className="rounded-full" onClick={onExport}>
           <Download className="w-4 h-4 mr-2" />
           Export CSV
         </Button>
@@ -558,7 +638,7 @@ function BalanceSheetReport({
       <Section title="Equity" items={data.equity} total={data.totalEquity} color="text-[var(--color-accent)]" icon={<Scale className="w-5 h-5" />} />
 
       {/* Balance Check */}
-      <div className="flex justify-between py-3 font-bold text-lg border-t-4 border-[var(--color-border)]">
+      <div className="flex justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-4 text-base font-bold">
         <span>Total Liabilities + Equity</span>
         <span className="font-mono">
           {formatCurrency(data.totalLiabilities + data.totalEquity)}
@@ -603,7 +683,7 @@ function CashFlowReport({
     <Card className="p-8 text-center">
       <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
       <p className="text-[var(--color-danger)] mb-4">{error}</p>
-      <Button variant="secondary" onClick={loadData}>
+      <Button variant="secondary" className="rounded-full" onClick={loadData}>
         <RefreshCw className="w-4 h-4 mr-2" />
         Retry
       </Button>
@@ -614,7 +694,7 @@ function CashFlowReport({
       <ArrowRightLeft className="w-12 h-12 mx-auto mb-4 text-[var(--color-muted)]" />
       <p className="text-[var(--color-text-secondary)] mb-4">No cash flow data available for this period</p>
       <Link to="/transactions">
-        <Button>
+        <Button className="rounded-full">
           <Plus className="w-4 h-4 mr-2" />
           Add Transaction
         </Button>
@@ -638,10 +718,10 @@ function CashFlowReport({
     const hasMore = items.length > 5;
 
     return (
-      <div className="mb-4">
-        <h3 className="font-mono font-bold border-b-2 border-[var(--color-border)] pb-2 mb-2">{title}</h3>
+      <div className="mb-8 last:mb-0">
+        <h3 className="mb-2 border-b border-[var(--color-border)] pb-2 text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-muted)]">{title}</h3>
         {displayItems.map((item, i) => (
-          <div key={i} className="flex justify-between py-1 text-sm">
+          <div key={i} className="flex items-center justify-between gap-4 border-b border-[var(--color-border)]/70 py-2.5 text-sm last:border-0">
             <span className="flex min-w-0 max-w-[70%] items-center gap-2 truncate"><span className="truncate">{item.description}</span><span className="shrink-0 rounded bg-[var(--ref-surface-container-low)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--ref-on-surface-variant)]">{item.classificationSource === 'explicit' ? 'classified' : 'legacy inference'}</span></span>
             <span className={cn('font-mono', item.amount >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
               {item.amount >= 0 ? '+' : ''}
@@ -667,7 +747,7 @@ function CashFlowReport({
             )}
           </button>
         )}
-        <div className="flex justify-between py-2 font-bold border-t border-[var(--color-border)] mt-2">
+        <div className="mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 text-sm font-bold">
           <span>Net {title}</span>
           <span className={cn('font-mono', total >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
             {total >= 0 ? '+' : ''}
@@ -680,9 +760,10 @@ function CashFlowReport({
 
   return (
     <Card
+      className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6"
       title="Cash Flow Statement"
       action={
-        <Button variant="secondary" size="sm" onClick={onExport}>
+        <Button variant="secondary" size="sm" className="rounded-full" onClick={onExport}>
           <Download className="w-4 h-4 mr-2" />
           Export CSV
         </Button>
@@ -698,7 +779,7 @@ function CashFlowReport({
         </div>
       )}
 
-      <div className="border-t-4 border-[var(--color-border)] pt-4 space-y-2">
+      <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4">
         <div className="flex justify-between font-bold">
           <span>Net Change in Cash</span>
           <span className={cn('font-mono', data.netChange >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
@@ -716,7 +797,7 @@ function CashFlowReport({
             <span className="font-mono">{data.historicalRecoveryBridge > 0 ? '+' : ''}{formatCurrency(data.historicalRecoveryBridge)}</span>
           </div>
         ) : null}
-        <div className="flex justify-between font-bold text-lg">
+        <div className="flex justify-between border-t border-[var(--color-border)] pt-3 text-base font-bold">
           <span>Ending Cash</span>
           <span className="font-mono">{formatCurrency(data.endingCash)}</span>
         </div>
@@ -739,7 +820,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
     <Card className="p-8 text-center">
       <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-[var(--color-danger)]" />
       <p className="text-[var(--color-danger)] mb-4">{error}</p>
-      <Button variant="secondary" onClick={loadData}>
+      <Button variant="secondary" className="rounded-full" onClick={loadData}>
         <RefreshCw className="w-4 h-4 mr-2" />
         Retry
       </Button>
@@ -752,7 +833,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
         <p className="text-[var(--color-text-secondary)] mb-4">{data?.coverage && !data.coverage.isComparable ? 'Spending coverage is incomplete; no recorded rows does not mean zero activity.' : 'No spending data available for this period'}</p>
         {data?.coverage && !data.coverage.isComparable && <p className="mb-4 text-xs text-[var(--color-warning)]">{data.coverage.warnings.join(' ')}</p>}
         <Link to="/transactions">
-          <Button>
+        <Button className="rounded-full">
             <Plus className="w-4 h-4 mr-2" />
             Add Expense
           </Button>
@@ -783,11 +864,11 @@ function SpendingReport({ periodId }: { periodId?: number }) {
   }
 
   return (
-    <Card title={`Spending Breakdown - Total: ${formatCurrency(data.total)}`}>
+    <Card className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6" title={`Spending Breakdown - Total: ${formatCurrency(data.total)}`}>
       {data.coverage && !data.coverage.isComparable && <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">{data.coverage.warnings.join(' ')}</div>}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.1fr)]">
         {/* Pie Chart */}
-        <div className="h-64">
+        <div className="relative h-72 sm:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <RePieChart>
               <Pie
@@ -800,7 +881,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
                 dataKey="value"
               >
                 {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} stroke="#1A1A1A" strokeWidth={2} />
+                  <Cell key={`cell-${index}`} fill={entry.color} stroke="var(--color-surface)" strokeWidth={3} />
                 ))}
               </Pie>
               <Tooltip
@@ -808,10 +889,10 @@ function SpendingReport({ periodId }: { periodId?: number }) {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload as typeof chartData[0];
                     return (
-                      <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
-                        <p className="font-mono text-sm font-bold">{data.name}</p>
-                        <p className="font-mono">{formatCurrency(data.value)}</p>
-                        <p className="text-xs text-[var(--color-muted)]">{data.percentage.toFixed(1)}%</p>
+                      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-lg">
+                        <p className="text-xs font-semibold text-[var(--color-muted)]">{data.name}</p>
+                        <p className="mt-1 font-mono text-sm font-bold">{formatCurrency(data.value)}</p>
+                        <p className="mt-0.5 text-xs text-[var(--color-muted)]">{data.percentage.toFixed(1)}%</p>
                       </div>
                     );
                   }
@@ -820,22 +901,26 @@ function SpendingReport({ periodId }: { periodId?: number }) {
               />
             </RePieChart>
           </ResponsiveContainer>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Period total</span>
+            <span className="mt-1 font-headline text-lg font-extrabold tracking-tight text-[var(--color-text-primary)]">{formatCurrency(data.total)}</span>
+          </div>
         </div>
 
         {/* Legend */}
-        <div className="space-y-2">
+        <div className="divide-y divide-[var(--color-border)]">
           {chartData.map((item, i) => (
-            <div key={i} className="flex items-center justify-between">
+            <div key={i} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
               <div className="flex items-center gap-2">
                 <div
-                  className="w-4 h-4 border-2 border-[var(--color-border)]"
+                  className="h-3 w-3 rounded-full"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-sm">{item.name}</span>
+                <span className="truncate text-sm font-medium">{item.name}</span>
               </div>
               <div className="text-right">
-                <span className="font-mono text-sm">{formatCurrency(item.value)}</span>
-                <span className="text-xs text-[var(--color-muted)] ml-2">
+                <span className="font-mono text-sm font-semibold">{formatCurrency(item.value)}</span>
+                <span className="ml-2 text-xs text-[var(--color-muted)]">
                   {item.percentage.toFixed(1)}%
                 </span>
               </div>
@@ -865,30 +950,34 @@ function TrendsReport() {
   }
 
   return (
-    <Card title="Trend Analysis - Last 6 Periods">
+    <Card className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6" title="Trend Analysis - Last 6 Periods">
       {data.some((period) => period.coverage && !period.coverage.isComparable) && <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">Some trend periods have incomplete coverage. Comparisons and averages should not treat those periods as zero activity.</div>}
-      <div className="h-80">
+      <div className="h-80 sm:h-96">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+          <BarChart data={data} margin={{ top: 10, right: 8, left: 8, bottom: 4 }} barCategoryGap="22%">
+            <CartesianGrid strokeDasharray="4 4" stroke="var(--color-border)" vertical={false} />
             <XAxis
               dataKey="periodName"
-              tick={{ fontSize: 11, fontFamily: 'Space Mono' }}
-              stroke="#1A1A1A"
+              tick={{ fontSize: 11, fontFamily: 'Inter' }}
+              tickLine={false}
+              axisLine={false}
+              stroke="var(--color-muted)"
             />
             <YAxis
-              tick={{ fontSize: 11, fontFamily: 'Space Mono' }}
-              stroke="#1A1A1A"
+              tick={{ fontSize: 11, fontFamily: 'Inter' }}
+              tickLine={false}
+              axisLine={false}
+              stroke="var(--color-muted)"
               tickFormatter={(value) => `Rp ${(value / 1000000).toFixed(0)}M`}
             />
             <Tooltip
               content={({ active, payload, label }) => {
                 if (active && payload && payload.length) {
                   return (
-                    <div className="bg-[var(--color-surface)] border-2 border-[var(--color-border)] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
-                      <p className="font-mono text-sm font-bold">{label}</p>
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-lg">
+                      <p className="text-xs font-semibold text-[var(--color-muted)]">{label}</p>
                       {payload.map((entry, index) => (
-                        <p key={index} className="text-sm" style={{ color: entry.color }}>
+                        <p key={index} className="mt-1 text-sm font-semibold" style={{ color: entry.color }}>
                           {entry.name}: {formatCurrency(entry.value as number)}
                         </p>
                       ))}
@@ -898,10 +987,10 @@ function TrendsReport() {
                 return null;
               }}
             />
-            <Legend />
-            <Bar dataKey="revenue" name="Revenue" fill="#5A9E6F" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expenses" name="Expenses" fill="#D94F4F" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="netIncome" name="Net Income" fill="#8BA888" radius={[4, 4, 0, 0]} />
+            <Legend wrapperStyle={{ paddingTop: 16, fontSize: 12 }} iconType="circle" />
+            <Bar dataKey="revenue" name="Revenue" fill="var(--color-success)" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="expenses" name="Expenses" fill="var(--color-danger)" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="netIncome" name="Net Income" fill="var(--ref-primary)" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

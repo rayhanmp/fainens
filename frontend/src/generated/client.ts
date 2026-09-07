@@ -126,6 +126,7 @@ export const ListTransactionsKind = {
   income: 'income',
   transfer: 'transfer',
   loan: 'loan',
+  reimbursement: 'reimbursement',
 } as const;
 
 export type ListTransactionsSort = typeof ListTransactionsSort[keyof typeof ListTransactionsSort];
@@ -155,6 +156,19 @@ export type ListTransactions200DataItemDate = string | number;
 export type ListTransactions200DataItemDueDate = string | number | null;
 
 export type ListTransactions200DataItemCreatedAt = string | number;
+
+export type ListTransactions200DataItemActivityKind = typeof ListTransactions200DataItemActivityKind[keyof typeof ListTransactions200DataItemActivityKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListTransactions200DataItemActivityKind = {
+  expense: 'expense',
+  income: 'income',
+  transfer: 'transfer',
+  loan: 'loan',
+  reimbursement: 'reimbursement',
+  other: 'other',
+} as const;
 
 /**
  * @nullable
@@ -266,6 +280,12 @@ export type ListTransactions200DataItem = {
   creditCents?: number;
   expenseCents?: number;
   incomeCents?: number;
+  activityKind?: ListTransactions200DataItemActivityKind;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  remainingReimbursableExpense?: number;
   lines?: ListTransactions200DataItemLinesItem[];
   tags?: ListTransactions200DataItemTagsItem[];
   categoryAllocations?: ListTransactions200DataItemCategoryAllocationsItem[];
@@ -292,6 +312,23 @@ export type ListTransactions200Pagination = {
   [key: string]: unknown;
 };
 
+export type ListTransactions200SummaryDailyActivityItem = {
+  date: string;
+  expenseCents: number;
+  incomeCents: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionCount: number;
+};
+
+export type ListTransactions200SummaryCategoryBreakdownItem = {
+  name: string;
+  amountCents: number;
+  share: number;
+};
+
 export type ListTransactions200Summary = {
   expenseCents: number;
   incomeCents: number;
@@ -299,6 +336,8 @@ export type ListTransactions200Summary = {
   largestExpenseCents?: number;
   /** @nullable */
   topCategoryName?: string | null;
+  dailyActivity?: ListTransactions200SummaryDailyActivityItem[];
+  categoryBreakdown?: ListTransactions200SummaryCategoryBreakdownItem[];
   [key: string]: unknown;
 };
 
@@ -528,6 +567,19 @@ export type GetTransaction200DueDate = string | number | null;
 
 export type GetTransaction200CreatedAt = string | number;
 
+export type GetTransaction200ActivityKind = typeof GetTransaction200ActivityKind[keyof typeof GetTransaction200ActivityKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetTransaction200ActivityKind = {
+  expense: 'expense',
+  income: 'income',
+  transfer: 'transfer',
+  loan: 'loan',
+  reimbursement: 'reimbursement',
+  other: 'other',
+} as const;
+
 /**
  * @nullable
  */
@@ -638,6 +690,12 @@ export type GetTransaction200 = {
   creditCents?: number;
   expenseCents?: number;
   incomeCents?: number;
+  activityKind?: GetTransaction200ActivityKind;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  remainingReimbursableExpense?: number;
   lines?: GetTransaction200LinesItem[];
   tags?: GetTransaction200TagsItem[];
   categoryAllocations?: GetTransaction200CategoryAllocationsItem[];
@@ -740,6 +798,19 @@ export type UpdateTransaction200Date = string | number;
 export type UpdateTransaction200DueDate = string | number | null;
 
 export type UpdateTransaction200CreatedAt = string | number;
+
+export type UpdateTransaction200ActivityKind = typeof UpdateTransaction200ActivityKind[keyof typeof UpdateTransaction200ActivityKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTransaction200ActivityKind = {
+  expense: 'expense',
+  income: 'income',
+  transfer: 'transfer',
+  loan: 'loan',
+  reimbursement: 'reimbursement',
+  other: 'other',
+} as const;
 
 /**
  * @nullable
@@ -851,6 +922,12 @@ export type UpdateTransaction200 = {
   creditCents?: number;
   expenseCents?: number;
   incomeCents?: number;
+  activityKind?: UpdateTransaction200ActivityKind;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  remainingReimbursableExpense?: number;
   lines?: UpdateTransaction200LinesItem[];
   tags?: UpdateTransaction200TagsItem[];
   categoryAllocations?: UpdateTransaction200CategoryAllocationsItem[];
@@ -4713,6 +4790,11 @@ export type UpdateBudgetBody = {
    * @maximum 9007199254740991
    */
   plannedAmount?: number;
+  /**
+   * @minimum 1
+   * @maximum 9007199254740991
+   */
+  periodId?: number;
 };
 
 export type UpdateBudget200 = {
@@ -5202,6 +5284,135 @@ export type UploadAttachment404 = {
 };
 
 export type UploadAttachment500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListGalleryImagesParams = {
+source?: ListGalleryImagesSource;
+/**
+ * @maxLength 200
+ */
+search?: string;
+/**
+ * @pattern ^\d+$
+ */
+limit?: string;
+/**
+ * @pattern ^\d+$
+ */
+offset?: string;
+};
+
+export type ListGalleryImagesSource = typeof ListGalleryImagesSource[keyof typeof ListGalleryImagesSource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListGalleryImagesSource = {
+  transaction: 'transaction',
+  agent: 'agent',
+  wishlist: 'wishlist',
+} as const;
+
+export type ListGalleryImages200ItemSource = typeof ListGalleryImages200ItemSource[keyof typeof ListGalleryImages200ItemSource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListGalleryImages200ItemSource = {
+  transaction: 'transaction',
+  agent: 'agent',
+  wishlist: 'wishlist',
+} as const;
+
+export type ListGalleryImages200Item = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  id: number;
+  source: ListGalleryImages200ItemSource;
+  filename: string;
+  mimetype: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  fileSize: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  createdAt: number | null;
+  /** @nullable */
+  downloadUrl: string | null;
+  /** @nullable */
+  context: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  relatedId: number | null;
+  /** @nullable */
+  relatedLabel: string | null;
+  storageManaged: boolean;
+};
+
+export type AttachGalleryImageToAgent200 = {
+  filename: string;
+  mimeType: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  fileSize: number;
+  data: string;
+};
+
+export type AttachGalleryImageToAgent400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AttachGalleryImageToAgent404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AttachGalleryImageToAgent413 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AttachGalleryImageToAgent500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DeleteGalleryImage202 = {
+  success: boolean;
+  cleanupPending: boolean;
+  message: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteGalleryImage204 = typeof DeleteGalleryImage204[keyof typeof DeleteGalleryImage204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteGalleryImage204 = {
+} as const;
+
+export type DeleteGalleryImage404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DeleteGalleryImage500 = {
   error: string;
   [key: string]: unknown;
 };
@@ -6662,6 +6873,12 @@ export type GetMonthlyReport200 = {
   period: GetMonthlyReport200Period;
   incomeStatement: GetMonthlyReport200IncomeStatement;
   balanceSheet: GetMonthlyReport200BalanceSheet;
+  previousBalance: number;
+  totalIncoming: number;
+  totalOutgoing: number;
+  closingBalance: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  reportHash: string;
   incomeBySource: GetMonthlyReport200IncomeBySourceItem[];
   expensesByCategory: GetMonthlyReport200ExpensesByCategoryItem[];
   budgetComparison: GetMonthlyReport200BudgetComparisonItem[];
@@ -7316,6 +7533,75 @@ export type AttachSalaryOccurrencePeriod200 = {
 };
 
 export type AttachSalaryOccurrencePeriod409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetAgentProviderSettings200ApiKeySource = typeof GetAgentProviderSettings200ApiKeySource[keyof typeof GetAgentProviderSettings200ApiKeySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetAgentProviderSettings200ApiKeySource = {
+  database: 'database',
+  environment: 'environment',
+  none: 'none',
+} as const;
+
+export type GetAgentProviderSettings200 = {
+  model: string;
+  apiKeyConfigured: boolean;
+  apiKeySource: GetAgentProviderSettings200ApiKeySource;
+  [key: string]: unknown;
+};
+
+export type UpdateAgentProviderSettingsBody = {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  model?: string;
+  /** @maxLength 500 */
+  apiKey?: string;
+  clearApiKey?: boolean;
+  [key: string]: unknown;
+};
+
+export type UpdateAgentProviderSettings200ApiKeySource = typeof UpdateAgentProviderSettings200ApiKeySource[keyof typeof UpdateAgentProviderSettings200ApiKeySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateAgentProviderSettings200ApiKeySource = {
+  database: 'database',
+  environment: 'environment',
+  none: 'none',
+} as const;
+
+export type UpdateAgentProviderSettings200 = {
+  model: string;
+  apiKeyConfigured: boolean;
+  apiKeySource: UpdateAgentProviderSettings200ApiKeySource;
+  [key: string]: unknown;
+};
+
+export type UpdateAgentProviderSettings400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type TestAgentProviderSettings200 = {
+  ok: boolean;
+  model: string;
+  /** @nullable */
+  modelAvailable: boolean | null;
+  [key: string]: unknown;
+};
+
+export type TestAgentProviderSettings400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type TestAgentProviderSettings502 = {
   error: string;
   [key: string]: unknown;
 };
@@ -9330,6 +9616,15 @@ export const ListContactsIncludeInactive = {
   false: 'false',
 } as const;
 
+export type ListContacts200ItemKind = typeof ListContacts200ItemKind[keyof typeof ListContacts200ItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListContacts200ItemKind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
+
 export type ListContacts200ItemCreatedAt = string | string | number;
 
 export type ListContacts200ItemUpdatedAt = string | string | number;
@@ -9341,6 +9636,7 @@ export type ListContacts200Item = {
    */
   id: number;
   name: string;
+  kind: ListContacts200ItemKind;
   /** @nullable */
   fullName: string | null;
   /** @nullable */
@@ -9365,12 +9661,22 @@ export type ListContacts200Item = {
   [key: string]: unknown;
 };
 
+export type CreateContactBodyKind = typeof CreateContactBodyKind[keyof typeof CreateContactBodyKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateContactBodyKind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
+
 export type CreateContactBody = {
   /**
    * @minLength 1
    * @maxLength 200
    */
   name: string;
+  kind?: CreateContactBodyKind;
   /**
    * @maxLength 200
    * @nullable
@@ -9399,6 +9705,15 @@ export type CreateContactBody = {
   [key: string]: unknown;
 };
 
+export type CreateContact201Kind = typeof CreateContact201Kind[keyof typeof CreateContact201Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateContact201Kind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
+
 export type CreateContact201CreatedAt = string | string | number;
 
 export type CreateContact201UpdatedAt = string | string | number;
@@ -9410,6 +9725,7 @@ export type CreateContact201 = {
    */
   id: number;
   name: string;
+  kind: CreateContact201Kind;
   /** @nullable */
   fullName: string | null;
   /** @nullable */
@@ -9430,6 +9746,15 @@ export type CreateContact400 = {
   error: string;
   [key: string]: unknown;
 };
+
+export type GetContact200Kind = typeof GetContact200Kind[keyof typeof GetContact200Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetContact200Kind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
 
 export type GetContact200CreatedAt = string | string | number;
 
@@ -9461,6 +9786,7 @@ export type GetContact200 = {
    */
   id: number;
   name: string;
+  kind: GetContact200Kind;
   /** @nullable */
   fullName: string | null;
   /** @nullable */
@@ -9484,12 +9810,22 @@ export type GetContact404 = {
   [key: string]: unknown;
 };
 
+export type UpdateContactBodyKind = typeof UpdateContactBodyKind[keyof typeof UpdateContactBodyKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateContactBodyKind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
+
 export type UpdateContactBody = {
   /**
    * @minLength 1
    * @maxLength 200
    */
   name?: string;
+  kind?: UpdateContactBodyKind;
   /**
    * @maxLength 200
    * @nullable
@@ -9518,6 +9854,15 @@ export type UpdateContactBody = {
   [key: string]: unknown;
 };
 
+export type UpdateContact200Kind = typeof UpdateContact200Kind[keyof typeof UpdateContact200Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateContact200Kind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
+
 export type UpdateContact200CreatedAt = string | string | number;
 
 export type UpdateContact200UpdatedAt = string | string | number;
@@ -9529,6 +9874,7 @@ export type UpdateContact200 = {
    */
   id: number;
   name: string;
+  kind: UpdateContact200Kind;
   /** @nullable */
   fullName: string | null;
   /** @nullable */
@@ -9575,6 +9921,15 @@ export type ArchiveContact409 = {
   [key: string]: unknown;
 };
 
+export type RestoreContact200Kind = typeof RestoreContact200Kind[keyof typeof RestoreContact200Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const RestoreContact200Kind = {
+  person: 'person',
+  organization: 'organization',
+} as const;
+
 export type RestoreContact200CreatedAt = string | string | number;
 
 export type RestoreContact200UpdatedAt = string | string | number;
@@ -9586,6 +9941,7 @@ export type RestoreContact200 = {
    */
   id: number;
   name: string;
+  kind: RestoreContact200Kind;
   /** @nullable */
   fullName: string | null;
   /** @nullable */
@@ -9613,6 +9969,832 @@ export type RestoreContact404 = {
 };
 
 export type RestoreContact409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListReimbursementsParams = {
+/**
+ * @maxLength 40
+ */
+status?: string;
+/**
+ * @maximum 9007199254740991
+ * @exclusiveMinimum
+ */
+contactId?: number;
+};
+
+/**
+ * @nullable
+ */
+export type ListReimbursements200ItemDueDate = string | number | string | null;
+
+export type ListReimbursements200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: ListReimbursements200ItemDueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type ListReimbursements400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CreateReimbursementBodySourcesItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  sourceTransactionId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  expenseLineId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amount: number;
+  [key: string]: unknown;
+};
+
+export type CreateReimbursementBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  contactId: number;
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  title: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  dueDate?: number | null;
+  /**
+   * @maxLength 4000
+   * @nullable
+   */
+  notes?: string | null;
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  sources: CreateReimbursementBodySourcesItem[];
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type CreateReimbursement201DueDate = string | number | string | null;
+
+export type CreateReimbursement201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: CreateReimbursement201DueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type CreateReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CreateReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type GetReimbursement200DueDate = string | number | string | null;
+
+export type GetReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: GetReimbursement200DueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type GetReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateReimbursementBodySourcesItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  sourceTransactionId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  expenseLineId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amount: number;
+  [key: string]: unknown;
+};
+
+export type UpdateReimbursementBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  contactId: number;
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  title: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  dueDate?: number | null;
+  /**
+   * @maxLength 4000
+   * @nullable
+   */
+  notes?: string | null;
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  sources: UpdateReimbursementBodySourcesItem[];
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type UpdateReimbursement200DueDate = string | number | string | null;
+
+export type UpdateReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: UpdateReimbursement200DueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type UpdateReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateReimbursement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type SubmitReimbursement200DueDate = string | number | string | null;
+
+export type SubmitReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: SubmitReimbursement200DueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type SubmitReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SubmitReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SubmitReimbursement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type RejectReimbursement200DueDate = string | number | string | null;
+
+export type RejectReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: RejectReimbursement200DueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type RejectReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RejectReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RejectReimbursement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type CancelReimbursement200DueDate = string | number | string | null;
+
+export type CancelReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  title: string;
+  status: string;
+  /** @nullable */
+  dueDate: CancelReimbursement200DueDate;
+  /** @nullable */
+  notes: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  proposedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  recognisedAmount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  outstandingAmount: number;
+  sources: unknown[];
+  receipts: unknown[];
+  [key: string]: unknown;
+};
+
+export type CancelReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CancelReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CancelReimbursement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ApproveReimbursementBody = {
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+  [key: string]: unknown;
+};
+
+export type ApproveReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  claimId: number;
+  recognitionTransactionIds: number[];
+};
+
+export type ApproveReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ApproveReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ApproveReimbursement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AmendReimbursementApprovalBodySourcesItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  sourceTransactionId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  expenseLineId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amount: number;
+  [key: string]: unknown;
+};
+
+export type AmendReimbursementApprovalBody = {
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  sources: AmendReimbursementApprovalBodySourcesItem[];
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+};
+
+export type AmendReimbursementApproval200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  claimId: number;
+  recognitionTransactionIds: number[];
+};
+
+export type AmendReimbursementApproval400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AmendReimbursementApproval404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AmendReimbursementApproval409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RecordReimbursementReceiptBodyAllocationsItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  claimId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amount: number;
+};
+
+export type RecordReimbursementReceiptBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  date: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  walletAccountId: number;
+  /**
+   * @maxLength 4000
+   * @nullable
+   */
+  notes?: string | null;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
+  allocations: RecordReimbursementReceiptBodyAllocationsItem[];
+  [key: string]: unknown;
+};
+
+export type RecordReimbursementReceipt201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  receiptId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+};
+
+export type RecordReimbursementReceipt400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RecordReimbursementReceipt404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RecordReimbursementReceipt409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementReceiptBody = {
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  reason: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+};
+
+export type ReverseReimbursementReceipt200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  reversalTransactionId: number;
+};
+
+export type ReverseReimbursementReceipt400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementReceipt404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementReceipt409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type WriteOffReimbursementBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  date: number;
+  /**
+   * @maxLength 4000
+   * @nullable
+   */
+  notes?: string | null;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+};
+
+export type WriteOffReimbursement200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  claimId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+};
+
+export type WriteOffReimbursement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type WriteOffReimbursement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type WriteOffReimbursement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementApprovalBody = {
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  reason: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+};
+
+export type ReverseReimbursementApproval200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  claimId: number;
+  reversalTransactionIds: number[];
+};
+
+export type ReverseReimbursementApproval400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementApproval404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementApproval409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementWriteOffBody = {
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  reason: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  idempotencyKey: string;
+};
+
+export type ReverseReimbursementWriteOff200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  claimId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  reversalTransactionId: number;
+};
+
+export type ReverseReimbursementWriteOff400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementWriteOff404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReverseReimbursementWriteOff409 = {
   error: string;
   [key: string]: unknown;
 };
@@ -12350,7 +13532,7 @@ export type getApiAuthGoogleResponse200 = {
   data: void
   status: 200
 }
-
+    
 export type getApiAuthGoogleResponseSuccess = (getApiAuthGoogleResponse200) & {
   headers: Headers;
 };
@@ -12361,7 +13543,7 @@ export type getApiAuthGoogleResponse = (getApiAuthGoogleResponseSuccess)
 export const getGetApiAuthGoogleUrl = () => {
 
 
-
+  
 
   return `/api/auth/google`
 }
@@ -15849,6 +17031,155 @@ export const uploadAttachment = async (uploadAttachmentBody: UploadAttachmentBod
 
 
 
+export type listGalleryImagesResponse200 = {
+  data: ListGalleryImages200Item[]
+  status: 200
+}
+    
+export type listGalleryImagesResponseSuccess = (listGalleryImagesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listGalleryImagesResponse = (listGalleryImagesResponseSuccess)
+
+export const getListGalleryImagesUrl = (params?: ListGalleryImagesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gallery/images?${stringifiedParams}` : `/api/gallery/images`
+}
+
+export const listGalleryImages = async (params?: ListGalleryImagesParams, options?: RequestInit): Promise<listGalleryImagesResponse> => {
+  
+  return generatedFetch<listGalleryImagesResponse>(getListGalleryImagesUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type attachGalleryImageToAgentResponse200 = {
+  data: AttachGalleryImageToAgent200
+  status: 200
+}
+
+export type attachGalleryImageToAgentResponse400 = {
+  data: AttachGalleryImageToAgent400
+  status: 400
+}
+
+export type attachGalleryImageToAgentResponse404 = {
+  data: AttachGalleryImageToAgent404
+  status: 404
+}
+
+export type attachGalleryImageToAgentResponse413 = {
+  data: AttachGalleryImageToAgent413
+  status: 413
+}
+
+export type attachGalleryImageToAgentResponse500 = {
+  data: AttachGalleryImageToAgent500
+  status: 500
+}
+    
+export type attachGalleryImageToAgentResponseSuccess = (attachGalleryImageToAgentResponse200) & {
+  headers: Headers;
+};
+export type attachGalleryImageToAgentResponseError = (attachGalleryImageToAgentResponse400 | attachGalleryImageToAgentResponse404 | attachGalleryImageToAgentResponse413 | attachGalleryImageToAgentResponse500) & {
+  headers: Headers;
+};
+
+export type attachGalleryImageToAgentResponse = (attachGalleryImageToAgentResponseSuccess | attachGalleryImageToAgentResponseError)
+
+export const getAttachGalleryImageToAgentUrl = (source: 'transaction' | 'agent' | 'wishlist',
+    id: number,) => {
+
+
+  
+
+  return `/api/gallery/images/${source}/${id}/attach`
+}
+
+export const attachGalleryImageToAgent = async (source: 'transaction' | 'agent' | 'wishlist',
+    id: number, options?: RequestInit): Promise<attachGalleryImageToAgentResponse> => {
+  
+  return generatedFetch<attachGalleryImageToAgentResponse>(getAttachGalleryImageToAgentUrl(source,id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type deleteGalleryImageResponse202 = {
+  data: DeleteGalleryImage202
+  status: 202
+}
+
+export type deleteGalleryImageResponse204 = {
+  data: DeleteGalleryImage204
+  status: 204
+}
+
+export type deleteGalleryImageResponse404 = {
+  data: DeleteGalleryImage404
+  status: 404
+}
+
+export type deleteGalleryImageResponse500 = {
+  data: DeleteGalleryImage500
+  status: 500
+}
+    
+export type deleteGalleryImageResponseSuccess = (deleteGalleryImageResponse202 | deleteGalleryImageResponse204) & {
+  headers: Headers;
+};
+export type deleteGalleryImageResponseError = (deleteGalleryImageResponse404 | deleteGalleryImageResponse500) & {
+  headers: Headers;
+};
+
+export type deleteGalleryImageResponse = (deleteGalleryImageResponseSuccess | deleteGalleryImageResponseError)
+
+export const getDeleteGalleryImageUrl = (source: 'transaction' | 'agent' | 'wishlist',
+    id: number,) => {
+
+
+  
+
+  return `/api/gallery/images/${source}/${id}`
+}
+
+export const deleteGalleryImage = async (source: 'transaction' | 'agent' | 'wishlist',
+    id: number, options?: RequestInit): Promise<deleteGalleryImageResponse> => {
+  
+  return generatedFetch<deleteGalleryImageResponse>(getDeleteGalleryImageUrl(source,id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
 export type getNetWorthResponse200 = {
   data: GetNetWorth200
   status: 200
@@ -17361,6 +18692,125 @@ export const attachSalaryOccurrencePeriod = async (occurrenceDate: number, optio
 
 
 
+export type getAgentProviderSettingsResponse200 = {
+  data: GetAgentProviderSettings200
+  status: 200
+}
+    
+export type getAgentProviderSettingsResponseSuccess = (getAgentProviderSettingsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getAgentProviderSettingsResponse = (getAgentProviderSettingsResponseSuccess)
+
+export const getGetAgentProviderSettingsUrl = () => {
+
+
+  
+
+  return `/api/settings/agent-provider`
+}
+
+export const getAgentProviderSettings = async ( options?: RequestInit): Promise<getAgentProviderSettingsResponse> => {
+  
+  return generatedFetch<getAgentProviderSettingsResponse>(getGetAgentProviderSettingsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type updateAgentProviderSettingsResponse200 = {
+  data: UpdateAgentProviderSettings200
+  status: 200
+}
+
+export type updateAgentProviderSettingsResponse400 = {
+  data: UpdateAgentProviderSettings400
+  status: 400
+}
+    
+export type updateAgentProviderSettingsResponseSuccess = (updateAgentProviderSettingsResponse200) & {
+  headers: Headers;
+};
+export type updateAgentProviderSettingsResponseError = (updateAgentProviderSettingsResponse400) & {
+  headers: Headers;
+};
+
+export type updateAgentProviderSettingsResponse = (updateAgentProviderSettingsResponseSuccess | updateAgentProviderSettingsResponseError)
+
+export const getUpdateAgentProviderSettingsUrl = () => {
+
+
+  
+
+  return `/api/settings/agent-provider`
+}
+
+export const updateAgentProviderSettings = async (updateAgentProviderSettingsBody: UpdateAgentProviderSettingsBody, options?: RequestInit): Promise<updateAgentProviderSettingsResponse> => {
+  
+  return generatedFetch<updateAgentProviderSettingsResponse>(getUpdateAgentProviderSettingsUrl(),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAgentProviderSettingsBody,)
+  }
+);}
+
+
+
+export type testAgentProviderSettingsResponse200 = {
+  data: TestAgentProviderSettings200
+  status: 200
+}
+
+export type testAgentProviderSettingsResponse400 = {
+  data: TestAgentProviderSettings400
+  status: 400
+}
+
+export type testAgentProviderSettingsResponse502 = {
+  data: TestAgentProviderSettings502
+  status: 502
+}
+    
+export type testAgentProviderSettingsResponseSuccess = (testAgentProviderSettingsResponse200) & {
+  headers: Headers;
+};
+export type testAgentProviderSettingsResponseError = (testAgentProviderSettingsResponse400 | testAgentProviderSettingsResponse502) & {
+  headers: Headers;
+};
+
+export type testAgentProviderSettingsResponse = (testAgentProviderSettingsResponseSuccess | testAgentProviderSettingsResponseError)
+
+export const getTestAgentProviderSettingsUrl = () => {
+
+
+  
+
+  return `/api/settings/agent-provider/test`
+}
+
+export const testAgentProviderSettings = async ( options?: RequestInit): Promise<testAgentProviderSettingsResponse> => {
+  
+  return generatedFetch<testAgentProviderSettingsResponse>(getTestAgentProviderSettingsUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
 export type listSubscriptionsResponse200 = {
   data: ListSubscriptions200
   status: 200
@@ -18732,6 +20182,704 @@ export const restoreContact = async (id: number, options?: RequestInit): Promise
 
 
 
+export type listReimbursementsResponse200 = {
+  data: ListReimbursements200Item[]
+  status: 200
+}
+
+export type listReimbursementsResponse400 = {
+  data: ListReimbursements400
+  status: 400
+}
+    
+export type listReimbursementsResponseSuccess = (listReimbursementsResponse200) & {
+  headers: Headers;
+};
+export type listReimbursementsResponseError = (listReimbursementsResponse400) & {
+  headers: Headers;
+};
+
+export type listReimbursementsResponse = (listReimbursementsResponseSuccess | listReimbursementsResponseError)
+
+export const getListReimbursementsUrl = (params?: ListReimbursementsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reimbursements?${stringifiedParams}` : `/api/reimbursements`
+}
+
+export const listReimbursements = async (params?: ListReimbursementsParams, options?: RequestInit): Promise<listReimbursementsResponse> => {
+  
+  return generatedFetch<listReimbursementsResponse>(getListReimbursementsUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type createReimbursementResponse201 = {
+  data: CreateReimbursement201
+  status: 201
+}
+
+export type createReimbursementResponse400 = {
+  data: CreateReimbursement400
+  status: 400
+}
+
+export type createReimbursementResponse404 = {
+  data: CreateReimbursement404
+  status: 404
+}
+    
+export type createReimbursementResponseSuccess = (createReimbursementResponse201) & {
+  headers: Headers;
+};
+export type createReimbursementResponseError = (createReimbursementResponse400 | createReimbursementResponse404) & {
+  headers: Headers;
+};
+
+export type createReimbursementResponse = (createReimbursementResponseSuccess | createReimbursementResponseError)
+
+export const getCreateReimbursementUrl = () => {
+
+
+  
+
+  return `/api/reimbursements`
+}
+
+export const createReimbursement = async (createReimbursementBody: CreateReimbursementBody, options?: RequestInit): Promise<createReimbursementResponse> => {
+  
+  return generatedFetch<createReimbursementResponse>(getCreateReimbursementUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createReimbursementBody,)
+  }
+);}
+
+
+
+export type getReimbursementResponse200 = {
+  data: GetReimbursement200
+  status: 200
+}
+
+export type getReimbursementResponse404 = {
+  data: GetReimbursement404
+  status: 404
+}
+    
+export type getReimbursementResponseSuccess = (getReimbursementResponse200) & {
+  headers: Headers;
+};
+export type getReimbursementResponseError = (getReimbursementResponse404) & {
+  headers: Headers;
+};
+
+export type getReimbursementResponse = (getReimbursementResponseSuccess | getReimbursementResponseError)
+
+export const getGetReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}`
+}
+
+export const getReimbursement = async (id: number, options?: RequestInit): Promise<getReimbursementResponse> => {
+  
+  return generatedFetch<getReimbursementResponse>(getGetReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type updateReimbursementResponse200 = {
+  data: UpdateReimbursement200
+  status: 200
+}
+
+export type updateReimbursementResponse400 = {
+  data: UpdateReimbursement400
+  status: 400
+}
+
+export type updateReimbursementResponse404 = {
+  data: UpdateReimbursement404
+  status: 404
+}
+
+export type updateReimbursementResponse409 = {
+  data: UpdateReimbursement409
+  status: 409
+}
+    
+export type updateReimbursementResponseSuccess = (updateReimbursementResponse200) & {
+  headers: Headers;
+};
+export type updateReimbursementResponseError = (updateReimbursementResponse400 | updateReimbursementResponse404 | updateReimbursementResponse409) & {
+  headers: Headers;
+};
+
+export type updateReimbursementResponse = (updateReimbursementResponseSuccess | updateReimbursementResponseError)
+
+export const getUpdateReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}`
+}
+
+export const updateReimbursement = async (id: number,
+    updateReimbursementBody: UpdateReimbursementBody, options?: RequestInit): Promise<updateReimbursementResponse> => {
+  
+  return generatedFetch<updateReimbursementResponse>(getUpdateReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateReimbursementBody,)
+  }
+);}
+
+
+
+export type submitReimbursementResponse200 = {
+  data: SubmitReimbursement200
+  status: 200
+}
+
+export type submitReimbursementResponse400 = {
+  data: SubmitReimbursement400
+  status: 400
+}
+
+export type submitReimbursementResponse404 = {
+  data: SubmitReimbursement404
+  status: 404
+}
+
+export type submitReimbursementResponse409 = {
+  data: SubmitReimbursement409
+  status: 409
+}
+    
+export type submitReimbursementResponseSuccess = (submitReimbursementResponse200) & {
+  headers: Headers;
+};
+export type submitReimbursementResponseError = (submitReimbursementResponse400 | submitReimbursementResponse404 | submitReimbursementResponse409) & {
+  headers: Headers;
+};
+
+export type submitReimbursementResponse = (submitReimbursementResponseSuccess | submitReimbursementResponseError)
+
+export const getSubmitReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/submit`
+}
+
+export const submitReimbursement = async (id: number, options?: RequestInit): Promise<submitReimbursementResponse> => {
+  
+  return generatedFetch<submitReimbursementResponse>(getSubmitReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type rejectReimbursementResponse200 = {
+  data: RejectReimbursement200
+  status: 200
+}
+
+export type rejectReimbursementResponse400 = {
+  data: RejectReimbursement400
+  status: 400
+}
+
+export type rejectReimbursementResponse404 = {
+  data: RejectReimbursement404
+  status: 404
+}
+
+export type rejectReimbursementResponse409 = {
+  data: RejectReimbursement409
+  status: 409
+}
+    
+export type rejectReimbursementResponseSuccess = (rejectReimbursementResponse200) & {
+  headers: Headers;
+};
+export type rejectReimbursementResponseError = (rejectReimbursementResponse400 | rejectReimbursementResponse404 | rejectReimbursementResponse409) & {
+  headers: Headers;
+};
+
+export type rejectReimbursementResponse = (rejectReimbursementResponseSuccess | rejectReimbursementResponseError)
+
+export const getRejectReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/reject`
+}
+
+export const rejectReimbursement = async (id: number, options?: RequestInit): Promise<rejectReimbursementResponse> => {
+  
+  return generatedFetch<rejectReimbursementResponse>(getRejectReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type cancelReimbursementResponse200 = {
+  data: CancelReimbursement200
+  status: 200
+}
+
+export type cancelReimbursementResponse400 = {
+  data: CancelReimbursement400
+  status: 400
+}
+
+export type cancelReimbursementResponse404 = {
+  data: CancelReimbursement404
+  status: 404
+}
+
+export type cancelReimbursementResponse409 = {
+  data: CancelReimbursement409
+  status: 409
+}
+    
+export type cancelReimbursementResponseSuccess = (cancelReimbursementResponse200) & {
+  headers: Headers;
+};
+export type cancelReimbursementResponseError = (cancelReimbursementResponse400 | cancelReimbursementResponse404 | cancelReimbursementResponse409) & {
+  headers: Headers;
+};
+
+export type cancelReimbursementResponse = (cancelReimbursementResponseSuccess | cancelReimbursementResponseError)
+
+export const getCancelReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/cancel`
+}
+
+export const cancelReimbursement = async (id: number, options?: RequestInit): Promise<cancelReimbursementResponse> => {
+  
+  return generatedFetch<cancelReimbursementResponse>(getCancelReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type approveReimbursementResponse200 = {
+  data: ApproveReimbursement200
+  status: 200
+}
+
+export type approveReimbursementResponse400 = {
+  data: ApproveReimbursement400
+  status: 400
+}
+
+export type approveReimbursementResponse404 = {
+  data: ApproveReimbursement404
+  status: 404
+}
+
+export type approveReimbursementResponse409 = {
+  data: ApproveReimbursement409
+  status: 409
+}
+    
+export type approveReimbursementResponseSuccess = (approveReimbursementResponse200) & {
+  headers: Headers;
+};
+export type approveReimbursementResponseError = (approveReimbursementResponse400 | approveReimbursementResponse404 | approveReimbursementResponse409) & {
+  headers: Headers;
+};
+
+export type approveReimbursementResponse = (approveReimbursementResponseSuccess | approveReimbursementResponseError)
+
+export const getApproveReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/approve`
+}
+
+export const approveReimbursement = async (id: number,
+    approveReimbursementBody: ApproveReimbursementBody, options?: RequestInit): Promise<approveReimbursementResponse> => {
+  
+  return generatedFetch<approveReimbursementResponse>(getApproveReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      approveReimbursementBody,)
+  }
+);}
+
+
+
+export type amendReimbursementApprovalResponse200 = {
+  data: AmendReimbursementApproval200
+  status: 200
+}
+
+export type amendReimbursementApprovalResponse400 = {
+  data: AmendReimbursementApproval400
+  status: 400
+}
+
+export type amendReimbursementApprovalResponse404 = {
+  data: AmendReimbursementApproval404
+  status: 404
+}
+
+export type amendReimbursementApprovalResponse409 = {
+  data: AmendReimbursementApproval409
+  status: 409
+}
+    
+export type amendReimbursementApprovalResponseSuccess = (amendReimbursementApprovalResponse200) & {
+  headers: Headers;
+};
+export type amendReimbursementApprovalResponseError = (amendReimbursementApprovalResponse400 | amendReimbursementApprovalResponse404 | amendReimbursementApprovalResponse409) & {
+  headers: Headers;
+};
+
+export type amendReimbursementApprovalResponse = (amendReimbursementApprovalResponseSuccess | amendReimbursementApprovalResponseError)
+
+export const getAmendReimbursementApprovalUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/amend-approval`
+}
+
+export const amendReimbursementApproval = async (id: number,
+    amendReimbursementApprovalBody: AmendReimbursementApprovalBody, options?: RequestInit): Promise<amendReimbursementApprovalResponse> => {
+  
+  return generatedFetch<amendReimbursementApprovalResponse>(getAmendReimbursementApprovalUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      amendReimbursementApprovalBody,)
+  }
+);}
+
+
+
+export type recordReimbursementReceiptResponse201 = {
+  data: RecordReimbursementReceipt201
+  status: 201
+}
+
+export type recordReimbursementReceiptResponse400 = {
+  data: RecordReimbursementReceipt400
+  status: 400
+}
+
+export type recordReimbursementReceiptResponse404 = {
+  data: RecordReimbursementReceipt404
+  status: 404
+}
+
+export type recordReimbursementReceiptResponse409 = {
+  data: RecordReimbursementReceipt409
+  status: 409
+}
+    
+export type recordReimbursementReceiptResponseSuccess = (recordReimbursementReceiptResponse201) & {
+  headers: Headers;
+};
+export type recordReimbursementReceiptResponseError = (recordReimbursementReceiptResponse400 | recordReimbursementReceiptResponse404 | recordReimbursementReceiptResponse409) & {
+  headers: Headers;
+};
+
+export type recordReimbursementReceiptResponse = (recordReimbursementReceiptResponseSuccess | recordReimbursementReceiptResponseError)
+
+export const getRecordReimbursementReceiptUrl = () => {
+
+
+  
+
+  return `/api/reimbursement-receipts`
+}
+
+export const recordReimbursementReceipt = async (recordReimbursementReceiptBody: RecordReimbursementReceiptBody, options?: RequestInit): Promise<recordReimbursementReceiptResponse> => {
+  
+  return generatedFetch<recordReimbursementReceiptResponse>(getRecordReimbursementReceiptUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      recordReimbursementReceiptBody,)
+  }
+);}
+
+
+
+export type reverseReimbursementReceiptResponse200 = {
+  data: ReverseReimbursementReceipt200
+  status: 200
+}
+
+export type reverseReimbursementReceiptResponse400 = {
+  data: ReverseReimbursementReceipt400
+  status: 400
+}
+
+export type reverseReimbursementReceiptResponse404 = {
+  data: ReverseReimbursementReceipt404
+  status: 404
+}
+
+export type reverseReimbursementReceiptResponse409 = {
+  data: ReverseReimbursementReceipt409
+  status: 409
+}
+    
+export type reverseReimbursementReceiptResponseSuccess = (reverseReimbursementReceiptResponse200) & {
+  headers: Headers;
+};
+export type reverseReimbursementReceiptResponseError = (reverseReimbursementReceiptResponse400 | reverseReimbursementReceiptResponse404 | reverseReimbursementReceiptResponse409) & {
+  headers: Headers;
+};
+
+export type reverseReimbursementReceiptResponse = (reverseReimbursementReceiptResponseSuccess | reverseReimbursementReceiptResponseError)
+
+export const getReverseReimbursementReceiptUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursement-receipts/${id}/reverse`
+}
+
+export const reverseReimbursementReceipt = async (id: number,
+    reverseReimbursementReceiptBody: ReverseReimbursementReceiptBody, options?: RequestInit): Promise<reverseReimbursementReceiptResponse> => {
+  
+  return generatedFetch<reverseReimbursementReceiptResponse>(getReverseReimbursementReceiptUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reverseReimbursementReceiptBody,)
+  }
+);}
+
+
+
+export type writeOffReimbursementResponse200 = {
+  data: WriteOffReimbursement200
+  status: 200
+}
+
+export type writeOffReimbursementResponse400 = {
+  data: WriteOffReimbursement400
+  status: 400
+}
+
+export type writeOffReimbursementResponse404 = {
+  data: WriteOffReimbursement404
+  status: 404
+}
+
+export type writeOffReimbursementResponse409 = {
+  data: WriteOffReimbursement409
+  status: 409
+}
+    
+export type writeOffReimbursementResponseSuccess = (writeOffReimbursementResponse200) & {
+  headers: Headers;
+};
+export type writeOffReimbursementResponseError = (writeOffReimbursementResponse400 | writeOffReimbursementResponse404 | writeOffReimbursementResponse409) & {
+  headers: Headers;
+};
+
+export type writeOffReimbursementResponse = (writeOffReimbursementResponseSuccess | writeOffReimbursementResponseError)
+
+export const getWriteOffReimbursementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/write-off`
+}
+
+export const writeOffReimbursement = async (id: number,
+    writeOffReimbursementBody: WriteOffReimbursementBody, options?: RequestInit): Promise<writeOffReimbursementResponse> => {
+  
+  return generatedFetch<writeOffReimbursementResponse>(getWriteOffReimbursementUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      writeOffReimbursementBody,)
+  }
+);}
+
+
+
+export type reverseReimbursementApprovalResponse200 = {
+  data: ReverseReimbursementApproval200
+  status: 200
+}
+
+export type reverseReimbursementApprovalResponse400 = {
+  data: ReverseReimbursementApproval400
+  status: 400
+}
+
+export type reverseReimbursementApprovalResponse404 = {
+  data: ReverseReimbursementApproval404
+  status: 404
+}
+
+export type reverseReimbursementApprovalResponse409 = {
+  data: ReverseReimbursementApproval409
+  status: 409
+}
+    
+export type reverseReimbursementApprovalResponseSuccess = (reverseReimbursementApprovalResponse200) & {
+  headers: Headers;
+};
+export type reverseReimbursementApprovalResponseError = (reverseReimbursementApprovalResponse400 | reverseReimbursementApprovalResponse404 | reverseReimbursementApprovalResponse409) & {
+  headers: Headers;
+};
+
+export type reverseReimbursementApprovalResponse = (reverseReimbursementApprovalResponseSuccess | reverseReimbursementApprovalResponseError)
+
+export const getReverseReimbursementApprovalUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/reverse-approval`
+}
+
+export const reverseReimbursementApproval = async (id: number,
+    reverseReimbursementApprovalBody: ReverseReimbursementApprovalBody, options?: RequestInit): Promise<reverseReimbursementApprovalResponse> => {
+  
+  return generatedFetch<reverseReimbursementApprovalResponse>(getReverseReimbursementApprovalUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reverseReimbursementApprovalBody,)
+  }
+);}
+
+
+
+export type reverseReimbursementWriteOffResponse200 = {
+  data: ReverseReimbursementWriteOff200
+  status: 200
+}
+
+export type reverseReimbursementWriteOffResponse400 = {
+  data: ReverseReimbursementWriteOff400
+  status: 400
+}
+
+export type reverseReimbursementWriteOffResponse404 = {
+  data: ReverseReimbursementWriteOff404
+  status: 404
+}
+
+export type reverseReimbursementWriteOffResponse409 = {
+  data: ReverseReimbursementWriteOff409
+  status: 409
+}
+    
+export type reverseReimbursementWriteOffResponseSuccess = (reverseReimbursementWriteOffResponse200) & {
+  headers: Headers;
+};
+export type reverseReimbursementWriteOffResponseError = (reverseReimbursementWriteOffResponse400 | reverseReimbursementWriteOffResponse404 | reverseReimbursementWriteOffResponse409) & {
+  headers: Headers;
+};
+
+export type reverseReimbursementWriteOffResponse = (reverseReimbursementWriteOffResponseSuccess | reverseReimbursementWriteOffResponseError)
+
+export const getReverseReimbursementWriteOffUrl = (id: number,) => {
+
+
+  
+
+  return `/api/reimbursements/${id}/reverse-write-off`
+}
+
+export const reverseReimbursementWriteOff = async (id: number,
+    reverseReimbursementWriteOffBody: ReverseReimbursementWriteOffBody, options?: RequestInit): Promise<reverseReimbursementWriteOffResponse> => {
+  
+  return generatedFetch<reverseReimbursementWriteOffResponse>(getReverseReimbursementWriteOffUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reverseReimbursementWriteOffBody,)
+  }
+);}
+
+
+
 export type generateDashboardInsightResponse200 = {
   data: GenerateDashboardInsight200
   status: 200
@@ -20060,7 +22208,7 @@ export type serveLocalAgentAttachmentResponse404 = {
   data: ServeLocalAgentAttachment404
   status: 404
 }
-
+    
 ;
 export type serveLocalAgentAttachmentResponseError = (serveLocalAgentAttachmentResponse404) & {
   headers: Headers;
@@ -20071,19 +22219,19 @@ export type serveLocalAgentAttachmentResponse = (serveLocalAgentAttachmentRespon
 export const getServeLocalAgentAttachmentUrl = (id: number,) => {
 
 
-
+  
 
   return `/api/agent/attachments/${id}`
 }
 
 export const serveLocalAgentAttachment = async (id: number, options?: RequestInit): Promise<serveLocalAgentAttachmentResponse> => {
-
+  
   return generatedFetch<serveLocalAgentAttachmentResponse>(getServeLocalAgentAttachmentUrl(id),
-  {
+  {      
     ...options,
     method: 'GET'
-
-
+    
+    
   }
 );}
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 import { Sparkles, RefreshCw, ChevronDown } from 'lucide-react';
@@ -15,41 +15,41 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [sourceRevision, setSourceRevision] = useState<number | null>(null);
+  const [resultKey, setResultKey] = useState<string | null>(null);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const currentKey = `${type}:${periodId ?? 'current'}`;
   const latestInsightQuery = useLatestInsightQuery(type, periodId);
   const generateInsightMutation = useGenerateInsightMutation();
   const isLoading = generateInsightMutation.isPending;
+  const latestInsight = latestInsightQuery.data;
+  const displayedInsight = resultKey === currentKey ? insight : latestInsight?.insight ?? null;
+  const displayedGeneratedAt = resultKey === currentKey
+    ? generatedAt
+    : latestInsight?.generatedAt ? new Date(latestInsight.generatedAt) : null;
+  const displayedSourceRevision = resultKey === currentKey
+    ? sourceRevision
+    : latestInsight?.sourceRevision ?? null;
+  const displayedError = errorKey === currentKey ? error : null;
 
   const generateInsight = useCallback(async () => {
     setError(null);
+    setErrorKey(null);
     
     try {
       const response = await generateInsightMutation.mutateAsync({ type, periodId });
       setInsight(response.insight);
       setGeneratedAt(new Date(response.generatedAt));
       setSourceRevision(response.sourceRevision);
+      setResultKey(currentKey);
       setIsCollapsed(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate insight');
+      setErrorKey(currentKey);
     }
-  }, [generateInsightMutation, type, periodId]);
+  }, [currentKey, generateInsightMutation, type, periodId]);
 
-  useEffect(() => {
-    setInsight(null);
-    setGeneratedAt(null);
-    setSourceRevision(null);
-    setError(null);
-  }, [type, periodId]);
-
-  useEffect(() => {
-    const response = latestInsightQuery.data;
-    if (!response) return;
-    setInsight(response.insight);
-    setGeneratedAt(response.generatedAt ? new Date(response.generatedAt) : null);
-    setSourceRevision(response.sourceRevision);
-  }, [latestInsightQuery.data]);
-
-  if (error) {
+  if (displayedError) {
     return (
       <div className={cn("rounded-xl border border-[var(--ref-error)]/30 bg-[var(--ref-surface-container-high)] p-4", className)}>
         <div className="flex items-center justify-between">
@@ -67,47 +67,47 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
             <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
           </Button>
         </div>
-        <p className="text-xs text-[var(--ref-error)] mt-1">{error}</p>
+        <p className="text-xs text-[var(--ref-error)] mt-1">{displayedError}</p>
       </div>
     );
   }
 
   return (
     <div className={cn("rounded-xl border border-[var(--ref-primary)]/30 bg-[var(--ref-surface-container-high)] relative overflow-hidden group", className)}>
-      <button 
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-black/5 transition-colors"
-      >
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 p-4 transition-colors hover:bg-black/5">
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          aria-expanded={!isCollapsed}
+          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+        >
+          <div className="flex min-w-0 items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--ref-primary)]" />
           <h3 className="font-semibold text-sm text-[var(--ref-on-surface)]">AI Insight</h3>
-          {insight && !isCollapsed && (
+          {displayedInsight && !isCollapsed && (
             <span className="text-xs text-[var(--ref-on-surface-variant)]">
-              {generatedAt?.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              {sourceRevision != null ? ` · ledger rev ${sourceRevision}` : ''}
+              {displayedGeneratedAt?.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {displayedSourceRevision != null ? ` · ledger rev ${displayedSourceRevision}` : ''}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            onClick={(e) => {
-              e.stopPropagation();
-              generateInsight();
-            }}
-            disabled={isLoading}
-            className="h-7 w-7 p-0"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
-          </Button>
+          </div>
           <ChevronDown className={cn("h-4 w-4 text-[var(--ref-on-surface-variant)] transition-transform", !isCollapsed && "rotate-180")} />
-        </div>
-      </button>
+        </button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void generateInsight()}
+          disabled={isLoading}
+          aria-label="Refresh AI insight"
+          className="h-7 w-7 shrink-0 p-0"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+        </Button>
+      </div>
       
       {!isCollapsed && (
         <div className="px-4 pb-4">
-          {!insight && !isLoading ? (
+          {!displayedInsight && !isLoading ? (
             <div className="space-y-3">
               <p className="text-sm text-[var(--ref-on-surface-variant)]">
                 Get AI-powered analysis of your spending.
@@ -125,7 +125,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
             </div>
           ) : (
             <div className="text-base text-[var(--ref-on-surface)] leading-relaxed whitespace-pre-line">
-              {insight}
+              {displayedInsight}
             </div>
           )}
         </div>

@@ -1,203 +1,82 @@
 import { Link, useLocation } from '@tanstack/react-router';
-import {
-  LayoutDashboard,
-  Calendar,
-  Wallet,
-  Receipt,
-  PiggyBank,
-  CreditCard,
-  BarChart3,
-  Shield,
-  Settings,
-  LogOut,
-  Banknote,
-  Users,
-  Calculator,
-  Sparkles,
-  AlertTriangle,
-  ChevronDown,
-} from 'lucide-react';
-import type { ComponentType } from 'react';
-import { useEffect, useState } from 'react';
+import { Plus, PanelLeftClose, PanelLeftOpen, ChevronUp, Settings, LogOut, Shield, CircleHelp } from 'lucide-react';
+import { useState } from 'react';
 import { useAuth } from '../../lib/auth';
-import { cn } from '../../lib/utils';
 import { useConfirm } from '../ui/ConfirmDialog';
+import { navigationGroups, navigationActive, pathMatches } from './navigation';
 
-function pathMatches(pathname: string, to: string) {
-  if (to === '/') return pathname === '/';
-  return pathname === to || pathname.startsWith(`${to}/`);
+export function NavigationLinks({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+  const { pathname } = useLocation();
+  return (
+    <nav aria-label="Main navigation" className="finance-navigation">
+      {navigationGroups.map((group, index) => (
+        <div className="finance-nav-group" key={index}>
+          {group.label && <div className="finance-nav-heading">{compact ? <span aria-label={group.label}>·</span> : group.label}</div>}
+          <ul>
+            {group.items.map(({ to, label, icon: Icon }) => (
+              <li key={to}>
+                <Link to={to} onClick={onNavigate} title={compact ? label : undefined} aria-label={compact ? label : undefined}
+                  aria-current={pathMatches(pathname, to) ? 'page' : undefined}
+                  className={`finance-nav-link ${navigationActive(pathname, to) ? 'is-active' : ''}`}>
+                  <Icon aria-hidden="true" />{!compact && <span>{label}</span>}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
 }
 
-type NavIcon = ComponentType<{ className?: string }>;
+export function ProfileMenu({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+  const { user, logout } = useAuth();
+  const { confirm } = useConfirm();
+  const { pathname } = useLocation();
+  const name = user?.email?.split('@')[0] || 'Your account';
+  return (
+    <details className="finance-profile" onKeyDown={event => {
+      if (event.key === 'Escape') {
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector('summary')?.focus();
+      }
+    }}>
+      <summary title={compact ? 'Profile & settings' : undefined} aria-label={compact ? 'Profile & settings' : undefined}>
+        <span className="finance-avatar">{name.slice(0, 2).toUpperCase()}</span>
+        {!compact && <><span className="finance-profile-name"><strong>{name}</strong><small>Profile & settings</small></span><ChevronUp className="h-4 w-4 shrink-0" /></>}
+      </summary>
+      <div className="finance-profile-popover">
+        <Link to="/settings" onClick={onNavigate} className={`finance-nav-link ${navigationActive(pathname, '/settings') ? 'is-active' : ''}`}><Settings />Settings</Link>
+        <Link to="/help" onClick={onNavigate} className={`finance-nav-link ${navigationActive(pathname, '/help') ? 'is-active' : ''}`}><CircleHelp />Help & glossary</Link>
+        <Link to="/audit-log" onClick={onNavigate} className="finance-nav-link"><Shield />Security audit</Link>
+        <button type="button" className="finance-nav-link" onClick={async () => {
+          if (await confirm({ title: 'Sign out', message: 'Are you sure you want to sign out?', confirmLabel: 'Sign out', variant: 'default' })) await logout();
+        }}><LogOut />Sign out</button>
+      </div>
+    </details>
+  );
+}
 
-type NavItem = { to: string; label: string; icon: NavIcon };
-
-/** Core destinations stay visible, including the Agent. */
-const topNav: NavItem[] = [
-  { to: '/accounts', label: 'Accounts', icon: Wallet },
-  { to: '/transactions', label: 'Transactions', icon: Receipt },
-  { to: '/agent', label: 'Fainens Agent', icon: Sparkles },
-  { to: '/loans', label: 'Loans', icon: Users },
-];
-
-const planningNav: NavItem[] = [
-  { to: '/paylater', label: 'Pay later', icon: CreditCard },
-  { to: '/salary-income', label: 'Salary & income', icon: Banknote },
-  { to: '/periods', label: 'Salary periods', icon: Calendar },
-  { to: '/budget', label: 'Budget', icon: PiggyBank },
-];
-
-const toolsNav: NavItem[] = [
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/anomalies', label: 'Data quality', icon: AlertTriangle },
-  { to: '/savings-simulator', label: 'Savings Simulator', icon: Calculator },
-];
+export function AddTransactionLink({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+  return <Link to="/transactions" search={{ action: 'new' }} onClick={onNavigate} className="finance-add" title={compact ? 'Add transaction' : undefined} aria-label={compact ? 'Add transaction' : undefined}><Plus aria-hidden="true" />{!compact && <span>Add transaction</span>}</Link>;
+}
 
 export function Sidebar() {
-  const location = useLocation();
-  const { logout } = useAuth();
-  const { confirm } = useConfirm();
-
-  const isActive = (to: string) =>
-    to === '/' ? location.pathname === '/' : pathMatches(location.pathname, to);
-
-  const [openSections, setOpenSections] = useState({ planning: false, tools: false });
-
-  useEffect(() => {
-    setOpenSections((current) => ({
-      planning: current.planning || planningNav.some((item) => pathMatches(location.pathname, item.to)),
-      tools: current.tools || toolsNav.some((item) => pathMatches(location.pathname, item.to)),
-    }));
-  }, [location.pathname]);
-
-  const renderLink = (item: NavItem, quiet = false) => {
-    const active = isActive(item.to);
-    const Icon = item.icon;
-    return (
-      <li key={item.to}>
-        <Link
-          to={item.to}
-          aria-current={active ? 'page' : undefined}
-          className={cn(
-            'sidebar-item flex items-center gap-3',
-            quiet && 'sidebar-item--quiet',
-            active && 'sidebar-item--active',
-          )}
-        >
-          <Icon className="w-5 h-5 shrink-0" />
-          <span>{item.label}</span>
-        </Link>
-      </li>
-    );
-  };
-
-  const renderSection = (key: 'planning' | 'tools', label: string, items: NavItem[]) => {
-    const open = openSections[key];
-    return (
-      <>
-        <li>
-          <button
-            type="button"
-            aria-expanded={open}
-            className="sidebar-section-toggle sidebar-section-label"
-            onClick={() => setOpenSections((current) => ({ ...current, [key]: !current[key] }))}
-          >
-            <span>{label}</span>
-            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !open && '-rotate-90')} />
-          </button>
-        </li>
-        {open && items.map((item) => renderLink(item, true))}
-      </>
-    );
-  };
-
-  const auditActive = isActive('/audit-log');
-  const settingsActive = isActive('/settings');
-
+  const [compact, setCompact] = useState(() => {
+    try { return localStorage.getItem('fainens.sidebar.compact') === 'true'; } catch { return false; }
+  });
   return (
-    <aside className="sidebar hidden md:flex md:flex-col w-64 h-[100dvh] max-h-[100dvh] shrink-0 sticky top-0">
-      <div className="shrink-0 p-6 border-b border-[var(--color-border)]">
-        <h1 className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">
-          Fainens
-        </h1>
-        <p className="text-sm text-[var(--color-text-secondary)] mt-1">Personal finance</p>
+    <aside className={`finance-sidebar hidden md:flex ${compact ? 'is-compact' : ''}`}>
+      <div className="finance-brand">
+        {!compact && <Link to="/" className="finance-wordmark"><span className="finance-brand-mark">f</span>Fainens</Link>}
+        <button type="button" className="finance-collapse" aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'} title={compact ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!compact} onClick={() => {
+          setCompact(!compact);
+          try { localStorage.setItem('fainens.sidebar.compact', String(!compact)); } catch { /* Storage is optional. */ }
+        }}>{compact ? <PanelLeftOpen /> : <PanelLeftClose />}</button>
       </div>
-
-      <nav className="min-h-0 flex-1 overflow-y-auto py-4 px-3">
-        <ul className="space-y-0.5">
-          <li>
-            <Link
-              to="/"
-              aria-current={location.pathname === '/' ? 'page' : undefined}
-              className={cn(
-                'sidebar-item flex items-center gap-3',
-                location.pathname === '/' && 'sidebar-item--active',
-              )}
-            >
-              <LayoutDashboard className="w-5 h-5 shrink-0" />
-              <span>Dashboard</span>
-            </Link>
-          </li>
-
-          {topNav.map((item) => renderLink(item))}
-
-          <li className="py-3 px-1" aria-hidden>
-            <div className="h-px bg-[var(--color-border)]" />
-          </li>
-
-          {renderSection('planning', 'Planning', planningNav)}
-          <li className="sidebar-section-label--spaced" aria-hidden />
-          {renderSection('tools', 'Tools', toolsNav)}
-        </ul>
-      </nav>
-
-      <div className="shrink-0 border-t border-[var(--color-border)] p-4">
-        <div className="flex w-full gap-2">
-          <Link
-            to="/audit-log"
-            title="Security audit"
-            aria-label="Security audit"
-            aria-current={auditActive ? 'page' : undefined}
-            className={cn(
-              'sidebar-footer-icon flex-1 min-h-10',
-              auditActive && 'sidebar-footer-icon--active',
-            )}
-          >
-            <Shield className="w-5 h-5" />
-          </Link>
-          <Link
-            to="/settings"
-            title="Settings"
-            aria-label="Settings"
-            aria-current={settingsActive ? 'page' : undefined}
-            className={cn(
-              'sidebar-footer-icon flex-1 min-h-10',
-              settingsActive && 'sidebar-footer-icon--active',
-            )}
-          >
-            <Settings className="w-5 h-5" />
-          </Link>
-          <button
-            type="button"
-            onClick={async () => {
-              const confirmed = await confirm({
-                title: 'Sign Out',
-                message: 'Are you sure you want to sign out?',
-                confirmLabel: 'Sign Out',
-                variant: 'default',
-              });
-              if (confirmed) {
-                logout();
-              }
-            }}
-            title="Sign out"
-            aria-label="Sign out"
-            className="cursor-pointer sidebar-footer-icon sidebar-footer-icon--button flex-1 min-h-10"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+      <div className="finance-action"><AddTransactionLink compact={compact} /></div>
+      <NavigationLinks compact={compact} />
+      <div className="finance-footer"><ProfileMenu compact={compact} /></div>
     </aside>
   );
 }

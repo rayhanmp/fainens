@@ -17,11 +17,14 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SavingsSimulatorRouteImport } from './routes/savings-simulator'
 import { Route as SalaryIncomeRouteImport } from './routes/salary-income'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as ReimbursementsRouteImport } from './routes/reimbursements'
 import { Route as PeriodsRouteImport } from './routes/periods'
 import { Route as PaylaterRouteImport } from './routes/paylater'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoansRouteImport } from './routes/loans'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as BudgetRouteImport } from './routes/budget'
 import { Route as AuditLogRouteImport } from './routes/audit-log'
@@ -70,6 +73,11 @@ const ReportsRoute = ReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReimbursementsRoute = ReimbursementsRouteImport.update({
+  id: '/reimbursements',
+  path: '/reimbursements',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PeriodsRoute = PeriodsRouteImport.update({
   id: '/periods',
   path: '/periods',
@@ -93,6 +101,16 @@ const LoginRoute = LoginRouteImport.update({
 const LoansRoute = LoansRouteImport.update({
   id: '/loans',
   path: '/loans',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CategoriesRoute = CategoriesRouteImport.update({
@@ -139,11 +157,14 @@ export interface FileRoutesByFullPath {
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
+  '/gallery': typeof GalleryRoute
+  '/help': typeof HelpRoute
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
   '/periods': typeof PeriodsRoute
+  '/reimbursements': typeof ReimbursementsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
   '/savings-simulator': typeof SavingsSimulatorRoute
@@ -161,11 +182,14 @@ export interface FileRoutesByTo {
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
+  '/gallery': typeof GalleryRoute
+  '/help': typeof HelpRoute
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
   '/periods': typeof PeriodsRoute
+  '/reimbursements': typeof ReimbursementsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
   '/savings-simulator': typeof SavingsSimulatorRoute
@@ -184,11 +208,14 @@ export interface FileRoutesById {
   '/audit-log': typeof AuditLogRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
+  '/gallery': typeof GalleryRoute
+  '/help': typeof HelpRoute
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
   '/periods': typeof PeriodsRoute
+  '/reimbursements': typeof ReimbursementsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
   '/savings-simulator': typeof SavingsSimulatorRoute
@@ -208,11 +235,14 @@ export interface FileRouteTypes {
     | '/audit-log'
     | '/budget'
     | '/categories'
+    | '/gallery'
+    | '/help'
     | '/loans'
     | '/login'
     | '/onboarding'
     | '/paylater'
     | '/periods'
+    | '/reimbursements'
     | '/reports'
     | '/salary-income'
     | '/savings-simulator'
@@ -230,11 +260,14 @@ export interface FileRouteTypes {
     | '/audit-log'
     | '/budget'
     | '/categories'
+    | '/gallery'
+    | '/help'
     | '/loans'
     | '/login'
     | '/onboarding'
     | '/paylater'
     | '/periods'
+    | '/reimbursements'
     | '/reports'
     | '/salary-income'
     | '/savings-simulator'
@@ -252,11 +285,14 @@ export interface FileRouteTypes {
     | '/audit-log'
     | '/budget'
     | '/categories'
+    | '/gallery'
+    | '/help'
     | '/loans'
     | '/login'
     | '/onboarding'
     | '/paylater'
     | '/periods'
+    | '/reimbursements'
     | '/reports'
     | '/salary-income'
     | '/savings-simulator'
@@ -275,11 +311,14 @@ export interface RootRouteChildren {
   AuditLogRoute: typeof AuditLogRoute
   BudgetRoute: typeof BudgetRoute
   CategoriesRoute: typeof CategoriesRoute
+  GalleryRoute: typeof GalleryRoute
+  HelpRoute: typeof HelpRoute
   LoansRoute: typeof LoansRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   PaylaterRoute: typeof PaylaterRoute
   PeriodsRoute: typeof PeriodsRoute
+  ReimbursementsRoute: typeof ReimbursementsRoute
   ReportsRoute: typeof ReportsRoute
   SalaryIncomeRoute: typeof SalaryIncomeRoute
   SavingsSimulatorRoute: typeof SavingsSimulatorRoute
@@ -348,6 +387,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reimbursements': {
+      id: '/reimbursements'
+      path: '/reimbursements'
+      fullPath: '/reimbursements'
+      preLoaderRoute: typeof ReimbursementsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/periods': {
       id: '/periods'
       path: '/periods'
@@ -381,6 +427,20 @@ declare module '@tanstack/react-router' {
       path: '/loans'
       fullPath: '/loans'
       preLoaderRoute: typeof LoansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/categories': {
@@ -443,11 +503,14 @@ const rootRouteChildren: RootRouteChildren = {
   AuditLogRoute: AuditLogRoute,
   BudgetRoute: BudgetRoute,
   CategoriesRoute: CategoriesRoute,
+  GalleryRoute: GalleryRoute,
+  HelpRoute: HelpRoute,
   LoansRoute: LoansRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   PaylaterRoute: PaylaterRoute,
   PeriodsRoute: PeriodsRoute,
+  ReimbursementsRoute: ReimbursementsRoute,
   ReportsRoute: ReportsRoute,
   SalaryIncomeRoute: SalaryIncomeRoute,
   SavingsSimulatorRoute: SavingsSimulatorRoute,

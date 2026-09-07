@@ -33,10 +33,13 @@ import {
   Check,
   Pencil,
   RotateCcw,
+  ChevronDown,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
 import { loadTransferFeeRules, type TransferFeeRule } from '../../lib/transferFees';
+
+const TRANSFER_FEE_CATEGORY_NAME = 'Bank & Transfer Fees';
 import {
   editMetadataSchema,
   formatValidationError,
@@ -74,6 +77,7 @@ import type { PendingTransactionParsed } from '../../features/transactions/queri
 import { useCalculatePaylaterScheduleMutation, usePaylaterQuery, useRecognizePaylaterMutation, useSettlePaylaterMutation } from '../../features/paylater/queries';
 import { useAttachmentDownload, useAttachmentsQuery, useDeleteAttachmentMutation } from '../../features/attachments/queries';
 import { TagPicker, type TagRow } from './TagPicker';
+import { useDraftStore } from '../../stores/draft-store';
 
 export type WalletAccount = {
   id: number;
@@ -133,6 +137,17 @@ export type EditingTransaction = {
   tags: Array<{ tagId: number; name: string; color: string }>;
 };
 
+export type TransactionPrefill = {
+  accountId?: number;
+  categoryId?: number;
+  periodId?: number;
+  type?: 'expense' | 'income' | 'transfer' | 'paylater';
+  amount?: string;
+  description?: string;
+  fromAccountId?: number;
+  toAccountId?: number;
+};
+
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -148,9 +163,35 @@ interface TransactionModalProps {
     id: number;
     parsedData: PendingTransactionParsed;
   } | null;
+  initialPrefill?: TransactionPrefill;
 }
 
 const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
+const SIMPLE_DRAFT_KEY = 'transaction:new:simple';
+const JOURNAL_DRAFT_KEY = 'transaction:new:journal';
+const AI_DRAFT_KEY = 'transaction:new:ai';
+const QUICK_ENTRY_PREFS_KEY = 'fainens-quick-entry';
+
+type QuickEntryPreferences = { accountIds: number[]; categoryIds: number[] };
+
+function loadQuickEntryPreferences(): QuickEntryPreferences {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(QUICK_ENTRY_PREFS_KEY) ?? '{}') as Partial<QuickEntryPreferences>;
+    return {
+      accountIds: Array.isArray(parsed.accountIds) ? parsed.accountIds.filter(Number.isSafeInteger).slice(0, 4) : [],
+      categoryIds: Array.isArray(parsed.categoryIds) ? parsed.categoryIds.filter(Number.isSafeInteger).slice(0, 6) : [],
+    };
+  } catch {
+    return { accountIds: [], categoryIds: [] };
+  }
+}
+
+function rememberQuickEntry(accountId?: number, categoryId?: number) {
+  const current = loadQuickEntryPreferences();
+  const accountIds = accountId ? [accountId, ...current.accountIds.filter((id) => id !== accountId)].slice(0, 4) : current.accountIds;
+  const categoryIds = categoryId ? [categoryId, ...current.categoryIds.filter((id) => id !== categoryId)].slice(0, 6) : current.categoryIds;
+  localStorage.setItem(QUICK_ENTRY_PREFS_KEY, JSON.stringify({ accountIds, categoryIds }));
+}
 
 export function TransactionModal({
   isOpen,
@@ -164,6 +205,7 @@ export function TransactionModal({
   periodId,
   initialMode = 'edit',
   pendingTransaction,
+  initialPrefill,
 }: TransactionModalProps) {
   const createTransactionMutation = useCreateTransaction();
   const updateTransactionMutation = useUpdateTransaction();
@@ -243,6 +285,18 @@ export function TransactionModal({
   // resets share one source of truth. UI-only state (map pickers, previews,
   // loading indicators) intentionally remains local to this component.
   const { methods: simpleFormMethods, values: simpleForm, update: setSimpleForm } = useSimpleTransactionForm();
+  const setStoredDraft = useDraftStore((state) => state.setDraft);
+  const clearStoredDraft = useDraftStore((state) => state.clearDraft);
+
+  useEffect(() => {
+    if (!isOpen || editingTransaction || pendingTransaction || inputMode !== 'simple') return;
+    const meaningful = simpleForm.type !== 'expense' || Boolean(simpleForm.amount || simpleForm.description || simpleForm.fromAccountId || simpleForm.toAccountId || simpleForm.categoryId || simpleForm.notes || simpleForm.place || simpleForm.tagIds.length);
+    const timer = window.setTimeout(() => {
+      if (meaningful) setStoredDraft(SIMPLE_DRAFT_KEY, JSON.stringify(simpleForm));
+      else clearStoredDraft(SIMPLE_DRAFT_KEY);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [clearStoredDraft, editingTransaction, inputMode, isOpen, pendingTransaction, setStoredDraft, simpleForm]);
 
   // Map picker modal state
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
@@ -319,13 +373,32 @@ export function TransactionModal({
   const [isConfirming, setIsConfirming] = useState(false);
   const [parseError, setParseError] = useState('');
 
+  useEffect(() => {
+    if (!isOpen || editingTransaction || pendingTransaction || inputMode !== 'journal') return;
+    const timer = window.setTimeout(() => setStoredDraft(JOURNAL_DRAFT_KEY, JSON.stringify(journalValues)), 350);
+    return () => window.clearTimeout(timer);
+  }, [editingTransaction, inputMode, isOpen, journalValues, pendingTransaction, setStoredDraft]);
+
+  useEffect(() => {
+    if (!isOpen || editingTransaction || pendingTransaction || inputMode !== 'ai') return;
+    if (!aiInput) {
+      const stored = useDraftStore.getState().drafts[AI_DRAFT_KEY]?.value;
+      if (stored) setAiInput(stored);
+      return;
+    }
+    const timer = window.setTimeout(() => setStoredDraft(AI_DRAFT_KEY, aiInput), 350);
+    return () => window.clearTimeout(timer);
+  }, [aiInput, editingTransaction, inputMode, isOpen, pendingTransaction, setStoredDraft]);
+
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [transferFeeRules, setTransferFeeRules] = useState<TransferFeeRule[]>([]);
   const [transferFeeControlsOpen, setTransferFeeControlsOpen] = useState(false);
   const [showAllTransferFromAccounts, setShowAllTransferFromAccounts] = useState(false);
   const [showAllTransferToAccounts, setShowAllTransferToAccounts] = useState(false);
-  const routeTemplates = (routeTemplatesQuery.data ?? []) as TransportRouteTemplate[];
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const [quickEntryPreferences, setQuickEntryPreferences] = useState<QuickEntryPreferences>(() => loadQuickEntryPreferences());
+  const routeTemplates = (routeTemplatesQuery.data?.templates ?? []) as TransportRouteTemplate[];
   const [isSavingRouteTemplate, setIsSavingRouteTemplate] = useState(false);
   const [isUpdatingRouteTemplate, setIsUpdatingRouteTemplate] = useState(false);
   const [selectedRouteTemplateId, setSelectedRouteTemplateId] = useState<number | null>(null);
@@ -372,6 +445,20 @@ export function TransactionModal({
   const walletAccounts = accounts.filter(
     (a) => (a.type === 'asset' || a.type === 'liability') && !a.systemKey,
   );
+  const quickWalletAccounts = [...walletAccounts]
+    .filter((account) => account.type === 'asset')
+    .sort((a, b) => {
+      const aIndex = quickEntryPreferences.accountIds.indexOf(a.id);
+      const bIndex = quickEntryPreferences.accountIds.indexOf(b.id);
+      return (aIndex < 0 ? 999 : aIndex) - (bIndex < 0 ? 999 : bIndex);
+    });
+  const quickCategories = [...categories]
+    .sort((a, b) => {
+      const aIndex = quickEntryPreferences.categoryIds.indexOf(a.id);
+      const bIndex = quickEntryPreferences.categoryIds.indexOf(b.id);
+      return (aIndex < 0 ? 999 : aIndex) - (bIndex < 0 ? 999 : bIndex);
+    })
+    .slice(0, 6);
   
   // Helper to check if an account is a paylater account
   const isPaylaterAccount = (accountId: string): boolean => {
@@ -555,14 +642,38 @@ export function TransactionModal({
       setRouteTemplateName('');
       setSelectedRouteTemplateId(null);
       setRouteTemplateEditorMode(null);
-      setSimpleForm(createSimpleFormDefaults());
+      const defaults = createSimpleFormDefaults();
+      const preferences = loadQuickEntryPreferences();
+      setQuickEntryPreferences(preferences);
+      const stored = useDraftStore.getState().drafts[SIMPLE_DRAFT_KEY]?.value;
+      let restored = defaults;
+      if (stored) {
+        try { restored = { ...defaults, ...JSON.parse(stored) } as typeof defaults; }
+        catch { restored = defaults; }
+      }
+      const preferredAccountId = initialPrefill?.accountId ?? preferences.accountIds[0];
+      const preferredCategoryId = initialPrefill?.categoryId ?? preferences.categoryIds[0];
+      setSimpleForm({
+        ...restored,
+        type: initialPrefill?.type ?? restored.type,
+        amount: initialPrefill?.amount ?? restored.amount,
+        description: initialPrefill?.description ?? restored.description,
+        fromAccountId: initialPrefill?.fromAccountId != null
+          ? String(initialPrefill.fromAccountId)
+          : initialPrefill?.accountId != null || !restored.fromAccountId ? String(preferredAccountId ?? restored.fromAccountId) : restored.fromAccountId,
+        toAccountId: initialPrefill?.toAccountId != null
+          ? String(initialPrefill.toAccountId)
+          : initialPrefill?.accountId != null || !restored.toAccountId ? String(preferredAccountId ?? restored.toAccountId) : restored.toAccountId,
+        categoryId: initialPrefill?.categoryId != null || !restored.categoryId ? String(preferredCategoryId ?? restored.categoryId) : restored.categoryId,
+      });
+      setMobileDetailsOpen(false);
       editMetadataForm.reset();
       setInstallmentPreview(null);
       setAttachments([]);
       setAttachmentUrls({});
       setPendingAttachments([]);
       setCategoryRecommendation(null);
-      journalForm.reset({
+      const journalDefaults: JournalFormValues = {
         dateTime: toDatetimeLocal(),
         description: '',
         notes: '',
@@ -573,10 +684,15 @@ export function TransactionModal({
           { accountId: '', debit: '', credit: '', description: '', cashFlowClass: '' },
         ],
         categoryAllocations: [],
-      });
+      };
+      const storedJournal = useDraftStore.getState().drafts[JOURNAL_DRAFT_KEY]?.value;
+      if (storedJournal) {
+        try { journalForm.reset({ ...journalDefaults, ...JSON.parse(storedJournal) } as JournalFormValues); }
+        catch { journalForm.reset(journalDefaults); }
+      } else journalForm.reset(journalDefaults);
     }
     setFormError('');
-  }, [isOpen, editingTransaction]);
+  }, [isOpen, editingTransaction, initialPrefill]);
 
   useEffect(() => {
     if (!isOpen || !editingTransaction || !attachmentsQuery.data) return;
@@ -905,6 +1021,7 @@ export function TransactionModal({
           originalTxId: recognitionId,
           notes: simpleForm.notes || undefined,
         });
+        clearStoredDraft(SIMPLE_DRAFT_KEY);
         onSaved();
         onClose();
       } catch (err) {
@@ -947,6 +1064,7 @@ export function TransactionModal({
             firstDueDate: startOfLocalDayMs(new Date(simpleForm.paylaterFirstDueDate).getTime()),
             notes: simpleForm.notes || undefined,
       });
+      clearStoredDraft(SIMPLE_DRAFT_KEY);
       onSaved();
       onClose();
         } catch (err) {
@@ -1053,6 +1171,7 @@ export function TransactionModal({
           
           // Fee transaction: debit expense and credit the wallet that actually
           // paid it. Recipient-deducted OVO fees reduce the destination wallet.
+          const transferFeeCategory = categories.find((category) => category.name === TRANSFER_FEE_CATEGORY_NAME);
           await createTransactionMutation.mutateAsync({
             kind: 'expense',
             amountCents: feeAmount,
@@ -1061,7 +1180,7 @@ export function TransactionModal({
             place: simpleForm.place || null,
             date: dateIso,
             periodId: periodId ?? null,
-            categoryId: null, // Will use auto expense account
+            categoryId: transferFeeCategory?.id ?? null,
             walletAccountId: transferDetails.senderPays ? walletAccountId : toWalletAccountId!,
             linkedTxId: mainTransaction.id, // Link to parent transfer transaction
           });
@@ -1125,6 +1244,11 @@ export function TransactionModal({
         await uploadPendingAttachments(mainTransaction.id, pendingAttachments);
       }
       
+      rememberQuickEntry(
+        simpleForm.type === 'income' ? Number(simpleForm.toAccountId) : Number(simpleForm.fromAccountId),
+        simpleForm.type === 'expense' ? Number(simpleForm.categoryId) : undefined,
+      );
+      clearStoredDraft(SIMPLE_DRAFT_KEY);
       onSaved();
       onSuccess?.(mainTransaction.id);
       onClose();
@@ -1265,6 +1389,7 @@ export function TransactionModal({
         })),
         categoryAllocations: parsedAllocations,
       });
+      clearStoredDraft(JOURNAL_DRAFT_KEY);
       onSaved();
       onClose();
     } catch (err) {
@@ -2298,6 +2423,7 @@ export function TransactionModal({
                     setIsConfirming(true);
                     try {
                       await createPendingMutation.mutateAsync({ message: aiInput, parsed: aiParsed });
+                      clearStoredDraft(AI_DRAFT_KEY);
                       onSaved();
                       onClose();
                     } catch (err) {
@@ -2316,9 +2442,195 @@ export function TransactionModal({
         </div>
       ) : (
         <form onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          {!editingTransaction && !pendingTransaction && (
+            <div className="space-y-5 lg:hidden">
+              <div className="grid grid-cols-4 gap-1 rounded-2xl bg-[var(--ref-surface-container)] p-1">
+                {([
+                  ['expense', 'Expense', ArrowUpRight],
+                  ['income', 'Income', ArrowDownRight],
+                  ['transfer', 'Transfer', ArrowRightLeft],
+                  ['paylater', 'Settle', CreditCard],
+                ] as const).map(([value, label, Icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSimpleForm((current) => ({
+                      ...current,
+                      type: value,
+                      description: value === 'income' && !current.description ? 'Income' : current.description,
+                      paylaterRecognitionId: value === 'paylater' ? current.paylaterRecognitionId : '',
+                    }))}
+                    className={cn(
+                      'flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold',
+                      simpleForm.type === value
+                        ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] shadow-sm'
+                        : 'text-[var(--color-text-secondary)]',
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {(simpleForm.type === 'expense' || simpleForm.type === 'income') && (
+                <>
+                  <CurrencyInput
+                    label="Amount"
+                    value={simpleForm.amount}
+                    onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
+                    size="lg"
+                    required
+                  />
+
+                  {simpleForm.type === 'expense' && (
+                    <fieldset className="space-y-2">
+                      <legend className="text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">Recent categories</legend>
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                        {quickCategories.map((category) => (
+                          <button
+                            key={category.id}
+                            type="button"
+                            aria-pressed={simpleForm.categoryId === String(category.id)}
+                            onClick={() => setSimpleForm((current) => ({
+                              ...current,
+                              categoryId: String(category.id),
+                              description: current.description || `${category.name} expense`,
+                            }))}
+                            className={cn(
+                              'min-h-11 shrink-0 rounded-full border px-4 text-sm font-semibold',
+                              simpleForm.categoryId === String(category.id)
+                                ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white'
+                                : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]',
+                            )}
+                          >
+                            {category.icon ? `${category.icon} ` : ''}{category.name}
+                          </button>
+                        ))}
+                      </div>
+                      <select
+                        aria-label="All categories"
+                        value={simpleForm.categoryId}
+                        onChange={(event) => {
+                          const category = categories.find((item) => String(item.id) === event.target.value);
+                          setSimpleForm((current) => ({
+                            ...current,
+                            categoryId: event.target.value,
+                            description: current.description || (category ? `${category.name} expense` : ''),
+                          }));
+                        }}
+                        className={cn('min-h-11 w-full appearance-none', stitchSelect)}
+                        required
+                      >
+                        <option value="">Choose another category…</option>
+                        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                      </select>
+                    </fieldset>
+                  )}
+
+                  <fieldset className="space-y-2">
+                    <legend className="text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">
+                      {simpleForm.type === 'income' ? 'Receive into' : 'Pay from'}
+                    </legend>
+                    <div className="grid grid-cols-2 gap-2">
+                      {quickWalletAccounts.slice(0, 4).map((account) => {
+                        const selected = simpleForm.type === 'income'
+                          ? simpleForm.toAccountId === String(account.id)
+                          : simpleForm.fromAccountId === String(account.id);
+                        return (
+                          <button
+                            key={account.id}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => setSimpleForm((current) => ({
+                              ...current,
+                              [simpleForm.type === 'income' ? 'toAccountId' : 'fromAccountId']: String(account.id),
+                              description: current.description || (simpleForm.type === 'income' ? 'Income' : current.description),
+                            }))}
+                            className={cn(
+                              'min-h-14 min-w-0 rounded-xl border px-3 py-2 text-left',
+                              selected
+                                ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]'
+                                : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]',
+                            )}
+                          >
+                            <span className="block truncate text-sm font-bold">{account.name}</span>
+                            <span className="block truncate text-[10px] text-[var(--color-text-secondary)]">{formatCurrency(account.balance)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {quickWalletAccounts.length > 4 && (
+                      <select
+                        aria-label="All accounts"
+                        value={simpleForm.type === 'income' ? simpleForm.toAccountId : simpleForm.fromAccountId}
+                        onChange={(event) => setSimpleForm((current) => ({
+                          ...current,
+                          [simpleForm.type === 'income' ? 'toAccountId' : 'fromAccountId']: event.target.value,
+                        }))}
+                        className={cn('min-h-11 w-full appearance-none', stitchSelect)}
+                      >
+                        <option value="">Choose another account…</option>
+                        {quickWalletAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                      </select>
+                    )}
+                  </fieldset>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileDetailsOpen((open) => !open)}
+                    aria-expanded={mobileDetailsOpen}
+                    className="flex min-h-11 w-full items-center justify-between rounded-xl border border-[var(--color-border)] px-4 text-sm font-bold"
+                  >
+                    More details
+                    <span className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
+                      {simpleForm.dateTime.startsWith(toDateInputLocal(new Date())) ? 'Today' : toDateInputLocal(new Date(simpleForm.dateTime))}
+                      <ChevronDown className={cn('h-4 w-4 transition-transform', mobileDetailsOpen && 'rotate-180')} />
+                    </span>
+                  </button>
+
+                  {mobileDetailsOpen && (
+                    <div className="space-y-4 rounded-2xl bg-[var(--ref-surface-container-low)] p-4">
+                      <label className="block text-sm font-semibold">Description
+                        <input value={simpleForm.description} onChange={(event) => setSimpleForm({ ...simpleForm, description: event.target.value })} className={cn('mt-1 w-full', stitchSelect)} placeholder="What was this for?" />
+                      </label>
+                      <div className="grid grid-cols-[auto_1fr] gap-2">
+                        <button type="button" onClick={() => setSimpleForm({ ...simpleForm, dateTime: toDatetimeLocal() })} className="min-h-11 rounded-xl bg-[var(--ref-primary)]/10 px-4 text-sm font-bold text-[var(--ref-primary)]">Today</button>
+                        <input type="datetime-local" value={simpleForm.dateTime} onChange={(event) => setSimpleForm({ ...simpleForm, dateTime: event.target.value })} className={cn('min-w-0', stitchSelect)} />
+                      </div>
+                      <label className="block text-sm font-semibold">Location
+                        <input value={simpleForm.place} onChange={(event) => setSimpleForm({ ...simpleForm, place: event.target.value })} className={cn('mt-1 w-full', stitchSelect)} placeholder="Optional" />
+                      </label>
+                      <label className="block text-sm font-semibold">Notes
+                        <textarea value={simpleForm.notes} onChange={(event) => setSimpleForm({ ...simpleForm, notes: event.target.value })} className={cn('mt-1 min-h-20 w-full', stitchSelect)} placeholder="Optional" />
+                      </label>
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">Tags</p>
+                        <TagPicker tags={tags} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">Receipt or attachment</p>
+                        <AttachmentUploader
+                          attachments={attachments}
+                          pendingAttachments={pendingAttachments}
+                          onAttachmentsChange={setAttachments}
+                          onPendingAttachmentsChange={setPendingAttachments}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          <div className={cn(
+            'grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8',
+            !editingTransaction && !pendingTransaction && (simpleForm.type === 'expense' || simpleForm.type === 'income') && 'hidden lg:grid',
+          )}>
           <div className="lg:col-span-8 space-y-6 lg:space-y-8">
-            <div className="grid grid-cols-2 sm:grid-cols-4 p-1 bg-[var(--ref-surface-container)] rounded-2xl gap-1">
+            <div className="hidden grid-cols-2 p-1 bg-[var(--ref-surface-container)] rounded-2xl gap-1 lg:grid lg:grid-cols-4">
               {(
                 [
                   { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },

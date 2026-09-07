@@ -8,10 +8,12 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Cpu,
   Database,
   Download,
   HelpCircle,
   ImagePlus,
+  Images,
   LoaderCircle,
   Pencil,
   RefreshCw,
@@ -29,6 +31,7 @@ import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { AgentMessage } from '../components/agent/AgentMessage';
+import { GalleryImagePicker } from '../components/gallery/GalleryImagePicker';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory } from '../lib/api';
@@ -37,9 +40,10 @@ import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
 import { agentCommands } from '../features/agent/commands';
 import { useConversationController } from '../features/agent/conversation-controller';
-import { ConversationList, ConversationTitle, CONVERSATIONS_PAGE_SIZE } from '../features/agent/ConversationList';
+import { ConversationList, ConversationTitle, CONVERSATIONS_PAGE_SIZE, type ConversationListProps } from '../features/agent/ConversationList';
 import type { AgentActivityStep, AgentResponse, ChatImage, ChatMessage, ConversationDetail, Period } from '../features/agent/types';
 import { useAgentConversationQuery, useAgentConversationsQuery, useAgentMemoriesQuery, useAgentProfileQuery } from '../features/agent/queries';
+import type { GalleryImage } from '../features/gallery/queries';
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useCategoriesQuery } from '../features/categories/queries';
 import { queryKeys } from '../features/core/query-keys';
@@ -82,8 +86,24 @@ type AccountOption = {
   liquidityClass: 'cash_equivalent' | 'receivable' | 'investment' | 'non_cash';
 };
 
+type FloatingComposerBounds = { left: number; width: number };
+
 function hasAgentResponse(message: ChatMessage): message is Extract<ChatMessage, { role: 'assistant' }> & { response: AgentResponse } {
   return message.role === 'assistant' && message.response != null;
+}
+
+function isClarificationFollowUp(text: string): boolean {
+  return text.startsWith('For "') && text.includes('", I choose "') && text.endsWith('".');
+}
+
+function clarificationSelection(clarification: AgentClarification, messages: ChatMessage[]): string | null {
+  const marker = `For "${clarification.question}", I choose "`;
+  const followUp = messages.find((message): message is Extract<ChatMessage, { role: 'user' }> => (
+    message.role === 'user' && message.isClarificationFollowUp === true && message.text.startsWith(marker)
+  ));
+  if (!followUp) return null;
+  const answer = followUp.text.slice(marker.length);
+  return answer.endsWith('".') ? answer.slice(0, -2) : answer || null;
 }
 
 function toChatMessages(detail: ConversationDetail): ChatMessage[] {
@@ -93,7 +113,15 @@ function toChatMessages(detail: ConversationDetail): ChatMessage[] {
     }
     const images = persistedMessageImages(message.attachments, message.id);
     const text = message.content.replace(/\n\n\[\d+ image attachments? provided for this turn; attachments are retained for conversation display\.\]$/, '');
-    return { id: String(message.id), serverId: message.id, role: 'user', text, createdAt: message.createdAt, ...(images.length > 0 ? { images } : {}) };
+    return {
+      id: String(message.id),
+      serverId: message.id,
+      role: 'user',
+      text,
+      createdAt: message.createdAt,
+      ...(images.length > 0 ? { images } : {}),
+      ...(isClarificationFollowUp(text) ? { isClarificationFollowUp: true } : {}),
+    };
   });
 }
 
@@ -101,8 +129,57 @@ const AGENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_AGENT_IMAGE_SIZE = 4 * 1024 * 1024;
 const MAX_AGENT_IMAGE_COUNT = 3;
 
+const AGENT_MODEL_OPTIONS = [
+  { value: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
+  { value: 'google/gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+  { value: 'google/gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite' },
+  { value: 'openai/gpt-5.6-luna', label: 'GPT 5.6 Luna' },
+  { value: 'deepseek/deepseek-v4-flash-vision-exp', label: 'DeepSeek V4 Flash Vision' },
+] as const;
+
+type SavedAgentModel = { id: number; name: string; model: string; baseUrl: string; isDefault: boolean };
+
 type StartupTime = 'morning' | 'afternoon' | 'night';
 type StartupSelection = { greeting: string; subtitle: string; prompts: string[] };
+type ComposerTaskId = 'split-bill' | 'prepare-transaction' | 'upload-photo' | 'change-model';
+type ComposerTask = {
+  id: ComposerTaskId;
+  command: string;
+  label: string;
+  description: string;
+  instruction: string;
+};
+
+const COMPOSER_TASKS: ComposerTask[] = [
+  {
+    id: 'split-bill',
+    command: '/split',
+    label: 'Split bill',
+    description: 'Divide a receipt or shared expense.',
+    instruction: 'Help me split this bill fairly. Use the attached receipt or the expense details I provide, ask for any missing shares, and prepare the amounts for each person.',
+  },
+  {
+    id: 'prepare-transaction',
+    command: '/trx',
+    label: 'Prepare transaction',
+    description: 'Turn details into a transaction draft.',
+    instruction: 'Prepare a transaction draft from the details I provide. Identify the amount, date, type, account, category, and any missing fields, then ask for clarification before proposing changes.',
+  },
+  {
+    id: 'upload-photo',
+    command: '/photo',
+    label: 'Upload photo',
+    description: 'Attach a receipt or finance image.',
+    instruction: '',
+  },
+  {
+    id: 'change-model',
+    command: '/model',
+    label: 'Change model',
+    description: 'Choose the model for the next request.',
+    instruction: '',
+  },
+];
 
 const STARTER_COPY: Record<StartupTime, Array<{ greeting: string; subtitle: string }>> = {
   morning: [
@@ -394,16 +471,22 @@ function ToolTrace({ response }: { response: AgentResponse }) {
 function ClarificationCard({
   clarification,
   disabled,
+  initialSelection,
   onSelect,
 }: {
   clarification: AgentClarification;
   disabled?: boolean;
+  initialSelection?: string | null;
   onSelect: (choice: AgentClarificationChoice, customValue?: string) => void;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialSelection ?? null);
   const [customChoiceId, setCustomChoiceId] = useState<string | null>(null);
   const [customValue, setCustomValue] = useState('');
   const customChoice = clarification.choices.find((choice) => choice.id === customChoiceId) ?? null;
+
+  useEffect(() => {
+    if (initialSelection) setSelected(initialSelection);
+  }, [initialSelection]);
 
   const choose = (choice: AgentClarificationChoice) => {
     if (disabled || selected) return;
@@ -438,12 +521,16 @@ function ClarificationCard({
             type="button"
             onClick={() => choose(choice)}
             disabled={Boolean(disabled || selected)}
+            aria-pressed={selected === choice.label || selected?.startsWith(`${choice.label}:`) || false}
             className={cn(
               'rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-left transition-colors hover:border-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/5 disabled:cursor-not-allowed disabled:opacity-60',
-              selected === choice.label && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10',
+              (selected === choice.label || selected?.startsWith(`${choice.label}:`)) && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]',
             )}
           >
-            <span className="block text-sm font-semibold">{choice.label}</span>
+            <span className="flex items-start justify-between gap-3 text-sm font-semibold">
+              <span>{choice.label}</span>
+              {(selected === choice.label || selected?.startsWith(`${choice.label}:`)) && <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--ref-primary)]"><Check className="h-3.5 w-3.5" />Selected</span>}
+            </span>
             {choice.description && <span className="mt-0.5 block text-xs text-[var(--color-text-secondary)]">{choice.description}</span>}
           </button>
         ))}
@@ -464,7 +551,7 @@ function ClarificationCard({
           <Button type="button" size="sm" onClick={submitCustom} disabled={!customValue.trim()}>Send choice</Button>
         </div>
       )}
-      {selected && <p className="mt-3 text-xs font-medium text-[var(--color-text-secondary)]">Sent: {selected}</p>}
+      {selected && <p className="mt-3 text-xs font-medium text-[var(--color-text-secondary)]">Selected: <span className="font-semibold text-[var(--color-text-primary)]">{selected}</span></p>}
     </div>
   );
 }
@@ -561,6 +648,10 @@ function isClarification(value: unknown): value is AgentClarification {
     return (choice.description == null || typeof choice.description === 'string')
       && (choice.freeText == null || typeof choice.freeText === 'boolean');
   });
+}
+
+function hasClarificationResponse(message: ChatMessage): boolean {
+  return hasAgentResponse(message) && Boolean(message.response.clarifications?.some(isClarification));
 }
 
 function TransactionProposalCard({
@@ -832,10 +923,22 @@ function AgentPage() {
   const activeConversationId = useAgentSessionStore((state) => state.activeConversationId);
   const setActiveConversationId = useAgentSessionStore((state) => state.setActiveConversationId);
   const conversationQuery = useAgentConversationQuery(activeConversationId);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Keep live turns with their conversation, including while another chat is open.
+  const [conversationMessages, setConversationMessages] = useState<Record<string, ChatMessage[]>>({});
+  const messages = conversationMessages[String(activeConversationId)] ?? [];
+  const setMessagesForConversation = (id: number | null, update: ChatMessage[] | ((current: ChatMessage[]) => ChatMessage[])) => {
+    setConversationMessages((current) => ({
+      ...current,
+      [String(id)]: typeof update === 'function' ? update(current[String(id)] ?? []) : update,
+    }));
+  };
+  const setMessages = (update: ChatMessage[] | ((current: ChatMessage[]) => ChatMessage[])) => setMessagesForConversation(activeConversationId, update);
   const [draft, setDraft] = useState('');
+  const [composerTaskId, setComposerTaskId] = useState<ComposerTaskId | null>(null);
+  const [composerModelMenuOpen, setComposerModelMenuOpen] = useState(false);
   const [pendingImages, setPendingImages] = useState<ChatImage[]>([]);
   const [previewImage, setPreviewImage] = useState<ChatImage | null>(null);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isDraggingImages, setIsDraggingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const streamStatus = useAgentSessionStore((state) => state.streamStatus);
@@ -858,6 +961,11 @@ function AgentPage() {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [agentModel, setAgentModel] = useState<string>(AGENT_MODEL_OPTIONS[0].value);
+  const [savedAgentModels, setSavedAgentModels] = useState<SavedAgentModel[]>([]);
+  const [isSavingAgentModel, setIsSavingAgentModel] = useState(false);
+  const [isAgentModelMenuOpen, setIsAgentModelMenuOpen] = useState(false);
+  const [isMobileHistoryOpen, setIsMobileHistoryOpen] = useState(false);
   const conversationController = useConversationController({
     activeConversationId,
     onError: setError,
@@ -880,7 +988,13 @@ function AgentPage() {
     closeConversationMenu,
   } = conversationController;
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const agentModelMenuRef = useRef<HTMLDivElement>(null);
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const composerFormRef = useRef<HTMLFormElement>(null);
+  const latestMessageAnchorRef = useRef<HTMLDivElement>(null);
+  const chatColumnRef = useRef<HTMLDivElement>(null);
+  const mobileConversationListRef = useRef<HTMLDivElement>(null);
   const editingUserMessageTextareaRef = useRef<HTMLTextAreaElement>(null);
   const messageActionHoldTimerRef = useRef<number | null>(null);
   const agentRequestRef = useRef<AbortController | null>(null);
@@ -888,6 +1002,8 @@ function AgentPage() {
   const lastProfileNicknameRef = useRef<string | null>(null);
   const hydratedConversationIdRef = useRef<number | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const [floatingComposerBounds, setFloatingComposerBounds] = useState<FloatingComposerBounds | null>(null);
+  const [isAtLatestMessage, setIsAtLatestMessage] = useState(false);
   const [visibleConversationCount, setVisibleConversationCount] = useState(CONVERSATIONS_PAGE_SIZE);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
 
@@ -914,10 +1030,70 @@ function AgentPage() {
     })),
     [accountsQuery.data],
   );
+  const selectableAgentModels = useMemo(() => {
+    const saved = savedAgentModels.map((option) => ({ value: option.model, label: option.name }));
+    const defaults = saved.length > 0 ? saved : AGENT_MODEL_OPTIONS;
+    const current = agentModel.trim();
+    if (!current || defaults.some((option) => option.value === current)) return defaults;
+    return [{ value: current, label: `Current · ${current}` }, ...defaults];
+  }, [agentModel, savedAgentModels]);
+
+  useEffect(() => {
+    if (!isAgentModelMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!agentModelMenuRef.current?.contains(event.target as Node)) setIsAgentModelMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsAgentModelMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAgentModelMenuOpen]);
+
+  useEffect(() => {
+    if (!composerModelMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!composerFormRef.current?.contains(event.target as Node)) setComposerModelMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [composerModelMenuOpen]);
+
+  useEffect(() => {
+    if (!isMobileHistoryOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMobileHistoryOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isMobileHistoryOpen]);
 
   useEffect(() => {
     setStartupSelection(createStartupSelection(nickname));
   }, [nickname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.agentProvider.get().then((settings) => {
+      if (!cancelled && settings.model.trim()) setAgentModel(settings.model);
+    }).catch(() => {
+      // The selector can still use the bundled defaults when provider settings
+      // are unavailable during local setup.
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.agentProvider.models.list().then((models) => {
+      if (!cancelled) setSavedAgentModels(models.map(({ id, name, model, baseUrl, isDefault }) => ({ id, name, model, baseUrl, isDefault })));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   // The page keeps its rich streaming view state locally, while these small
   // selectors make the durable draft and transient session lifecycle visible
@@ -928,7 +1104,16 @@ function AgentPage() {
   const draftKey = `agent:${activeConversationId ?? 'new'}`;
   const storedDraft = useDraftStore((state) => state.drafts[draftKey]?.value ?? '');
   const lastDraftKeyRef = useRef(draftKey);
+  const activeComposerTask = composerTaskId == null ? null : COMPOSER_TASKS.find((task) => task.id === composerTaskId) ?? null;
+  const composerTaskQuery = draft.trimStart().startsWith('/') ? draft.trimStart().slice(1).toLowerCase() : '';
+  const matchingComposerTasks = COMPOSER_TASKS.filter((task) => `${task.command.slice(1)} ${task.label} ${task.description}`.toLowerCase().includes(composerTaskQuery));
+  const showComposerTaskMenu = activeComposerTask == null && !composerModelMenuOpen && draft.trimStart().startsWith('/');
+  const [composerTaskHighlight, setComposerTaskHighlight] = useState(0);
   const draftWasEditedRef = useRef(false);
+
+  useEffect(() => {
+    setComposerTaskHighlight(0);
+  }, [composerTaskQuery]);
 
   useEffect(() => {
     setSessionAttachmentIds(pendingImages.map((image) => image.id));
@@ -941,6 +1126,43 @@ function AgentPage() {
     }
     lastProfileNicknameRef.current = nickname;
   }, [nickname, profileQuery.data]);
+
+  useLayoutEffect(() => {
+    const column = chatColumnRef.current;
+    if (!column) return;
+    const measure = () => {
+      const { left, width } = column.getBoundingClientRect();
+      setFloatingComposerBounds({ left, width });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(column);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  useEffect(() => {
+    const anchor = latestMessageAnchorRef.current;
+    if (!anchor) return;
+    const update = () => {
+      const rect = anchor.getBoundingClientRect();
+      setIsAtLatestMessage(rect.top >= 0 && rect.bottom <= window.innerHeight - 8);
+    };
+    update();
+    document.addEventListener('scroll', update, { capture: true, passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      document.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [messages]);
+
+  const jumpToLatest = () => {
+    latestMessageAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  };
 
   useEffect(() => {
     if (lastDraftKeyRef.current !== draftKey) {
@@ -994,6 +1216,26 @@ function AgentPage() {
     textarea.style.height = `${nextHeight}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, [editingUserMessageId, editingUserMessageText]);
+
+  const saveAgentModel = async (nextModel: string) => {
+    if (!nextModel || nextModel === agentModel || isSavingAgentModel) return;
+    const previousModel = agentModel;
+    setAgentModel(nextModel);
+    setIsSavingAgentModel(true);
+    setError(null);
+    try {
+      const result = await api.agentProvider.update({ model: nextModel });
+      setAgentModel(result.model);
+      const modelLabel = savedAgentModels.find((option) => option.model === result.model)?.name ?? AGENT_MODEL_OPTIONS.find((option) => option.value === result.model)?.label;
+      void api.agentProvider.models.list().then((models) => setSavedAgentModels(models.map(({ id, name, model, baseUrl, isDefault }) => ({ id, name, model, baseUrl, isDefault })))).catch(() => undefined);
+      setNotice(modelLabel ? `${modelLabel} selected.` : 'Agent model updated.');
+    } catch (caught) {
+      setAgentModel(previousModel);
+      setError(caught instanceof Error ? caught.message : 'Could not change the agent model.');
+    } finally {
+      setIsSavingAgentModel(false);
+    }
+  };
 
   const saveNickname = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1070,16 +1312,36 @@ function AgentPage() {
 
   useLayoutEffect(() => {
     const textarea = questionInputRef.current;
-    if (!textarea) return;
-
-    const maxHeight = 160;
-    textarea.style.height = 'auto';
-    const contentHeight = textarea.scrollHeight;
-    setIsComposerExpanded(draft.includes('\n') || contentHeight > 40);
-    const nextHeight = Math.min(contentHeight, maxHeight);
-    textarea.style.height = `${Math.max(nextHeight, 40)}px`;
-    textarea.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
-  }, [draft]);
+    const composer = composerRef.current;
+    if (!textarea || !composer) return;
+    // Measure at the compact width regardless of the current layout. Measuring
+    // the expanded width can otherwise alternate between one and two lines.
+    const measure = () => {
+      const probe = textarea.cloneNode() as HTMLTextAreaElement;
+      probe.removeAttribute('id');
+      probe.setAttribute('aria-hidden', 'true');
+      probe.tabIndex = -1;
+      probe.value = draft;
+      probe.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;height:0;min-height:0;padding:0;border:0;width:${Math.max(1, composer.clientWidth - 162)}px`;
+      composer.appendChild(probe);
+      const expanded = draft.includes('\n') || probe.scrollHeight > 24;
+      probe.remove();
+      setIsComposerExpanded(expanded);
+      textarea.style.height = '0px';
+      const contentHeight = textarea.scrollHeight;
+      textarea.style.height = `${Math.max(40, Math.min(contentHeight, 160))}px`;
+      textarea.style.overflowY = contentHeight > 160 ? 'auto' : 'hidden';
+    };
+    measure();
+    let width = composer.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (composer.clientWidth === width) return;
+      width = composer.clientWidth;
+      measure();
+    });
+    observer.observe(composer);
+    return () => observer.disconnect();
+  }, [draft, isComposerExpanded]);
 
   const refreshConversations = async () => {
     const result = await conversationsQuery.refetch();
@@ -1087,13 +1349,14 @@ function AgentPage() {
   };
 
   const selectConversation = (conversationId: number) => {
-    if (conversationId === activeConversationId || isLoadingConversation) return;
+    if (conversationId === activeConversationId) return;
     setError(null);
     setNotice(null);
     hydratedConversationIdRef.current = null;
     setActiveConversationId(conversationId);
     void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId, prompt: undefined }) } as any);
-    setMessages([]);
+    setComposerTaskId(null);
+    setComposerModelMenuOpen(false);
     setPendingImages([]);
     setImageError(null);
   };
@@ -1106,7 +1369,8 @@ function AgentPage() {
     if (useAgentSessionStore.getState().activeConversationId === conversationId) return;
     hydratedConversationIdRef.current = null;
     setActiveConversationId(conversationId);
-    setMessages([]);
+    setComposerTaskId(null);
+    setComposerModelMenuOpen(false);
     setPendingImages([]);
     setImageError(null);
     setError(null);
@@ -1123,7 +1387,9 @@ function AgentPage() {
     // that server data cannot erase the live message.
     if (conversationQuery.isFetching || hydratedConversationIdRef.current === activeConversationId) return;
     hydratedConversationIdRef.current = activeConversationId;
-    setMessages(toChatMessages(conversationQuery.data));
+    setConversationMessages((current) => current[String(activeConversationId)] ? current : {
+      ...current, [String(activeConversationId)]: toChatMessages(conversationQuery.data!),
+    });
     setPendingImages([]);
     setImageError(null);
   }, [activeConversationId, conversationQuery.data, conversationQuery.isFetching]);
@@ -1150,6 +1416,8 @@ function AgentPage() {
       setActiveConversationId(null);
       setMessages([]);
       setPendingImages([]);
+      setComposerTaskId(null);
+      setComposerModelMenuOpen(false);
       setDraft(search.prompt.trim());
       if (search.conversationId != null) {
         void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: undefined }) } as any);
@@ -1229,6 +1497,32 @@ function AgentPage() {
     setImageError(errors.length > 0 ? errors.join('\n') : null);
   };
 
+  const addGalleryImage = async (image: GalleryImage) => {
+    if (pendingImages.length >= MAX_AGENT_IMAGE_COUNT) {
+      setImageError(`You can attach at most ${MAX_AGENT_IMAGE_COUNT} images per message.`);
+      return;
+    }
+    setImageError(null);
+    try {
+      const attachment = await api.gallery.attach(image.source, image.id);
+      if (!AGENT_IMAGE_TYPES.includes(attachment.mimeType) || attachment.fileSize <= 0 || attachment.fileSize > MAX_AGENT_IMAGE_SIZE) {
+        throw new Error('That gallery image is not supported for Agent attachments.');
+      }
+      setPendingImages((current) => current.length >= MAX_AGENT_IMAGE_COUNT
+        ? current
+        : [...current, {
+          id: `gallery-${image.source}-${image.id}-${Date.now()}`,
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+          dataUrl: attachment.data,
+          fileSize: attachment.fileSize,
+        }]);
+      setIsGalleryOpen(false);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not attach that gallery image.');
+    }
+  };
+
   const handleComposerPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (isSending) return;
     const imageFiles = Array.from(event.clipboardData.files).filter((file) => AGENT_IMAGE_TYPES.includes(file.type));
@@ -1237,15 +1531,52 @@ function AgentPage() {
     void addImageFiles(imageFiles);
   };
 
-  const submitQuestion = async (question = draft, replacement?: { localId: string; serverId: number }) => {
+  const selectComposerTask = (taskId: ComposerTaskId) => {
+    draftWasEditedRef.current = true;
+    setComposerTaskHighlight(0);
+    setComposerModelMenuOpen(false);
+    setDraft('');
+    clearDraft(draftKey);
+    if (taskId === 'upload-photo') {
+      requestAnimationFrame(() => imageInputRef.current?.click());
+      return;
+    }
+    if (taskId === 'change-model') {
+      setComposerModelMenuOpen(true);
+      requestAnimationFrame(() => questionInputRef.current?.focus());
+      return;
+    }
+    setComposerTaskId(taskId);
+    requestAnimationFrame(() => questionInputRef.current?.focus());
+  };
+
+  const clearComposerTask = () => {
+    setComposerTaskId(null);
+    requestAnimationFrame(() => questionInputRef.current?.focus());
+  };
+
+  const selectComposerModel = (model: string) => {
+    setComposerModelMenuOpen(false);
+    setComposerTaskHighlight(0);
+    void saveAgentModel(model);
+    requestAnimationFrame(() => questionInputRef.current?.focus());
+  };
+
+  const submitQuestion = async (question = draft, replacement?: { localId: string; serverId: number }, presentation?: { hideUserMessage?: boolean }) => {
+    let requestConversationId = activeConversationId;
+    const setMessages = (update: ChatMessage[] | ((current: ChatMessage[]) => ChatMessage[])) => setMessagesForConversation(requestConversationId, update);
+    const isRequestVisible = () => useAgentSessionStore.getState().activeConversationId === requestConversationId;
     const text = question.trim();
     const attachedImages = replacement ? [] : pendingImages;
-    if ((text.length < 2 && attachedImages.length === 0) || isSending) return;
-    const questionForAgent = text || 'Please analyze the attached image.';
+    if ((text.length < 2 && attachedImages.length === 0) || isSending || isLoadingConversation) return;
+    const questionForAgent = activeComposerTask
+      ? `${activeComposerTask.instruction}\n\nUser request: ${text || 'Please analyze the attached image.'}`
+      : text || 'Please analyze the attached image.';
     const composerDraftKey = draftKey;
     const createdAt = Date.now();
     const userLocalId = replacement?.localId ?? `user-${createdAt}`;
     setDraft('');
+    setComposerTaskId(null);
     // Clear the persisted composer value at send time as well. Otherwise the
     // draft hydration effect sees the old value while streaming and restores
     // it into the input immediately after the local state is cleared.
@@ -1256,7 +1587,14 @@ function AgentPage() {
     setEditingUserMessageId(null);
     setEditingUserMessageText('');
     setMessages((current) => {
-      if (!replacement) return [...current, { id: userLocalId, role: 'user', text, createdAt, images: attachedImages }];
+      if (!replacement) return [...current, {
+        id: userLocalId,
+        role: 'user',
+        text,
+        createdAt,
+        images: attachedImages,
+        ...(presentation?.hideUserMessage ? { isClarificationFollowUp: true } : {}),
+      }];
       const replacementIndex = current.findIndex((message) => message.id === replacement.localId);
       if (replacementIndex < 0) return current;
       return current.slice(0, replacementIndex + 1).map((message) =>
@@ -1274,17 +1612,23 @@ function AgentPage() {
     // Keep a newly-created conversation out of the detail-query hydration
     // path until this first turn has settled. Otherwise the empty detail GET
     // can race the stream and replace the optimistic first message.
-    let requestConversationId = activeConversationId;
     try {
       if (requestConversationId == null) {
         const created = await agentCommands.conversations.create();
         requestConversationId = created.conversation.id;
+        const createdId = requestConversationId;
+        setConversationMessages((current) => {
+          const { null: initialMessages = [], ...saved } = current;
+          return { ...saved, [String(createdId)]: initialMessages };
+        });
         updateConversationCache((current) => [created.conversation, ...current.filter((candidate) => candidate.id !== created.conversation.id)]);
         // Mark the optimistic first turn as already hydrated. The detail
         // query may race it with an empty conversation response.
-        hydratedConversationIdRef.current = requestConversationId;
-        setActiveConversationId(requestConversationId);
-        void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: requestConversationId, prompt: undefined }) } as any);
+        if (useAgentSessionStore.getState().activeConversationId == null) {
+          hydratedConversationIdRef.current = requestConversationId;
+          setActiveConversationId(requestConversationId);
+          void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: createdId, prompt: undefined }) } as any);
+        }
       }
       const conversationId = requestConversationId;
       if (conversationId == null) throw new Error('Could not establish a conversation. Please try again.');
@@ -1337,27 +1681,25 @@ function AgentPage() {
             ? { ...message, serverId: response.userMessageId ?? message.serverId }
             : message,
       ));
-      setPendingImages([]);
+      if (isRequestVisible()) setPendingImages([]);
       clearDraft(composerDraftKey);
-      if (response.conversationId != null && activeConversationId == null) setActiveConversationId(response.conversationId);
-      else if (activeConversationId == null && requestConversationId != null) setActiveConversationId(requestConversationId);
       void refreshConversations().catch(() => undefined);
     } catch (caught) {
       // Preserve the newly created session after a failed first provider
       // request so retrying continues the same conversation and does not
       // create an orphaned second chat.
-      if (activeConversationId == null && requestConversationId != null) {
-        setActiveConversationId(requestConversationId);
-      }
       const wasCancelled = requestController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError');
       if (wasCancelled) {
         setMessages((current) => current.filter((message) => message.id !== streamedAssistantId || message.role !== 'assistant' || message.text.trim().length > 0));
-        setNotice('Response stopped.');
+        if (isRequestVisible()) setNotice('Response stopped.');
       } else {
         setMessages((current) => current.filter((message) => message.id !== streamedAssistantId));
-        setError(caught instanceof Error ? caught.message : 'The agent query failed. Please try again.');
+        if (isRequestVisible()) setError(caught instanceof Error ? caught.message : 'The agent query failed. Please try again.');
       }
     } finally {
+      // The detail cache may still contain the pre-stream turn for five minutes.
+      // Invalidate even on cancellation, since the server can have saved messages.
+      if (requestConversationId != null) void queryClient.invalidateQueries({ queryKey: queryKeys.agent.conversation(requestConversationId) });
       if (agentRequestRef.current === requestController) agentRequestRef.current = null;
       setIsSending(false);
       setStreamActivity(null);
@@ -1367,7 +1709,7 @@ function AgentPage() {
 
   const submitClarification = (clarification: AgentClarification, choice: AgentClarificationChoice, customValue?: string) => {
     const choiceText = customValue ? `${choice.label}: ${customValue}` : choice.label;
-    void submitQuestion(`For "${clarification.question}", I choose "${choiceText}".`);
+    void submitQuestion(`For "${clarification.question}", I choose "${choiceText}".`, undefined, { hideUserMessage: true });
   };
 
   const stopAgentQuery = () => {
@@ -1441,11 +1783,14 @@ function AgentPage() {
   };
 
   const startNewConversation = () => {
+    if (isSending && activeConversationId == null) return;
     hydratedConversationIdRef.current = null;
     setActiveConversationId(null);
     void navigate({ search: (previous: Record<string, unknown>) => ({ ...previous, conversationId: undefined, prompt: undefined }) } as any);
-    setMessages([]);
+    setMessagesForConversation(null, []);
     setDraft('');
+    setComposerTaskId(null);
+    setComposerModelMenuOpen(false);
     setPendingImages([]);
     setImageError(null);
     setError(null);
@@ -1470,19 +1815,62 @@ function AgentPage() {
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
   const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id ?? null;
   const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id ?? null;
+  const messageCharacterCount = messages.reduce((total, message) => total + message.text.length, 0);
+  const shouldFloatComposer = isSending || messages.length > 4 || messageCharacterCount > 1_200;
+  const conversationListProps: Omit<ConversationListProps, 'conversationListRef'> = {
+    conversations,
+    dailyUsage: conversationsQuery.data?.dailyUsage ?? null,
+    periods,
+    selectedPeriodId,
+    onSelectPeriod: setSelectedPeriodId,
+    activeConversationId,
+    visibleConversations,
+    visibleConversationCount,
+    isLoadingMoreConversations,
+    isLoadingConversation,
+    onNearEnd: () => {
+      if (isLoadingMoreConversations || visibleConversationCount >= sortedConversations.length) return;
+      setIsLoadingMoreConversations(true);
+      conversationLoadMoreTimerRef.current = window.setTimeout(() => {
+        setVisibleConversationCount((current) => Math.min(current + CONVERSATIONS_PAGE_SIZE, sortedConversations.length));
+        setIsLoadingMoreConversations(false);
+        conversationLoadMoreTimerRef.current = null;
+      }, 650);
+    },
+    onSelectConversation: (id) => {
+      setIsMobileHistoryOpen(false);
+      void selectConversation(id);
+    },
+    editingConversationId,
+    conversationTitleDraft,
+    onConversationTitleDraftChange: setConversationTitleDraft,
+    onSaveConversationTitle: (id) => void saveConversationTitle(id),
+    onCancelRename: cancelConversationRename,
+    openConversationMenuId,
+    conversationMenuPlacement,
+    conversationActionId,
+    onToggleConversationMenu: toggleConversationMenu,
+    onEditConversation: beginConversationRename,
+    onTogglePin: (conversation) => { closeConversationMenu(); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); },
+    onToggleArchive: (conversation) => { closeConversationMenu(); void updateConversation(conversation.id, { archived: conversation.archivedAt == null }); },
+    onDeleteConversation: (conversation) => void deleteConversation(conversation, startNewConversation),
+  };
 
   return (
     <RequireAuth>
-      <PageContainer className="max-w-7xl">
-        <div className="flex flex-col gap-6">
-          <PageHeader
-            subtext="Evidence-first finance chat"
-            title="Fainens Agent"
-            description="Ask about recorded finances, investigate patterns, and prepare changes with your approval."
-          />
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-            <Card className="overflow-hidden">
-              <div className="flex min-h-16 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6">
+      <PageContainer className="max-w-7xl max-md:-mx-4 max-md:-mt-[calc(1rem+env(safe-area-inset-top))] max-md:!pb-0">
+        <div className="flex flex-col gap-0 md:gap-6">
+          <div className="hidden md:block">
+            <PageHeader
+              subtext="Evidence-first finance chat"
+              title="Fainens Agent"
+              description="Explore your finances and approve changes."
+            />
+          </div>
+          <div className="grid items-start gap-0 xl:items-stretch xl:grid-cols-[minmax(0,1fr)_22rem] xl:gap-6">
+            <div ref={chatColumnRef} className="min-w-0 self-start xl:flex xl:self-stretch">
+            <Card className="flex min-w-0 flex-col overflow-visible max-md:min-h-[calc(100dvh-4.75rem)] max-md:rounded-none max-md:border-x-0 max-md:border-t-0 max-md:shadow-none xl:h-full xl:flex-1 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:p-0">
+              <div className="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-3 md:static">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--ref-primary-container)] text-white"><Sparkles className="h-[18px] w-[18px]" /></span>
                   <div className="min-w-0">
@@ -1510,30 +1898,83 @@ function AgentPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileHistoryOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)] xl:hidden"
+                    aria-expanded={isMobileHistoryOpen}
+                    aria-controls="agent-mobile-history"
+                  >
+                    <span className="hidden sm:inline">History</span><span className="sm:hidden">Chats</span>
+                    <ChevronDown className="h-4 w-4 -rotate-90" aria-hidden="true" />
+                  </button>
+                  <div ref={agentModelMenuRef} className="relative hidden sm:block">
+                    <button
+                      type="button"
+                      onClick={() => setIsAgentModelMenuOpen((open) => !open)}
+                      onKeyDown={(event) => {
+                        if ((event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') && !isAgentModelMenuOpen) {
+                          event.preventDefault();
+                          setIsAgentModelMenuOpen(true);
+                        }
+                      }}
+                      disabled={isSavingAgentModel}
+                      aria-haspopup="listbox"
+                      aria-expanded={isAgentModelMenuOpen}
+                      aria-controls="agent-model-menu"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--ref-primary)]/40 hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]/20 disabled:cursor-wait disabled:opacity-60"
+                      title="Choose the model used for the next Agent request"
+                    >
+                      <Cpu className="h-3.5 w-3.5 shrink-0 text-[var(--ref-primary)]" aria-hidden="true" />
+                      <span className="max-w-[9.5rem] truncate text-[var(--ref-on-surface)]">{selectableAgentModels.find((option) => option.value === agentModel)?.label ?? agentModel}</span>
+                      <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-[var(--ref-outline)] transition-transform', isAgentModelMenuOpen && 'rotate-180')} aria-hidden="true" />
+                    </button>
+                    {isAgentModelMenuOpen && (
+                      <div id="agent-model-menu" role="listbox" aria-label="Agent model" className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-xl">
+                        <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ref-outline)]">Agent model</p>
+                        <div className="space-y-0.5">
+                          {selectableAgentModels.map((option) => {
+                            const selected = option.value === agentModel;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => {
+                                  setIsAgentModelMenuOpen(false);
+                                  void saveAgentModel(option.value);
+                                }}
+                                className={cn('flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors', selected ? 'bg-[var(--ref-primary)]/10 font-semibold text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}
+                              >
+                                <span className="min-w-0 truncate">{option.label}</span>
+                                {selected && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <button type="button" onClick={() => setIsMemoryOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)]" title="Manage agent memory">
                     <Brain className="h-4 w-4" /> <span className="hidden sm:inline">Memory</span>
                   </button>
-                  <Button type="button" size="sm" onClick={startNewConversation} className="inline-flex items-center gap-1.5 rounded-lg">
-                    <Sparkles className="h-4 w-4" /> New chat
+                  <Button type="button" size="sm" onClick={startNewConversation} className="inline-flex items-center gap-1.5 rounded-lg" aria-label="Start a new chat">
+                    <Sparkles className="h-4 w-4" /> <span className="hidden sm:inline">New chat</span>
                   </Button>
                 </div>
               </div>
-              <div className="space-y-5 p-4 sm:p-6">
-                {messages.length === 0 && (
-                  <div className="startup-empty-state py-10 text-center sm:py-14">
+              <div aria-label="Conversation messages" className="flex flex-1 flex-col">
+                <div className={cn('flex-1 space-y-5 p-4 pb-40 sm:p-6 md:pb-6', shouldFloatComposer && 'md:pb-16', !isLoadingConversation && messages.length === 0 && 'flex flex-col')}>
+                {isLoadingConversation && messages.length === 0 && <p role="status" className="py-10 text-center text-sm text-[var(--color-text-secondary)]">Loading conversation…</p>}
+                {!isLoadingConversation && messages.length === 0 && (
+                  <div className="startup-empty-state my-auto py-3 text-center sm:py-4">
                     <span className="startup-empty-icon mx-auto grid h-10 w-10 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><Bot className="h-5 w-5" /></span>
-                    <h3 className="startup-empty-greeting mt-3 font-semibold">{startupSelection.greeting}</h3>
+                    <h3 className="startup-empty-greeting mt-2 font-semibold">{startupSelection.greeting}</h3>
                     <p className="startup-empty-subtitle mt-1 text-sm text-[var(--color-text-secondary)]">{startupSelection.subtitle}</p>
-                    <button
-                      type="button"
-                      onClick={() => { setDraft('Help me split a bill. I will attach the receipt and tell you who shared it.'); questionInputRef.current?.focus(); }}
-                      className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--ref-primary)] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5"
-                    >
-                      <ReceiptText className="h-4 w-4" /> Split a receipt
-                    </button>
-                    <div className="mx-auto mt-5 flex max-w-2xl flex-wrap justify-center gap-2">
+                    <div className="mx-auto mt-4 grid w-full max-w-2xl gap-2 sm:flex sm:flex-wrap sm:justify-center">
                       {startupSelection.prompts.map((suggestion, index) => (
-                        <button key={suggestion} type="button" onClick={() => void submitQuestion(suggestion)} style={{ animationDelay: String(index * 70) + 'ms' }} className="startup-prompt rounded-full border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)] hover:text-[var(--ref-primary)]">
+                        <button key={suggestion} type="button" onClick={() => void submitQuestion(suggestion)} style={{ animationDelay: String(index * 70) + 'ms' }} className="startup-prompt min-h-11 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-left text-sm font-medium text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)] hover:text-[var(--ref-primary)] sm:min-h-0 sm:rounded-full sm:px-3 sm:py-2 sm:text-center sm:text-xs">
                           {suggestion}
                         </button>
                       ))}
@@ -1541,7 +1982,7 @@ function AgentPage() {
                   </div>
                 )}
 
-                {messages.map((message) => (
+                {messages.filter((message) => !(message.role === 'user' && message.isClarificationFollowUp)).map((message) => (
                   <div key={message.id} className={cn('flex gap-3', message.role === 'user' && 'justify-end')}>
                     <div
                       className={cn('group min-w-0', message.role === 'assistant' ? 'min-w-0 flex-1' : editingUserMessageId === message.id ? 'w-full max-w-[90%]' : 'relative w-fit max-w-[min(32rem,85%)] pb-7')}
@@ -1570,7 +2011,7 @@ function AgentPage() {
                         : editingUserMessageId === message.id
                           ? <div className="space-y-2"><textarea ref={editingUserMessageTextareaRef} value={editingUserMessageText} onChange={(event) => setEditingUserMessageText(event.target.value)} className="brutalist-input max-h-40 min-h-12 w-full resize-none overflow-y-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)]" maxLength={2000} autoFocus /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => { setEditingUserMessageId(null); setEditingUserMessageText(''); }} disabled={isSending}>Cancel</Button><Button size="sm" onClick={() => void saveEditedLastUserMessage(message)} disabled={isSending}>Send</Button></div></div>
                           : <p className="whitespace-pre-wrap break-words leading-6">{message.text}</p>}
-                      {message.role === 'assistant' && message.text.trim() && !isSending && (
+                      {message.role === 'assistant' && message.text.trim() && !isSending && !hasClarificationResponse(message) && (
                         <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-[var(--color-border)] pt-2">
                           <button type="button" onClick={() => void copyAssistantResponse(message)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)]" title="Copy response">
                             {copiedAssistantId === message.id ? <Check className="h-3.5 w-3.5 text-[var(--color-success)]" /> : <Copy className="h-3.5 w-3.5" />} {copiedAssistantId === message.id ? 'Copied' : 'Copy'}
@@ -1585,17 +2026,18 @@ function AgentPage() {
                       )}
                       {hasAgentResponse(message) && (
                         <>
-                          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--color-text-secondary)]">
+                          {!hasClarificationResponse(message) && <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--color-text-secondary)]">
                             <span className="rounded-full bg-[var(--ref-surface-container-low)] px-2 py-1">Scope: {scopeLabel(message.response.scope ?? (isRecord(message.response.context) ? message.response.context.scope : null), periods)}</span>
                             {message.response.revision != null && <span className="rounded-full bg-[var(--ref-surface-container-low)] px-2 py-1">Revision {message.response.revision}</span>}
                             {!message.response.llmAvailable && <span className="rounded-full bg-[var(--color-warning)]/10 px-2 py-1 text-[var(--color-warning)]">LLM setup required for written analysis</span>}
-                          </div>
-                          <ToolTrace response={message.response} />
+                          </div>}
+                          {!hasClarificationResponse(message) && <ToolTrace response={message.response} />}
                           {message.response.clarifications?.filter(isClarification).map((clarification) => (
                             <ClarificationCard
                               key={clarification.id}
                               clarification={clarification}
                               disabled={isSending}
+                              initialSelection={clarificationSelection(clarification, messages)}
                               onSelect={(choice, customValue) => submitClarification(clarification, choice, customValue)}
                             />
                           ))}
@@ -1638,16 +2080,102 @@ function AgentPage() {
                   </div>
                 )}
                 {error && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
-                {notice && <p role="status" className="rounded-lg border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 p-3 text-sm text-[var(--color-success)]">{notice}</p>}
+                {notice && <p role="status" aria-live="polite" className="inline-flex max-w-full items-center rounded-full border border-[var(--ref-primary)]/20 bg-[var(--ref-primary)]/5 px-3 py-1.5 text-xs font-medium text-[var(--ref-on-surface-variant)]">{notice}</p>}
+                <div ref={latestMessageAnchorRef} aria-hidden="true" className="h-px" />
+                </div>
               </div>
 
+              {shouldFloatComposer && messages.length > 0 && !isAtLatestMessage && (
+                <button
+                  type="button"
+                  onClick={jumpToLatest}
+                  style={floatingComposerBounds ? { left: floatingComposerBounds.left + floatingComposerBounds.width / 2 } : undefined}
+                  className="fixed bottom-40 left-1/2 z-30 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-lg transition-colors hover:bg-[var(--ref-surface-container-low)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)] md:bottom-24"
+                  aria-label="Jump to latest message"
+                  title="Jump to latest"
+                >
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+
+              {shouldFloatComposer && <div
+                aria-hidden="true"
+                style={{
+                  ...(floatingComposerBounds ? { left: floatingComposerBounds.left, width: floatingComposerBounds.width } : {}),
+                  background: 'linear-gradient(to top, var(--color-background), color-mix(in srgb, var(--color-background) 70%, transparent), transparent)',
+                }}
+                className="pointer-events-none fixed bottom-0 left-4 right-4 z-10 hidden h-16 backdrop-blur-sm md:block md:right-auto"
+              />}
+
+              <div aria-hidden="true" className="pointer-events-none fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] left-0 right-0 z-20 h-28 bg-gradient-to-t from-[var(--color-background)] via-[var(--color-background)]/90 to-transparent md:hidden" />
+
               <form
+                ref={composerFormRef}
+                style={{
+                  ...(shouldFloatComposer && floatingComposerBounds ? { left: floatingComposerBounds.left, width: floatingComposerBounds.width } : {}),
+                  backgroundColor: isDraggingImages
+                    ? 'color-mix(in srgb, var(--ref-primary) 10%, var(--color-background))'
+                    : 'color-mix(in srgb, var(--color-background) 88%, transparent)',
+                }}
                 onSubmit={(event) => { event.preventDefault(); void submitQuestion(); }}
                 onDragOver={(event) => { event.preventDefault(); if (!isSending) setIsDraggingImages(true); }}
                 onDragLeave={() => setIsDraggingImages(false)}
                 onDrop={(event) => { event.preventDefault(); setIsDraggingImages(false); if (!isSending) void addImageFiles(Array.from(event.dataTransfer.files)); }}
-                className={cn('-mx-4 -mb-4 border-t border-[var(--color-border)] bg-[var(--color-background)] px-6 py-3 sm:px-8 sm:py-4', isDraggingImages && 'bg-[var(--ref-primary)]/5')}
+                className={cn(
+                  'agent-mobile-composer relative rounded-2xl border border-[var(--color-border)] px-4 py-3 shadow-[0_18px_34px_-16px_rgba(15,23,42,0.54)] backdrop-blur-md sm:px-6 sm:py-4',
+                  'max-md:fixed max-md:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] max-md:left-3 max-md:right-3 max-md:z-30',
+                  shouldFloatComposer ? 'md:fixed md:bottom-6 md:z-20 md:right-auto' : 'relative md:mx-6 md:mb-6 md:mt-auto',
+                  isDraggingImages && 'bg-[var(--ref-primary)]/5',
+                )}
               >
+                {showComposerTaskMenu && matchingComposerTasks.length > 0 && (
+                  <div id="composer-task-list" role="listbox" aria-label="Composer tasks" className="absolute bottom-full left-4 right-4 z-30 mb-2 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-lg sm:left-6 sm:right-6">
+                    {matchingComposerTasks.map((task, index) => (
+                      <button
+                        key={task.id}
+                        type="button"
+                        role="option"
+                        id={`composer-task-${task.id}`}
+                        aria-selected={composerTaskHighlight === index}
+                        disabled={task.id === 'upload-photo' && (isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT)}
+                        onClick={() => selectComposerTask(task.id)}
+                        className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:bg-[var(--ref-surface-container-low)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50', composerTaskHighlight === index && 'bg-[var(--ref-surface-container-low)]')}
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]">
+                          {task.id === 'split-bill' ? <ReceiptText className="h-4 w-4" /> : task.id === 'prepare-transaction' ? <Database className="h-4 w-4" /> : task.id === 'upload-photo' ? <ImagePlus className="h-4 w-4" /> : <Cpu className="h-4 w-4" />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-[var(--color-text-primary)]">{task.label}</span>
+                          <span className="block truncate text-xs text-[var(--color-text-secondary)]">{task.command} · {task.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {composerModelMenuOpen && (
+                  <div id="composer-model-list" role="listbox" aria-label="Agent models" className="absolute bottom-full left-4 right-4 z-30 mb-2 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1.5 shadow-lg sm:left-6 sm:right-6">
+                    <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-muted)]">Choose model</p>
+                    <div className="space-y-0.5">
+                      {selectableAgentModels.map((option, index) => {
+                        const selected = option.value === agentModel;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="option"
+                            id={`composer-model-${index}`}
+                            aria-selected={selected}
+                            onClick={() => selectComposerModel(option.value)}
+                            className={cn('flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:bg-[var(--ref-surface-container-low)] focus-visible:outline-none', composerTaskHighlight === index && 'bg-[var(--ref-surface-container-low)]', selected && 'font-semibold text-[var(--ref-primary)]')}
+                          >
+                            <span className="min-w-0 truncate">{option.label}</span>
+                            {selected && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <label htmlFor="agent-question" className="sr-only">Ask Fainens Agent</label>
                 <input
                   ref={imageInputRef}
@@ -1676,19 +2204,80 @@ function AgentPage() {
                   </div>
                 )}
                 {imageError && <p role="alert" className="mb-2 whitespace-pre-line text-xs text-[var(--color-danger)]">{imageError}</p>}
-                <div className={cn(
+                <div ref={composerRef} className={cn(
                   'border border-[var(--color-border)] bg-[var(--color-surface)] transition-colors',
                   isComposerExpanded ? 'rounded-[1.65rem] px-4 py-3' : 'flex items-center gap-2 rounded-full p-1.5',
                   isDraggingImages && 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/5 ring-2 ring-[var(--ref-primary)]/15',
                 )}>
+                  {activeComposerTask && (
+                    <button
+                      type="button"
+                      onClick={clearComposerTask}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Backspace' || event.key === 'Delete') {
+                          event.preventDefault();
+                          clearComposerTask();
+                        }
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--ref-primary)]/10 px-2.5 py-1.5 text-xs font-semibold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]"
+                      aria-label={`Remove ${activeComposerTask.label} task`}
+                      title="Remove task"
+                    >
+                      {activeComposerTask.id === 'split-bill' ? <ReceiptText className="h-3.5 w-3.5" /> : <Database className="h-3.5 w-3.5" />}
+                      <span>{activeComposerTask.label}</span>
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  )}
                   <textarea
                     ref={questionInputRef}
                     id="agent-question"
                     value={draft}
                     onChange={(event) => { draftWasEditedRef.current = true; setDraft(event.target.value); }}
                     onPaste={handleComposerPaste}
-                    onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); } }}
-                    placeholder="Ask Fainens anything…"
+                    aria-controls={showComposerTaskMenu ? 'composer-task-list' : composerModelMenuOpen ? 'composer-model-list' : undefined}
+                    aria-activedescendant={showComposerTaskMenu && matchingComposerTasks[composerTaskHighlight] ? `composer-task-${matchingComposerTasks[composerTaskHighlight].id}` : composerModelMenuOpen && selectableAgentModels[composerTaskHighlight] ? `composer-model-${composerTaskHighlight}` : undefined}
+                    onKeyDown={(event) => {
+                      if (activeComposerTask && !draft.trim() && (event.key === 'Backspace' || event.key === 'Delete')) {
+                        event.preventDefault();
+                        clearComposerTask();
+                        return;
+                      }
+                      if (composerModelMenuOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                        if (selectableAgentModels.length > 0) {
+                          event.preventDefault();
+                          setComposerTaskHighlight((current) => (current + (event.key === 'ArrowDown' ? 1 : -1) + selectableAgentModels.length) % selectableAgentModels.length);
+                        }
+                        return;
+                      }
+                      if (composerModelMenuOpen && (event.key === 'Enter' || event.key === 'Tab')) {
+                        const selectedModel = selectableAgentModels[composerTaskHighlight] ?? selectableAgentModels[0];
+                        if (selectedModel) { event.preventDefault(); selectComposerModel(selectedModel.value); }
+                        return;
+                      }
+                      if (composerModelMenuOpen && (event.key === 'Escape' || ((event.key === 'Backspace' || event.key === 'Delete') && !draft.trim()))) {
+                        event.preventDefault();
+                        setComposerModelMenuOpen(false);
+                        return;
+                      }
+                      if (showComposerTaskMenu && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                        if (matchingComposerTasks.length > 0) {
+                          event.preventDefault();
+                          setComposerTaskHighlight((current) => (current + (event.key === 'ArrowDown' ? 1 : -1) + matchingComposerTasks.length) % matchingComposerTasks.length);
+                        }
+                        return;
+                      }
+                      if (showComposerTaskMenu && (event.key === 'Enter' || event.key === 'Tab')) {
+                        const selectedTask = matchingComposerTasks[composerTaskHighlight] ?? matchingComposerTasks[0];
+                        if (selectedTask) { event.preventDefault(); selectComposerTask(selectedTask.id); }
+                        return;
+                      }
+                      if (showComposerTaskMenu && event.key === 'Escape') {
+                        event.preventDefault(); setDraft('');
+                        return;
+                      }
+                      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); }
+                    }}
+                    placeholder={activeComposerTask?.id === 'split-bill' ? 'Describe the shared expense…' : activeComposerTask?.id === 'prepare-transaction' ? 'Describe the transaction…' : 'Ask Fainens anything…'}
                     rows={1}
                     maxLength={2000}
                     aria-describedby="agent-question-help"
@@ -1706,6 +2295,14 @@ function AgentPage() {
                       title="Attach images"
                       aria-label="Attach images"
                     ><ImagePlus className="h-5 w-5" /></button>
+                    <button
+                      type="button"
+                      onClick={() => { setImageError(null); setIsGalleryOpen(true); }}
+                      disabled={isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT}
+                      className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] disabled:cursor-not-allowed disabled:opacity-50', !isComposerExpanded && 'order-first')}
+                      title="Choose from gallery"
+                      aria-label="Choose from gallery"
+                    ><Images className="h-5 w-5" /></button>
                     {isSending ? (
                       <button type="button" onClick={stopAgentQuery} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-background)] transition-transform hover:scale-105" aria-label="Stop response" title="Stop response">
                         <Square className="h-3.5 w-3.5 fill-current" />
@@ -1715,9 +2312,17 @@ function AgentPage() {
                     )}
                   </div>
                 </div>
-                <p id="agent-question-help" className="sr-only">Drop an image here or use the attach button. JPEG, PNG, WebP, and GIF up to 4 MB. Images are not retained.</p>
+                <p id="agent-question-help" className="sr-only">Drop an image here, upload one, or choose a stored image from the gallery. JPEG, PNG, WebP, and GIF up to 4 MB.</p>
               </form>
             </Card>
+            </div>
+
+            <GalleryImagePicker
+              isOpen={isGalleryOpen}
+              onClose={() => setIsGalleryOpen(false)}
+              onSelect={addGalleryImage}
+              disabled={isSending || pendingImages.length >= MAX_AGENT_IMAGE_COUNT}
+            />
 
             <Modal
               isOpen={isMemoryOpen}
@@ -1832,43 +2437,38 @@ function AgentPage() {
               </div>
             )}
 
-            <ConversationList
-              conversations={conversations}
-              dailyUsage={conversationsQuery.data?.dailyUsage ?? null}
-              periods={periods}
-              selectedPeriodId={selectedPeriodId}
-              onSelectPeriod={setSelectedPeriodId}
-              activeConversationId={activeConversationId}
-              visibleConversations={visibleConversations}
-              visibleConversationCount={visibleConversationCount}
-              isLoadingMoreConversations={isLoadingMoreConversations}
-              isLoadingConversation={isLoadingConversation}
-              conversationListRef={conversationListRef}
-              onNearEnd={() => {
-                if (isLoadingMoreConversations || visibleConversationCount >= sortedConversations.length) return;
-                setIsLoadingMoreConversations(true);
-                conversationLoadMoreTimerRef.current = window.setTimeout(() => {
-                  setVisibleConversationCount((current) => Math.min(current + CONVERSATIONS_PAGE_SIZE, sortedConversations.length));
-                  setIsLoadingMoreConversations(false);
-                  conversationLoadMoreTimerRef.current = null;
-                }, 650);
-              }}
-              onSelectConversation={(id) => void selectConversation(id)}
-              editingConversationId={editingConversationId}
-              conversationTitleDraft={conversationTitleDraft}
-              onConversationTitleDraftChange={setConversationTitleDraft}
-              onSaveConversationTitle={(id) => void saveConversationTitle(id)}
-              onCancelRename={cancelConversationRename}
-              openConversationMenuId={openConversationMenuId}
-              conversationMenuPlacement={conversationMenuPlacement}
-              conversationActionId={conversationActionId}
-              onToggleConversationMenu={toggleConversationMenu}
-              onEditConversation={(conversation) => beginConversationRename(conversation)}
-              onTogglePin={(conversation) => { closeConversationMenu(); void updateConversation(conversation.id, { isPinned: !conversation.isPinned }); }}
-              onToggleArchive={(conversation) => { closeConversationMenu(); void updateConversation(conversation.id, { archived: conversation.archivedAt == null }); }}
-              onDeleteConversation={(conversation) => void deleteConversation(conversation, startNewConversation)}
-            />
+            <div className="sticky top-8 hidden self-start xl:block">
+              <ConversationList {...conversationListProps} conversationListRef={conversationListRef} />
+            </div>
           </div>
+
+          {isMobileHistoryOpen && (
+            <div className="fixed inset-0 z-50 flex items-end xl:hidden" role="dialog" aria-modal="true" aria-label="Conversation history">
+              <button type="button" className="absolute inset-0 cursor-default bg-black/40" onClick={() => setIsMobileHistoryOpen(false)} aria-label="Close conversation history" />
+              <aside id="agent-mobile-history" className="relative flex max-h-[88dvh] min-h-[65dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-[var(--color-background)] pb-[env(safe-area-inset-bottom)] shadow-2xl">
+                <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-[var(--ref-outline-variant)]" aria-hidden="true" />
+                <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+                  <h2 className="text-base font-semibold">Chats</h2>
+                  <button type="button" onClick={() => setIsMobileHistoryOpen(false)} className="rounded-lg p-2 text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)]" aria-label="Close conversation history"><X className="h-4 w-4" /></button>
+                </div>
+                <div className="border-b border-[var(--color-border)] px-4 py-3">
+                  <label htmlFor="mobile-agent-model" className="mb-1 block text-xs font-semibold text-[var(--color-text-secondary)]">Agent model</label>
+                  <select
+                    id="mobile-agent-model"
+                    value={agentModel}
+                    onChange={(event) => void saveAgentModel(event.target.value)}
+                    disabled={isSavingAgentModel}
+                    className="brutalist-input w-full text-sm"
+                  >
+                    {selectableAgentModels.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <ConversationList {...conversationListProps} conversationListRef={mobileConversationListRef} />
+                </div>
+              </aside>
+            </div>
+          )}
         </div>
       </PageContainer>
     </RequireAuth>

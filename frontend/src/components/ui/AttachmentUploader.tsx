@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Paperclip, X, FileText, Image, File, Eye, Trash2, Loader2 } from 'lucide-react';
+import { Camera, Files, X, FileText, Image, File, Eye, Trash2, Loader2, RotateCcw } from 'lucide-react';
 import { formatFileSize, cn } from '../../lib/utils';
 import { uploadAttachmentRequest, useAttachmentDownload, useDeleteAttachmentMutation } from '../../features/attachments/queries';
 
@@ -69,6 +69,7 @@ export function AttachmentUploader({
   const deleteAttachmentMutation = useDeleteAttachmentMutation();
   const downloadAttachment = useAttachmentDownload();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -127,9 +128,7 @@ export function AttachmentUploader({
     }
 
     // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    event.target.value = '';
   }, [pendingAttachments, onPendingAttachmentsChange]);
 
   const removePendingAttachment = useCallback((id: string) => {
@@ -170,16 +169,7 @@ export function AttachmentUploader({
 
   return (
     <div className="space-y-3">
-      {/* Upload Area */}
-      <div
-        onClick={() => !disabled && fileInputRef.current?.click()}
-        className={cn(
-          'border-2 border-dashed border-[var(--color-border-strong)]/50 rounded-xl p-4',
-          'flex flex-col items-center justify-center bg-[var(--ref-surface-container-lowest)]',
-          'transition-colors cursor-pointer',
-          disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-[var(--color-accent)]/50 hover:bg-[var(--ref-surface-container-low)]'
-        )}
-      >
+      <div className="grid grid-cols-2 gap-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -189,15 +179,23 @@ export function AttachmentUploader({
           className="hidden"
           accept={ALLOWED_TYPES.join(',')}
         />
-        
-        <Paperclip className="w-8 h-8 text-[var(--color-muted)] mb-2" />
-        <span className="text-sm font-medium text-[var(--color-muted)]">
-          Click or drop files to attach
-        </span>
-        <span className="text-xs text-[var(--color-muted)] mt-1">
-          Max 10MB each. Images, PDF, Word, Excel
-        </span>
+        <input
+          ref={cameraInputRef}
+          type="file"
+          capture="environment"
+          onChange={handleFileSelect}
+          disabled={disabled}
+          className="hidden"
+          accept="image/*"
+        />
+        <button type="button" disabled={disabled} onClick={() => cameraInputRef.current?.click()} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-3 text-sm font-bold disabled:opacity-50">
+          <Camera className="h-5 w-5 text-[var(--color-accent)]" />Take photo
+        </button>
+        <button type="button" disabled={disabled} onClick={() => fileInputRef.current?.click()} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-3 text-sm font-bold disabled:opacity-50">
+          <Files className="h-5 w-5 text-[var(--color-accent)]" />Choose file
+        </button>
       </div>
+      <p className="text-center text-xs text-[var(--color-muted)]">Up to 10 MB · images, PDF, Word, or Excel</p>
 
       {/* Error Message */}
       {uploadError && (
@@ -239,17 +237,18 @@ export function AttachmentUploader({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
                   <button
                     type="button"
                     onClick={() => handleDownload(attachment)}
                     disabled={isDeleting}
                     className={cn(
-                      'cursor-pointer disabled:cursor-not-allowed h-8 w-8 rounded-lg flex items-center justify-center',
+                      'cursor-pointer disabled:cursor-not-allowed h-11 w-11 rounded-lg flex items-center justify-center',
                       'text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--ref-surface-container-high)]',
                       'transition-colors disabled:opacity-50'
                     )}
                   >
+                    <span className="sr-only">Open {attachment.filename}</span>
                     <FileText className="w-4 h-4" />
                   </button>
                   
@@ -258,11 +257,12 @@ export function AttachmentUploader({
                     onClick={() => handleDeleteSaved(attachment.id)}
                     disabled={isDeleting}
                     className={cn(
-                      'cursor-pointer disabled:cursor-not-allowed h-8 w-8 rounded-lg flex items-center justify-center',
+                      'cursor-pointer disabled:cursor-not-allowed h-11 w-11 rounded-lg flex items-center justify-center',
                       'text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10',
                       'transition-colors disabled:opacity-50'
                     )}
                   >
+                    <span className="sr-only">Remove {attachment.filename}</span>
                     {isDeleting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
@@ -310,17 +310,18 @@ export function AttachmentUploader({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
                   {isImage && pending.preview && (
                     <button
                       type="button"
                       onClick={() => setPreviewFile(pending)}
                       className={cn(
-                        'cursor-pointer h-8 w-8 rounded-lg flex items-center justify-center',
+                        'cursor-pointer h-11 w-11 rounded-lg flex items-center justify-center',
                         'text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--ref-surface-container-high)]',
                         'transition-colors'
                       )}
                     >
+                      <span className="sr-only">Preview {pending.filename}</span>
                       <Eye className="w-4 h-4" />
                     </button>
                   )}
@@ -329,11 +330,12 @@ export function AttachmentUploader({
                     type="button"
                     onClick={() => removePendingAttachment(pending.id)}
                     className={cn(
-                      'cursor-pointer h-8 w-8 rounded-lg flex items-center justify-center',
+                      'cursor-pointer h-11 w-11 rounded-lg flex items-center justify-center',
                       'text-[var(--color-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10',
                       'transition-colors'
                     )}
                   >
+                    <span className="sr-only">Remove {pending.filename}</span>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -368,6 +370,19 @@ export function AttachmentUploader({
                 alt={previewFile.filename}
                 className="max-w-full max-h-[70vh] object-contain"
               />
+            </div>
+            <div className="grid grid-cols-2 gap-2 p-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const id = previewFile.id;
+                  setPreviewFile(null);
+                  removePendingAttachment(id);
+                  window.setTimeout(() => cameraInputRef.current?.click(), 0);
+                }}
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--ref-surface-container-low)] text-sm font-bold"
+              ><RotateCcw className="h-4 w-4" />Retake</button>
+              <button type="button" onClick={() => removePendingAttachment(previewFile.id)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--color-danger)]/10 text-sm font-bold text-[var(--color-danger)]"><Trash2 className="h-4 w-4" />Remove</button>
             </div>
           </div>
         </div>

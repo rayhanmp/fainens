@@ -181,7 +181,7 @@ export function ConversationList({
         const element = event.currentTarget;
         if (element.scrollHeight - element.scrollTop - element.clientHeight < 80) onNearEnd();
       }}
-      className="conversation-list-scroll max-h-[32rem] space-y-1 overflow-y-auto lg:max-h-[calc(100vh-18rem)]"
+      className="conversation-list-scroll max-h-[32rem] space-y-1 overflow-y-auto lg:max-h-[calc(100vh-18rem)] xl:max-h-[calc(100dvh-26rem)]"
     >
       {visibleConversations.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">Your conversations will appear here.</p>}
       {visibleConversations.map((conversation, index) => {

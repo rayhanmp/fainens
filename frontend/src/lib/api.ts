@@ -350,6 +350,66 @@ export const api = {
       fetchApi<{ needsOnboarding: boolean }>('/auth/onboarding-status'),
   },
 
+  agentProvider: {
+    get: () => fetchApi<{
+      id?: number;
+      name?: string;
+      model: string;
+      baseUrl: string;
+      apiKeyConfigured: boolean;
+      apiKeySource: 'database' | 'environment' | 'none';
+    }>('/settings/agent-provider'),
+    update: (input: { model?: string; apiKey?: string; clearApiKey?: boolean }) => fetchApi<{
+      model: string;
+      apiKeyConfigured: boolean;
+      apiKeySource: 'database' | 'environment' | 'none';
+    }>('/settings/agent-provider', { method: 'PUT', body: JSON.stringify(input) }),
+    test: () => fetchApi<{ ok: true; model: string; modelAvailable: boolean | null }>('/settings/agent-provider/test', { method: 'POST' }),
+    models: {
+      list: () => fetchApi<Array<{
+        id: number; name: string; model: string; baseUrl: string; isDefault: boolean;
+        apiKeyConfigured: boolean; apiKeySource: 'database' | 'environment' | 'none'; createdAt: number | string; updatedAt: number | string;
+      }>>('/settings/agent-models'),
+      create: (input: { name: string; model: string; baseUrl: string; apiKey?: string; isDefault?: boolean }) => fetchApi('/settings/agent-models', { method: 'POST', body: JSON.stringify(input) }),
+      update: (id: number, input: { name?: string; model?: string; baseUrl?: string; apiKey?: string; clearApiKey?: boolean }) => fetchApi(`/settings/agent-models/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+      setDefault: (id: number) => fetchApi(`/settings/agent-models/${id}/default`, { method: 'POST' }),
+      remove: (id: number) => fetchApi<void>(`/settings/agent-models/${id}`, { method: 'DELETE' }),
+    },
+  },
+
+  gallery: {
+    list: (params?: { source?: 'transaction' | 'agent' | 'wishlist'; search?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.source) query.set('source', params.source);
+      if (params?.search?.trim()) query.set('search', params.search.trim());
+      if (params?.limit !== undefined) query.set('limit', String(params.limit));
+      if (params?.offset !== undefined) query.set('offset', String(params.offset));
+      const suffix = query.toString();
+      return fetchApi<Array<{
+        id: number;
+        source: 'transaction' | 'agent' | 'wishlist';
+        filename: string;
+        mimetype: string;
+        fileSize: number;
+        createdAt: number | null;
+        downloadUrl: string | null;
+        context: string | null;
+        relatedId: number | null;
+        relatedLabel: string | null;
+        storageManaged: boolean;
+      }>>(`/gallery/images${suffix ? `?${suffix}` : ''}`);
+    },
+    attach: (source: 'transaction' | 'agent' | 'wishlist', id: number) =>
+      fetchApi<{
+        filename: string;
+        mimeType: string;
+        fileSize: number;
+        data: string;
+      }>(`/gallery/images/${source}/${id}/attach`, { method: 'POST' }),
+    delete: (source: 'transaction' | 'agent' | 'wishlist', id: number) =>
+      fetchApi<void>(`/gallery/images/${source}/${id}`, { method: 'DELETE' }),
+  },
+
   // Accounts (wallets / GL — no user-facing codes)
   accounts: {
     list: (params?: { type?: string; search?: string; includeInactive?: boolean }) => {
@@ -501,7 +561,7 @@ export const api = {
       categoryId?: string;
       tagId?: string;
       search?: string;
-      kind?: 'expense' | 'income' | 'transfer' | 'loan';
+      kind?: 'expense' | 'income' | 'transfer' | 'loan' | 'reimbursement';
       minAmount?: string;
       maxAmount?: string;
       sort?: 'newest' | 'oldest' | 'largest';
@@ -529,6 +589,7 @@ export const api = {
           creditCents: number;
           expenseCents: number;
           incomeCents: number;
+          remainingReimbursableExpense?: number;
           lines: Array<{
             id: number;
             accountId: number;
@@ -566,6 +627,7 @@ export const api = {
       lines: Array<{ id: number; accountId: number; debit: number; credit: number; description: string | null; cashFlowClass: 'operating' | 'investing' | 'financing' | 'transfer' | 'recovery' | null }>;
       tags: Array<{ tagId: number; name: string; color: string }>;
       categoryAllocations: Array<{ categoryId: number; amount: number; categoryName: string | null }>;
+      expenseCents?: number;
     }>(`/transactions/${id}`),
     reverse: (id: number) => fetchApi<{ id: number; reversalOfTxId: number }>(`/transactions/${id}/reverse`, { method: 'POST' }),
     create: (
@@ -1826,6 +1888,7 @@ export const api = {
     }>(`/contacts/${id}`),
     create: (data: {
       name: string;
+      kind?: 'person' | 'organization';
       fullName?: string | null;
       nickname?: string | null;
       email?: string | null;
@@ -1847,6 +1910,7 @@ export const api = {
     }>('/contacts', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<{
       name: string;
+      kind?: 'person' | 'organization';
       fullName: string | null;
       nickname: string | null;
       email: string | null;
@@ -1868,6 +1932,31 @@ export const api = {
     }>(`/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi<void>(`/contacts/${id}`, { method: 'DELETE' }),
     restore: (id: number) => fetchApi(`/contacts/${id}/restore`, { method: 'POST' }),
+  },
+
+  reimbursements: {
+    list: (params?: { status?: string; contactId?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.set('status', params.status);
+      if (params?.contactId) query.set('contactId', String(params.contactId));
+      return fetchApi<Array<{
+        id: number; contactId: number; title: string; status: string; dueDate: number | null; notes: string | null;
+        contact: { id: number; name: string; kind: 'person' | 'organization'; email: string | null } | null;
+        sources: Array<{ id: number; sourceTransactionId: number; expenseLineId: number; categoryId: number | null; amount: number; recognitionTransactionId: number | null }>;
+        receipts: Array<{ receipt: { id: number; transactionId: number; receiptDate: number; amount: number; status: string }; allocation: { amount: number } }>;
+        proposedAmount: number; recognisedAmount: number; outstandingAmount: number;
+      }>>(`/reimbursements${query.size ? `?${query.toString()}` : ''}`);
+    },
+    get: (id: number) => fetchApi<unknown>(`/reimbursements/${id}`),
+    create: (data: { contactId: number; title: string; dueDate?: number | null; notes?: string | null; sources: Array<{ sourceTransactionId: number; expenseLineId: number; categoryId?: number | null; amount: number }> }) =>
+      fetchApi(`/reimbursements`, { method: 'POST', body: JSON.stringify(data) }),
+    submit: (id: number) => fetchApi(`/reimbursements/${id}/submit`, { method: 'POST' }),
+    cancel: (id: number) => fetchApi(`/reimbursements/${id}/cancel`, { method: 'POST' }),
+    approve: (id: number, idempotencyKey: string) => fetchApi(`/reimbursements/${id}/approve`, { method: 'POST', body: JSON.stringify({ idempotencyKey }) }),
+    receipt: (data: { date: number; walletAccountId: number; notes?: string | null; idempotencyKey: string; allocations: Array<{ claimId: number; amount: number }> }) =>
+      fetchApi('/reimbursement-receipts', { method: 'POST', body: JSON.stringify(data) }),
+    writeOff: (id: number, data: { date: number; notes?: string | null; idempotencyKey: string }) =>
+      fetchApi(`/reimbursements/${id}/write-off`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   // Loans

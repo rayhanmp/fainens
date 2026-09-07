@@ -286,6 +286,9 @@ function SalaryIncomePage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" className="rounded-full px-6 py-3" onClick={() => navigate({ to: '/periods' })}>
+              <Calendar className="h-4 w-4" />Salary periods
+            </Button>
             <button
               type="button"
               disabled={incomeTxs.length === 0}

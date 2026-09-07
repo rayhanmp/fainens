@@ -154,6 +154,10 @@ export function CurrencyInput({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value;
     setRawInput(input);
+    if (input === '') {
+      onChange('');
+      return;
+    }
     
     // Clear any pending debounce timer
     if (debounceTimer) {

@@ -1,5 +1,6 @@
 import { BarChart3, CalendarDays, CircleDollarSign, Gauge, PieChart, TrendingUp, Wallet } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatCurrency } from '../../lib/utils';
 import { SplitBillCard, parseSplitBillVisualization, type SplitBillAccount, type SplitBillVisualization } from './SplitBillCard';
 
@@ -493,6 +494,16 @@ function formatValue(value: number, unit: VisualizationUnit): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
+function formatCompactValue(value: number, unit: VisualizationUnit): string {
+  const prefix = unit === 'IDR' ? 'Rp ' : '';
+  const unitSuffix = unit === 'percent' ? '%' : unit === 'months' ? ' mo' : '';
+  const absolute = Math.abs(value);
+  const suffix = absolute >= 1_000_000_000 ? 'B' : absolute >= 1_000_000 ? 'M' : absolute >= 1_000 ? 'K' : '';
+  const divisor = suffix === 'B' ? 1_000_000_000 : suffix === 'M' ? 1_000_000 : suffix === 'K' ? 1_000 : 1;
+  const digits = suffix ? (absolute >= 10 * divisor ? 0 : 1) : 0;
+  return `${value < 0 ? '-' : ''}${prefix}${(absolute / divisor).toLocaleString('en-US', { maximumFractionDigits: digits })}${suffix}${unitSuffix}`;
+}
+
 function toneClass(tone: VisualizationTone): string {
   if (tone === 'positive') return 'text-[var(--color-success)]';
   if (tone === 'negative') return 'text-[var(--color-danger)]';
@@ -774,6 +785,30 @@ function AllocationEditorCard({ visualization }: { visualization: AllocationEdit
   </article>;
 }
 
+type TrendPoint = { label: string; value: number };
+
+function TrendLineChart({ title, unit, points }: { title: string; unit: VisualizationUnit; points: TrendPoint[] }) {
+  const values = points.map((point) => point.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const rawRange = rawMax - rawMin;
+  const padding = rawRange === 0 ? Math.max(Math.abs(rawMax) * 0.1, 1) : rawRange * 0.12;
+  const includesZero = rawMin <= 0 && rawMax >= 0;
+  const min = (includesZero ? Math.min(0, rawMin) : rawMin) - padding * 0.15;
+  const max = (includesZero ? Math.max(0, rawMax) : rawMax) + padding;
+  return <div className="mt-3 h-52 w-full" role="img" aria-label={`${title} trend`}>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={points} margin={{ top: 8, right: 14, left: 10, bottom: 2 }}>
+        <CartesianGrid stroke="var(--ref-outline-variant)" strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline-variant)" interval="preserveStartEnd" minTickGap={32} tickLine={false} axisLine={false} />
+        <YAxis width={58} domain={[min, max]} tickFormatter={(value) => formatCompactValue(Number(value), unit)} tick={{ fontSize: 10, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline-variant)" tickLine={false} axisLine={false} />
+        <Tooltip cursor={{ stroke: 'var(--ref-outline)', strokeDasharray: '3 3' }} content={({ active, payload, label }) => { const value = Number(payload?.[0]?.value); return active && Number.isFinite(value) ? <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 shadow-md"><p className="text-[11px] font-semibold text-[var(--color-text-secondary)]">{label}</p><p className="mt-0.5 text-sm font-bold tabular-nums text-[var(--color-text-primary)]">{formatValue(value, unit)}</p></div> : null; }} />
+        <Line type="monotone" dataKey="value" stroke="var(--ref-primary)" strokeWidth={3} dot={{ r: 4, fill: 'var(--ref-primary)', stroke: 'var(--ref-surface-container-lowest)', strokeWidth: 2 }} activeDot={{ r: 6 }} isAnimationActive={typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: no-preference)').matches} />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>;
+}
+
 function TimeSeriesExplorerCard({ visualization }: { visualization: TimeSeriesExplorerVisualization }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [windowSize, setWindowSize] = useState<number | null>(null);
@@ -781,18 +816,16 @@ function TimeSeriesExplorerCard({ visualization }: { visualization: TimeSeriesEx
   if (!active) return null;
   const options = [7, 30, 90].filter((option) => option < active.points.length);
   const visible = windowSize == null ? active.points : active.points.slice(-windowSize);
-  const values = visible.map((point) => point.value);
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 0, 1);
-  const range = max - min || 1;
-  const path = visible.map((point, index) => `${10 + index / Math.max(visible.length - 1, 1) * 300},${82 - ((point.value - min) / range) * 68}`).join(' ');
   const latest = visible[visible.length - 1];
+  const first = visible[0];
+  const change = latest && first ? latest.value - first.value : 0;
+  const changePercent = first && first.value !== 0 ? change / Math.abs(first.value) * 100 : null;
+  const changeTone = change > 0 ? 'text-[var(--color-success)]' : change < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]';
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <div className="flex flex-wrap items-center justify-between gap-3"><VizHeader title={visualization.title} icon={<BarChart3 className="h-4 w-4" />} /><div className="flex flex-wrap gap-1">{options.map((option) => <button key={option} type="button" onClick={() => setWindowSize(option)} className={`rounded-md px-2 py-1 text-[11px] font-semibold ${windowSize === option ? 'bg-[var(--ref-primary)] text-white' : 'bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] hover:text-[var(--ref-primary)]'}`}>Last {option}</button>)}<button type="button" onClick={() => setWindowSize(null)} className={`rounded-md px-2 py-1 text-[11px] font-semibold ${windowSize == null ? 'bg-[var(--ref-primary)] text-white' : 'bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] hover:text-[var(--ref-primary)]'}`}>All</button></div></div>
     {visualization.series.length > 1 && <div className="mt-3 flex flex-wrap gap-2">{visualization.series.map((series, index) => <button key={`${series.label}-${index}`} type="button" onClick={() => { setActiveIndex(index); setWindowSize(null); }} aria-pressed={index === activeIndex} className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${index === activeIndex ? 'border-[var(--ref-primary)] text-[var(--ref-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>{series.label}</button>)}</div>}
-    <div className="mt-3 flex items-baseline justify-between gap-3"><p className="text-xl font-bold tabular-nums text-[var(--color-text-primary)]">{latest ? formatValue(latest.value, visualization.unit) : '—'}</p><p className="text-xs text-[var(--color-text-secondary)]">{latest?.label}</p></div>
-    <svg className="mt-3 h-24 w-full overflow-visible" viewBox="0 0 320 96" role="img" aria-label={`${visualization.title}: ${active.label}`} preserveAspectRatio="none"><line x1="10" y1="82" x2="310" y2="82" stroke="var(--ref-outline-variant)" strokeWidth="1" /><polyline points={path} fill="none" stroke="var(--ref-primary)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-    <div className="mt-1 flex justify-between text-[11px] text-[var(--color-text-secondary)]"><span>{visible[0]?.label}</span><span>{latest?.label}</span></div>
+    <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1"><div><p className="text-[11px] text-[var(--color-text-secondary)]">Latest</p><p className="mt-0.5 text-xl font-bold tabular-nums text-[var(--color-text-primary)]">{latest ? formatValue(latest.value, visualization.unit) : '—'}</p></div><div className={`text-right text-xs font-semibold tabular-nums ${changeTone}`}>{change >= 0 ? '+' : ''}{formatValue(change, visualization.unit)}{changePercent == null ? '' : ` (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}<span className="ml-1 font-normal text-[var(--color-text-secondary)]">since {first?.label}</span></div></div>
+    <TrendLineChart title={`${visualization.title}: ${active.label}`} unit={visualization.unit} points={visible} />
   </article>;
 }
 
@@ -840,20 +873,15 @@ function WorksheetCard({ visualization }: { visualization: WorksheetVisualizatio
 }
 
 function SparklineCard({ visualization }: { visualization: SparklineVisualization }) {
-  const values = visualization.points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const points = visualization.points.map((point, index) => `${(index / (visualization.points.length - 1)) * 300 + 10},${82 - ((point.value - min) / range) * 68}`).join(' ');
   const latest = visualization.points[visualization.points.length - 1];
+  const first = visualization.points[0];
+  const change = latest && first ? latest.value - first.value : 0;
+  const changePercent = first && first.value !== 0 ? change / Math.abs(first.value) * 100 : null;
+  const changeTone = change > 0 ? 'text-[var(--color-success)]' : change < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]';
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<CircleDollarSign className="h-4 w-4" />} />
-    {latest && <p className="mt-3 text-xl font-bold tracking-tight text-[var(--color-text-primary)]">{formatValue(latest.value, visualization.unit)}</p>}
-    <svg className="mt-3 h-20 w-full overflow-visible" viewBox="0 0 320 96" role="img" aria-label={`${visualization.title} trend`} preserveAspectRatio="none">
-      <line x1="10" y1="82" x2="310" y2="82" stroke="var(--ref-outline-variant)" strokeWidth="1" />
-      <polyline points={points} fill="none" stroke="var(--ref-primary)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-    <div className="mt-1 flex justify-between gap-3 text-[11px] text-[var(--color-text-secondary)]"><span>{visualization.points[0]?.label}</span><span>{latest?.label}</span></div>
+    <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1"><div><p className="text-[11px] text-[var(--color-text-secondary)]">Latest</p><p className="mt-0.5 text-xl font-bold tabular-nums text-[var(--color-text-primary)]">{latest ? formatValue(latest.value, visualization.unit) : '—'}</p></div><div className={`text-right text-xs font-semibold tabular-nums ${changeTone}`}>{change >= 0 ? '+' : ''}{formatValue(change, visualization.unit)}{changePercent == null ? '' : ` (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}<span className="ml-1 font-normal text-[var(--color-text-secondary)]">since {first?.label}</span></div></div>
+    <TrendLineChart title={visualization.title} unit={visualization.unit} points={visualization.points} />
   </article>;
 }
 

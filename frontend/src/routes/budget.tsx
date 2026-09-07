@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useSearch } from '@tanstack/react-router';
+import { createFileRoute, Link, useSearch, useNavigate } from '@tanstack/react-router';
+import { Calculator } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
@@ -36,6 +37,7 @@ import {
   TrendingDown,
   MoreVertical,
   MoreHorizontal,
+  ArrowRightLeft,
   Search,
   ArrowUp,
   ArrowDown,
@@ -125,6 +127,7 @@ function formatPeriodRange(p: Period) {
 }
 
 function BudgetPage() {
+  const navigate = useNavigate();
   const search = useSearch({ from: '/budget' }) as { periodId?: string };
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>(search.periodId || '');
   const [comparePeriodId, setComparePeriodId] = useState<string>('');
@@ -153,6 +156,8 @@ function BudgetPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
+  const [movingBudget, setMovingBudget] = useState<BudgetRow | null>(null);
+  const [movePeriodId, setMovePeriodId] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('amountSpent');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
@@ -313,6 +318,39 @@ function BudgetPage() {
       await deleteBudgetMutation.mutateAsync(budgetId);
     } catch (err) {
       alert((err as Error).message);
+    }
+  };
+
+  const openMoveModal = (budget: BudgetRow) => {
+    if (isPeriodClosed) return;
+    setMovingBudget(budget);
+    setMovePeriodId('');
+    setFormError('');
+  };
+
+  const closeMoveModal = () => {
+    setMovingBudget(null);
+    setMovePeriodId('');
+    setFormError('');
+  };
+
+  const handleMoveBudget = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!movingBudget) return;
+    const targetPeriodId = Number(movePeriodId);
+    if (!Number.isSafeInteger(targetPeriodId) || targetPeriodId <= 0 || targetPeriodId === movingBudget.periodId) {
+      setFormError('Choose a different open salary period');
+      return;
+    }
+    setFormError('');
+    setIsSubmitting(true);
+    try {
+      await updateBudgetMutation.mutateAsync({ id: movingBudget.id, data: { periodId: targetPeriodId } });
+      closeMoveModal();
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -517,7 +555,10 @@ function BudgetPage() {
             {periods.length > 0 && (
               <Select
                 value={selectedPeriodId}
-                onChange={(e) => setSelectedPeriodId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedPeriodId(e.target.value);
+                  void navigate({ to: '/budget', search: { periodId: e.target.value }, replace: true });
+                }}
                 options={periods.map((p) => ({ value: p.id.toString(), label: `${p.name}${p.status === 'closed' ? ' (closed)' : ''}` }))}
                 className="min-w-[180px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold"
               />
@@ -568,6 +609,9 @@ function BudgetPage() {
               </button>
               {isMoreMenuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--ref-surface-container-lowest)] rounded-xl editorial-shadow border border-[var(--color-border)] py-2 z-50">
+                  <button type="button" onClick={() => { setIsMoreMenuOpen(false); navigate({ to: '/savings-simulator' }); }} className="flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]">
+                    <Calculator className="h-4 w-4" />Savings simulator
+                  </button>
                   <Link
                     to="/categories"
                     className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
@@ -607,6 +651,14 @@ function BudgetPage() {
           </div>
         </div>
 
+        <nav aria-label="Planning tools" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:hidden">
+          <Link to="/salary-income" className="shrink-0 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold">Income</Link>
+          <Link to="/subscriptions" className="shrink-0 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold">Bills</Link>
+          <Link to="/savings-simulator" className="shrink-0 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold">Savings</Link>
+          <Link to="/paylater" className="shrink-0 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold">Pay later</Link>
+          <Link to="/loans" className="shrink-0 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold">Loans</Link>
+        </nav>
+
         {loadError && (
           <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/10 px-4 py-3 text-sm text-[var(--color-danger)]">
             <span>Budget data could not be refreshed. Showing the last available snapshot.</span>
@@ -616,7 +668,7 @@ function BudgetPage() {
 
         {/* Bento summary - Cards at the top */}
         {selectedPeriod && (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+          <div className="mobile-summary-grid grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-6">
             <div className="relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-[2rem] bg-[var(--ref-primary-container)] p-8 text-white group">
               <div className="relative z-10">
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[var(--ref-on-primary-container)] opacity-90">
@@ -923,7 +975,7 @@ function BudgetPage() {
                                 <button
                                   type="button"
                                   onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
-                                  className="p-1.5 rounded-lg text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)] cursor-pointer"
+                                  className="grid h-11 w-11 place-items-center rounded-xl text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)] cursor-pointer"
                                   aria-label="More actions"
                                 >
                                   <MoreVertical className="h-4 w-4" />
@@ -939,7 +991,7 @@ function BudgetPage() {
                                     <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
                                       <button
                                         type="button"
-                                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
+                                        className="flex min-h-11 w-full items-center px-3 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
                                         onClick={() => {
                                           setMenuRowId(null);
                                           openEditModal(row);
@@ -949,7 +1001,18 @@ function BudgetPage() {
                                       </button>
                                       <button
                                         type="button"
-                                        className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
+                                        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
+                                        onClick={() => {
+                                          setMenuRowId(null);
+                                          openMoveModal(row);
+                                        }}
+                                      >
+                                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                                        Move to period
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="flex min-h-11 w-full items-center px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
                                         onClick={() => {
                                           setMenuRowId(null);
                                           deleteBudget(row.id);
@@ -1188,6 +1251,42 @@ function BudgetPage() {
                 Update budget
               </Button>
               <Button type="button" variant="secondary" onClick={closeEditModal}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Move Budget Modal */}
+        <Modal
+          isOpen={movingBudget != null}
+          onClose={closeMoveModal}
+          title="Move budget line"
+          subtitle={`Move ${movingBudget?.categoryName || 'this category'} to another salary period.`}
+          size="xl"
+        >
+          <form onSubmit={handleMoveBudget} className="space-y-5">
+            <Select
+              label="Target salary period"
+              value={movePeriodId}
+              onChange={(event) => setMovePeriodId(event.target.value)}
+              options={[
+                { value: '', label: 'Choose an open period…' },
+                ...periods
+                  .filter((period) => period.id !== movingBudget?.periodId && period.status !== 'closed')
+                  .map((period) => ({ value: period.id.toString(), label: period.name })),
+              ]}
+              required
+            />
+            <div className="rounded-xl bg-[var(--ref-surface-container-low)] p-4 text-sm text-[var(--ref-on-surface-variant)]">
+              The planned amount of {movingBudget ? formatCurrency(movingBudget.plannedAmount) : ''} moves with this line. The target period must not already contain this category.
+            </div>
+            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+            <div className="flex flex-wrap gap-3 pt-2">
+              <Button type="submit" isLoading={isSubmitting} className="min-w-[140px]">
+                Move budget line
+              </Button>
+              <Button type="button" variant="secondary" onClick={closeMoveModal}>
                 Cancel
               </Button>
             </div>

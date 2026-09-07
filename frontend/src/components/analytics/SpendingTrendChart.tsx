@@ -194,7 +194,7 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--ref-on-surface-variant)]">
             <span>{points[0] ? shortDate(points[0].startMs) : ''}</span>
-            <span className="flex items-center gap-1.5" aria-label="Heatmap legend"><i className="h-2.5 w-2.5 rounded-sm bg-[var(--ref-surface-container-highest)]" /> none <i className="ml-1 h-2.5 w-2.5 rounded-sm bg-[var(--ref-primary)]" /> more</span>
+            <span className="flex items-center gap-1.5" aria-label="Heatmap legend"><i className="h-2.5 w-2.5 rounded-sm bg-[var(--ref-surface-container-highest)]" /> None <i className="ml-1 h-2.5 w-2.5 rounded-sm bg-[var(--ref-primary)]" /> More</span>
             <span>{points.at(-1) ? shortDate(points.at(-1)!.startMs) : ''}</span>
           </div>
         </div>

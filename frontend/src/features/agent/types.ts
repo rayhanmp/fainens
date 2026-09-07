@@ -25,7 +25,7 @@ export type ChatImage = {
 };
 
 export type ChatMessage =
-  | { id: string; serverId?: number; role: 'user'; text: string; createdAt: number; images?: ChatImage[] }
+  | { id: string; serverId?: number; role: 'user'; text: string; createdAt: number; images?: ChatImage[]; isClarificationFollowUp?: boolean }
   | { id: string; role: 'assistant'; text: string; createdAt: number; response?: AgentResponse };
 
 export type AgentActivityStep = {
@@ -34,4 +34,3 @@ export type AgentActivityStep = {
   status: 'active' | 'done';
   detail?: string;
 };
-
