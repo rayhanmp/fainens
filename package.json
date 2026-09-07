@@ -5,6 +5,7 @@
   "description": "Personal Finance Bookkeeping App (Fainens) monorepo",
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
+    "deploy": "node scripts/deploy.mjs",
     "dev:backend": "pnpm --filter backend dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",

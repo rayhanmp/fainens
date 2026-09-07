@@ -42,6 +42,7 @@ lerna-debug.log*
 # Testing
 coverage
 .nyc_output
+backend/eval-results/
 
 # Cache
 .cache
@@ -69,3 +70,10 @@ backend/waha/.env
 # Production environment
 .env.production
 
+# Local deployment/build artifacts
+.pnpm-store/
+*.tar.gz
+output/
+tmp/
+backend/waha/sessions/all/*.sqlite3-shm
+backend/waha/sessions/all/*.sqlite3-wal

@@ -127,6 +127,22 @@ docker compose logs -f backend
 - 🌐 Open http://localhost (nginx serves frontend)
 - 🔌 API available at http://localhost/api
 
+### Deployment CLI
+
+Use the guided terminal interface from the repository root. On first run, or with `--setup`, it asks for the deployment URL, Google OAuth values, sign-in email, secrets, Redis, and container image settings, then creates/updates `.env`. pnpm reserves `deploy` as a built-in command, so invoke the package script with `run`:
+```bash
+pnpm run deploy
+```
+
+It can build images, push them, deploy the configured tag, show service status, and stream logs. For automation or remote sessions, use direct actions:
+
+```bash
+node scripts/deploy.mjs release --tag 2026-09-07 --yes
+node scripts/deploy.mjs deploy --dry-run
+node scripts/deploy.mjs logs --service backend --follow
+```
+
+Deployment values come from `.env` and can be overridden with `--registry`, `--namespace`, `--tag`, and `--frontend-port`. On Windows, `./deploy.ps1` is also available.
 ### Stopping
 ```bash
 docker compose down
@@ -147,13 +163,24 @@ docker compose down -v
 | `ALLOWED_EMAIL` | Your email address (single-user mode) |
 | `SESSION_SECRET` | Random string for JWT signing |
 | `REDIS_URL` | Redis connection URL |
+| `HOST` / `PORT` | Backend bind address and port |
+| `CORS_ORIGINS` | Comma-separated browser origins |
+| `FRONTEND_URL` | SPA origin used after OAuth login |
 
+
+### Deployment scope
+
+Fainens is currently designed as a single-tenant deployment: `ALLOWED_EMAIL` selects the Google account for one installation, and the core ledger tables are shared by that installation. The configuration above removes personal deployment values, but accepting multiple unrelated accounts safely requires owner/workspace columns and scoped queries across the financial tables before turning this into a multi-user service.
 ### Optional Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `R2_*` | Cloudflare R2 for attachments | (optional) |
 | `NODE_ENV` | production or development | production |
+| `VITE_DEV_PORT` | Frontend development server port | 8080 |
+| `VITE_API_PROXY_TARGET` | Backend target for the Vite `/api` proxy | `http://localhost:3000` |
+| `FAINENS_IMAGE_REGISTRY` / `FAINENS_IMAGE_NAMESPACE` | Container registry and image namespace | `docker.io` / `fainens` |
+| `FAINENS_FRONTEND_PORT` | Host port for the Docker frontend | 8082 |
 
 ---
 

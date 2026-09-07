@@ -2,14 +2,14 @@ version: "3.9"
 
 services:
   frontend:
-    image: rayhanmp/fainens-frontend:latest
+    image: ${FAINENS_IMAGE_REGISTRY:-docker.io}/${FAINENS_IMAGE_NAMESPACE:-fainens}/fainens-frontend:${FAINENS_IMAGE_TAG:-latest}
     ports:
-      - "8082:80"
+      - "${FAINENS_FRONTEND_PORT:-8082}:80"
     depends_on:
       - backend
 
   backend:
-    image: rayhanmp/fainens-backend:latest
+    image: ${FAINENS_IMAGE_REGISTRY:-docker.io}/${FAINENS_IMAGE_NAMESPACE:-fainens}/fainens-backend:${FAINENS_IMAGE_TAG:-latest}
     expose:
       - "3000"
     volumes:
@@ -31,7 +31,7 @@ services:
       - .env
 
   worker:
-    image: rayhanmp/fainens-backend:latest
+    image: ${FAINENS_IMAGE_REGISTRY:-docker.io}/${FAINENS_IMAGE_NAMESPACE:-fainens}/fainens-backend:${FAINENS_IMAGE_TAG:-latest}
     command: ["node", "dist/jobs/worker.js"]
     restart: unless-stopped
     volumes:
