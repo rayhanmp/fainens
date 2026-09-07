@@ -1,6 +1,10 @@
 packages:
   - "frontend"
   - "backend"
+virtualStoreDirMaxLength: 120
+publicHoistPattern:
+  - "*eslint*"
+  - "*prettier*"
 allowBuilds:
   better-sqlite3: set this to true or false
   core-js: set this to true or false
