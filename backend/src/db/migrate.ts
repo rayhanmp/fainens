@@ -366,15 +366,28 @@ function repairMigrationHistory(journal: MigrationJournal): void {
 }
 
 /**
- * Agent profile preferences are additive and owner-scoped. Keep this small
+ * User profile preferences are additive and owner-scoped. Keep this small
  * compatibility ensure separate from the generated migration stream so
  * legacy databases and fresh databases both receive the table idempotently.
  */
-function ensureAgentProfileTable(): void {
+function ensureUserProfileTable(): void {
   db.$client.exec(`
-    CREATE TABLE IF NOT EXISTS agent_profile (
+    CREATE TABLE IF NOT EXISTS user_profile (
       owner_email text PRIMARY KEY NOT NULL,
+      full_name text,
+      preferred_name text,
       nickname text,
+      pronouns text,
+      date_of_birth text,
+      country text,
+      timezone text DEFAULT 'Asia/Jakarta' NOT NULL,
+      language text DEFAULT 'en' NOT NULL,
+      currency text DEFAULT 'IDR' NOT NULL,
+      income_pattern text,
+      primary_goal text,
+      agent_tone text DEFAULT 'warm' NOT NULL,
+      agent_verbosity text DEFAULT 'concise' NOT NULL,
+      agent_context_preferences text DEFAULT '{"fullName":false,"preferredName":true,"pronouns":false,"age":false,"country":false,"timezone":true,"language":true,"currency":true,"incomePattern":false,"primaryGoal":false,"agentTone":true,"agentVerbosity":true}' NOT NULL,
       updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
     )
   `);
@@ -483,7 +496,7 @@ function assertRequiredSchema(): void {
     agent_pending_action: ["id", "owner_email", "conversation_id", "kind", "normalized_input", "batch_id", "base_financial_revision", "status", "expires_at", "created_at", "updated_at"],
     agent_approval: ["id", "pending_action_id", "owner_email", "token_hash", "idempotency_key", "status", "approved_at", "executed_at", "execution_receipt", "expires_at", "created_at"],
     agent_memory: ["id", "owner_email", "label", "content", "created_at", "updated_at"],
-    agent_profile: ["owner_email", "nickname", "updated_at"],
+    user_profile: ["owner_email", "full_name", "preferred_name", "nickname", "pronouns", "date_of_birth", "country", "timezone", "language", "currency", "income_pattern", "primary_goal", "agent_tone", "agent_verbosity", "agent_context_preferences", "updated_at"],
     forecast_review: ["period_id", "category_id", "evidence_revision", "classification", "weight", "confidence", "rationale", "status"],
     forecast_purchase_review: ["transaction_id", "transaction_date", "period_id", "category_id", "amount", "evidence_revision", "classification", "weight", "confidence", "rationale", "status"],
     transport_route_template: ["id", "name", "provider", "service", "origin_name", "origin_lat", "origin_lng", "dest_name", "dest_lat", "dest_lng", "category_id", "default_account_id", "notes", "tag_ids", "created_at", "updated_at"],
@@ -574,7 +587,7 @@ export async function bootstrapDb() {
   // assertion runs. Startup must fail closed if the schema cannot be brought
   // to the checked-in version.
   migrate(db, { migrationsFolder });
-  ensureAgentProfileTable();
+  ensureUserProfileTable();
   ensureForecastReviewTable();
   ensureTransportRouteTemplateTable();
   assertRequiredSchema();

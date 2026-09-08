@@ -6,7 +6,7 @@ import { promises as fs } from "fs";
 import { randomUUID } from "node:crypto";
 
 import { db } from "../db/client";
-import { accounts, agentApprovals, agentConversations, agentConversationInsights, agentMemories, agentMessageAttachments, agentMessages, agentPendingActions, agentProfiles, storageDeletionOutbox } from "../db/schema";
+import { accounts, agentApprovals, agentConversations, agentConversationInsights, agentMemories, agentMessageAttachments, agentMessages, agentPendingActions, userProfiles, storageDeletionOutbox } from "../db/schema";
 import {
   agentToolDefinitions,
   executeAgentTool,
@@ -22,7 +22,8 @@ import {
   type AgentToolExecutionContext,
 } from "../services/agent-tools";
 import { callOpenRouterAgent, streamOpenRouterAgent, type AgentChatContentPart, type AgentChatMessage, type AgentChatResponse, type AgentChatTool } from "../services/agent-llm";
-import { buildAgentSystemPrompt } from "../services/agent-prompt";
+import { buildAgentSystemPrompt, type AgentPromptProfile } from "../services/agent-prompt";
+import { parseAgentContextPreferences } from "../services/agent-context";
 import { presentationTools, type AgentPresentation } from "../services/agent-presentations";
 import {
   agentToolGroups,
@@ -514,13 +515,57 @@ async function ownerMemories(ownerEmail: string): Promise<AgentMemoryContext[]> 
     .limit(MAX_AGENT_MEMORIES);
 }
 
-async function ownerNickname(ownerEmail: string): Promise<string | null> {
+function profileAge(dateOfBirth: string | null | undefined): number | null {
+  if (!dateOfBirth || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return null;
+  const [year, month, day] = dateOfBirth.split("-").map(Number);
+  const now = new Date();
+  const age = now.getUTCFullYear() - year - ((now.getUTCMonth() + 1 < month || (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)) ? 1 : 0);
+  return age >= 0 && age <= 150 ? age : null;
+}
+
+function profileContextText(value: string | null | undefined, maxLength: number): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+async function ownerNickname(ownerEmail: string): Promise<AgentPromptProfile | null> {
   const [profile] = await db
-    .select({ nickname: agentProfiles.nickname })
-    .from(agentProfiles)
-    .where(eq(agentProfiles.ownerEmail, ownerEmail))
+    .select({
+      fullName: userProfiles.fullName,
+      preferredName: userProfiles.preferredName,
+      nickname: userProfiles.nickname,
+      pronouns: userProfiles.pronouns,
+      dateOfBirth: userProfiles.dateOfBirth,
+      country: userProfiles.country,
+      timezone: userProfiles.timezone,
+      language: userProfiles.language,
+      currency: userProfiles.currency,
+      incomePattern: userProfiles.incomePattern,
+      primaryGoal: userProfiles.primaryGoal,
+      agentTone: userProfiles.agentTone,
+      agentVerbosity: userProfiles.agentVerbosity,
+      agentContextPreferences: userProfiles.agentContextPreferences,
+  })
+    .from(userProfiles)
+    .where(eq(userProfiles.ownerEmail, ownerEmail))
     .limit(1);
-  return parseNickname(profile?.nickname);
+  if (!profile) return null;
+  const context = parseAgentContextPreferences(profile.agentContextPreferences);
+  return {
+    fullName: context.fullName ? profileContextText(profile.fullName, 120) : null,
+    preferredName: context.preferredName ? parseNickname(profile.preferredName ?? profile.nickname) : null,
+    pronouns: context.pronouns ? profileContextText(profile.pronouns, 40) : null,
+    age: context.age ? profileAge(profile.dateOfBirth) : null,
+    country: context.country ? profileContextText(profile.country, 80) : null,
+    timezone: context.timezone ? profile.timezone || "Asia/Jakarta" : "Asia/Jakarta",
+    language: context.language ? profile.language || "en" : "en",
+    currency: context.currency ? profile.currency || "IDR" : "IDR",
+    incomePattern: context.incomePattern ? profileContextText(profile.incomePattern, 40) : null,
+    primaryGoal: context.primaryGoal ? profileContextText(profile.primaryGoal, 60) : null,
+    agentTone: context.agentTone ? profile.agentTone || "warm" : "warm",
+    agentVerbosity: context.agentVerbosity ? profile.agentVerbosity || "concise" : "concise",
+  };
 }
 
 /**
@@ -1260,7 +1305,7 @@ async function answerWithTools(
   history: AgentChatMessage[] = [],
   images: AgentImageAttachment[] = [],
   memories: AgentMemoryContext[] = [],
-  nickname: string | null = null,
+  nickname: AgentPromptProfile | null = null,
   executionContext?: AgentToolExecutionContext,
 ) {
   const providerConfig = await getAgentProviderConfig();
@@ -1619,7 +1664,7 @@ async function answerWithToolsStreaming(
   history: AgentChatMessage[],
   images: AgentImageAttachment[],
   memories: AgentMemoryContext[],
-  nickname: string | null,
+  nickname: AgentPromptProfile | null,
   onTextDelta: (text: string) => void,
   onProgress: (event: AgentProgressEvent) => void,
   executionContext?: AgentToolExecutionContext,
@@ -1901,7 +1946,7 @@ type AgentQueryResult = Awaited<ReturnType<typeof answerWithTools>>;
 async function executeAgentQuery(
   request: { user?: unknown },
   body: AgentQueryBody,
-  answer: (question: string, scopeInput: ReturnType<typeof parseAgentScopeInput>, history: AgentChatMessage[], images: AgentImageAttachment[], memories: AgentMemoryContext[], nickname: string | null, executionContext: AgentToolExecutionContext) => Promise<AgentQueryResult>,
+  answer: (question: string, scopeInput: ReturnType<typeof parseAgentScopeInput>, history: AgentChatMessage[], images: AgentImageAttachment[], memories: AgentMemoryContext[], nickname: AgentPromptProfile | null, executionContext: AgentToolExecutionContext) => Promise<AgentQueryResult>,
 ) {
   const question = (body.question as string).trim();
   const ownerEmail = currentOwnerEmail(request);
@@ -2074,11 +2119,11 @@ export default async function agentRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const ownerEmail = currentOwnerEmail(request);
-      const [profile] = await db.select({ nickname: agentProfiles.nickname })
-        .from(agentProfiles)
-        .where(eq(agentProfiles.ownerEmail, ownerEmail))
+      const [profile] = await db.select({ preferredName: userProfiles.preferredName, nickname: userProfiles.nickname, fullName: userProfiles.fullName })
+        .from(userProfiles)
+        .where(eq(userProfiles.ownerEmail, ownerEmail))
         .limit(1);
-      return { nickname: parseNickname(profile?.nickname) };
+      return { nickname: parseNickname(profile?.preferredName ?? profile?.nickname ?? profile?.fullName) };
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Could not load agent profile" });
     }
@@ -2091,16 +2136,16 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       const ownerEmail = currentOwnerEmail(request);
       const body = request.body as { nickname?: unknown };
       const nickname = parseNickname(body?.nickname);
-      const [existing] = await db.select({ ownerEmail: agentProfiles.ownerEmail })
-        .from(agentProfiles)
-        .where(eq(agentProfiles.ownerEmail, ownerEmail))
+      const [existing] = await db.select({ ownerEmail: userProfiles.ownerEmail })
+        .from(userProfiles)
+        .where(eq(userProfiles.ownerEmail, ownerEmail))
         .limit(1);
       if (existing) {
-        await db.update(agentProfiles)
-          .set({ nickname, updatedAt: new Date() })
-          .where(eq(agentProfiles.ownerEmail, ownerEmail));
+        await db.update(userProfiles)
+          .set({ nickname, preferredName: nickname, updatedAt: new Date() })
+          .where(eq(userProfiles.ownerEmail, ownerEmail));
       } else {
-        await db.insert(agentProfiles).values({ ownerEmail, nickname });
+        await db.insert(userProfiles).values({ ownerEmail, nickname, preferredName: nickname });
       }
       return { nickname };
     } catch (error) {

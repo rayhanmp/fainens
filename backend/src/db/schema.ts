@@ -802,12 +802,25 @@ export const agentMemories = sqliteTable("agent_memory", {
   ownerUpdatedIdx: index("idx_agent_memory_owner_updated").on(table.ownerEmail, table.updatedAt),
 }));
 
-/** Durable per-user agent preferences. Kept separate from free-form memories
+/** Durable per-user profile and agent preferences. Kept separate from free-form memories
  * so identity/display preferences can be edited without mixing them into
  * contextual notes. */
-export const agentProfiles = sqliteTable("agent_profile", {
+export const userProfiles = sqliteTable("user_profile", {
   ownerEmail: text("owner_email").primaryKey(),
+  fullName: text("full_name"),
+  preferredName: text("preferred_name"),
   nickname: text("nickname"),
+  pronouns: text("pronouns"),
+  dateOfBirth: text("date_of_birth"),
+  country: text("country"),
+  timezone: text("timezone").notNull().default("Asia/Jakarta"),
+  language: text("language").notNull().default("en"),
+  currency: text("currency").notNull().default("IDR"),
+  incomePattern: text("income_pattern"),
+  primaryGoal: text("primary_goal"),
+  agentTone: text("agent_tone").notNull().default("warm"),
+  agentVerbosity: text("agent_verbosity").notNull().default("concise"),
+  agentContextPreferences: text("agent_context_preferences").notNull().default("{\"fullName\":false,\"preferredName\":true,\"pronouns\":false,\"age\":false,\"country\":false,\"timezone\":true,\"language\":true,\"currency\":true,\"incomePattern\":false,\"primaryGoal\":false,\"agentTone\":true,\"agentVerbosity\":true}"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),

@@ -4791,8 +4791,8 @@ export type UpdateBudgetBody = {
    */
   plannedAmount?: number;
   /**
-   * @minimum 1
    * @maximum 9007199254740991
+   * @exclusiveMinimum
    */
   periodId?: number;
 };
@@ -7548,7 +7548,14 @@ export const GetAgentProviderSettings200ApiKeySource = {
 } as const;
 
 export type GetAgentProviderSettings200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id?: number;
+  name?: string;
   model: string;
+  baseUrl: string;
   apiKeyConfigured: boolean;
   apiKeySource: GetAgentProviderSettings200ApiKeySource;
   [key: string]: unknown;
@@ -7577,7 +7584,14 @@ export const UpdateAgentProviderSettings200ApiKeySource = {
 } as const;
 
 export type UpdateAgentProviderSettings200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id?: number;
+  name?: string;
   model: string;
+  baseUrl: string;
   apiKeyConfigured: boolean;
   apiKeySource: UpdateAgentProviderSettings200ApiKeySource;
   [key: string]: unknown;
@@ -7602,6 +7616,199 @@ export type TestAgentProviderSettings400 = {
 };
 
 export type TestAgentProviderSettings502 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListAgentModels200ItemApiKeySource = typeof ListAgentModels200ItemApiKeySource[keyof typeof ListAgentModels200ItemApiKeySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListAgentModels200ItemApiKeySource = {
+  database: 'database',
+  environment: 'environment',
+  none: 'none',
+} as const;
+
+export type ListAgentModels200ItemCreatedAt = string | string | number;
+
+export type ListAgentModels200ItemUpdatedAt = string | string | number;
+
+export type ListAgentModels200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  model: string;
+  baseUrl: string;
+  isDefault: boolean;
+  apiKeyConfigured: boolean;
+  apiKeySource: ListAgentModels200ItemApiKeySource;
+  createdAt: ListAgentModels200ItemCreatedAt;
+  updatedAt: ListAgentModels200ItemUpdatedAt;
+  [key: string]: unknown;
+};
+
+export type CreateAgentModelBody = {
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  name: string;
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  model: string;
+  /** @maxLength 500 */
+  baseUrl: string;
+  /** @maxLength 500 */
+  apiKey?: string;
+  isDefault?: boolean;
+  [key: string]: unknown;
+};
+
+export type CreateAgentModel201ApiKeySource = typeof CreateAgentModel201ApiKeySource[keyof typeof CreateAgentModel201ApiKeySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateAgentModel201ApiKeySource = {
+  database: 'database',
+  environment: 'environment',
+  none: 'none',
+} as const;
+
+export type CreateAgentModel201CreatedAt = string | string | number;
+
+export type CreateAgentModel201UpdatedAt = string | string | number;
+
+export type CreateAgentModel201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  model: string;
+  baseUrl: string;
+  isDefault: boolean;
+  apiKeyConfigured: boolean;
+  apiKeySource: CreateAgentModel201ApiKeySource;
+  createdAt: CreateAgentModel201CreatedAt;
+  updatedAt: CreateAgentModel201UpdatedAt;
+  [key: string]: unknown;
+};
+
+export type CreateAgentModel400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateAgentModelBody = {
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  name?: string;
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  model?: string;
+  /** @maxLength 500 */
+  baseUrl?: string;
+  /** @maxLength 500 */
+  apiKey?: string;
+  isDefault?: boolean;
+  clearApiKey?: boolean;
+  [key: string]: unknown;
+};
+
+export type UpdateAgentModel200ApiKeySource = typeof UpdateAgentModel200ApiKeySource[keyof typeof UpdateAgentModel200ApiKeySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateAgentModel200ApiKeySource = {
+  database: 'database',
+  environment: 'environment',
+  none: 'none',
+} as const;
+
+export type UpdateAgentModel200CreatedAt = string | string | number;
+
+export type UpdateAgentModel200UpdatedAt = string | string | number;
+
+export type UpdateAgentModel200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  model: string;
+  baseUrl: string;
+  isDefault: boolean;
+  apiKeyConfigured: boolean;
+  apiKeySource: UpdateAgentModel200ApiKeySource;
+  createdAt: UpdateAgentModel200CreatedAt;
+  updatedAt: UpdateAgentModel200UpdatedAt;
+  [key: string]: unknown;
+};
+
+export type UpdateAgentModel400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteAgentModel204 = typeof DeleteAgentModel204[keyof typeof DeleteAgentModel204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteAgentModel204 = {
+} as const;
+
+export type DeleteAgentModel400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SetDefaultAgentModel200ApiKeySource = typeof SetDefaultAgentModel200ApiKeySource[keyof typeof SetDefaultAgentModel200ApiKeySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SetDefaultAgentModel200ApiKeySource = {
+  database: 'database',
+  environment: 'environment',
+  none: 'none',
+} as const;
+
+export type SetDefaultAgentModel200CreatedAt = string | string | number;
+
+export type SetDefaultAgentModel200UpdatedAt = string | string | number;
+
+export type SetDefaultAgentModel200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  model: string;
+  baseUrl: string;
+  isDefault: boolean;
+  apiKeyConfigured: boolean;
+  apiKeySource: SetDefaultAgentModel200ApiKeySource;
+  createdAt: SetDefaultAgentModel200CreatedAt;
+  updatedAt: SetDefaultAgentModel200UpdatedAt;
+  [key: string]: unknown;
+};
+
+export type SetDefaultAgentModel400 = {
   error: string;
   [key: string]: unknown;
 };
@@ -10795,6 +11002,352 @@ export type ReverseReimbursementWriteOff404 = {
 };
 
 export type ReverseReimbursementWriteOff409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetPersonalProfile200Language = typeof GetPersonalProfile200Language[keyof typeof GetPersonalProfile200Language];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetPersonalProfile200Language = {
+  en: 'en',
+  id: 'id',
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetPersonalProfile200IncomePattern = typeof GetPersonalProfile200IncomePattern[keyof typeof GetPersonalProfile200IncomePattern] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetPersonalProfile200IncomePattern = {
+  salary: 'salary',
+  freelance: 'freelance',
+  business: 'business',
+  mixed: 'mixed',
+  irregular: 'irregular',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetPersonalProfile200PrimaryGoal = typeof GetPersonalProfile200PrimaryGoal[keyof typeof GetPersonalProfile200PrimaryGoal] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetPersonalProfile200PrimaryGoal = {
+  build_savings: 'build_savings',
+  pay_debt: 'pay_debt',
+  control_spending: 'control_spending',
+  plan_purchase: 'plan_purchase',
+  understand_finances: 'understand_finances',
+  other: 'other',
+} as const;
+
+export type GetPersonalProfile200AgentTone = typeof GetPersonalProfile200AgentTone[keyof typeof GetPersonalProfile200AgentTone];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetPersonalProfile200AgentTone = {
+  warm: 'warm',
+  direct: 'direct',
+  encouraging: 'encouraging',
+} as const;
+
+export type GetPersonalProfile200AgentVerbosity = typeof GetPersonalProfile200AgentVerbosity[keyof typeof GetPersonalProfile200AgentVerbosity];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetPersonalProfile200AgentVerbosity = {
+  concise: 'concise',
+  balanced: 'balanced',
+  detailed: 'detailed',
+} as const;
+
+export type GetPersonalProfile200AgentContext = {
+  fullName: boolean;
+  preferredName: boolean;
+  pronouns: boolean;
+  age: boolean;
+  country: boolean;
+  timezone: boolean;
+  language: boolean;
+  currency: boolean;
+  incomePattern: boolean;
+  primaryGoal: boolean;
+  agentTone: boolean;
+  agentVerbosity: boolean;
+};
+
+export type GetPersonalProfile200 = {
+  /** @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$ */
+  email: string;
+  /** @nullable */
+  fullName: string | null;
+  /** @nullable */
+  preferredName: string | null;
+  /** @nullable */
+  pronouns: string | null;
+  /** @nullable */
+  dateOfBirth: string | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  age: number | null;
+  /** @nullable */
+  country: string | null;
+  timezone: string;
+  language: GetPersonalProfile200Language;
+  currency: string;
+  /** @nullable */
+  incomePattern: GetPersonalProfile200IncomePattern;
+  /** @nullable */
+  primaryGoal: GetPersonalProfile200PrimaryGoal;
+  agentTone: GetPersonalProfile200AgentTone;
+  agentVerbosity: GetPersonalProfile200AgentVerbosity;
+  agentContext: GetPersonalProfile200AgentContext;
+};
+
+export type GetPersonalProfile401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdatePersonalProfileBodyLanguage = typeof UpdatePersonalProfileBodyLanguage[keyof typeof UpdatePersonalProfileBodyLanguage];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfileBodyLanguage = {
+  en: 'en',
+  id: 'id',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdatePersonalProfileBodyIncomePattern = typeof UpdatePersonalProfileBodyIncomePattern[keyof typeof UpdatePersonalProfileBodyIncomePattern] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfileBodyIncomePattern = {
+  salary: 'salary',
+  freelance: 'freelance',
+  business: 'business',
+  mixed: 'mixed',
+  irregular: 'irregular',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdatePersonalProfileBodyPrimaryGoal = typeof UpdatePersonalProfileBodyPrimaryGoal[keyof typeof UpdatePersonalProfileBodyPrimaryGoal] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfileBodyPrimaryGoal = {
+  build_savings: 'build_savings',
+  pay_debt: 'pay_debt',
+  control_spending: 'control_spending',
+  plan_purchase: 'plan_purchase',
+  understand_finances: 'understand_finances',
+  other: 'other',
+} as const;
+
+export type UpdatePersonalProfileBodyAgentTone = typeof UpdatePersonalProfileBodyAgentTone[keyof typeof UpdatePersonalProfileBodyAgentTone];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfileBodyAgentTone = {
+  warm: 'warm',
+  direct: 'direct',
+  encouraging: 'encouraging',
+} as const;
+
+export type UpdatePersonalProfileBodyAgentVerbosity = typeof UpdatePersonalProfileBodyAgentVerbosity[keyof typeof UpdatePersonalProfileBodyAgentVerbosity];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfileBodyAgentVerbosity = {
+  concise: 'concise',
+  balanced: 'balanced',
+  detailed: 'detailed',
+} as const;
+
+export type UpdatePersonalProfileBodyAgentContext = {
+  fullName?: boolean;
+  preferredName?: boolean;
+  pronouns?: boolean;
+  age?: boolean;
+  country?: boolean;
+  timezone?: boolean;
+  language?: boolean;
+  currency?: boolean;
+  incomePattern?: boolean;
+  primaryGoal?: boolean;
+  agentTone?: boolean;
+  agentVerbosity?: boolean;
+};
+
+export type UpdatePersonalProfileBody = {
+  /**
+   * @maxLength 120
+   * @nullable
+   */
+  fullName?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  preferredName?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  pronouns?: string | null;
+  /** @nullable */
+  dateOfBirth?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  country?: string | null;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  timezone?: string;
+  language?: UpdatePersonalProfileBodyLanguage;
+  /** @pattern ^[A-Z]{3}$ */
+  currency?: string;
+  /** @nullable */
+  incomePattern?: UpdatePersonalProfileBodyIncomePattern;
+  /** @nullable */
+  primaryGoal?: UpdatePersonalProfileBodyPrimaryGoal;
+  agentTone?: UpdatePersonalProfileBodyAgentTone;
+  agentVerbosity?: UpdatePersonalProfileBodyAgentVerbosity;
+  agentContext?: UpdatePersonalProfileBodyAgentContext;
+  [key: string]: unknown;
+};
+
+export type UpdatePersonalProfile200Language = typeof UpdatePersonalProfile200Language[keyof typeof UpdatePersonalProfile200Language];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfile200Language = {
+  en: 'en',
+  id: 'id',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdatePersonalProfile200IncomePattern = typeof UpdatePersonalProfile200IncomePattern[keyof typeof UpdatePersonalProfile200IncomePattern] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfile200IncomePattern = {
+  salary: 'salary',
+  freelance: 'freelance',
+  business: 'business',
+  mixed: 'mixed',
+  irregular: 'irregular',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdatePersonalProfile200PrimaryGoal = typeof UpdatePersonalProfile200PrimaryGoal[keyof typeof UpdatePersonalProfile200PrimaryGoal] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfile200PrimaryGoal = {
+  build_savings: 'build_savings',
+  pay_debt: 'pay_debt',
+  control_spending: 'control_spending',
+  plan_purchase: 'plan_purchase',
+  understand_finances: 'understand_finances',
+  other: 'other',
+} as const;
+
+export type UpdatePersonalProfile200AgentTone = typeof UpdatePersonalProfile200AgentTone[keyof typeof UpdatePersonalProfile200AgentTone];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfile200AgentTone = {
+  warm: 'warm',
+  direct: 'direct',
+  encouraging: 'encouraging',
+} as const;
+
+export type UpdatePersonalProfile200AgentVerbosity = typeof UpdatePersonalProfile200AgentVerbosity[keyof typeof UpdatePersonalProfile200AgentVerbosity];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdatePersonalProfile200AgentVerbosity = {
+  concise: 'concise',
+  balanced: 'balanced',
+  detailed: 'detailed',
+} as const;
+
+export type UpdatePersonalProfile200AgentContext = {
+  fullName: boolean;
+  preferredName: boolean;
+  pronouns: boolean;
+  age: boolean;
+  country: boolean;
+  timezone: boolean;
+  language: boolean;
+  currency: boolean;
+  incomePattern: boolean;
+  primaryGoal: boolean;
+  agentTone: boolean;
+  agentVerbosity: boolean;
+};
+
+export type UpdatePersonalProfile200 = {
+  /** @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$ */
+  email: string;
+  /** @nullable */
+  fullName: string | null;
+  /** @nullable */
+  preferredName: string | null;
+  /** @nullable */
+  pronouns: string | null;
+  /** @nullable */
+  dateOfBirth: string | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  age: number | null;
+  /** @nullable */
+  country: string | null;
+  timezone: string;
+  language: UpdatePersonalProfile200Language;
+  currency: string;
+  /** @nullable */
+  incomePattern: UpdatePersonalProfile200IncomePattern;
+  /** @nullable */
+  primaryGoal: UpdatePersonalProfile200PrimaryGoal;
+  agentTone: UpdatePersonalProfile200AgentTone;
+  agentVerbosity: UpdatePersonalProfile200AgentVerbosity;
+  agentContext: UpdatePersonalProfile200AgentContext;
+};
+
+export type UpdatePersonalProfile400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdatePersonalProfile401 = {
   error: string;
   [key: string]: unknown;
 };
@@ -18811,6 +19364,202 @@ export const testAgentProviderSettings = async ( options?: RequestInit): Promise
 
 
 
+export type listAgentModelsResponse200 = {
+  data: ListAgentModels200Item[]
+  status: 200
+}
+    
+export type listAgentModelsResponseSuccess = (listAgentModelsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAgentModelsResponse = (listAgentModelsResponseSuccess)
+
+export const getListAgentModelsUrl = () => {
+
+
+  
+
+  return `/api/settings/agent-models`
+}
+
+export const listAgentModels = async ( options?: RequestInit): Promise<listAgentModelsResponse> => {
+  
+  return generatedFetch<listAgentModelsResponse>(getListAgentModelsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type createAgentModelResponse201 = {
+  data: CreateAgentModel201
+  status: 201
+}
+
+export type createAgentModelResponse400 = {
+  data: CreateAgentModel400
+  status: 400
+}
+    
+export type createAgentModelResponseSuccess = (createAgentModelResponse201) & {
+  headers: Headers;
+};
+export type createAgentModelResponseError = (createAgentModelResponse400) & {
+  headers: Headers;
+};
+
+export type createAgentModelResponse = (createAgentModelResponseSuccess | createAgentModelResponseError)
+
+export const getCreateAgentModelUrl = () => {
+
+
+  
+
+  return `/api/settings/agent-models`
+}
+
+export const createAgentModel = async (createAgentModelBody: CreateAgentModelBody, options?: RequestInit): Promise<createAgentModelResponse> => {
+  
+  return generatedFetch<createAgentModelResponse>(getCreateAgentModelUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createAgentModelBody,)
+  }
+);}
+
+
+
+export type updateAgentModelResponse200 = {
+  data: UpdateAgentModel200
+  status: 200
+}
+
+export type updateAgentModelResponse400 = {
+  data: UpdateAgentModel400
+  status: 400
+}
+    
+export type updateAgentModelResponseSuccess = (updateAgentModelResponse200) & {
+  headers: Headers;
+};
+export type updateAgentModelResponseError = (updateAgentModelResponse400) & {
+  headers: Headers;
+};
+
+export type updateAgentModelResponse = (updateAgentModelResponseSuccess | updateAgentModelResponseError)
+
+export const getUpdateAgentModelUrl = (id: string,) => {
+
+
+  
+
+  return `/api/settings/agent-models/${id}`
+}
+
+export const updateAgentModel = async (id: string,
+    updateAgentModelBody: UpdateAgentModelBody, options?: RequestInit): Promise<updateAgentModelResponse> => {
+  
+  return generatedFetch<updateAgentModelResponse>(getUpdateAgentModelUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAgentModelBody,)
+  }
+);}
+
+
+
+export type deleteAgentModelResponse204 = {
+  data: DeleteAgentModel204
+  status: 204
+}
+
+export type deleteAgentModelResponse400 = {
+  data: DeleteAgentModel400
+  status: 400
+}
+    
+export type deleteAgentModelResponseSuccess = (deleteAgentModelResponse204) & {
+  headers: Headers;
+};
+export type deleteAgentModelResponseError = (deleteAgentModelResponse400) & {
+  headers: Headers;
+};
+
+export type deleteAgentModelResponse = (deleteAgentModelResponseSuccess | deleteAgentModelResponseError)
+
+export const getDeleteAgentModelUrl = (id: string,) => {
+
+
+  
+
+  return `/api/settings/agent-models/${id}`
+}
+
+export const deleteAgentModel = async (id: string, options?: RequestInit): Promise<deleteAgentModelResponse> => {
+  
+  return generatedFetch<deleteAgentModelResponse>(getDeleteAgentModelUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type setDefaultAgentModelResponse200 = {
+  data: SetDefaultAgentModel200
+  status: 200
+}
+
+export type setDefaultAgentModelResponse400 = {
+  data: SetDefaultAgentModel400
+  status: 400
+}
+    
+export type setDefaultAgentModelResponseSuccess = (setDefaultAgentModelResponse200) & {
+  headers: Headers;
+};
+export type setDefaultAgentModelResponseError = (setDefaultAgentModelResponse400) & {
+  headers: Headers;
+};
+
+export type setDefaultAgentModelResponse = (setDefaultAgentModelResponseSuccess | setDefaultAgentModelResponseError)
+
+export const getSetDefaultAgentModelUrl = (id: string,) => {
+
+
+  
+
+  return `/api/settings/agent-models/${id}/default`
+}
+
+export const setDefaultAgentModel = async (id: string, options?: RequestInit): Promise<setDefaultAgentModelResponse> => {
+  
+  return generatedFetch<setDefaultAgentModelResponse>(getSetDefaultAgentModelUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
 export type listSubscriptionsResponse200 = {
   data: ListSubscriptions200
   status: 200
@@ -20875,6 +21624,92 @@ export const reverseReimbursementWriteOff = async (id: number,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       reverseReimbursementWriteOffBody,)
+  }
+);}
+
+
+
+export type getPersonalProfileResponse200 = {
+  data: GetPersonalProfile200
+  status: 200
+}
+
+export type getPersonalProfileResponse401 = {
+  data: GetPersonalProfile401
+  status: 401
+}
+    
+export type getPersonalProfileResponseSuccess = (getPersonalProfileResponse200) & {
+  headers: Headers;
+};
+export type getPersonalProfileResponseError = (getPersonalProfileResponse401) & {
+  headers: Headers;
+};
+
+export type getPersonalProfileResponse = (getPersonalProfileResponseSuccess | getPersonalProfileResponseError)
+
+export const getGetPersonalProfileUrl = () => {
+
+
+  
+
+  return `/api/profile`
+}
+
+export const getPersonalProfile = async ( options?: RequestInit): Promise<getPersonalProfileResponse> => {
+  
+  return generatedFetch<getPersonalProfileResponse>(getGetPersonalProfileUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type updatePersonalProfileResponse200 = {
+  data: UpdatePersonalProfile200
+  status: 200
+}
+
+export type updatePersonalProfileResponse400 = {
+  data: UpdatePersonalProfile400
+  status: 400
+}
+
+export type updatePersonalProfileResponse401 = {
+  data: UpdatePersonalProfile401
+  status: 401
+}
+    
+export type updatePersonalProfileResponseSuccess = (updatePersonalProfileResponse200) & {
+  headers: Headers;
+};
+export type updatePersonalProfileResponseError = (updatePersonalProfileResponse400 | updatePersonalProfileResponse401) & {
+  headers: Headers;
+};
+
+export type updatePersonalProfileResponse = (updatePersonalProfileResponseSuccess | updatePersonalProfileResponseError)
+
+export const getUpdatePersonalProfileUrl = () => {
+
+
+  
+
+  return `/api/profile`
+}
+
+export const updatePersonalProfile = async (updatePersonalProfileBody: UpdatePersonalProfileBody, options?: RequestInit): Promise<updatePersonalProfileResponse> => {
+  
+  return generatedFetch<updatePersonalProfileResponse>(getUpdatePersonalProfileUrl(),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updatePersonalProfileBody,)
   }
 );}
 

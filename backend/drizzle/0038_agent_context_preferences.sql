@@ -1,0 +1,1 @@
+ALTER TABLE `user_profile` ADD COLUMN `agent_context_preferences` text NOT NULL DEFAULT '{"fullName":false,"preferredName":true,"pronouns":false,"age":false,"country":false,"timezone":true,"language":true,"currency":true,"incomePattern":false,"primaryGoal":false,"agentTone":true,"agentVerbosity":true}';

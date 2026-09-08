@@ -39,6 +39,7 @@ import splitbillRoutes from "./routes/splitbill";
 import agentRoutes from "./routes/agent";
 import moneyAnomalyRoutes from "./routes/money-anomalies";
 import reimbursementRoutes from "./routes/reimbursements";
+import profileRoutes from "./routes/profile";
 import jobsRoutes from "./routes/jobs";
 import { closeQueues, getJobQueueHealth } from "./jobs/queue";
 
@@ -52,7 +53,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(swagger, {
     openapi: {
       info: { title: "Fainens API", version: "1.0.0", description: "Personal finance ledger API" },
-      tags: ["accounts", "transactions", "categories", "periods", "budgets", "analytics", "agent", "gallery", "reimbursements"].map((name) => ({ name })),
+      tags: ["accounts", "transactions", "categories", "periods", "budgets", "analytics", "agent", "profile", "gallery", "reimbursements"].map((name) => ({ name })),
     },
     transform: jsonSchemaTransform,
   });
@@ -113,6 +114,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(loanRoutes);
   app.register(contactRoutes);
   app.register(reimbursementRoutes);
+  app.register(profileRoutes);
   app.register(insightsRoutes);
   app.register(pendingTransactionsRoutes);
   app.register(splitbillRoutes);

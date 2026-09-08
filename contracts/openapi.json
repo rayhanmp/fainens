@@ -825,11 +825,21 @@
                           "items": {
                             "type": "object",
                             "properties": {
-                              "name": { "type": "string" },
-                              "amountCents": { "type": "number" },
-                              "share": { "type": "number" }
+                              "name": {
+                                "type": "string"
+                              },
+                              "amountCents": {
+                                "type": "number"
+                              },
+                              "share": {
+                                "type": "number"
+                              }
                             },
-                            "required": ["name", "amountCents", "share"],
+                            "required": [
+                              "name",
+                              "amountCents",
+                              "share"
+                            ],
                             "additionalProperties": false
                           }
                         }
@@ -9932,11 +9942,6 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
-                  },
-                  "periodId": {
-                    "type": "integer",
-                    "exclusiveMinimum": true,
-                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -17723,7 +17728,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
                     "model": {
+                      "type": "string"
+                    },
+                    "baseUrl": {
                       "type": "string"
                     },
                     "apiKeyConfigured": {
@@ -17740,6 +17756,7 @@
                   },
                   "required": [
                     "model",
+                    "baseUrl",
                     "apiKeyConfigured",
                     "apiKeySource"
                   ],
@@ -17788,7 +17805,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
                     "model": {
+                      "type": "string"
+                    },
+                    "baseUrl": {
                       "type": "string"
                     },
                     "apiKeyConfigured": {
@@ -17805,6 +17833,7 @@
                   },
                   "required": [
                     "model",
+                    "baseUrl",
                     "apiKeyConfigured",
                     "apiKeySource"
                   ],
@@ -17893,6 +17922,573 @@
             }
           },
           "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/agent-models": {
+      "get": {
+        "operationId": "listAgentModels",
+        "tags": [
+          "agent"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "baseUrl": {
+                        "type": "string"
+                      },
+                      "isDefault": {
+                        "type": "boolean"
+                      },
+                      "apiKeyConfigured": {
+                        "type": "boolean"
+                      },
+                      "apiKeySource": {
+                        "type": "string",
+                        "enum": [
+                          "database",
+                          "environment",
+                          "none"
+                        ]
+                      },
+                      "createdAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "updatedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "model",
+                      "baseUrl",
+                      "isDefault",
+                      "apiKeyConfigured",
+                      "apiKeySource",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAgentModel",
+        "tags": [
+          "agent"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "baseUrl": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "format": "uri"
+                  },
+                  "apiKey": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "model",
+                  "baseUrl"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "baseUrl": {
+                      "type": "string"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "apiKeyConfigured": {
+                      "type": "boolean"
+                    },
+                    "apiKeySource": {
+                      "type": "string",
+                      "enum": [
+                        "database",
+                        "environment",
+                        "none"
+                      ]
+                    },
+                    "createdAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "updatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "model",
+                    "baseUrl",
+                    "isDefault",
+                    "apiKeyConfigured",
+                    "apiKeySource",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/agent-models/{id}": {
+      "patch": {
+        "operationId": "updateAgentModel",
+        "tags": [
+          "agent"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "baseUrl": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "format": "uri"
+                  },
+                  "apiKey": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
+                  "clearApiKey": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "baseUrl": {
+                      "type": "string"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "apiKeyConfigured": {
+                      "type": "boolean"
+                    },
+                    "apiKeySource": {
+                      "type": "string",
+                      "enum": [
+                        "database",
+                        "environment",
+                        "none"
+                      ]
+                    },
+                    "createdAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "updatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "model",
+                    "baseUrl",
+                    "isDefault",
+                    "apiKeyConfigured",
+                    "apiKeySource",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAgentModel",
+        "tags": [
+          "agent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [
+                    null
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/agent-models/{id}/default": {
+      "post": {
+        "operationId": "setDefaultAgentModel",
+        "tags": [
+          "agent"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "baseUrl": {
+                      "type": "string"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "apiKeyConfigured": {
+                      "type": "boolean"
+                    },
+                    "apiKeySource": {
+                      "type": "string",
+                      "enum": [
+                        "database",
+                        "environment",
+                        "none"
+                      ]
+                    },
+                    "createdAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "updatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "model",
+                    "baseUrl",
+                    "isDefault",
+                    "apiKeyConfigured",
+                    "apiKeySource",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -25165,6 +25761,555 @@
         }
       }
     },
+    "/api/profile": {
+      "get": {
+        "operationId": "getPersonalProfile",
+        "tags": [
+          "profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    },
+                    "fullName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "preferredName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "pronouns": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "dateOfBirth": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "age": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "country": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string",
+                      "enum": [
+                        "en",
+                        "id"
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "incomePattern": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "salary",
+                        "freelance",
+                        "business",
+                        "mixed",
+                        "irregular",
+                        "other"
+                      ]
+                    },
+                    "primaryGoal": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "build_savings",
+                        "pay_debt",
+                        "control_spending",
+                        "plan_purchase",
+                        "understand_finances",
+                        "other"
+                      ]
+                    },
+                    "agentTone": {
+                      "type": "string",
+                      "enum": [
+                        "warm",
+                        "direct",
+                        "encouraging"
+                      ]
+                    },
+                    "agentVerbosity": {
+                      "type": "string",
+                      "enum": [
+                        "concise",
+                        "balanced",
+                        "detailed"
+                      ]
+                    },
+                    "agentContext": {
+                      "type": "object",
+                      "properties": {
+                        "fullName": {
+                          "type": "boolean"
+                        },
+                        "preferredName": {
+                          "type": "boolean"
+                        },
+                        "pronouns": {
+                          "type": "boolean"
+                        },
+                        "age": {
+                          "type": "boolean"
+                        },
+                        "country": {
+                          "type": "boolean"
+                        },
+                        "timezone": {
+                          "type": "boolean"
+                        },
+                        "language": {
+                          "type": "boolean"
+                        },
+                        "currency": {
+                          "type": "boolean"
+                        },
+                        "incomePattern": {
+                          "type": "boolean"
+                        },
+                        "primaryGoal": {
+                          "type": "boolean"
+                        },
+                        "agentTone": {
+                          "type": "boolean"
+                        },
+                        "agentVerbosity": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "fullName",
+                        "preferredName",
+                        "pronouns",
+                        "age",
+                        "country",
+                        "timezone",
+                        "language",
+                        "currency",
+                        "incomePattern",
+                        "primaryGoal",
+                        "agentTone",
+                        "agentVerbosity"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "email",
+                    "fullName",
+                    "preferredName",
+                    "pronouns",
+                    "dateOfBirth",
+                    "age",
+                    "country",
+                    "timezone",
+                    "language",
+                    "currency",
+                    "incomePattern",
+                    "primaryGoal",
+                    "agentTone",
+                    "agentVerbosity",
+                    "agentContext"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updatePersonalProfile",
+        "tags": [
+          "profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "preferredName": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "pronouns": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "dateOfBirth": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "country": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "id"
+                    ]
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "incomePattern": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "salary",
+                      "freelance",
+                      "business",
+                      "mixed",
+                      "irregular",
+                      "other"
+                    ]
+                  },
+                  "primaryGoal": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "build_savings",
+                      "pay_debt",
+                      "control_spending",
+                      "plan_purchase",
+                      "understand_finances",
+                      "other"
+                    ]
+                  },
+                  "agentTone": {
+                    "type": "string",
+                    "enum": [
+                      "warm",
+                      "direct",
+                      "encouraging"
+                    ]
+                  },
+                  "agentVerbosity": {
+                    "type": "string",
+                    "enum": [
+                      "concise",
+                      "balanced",
+                      "detailed"
+                    ]
+                  },
+                  "agentContext": {
+                    "type": "object",
+                    "properties": {
+                      "fullName": {
+                        "type": "boolean"
+                      },
+                      "preferredName": {
+                        "type": "boolean"
+                      },
+                      "pronouns": {
+                        "type": "boolean"
+                      },
+                      "age": {
+                        "type": "boolean"
+                      },
+                      "country": {
+                        "type": "boolean"
+                      },
+                      "timezone": {
+                        "type": "boolean"
+                      },
+                      "language": {
+                        "type": "boolean"
+                      },
+                      "currency": {
+                        "type": "boolean"
+                      },
+                      "incomePattern": {
+                        "type": "boolean"
+                      },
+                      "primaryGoal": {
+                        "type": "boolean"
+                      },
+                      "agentTone": {
+                        "type": "boolean"
+                      },
+                      "agentVerbosity": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    },
+                    "fullName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "preferredName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "pronouns": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "dateOfBirth": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "age": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "country": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string",
+                      "enum": [
+                        "en",
+                        "id"
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "incomePattern": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "salary",
+                        "freelance",
+                        "business",
+                        "mixed",
+                        "irregular",
+                        "other"
+                      ]
+                    },
+                    "primaryGoal": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "build_savings",
+                        "pay_debt",
+                        "control_spending",
+                        "plan_purchase",
+                        "understand_finances",
+                        "other"
+                      ]
+                    },
+                    "agentTone": {
+                      "type": "string",
+                      "enum": [
+                        "warm",
+                        "direct",
+                        "encouraging"
+                      ]
+                    },
+                    "agentVerbosity": {
+                      "type": "string",
+                      "enum": [
+                        "concise",
+                        "balanced",
+                        "detailed"
+                      ]
+                    },
+                    "agentContext": {
+                      "type": "object",
+                      "properties": {
+                        "fullName": {
+                          "type": "boolean"
+                        },
+                        "preferredName": {
+                          "type": "boolean"
+                        },
+                        "pronouns": {
+                          "type": "boolean"
+                        },
+                        "age": {
+                          "type": "boolean"
+                        },
+                        "country": {
+                          "type": "boolean"
+                        },
+                        "timezone": {
+                          "type": "boolean"
+                        },
+                        "language": {
+                          "type": "boolean"
+                        },
+                        "currency": {
+                          "type": "boolean"
+                        },
+                        "incomePattern": {
+                          "type": "boolean"
+                        },
+                        "primaryGoal": {
+                          "type": "boolean"
+                        },
+                        "agentTone": {
+                          "type": "boolean"
+                        },
+                        "agentVerbosity": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "fullName",
+                        "preferredName",
+                        "pronouns",
+                        "age",
+                        "country",
+                        "timezone",
+                        "language",
+                        "currency",
+                        "incomePattern",
+                        "primaryGoal",
+                        "agentTone",
+                        "agentVerbosity"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "email",
+                    "fullName",
+                    "preferredName",
+                    "pronouns",
+                    "dateOfBirth",
+                    "age",
+                    "country",
+                    "timezone",
+                    "language",
+                    "currency",
+                    "incomePattern",
+                    "primaryGoal",
+                    "agentTone",
+                    "agentVerbosity",
+                    "agentContext"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/insights/dashboard": {
       "post": {
         "operationId": "generateDashboardInsight",
@@ -32136,6 +33281,9 @@
     },
     {
       "name": "agent"
+    },
+    {
+      "name": "profile"
     },
     {
       "name": "gallery"

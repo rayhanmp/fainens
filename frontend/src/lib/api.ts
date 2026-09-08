@@ -259,6 +259,39 @@ export type AgentActionProposal = {
   tokenAlreadyIssued: boolean;
 };
 
+export type AgentContextPreferences = {
+  fullName: boolean;
+  preferredName: boolean;
+  pronouns: boolean;
+  age: boolean;
+  country: boolean;
+  timezone: boolean;
+  language: boolean;
+  currency: boolean;
+  incomePattern: boolean;
+  primaryGoal: boolean;
+  agentTone: boolean;
+  agentVerbosity: boolean;
+};
+
+export type PersonalProfile = {
+  email: string;
+  fullName: string | null;
+  preferredName: string | null;
+  pronouns: string | null;
+  dateOfBirth: string | null;
+  age: number | null;
+  country: string | null;
+  timezone: string;
+  language: 'en' | 'id';
+  currency: string;
+  incomePattern: 'salary' | 'freelance' | 'business' | 'mixed' | 'irregular' | 'other' | null;
+  primaryGoal: 'build_savings' | 'pay_debt' | 'control_spending' | 'plan_purchase' | 'understand_finances' | 'other' | null;
+  agentTone: 'warm' | 'direct' | 'encouraging';
+  agentVerbosity: 'concise' | 'balanced' | 'detailed';
+  agentContext: AgentContextPreferences;
+};
+
 export type AgentBudgetActionProposal = AgentActionProposal & {
   kind: 'budget_plan_upsert';
   input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
@@ -348,6 +381,14 @@ export const api = {
     logout: () => fetchApi<{ success: boolean }>('/auth/logout', { method: 'POST' }),
     onboardingStatus: () =>
       fetchApi<{ needsOnboarding: boolean }>('/auth/onboarding-status'),
+  },
+
+  profile: {
+    get: () => fetchApi<PersonalProfile>('/profile'),
+    update: (input: Partial<Omit<PersonalProfile, 'email' | 'age'>>) => fetchApi<PersonalProfile>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
   },
 
   agentProvider: {

@@ -8,6 +8,7 @@ import { useCreateBudgetMutation } from '../features/budgets/queries';
 import { useCreatePeriodMutation, useSuggestedPeriodQuery } from '../features/periods/queries';
 import { useUpdateSalarySettingsMutation } from '../features/salary/queries';
 import { useOnboardingForm } from '../features/onboarding/controller';
+import { api } from '../lib/api';
 import {
   Wallet,
   Tag,
@@ -110,6 +111,7 @@ function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [previewCategories, setPreviewCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [preferences, setPreferences] = useState({ currency: 'IDR', dateFormat: 'DD/MM/YYYY', payrollDay: 25 });
+  const [profile, setProfile] = useState({ fullName: '', preferredName: '', pronouns: '', dateOfBirth: '' });
 
   const [createdPeriodId, setCreatedPeriodId] = useState<number | null>(null);
 
@@ -180,6 +182,24 @@ function OnboardingPage() {
       }
     }
 
+    if (step === 1 && !isPreview) {
+      setLoading(true);
+      try {
+        await api.profile.update({
+          fullName: profile.fullName.trim() || null,
+          preferredName: profile.preferredName.trim() || null,
+          pronouns: profile.pronouns.trim() || null,
+          dateOfBirth: profile.dateOfBirth || null,
+          currency: preferences.currency,
+        });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not save your profile');
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+
     if (step === 4) {
       if (!values.periodName.trim() || !values.periodStart || !values.periodEnd) {
         setError('Please fill in period name and dates.');
@@ -235,7 +255,6 @@ function OnboardingPage() {
         const existing = saved ? JSON.parse(saved) as Record<string, unknown> : {};
         localStorage.setItem('fainens-settings', JSON.stringify({
           ...existing,
-          currency: preferences.currency,
           dateFormat: preferences.dateFormat,
           salaryDay: preferences.payrollDay,
         }));
@@ -267,6 +286,7 @@ function OnboardingPage() {
     createCategoryMutation,
     createPeriodMutation,
     preferences,
+    profile,
     updateSalarySettingsMutation,
   ]);
 
@@ -353,7 +373,10 @@ function OnboardingPage() {
             <div className="rounded-3xl border border-[var(--color-border)] bg-white/95 p-6 shadow-[0_20px_60px_-24px_rgba(15,23,42,0.25)] backdrop-blur-md sm:p-10">
               {isPreview && <div className="mb-8 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm leading-relaxed text-amber-900"><span className="mt-0.5" aria-hidden>◌</span><p><strong>Preview mode</strong><br /><span className="text-amber-800/80">Explore every step safely. Nothing you enter here will be saved.</span></p></div>}
           {step === 1 && (
-            <StepWelcome />
+            <StepWelcome
+              profile={profile}
+              onChange={(field, value) => setProfile((current) => ({ ...current, [field]: value }))}
+            />
           )}
           {step === 2 && (
             <StepWallets
@@ -505,7 +528,12 @@ function SetupSummary(props: { wallets: string[]; periodName: string; payrollDay
   );
 }
 
-function StepWelcome() {
+type OnboardingProfileDraft = { fullName: string; preferredName: string; pronouns: string; dateOfBirth: string };
+
+function StepWelcome(props: {
+  profile: OnboardingProfileDraft;
+  onChange: (field: keyof OnboardingProfileDraft, value: string) => void;
+}) {
   return (
     <div className="sm:px-2 sm:py-2">
       <div className="text-center">
@@ -518,6 +546,16 @@ function StepWelcome() {
           categories, and start your first pay period so the dashboard feels right
           from day one.
         </p>
+      </div>
+      <div className="mx-auto mt-8 max-w-xl rounded-2xl bg-[var(--ref-surface-container-low)] p-5 text-left ring-1 ring-[var(--color-border)]">
+        <p className="text-sm font-bold text-[var(--color-text-primary)]">A little about you <span className="font-normal text-[var(--color-muted)]">(optional)</span></p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">This helps greetings and Agent responses feel more personal. You can change it anytime in Settings.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-[var(--color-text-primary)]">Name</span><input value={props.profile.fullName} onChange={(event) => props.onChange('fullName', event.target.value)} placeholder="Your full name" maxLength={120} className="brutalist-input bg-white" /></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-[var(--color-text-primary)]">Preferred name</span><input value={props.profile.preferredName} onChange={(event) => props.onChange('preferredName', event.target.value)} placeholder="What should we call you?" maxLength={80} className="brutalist-input bg-white" /></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-[var(--color-text-primary)]">Pronouns <span className="font-normal text-[var(--color-muted)]">(optional)</span></span><input value={props.profile.pronouns} onChange={(event) => props.onChange('pronouns', event.target.value)} placeholder="e.g. they/them" maxLength={80} className="brutalist-input bg-white" /></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-[var(--color-text-primary)]">Date of birth <span className="font-normal text-[var(--color-muted)]">(optional)</span></span><input type="date" value={props.profile.dateOfBirth} onChange={(event) => props.onChange('dateOfBirth', event.target.value)} className="brutalist-input bg-white" /></label>
+        </div>
       </div>
       <MiniFeatureDemo />
     </div>
