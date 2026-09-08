@@ -171,8 +171,22 @@ const SIMPLE_DRAFT_KEY = 'transaction:new:simple';
 const JOURNAL_DRAFT_KEY = 'transaction:new:journal';
 const AI_DRAFT_KEY = 'transaction:new:ai';
 const QUICK_ENTRY_PREFS_KEY = 'fainens-quick-entry';
+const SETTINGS_STORAGE_KEY = 'fainens-settings';
 
 type QuickEntryPreferences = { accountIds: number[]; categoryIds: number[] };
+
+function loadDefaultBankAccountId(): number | undefined {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? '{}') as { defaultBankAccountId?: unknown };
+    return typeof parsed.defaultBankAccountId === 'number'
+      && Number.isSafeInteger(parsed.defaultBankAccountId)
+      && parsed.defaultBankAccountId > 0
+      ? parsed.defaultBankAccountId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function loadQuickEntryPreferences(): QuickEntryPreferences {
   try {
@@ -644,14 +658,22 @@ export function TransactionModal({
       setRouteTemplateEditorMode(null);
       const defaults = createSimpleFormDefaults();
       const preferences = loadQuickEntryPreferences();
-      setQuickEntryPreferences(preferences);
       const stored = useDraftStore.getState().drafts[SIMPLE_DRAFT_KEY]?.value;
       let restored = defaults;
       if (stored) {
         try { restored = { ...defaults, ...JSON.parse(stored) } as typeof defaults; }
         catch { restored = defaults; }
       }
-      const preferredAccountId = initialPrefill?.accountId ?? preferences.accountIds[0];
+      const configuredBankAccountId = loadDefaultBankAccountId();
+      const defaultBankAccountId = configuredBankAccountId != null
+        && accounts.some((account) => account.id === configuredBankAccountId && account.type === 'asset' && !account.systemKey)
+        ? configuredBankAccountId
+        : undefined;
+      const effectiveQuickEntryPreferences = defaultBankAccountId != null
+        ? { ...preferences, accountIds: [defaultBankAccountId, ...preferences.accountIds.filter((id) => id !== defaultBankAccountId)] }
+        : preferences;
+      setQuickEntryPreferences(effectiveQuickEntryPreferences);
+      const preferredTransactionAccountId = initialPrefill?.accountId ?? defaultBankAccountId ?? preferences.accountIds[0];
       const preferredCategoryId = initialPrefill?.categoryId ?? preferences.categoryIds[0];
       setSimpleForm({
         ...restored,
@@ -660,10 +682,10 @@ export function TransactionModal({
         description: initialPrefill?.description ?? restored.description,
         fromAccountId: initialPrefill?.fromAccountId != null
           ? String(initialPrefill.fromAccountId)
-          : initialPrefill?.accountId != null || !restored.fromAccountId ? String(preferredAccountId ?? restored.fromAccountId) : restored.fromAccountId,
+          : initialPrefill?.accountId != null || !restored.fromAccountId ? String(preferredTransactionAccountId ?? restored.fromAccountId) : restored.fromAccountId,
         toAccountId: initialPrefill?.toAccountId != null
           ? String(initialPrefill.toAccountId)
-          : initialPrefill?.accountId != null || !restored.toAccountId ? String(preferredAccountId ?? restored.toAccountId) : restored.toAccountId,
+          : initialPrefill?.accountId != null || !restored.toAccountId ? String(preferredTransactionAccountId ?? restored.toAccountId) : restored.toAccountId,
         categoryId: initialPrefill?.categoryId != null || !restored.categoryId ? String(preferredCategoryId ?? restored.categoryId) : restored.categoryId,
       });
       setMobileDetailsOpen(false);
