@@ -18,6 +18,7 @@ import {
 import { cn } from '../../lib/utils';
 import { ProfileMenu } from './Sidebar';
 import { navigationActive } from './navigation';
+import { useUiStore } from '../../stores/ui-store';
 
 const groups = [
   {
@@ -51,6 +52,7 @@ export function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const dialog = useRef<HTMLDialogElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const { pathname } = useLocation();
+  const openSettings = useUiStore((state) => state.openSettings);
 
   useEffect(() => {
     if (!isOpen) {
@@ -101,7 +103,7 @@ export function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             <div className="grid grid-cols-2 gap-2">
               {supportItems.map(({ to, label, icon: Icon }) => {
                 const active = navigationActive(pathname, to);
-                return <Link key={to} to={to} onClick={onClose} aria-current={active ? 'page' : undefined} className={cn('flex min-h-12 items-center gap-2 rounded-xl px-3 text-sm font-semibold', active ? 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]')}><Icon className="h-4 w-4 shrink-0" />{label}</Link>;
+                return <Link key={to} to={to} onClick={(event) => { if (to === '/settings') { event.preventDefault(); openSettings(); } onClose(); }} aria-current={active ? 'page' : undefined} className={cn('flex min-h-12 items-center gap-2 rounded-xl px-3 text-sm font-semibold', active ? 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]')}><Icon className="h-4 w-4 shrink-0" />{label}</Link>;
               })}
             </div>
           </section>

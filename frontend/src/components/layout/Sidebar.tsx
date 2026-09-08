@@ -2,6 +2,8 @@ import { Link, useLocation } from '@tanstack/react-router';
 import { Plus, PanelLeftClose, PanelLeftOpen, ChevronUp, Settings, LogOut, Shield, CircleHelp } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../../lib/auth';
+import { useAgentProfileQuery } from '../../features/agent/queries';
+import { useUiStore } from '../../stores/ui-store';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { navigationGroups, navigationActive, pathMatches } from './navigation';
 
@@ -31,9 +33,11 @@ export function NavigationLinks({ compact = false, onNavigate }: { compact?: boo
 
 export function ProfileMenu({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
   const { user, logout } = useAuth();
+  const profileQuery = useAgentProfileQuery();
   const { confirm } = useConfirm();
+  const openSettings = useUiStore((state) => state.openSettings);
   const { pathname } = useLocation();
-  const name = user?.email?.split('@')[0] || 'Your account';
+  const name = profileQuery.data?.nickname || user?.email?.split('@')[0] || 'Your account';
   return (
     <details className="finance-profile" onKeyDown={event => {
       if (event.key === 'Escape') {
@@ -46,7 +50,7 @@ export function ProfileMenu({ compact = false, onNavigate }: { compact?: boolean
         {!compact && <><span className="finance-profile-name"><strong>{name}</strong><small>Profile & settings</small></span><ChevronUp className="h-4 w-4 shrink-0" /></>}
       </summary>
       <div className="finance-profile-popover">
-        <Link to="/settings" onClick={onNavigate} className={`finance-nav-link ${navigationActive(pathname, '/settings') ? 'is-active' : ''}`}><Settings />Settings</Link>
+        <button type="button" onClick={() => { onNavigate?.(); openSettings(); }} className="finance-nav-link"><Settings />Settings</button>
         <Link to="/help" onClick={onNavigate} className={`finance-nav-link ${navigationActive(pathname, '/help') ? 'is-active' : ''}`}><CircleHelp />Help & glossary</Link>
         <Link to="/audit-log" onClick={onNavigate} className="finance-nav-link"><Shield />Security audit</Link>
         <button type="button" className="finance-nav-link" onClick={async () => {

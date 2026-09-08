@@ -6,6 +6,9 @@ type UiStore = {
   activePanel: string | null;
   setCompactTables: (value: boolean) => void;
   setActivePanel: (panel: string | null) => void;
+  settingsOpen: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
   transactionComposer: {
     isOpen: boolean;
     prefill?: { accountId?: number; categoryId?: number; periodId?: number };
@@ -19,6 +22,9 @@ export const useUiStore = create<UiStore>()(persist((set) => ({
   activePanel: null,
   setCompactTables: (compactTables) => set({ compactTables }),
   setActivePanel: (activePanel) => set({ activePanel }),
+  settingsOpen: false,
+  openSettings: () => set({ settingsOpen: true }),
+  closeSettings: () => set({ settingsOpen: false }),
   transactionComposer: { isOpen: false },
   openTransactionComposer: (prefill) => set({ transactionComposer: { isOpen: true, prefill } }),
   closeTransactionComposer: () => set({ transactionComposer: { isOpen: false } }),

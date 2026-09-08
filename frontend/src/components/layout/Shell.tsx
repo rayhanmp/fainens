@@ -7,6 +7,7 @@ import { useAuth } from '../../lib/auth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useUiStore } from '../../stores/ui-store';
 import { GlobalTransactionComposer } from '../transactions/GlobalTransactionComposer';
+import { SettingsPage } from '../../routes/settings';
 
 interface ShellProps {
   children?: React.ReactNode;
@@ -15,6 +16,8 @@ interface ShellProps {
 export function Shell({ children }: ShellProps) {
   const { isDemoMode } = useAuth();
   const openTransactionComposer = useUiStore((state) => state.openTransactionComposer);
+  const settingsOpen = useUiStore((state) => state.settingsOpen);
+  const closeSettings = useUiStore((state) => state.closeSettings);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts({
@@ -40,6 +43,7 @@ export function Shell({ children }: ShellProps) {
       </main>
       <MobileBottomNav />
       <GlobalTransactionComposer />
+      {settingsOpen && <SettingsPage onClose={closeSettings} />}
     </div>
   );
 }
