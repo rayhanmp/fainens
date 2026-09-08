@@ -2,6 +2,7 @@ export type PdfPasswordFormat = 'DDMMYYYY' | 'YYYYMMDD';
 
 export interface ReportSecuritySettings {
   pdfPasswordEnabled: boolean;
+  /** Legacy browser-only fallback; new profiles store this through the API. */
   birthDate: string;
   pdfPasswordFormat: PdfPasswordFormat;
 }

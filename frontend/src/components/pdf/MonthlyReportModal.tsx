@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, cn } from '../../lib/utils';
 import { MonthlyReportPDF } from './MonthlyReportPDF';
 import { Download, FileText, Loader2 } from 'lucide-react';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type ReportSecuritySettings } from '../../lib/reportSecurity';
+import { api } from '../../lib/api';
 import { usePeriodsLedgerQuery } from '../../features/periods/queries';
 import { useMonthlyReportQuery } from '../../features/reports/queries';
 
@@ -22,10 +23,12 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
   const [reportData, setReportData] = useState<any>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSecurity, setReportSecurity] = useState<ReportSecuritySettings>(() => loadReportSecuritySettings());
+  const [profileBirthDate, setProfileBirthDate] = useState<string | null>(null);
+  const [profileFullName, setProfileFullName] = useState<string | null>(null);
 
   const monthlyReportQuery = useMonthlyReportQuery(selectedPeriodId ? Number(selectedPeriodId) : null);
   const configuredPdfPassword = reportSecurity.pdfPasswordEnabled
-    ? birthdayPassword(reportSecurity.birthDate, reportSecurity.pdfPasswordFormat)
+    ? birthdayPassword(profileBirthDate ?? reportSecurity.birthDate, reportSecurity.pdfPasswordFormat)
     : null;
 
   useEffect(() => {
@@ -36,7 +39,19 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
   }, [periods, selectedPeriodId]);
 
   useEffect(() => {
-    if (isOpen) setReportSecurity(loadReportSecuritySettings());
+    if (isOpen) {
+      const localSecurity = loadReportSecuritySettings();
+      setReportSecurity(localSecurity);
+      void api.profile.get()
+        .then((profile) => {
+          setProfileBirthDate(profile.dateOfBirth ?? '');
+          setProfileFullName(profile.fullName?.trim() || profile.preferredName?.trim() || null);
+        })
+        .catch(() => {
+          setProfileBirthDate(localSecurity.birthDate);
+          setProfileFullName(null);
+        });
+    }
   }, [isOpen]);
 
   const handleGenerate = async () => {
@@ -104,6 +119,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
     try {
       const doc = (
         <MonthlyReportPDF
+          fullName={profileFullName}
           periodName={reportData.periodName}
           startDate={reportData.startDate}
           endDate={reportData.endDate}

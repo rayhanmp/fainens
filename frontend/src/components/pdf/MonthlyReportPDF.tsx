@@ -36,6 +36,7 @@ const money = (value: number) => `${value < 0 ? '-' : ''}Rp ${new Intl.NumberFor
 const percent = (value: number, total: number) => total > 0 ? `${(value / total * 100).toFixed(1)}%` : 'N/A';
 
 export interface MonthlyReportProps {
+  fullName?: string | null;
   periodName: string; startDate: string; endDate: string; totalIncome: number; totalExpenses: number; netIncome: number;
   totalAssets: number; totalLiabilities: number; netWorth: number; previousBalance: number; totalIncoming: number; totalOutgoing: number; closingBalance: number; reportHash: string;
   incomeBySource: Array<{ name: string; amount: number }>;
@@ -83,7 +84,7 @@ export function MonthlyReportPDF(p: MonthlyReportProps) {
   return <Document title={`Fainens - ${p.periodName}`} author="Fainens" subject="Personal financial report">
     <Page size="A4" style={s.cover}>
       <View style={s.coverTop}><Brand /><View style={s.badge}><Text style={s.badgeText}>PRIVATE REPORT</Text></View></View>
-      <View style={s.coverIntro}><Text style={s.eyebrow}>Your money, in perspective</Text><Text style={s.coverTitle}>Monthly financial{'\n'}report</Text><Text style={s.coverPeriod}>{p.periodName}</Text><Text style={s.lead}>{p.startDate} - {p.endDate}</Text></View>
+      <View style={s.coverIntro}><Text style={s.eyebrow}>Your money, in perspective</Text><Text style={s.coverTitle}>Monthly financial{'\n'}report</Text><Text style={s.coverPeriod}>{p.periodName}</Text><Text style={s.lead}>{p.fullName ? `For ${p.fullName} · ` : ''}{p.startDate} - {p.endDate}</Text></View>
       <View style={s.coverHero} wrap={false}>
         <Text style={s.coverHeroLabel}>NET INCOME FOR THE PERIOD</Text><Text style={s.coverHeroValue}>{money(p.netIncome)}</Text>
         <View style={s.coverMetrics}><View style={s.coverMetric}><Text style={s.coverHeroLabel}>Income</Text><Text style={s.coverMetricValue}>{money(p.totalIncome)}</Text></View><View style={s.coverMetric}><Text style={s.coverHeroLabel}>Spending</Text><Text style={s.coverMetricValue}>{money(p.totalExpenses)}</Text></View><View style={s.coverMetric}><Text style={s.coverHeroLabel}>Savings rate</Text><Text style={s.coverMetricValue}>{percent(p.netIncome, p.totalIncome)}</Text></View></View>
