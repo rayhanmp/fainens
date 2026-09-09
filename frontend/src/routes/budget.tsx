@@ -10,7 +10,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { formatCurrency, cn, parseIdNominalToInt } from '../lib/utils';
+import { formatCurrency, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useApplyBudgetTemplateMutation,
@@ -387,7 +387,7 @@ function BudgetPage() {
     setEditingBudget(budget);
     setBudgetForm({
       categoryId: budget.categoryId.toString(),
-      plannedAmount: formatCurrency(budget.plannedAmount),
+      plannedAmount: formatIdNominalInput(budget.plannedAmount.toString()),
     });
     setFormError('');
     setIsEditModalOpen(true);

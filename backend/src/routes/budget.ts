@@ -1,14 +1,14 @@
-import { eq, and, sql, isNull, or, gte, lte, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
 
 const DAY_MS = 86_400_000;
-import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, forecastPurchaseReviews, salaryPeriods, transactions, transactionLines, accounts } from "../db/schema";
+import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, forecastPurchaseReviews, salaryPeriods } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary } from "../cache/invalidation";
-import { getBudgetFacts } from "../services/financial-facts";
+import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getPeriodCoverage } from "../services/period-coverage";
 import { getBudgetOutlook } from "../services/budget-outlook";
 import { getBudgetReviewStatus, requestBudgetOutlierReview } from "../services/budget-outlook-review";
@@ -144,40 +144,20 @@ export default async function (fastify: FastifyInstance) {
         .where(eq(salaryPeriods.id, pid))
         .limit(1);
 
-      let totalIncome = 0;
       const coverage = period
         ? await getPeriodCoverage(period.startDate, period.endDate + DAY_MS - 1)
         : { complete: [], partial: [], skipped: [], unknown: [], isComparable: false, warnings: ["Period not found"] };
       const budgetFacts = period ? await getBudgetFacts(pid) : [];
-      if (period) {
-        const revenueAccounts = await db
-          .select({ id: accounts.id })
-          .from(accounts)
-          .where(eq(accounts.type, "revenue"));
-        const revIds = revenueAccounts.map((a) => a.id);
-
-        if (revIds.length > 0) {
-          const [incomeRow] = await db
-            .select({
-              total: sql<number>`coalesce(sum(${transactionLines.credit} - ${transactionLines.debit}), 0)`,
-            })
-            .from(transactions)
-            .innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId))
-            .where(
-              and(
-                sql`${transactionLines.accountId} IN (${sql.join(revIds.map(String), sql`, `)})`,
-                sql`${transactions.status} <> 'draft'`,
-                // `transactions.date` uses Drizzle's timestamp_ms mode, whose
-                // query encoder expects Date objects. Salary-period boundaries
-                // are intentionally stored as numeric milliseconds.
-                gte(transactions.date, new Date(period.startDate)),
-                lte(transactions.date, new Date(period.endDate + DAY_MS - 1)),
-                or(eq(transactions.periodId, pid), isNull(transactions.periodId)),
-              ),
-            );
-          totalIncome = incomeRow?.total ?? 0;
-        }
-      }
+      const periodEndMs = period ? period.endDate + DAY_MS - 1 : null;
+      const financialFacts = period
+        ? await getFinancialFacts({
+            startMs: period.startDate,
+            endMs: periodEndMs!,
+            asOfMs: Math.min(Date.now(), periodEndMs!),
+            periodId: pid,
+          })
+        : null;
+      const totalIncome = financialFacts?.totalIncomeCents ?? 0;
 
       let plansQuery = db
         .select({
