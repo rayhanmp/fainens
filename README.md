@@ -1,413 +1,271 @@
-# 💰 Fainens - Personal Finance Bookkeeping App
+# Fainens
 
-A Docker-deployable, accrual-based double-entry personal finance app with a React frontend, Fastify backend, Drizzle ORM with SQLite, Redis caching, Google OAuth login, and Cloudflare R2 attachments.
+Fainens is a personal finance workspace with double-entry bookkeeping, planning tools, reports, and an optional AI financial assistant. It is designed for a single-owner deployment, with Google OAuth restricting access to the configured account.
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
-[![React](https://img.shields.io/badge/react-18-61DAFB?logo=react)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/typescript-5.0-3178C6?logo=typescript)](https://www.typescriptlang.org)
+## What it includes
 
----
+- Double-entry transactions, accounts, categories, tags, transfers, and adjustments
+- Budgeting, income and salary planning, loans, pay-later items, reimbursements, split bills, subscriptions, and savings goals
+- Dashboard, financial reports, trends, CSV export, and PDF report export
+- Profile and personalization settings, including preferred name and report personalization
+- Agent context controls, saved memories, response preferences, and configurable OpenAI-compatible models
+- Optional attachment storage through Cloudflare R2
+- Background jobs through Redis and BullMQ, with an interval-based local mode
+- Responsive web UI with quick transaction entry and configurable default accounts
 
-## ✨ Features
+## Stack
 
-### 📊 Core Accounting
-- **Double-entry ledger** with trial balance checks and optional full journal entries
-- **Wallets & categories** — asset/liability accounts with emoji/color; flat spending categories
-- **Simple transactions** — expense / income / transfer with automatic posting
-- **Salary periods & budgets** — planned vs actual by category with visual progress tracking
-- **Tags & audit log** for labeling and history
+| Area | Technologies |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite, TanStack Router, TanStack Query, Tailwind CSS |
+| Backend | Fastify, TypeScript, Zod, Google OAuth, JWT/session cookies |
+| Data | SQLite, better-sqlite3, Drizzle ORM and migrations |
+| Jobs | Redis, ioredis, BullMQ, dedicated worker container |
+| Files | Local attachments by default, optional Cloudflare R2 |
+| Deployment | Docker Compose, nginx, the guided `scripts/deploy.mjs` CLI |
 
-### 💸 Advanced Workflows
-- **Paylater** — recognize purchases, interest, and settlement payments (API + UI)
-- **Loans & Debt Tracking** — 
-  - Track money lent to and borrowed from contacts
-  - Full contact management with relationships (family, friend, colleague, professional)
-  - Contact profiles with loan history and net balance
-  - Record payments and track remaining balances
-  - Visual indicators for overdue loans
-- **Reports** — income statement, balance sheet, cash flow, spending, trends; CSV export
-- **Analytics** — net worth, burn rate, runway, period summaries (Redis-backed where configured)
+## Requirements
 
-### 🎨 UX & Design
-- **Responsive UI** — desktop sidebar + mobile bottom navigation
-- **Neo-brutalist design system** — warm off-white, thick borders, sage green accents
-- **Budget visualizations** — progress bars, status pills, category mix charts
-- **Real-time filtering** — search, sort, and filter budgets with instant feedback
-- **Keyboard shortcuts** — quick navigation and actions
+- Node.js 22.12+ (or Node.js 20.19+)
+- pnpm
+- Docker and Docker Compose for a production-style deployment
+- A Google OAuth client for non-local authentication
 
-### 🔒 Security & Deployment
-- Single-user mode with Google OAuth
-- Redis-cached analytics for fast dashboard loads
-- Docker Compose deployment ready
-- Cloudflare R2 for file attachments
+## Local development
 
----
+Install dependencies and create the environment file:
 
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | React 18 + TypeScript + Vite + Tailwind CSS |
-| **Routing** | TanStack Router (file-based) |
-| **UI** | Custom shadcn/ui-inspired components |
-| **Charts** | Recharts |
-| **Backend** | Fastify + TypeScript |
-| **ORM** | Drizzle ORM |
-| **Database** | SQLite (better-sqlite3) |
-| **Cache** | Redis (ioredis) |
-| **Auth** | Google OAuth 2.0 + JWT |
-| **Storage** | Cloudflare R2 (S3-compatible) |
-| **Deployment** | Docker Compose |
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- pnpm (recommended) or npm
-- Docker & Docker Compose (for production deployment)
-- Google Cloud account (for OAuth)
-
-### Local Development
-
-1. **Clone and install dependencies:**
 ```bash
-git clone <repository-url>
-cd fainens
 pnpm install
-```
-
-2. **Set up environment variables:**
-```bash
 cp .env.example .env
-# Edit .env and fill in your values
 ```
 
-3. **Start development servers:**
+On PowerShell, use:
 
-Terminal 1 (Backend):
+```powershell
+pnpm install
+Copy-Item .env.example .env
+```
+
+For a quick local-only session, set these values in `.env`:
+
+```dotenv
+NODE_ENV=development
+LOCAL_AUTH_BYPASS=true
+LOCAL_AUTH_EMAIL=local-dev@fainens.test
+```
+
+This bypass is development-only and is rejected by the application in production.
+
+Start the services in separate terminals:
+
 ```bash
-cd backend
-pnpm dev
+pnpm run dev:backend
+pnpm run dev:frontend
 ```
 
-Terminal 2 (Frontend):
+The frontend runs on `http://localhost:8080` and proxies `/api` requests to the backend on `http://localhost:3000` by default. Adjust `VITE_DEV_PORT` or `VITE_API_PROXY_TARGET` in `.env` if those ports are already in use.
+
+Useful local commands:
+
 ```bash
-cd frontend
-pnpm dev
+pnpm run build
+pnpm run lint
+pnpm run start
+pnpm --filter backend test
 ```
 
-The app will be available at:
-- 🌐 Frontend: http://localhost:8080
-- 🔌 Backend API: http://localhost:3000
+## Guided deployment
 
-### Docker Deployment
+The deployment CLI asks for the values needed to run Fainens instead of requiring a hand-written production `.env`. It creates or updates `.env`, validates the configuration, and can build, publish, and start the Docker services.
 
-1. **Configure environment:**
-```bash
-cp .env.example .env
-# Edit .env with production values
-```
+Run the interactive setup:
 
-2. **Start all services:**
-```bash
-docker compose up -d
-```
-
-3. **Check status:**
-```bash
-docker compose ps
-docker compose logs -f backend
-```
-
-4. **Access the app:**
-- 🌐 Open http://localhost (nginx serves frontend)
-- 🔌 API available at http://localhost/api
-
-### Deployment CLI
-
-Use the guided terminal interface from the repository root. On first run, or with `--setup`, it asks for the deployment URL, Google OAuth values, sign-in email, secrets, Redis, and container image settings, then creates/updates `.env`. pnpm reserves `deploy` as a built-in command, so invoke the package script with `run`:
 ```bash
 pnpm run deploy
 ```
 
-It can build images, push them, deploy the configured tag, show service status, and stream logs. For automation or remote sessions, use direct actions:
+On Windows, the wrapper is also available:
+
+```powershell
+.\deploy.ps1
+```
+
+On macOS/Linux:
 
 ```bash
-node scripts/deploy.mjs release --tag 2026-09-07 --yes
-node scripts/deploy.mjs deploy --dry-run
+./deploy.sh
+```
+
+The wizard covers:
+
+1. Public app URL and derived Google OAuth callback URL
+2. Google OAuth client ID and secret
+3. Allowed sign-in email
+4. Session secret generation
+5. Optional OpenRouter key and model
+6. Redis connection
+7. Container registry, image namespace, image tag, and frontend port
+
+The command `pnpm deploy` is reserved by pnpm and does not run this project’s CLI. Use `pnpm run deploy` or call the script directly:
+
+```bash
+node scripts/deploy.mjs --setup
+```
+
+### Deployment actions
+
+```bash
+# Inspect or update deployment configuration
+node scripts/deploy.mjs config
+
+# Build images locally
+node scripts/deploy.mjs build
+
+# Build and publish images
+node scripts/deploy.mjs push --tag 2026-09-08
+
+# Pull images and start the stack
+node scripts/deploy.mjs deploy --tag 2026-09-08
+
+# Build, publish, and deploy after confirmation
+node scripts/deploy.mjs release --tag 2026-09-08
+
+# Preview a release without changing Docker or the registry
+node scripts/deploy.mjs release --dry-run
+
+# Inspect services or follow logs
+node scripts/deploy.mjs status
 node scripts/deploy.mjs logs --service backend --follow
 ```
 
-Deployment values come from `.env` and can be overridden with `--registry`, `--namespace`, `--tag`, and `--frontend-port`. On Windows, `./deploy.ps1` is also available.
-### Stopping
+Use `--yes` for non-interactive releases after the configuration has already been reviewed.
+
+## Docker Compose
+
+The Compose stack contains four services:
+
+- `frontend`: nginx serving the built React application
+- `backend`: Fastify API and migrations
+- `worker`: background job processor using the backend image
+- `redis`: queue and cache service
+
+For a manually configured deployment:
+
 ```bash
-docker compose down
-# To also remove data volumes:
-docker compose down -v
+cp .env.example .env
+# Edit .env with production values
+docker compose up -d --build
+docker compose ps
+docker compose logs -f backend
 ```
 
----
+The default public port is `8082`, configurable with `FAINENS_FRONTEND_PORT`. The backend and worker share the `./data` and `./attachments` directories so SQLite data and uploaded files survive container recreation.
 
-## ⚙️ Configuration
+## Configuration
 
-### Required Environment Variables
+The complete template is in [.env.example](.env.example). The most important production values are:
 
-| Variable | Description |
-|----------|-------------|
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `ALLOWED_EMAIL` | Your email address (single-user mode) |
-| `SESSION_SECRET` | Random string for JWT signing |
-| `REDIS_URL` | Redis connection URL |
-| `HOST` / `PORT` | Backend bind address and port |
-| `CORS_ORIGINS` | Comma-separated browser origins |
-| `FRONTEND_URL` | SPA origin used after OAuth login |
+| Variable | Purpose |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
+| `GOOGLE_CALLBACK_URL` | OAuth callback; normally `<public-url>/api/auth/google/callback` |
+| `FRONTEND_URL` | Canonical public URL |
+| `CORS_ORIGINS` | Allowed browser origins |
+| `ALLOWED_EMAIL` | The email allowed to sign in |
+| `SESSION_SECRET` | Secret used to protect sessions; keep it private and stable |
+| `REDIS_URL` | Redis connection used by the API and worker |
+| `OPENROUTER_API_KEY` | Optional server-side key for the Agent |
+| `AGENT_OPENROUTER_MODEL` | Optional default Agent model |
+| `VITE_DEV_PORT` | Local Vite port |
+| `FAINENS_FRONTEND_PORT` | Docker public port |
 
+For production, the deploy wizard automatically switches the job runner to queue mode and applies production defaults. Do not commit `.env`, API keys, OAuth secrets, session secrets, or local database files.
 
-### Deployment scope
+## Google OAuth setup
 
-Fainens is currently designed as a single-tenant deployment: `ALLOWED_EMAIL` selects the Google account for one installation, and the core ledger tables are shared by that installation. The configuration above removes personal deployment values, but accepting multiple unrelated accounts safely requires owner/workspace columns and scoped queries across the financial tables before turning this into a multi-user service.
-### Optional Variables
+1. Create or select a project in Google Cloud Console.
+2. Configure the OAuth consent screen.
+3. Create a Web application OAuth client.
+4. Add the exact callback URL shown by the deployment wizard, for example:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `R2_*` | Cloudflare R2 for attachments | (optional) |
-| `NODE_ENV` | production or development | production |
-| `VITE_DEV_PORT` | Frontend development server port | 8080 |
-| `VITE_API_PROXY_TARGET` | Backend target for the Vite `/api` proxy | `http://localhost:3000` |
-| `FAINENS_IMAGE_REGISTRY` / `FAINENS_IMAGE_NAMESPACE` | Container registry and image namespace | `docker.io` / `fainens` |
-| `FAINENS_FRONTEND_PORT` | Host port for the Docker frontend | 8082 |
+   ```text
+   https://finance.example.com/api/auth/google/callback
+   ```
 
----
+5. Put the client ID, client secret, public URL, and allowed email into the wizard or `.env`.
+6. Restart the backend after changing OAuth settings.
 
-## 📁 Project Structure
+The callback URL, frontend URL, and CORS origin must use the same public origin. Google will reject a callback URL that differs by scheme, hostname, port, or path.
 
-```
-fainens/
-├── docker-compose.yml          # Docker orchestration
-├── .env.example                # Environment template
-├── .env                        # Your secrets (gitignored)
-├── backend/
-│   ├── Dockerfile
-│   ├── src/
-│   │   ├── server.ts           # Fastify entry
-│   │   ├── db/                 # Drizzle schema & migrations
-│   │   ├── routes/             # API routes
-│   │   │   ├── auth.ts         # Authentication
-│   │   │   ├── transactions.ts # Transaction CRUD
-│   │   │   ├── loans.ts        # Loan management
-│   │   │   ├── contacts.ts     # Contact management
-│   │   │   ├── budgets.ts      # Budget planning
-│   │   │   └── ...
-│   │   ├── services/           # Business logic
-│   │   ├── cache/              # Redis layer
-│   │   └── lib/                # Utilities
-│   └── data/                   # SQLite database volume
-├── frontend/
-│   ├── Dockerfile
-│   ├── src/
-│   │   ├── routes/             # TanStack Router pages
-│   │   │   ├── index.tsx       # Dashboard
-│   │   │   ├── transactions.tsx
-│   │   │   ├── loans.tsx       # Loan tracking
-│   │   │   ├── budget.tsx      # Budget management
-│   │   │   └── ...
-│   │   ├── components/         # React components
-│   │   │   ├── loans/          # Loan-specific components
-│   │   │   ├── transactions/
-│   │   │   └── ui/             # Shared UI components
-│   │   ├── lib/                # API client & utilities
-│   │   └── index.css           # Tailwind + neo-brutalism
-│   └── dist/                   # Production build
-└── nginx/
-    └── nginx.conf              # Reverse proxy config
-```
+## Generated API contract
 
----
+The backend OpenAPI contract and generated frontend client are checked into the repository.
 
-## 🔌 API Endpoints
-
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/auth/google` | Initiate OAuth flow |
-| GET | `/api/auth/google/callback` | OAuth callback |
-| GET | `/api/auth/me` | Get current user |
-| POST | `/api/auth/logout` | Logout |
-
-### Core CRUD
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| CRUD | `/api/accounts` | Chart of accounts |
-| CRUD | `/api/transactions` | Journal entries |
-| CRUD | `/api/categories` | Account categories |
-| CRUD | `/api/tags` | Transaction tags |
-| CRUD | `/api/periods` | Salary periods |
-| CRUD | `/api/budgets` | Budget plans |
-
-### Loans & Contacts
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/loans` | List all loans |
-| POST | `/api/loans` | Create new loan |
-| GET | `/api/loans/:id` | Get loan details with payments |
-| POST | `/api/loans/:id/payments` | Record payment |
-| DELETE | `/api/loans/:id` | Delete loan |
-| GET | `/api/loans/summary` | Loan statistics |
-| GET | `/api/contacts` | List contacts |
-| POST | `/api/contacts` | Create contact |
-| GET | `/api/contacts/:id` | Get contact with loan history |
-| PATCH | `/api/contacts/:id` | Update contact |
-
-### Workflows
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/workflows/paylater/*` | Paylater management |
-| POST | `/api/workflows/split-bill/*` | Split bill tracking |
-| POST | `/api/workflows/barter/*` | Barter settlements |
-| POST | `/api/workflows/sinking-fund/*` | Sinking fund rules |
-| POST | `/api/workflows/opportunity-cost/*` | Opportunity cost sim |
-
-### Reports & Analytics
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/reports/income-statement` | P&L report |
-| GET | `/api/reports/balance-sheet` | Balance sheet |
-| GET | `/api/reports/cash-flow` | Cash flow statement |
-| GET | `/api/reports/spending` | Spending breakdown |
-| GET | `/api/reports/trends` | Period trends |
-| POST | `/api/import/*` | CSV import endpoints |
-
----
-
-## 🗄️ Database Schema
-
-### Core Tables
-| Table | Description |
-|-------|-------------|
-| `account` | Chart of accounts (assets, liabilities, equity) |
-| `transaction` | Journal header |
-| `transaction_line` | Journal lines (debits/credits) |
-| `category` | Account categories |
-| `tag` | Transaction tags |
-| `transaction_tag` | Tag junction table |
-| `salary_period` | Budget periods |
-| `budget_plan` | Period budgets |
-
-### Loans & Contacts
-| Table | Description |
-|-------|-------------|
-| `contact` | People you lend to/borrow from |
-| `loan` | Loan records (lent/borrowed) |
-| `loan_payment` | Payment history for loans |
-
-### Other
-| Table | Description |
-|-------|-------------|
-| `sinking_fund_rule` | Auto-allocation rules |
-| `attachment` | File attachments |
-| `audit_log` | Change history |
-
----
-
-## 🎨 Design System
-
-### Neo-Brutalist Aesthetic
-- **Background:** Warm off-white (#F5F0EB)
-- **Surface:** White with thick black borders (2-3px)
-- **Accent:** Sage green (#8BA888)
-- **Typography:** Space Mono (headings) + DM Sans (body)
-- **Shadows:** Hard offset shadows (4px 4px 0px black)
-- **No rounded corners** (or very slight)
-- **No gradients or blur effects**
-
-### Color Coding
-- 🟢 Green — Under budget, positive, success
-- 🟡 Yellow/Amber — Near limit, warning
-- 🔴 Red — Over budget, negative, danger
-- 🔵 Blue — Primary actions, links
-
----
-
-## 🔐 Google OAuth Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-2. Create a new project
-3. Enable Google+ API
-4. Create OAuth 2.0 credentials (Web application)
-5. **Authorized redirect URI** must match the **same origin as your browser** (where Vite serves the app), not only the API port:
-   - **Local dev (Vite default port 8080):** `http://localhost:8080/api/auth/google/callback`  
-     Vite proxies `/api` to the backend; Google returns here so the `token` cookie is set on the UI origin.
-   - **Production:** `https://your-domain/api/auth/google/callback`
-6. Set in `.env`: `GOOGLE_CALLBACK_URL` to that exact URI, and **`FRONTEND_URL`** to the app origin (e.g. `http://localhost:8080` or `https://your-domain`). After login the backend redirects there; without `FRONTEND_URL`, the callback used to send you to `/` on the **API** host (e.g. `:3000`) instead of the SPA.
-7. Copy Client ID and Secret to `.env`
-
----
-
-## 🐛 Troubleshooting
-
-### Database Issues
 ```bash
-# Reset database (deletes all data!)
-docker compose down -v
-rm -rf backend/data/*.db
-docker compose up -d
+pnpm run generate:openapi
+pnpm run generate:api
+pnpm run generate:all
+pnpm run verify:contract
+pnpm run verify:generated
 ```
 
-### Cache Issues
+When an API route changes, regenerate the contract and client before opening a pull request.
+
+## Project layout
+
+```text
+backend/
+  src/routes/       Fastify route modules
+  src/services/     Domain and Agent services
+  src/db/           Drizzle schema and database access
+  src/jobs/         Queue worker and recurring jobs
+  drizzle/          SQL migrations
+frontend/
+  src/routes/       TanStack Router pages
+  src/components/   Shared UI and feature components
+  src/generated/    Generated API client
+  public/           Static assets, favicon, manifest, and service worker
+contracts/          OpenAPI contract
+scripts/            Guided deployment CLI
+docker-compose.yml  Production-style service stack
+nginx/              Frontend and reverse-proxy configuration
+```
+
+## Data and security notes
+
+- Fainens currently targets a single-owner deployment; `ALLOWED_EMAIL` is the access boundary.
+- Keep `.env` and the `data/` directory private.
+- Back up `data/` and `attachments/` before upgrading or moving the deployment.
+- R2 is optional. If it is not configured, attachments use the local mounted storage path.
+- Agent memories and profile context are personalization inputs, not authorization to mutate financial data.
+- Keep the local authentication bypass disabled in production.
+
+## Troubleshooting
+
+### `ERR_PNPM_NOTHING_TO_DEPLOY`
+
+`pnpm deploy` invokes pnpm’s reserved deployment command. Run the Fainens CLI with:
+
 ```bash
-# Clear Redis
-docker compose exec redis redis-cli FLUSHALL
-# Or restart
-docker compose restart redis backend
+pnpm run deploy
 ```
 
-### Port Conflicts
-If port 80 is taken, modify `docker-compose.yml`:
-```yaml
-ports:
-  - "8080:80"  # Use 8080 instead
+### The frontend cannot reach the API
+
+Check that the backend is listening on port `3000`, that `VITE_API_PROXY_TARGET` points to it, and that the browser is using the Vite frontend URL. For Compose, inspect both `backend` and `frontend` logs.
+
+### Docker services are unhealthy
+
+```bash
+docker compose ps
+docker compose logs --tail=200 backend worker redis
 ```
 
----
+The backend waits for Redis and runs database migrations during startup. If you intentionally need to rebuild local state, stop the stack first and understand that removing volumes or the `data/` directory deletes local data.
 
-## 📜 License
+## Contributing
 
-MIT License - See [LICENSE](LICENSE) file
+Keep API changes, OpenAPI output, generated clients, and migrations in sync. Prefer focused commits, run the relevant package checks, and never commit secrets or runtime database files.
 
----
-
-## 🤝 Contributing
-
-This is a personal finance app designed for single-user deployment. Contributions are welcome but the primary use case is individual deployment on personal VPS/home server.
-
----
-
-## 🗺️ Roadmap
-
-### ✅ Completed
-- [x] Phase 1–2: Ledger, schema, APIs, caching
-- [x] Phase 3: Core UX (dashboard, transactions, wallets, categories, budget, paylater)
-- [x] Phase 4: Design system refresh, responsive shell (mobile nav), skeleton loading, reports tab UX, docs
-- [x] Phase 5: **Loans & Contact Management** — Track money lent/borrowed with full contact profiles
-- [x] Phase 6: **Budget UI Redesign** — Visual filters, search, sort direction, status overview
-
-### 🔄 In Progress
-- [ ] Multi-currency support
-- [ ] Recurring transactions
-- [ ] Advanced reporting with PDF export
-
-### 📋 Planned
-- [ ] Mobile app (React Native)
-- [ ] Bank API integrations
-- [ ] Shared budgets (multi-user)
-
----
-
-**Fainens** — Salary-to-salary bookkeeping for the modern age. 💰
-
-Made with ❤️ for personal finance nerds.
+The repository does not currently include a `LICENSE` file; add one before distributing Fainens outside your own deployment.
