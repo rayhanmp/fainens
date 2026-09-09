@@ -186,7 +186,7 @@ export function Modal({
       {/* Backdrop */}
       <div
         className={cn(
-          'absolute inset-0 bg-black/50 transition-opacity duration-200',
+          'finance-modal-backdrop absolute inset-0 transition-opacity duration-200',
           isVisible ? 'opacity-100' : 'opacity-0'
         )}
         onClick={onClose}
@@ -201,7 +201,7 @@ export function Modal({
           ...(viewportHeight ? { '--modal-viewport-height': `${viewportHeight}px` } as React.CSSProperties : {}),
         }}
         className={cn(
-          'brutalist-card mobile-sheet relative z-10 w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-200 ease-out',
+          'brutalist-card finance-modal-panel mobile-sheet relative z-10 w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-200 ease-out',
           isVisible ? 'opacity-100 sm:scale-100 sm:translate-y-0' : 'opacity-0 translate-y-full sm:scale-95 sm:translate-y-4',
           isWide ? 'max-w-[min(1024px,92vw)]' : 'max-w-lg',
           isWide && 'mobile-sheet-full',

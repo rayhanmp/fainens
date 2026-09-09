@@ -8,6 +8,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useUiStore } from '../../stores/ui-store';
 import { GlobalTransactionComposer } from '../transactions/GlobalTransactionComposer';
 import { SettingsPage } from '../../routes/settings';
+import { ConfirmProvider } from '../ui/ConfirmDialog';
 
 interface ShellProps {
   children?: React.ReactNode;
@@ -27,6 +28,7 @@ export function Shell({ children }: ShellProps) {
   });
 
   return (
+    <ConfirmProvider>
     <div className="flex min-h-screen min-h-[100dvh] items-start">
       <ConnectivityStatus />
       <Sidebar />
@@ -45,5 +47,6 @@ export function Shell({ children }: ShellProps) {
       <GlobalTransactionComposer />
       {settingsOpen && <SettingsPage onClose={closeSettings} />}
     </div>
+    </ConfirmProvider>
   );
 }

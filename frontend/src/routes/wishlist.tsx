@@ -271,7 +271,7 @@ export default function WishlistPage() {
                         </button>
                         
                         {activeMenuId === item.id && (
-                          <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-1 shadow-lg">
+                          <div className="ui-popover absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-1 shadow-lg">
                             <button
                               onClick={() => {
                                 setFulfillItem(item);

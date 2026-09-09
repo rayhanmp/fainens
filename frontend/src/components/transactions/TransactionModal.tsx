@@ -2466,7 +2466,10 @@ export function TransactionModal({
         <form onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
           {!editingTransaction && !pendingTransaction && (
             <div className="space-y-5 lg:hidden">
-              <div className="grid grid-cols-4 gap-1 rounded-2xl bg-[var(--ref-surface-container)] p-1">
+              <div
+                className="ui-segmented ui-segmented--4 grid grid-cols-4 gap-1 rounded-2xl bg-[var(--ref-surface-container)] p-1"
+                data-segment-index={['expense', 'income', 'transfer', 'paylater'].indexOf(simpleForm.type)}
+              >
                 {([
                   ['expense', 'Expense', ArrowUpRight],
                   ['income', 'Income', ArrowDownRight],
@@ -2485,7 +2488,7 @@ export function TransactionModal({
                     className={cn(
                       'flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold',
                       simpleForm.type === value
-                        ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] shadow-sm'
+                        ? 'text-[var(--color-accent)]'
                         : 'text-[var(--color-text-secondary)]',
                     )}
                   >
@@ -2652,7 +2655,10 @@ export function TransactionModal({
             !editingTransaction && !pendingTransaction && (simpleForm.type === 'expense' || simpleForm.type === 'income') && 'hidden lg:grid',
           )}>
           <div className="lg:col-span-8 space-y-6 lg:space-y-8">
-            <div className="hidden grid-cols-2 p-1 bg-[var(--ref-surface-container)] rounded-2xl gap-1 lg:grid lg:grid-cols-4">
+            <div
+              className="ui-segmented ui-segmented--4 hidden grid-cols-2 gap-1 rounded-2xl bg-[var(--ref-surface-container)] p-1 lg:grid lg:grid-cols-4"
+              data-segment-index={['expense', 'income', 'transfer', 'paylater'].indexOf(simpleForm.type)}
+            >
               {(
                 [
                   { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },
@@ -2683,7 +2689,7 @@ export function TransactionModal({
                   className={cn(
                     'cursor-pointer w-full min-w-0 inline-flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-xl sm:rounded-full text-xs sm:text-sm transition-all',
                     simpleForm.type === t.value
-                      ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
+                      ? 'text-[var(--color-accent)] font-bold'
                       : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',
                   )}
                 >

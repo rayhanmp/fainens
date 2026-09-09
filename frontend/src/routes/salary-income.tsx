@@ -233,7 +233,7 @@ function SalaryIncomePage() {
                     <MoreVertical className="h-6 w-6" />
                   </button>
                   {menuOpen && (
-                    <div className="absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
+                    <div className="ui-popover absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
                       <button
                         type="button"
                         className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"

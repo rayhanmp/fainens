@@ -4,7 +4,6 @@ import { useToast } from './components/ui/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RouterProvider } from '@tanstack/react-router';
 import type { Router } from '@tanstack/react-router';
-import { ConfirmProvider } from './components/ui/ConfirmDialog';
 import { ThemeProvider } from './hooks/useTheme';
 
 // Create QueryClient instance
@@ -50,12 +49,10 @@ export function App({ router }: AppProps) {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <ConfirmProvider>
-          <ErrorBoundary>
-            <RouterProvider router={router} />
-            <ToastContainer />
-          </ErrorBoundary>
-        </ConfirmProvider>
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+          <ToastContainer />
+        </ErrorBoundary>
       </QueryClientProvider>
     </ThemeProvider>
   );

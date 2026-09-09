@@ -1158,3 +1158,311 @@ button[data-variant="danger"]:focus-visible,
 }
 @media (prefers-reduced-motion: reduce) { .finance-nav-link, .finance-add { transition: none; } }
 .finance-navigation { scrollbar-width: thin; scrollbar-color: var(--nav-border) transparent; }
+
+/* Selection moves as one surface while labels remain fixed and readable. */
+.ui-segmented {
+  position: relative;
+  isolation: isolate;
+}
+.ui-segmented::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: .25rem;
+  top: .25rem;
+  bottom: .25rem;
+  border-radius: inherit;
+  background: var(--ref-surface-container-lowest);
+  box-shadow: 0 1px 3px #1118271a, inset 0 1px 0 #ffffff80;
+  transition: transform 180ms cubic-bezier(.2, .8, .2, 1), background-color 180ms ease;
+}
+.ui-segmented--4::before { width: calc(25% - 5px); }
+.ui-segmented--5::before { width: calc(20% - 4.8px); }
+.ui-segmented--accent::before {
+  background: linear-gradient(110deg, var(--ref-primary), var(--ref-primary-container));
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--ref-primary) 25%, transparent), inset 0 1px 0 #ffffff38;
+}
+.ui-segmented > button { position: relative; z-index: 1; transition: color 150ms ease; }
+.ui-segmented[data-segment-index="1"]::before { transform: translateX(calc(100% + .25rem)); }
+.ui-segmented[data-segment-index="2"]::before { transform: translateX(calc(200% + .5rem)); }
+.ui-segmented[data-segment-index="3"]::before { transform: translateX(calc(300% + .75rem)); }
+.ui-segmented[data-segment-index="4"]::before { transform: translateX(calc(400% + 1rem)); }
+
+/* Menus appear promptly, with just enough movement to establish their source. */
+.ui-popover,
+[role="menu"],
+[role="listbox"],
+[role="tooltip"],
+.finance-profile[open] .finance-profile-popover {
+  transform-origin: top center;
+  animation: ui-popover-in 160ms cubic-bezier(.2, .8, .2, 1) both;
+}
+@keyframes ui-popover-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Satin cash surface: the moving light stays underneath all financial text. */
+.cash-satin {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #f4f8ff;
+  background: linear-gradient(125deg, #073678 0%, #0752b6 54%, #173d8a 100%);
+  box-shadow: inset 0 1px 0 #ffffff40, inset 0 0 0 1px #ffffff18, 0 12px 28px #07367820;
+}
+.cash-satin::before, .cash-satin::after {
+  content: '';
+  position: absolute;
+  inset: -45%;
+  z-index: -1;
+  pointer-events: none;
+}
+.cash-satin::before {
+  background: conic-gradient(from 205deg at 68% 48%, transparent 0deg, #b2e6ff08 28deg, #b2e6ff38 43deg, #020f472e 59deg, transparent 80deg, transparent 175deg, #9edcff30 195deg, transparent 230deg);
+  filter: blur(12px);
+  animation: cash-satin-drift 22s ease-in-out infinite alternate;
+}
+.cash-satin::after {
+  background: radial-gradient(ellipse at 80% 10%, #b4efff30, transparent 42%), linear-gradient(115deg, transparent 40%, #c7ecff0d 48%, transparent 55%);
+}
+.dark .cash-satin {
+  background: linear-gradient(125deg, #112d58, #164786 54%, #203267);
+  box-shadow: inset 0 1px 0 #b7dfff40, inset 0 0 0 1px #ffffff18, 0 12px 28px #00000026;
+}
+@keyframes cash-satin-drift {
+  from { transform: translate3d(-3%, -2%, 0) rotate(-8deg); }
+  to { transform: translate3d(3%, 2%, 0) rotate(9deg); }
+}
+
+/* Glass body, drifting ribbons, and a quiet satellite of light. */
+.agent-orb {
+  --orb-size: 38px;
+  --orb-glow: #39c9c4;
+  display: inline-block;
+  position: relative;
+  isolation: isolate;
+  flex-shrink: 0;
+  width: var(--orb-size);
+  height: var(--orb-size);
+  vertical-align: middle;
+  border-radius: 50%;
+  transform: perspective(240px) rotateX(var(--orb-tilt-x, 0deg)) rotateY(var(--orb-tilt-y, 0deg));
+  transition: transform 220ms ease;
+}
+.agent-orb-halo {
+  position: absolute;
+  inset: -16%;
+  border-radius: inherit;
+  background: radial-gradient(circle, color-mix(in srgb, var(--orb-glow) 34%, transparent), transparent 70%);
+  opacity: .65;
+  animation: agent-orb-breathe 5s ease-in-out infinite;
+}
+.agent-orb-shell {
+  position: absolute;
+  inset: 4%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: radial-gradient(circle at 28% 24%, #c3fff2, #43cbbb 26%, #2383b9 50%, #3b3a91 77%, #111f4a);
+  box-shadow: inset 0 0 0 1px #ffffff85, inset -3px -5px 9px #10294f70, 0 4px 10px #17326830;
+}
+.agent-orb-flow, .agent-orb-ribbon {
+  position: absolute;
+  inset: -24%;
+  border-radius: 38% 62% 57% 43%;
+  background: conic-gradient(from 30deg, transparent 8%, #bbfff1d9 23%, #48dddc00 38%, #7277f8cc 53%, #dafbff 68%, #439ac800 83%);
+  filter: blur(2px);
+  animation: agent-orb-flow 13s linear infinite;
+}
+.agent-orb-ribbon {
+  inset: 8% -35%;
+  border: 2px solid #c4ffff70;
+  background: linear-gradient(140deg, transparent 24%, #75ede888 46%, #d7f4ffbb 50%, #727cf277 57%, transparent 70%);
+  filter: blur(1px);
+  animation-duration: 19s;
+  animation-direction: reverse;
+}
+.agent-orb-core {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 30% 18%, #ffffffed, #ffffff20 19%, transparent 36%), radial-gradient(ellipse at 65% 86%, #8a83ff88, transparent 42%), radial-gradient(circle at 50% 40%, transparent 42%, #071b4c88);
+  box-shadow: inset 0 0 0 1px #ffffff40;
+}
+.agent-orb-orbit {
+  position: absolute;
+  inset: -7%;
+  border: 1px solid color-mix(in srgb, var(--orb-glow) 24%, transparent);
+  border-top-color: #93ebe9a6;
+  border-radius: inherit;
+  animation: agent-orb-spin 22s linear infinite;
+}
+.agent-orb-orbit::after {
+  content: '';
+  position: absolute;
+  top: 11%;
+  right: 11%;
+  width: 7%;
+  height: 7%;
+  min-width: 2px;
+  min-height: 2px;
+  border-radius: 50%;
+  background: #d6fffa;
+  box-shadow: 0 0 5px var(--orb-glow);
+}
+.agent-orb-large { --orb-size: 88px; }
+.agent-orb-small { --orb-size: 24px; }
+.agent-orb[data-state="ready"] { --orb-glow: #8579f4; }
+.agent-orb[data-state="ready"] .agent-orb-flow { animation-duration: 8s; }
+.agent-orb[data-state="thinking"] .agent-orb-flow { animation-duration: 3s; }
+.agent-orb[data-state="thinking"] .agent-orb-orbit { animation-duration: 2.4s; border-top-color: #6c85f5; }
+.agent-orb[data-state="thinking"] .agent-orb-halo { animation-duration: 1.8s; }
+.agent-orb[data-state="error"] { --orb-glow: #e58e65; }
+.agent-orb[data-state="error"] .agent-orb-shell { filter: hue-rotate(155deg) saturate(.7); }
+.agent-orb[data-state="error"] .agent-orb-orbit { border-color: #df9565; animation-play-state: paused; }
+.agent-orb-trigger {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 5px;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.agent-orb-trigger:hover .agent-orb-shell { box-shadow: inset 0 0 0 1px #ffffffb0, inset -3px -5px 9px #10294f70, 0 4px 20px #39c9c470; }
+.agent-orb-trigger:hover .agent-orb-flow { animation-duration: 5s; }
+.agent-orb-trigger:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: 5px; }
+.agent-orb-trigger:active .agent-orb { transform: scale(.94); }
+.agent-orb-trigger-spark {
+  position: absolute;
+  bottom: 0;
+  right: -1px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--ref-primary);
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 600;
+}
+.agent-orb-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(420px, calc(100vw - 24px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: 0 24px 100px #0b1e4340;
+}
+.agent-orb-dialog[open] { animation: ui-popover-in 180ms ease both; }
+.agent-orb-dialog::backdrop { background: #101c3666; backdrop-filter: blur(8px); }
+.agent-orb-dialog-close { position: absolute; right: 12px; top: 12px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--color-text-secondary); cursor: pointer; }
+.agent-orb-action { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 12px; border-radius: 16px; text-align: left; cursor: pointer; transition: background 150ms ease; }
+.agent-orb-action:hover, .agent-orb-dialog-close:hover { background: var(--ref-surface-container-low); }
+.agent-orb-action:focus-visible, .agent-orb-dialog-close:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: -2px; }
+.agent-orb-action:disabled { opacity: .45; cursor: wait; }
+.agent-orb-action-icon { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 12px; background: var(--ref-surface-container-low); color: var(--ref-primary); }
+@keyframes agent-orb-flow {
+  0% { transform: rotate(0deg) scale(.9); }
+  50% { transform: rotate(180deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(.9); }
+}
+@keyframes agent-orb-spin { to { transform: rotate(360deg); } }
+@keyframes agent-orb-breathe { 50% { transform: scale(1.14); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .agent-orb, .agent-orb *, .agent-orb-dialog[open], .agent-orb-action { animation: none !important; transition: none !important; }
+  .agent-orb-trigger .agent-orb { transform: none; }
+}
+
+
+/* Opaque fallbacks retain contrast when backdrop filtering is unavailable. */
+.finance-glass-dock {
+  isolation: isolate;
+  overflow: visible;
+  left: max(.75rem, env(safe-area-inset-left));
+  right: max(.75rem, env(safe-area-inset-right));
+  bottom: max(.5rem, env(safe-area-inset-bottom));
+  max-width: 32rem;
+  margin-inline: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  background: var(--color-surface);
+  box-shadow: inset 0 1px 0 #ffffffd1, inset 0 -1px 0 #18315320, 0 8px 28px #162b4d1f;
+}
+.finance-glass-dock::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  left: 9%;
+  right: 9%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ffffff, transparent);
+  opacity: .78;
+}
+.finance-glass-dock::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 -10px 18px #2340630a;
+}
+.finance-glass-dock > ul {
+  position: relative;
+  z-index: 1;
+}
+.finance-glass-dock a,
+.finance-glass-dock button {
+  transition: color 150ms ease, transform 100ms ease;
+}
+.finance-glass-dock a:active,
+.finance-glass-dock button:active {
+  transform: scale(.97);
+}
+.finance-modal-backdrop, .finance-mobile-menu::backdrop { background: #101c36a6; }
+.finance-modal-panel.brutalist-card {
+  border-color: color-mix(in srgb, var(--color-border) 70%, white);
+  box-shadow: inset 0 1px 0 #ffffff80, 0 24px 80px #07152e40;
+}
+.dark .finance-glass-dock {
+  border-color: #ffffff24;
+  box-shadow: inset 0 1px 0 #ffffff33, inset 0 -1px 0 #00000070, 0 8px 28px #0000004d;
+}
+.dark .finance-modal-panel.brutalist-card {
+  border-color: #ffffff26;
+  box-shadow: inset 0 1px 0 #ffffff1a, 0 24px 80px #00000066;
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .finance-glass-dock {
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
+    backdrop-filter: blur(20px) saturate(135%);
+  }
+  .finance-modal-backdrop, .finance-mobile-menu::backdrop {
+    background: #101c3666;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cash-satin::before, .agent-orb-flow { animation: none; }
+  .finance-modal-backdrop, .finance-modal-panel { transition: none; }
+  .finance-mobile-menu[open] .finance-mobile-inner { animation: none; }
+  .ui-popover, [role="menu"], [role="listbox"], [role="tooltip"], .finance-profile[open] .finance-profile-popover { animation: none; }
+  .ui-segmented::before, .ui-segmented > button, .finance-glass-dock a, .finance-glass-dock button { transition: none; }
+}

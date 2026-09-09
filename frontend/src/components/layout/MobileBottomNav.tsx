@@ -34,7 +34,7 @@ export function MobileBottomNav() {
   return (
     <>
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
+        className="finance-glass-dock md:hidden fixed z-40"
         aria-label="Main navigation"
       >
         <ul className="flex items-stretch justify-around max-w-lg mx-auto">

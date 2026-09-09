@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Brain,
-  Bot,
   Check,
   ChevronDown,
   ChevronUp,
@@ -25,6 +24,8 @@ import {
   X,
 } from 'lucide-react';
 import { PageContainer } from '../components/ui/PageContainer';
+import { AgentOrb } from '../components/ui/AgentOrb';
+import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -1817,6 +1818,20 @@ function AgentPage() {
   const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id ?? null;
   const messageCharacterCount = messages.reduce((total, message) => total + message.text.length, 0);
   const shouldFloatComposer = isSending || messages.length > 4 || messageCharacterCount > 1_200;
+  const orbState = isSending || isLoadingConversation ? 'thinking' : error ? 'error' : draft.trim() ? 'ready' : 'idle';
+  const orbActions = {
+    state: orbState,
+    status: isSending ? streamActivity ?? 'Reading your ledger…' : isLoadingConversation ? 'Loading conversation…' : undefined,
+    disabled: isSending || isLoadingConversation,
+    onPrompt: (prompt: string) => {
+      draftWasEditedRef.current = true;
+      setComposerTaskId(null);
+      setComposerModelMenuOpen(false);
+      setDraft(prompt);
+      requestAnimationFrame(() => questionInputRef.current?.focus());
+    },
+    onUpload: pendingImages.length < MAX_AGENT_IMAGE_COUNT ? () => imageInputRef.current?.click() : undefined,
+  } as const;
   const conversationListProps: Omit<ConversationListProps, 'conversationListRef'> = {
     conversations,
     dailyUsage: conversationsQuery.data?.dailyUsage ?? null,
@@ -1872,7 +1887,7 @@ function AgentPage() {
             <Card className="flex min-w-0 flex-col overflow-visible max-md:min-h-[calc(100dvh-4.75rem)] max-md:rounded-none max-md:border-x-0 max-md:border-t-0 max-md:shadow-none xl:h-full xl:flex-1 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:p-0">
               <div className="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-3 md:static">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--ref-primary-container)] text-white"><Sparkles className="h-[18px] w-[18px]" /></span>
+                  <AgentOrbActions {...orbActions} />
                   <div className="min-w-0">
                     {activeConversation && editingConversationId === activeConversation.id ? (
                       <form className="flex min-w-0 items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); void saveConversationTitle(activeConversation.id); }}>
@@ -1969,7 +1984,7 @@ function AgentPage() {
                 {isLoadingConversation && messages.length === 0 && <p role="status" className="py-10 text-center text-sm text-[var(--color-text-secondary)]">Loading conversation…</p>}
                 {!isLoadingConversation && messages.length === 0 && (
                   <div className="startup-empty-state my-auto py-3 text-center sm:py-4">
-                    <span className="startup-empty-icon mx-auto grid h-10 w-10 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]"><Bot className="h-5 w-5" /></span>
+                    <div className="mx-auto mb-3 w-fit"><AgentOrbActions {...orbActions} className="agent-orb-large" /></div><p className="mb-3 text-[11px] font-medium tracking-wide text-[var(--color-muted)]">Tap the orb for a starting point</p>
                     <h3 className="startup-empty-greeting mt-2 font-semibold">{startupSelection.greeting}</h3>
                     <p className="startup-empty-subtitle mt-1 text-sm text-[var(--color-text-secondary)]">{startupSelection.subtitle}</p>
                     <div className="mx-auto mt-4 grid w-full max-w-2xl gap-2 sm:flex sm:flex-wrap sm:justify-center">
@@ -2064,7 +2079,7 @@ function AgentPage() {
                 {isSending && (
                   <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2.5" aria-live="polite">
                     <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
-                      <LoaderCircle className="h-4 w-4 animate-spin text-[var(--ref-primary)]" />
+                      <AgentOrb active className="agent-orb-small" />
                       <span>{streamActivity ?? 'Reading your ledger…'}</span>
                     </div>
                     {activityTimeline.length > 0 && (
