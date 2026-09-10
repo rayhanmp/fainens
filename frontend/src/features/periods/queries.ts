@@ -90,7 +90,7 @@ export function useUpdatePeriodMutation() {
 export function useAutoCreatePeriodMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => unwrapGenerated(autoCreatePeriod(), 200, 'Failed to create current period'),
+    mutationFn: () => unwrapGenerated(autoCreatePeriod(), 201, 'Failed to create current period'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
