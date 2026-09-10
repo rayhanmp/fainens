@@ -22,7 +22,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import type { api, AgentFinancialFacts, BudgetOutlook, BudgetPlan, BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
-import { cn, formatCurrency, formatDate } from '../lib/utils';
+import { cn, findCurrentPeriod, formatCurrency, formatDate } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 import { MonthlyReportModal } from '../components/pdf/MonthlyReportModal';
@@ -177,9 +177,7 @@ function DashboardPage() {
   useEffect(() => {
     setSelectedPeriodId((current) => {
       if (current && periods.some((period) => String(period.id) === current)) return current;
-      const now = Date.now();
-      const currentPeriod = periods.find((period) => period.startDate <= now && now <= period.endDate + DAY_MS - 1);
-      return String((currentPeriod ?? periods[0])?.id ?? '');
+      return String(findCurrentPeriod(periods)?.id ?? '');
     });
   }, [periods]);
 

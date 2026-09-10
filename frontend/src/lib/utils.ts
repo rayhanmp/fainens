@@ -63,6 +63,16 @@ export function formatDate(timestamp: number): string {
   });
 }
 
+export type PeriodDateRange = { startDate: number; endDate: number };
+
+/** Return the active period whose calendar range contains the supplied date. */
+export function findCurrentPeriod<T extends PeriodDateRange>(periods: readonly T[], now = Date.now()): T | undefined {
+  const dayMs = 86_400_000;
+  return periods
+    .filter((period) => period.startDate <= now && now <= (period.endDate % dayMs === 0 ? period.endDate + dayMs - 1 : period.endDate))
+    .sort((a, b) => b.startDate - a.startDate)[0];
+}
+
 /** Audit / log views — date + time */
 export function formatDateTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('en-US', {

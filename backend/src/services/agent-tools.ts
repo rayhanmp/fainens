@@ -691,16 +691,9 @@ export async function resolveAgentScope(input: AgentScopeInput = {}): Promise<Ag
     period = (await db
       .select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
       .from(salaryPeriods)
-      .where(and(lte(salaryPeriods.startDate, now), gte(salaryPeriods.endDate, now)))
+      .where(and(eq(salaryPeriods.isActive, true), lte(salaryPeriods.startDate, now), sql`${salaryPeriods.endDate} + ${DAY_MS - 1} >= ${now}`))
       .orderBy(salaryPeriods.endDate)
       .limit(1))[0];
-    if (!period) {
-      period = (await db
-        .select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
-        .from(salaryPeriods)
-        .orderBy(desc(salaryPeriods.endDate))
-        .limit(1))[0];
-    }
   }
 
   const fallbackEnd = Date.now();

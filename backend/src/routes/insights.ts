@@ -8,6 +8,7 @@ import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
 
 const CACHE_TTL_SECONDS = 24 * 60 * 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const insightErrorSchema = z.object({ error: z.string() }).passthrough();
 const insightPeriodQuerySchema = z.object({ periodId: z.string().regex(/^\d+$/).optional() });
 const insightResponseSchema = z.object({ insight: z.string(), generatedAt: z.string(), sourceRevision: z.number().int(), stale: z.literal(false) }).passthrough();
@@ -192,8 +193,11 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
         const periodResult = await db.all(sql`SELECT * FROM salary_period WHERE id = ${periodId} LIMIT 1`);
         currentPeriod = periodResult[0] as any;
       } else {
+        const nowMs = Date.now();
         const currentPeriodResult = await db.all(sql`
-          SELECT * FROM salary_period ORDER BY end_date DESC LIMIT 1
+          SELECT * FROM salary_period
+          WHERE is_active = 1 AND start_date <= ${nowMs} AND end_date + ${DAY_MS - 1} >= ${nowMs}
+          ORDER BY start_date DESC LIMIT 1
         `);
         currentPeriod = currentPeriodResult[0] as any;
       }
@@ -389,7 +393,12 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       if (periodId) {
         periodResult = await db.all(sql`SELECT * FROM salary_period WHERE id = ${periodId} LIMIT 1`);
       } else {
-        periodResult = await db.all(sql`SELECT * FROM salary_period ORDER BY end_date DESC LIMIT 1`);
+        const nowMs = Date.now();
+        periodResult = await db.all(sql`
+          SELECT * FROM salary_period
+          WHERE is_active = 1 AND start_date <= ${nowMs} AND end_date + ${DAY_MS - 1} >= ${nowMs}
+          ORDER BY start_date DESC LIMIT 1
+        `);
       }
 
       const period = periodResult[0] as any;

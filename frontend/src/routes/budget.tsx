@@ -10,7 +10,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { formatCurrency, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
+import { findCurrentPeriod, formatCurrency, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useApplyBudgetTemplateMutation,
@@ -204,7 +204,8 @@ function BudgetPage() {
   const loadError = periodsQuery.error?.message ?? categoriesQuery.error?.message ?? budgetQuery.error?.message ?? templatesQuery.error?.message ?? null;
 
   useEffect(() => {
-    if (!selectedPeriodId && periods.length > 0) setSelectedPeriodId(periods[0].id.toString());
+    const currentPeriod = findCurrentPeriod(periods);
+    if (!selectedPeriodId && currentPeriod) setSelectedPeriodId(currentPeriod.id.toString());
   }, [periods, selectedPeriodId]);
 
   const loadData = async () => {

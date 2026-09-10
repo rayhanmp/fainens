@@ -7,7 +7,7 @@ import { Modal } from '../components/ui/Modal';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
-import { formatCurrency, formatDate, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../lib/utils';
+import { findCurrentPeriod, formatCurrency, formatDate, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
   useArchivePeriodMutation,
@@ -28,8 +28,6 @@ import {
 // TanStack routes are module-level exports rather than React components.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute('/periods')({ component: PeriodsPage } as any);
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface Period {
   id: number;
@@ -128,12 +126,8 @@ function PeriodsPage() {
     || (returnAsOfDate == null && isReturnModalOpen ? 'Choose a current or historical return date' : '');
 
   const currentPeriod = useMemo(() => {
-    const now = Date.now();
     const active = periods.filter((period) => period.isActive);
-    return active.find((period) => period.startDate <= now && now <= period.endDate + DAY_MS - 1)
-      ?? active.find((period) => period.status === 'open')
-      ?? active[0]
-      ?? null;
+    return findCurrentPeriod(active) ?? null;
   }, [periods]);
 
   const historyPeriods = useMemo(() => periods.filter((period) => period.id !== currentPeriod?.id), [periods, currentPeriod]);

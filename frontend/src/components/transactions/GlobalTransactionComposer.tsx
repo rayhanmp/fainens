@@ -5,6 +5,7 @@ import { useCategoriesQuery, useTagsQuery } from '../../features/categories/quer
 import { invalidateFinancialSummaries } from '../../features/core/query-keys';
 import { useUiStore } from '../../stores/ui-store';
 import { usePeriodsQuery } from '../../features/periods/queries';
+import { findCurrentPeriod } from '../../lib/utils';
 
 export function GlobalTransactionComposer() {
   const queryClient = useQueryClient();
@@ -13,8 +14,7 @@ export function GlobalTransactionComposer() {
   const categoriesQuery = useCategoriesQuery();
   const tagsQuery = useTagsQuery();
   const periodsQuery = usePeriodsQuery();
-  const now = Date.now();
-  const currentPeriod = periodsQuery.data?.find((period) => period.startDate <= now && now <= period.endDate + 86_400_000 - 1);
+  const currentPeriod = findCurrentPeriod(periodsQuery.data ?? []);
 
   return (
     <TransactionModal

@@ -36,7 +36,7 @@ import { GalleryImagePicker } from '../components/gallery/GalleryImagePicker';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory } from '../lib/api';
-import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
+import { cn, findCurrentPeriod, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
 import { agentCommands } from '../features/agent/commands';
@@ -1397,8 +1397,8 @@ function AgentPage() {
 
   useEffect(() => {
     if (selectedPeriodId || periods.length === 0) return;
-    const active = periods.find((period) => period.isActive) ?? periods[0];
-    if (active) setSelectedPeriodId(String(active.id));
+    const currentPeriod = findCurrentPeriod(periods.filter((period) => period.isActive));
+    if (currentPeriod) setSelectedPeriodId(String(currentPeriod.id));
   }, [periods, selectedPeriodId]);
 
   useEffect(() => {

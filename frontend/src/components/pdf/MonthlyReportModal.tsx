@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { Modal } from '../ui/Modal';
-import { formatCurrency, formatDate, cn } from '../../lib/utils';
+import { findCurrentPeriod, formatCurrency, formatDate, cn } from '../../lib/utils';
 import { MonthlyReportPDF } from './MonthlyReportPDF';
 import { Download, FileText, Loader2 } from 'lucide-react';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type ReportSecuritySettings } from '../../lib/reportSecurity';
@@ -33,8 +33,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
 
   useEffect(() => {
     if (periods.length > 0 && !selectedPeriodId) {
-      // Periods are returned newest first; default to the current/latest one.
-      setSelectedPeriodId(periods[0].id.toString());
+      const currentPeriod = findCurrentPeriod(periods);
+      if (currentPeriod) setSelectedPeriodId(currentPeriod.id.toString());
     }
   }, [periods, selectedPeriodId]);
 

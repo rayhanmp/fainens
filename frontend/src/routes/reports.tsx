@@ -16,7 +16,7 @@ import {
   useTrendsQuery,
   useExportReportMutation,
 } from '../features/reports/queries';
-import { formatCurrency, cn } from '../lib/utils';
+import { findCurrentPeriod, formatCurrency, cn } from '../lib/utils';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -72,9 +72,9 @@ function ReportsPage() {
   const periodsQuery = usePeriodsLedgerQuery();
   const exportReportMutation = useExportReportMutation();
   const periods = periodsQuery.data ?? [];
-  // Null means “use the newest period”; an explicit empty string means All Periods.
+  // Null means “use the current period”; an explicit empty string means All Periods.
   const selectedPeriodId = search.periodId ?? null;
-  const effectivePeriodId = selectedPeriodId ?? periods[0]?.id.toString() ?? '';
+  const effectivePeriodId = selectedPeriodId ?? findCurrentPeriod(periods)?.id.toString() ?? '';
   const selectedPeriod = periods.find((p) => p.id.toString() === effectivePeriodId);
   const selectedNumericPeriodId = effectivePeriodId ? Number(effectivePeriodId) : null;
   const currentPeriodIndex = selectedNumericPeriodId == null
