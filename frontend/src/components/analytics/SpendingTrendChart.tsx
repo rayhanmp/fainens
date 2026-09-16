@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -41,6 +41,8 @@ export function SpendingTrendChart({ periodId = null, className }: { periodId?: 
   const [dataScope, setDataScope] = useState<'30d' | 'period'>('30d');
   const [view, setView] = useState<ViewMode>('calendar');
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
+  const optionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const optionsPanelRef = useRef<HTMLDivElement>(null);
 
   const spendingQuery = useSpendingTrendQuery({ scope: dataScope, periodId });
   const result = spendingQuery.data;
@@ -55,6 +57,28 @@ export function SpendingTrendChart({ periodId = null, className }: { periodId?: 
   useEffect(() => {
     if (periodId == null && dataScope === 'period') setDataScope('30d');
   }, [dataScope, periodId]);
+
+  useEffect(() => {
+    const closeOptionsOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node
+        && !optionsTriggerRef.current?.contains(event.target)
+        && !optionsPanelRef.current?.contains(event.target)) {
+        setIsOptionsOpen(false);
+      }
+    };
+    const closeOptionsOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOptionsOpen) {
+        setIsOptionsOpen(false);
+        optionsTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOptionsOnOutsideClick);
+    document.addEventListener('keydown', closeOptionsOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOptionsOnOutsideClick);
+      document.removeEventListener('keydown', closeOptionsOnEscape);
+    };
+  }, [isOptionsOpen]);
 
   const weeklyPoints = useMemo(() => {
     const groups: Array<{ label: string; startMs: number; endMs: number; spent: number; transactionCount: number; hasIncompleteCoverage: boolean }> = [];
@@ -121,6 +145,7 @@ export function SpendingTrendChart({ periodId = null, className }: { periodId?: 
             <p className="mt-0.5 text-[11px] text-[var(--ref-on-surface-variant)]">{formatCurrency(averageDailySpend)} avg/day</p>
           </div>
           <button
+            ref={optionsTriggerRef}
             type="button"
             aria-label="Spending chart options"
             aria-expanded={isOptionsOpen}
@@ -138,7 +163,7 @@ export function SpendingTrendChart({ periodId = null, className }: { periodId?: 
       </div>
 
       {isOptionsOpen && (
-        <div className="absolute right-5 top-[4.75rem] z-20 w-60 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-xl">
+        <div ref={optionsPanelRef} className="absolute right-5 top-[4.75rem] z-20 w-60 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-xl">
           <p className="px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Time range</p>
           <div className="mt-2 grid grid-cols-2 gap-1">
             <button
