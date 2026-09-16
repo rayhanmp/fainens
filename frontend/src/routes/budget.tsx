@@ -3,6 +3,7 @@ import { Calculator } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -569,14 +570,15 @@ function BudgetPage() {
           />
           <div className="flex flex-wrap items-center gap-3">
             {periods.length > 0 && (
-              <Select
+              <PeriodPicker
+                periods={periods}
                 value={selectedPeriodId}
-                onChange={(e) => {
-                  setSelectedPeriodId(e.target.value);
-                  void navigate({ to: '/budget', search: { periodId: e.target.value }, replace: true });
+                onChange={(periodId) => {
+                  setSelectedPeriodId(periodId);
+                  void navigate({ to: '/budget', search: { periodId }, replace: true });
                 }}
-                options={periods.map((p) => ({ value: p.id.toString(), label: `${p.name}${p.status === 'closed' ? ' (closed)' : ''}` }))}
-                className="min-w-[180px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold"
+                getPeriodLabel={(period) => `${period.name}${period.status === 'closed' ? ' (closed)' : ''}`}
+                ariaLabel="Budget period"
               />
             )}
             

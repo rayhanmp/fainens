@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, HandCoins, Landmark, Mail, MoreHorizontal, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { Modal } from '../components/ui/Modal';
 import { SwipeReveal } from '../components/ui/SwipeReveal';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -408,7 +409,13 @@ function TransactionsPage() {
     {selectedPeriod && selectedPeriod.coverageStatus !== 'complete' && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><CircleAlert className="mt-0.5 h-5 w-5 shrink-0" /><div><strong>Read this activity carefully.</strong> {coverageMessage(selectedPeriod)} <Link to="/periods" className="ml-1 font-bold underline">Review period</Link></div></div>}
     <section className="mt-4 rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-sm sm:mt-6 sm:p-5">
       <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center lg:gap-3"><div className="relative col-span-2 min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ref-outline)]" /><input ref={searchInputRef} type="search" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} aria-label="Search transactions" placeholder="Search activity" className="w-full rounded-full bg-[var(--ref-surface-container-low)] py-2.5 pl-10 pr-4 text-sm outline-none ring-[var(--ref-primary)] focus:ring-2" /></div>
-        <select aria-label="Period" value={search.periodId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, periodId: event.target.value || undefined }) })} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-sm font-semibold"><option value="all">All periods</option>{periods.map((period) => <option key={period.id} value={String(period.id)}>{period.name}</option>)}</select>
+        <PeriodPicker
+          periods={periods}
+          value={search.periodId ?? ''}
+          onChange={(periodId) => void navigate({ search: (previous) => ({ ...previous, periodId }) })}
+          allOption={{ value: 'all', label: 'All periods' }}
+          ariaLabel="Transaction period"
+        />
         <Button variant="secondary" className="rounded-full" aria-expanded={isFiltersOpen} aria-controls="transaction-filters" onClick={() => setActivePanel(isFiltersOpen ? null : 'transactions-filters')}><SlidersHorizontal className="mr-2 h-4 w-4" />Filters{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}</Button>
       </div>
       {isFiltersOpen && <div id="transaction-filters" className="mt-4 hidden gap-3 border-t border-[var(--ref-outline-variant)]/20 pt-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">

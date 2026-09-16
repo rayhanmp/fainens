@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Select } from '../components/ui/Select';
+import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
@@ -220,19 +220,14 @@ function ReportsPage() {
             title="Financial Reports"
             description="A clear view of your income, balances, cash movement, and spending patterns."
           />
-          <div className="w-full lg:w-64">
-            <label htmlFor="reports-period" className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Reporting period</label>
-            <Select
-              id="reports-period"
-              value={effectivePeriodId}
-              onChange={(e) => void navigate({ search: { periodId: e.target.value || undefined, tab: activeTab } } as any)}
-              options={[
-                { value: '', label: 'All Periods' },
-                ...periods.map((p) => ({ value: p.id.toString(), label: p.name })),
-              ]}
-              className="w-full"
-            />
-          </div>
+          <PeriodPicker
+            periods={periods}
+            value={selectedPeriodId ?? effectivePeriodId}
+            onChange={(periodId) => void navigate({ search: { periodId, tab: activeTab } } as any)}
+            allOption={{ value: '', label: 'All Periods' }}
+            ariaLabel="Reporting period"
+            className="w-full lg:w-64"
+          />
         </div>
         {selectedPeriod && selectedPeriod.coverageStatus !== 'complete' && (
           <div role="status" className="flex items-start gap-3 rounded-2xl border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-[var(--color-text-primary)]">

@@ -5,9 +5,6 @@ import {
   BarChart3,
   Bell,
   CalendarClock,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleDollarSign,
   Flame,
   Info,
@@ -19,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { PageContainer } from '../components/ui/PageContainer';
+import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { RequireAuth, useAuth } from '../lib/auth';
 import type { api, AgentFinancialFacts, BudgetOutlook, BudgetPlan, BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
@@ -177,9 +175,6 @@ function DashboardPage() {
   const [dashboardNow] = useState(() => Date.now());
   const { user } = useAuth();
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
-  const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false);
-  const periodPickerRef = useRef<HTMLDivElement>(null);
-  const periodPickerTriggerRef = useRef<HTMLButtonElement>(null);
   const notificationPopoverRef = useRef<HTMLDetailsElement>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -479,9 +474,6 @@ function DashboardPage() {
           : upcomingCommitmentTotal > 0
             ? `Your net worth held steady over the last 30 days. Upcoming commitments total ${formatCurrency(upcomingCommitmentTotal)}.`
             : 'Your net worth held steady over the last 30 days. Consistency is a strong foundation.';
-  const selectedPeriodIndex = periods.findIndex((period) => String(period.id) === selectedPeriodId);
-  const olderPeriod = selectedPeriodIndex >= 0 ? periods[selectedPeriodIndex + 1] : undefined;
-  const newerPeriod = selectedPeriodIndex > 0 ? periods[selectedPeriodIndex - 1] : undefined;
   const openAgent = (prompt = '') => {
     const text = prompt.trim();
     void navigate({ to: '/agent', search: text ? { prompt: text } : {} } as any);
@@ -490,15 +482,6 @@ function DashboardPage() {
   useEffect(() => {
     setDashboardNotificationCount(unreadAttentionItems.length);
   }, [setDashboardNotificationCount, unreadAttentionItems.length]);
-
-  useEffect(() => {
-    if (!isPeriodPickerOpen) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (periodPickerRef.current && !periodPickerRef.current.contains(event.target as Node)) setIsPeriodPickerOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePointer);
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
-  }, [isPeriodPickerOpen]);
 
   if (isLoading) {
     return <RequireAuth><PageContainer><div className="h-8 w-56 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((key) => <div key={key} className="h-44 animate-pulse rounded-3xl bg-[var(--ref-surface-container-highest)]" />)}</div></PageContainer></RequireAuth>;
@@ -513,18 +496,7 @@ function DashboardPage() {
             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of {formatAsOf(dashboardNow)}</p>
           </div>
           <div className="flex items-center justify-between gap-2 sm:justify-end">
-            {periods.length > 0 && <div className="flex w-fit max-w-full shrink-0 items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1 shadow-sm">
-              <button type="button" disabled={!olderPeriod} onClick={() => olderPeriod && setSelectedPeriodId(String(olderPeriod.id))} className="grid h-9 w-9 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Previous period" title={olderPeriod ? `Previous: ${olderPeriod.name}` : 'No previous period'}><ChevronLeft className="h-4 w-4" /></button>
-              <div ref={periodPickerRef} className="relative w-[min(145px,calc(100vw-7rem))] shrink-0">
-                <button ref={periodPickerTriggerRef} type="button" onClick={() => setIsPeriodPickerOpen((open) => !open)} onKeyDown={(event) => { if (event.key === 'Escape') { setIsPeriodPickerOpen(false); periodPickerTriggerRef.current?.focus(); } }} className={cn('relative flex h-9 w-full items-center justify-center rounded-lg px-4 text-center text-xs font-bold text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]', isPeriodPickerOpen && 'bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]')} aria-haspopup="listbox" aria-expanded={isPeriodPickerOpen} aria-label="Dashboard period">
-                  <span className="-translate-x-1 truncate text-center">{selectedPeriod?.name ?? 'Select period'}</span><ChevronDown className={cn('absolute right-2 h-4 w-4 transition-transform', isPeriodPickerOpen && 'rotate-180')} />
-                </button>
-                {isPeriodPickerOpen && <div role="listbox" aria-label="Dashboard periods" className="period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-60 w-full overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-2xl">
-                  {periods.map((period) => <button key={period.id} type="button" role="option" aria-selected={String(period.id) === selectedPeriodId} onClick={() => { setSelectedPeriodId(String(period.id)); setIsPeriodPickerOpen(false); periodPickerTriggerRef.current?.focus(); }} onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); setIsPeriodPickerOpen(false); periodPickerTriggerRef.current?.focus(); } }} className={cn('w-full rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors', String(period.id) === selectedPeriodId ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>{period.name}</button>)}
-                </div>}
-              </div>
-              <button type="button" disabled={!newerPeriod} onClick={() => newerPeriod && setSelectedPeriodId(String(newerPeriod.id))} className="grid h-9 w-9 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Next period" title={newerPeriod ? `Next: ${newerPeriod.name}` : 'No next period'}><ChevronRight className="h-4 w-4" /></button>
-            </div>}
+            {periods.length > 0 && <PeriodPicker periods={periods} value={selectedPeriodId} onChange={setSelectedPeriodId} ariaLabel="Dashboard period" />}
             <details ref={notificationPopoverRef} className="group relative">
               <summary className="relative grid h-11 w-11 cursor-pointer list-none place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)] [&::-webkit-details-marker]:hidden" aria-label="Dashboard notifications">
                 <Bell className="h-5 w-5" />
