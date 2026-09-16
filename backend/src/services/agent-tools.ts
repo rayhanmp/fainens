@@ -4,10 +4,12 @@ import { and, desc, eq, gte, inArray, like, lte, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   accounts,
+  auditLogs,
   budgetPlans,
   categories,
   contacts,
   loans,
+  pendingTransactions,
   reconciliationItems,
   reconciliationSessions,
   salaryPeriods,
@@ -19,7 +21,8 @@ import {
   tags,
   transportRouteTemplates,
 } from "../db/schema";
-import { computeAccountBalanceAsOf } from "./ledger";
+import { computeAccountBalanceAsOf, getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
+import { findContactsInputJsonSchema, findContactsTool } from "./agent-contact-search";
 import { getBudgetFacts, getFinancialFacts } from "./financial-facts";
 import { getFinancialRevision } from "./financial-revision";
 import { getPaylaterObligations } from "./paylater";
@@ -29,11 +32,12 @@ import { generateCashFlowStatement } from "./reports";
 import { calculateBurnRate } from "./analytics";
 import { assignedPeriodMembership, inclusivePeriodEnd } from "./period-locking";
 import { getPeriodCoverage } from "./period-coverage";
-import { prepareAgentAction } from "./agent-actions";
+import { AGENT_TRANSACTION_ACTION_KIND, prepareAgentAction } from "./agent-actions";
 import { listMoneyAnomalyReviews } from "./money-anomaly-review";
 import { requestBudgetOutlierReview } from "./budget-outlook-review";
 import { updateTransactionAtomically } from "./transaction-mutations";
 import { listReimbursementClaims } from "./reimbursements";
+import { DEFAULT_AGENT_TIMEZONE, normalizeAgentDateString } from "./agent-normalization";
 
 const DAY_MS = 86_400_000;
 const MAX_TRANSACTION_SEARCH = 100;
@@ -44,6 +48,7 @@ const CURRENCY_RATE_API = "https://api.frankfurter.app";
 const CURRENCY_RATE_CACHE_TTL_MS = 5 * 60_000;
 const currencyRateCache = new Map<string, { expiresAt: number; payload: CurrencyRatePayload }>();
 const INTERNAL_CORRECTION_TX_TYPES = ["reversal", "domain_reversal", "historical_recovery_adjustment"] as const;
+const GMAIL_PENDING_SOURCE = "gmail_bni";
 
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
 
@@ -66,8 +71,8 @@ export interface AgentToolDefinition {
   inputSchema: {
     type: "object";
     properties: Record<string, unknown>;
-    required?: string[];
-    anyOf?: Array<{ required: string[] }>;
+    required?: readonly string[];
+    anyOf?: ReadonlyArray<{ required: readonly string[] }>;
     additionalProperties: false;
   };
 }
@@ -82,6 +87,7 @@ export interface AgentToolResult<T = unknown> {
 export interface AgentToolExecutionContext {
   ownerEmail: string;
   conversationId?: number | null;
+  timeZone?: string;
 }
 
 interface CurrencyRatePayload {
@@ -148,6 +154,29 @@ const transactionProposalProperties: Record<string, unknown> = {
 };
 
 const transactionProposalRequired = ["intent", "date", "description", "lines"];
+
+const pendingTransactionChangeProperties: Record<string, unknown> = {
+  type: { type: "string", enum: ["expense", "income", "transfer"] },
+  amountCents: { type: "integer", minimum: 1, description: "Whole base-currency amount (canonical agent field)." },
+  amount: { type: "integer", minimum: 1, description: "Deprecated alias for amountCents." },
+  description: { type: "string", minLength: 1, maxLength: 500 },
+  category: { type: "string", maxLength: 200 },
+  categoryId: { type: ["integer", "null"], minimum: 1 },
+  date: { type: ["string", "null"], maxLength: 40, description: "YYYY-MM-DD or a timezone-aware ISO date/time." },
+  place: { type: ["string", "null"], maxLength: 300 },
+  notes: { type: ["string", "null"], maxLength: 2000 },
+  memo: { type: ["string", "null"], maxLength: 2000 },
+  fromAccount: { type: ["string", "null"], maxLength: 200 },
+  fromAccountId: { type: ["integer", "null"], minimum: 1 },
+  toAccount: { type: ["string", "null"], maxLength: 200 },
+  reference: { type: ["string", "null"], maxLength: 500 },
+};
+
+const pendingTransactionChangesSchema = {
+  type: "object",
+  properties: pendingTransactionChangeProperties,
+  additionalProperties: false,
+};
 
 export const agentToolDefinitions: AgentToolDefinition[] = [
   {
@@ -235,12 +264,18 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     },
   },
   {
+    name: "find_contacts",
+    description: "Discover saved contact IDs by display name or full name, including partial names. Exact matches rank first. Clarify ambiguous candidates; never guess IDs. Choose all results or an explicit page. Contacts do not need an existing loan to be found.",
+    inputSchema: findContactsInputJsonSchema,
+  },
+  {
     name: "get_loan_balances",
     description: "Read loan receivables and payables, counterparties, remaining amounts, due dates, and status. Use before classifying lending, borrowing, or repayment; these are not automatically income or ordinary spending.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["active", "all", "closed"], description: "Defaults to active." },
+        contactId: { type: "integer", minimum: 1, description: "Exact saved contact ID discovered with find_contacts." },
       },
       additionalProperties: false,
     },
@@ -265,6 +300,49 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     name: "get_salary_catch_up",
     description: "Read unprocessed salary occurrence candidates after an absence. This is a preview only; do not claim that any salary was posted or skipped from this result.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_pending_transactions",
+    description: "Read unposted transaction items waiting for user review, including Gmail imports from wondr by BNI. These are not ledger actuals yet. Use pendingId for one exact item and source gmail_bni for Gmail-only results.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pendingId: { type: "integer", minimum: 1, description: "Optional exact pending transaction ID." },
+        source: { type: "string", enum: ["all", "gmail_bni", "whatsapp", "web"], description: "Optional source filter; defaults to all sources." },
+        status: { type: "string", enum: ["pending", "approved", "rejected", "failed", "all"], description: "Optional status filter; defaults to pending." },
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum items, newest first; defaults to 20." },
+        cursor: { type: "string", maxLength: 300, description: "Opaque cursor returned as nextCursor for the next page." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_pending_transaction",
+    description: "Edit the parsed fields of one unposted pending transaction when the user explicitly requests a correction. This does not post anything; read the item first and send only the requested changes.",
+    inputSchema: {
+      type: "object",
+      required: ["pendingId", "changes"],
+      properties: {
+        pendingId: { type: "integer", minimum: 1 },
+        changes: pendingTransactionChangesSchema,
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "resolve_pending_transaction",
+    description: "Resolve one pending transaction explicitly. Use resolution approve to prepare a normal transaction review card; nothing posts until the user confirms. Use resolution reject only when the user clearly asks to dismiss it. Optional changes are applied before the resolution.",
+    inputSchema: {
+      type: "object",
+      required: ["pendingId", "resolution"],
+      properties: {
+        pendingId: { type: "integer", minimum: 1 },
+        resolution: { type: "string", enum: ["approve", "reject"] },
+        changes: pendingTransactionChangesSchema,
+        assumptions: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 500 } },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: "search_transactions",
@@ -301,7 +379,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
         amountCents: { type: "integer", minimum: 1, description: "Optional integer IDR amount refinement despite the legacy field name." },
         limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum candidates; defaults to 20." },
       },
-      anyOf: [{ required: ["query"] }, { required: ["transactionId"] }],
+      anyOf: [{ required: ["query"] }, { required: ["transactionId"] }, { required: ["amountCents"] }],
       additionalProperties: false,
     },
   },
@@ -742,14 +820,25 @@ export function calculateTool(input: unknown) {
   return { expression, result: new ArithmeticParser(expression).parse() };
 }
 
-export function getCurrentDatetimeTool() {
+export function getCurrentDatetimeTool(timeZone = DEFAULT_AGENT_TIMEZONE) {
   const nowMs = Date.now();
+  let effectiveTimeZone = timeZone || DEFAULT_AGENT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: effectiveTimeZone }).format();
+  } catch {
+    effectiveTimeZone = DEFAULT_AGENT_TIMEZONE;
+  }
+  const format = (zone: string) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone, dateStyle: "full", timeStyle: "long",
+  }).format(new Date(nowMs));
   return {
     nowMs,
     utcIso: new Date(nowMs).toISOString(),
-    asiaJakarta: new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Jakarta", dateStyle: "full", timeStyle: "long",
-    }).format(new Date(nowMs)),
+    timeZone: effectiveTimeZone,
+    localTime: format(effectiveTimeZone),
+    // Keep the legacy field for non-model callers while the model projection
+    // uses the profile's actual timezone above.
+    asiaJakarta: format(DEFAULT_AGENT_TIMEZONE),
   };
 }
 
@@ -950,6 +1039,7 @@ export async function getLoanBalancesTool(input: unknown) {
   const status = input.status == null ? "active" : input.status;
   if (status !== "active" && status !== "all" && status !== "closed") throw new Error("status must be active, all, or closed");
   const loanId = optionalInteger(input.loanId, "loanId", { min: 1 });
+  const contactId = optionalInteger(input.contactId, "contactId", { min: 1 });
   const rows = await db.select({
     id: loans.id,
     contactId: loans.contactId,
@@ -965,10 +1055,12 @@ export async function getLoanBalancesTool(input: unknown) {
   }).from(loans).leftJoin(contacts, eq(loans.contactId, contacts.id)).where(and(
     status === "active" ? eq(loans.status, "active") : status === "closed" ? sql`${loans.status} <> 'active'` : undefined,
     loanId == null ? undefined : eq(loans.id, loanId),
+    contactId == null ? undefined : eq(loans.contactId, contactId),
   ));
   return {
     loans: rows,
     loanId: loanId ?? null,
+    contactId: contactId ?? null,
     totalReceivableCents: rows.filter((row) => row.direction === "lent").reduce((sum, row) => sum + row.remainingCents, 0),
     totalPayableCents: rows.filter((row) => row.direction === "borrowed").reduce((sum, row) => sum + row.remainingCents, 0),
   };
@@ -1029,6 +1121,303 @@ export async function findDueRecurringTool(input: unknown) {
 
 export async function getSalaryCatchUpTool() {
   return { ...(await previewSalaryCatchUp()), writesPerformed: false };
+}
+
+type PendingTransactionRow = typeof pendingTransactions.$inferSelect;
+
+function parseStoredPendingData(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function pendingTransactionView(row: PendingTransactionRow) {
+  return {
+    id: row.id,
+    source: row.source,
+    status: row.status,
+    parsedData: parseStoredPendingData(row.parsedData),
+    rawMessage: row.rawMessage,
+    parseAttempts: row.parseAttempts,
+    lastError: row.lastError,
+    userMessageId: row.userMessageId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export async function getPendingTransactionsTool(input: unknown) {
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const pendingId = optionalInteger(input.pendingId, "pendingId", { min: 1 });
+  const source = input.source == null ? "all" : optionalText(input.source, "source", 40) ?? "all";
+  const status = input.status == null ? "pending" : optionalText(input.status, "status", 40) ?? "pending";
+  const limit = Math.min(optionalInteger(input.limit, "limit", { min: 1 }) ?? 20, 50);
+  const cursor = input.cursor == null ? null : optionalText(input.cursor, "cursor", 300);
+  let cursorCreatedAt: number | null = null;
+  let cursorId: number | null = null;
+  if (cursor != null) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { createdAt?: unknown; id?: unknown };
+      cursorCreatedAt = typeof decoded.createdAt === "number" ? decoded.createdAt : null;
+      cursorId = typeof decoded.id === "number" ? decoded.id : null;
+      if (cursorCreatedAt == null || cursorId == null || !Number.isSafeInteger(cursorCreatedAt) || !Number.isSafeInteger(cursorId)) throw new Error("invalid");
+    } catch {
+      throw new Error("cursor is invalid");
+    }
+  }
+  if (source !== "all" && source !== GMAIL_PENDING_SOURCE && source !== "whatsapp" && source !== "web") {
+    throw new Error("source must be all, gmail_bni, whatsapp, or web");
+  }
+  if (status !== "all" && status !== "pending" && status !== "approved" && status !== "rejected" && status !== "failed") {
+    throw new Error("status must be pending, approved, rejected, failed, or all");
+  }
+
+  const filters: any[] = [];
+  if (pendingId != null) filters.push(eq(pendingTransactions.id, pendingId));
+  if (source !== "all") filters.push(eq(pendingTransactions.source, source));
+  if (status !== "all") filters.push(eq(pendingTransactions.status, status));
+  const filterClause = filters.length > 0 ? and(...filters) : undefined;
+  const pageFilters = [...filters];
+  if (cursorCreatedAt != null && cursorId != null) {
+    pageFilters.push(sql`(${pendingTransactions.createdAt} < ${cursorCreatedAt} OR (${pendingTransactions.createdAt} = ${cursorCreatedAt} AND ${pendingTransactions.id} < ${cursorId}))`);
+  }
+  const pageClause = pageFilters.length > 0 ? and(...pageFilters) : undefined;
+  const [rows, countRows] = await Promise.all([
+    db.select().from(pendingTransactions).where(pageClause).orderBy(desc(pendingTransactions.createdAt), desc(pendingTransactions.id)).limit(limit + 1),
+    db.select({ count: sql<number>`count(*)` }).from(pendingTransactions).where(filterClause),
+  ]);
+  const complete = rows.length <= limit;
+  const filtered = complete ? rows : rows.slice(0, limit);
+  const last = filtered[filtered.length - 1];
+  const lastCreatedAt = last?.createdAt instanceof Date ? last.createdAt.getTime() : Number(last?.createdAt);
+  const nextCursor = !complete && last && Number.isSafeInteger(lastCreatedAt)
+    ? Buffer.from(JSON.stringify({ createdAt: lastCreatedAt, id: last.id }), "utf8").toString("base64url")
+    : undefined;
+  return {
+    pendingTransactions: filtered.map(pendingTransactionView),
+    pendingCount: filtered.length,
+    matchedCount: Number(countRows[0]?.count ?? 0),
+    appliedFilters: { pendingId: pendingId ?? null, source, status, limit, ...(cursor ? { cursor } : {}) },
+    complete,
+    ...(nextCursor ? { nextCursor } : {}),
+    writesPerformed: false,
+  };
+}
+
+function nullablePendingText(value: unknown, field: string, maxLength: number): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.length > maxLength) {
+    throw new Error(`${field} must be a string of at most ${maxLength} characters or null`);
+  }
+  return value.trim() || null;
+}
+
+function normalizePendingChanges(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error("changes must be an object");
+  const allowed = new Set([
+    "type", "amountCents", "amount", "description", "category", "categoryId", "date", "place", "notes", "memo",
+    "fromAccount", "fromAccountId", "toAccount", "reference",
+  ]);
+  const unknownKeys = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknownKeys.length > 0) throw new Error(`Unsupported pending transaction field: ${unknownKeys[0]}`);
+  if (Object.keys(value).length === 0) throw new Error("changes must include at least one field");
+
+  const changes: Record<string, unknown> = {};
+  if (value.type != null) {
+    if (value.type !== "expense" && value.type !== "income" && value.type !== "transfer") throw new Error("changes.type must be expense, income, or transfer");
+    changes.type = value.type;
+  }
+  const suppliedAmount = value.amountCents ?? value.amount;
+  if (suppliedAmount != null) changes.amount = optionalInteger(suppliedAmount, "changes.amountCents", { min: 1 });
+  if (value.description != null) {
+    if (typeof value.description !== "string" || value.description.trim() === "" || value.description.length > 500) throw new Error("changes.description must be a non-empty string of at most 500 characters");
+    changes.description = value.description.trim();
+  }
+  if (value.category != null) {
+    if (typeof value.category !== "string" || value.category.length > 200) throw new Error("changes.category must be a string of at most 200 characters");
+    changes.category = value.category.trim() || "Others";
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "categoryId")) {
+    if (value.categoryId !== null) changes.categoryId = optionalInteger(value.categoryId, "changes.categoryId", { min: 1 });
+    else changes.categoryId = null;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "date")) {
+    if (value.date !== null && typeof value.date !== "string") throw new Error("changes.date must be a date string or null");
+    changes.date = value.date === null ? null : value.date.trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "place")) changes.place = nullablePendingText(value.place, "changes.place", 300);
+  if (Object.prototype.hasOwnProperty.call(value, "notes")) changes.notes = nullablePendingText(value.notes, "changes.notes", 2000);
+  if (Object.prototype.hasOwnProperty.call(value, "memo")) changes.memo = nullablePendingText(value.memo, "changes.memo", 2000);
+  if (Object.prototype.hasOwnProperty.call(value, "fromAccount")) changes.fromAccount = nullablePendingText(value.fromAccount, "changes.fromAccount", 200);
+  if (Object.prototype.hasOwnProperty.call(value, "fromAccountId")) {
+    if (value.fromAccountId !== null) changes.fromAccountId = optionalInteger(value.fromAccountId, "changes.fromAccountId", { min: 1 });
+    else changes.fromAccountId = null;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "toAccount")) changes.toAccount = nullablePendingText(value.toAccount, "changes.toAccount", 200);
+  if (Object.prototype.hasOwnProperty.call(value, "reference")) changes.reference = nullablePendingText(value.reference, "changes.reference", 500);
+  return changes;
+}
+
+async function getPendingTransactionForAgent(pendingId: number): Promise<PendingTransactionRow> {
+  const [row] = await db.select().from(pendingTransactions).where(eq(pendingTransactions.id, pendingId)).limit(1);
+  if (!row) throw new Error("Pending transaction not found");
+  if (row.status !== "pending") throw new Error(`Pending transaction is already ${row.status}`);
+  return row;
+}
+
+export async function updatePendingTransactionTool(input: unknown, executionContext?: AgentToolExecutionContext) {
+  if (!executionContext?.ownerEmail?.trim()) throw new Error("Pending transaction updates require an authenticated conversation");
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const pendingId = optionalInteger(input.pendingId, "pendingId", { min: 1 });
+  if (pendingId == null) throw new Error("pendingId is required");
+  const changes = normalizePendingChanges(input.changes);
+  const result = db.transaction((tx) => {
+    const row = tx.select().from(pendingTransactions).where(eq(pendingTransactions.id, pendingId)).limit(1).all()[0];
+    if (!row) throw new Error("Pending transaction not found");
+    if (row.status !== "pending") throw new Error(`Pending transaction is already ${row.status}`);
+    const before = parseStoredPendingData(row.parsedData);
+    const after = { ...before, ...changes };
+    const updated = tx.update(pendingTransactions)
+      .set({ parsedData: JSON.stringify(after), lastError: null, updatedAt: new Date() })
+      .where(and(eq(pendingTransactions.id, pendingId), eq(pendingTransactions.status, "pending")))
+      .returning()
+      .all()[0];
+    if (!updated) throw new Error("Pending transaction changed before it could be updated");
+    const audit = tx.insert(auditLogs).values({
+      entityType: "pending_transaction",
+      entityId: pendingId,
+      action: "agent_update",
+      beforeSnapshot: Buffer.from(JSON.stringify(before)),
+      afterSnapshot: Buffer.from(JSON.stringify(after)),
+    }).returning({ id: auditLogs.id }).all()[0];
+    return { updated, auditId: audit?.id ?? null };
+  });
+  return {
+    writesPerformed: true,
+    requiresConfirmation: false,
+    receipt: { pendingId, changedFields: Object.keys(changes), auditLogId: result.auditId },
+    pendingTransaction: pendingTransactionView(result.updated),
+  };
+}
+
+async function buildPendingTransactionProposal(pendingId: number, parsed: Record<string, unknown>, pendingUpdatedAt: number, timeZone = "Asia/Jakarta") {
+  const type = parsed.type === "income" ? "income" : parsed.type === "expense" ? "expense" : parsed.type;
+  if (type !== "expense" && type !== "income") throw new Error("Transfer pending transactions need explicit source and destination accounts before they can be approved");
+  const amount = optionalInteger(parsed.amountCents ?? parsed.amount, "pending amount", { min: 1 });
+  if (amount == null) throw new Error("Pending transaction amount must be a positive integer");
+  const description = typeof parsed.description === "string" ? parsed.description.trim() : "";
+  if (!description) throw new Error("Pending transaction description is required");
+
+  const wallets = await db.select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive, liquidityClass: accounts.liquidityClass })
+    .from(accounts).where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true)));
+  const requestedAccountId = parsed.fromAccountId == null ? null : optionalInteger(parsed.fromAccountId, "fromAccountId", { min: 1 }) ?? null;
+  const requestedName = typeof parsed.fromAccount === "string" ? parsed.fromAccount.trim().toLowerCase() : "";
+  const exactMatches = requestedName ? wallets.filter((wallet) => wallet.name.trim().toLowerCase() === requestedName) : [];
+  const partialMatches = requestedName ? wallets.filter((wallet) => wallet.name.toLowerCase().includes(requestedName) || requestedName.includes(wallet.name.toLowerCase())) : [];
+  const wallet = (requestedAccountId == null ? undefined : wallets.find((candidate) => candidate.id === requestedAccountId))
+    ?? (exactMatches.length === 1 ? exactMatches[0] : partialMatches.length === 1 ? partialMatches[0] : undefined)
+    ?? (requestedAccountId == null && !requestedName && wallets.length === 1 ? wallets[0] : undefined);
+  if (!wallet) throw new Error("Could not resolve the pending transaction's source wallet; specify fromAccount or fromAccountId");
+
+  let categoryId: number | null = null;
+  let categoryReportingAccountId: number | null = null;
+  const requestedCategoryId = parsed.categoryId == null ? null : optionalInteger(parsed.categoryId, "categoryId", { min: 1 }) ?? null;
+  if (type === "expense" && requestedCategoryId != null) {
+    const [category] = await db.select({ id: categories.id, reportingAccountId: categories.reportingAccountId }).from(categories)
+      .where(and(eq(categories.id, requestedCategoryId), eq(categories.isActive, true))).limit(1);
+    if (!category) throw new Error("Pending category ID does not identify an active category");
+    categoryId = category.id;
+    categoryReportingAccountId = category.reportingAccountId;
+  } else if (type === "expense" && typeof parsed.category === "string" && parsed.category.trim()) {
+    const [category] = await db.select({ id: categories.id, reportingAccountId: categories.reportingAccountId }).from(categories)
+      .where(and(eq(sql`lower(${categories.name})`, parsed.category.trim().toLowerCase()), eq(categories.isActive, true))).limit(1);
+    categoryId = category?.id ?? null;
+    categoryReportingAccountId = category?.reportingAccountId ?? null;
+  }
+  const expenseAccountId = type === "expense"
+    ? categoryReportingAccountId ?? (await getOrCreateAutoExpenseAccount(db)).id
+    : null;
+  const incomeAccount = type === "income" ? await getOrCreateAutoIncomeAccount(db) : null;
+  const dateValue = parsed.date;
+  let dateMs = Date.now();
+  if (typeof dateValue === "string" && dateValue.trim()) {
+    const normalizedDate = normalizeAgentDateString(dateValue, timeZone);
+    if (typeof normalizedDate !== "string") throw new Error("Pending transaction date is invalid");
+    const parsedDate = Date.parse(normalizedDate);
+    if (!Number.isSafeInteger(parsedDate) || parsedDate < 0) throw new Error("Pending transaction date is invalid");
+    dateMs = parsedDate;
+  }
+  const commonLine = { description, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" as const : null };
+  const input = {
+    intent: type,
+    date: new Date(dateMs).toISOString(),
+    description,
+    reference: typeof parsed.reference === "string" ? parsed.reference : null,
+    notes: typeof parsed.notes === "string" ? parsed.notes : typeof parsed.memo === "string" ? parsed.memo : null,
+    place: typeof parsed.place === "string" ? parsed.place : null,
+    periodId: null,
+    categoryId,
+    categoryAllocations: type === "expense" && categoryId != null ? [{ categoryId, amount }] : [],
+    pendingTransactionId: pendingId,
+    pendingTransactionUpdatedAt: pendingUpdatedAt,
+    tagIds: [],
+    lines: type === "expense"
+      ? [{ accountId: expenseAccountId!, debit: amount, credit: 0, description }, { accountId: wallet.id, debit: 0, credit: amount, ...commonLine }]
+      : [{ accountId: wallet.id, debit: amount, credit: 0, ...commonLine }, { accountId: incomeAccount!.id, debit: 0, credit: amount, description }],
+  };
+  return input;
+}
+
+export async function resolvePendingTransactionTool(input: unknown, executionContext?: AgentToolExecutionContext) {
+  if (!executionContext?.ownerEmail?.trim()) throw new Error("Pending transaction resolution requires an authenticated conversation");
+  if (!isRecord(input)) throw new Error("Tool input must be a JSON object");
+  const pendingId = optionalInteger(input.pendingId, "pendingId", { min: 1 });
+  if (pendingId == null) throw new Error("pendingId is required");
+  const resolution = input.resolution;
+  if (resolution !== "approve" && resolution !== "reject") throw new Error("resolution must be approve or reject");
+  const row = await getPendingTransactionForAgent(pendingId);
+  if (resolution === "reject") {
+    if (input.changes != null) throw new Error("Do not provide changes when rejecting a pending transaction");
+    const result = db.transaction((tx) => {
+      const updated = tx.update(pendingTransactions)
+        .set({ status: "rejected", updatedAt: new Date() })
+        .where(and(eq(pendingTransactions.id, pendingId), eq(pendingTransactions.status, "pending")))
+        .returning()
+        .all()[0];
+      if (!updated) throw new Error("Pending transaction changed before it could be rejected");
+      const audit = tx.insert(auditLogs).values({
+        entityType: "pending_transaction",
+        entityId: pendingId,
+        action: "agent_reject",
+        beforeSnapshot: Buffer.from(JSON.stringify(parseStoredPendingData(row.parsedData))),
+        afterSnapshot: Buffer.from(JSON.stringify({ status: "rejected" })),
+      }).returning({ id: auditLogs.id }).all()[0];
+      return { updated, auditId: audit?.id ?? null };
+    });
+    return {
+      writesPerformed: true,
+      requiresConfirmation: false,
+      receipt: { pendingId, resolution: "reject", auditLogId: result.auditId },
+      pendingTransaction: pendingTransactionView(result.updated),
+    };
+  }
+
+  if (input.changes != null) {
+    await updatePendingTransactionTool({ pendingId, changes: input.changes }, executionContext);
+  }
+  const refreshed = await getPendingTransactionForAgent(pendingId);
+  const proposalInput = await buildPendingTransactionProposal(pendingId, parseStoredPendingData(refreshed.parsedData), Number(refreshed.updatedAt), executionContext.timeZone);
+  const proposal = await prepareAgentAction({
+    ownerEmail: executionContext.ownerEmail,
+    conversationId: executionContext.conversationId,
+    kind: AGENT_TRANSACTION_ACTION_KIND,
+    input: proposalInput,
+    assumptions: input.assumptions,
+  });
+  return { data: proposal, revision: await getFinancialRevision(), readOnly: false };
 }
 
 export async function searchTransactionsTool(input: unknown) {
@@ -1833,7 +2222,7 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       data = calculateTool(input);
       break;
     case "get_current_datetime":
-      data = getCurrentDatetimeTool();
+      data = getCurrentDatetimeTool(executionContext?.timeZone);
       break;
     case "calculate_date_difference":
       data = calculateDateDifferenceTool(input);
@@ -1850,6 +2239,9 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
     case "get_loan_balances":
       data = await getLoanBalancesTool(input);
       break;
+    case "find_contacts":
+      data = (await findContactsTool(input)).data;
+      break;
     case "get_paylater_obligations":
       data = await getPaylaterObligationsTool(input);
       break;
@@ -1858,6 +2250,15 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
       break;
     case "get_salary_catch_up":
       data = await getSalaryCatchUpTool();
+      break;
+    case "get_pending_transactions":
+      data = await getPendingTransactionsTool(input);
+      break;
+    case "update_pending_transaction":
+      data = await updatePendingTransactionTool(input, executionContext);
+      break;
+    case "resolve_pending_transaction":
+      data = await resolvePendingTransactionTool(input, executionContext);
       break;
     case "search_transactions":
       data = await searchTransactionsTool(input);
@@ -1971,5 +2372,5 @@ export async function executeAgentTool(name: unknown, input: unknown, executionC
     default:
       throw new Error("Unknown or unavailable agent tool");
   }
-  return { tool: name, revision: await getFinancialRevision(), readOnly: !["prepare_transaction", "prepare_transactions", "prepare_budget", "review_budget_patterns", "update_transaction_tags", "update_transaction_metadata", "create_tag"].includes(name), data };
+  return { tool: name, revision: await getFinancialRevision(), readOnly: !["prepare_transaction", "prepare_transactions", "prepare_budget", "review_budget_patterns", "update_transaction_tags", "update_transaction_metadata", "create_tag", "update_pending_transaction", "resolve_pending_transaction"].includes(name), data };
 }

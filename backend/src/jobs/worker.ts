@@ -8,6 +8,7 @@ import { processCacheInvalidationOutbox } from "../services/cache-invalidation-o
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { processDueSubscriptionRenewals } from "../services/subscription-renewals";
 import { postSalaryIfPayrollDay } from "../services/salary-posting";
+import { pollConnectedGmail } from "../services/gmail-sync";
 import { cancelBackgroundTask, claimBackgroundTask, completeBackgroundTask, dispatchDueBackgroundTasks, failBackgroundTask } from "../services/background-tasks";
 import { configureJobSchedulers } from "./schedulers";
 import { agentQueue, maintenanceQueue, recurringQueue, type AgentJobName, type MaintenanceJobName, type RecurringJobName } from "./queue";
@@ -42,6 +43,9 @@ async function processRecurring(job: Job<undefined, void, RecurringJobName>): Pr
       return;
     case "salary-posting":
       await postSalaryIfPayrollDay(db);
+      return;
+    case "gmail-sync":
+      await pollConnectedGmail();
       return;
   }
 }
@@ -91,6 +95,7 @@ async function main(): Promise<void> {
     maintenanceQueue.add("storage-deletion-outbox", undefined, { jobId: "maintenance:storage-deletion-outbox" }),
     recurringQueue.add("subscription-renewals", undefined, { jobId: "recurring:subscription-renewals" }),
     recurringQueue.add("salary-posting", undefined, { jobId: "recurring:salary-posting" }),
+    recurringQueue.add("gmail-sync", undefined, { jobId: "recurring:gmail-sync" }),
   ]);
 
   const workers = [

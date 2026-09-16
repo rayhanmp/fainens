@@ -1,4 +1,5 @@
 import { aggregateTransactionActivity, type DailyTransactionActivity } from "../services/transaction-activity";
+import { loadTransactionLoanActivity } from "../services/transaction-loan-activity";
 import { eq, and, asc, desc, sql, inArray, count, ne, notInArray, or, SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -71,6 +72,11 @@ const transactionRecordSchema = z.object({
   incomeCents: z.number().optional(),
   activityKind: z.enum(["expense", "income", "transfer", "loan", "reimbursement", "other"]).optional(),
   remainingReimbursableExpense: z.number().int().nonnegative().optional(),
+  loanActivity: z.object({
+    role: z.enum(['origin', 'payment']),
+    loans: z.array(z.object({ id: z.number().int(), contactName: z.string(), direction: z.string(), amountCents: z.number().int(), remainingCents: z.number().int(), status: z.string() })),
+    payment: z.object({ amountCents: z.number().int(), status: z.string() }).optional(),
+  }).nullable().optional(),
   lines: z.array(transactionLineSchema).optional(),
   tags: z.array(transactionTagSchema).optional(),
   categoryAllocations: z.array(transactionAllocationSchema).optional(),
@@ -458,7 +464,7 @@ function activityKindCondition(kind: string): SQL | null {
     return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'revenue' and kind_line.credit > kind_line.debit)`;
   }
   if (kind === "transfer") return sql`${transactions.txType} in ('simple_transfer', 'transfer')`;
-  if (kind === "loan") return sql`${transactions.txType} like '%loan%'`;
+  if (kind === "loan") return sql`(${transactions.txType} like '%loan%' or ${transactions.txType} in ('split_bill_lent', 'split_bill_borrowed'))`;
   if (kind === "reimbursement") return sql`${transactions.txType} like 'reimbursement_%'`;
   return null;
 }
@@ -684,7 +690,7 @@ async function fetchRemainingReimbursableExpenses(txIds: number[], effects: Map<
 
 function reimbursementActivityKind(txType: string, expenseCents: number, incomeCents: number) {
   if (txType.startsWith("reimbursement_")) return "reimbursement" as const;
-  if (txType.includes("loan")) return "loan" as const;
+  if (txType.includes("loan") || txType === 'split_bill_lent' || txType === 'split_bill_borrowed') return "loan" as const;
   if (txType === "simple_transfer" || txType === "transfer") return "transfer" as const;
   if (expenseCents > 0) return "expense" as const;
   if (incomeCents > 0) return "income" as const;
@@ -945,6 +951,7 @@ RULES:
     const { linesByTxId, tagsByTxId, allocationsByTxId } = await fetchTransactionDetails(txIds);
     const effectsByTxId = await fetchTransactionEffects(txIds);
     const remainingReimbursableByTxId = await fetchRemainingReimbursableExpenses(txIds, effectsByTxId);
+    const loanActivityByTxId = await loadTransactionLoanActivity(txIds);
 
     // Map transactions with their details
     const transactionsWithDetails = txList.map((tx) => {
@@ -955,6 +962,7 @@ RULES:
         tags: tagsByTxId.get(tx.id) || [],
         categoryAllocations: allocationsByTxId.get(tx.id) || [],
         ...effects,
+        loanActivity: loanActivityByTxId.get(tx.id) ?? null,
         activityKind: reimbursementActivityKind(tx.txType, effects.expenseCents, effects.incomeCents),
         remainingReimbursableExpense: remainingReimbursableByTxId.get(tx.id) ?? 0,
       };
@@ -1034,9 +1042,11 @@ RULES:
       .from(reimbursementClaimSources).innerJoin(reimbursementClaims, eq(reimbursementClaimSources.claimId, reimbursementClaims.id))
       .where(and(eq(reimbursementClaimSources.sourceTransactionId, tx.id), sql`${reimbursementClaims.status} IN ('approved', 'partially_paid', 'settled')`));
 
+    const loanActivityByTxId = await loadTransactionLoanActivity([tx.id]);
     return {
       ...tx,
       lines,
+      loanActivity: loanActivityByTxId.get(tx.id) ?? null,
       tags: txTagRows,
       categoryAllocations: categoryAllocationRows,
       ...effects,

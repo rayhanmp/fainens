@@ -7,7 +7,10 @@ import {
   findDueRecurringTool,
   getDueRecurringSummaryTool,
   getMoneyAnomalySummaryTool,
+  getPendingTransactionsTool,
   summarizeTransactionsTool,
+  updatePendingTransactionTool,
+  resolvePendingTransactionTool,
   type AgentToolExecutionContext,
 } from "./agent-tools";
 import { accounts, categories } from "../db/schema";
@@ -15,6 +18,9 @@ import { db } from "../db/client";
 import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
 import { parseAgentPresentation, type AgentPresentation } from "./agent-presentations";
 import type { ModelEvidence } from "./agent-evidence";
+import { prepareAgentAction } from "./agent-actions";
+import { getFinancialRevision } from "./financial-revision";
+import { findContactsInputJsonSchema, findContactsTool } from "./agent-contact-search";
 
 export type JsonSchema = Record<string, unknown>;
 export type AgentModelToolKind = "read" | "action" | "presentation";
@@ -85,6 +91,26 @@ const transactionFilters = {
     maxAmount: { type: "integer", minimum: 0 },
     transactionType: { type: "string", maxLength: 80 },
     direction: { type: "string", enum: ["inflow", "outflow"] },
+  },
+};
+
+const pendingTransactionChanges = {
+  type: "object", additionalProperties: false,
+  properties: {
+    type: { type: "string", enum: ["expense", "income", "transfer"] },
+    amountCents: { type: "integer", minimum: 1, description: "Whole base-currency units; the backend's legacy field is amount." },
+    amount: { type: "integer", minimum: 1, description: "Deprecated alias for amountCents." },
+    description: { type: "string", minLength: 1, maxLength: 500 },
+    category: { type: "string", maxLength: 200 },
+    categoryId: { type: ["integer", "null"], minimum: 1 },
+    date: { type: ["string", "null"], maxLength: 40 },
+    place: { type: ["string", "null"], maxLength: 300 },
+    notes: { type: ["string", "null"], maxLength: 2000 },
+    memo: { type: ["string", "null"], maxLength: 2000 },
+    fromAccount: { type: ["string", "null"], maxLength: 200 },
+    fromAccountId: { type: ["integer", "null"], minimum: 1 },
+    toAccount: { type: ["string", "null"], maxLength: 200 },
+    reference: { type: ["string", "null"], maxLength: 500 },
   },
 };
 
@@ -169,6 +195,20 @@ function projectAnomalyRows(value: unknown): Array<Record<string, unknown>> {
   return compactRows(value, ["id", "anomalyId", "transactionId", "status", "severity", "type", "description", "amountCents", "createdAt", "resolvedAt"]);
 }
 
+function projectPendingRow(value: unknown): Record<string, unknown> {
+  const row = asRecord(value);
+  const parsed = asRecord(row.parsedData);
+  const parsedData = compactObject(parsed, ["type", "description", "category", "categoryId", "date", "place", "notes", "memo", "fromAccount", "fromAccountId", "toAccount", "reference", "confidence", "transactionTime", "transactionType", "rrnCode", "sourceAccountLabel"]);
+  const amount = parsed.amountCents ?? parsed.amount;
+  if (typeof amount === "number") parsedData.amountCents = amount;
+  const rawMessage = typeof row.rawMessage === "string" ? row.rawMessage.slice(0, 1_000) : undefined;
+  return {
+    ...compactObject(row, ["id", "source", "status", "parseAttempts", "lastError", "createdAt", "updatedAt"]),
+    ...(rawMessage != null ? { rawMessage, ...(typeof row.rawMessage === "string" && row.rawMessage.length > rawMessage.length ? { rawMessageTruncated: true } : {}) } : {}),
+    parsedData,
+  };
+}
+
 function projectTransactionRow(value: unknown): Record<string, unknown> {
   const row = asRecord(value);
   const expense = Number(row.expenseCents ?? 0);
@@ -212,7 +252,7 @@ function projectSummary(raw: Record<string, unknown>, input: unknown): Record<st
 
 function projectAction(raw: Record<string, unknown>): Record<string, unknown> {
   const details = asRecord(raw.details);
-  const compactDetails = compactObject(details, ["intent", "date", "description", "periodId", "totalDebit", "totalCredit", "amountCents", "accountName", "toAccountName", "categoryAllocations", "transactionCount"]);
+  const compactDetails = compactObject(details, ["intent", "date", "description", "periodId", "totalDebit", "totalCredit", "amountCents", "accountName", "toAccountName", "categoryAllocations", "transactionCount", "title", "walletName", "personalShareCents", "receiptTotalCents", "totalReceivableCents", "receivables", "tagNames"]);
   return {
     ...compactObject(raw, ["status", "pendingActionId", "approvalId", "kind", "receipt", "writesPerformed", "requiresConfirmation"]),
     ...(Object.keys(compactDetails).length > 0 ? { details: compactDetails } : {}),
@@ -279,6 +319,18 @@ function compactResultData(name: string, result: unknown, input: unknown): { dat
           ...(isRecord(raw.scope) && (raw.scope.startMs != null || raw.scope.endMs != null) ? { inclusiveBoundary: true } : {}),
         },
         selectionApplied: { pageSize: raw.pageSize ?? raw.limit, filters: asRecord(asRecord(input).filters) },
+        complete: raw.complete !== false,
+        ...(typeof raw.nextCursor === "string" ? { nextCursor: raw.nextCursor } : {}),
+      };
+    case "find_pending_transactions":
+      return {
+        data: {
+          pendingTransactions: Array.isArray(raw.pendingTransactions) ? raw.pendingTransactions.map(projectPendingRow) : [],
+          pendingCount: raw.pendingCount,
+          matchedCount: raw.matchedCount,
+          appliedFilters: raw.appliedFilters,
+        },
+        selectionApplied: asRecord(raw.appliedFilters),
         complete: raw.complete !== false,
         ...(typeof raw.nextCursor === "string" ? { nextCursor: raw.nextCursor } : {}),
       };
@@ -358,9 +410,11 @@ function compactResultData(name: string, result: unknown, input: unknown): { dat
       return { data: compactObject(raw, ["horizonMonths", "currentCashCents", "monthlyBurnCents", "projectedCashCents", "assumptions"]), complete: true };
     case "get_loan_summary":
       return { data: compactObject(raw, ["totalReceivableCents", "totalPayableCents"]), complete: true };
+    case "find_contacts":
+      return { data: { ...compactObject(raw, ["query", "availableCount", "exactMatchCount", "ambiguous", "nextOffset"]), contacts: compactRows(raw.contacts, ["id", "name", "fullName", "kind", "isActive", "matchType", "matchedField"]) }, selectionApplied: asRecord(raw.selectionApplied), complete: raw.complete !== false };
     case "find_loans":
     case "get_loan":
-      return { data: { loans: projectLoanRows(raw.loans), ...compactObject(raw, ["loanId", "totalReceivableCents", "totalPayableCents"]) }, complete: true };
+      return { data: { loans: projectLoanRows(raw.loans), ...compactObject(raw, ["loanId", "contactId", "totalReceivableCents", "totalPayableCents"]) }, complete: true };
     case "get_paylater_summary":
       return { data: compactObject(raw, ["totalOutstandingCents", "providerExposure"]), complete: true };
     case "get_paylater_account":
@@ -398,6 +452,9 @@ function compactResultData(name: string, result: unknown, input: unknown): { dat
     case "prepare_income":
     case "prepare_transfer":
     case "prepare_expense_batch":
+    case "prepare_split_bill_loans":
+    case "resolve_pending_transaction":
+    case "update_pending_transaction":
     case "set_transaction_note":
     case "set_transaction_tags":
     case "create_tag":
@@ -405,7 +462,7 @@ function compactResultData(name: string, result: unknown, input: unknown): { dat
     case "calculate":
       return { data: compactObject(raw, ["result"]), complete: true };
     case "get_current_datetime":
-      return { data: compactObject(raw, ["nowMs", "asiaJakarta"]), complete: true };
+      return { data: compactObject(raw, ["nowMs", "utcIso", "timeZone", "localTime"]), complete: true };
     case "calculate_date_difference":
       return { data: compactObject(raw, ["startDate", "endDate", "milliseconds", "days", "hours"]), complete: true };
     case "get_currency_exchange_rate":
@@ -506,7 +563,18 @@ async function executePreparation(input: unknown, intent: "expense" | "income" |
 }
 
 function presentationSchema(type: string, properties: JsonSchema, required: string[] = ["title"]): JsonSchema {
-  return { type: "object", additionalProperties: false, required, properties: { type: { type: "string", enum: [type] }, ...properties } };
+  return {
+    type: "object",
+    additionalProperties: false,
+    required,
+    properties: {
+      type: { type: "string", enum: [type] },
+      ...(required.includes("title") && !Object.prototype.hasOwnProperty.call(properties, "title")
+        ? { title: { type: "string", minLength: 1, maxLength: 120 } }
+        : {}),
+      ...properties,
+    },
+  };
 }
 
 function presentationTool(name: string, summary: string, schema: JsonSchema, parser: (input: unknown) => AgentPresentation): AgentModelTool {
@@ -556,13 +624,16 @@ const modelTools: AgentModelTool[] = [
     name: "find_transactions", kind: "read", summary: "Find one page: pageSize required; optional cursor, period/range, and filters.", description: "Supply pageSize and optional cursor. Use summarize_transactions when the question needs all activity. Filters accept text, exact account/category ID or name, amount boundaries, and transactionType.", inputSchema: { type: "object", additionalProperties: false, required: ["pageSize"], properties: { ...scopeProperties, filters: transactionFilters, pageSize: { type: "integer", minimum: 1, maximum: 100 }, cursor: { type: "string", maxLength: 300 } } }, execute: async (input, context) => oldTool("search_transactions", await resolveTransactionFilterNames(input), context), projectResult: (r, i, id, rev) => projectResult("find_transactions", r, i, id, rev),
   },
   {
+    name: "find_pending_transactions", kind: "read", summary: "Find unposted pending transactions, including Gmail imports.", description: "Use this for the review queue, not find_transactions: these rows are not posted ledger actuals. Supply pageSize and optionally cursor, source gmail_bni, a status, or one exact pendingId. Follow nextCursor until complete when all matches are needed.", inputSchema: { type: "object", additionalProperties: false, anyOf: [{ required: ["pageSize"] }, { required: ["pendingId"] }], properties: { pendingId: { type: "integer", minimum: 1 }, source: { type: "string", enum: ["all", "gmail_bni", "whatsapp", "web"] }, status: { type: "string", enum: ["pending", "approved", "rejected", "failed", "all"] }, pageSize: { type: "integer", minimum: 1, maximum: 50 }, cursor: { type: "string", maxLength: 300 } } }, execute: async (input) => getPendingTransactionsTool({ ...asRecord(input), limit: asRecord(input).pageSize }), projectResult: (r, i, id, rev) => projectResult("find_pending_transactions", r, i, id, rev),
+  },
+  {
     name: "summarize_transactions", kind: "read", summary: "Aggregate all matches; groupBy category/account/merchant/day/month is required.", description: "Use category, account, merchant, day, or month instead of fetching unbounded raw rows. Filters accept text, exact account/category ID or name, amount boundaries, and transactionType.", inputSchema: { type: "object", additionalProperties: false, required: ["groupBy"], properties: { ...scopeProperties, filters: transactionFilters, groupBy: { type: "string", enum: ["category", "account", "merchant", "day", "month"] } } }, execute: async (input) => summarizeTransactionsTool(await resolveTransactionFilterNames(input)), projectResult: (r, i, id, rev) => projectResult("summarize_transactions", r, i, id, rev),
   },
   {
     name: "get_transaction", kind: "read", summary: "Get exact journal, note, tags, and allocations for one transaction.", description: "Use only after finding the exact transaction ID.", inputSchema: { type: "object", additionalProperties: false, required: ["transactionId"], properties: { transactionId: { type: "integer", minimum: 1 } } }, execute: (input, context) => oldTool("get_transaction_details", input, context), projectResult: (r, i, id, rev) => projectResult("get_transaction", r, i, id, rev),
   },
   {
-    name: "find_similar_transactions", kind: "read", summary: "Find similar posted transactions with explicit all or top selection.", description: "Use a transaction ID, query, or amount and choose how many candidates are needed.", inputSchema: { type: "object", additionalProperties: false, required: ["selection"], properties: { transactionId: { type: "integer", minimum: 1 }, query: { type: "string", maxLength: 200 }, amount: { type: "integer", minimum: 1 }, selection: allOrTopSchema } }, execute: async (input, context) => oldTool("find_similar_transactions", { ...asRecord(input), amountCents: asRecord(input).amount }, context), projectResult: (r, i, id, rev) => projectResult("find_similar_transactions", r, i, id, rev),
+    name: "find_similar_transactions", kind: "read", summary: "Find similar posted transactions with explicit all or top selection.", description: "Use a transaction ID, query, or amountCents and choose how many candidates are needed.", inputSchema: { type: "object", additionalProperties: false, required: ["selection"], anyOf: [{ required: ["query"] }, { required: ["transactionId"] }, { required: ["amountCents"] }], properties: { transactionId: { type: "integer", minimum: 1 }, query: { type: "string", maxLength: 200 }, amountCents: { type: "integer", minimum: 1, description: "Optional whole base-currency amount refinement." }, selection: allOrTopSchema } }, execute: async (input, context) => oldTool("find_similar_transactions", input, context), projectResult: (r, i, id, rev) => projectResult("find_similar_transactions", r, i, id, rev),
   },
   {
     name: "list_periods", kind: "read", summary: "List explicitly selected salary periods.", description: "Choose all, IDs, or a status filter; do not infer missing periods.", inputSchema: { type: "object", additionalProperties: false, required: ["selection"], properties: { selection: { oneOf: [selectionSchema("all"), selectionSchema("ids"), selectionSchema("status")] } } }, execute: (input, context) => oldTool("list_periods", input, context), projectResult: (r, i, id, rev) => projectResult("list_periods", r, i, id, rev),
@@ -595,7 +666,12 @@ const modelTools: AgentModelTool[] = [
     name: "get_loan_summary", kind: "read", summary: "Get loan totals by active, closed, or all status.", description: "Loans are separate from ordinary spending and income.", inputSchema: { type: "object", additionalProperties: false, properties: { status: { type: "string", enum: ["active", "closed", "all"] } } }, execute: (input, context) => oldTool("get_loan_balances", input, context), projectResult: (r, i, id, rev) => projectResult("get_loan_summary", r, i, id, rev),
   },
   {
-    name: "find_loans", kind: "read", summary: "Find loans using an explicit status filter.", description: "Use for filtered loan rows.", inputSchema: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", enum: ["active", "closed", "all"] } } }, execute: (input, context) => oldTool("get_loan_balances", input, context), projectResult: (r, i, id, rev) => projectResult("find_loans", r, i, id, rev),
+    name: "find_loans", kind: "read", summary: "Find loans by contact ID and status.", description: "For a person named by the user, first use find_contacts to discover the contact ID, then filter loans by contactId and status. Never invent an ID or widen a missing person's loans to everybody.", inputSchema: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", enum: ["active", "closed", "all"] }, contactId: { type: "integer", minimum: 1 } } }, execute: (input, context) => oldTool("get_loan_balances", input, context), projectResult: (r, i, id, rev) => projectResult("find_loans", r, i, id, rev),
+  },
+  {
+    name: "find_contacts", kind: "read", summary: "Find contact IDs by saved name.",
+    description: "Discover saved contact IDs from a user's name before looking up loans or preparing split-bill loans. Searches display name and fullName case-insensitively, including literal partial names, with exact matches ranked first. Returns contacts even with no existing loans. Prefer a unique exact match; clarify ambiguous candidates instead of taking the first or guessing an ID. Archived contacts are excluded unless includeInactive is true. Explicitly choose all results or a page; nextOffset is a numeric pagination offset. Do not create a contact merely because only the user's shorthand differs from the saved name.",
+    inputSchema: findContactsInputJsonSchema, execute: (input) => findContactsTool(input), projectResult: (r, i, id, rev) => projectResult("find_contacts", r, i, id, rev),
   },
   {
     name: "get_loan", kind: "read", summary: "Get exact loan detail by loan ID.", description: "Use after finding the exact loan.", inputSchema: { type: "object", additionalProperties: false, required: ["loanId"], properties: { loanId: { type: "integer", minimum: 1 } } }, execute: (input, context) => oldTool("get_loan_balances", { ...asRecord(input), status: "all" }, context), projectResult: (r, i, id, rev) => projectResult("get_loan", r, i, id, rev),
@@ -643,10 +719,38 @@ const modelTools: AgentModelTool[] = [
     name: "get_salary_catch_up", kind: "read", summary: "Preview unprocessed salary occurrences after an absence.", description: "Preview only; it never posts or skips salary occurrences.", inputSchema: { type: "object", additionalProperties: false, properties: {} }, execute: (input, context) => oldTool("get_salary_catch_up", input, context), projectResult: (r, i, id, rev) => projectResult("get_salary_catch_up", r, i, id, rev),
   },
   {
+    name: "update_pending_transaction", kind: "action", summary: "Edit one unposted pending transaction.", description: "Use only when the user explicitly asks to correct a pending item. Read it first and send only the requested changes; this updates the pending record but never posts a journal.", inputSchema: { type: "object", additionalProperties: false, required: ["pendingId", "changes"], properties: { pendingId: { type: "integer", minimum: 1 }, changes: pendingTransactionChanges } }, execute: (input, context) => updatePendingTransactionTool(input, context), projectResult: (r, i, id, rev) => projectResult("update_pending_transaction", r, i, id, rev),
+  },
+  {
+    name: "resolve_pending_transaction", kind: "action", summary: "Approve or reject one pending transaction.", description: "Use approve only after the user asks to post/resolve it; approval creates a normal transaction review card and still requires the user's confirmation. Use reject only for an explicit dismissal. Optional changes are applied before approval.", inputSchema: { type: "object", additionalProperties: false, required: ["pendingId", "resolution"], properties: { pendingId: { type: "integer", minimum: 1 }, resolution: { type: "string", enum: ["approve", "reject"] }, changes: pendingTransactionChanges, assumptions: { type: "array", maxItems: 20, items: { type: "string", maxLength: 500 } } } }, execute: (input, context) => resolvePendingTransactionTool(input, context), projectResult: (r, i, id, rev) => projectResult("resolve_pending_transaction", r, i, id, rev),
+  },
+  {
     name: "review_budget_patterns", kind: "action", summary: "Queue a review of unusual budget patterns.", description: "Use only when the user asks to review budget patterns; this creates analytical metadata and does not change ledger facts.", inputSchema: { type: "object", additionalProperties: false, required: ["periodId"], properties: { periodId: { type: "integer", minimum: 1 } } }, execute: (input, context) => oldTool("review_budget_patterns", input, context), projectResult: (r, i, id, rev) => projectResult("review_budget_patterns", r, i, id, rev),
   },
   {
     name: "prepare_budget", kind: "action", summary: "Prepare a budget proposal for one open period.", description: "Prepare only after reading the target period and relevant category IDs. It creates a review proposal and never applies changes.", inputSchema: { type: "object", additionalProperties: false, required: ["periodId", "plans"], properties: { periodId: { type: "integer", minimum: 1 }, plans: { type: "array", minItems: 1, maxItems: 100, items: { type: "object", additionalProperties: false, required: ["categoryId", "plannedAmountCents"], properties: { categoryId: { type: "integer", minimum: 1 }, plannedAmountCents: { type: "integer", minimum: 0 } } } }, assumptions: { type: "array", maxItems: 20, items: { type: "string", maxLength: 500 } } } }, execute: (input, context) => oldTool("prepare_budget", input, context), projectResult: (r, i, id, rev) => projectResult("prepare_budget", r, i, id, rev),
+  },
+  {
+    name: "prepare_split_bill_loans", kind: "action",
+    summary: "Prepare linked per-person split-bill loans with a shared bill and tags.",
+    description: "When the user paid a split bill and asks to record each friend's debt, prepare this proposal. Backend creates one receivable loan per person, one payment journal and unified split-bill history with shared tags after approval. First use find_contacts for each name, then supply the discovered contactId. Clarify ambiguous matches; create a new contact on confirmation only if no existing match fits. Supply the actual wallet that paid, never infer it from repayment details. Personal share plus receivables must equal receiptTotalCents. For a receipt payment not yet posted; check existing transactions when already recorded and do not post cash twice. Never use ordinary income/expense proposals for friends' receivables.",
+    inputSchema: {
+      type: "object", additionalProperties: false,
+      required: ["title", "date", "walletAccountId", "personalShareCents", "receiptTotalCents", "receivables"],
+      properties: {
+        title: { type: "string", minLength: 1, maxLength: 120 }, date: { type: "string", maxLength: 64 },
+        walletAccountId: { type: "integer", minimum: 1 }, personalShareCents: { type: "integer", minimum: 0 }, receiptTotalCents: { type: "integer", minimum: 1 },
+        categoryId: { type: "integer", minimum: 1 }, periodId: { type: "integer", minimum: 1 }, dueDate: { type: ["string", "null"], maxLength: 64 }, notes: { type: "string", maxLength: 2000 },
+        receivables: { type: "array", minItems: 1, maxItems: 30, items: { type: "object", additionalProperties: false, required: ["name", "amountCents"], properties: { contactId: { type: "integer", minimum: 1 }, name: { type: "string", minLength: 1, maxLength: 120 }, amountCents: { type: "integer", minimum: 1 } } } },
+        tagNames: { type: "array", maxItems: 10, items: { type: "string", minLength: 1, maxLength: 100 } },
+      },
+    },
+    execute: async (input, context) => {
+      if (!context?.ownerEmail) throw new Error("Split-bill loan proposals require an authenticated conversation");
+      const data = await prepareAgentAction({ ownerEmail: context.ownerEmail, conversationId: context.conversationId, kind: "split_bill_loans_create", input });
+      return { data, revision: await getFinancialRevision(), readOnly: false };
+    },
+    projectResult: (r, i, id, rev) => projectResult("prepare_split_bill_loans", r, i, id, rev),
   },
   {
     name: "prepare_expense", kind: "action", summary: "Prepare an expense proposal from business fields.", description: "Backend builds balanced journal lines; this creates a review proposal and never posts.", inputSchema: { type: "object", additionalProperties: false, required: ["amountCents", "accountId", "description", "date"], properties: { amountCents: { type: "integer", minimum: 1 }, accountId: { type: "integer", minimum: 1 }, categoryId: { type: "integer", minimum: 1 }, description: { type: "string", minLength: 1, maxLength: 500 }, date: { type: "string", maxLength: 64 }, dateMs: { type: "integer", minimum: 0 }, notes: { type: "string", maxLength: 2000 }, reference: { type: "string", maxLength: 500 }, periodId: { type: "integer", minimum: 1 }, tagIds: { type: "array", items: { type: "integer", minimum: 1 }, maxItems: 100 } } }, execute: (input, context) => executePreparation(input, "expense", context), projectResult: (r, i, id, rev) => projectResult("prepare_expense", r, i, id, rev),
@@ -695,8 +799,16 @@ const presentationTools: AgentModelTool[] = [
   }),
   presentationTool("show_comparison", "Show current and previous values for a comparison.", presentationSchema("comparison", { title: metricProperties.title, unit: metricProperties.unit, currentLabel: { type: "string", maxLength: 120 }, previousLabel: { type: "string", maxLength: 120 }, items: { type: "array", minItems: 1, maxItems: 8, items: { type: "object", additionalProperties: false, required: ["label", "current", "previous"], properties: { label: { type: "string", maxLength: 120 }, current: { type: "number" }, previous: { type: "number" } } } } }, ["title", "unit", "currentLabel", "previousLabel", "items"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "comparison" })),
   presentationTool("show_trend", "Show a trend over time.", presentationSchema("trend", { title: metricProperties.title, unit: metricProperties.unit, points: { type: "array", minItems: 2, maxItems: 24, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string", maxLength: 120 }, value: { type: "number" } } } } }, ["title", "unit", "points"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "sparkline" })),
-  presentationTool("show_budget_progress", "Show planned versus actual budget progress.", presentationSchema("budget_progress", { title: metricProperties.title, unit: metricProperties.unit, planned: { type: "number", minimum: 0 }, actual: { type: "number", minimum: 0 }, remaining: { type: "number" }, status: { type: "string", enum: ["positive", "negative", "neutral"] } }, ["title", "unit", "planned", "actual"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "budget_progress" })),
-  presentationTool("show_cash_flow", "Show income, spending, and net cash flow.", presentationSchema("cash_flow", { title: metricProperties.title, unit: metricProperties.unit, income: { type: "number" }, spending: { type: "number" }, net: { type: "number" }, periodLabel: { type: "string", maxLength: 120 } }, ["title", "unit", "income", "spending", "net"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "cash_flow" })),
+  presentationTool("show_budget_progress", "Show planned versus actual budget progress.", presentationSchema("budget_progress", { title: metricProperties.title, unit: metricProperties.unit, planned: { type: "number", minimum: 0 }, actual: { type: "number", minimum: 0 }, remaining: { type: "number" }, status: { type: "string", enum: ["positive", "negative", "neutral"] } }, ["title", "unit", "planned", "actual"]), (input) => {
+    const value = asRecord(input);
+    const planned = Number(value.planned);
+    const actual = Number(value.actual);
+    return parseAgentPresentation("show_chart", { ...value, type: "budget_progress", remaining: planned - actual });
+  }),
+  presentationTool("show_cash_flow", "Show income, spending, and net cash flow (net is calculated by the backend).", presentationSchema("cash_flow", { title: metricProperties.title, unit: metricProperties.unit, income: { type: "number" }, spending: { type: "number" }, periodLabel: { type: "string", maxLength: 120 } }, ["title", "unit", "income", "spending"]), (input) => {
+    const value = asRecord(input);
+    return parseAgentPresentation("show_chart", { ...value, type: "cash_flow", net: Number(value.income) - Number(value.spending) });
+  }),
   presentationTool("show_projection", "Show an editable projection scenario.", presentationSchema("projection", { unit: metricProperties.unit, startingValue: { type: "number" }, monthlyContribution: { type: "number" }, monthlyGrowthRate: { type: "number", minimum: -100, maximum: 100 }, horizonMonths: { type: "integer", minimum: 3, maximum: 120 }, target: { type: "number" }, subtitle: { type: "string", maxLength: 240 } }, ["title", "startingValue", "monthlyContribution", "monthlyGrowthRate", "horizonMonths"]), (input) => parseAgentPresentation("show_scenario", { ...asRecord(input), type: "projection" })),
   presentationTool("show_scenario_comparison", "Show an editable comparison of what-if scenarios.", presentationSchema("scenario_compare", { scenarios: { type: "array", minItems: 2, maxItems: 4, items: { type: "object", additionalProperties: false, required: ["label", "metrics"], properties: { label: { type: "string", maxLength: 120 }, description: { type: "string", maxLength: 240 }, metrics: { type: "array", minItems: 1, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["label", "value", "unit"], properties: { label: { type: "string" }, value: { type: "number" }, unit: { type: "string", enum: ["IDR", "number", "percent", "months"] } } } } } } } }, ["title", "scenarios"]), (input) => parseAgentPresentation("show_scenario", { ...asRecord(input), type: "scenario_compare" })),
   presentationTool("show_allocation", "Show an editable allocation of a total.", presentationSchema("allocation_editor", { unit: metricProperties.unit, total: { type: "number", minimum: 0 }, rows: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string" }, value: { type: "number", minimum: 0 }, locked: { type: "boolean" } } } } }, ["title", "total", "rows"]), (input) => parseAgentPresentation("show_scenario", { ...asRecord(input), type: "allocation_editor" })),
@@ -727,13 +839,14 @@ export const agentModelToolMap = new Map(agentModelTools.map((tool) => [tool.nam
 export const agentModelToolNames = agentModelTools.map((tool) => tool.name);
 export const agentReadToolNames = new Set(agentModelTools.filter((tool) => tool.kind === "read").map((tool) => tool.name));
 export const modelPresentationToolNames = new Set(presentationTools.map((tool) => tool.name));
+export const agentActionToolNames = new Set(agentModelTools.filter((tool) => tool.kind === "action").map((tool) => tool.name));
 
 export const agentToolCatalog = agentModelTools.map(({ name, kind, summary }) => ({
   name,
   kind,
-  // Keep the full registry discoverable while leaving the catalog small
-  // enough to coexist with the initial runtime schemas and user context.
-  summary: summary.length > 40 ? summary.slice(0, 37) + "..." : summary,
+  // Keep enough of the contract visible to avoid argument guessing. Detailed
+  // JSON schemas are loaded on demand when a capability needs them.
+  summary: summary.length > 33 ? summary.slice(0, 30) + "..." : summary,
 }));
 
 export function modelToolToChatTool(tool: AgentModelTool): AgentChatTool {
@@ -760,6 +873,78 @@ function validationPath(path: string, key: string): string {
 
 function validateJsonSchema(schema: JsonSchema, value: unknown, path: string, errors: string[]): void {
   if (errors.length >= 8) return;
+  const label = path || "input";
+  if (Array.isArray(schema.enum) && !schema.enum.some((candidate) => Object.is(candidate, value))) {
+    errors.push(`${label} must be one of ${schema.enum.map(String).join(", ")}`);
+  }
+  if ("const" in schema && !Object.is(schema.const, value)) errors.push(`${label} must equal the declared constant`);
+
+  const declaredTypes = Array.isArray(schema.type)
+    ? schema.type.filter((candidate): candidate is string => typeof candidate === "string")
+    : typeof schema.type === "string" ? [schema.type] : [];
+  const inferredObject = declaredTypes.length === 0
+    && (isRecord(schema.properties) || Array.isArray(schema.required) || schema.additionalProperties !== undefined);
+  const typeMatches = (type: string): boolean => {
+    if (type === "null") return value === null;
+    if (type === "object") return isRecord(value);
+    if (type === "array") return Array.isArray(value);
+    if (type === "string") return typeof value === "string";
+    if (type === "boolean") return typeof value === "boolean";
+    if (type === "number") return typeof value === "number" && Number.isFinite(value);
+    if (type === "integer") return typeof value === "number" && Number.isSafeInteger(value);
+    return true;
+  };
+  const shouldValidateObject = (declaredTypes.includes("object") && isRecord(value)) || (inferredObject && declaredTypes.length === 0);
+  if (declaredTypes.length > 0 && !declaredTypes.some(typeMatches)) {
+    errors.push(`${label} must be ${declaredTypes.length === 1 ? declaredTypes[0] : `one of ${declaredTypes.join(", ")}`}`);
+  } else if (shouldValidateObject) {
+    if (!isRecord(value)) {
+      if (declaredTypes.includes("object") || inferredObject) errors.push(`${label} must be an object`);
+    } else {
+      const properties = isRecord(schema.properties) ? schema.properties : {};
+      const required = Array.isArray(schema.required) ? schema.required.filter((key): key is string => typeof key === "string") : [];
+      for (const key of required) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) errors.push(`${validationPath(path, key)} is required`);
+      }
+      if (schema.additionalProperties === false) {
+        for (const key of Object.keys(value)) {
+          if (!Object.prototype.hasOwnProperty.call(properties, key)) errors.push(`${validationPath(path, key)} is not allowed`);
+        }
+      }
+      if (typeof schema.minProperties === "number" && Object.keys(value).length < schema.minProperties) errors.push(`${label} must contain at least ${schema.minProperties} propert${schema.minProperties === 1 ? "y" : "ies"}`);
+      if (typeof schema.maxProperties === "number" && Object.keys(value).length > schema.maxProperties) errors.push(`${label} must contain at most ${schema.maxProperties} properties`);
+      for (const [key, childSchema] of Object.entries(properties)) {
+        if (Object.prototype.hasOwnProperty.call(value, key) && isRecord(childSchema)) validateJsonSchema(childSchema, value[key], validationPath(path, key), errors);
+      }
+    }
+  }
+
+  if (declaredTypes.includes("array") && Array.isArray(value)) {
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) errors.push(`${label} must contain at least ${schema.minItems} item(s)`);
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) errors.push(`${label} must contain at most ${schema.maxItems} item(s)`);
+    if (isRecord(schema.items)) value.forEach((item, index) => validateJsonSchema(schema.items as JsonSchema, item, `${label}[${index}]`, errors));
+  }
+  if (declaredTypes.includes("string") && typeof value === "string") {
+    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(`${label} is too short`);
+    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(`${label} is too long`);
+    if (typeof schema.pattern === "string") {
+      try {
+        if (!new RegExp(schema.pattern).test(value)) errors.push(`${label} has an invalid format`);
+      } catch {
+        errors.push(`${label} has an invalid schema pattern`);
+      }
+    }
+    if (schema.format === "date-time" && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+      errors.push(`${label} must be a timezone-aware ISO date-time`);
+    }
+  }
+  if ((declaredTypes.includes("integer") || declaredTypes.includes("number")) && typeof value === "number" && Number.isFinite(value)) {
+    if (typeof schema.minimum === "number" && value < schema.minimum) errors.push(`${label} must be at least ${schema.minimum}`);
+    if (typeof schema.maximum === "number" && value > schema.maximum) errors.push(`${label} must be at most ${schema.maximum}`);
+    if (typeof schema.exclusiveMinimum === "number" && value <= schema.exclusiveMinimum) errors.push(`${label} must be greater than ${schema.exclusiveMinimum}`);
+    if (typeof schema.exclusiveMaximum === "number" && value >= schema.exclusiveMaximum) errors.push(`${label} must be less than ${schema.exclusiveMaximum}`);
+  }
+
   const anyOf = Array.isArray(schema.anyOf) ? schema.anyOf.filter(isRecord) : [];
   if (anyOf.length > 0) {
     const valid = anyOf.some((candidate) => {
@@ -767,8 +952,7 @@ function validateJsonSchema(schema: JsonSchema, value: unknown, path: string, er
       validateJsonSchema(candidate, value, path, candidateErrors);
       return candidateErrors.length === 0;
     });
-    if (!valid) errors.push(`${path || "input"} must match one accepted shape`);
-    return;
+    if (!valid) errors.push(`${label} must match one accepted shape`);
   }
   const oneOf = Array.isArray(schema.oneOf) ? schema.oneOf.filter(isRecord) : [];
   if (oneOf.length > 0) {
@@ -777,63 +961,9 @@ function validateJsonSchema(schema: JsonSchema, value: unknown, path: string, er
       validateJsonSchema(candidate, value, path, candidateErrors);
       return candidateErrors.length === 0;
     }).length;
-    if (validCount !== 1) errors.push(`${path || "input"} must match exactly one accepted shape`);
-    return;
+    if (validCount !== 1) errors.push(`${label} must match exactly one accepted shape`);
   }
-  if (Array.isArray(schema.enum) && !schema.enum.some((candidate) => Object.is(candidate, value))) {
-    errors.push(`${path || "input"} must be one of ${schema.enum.map(String).join(", ")}`);
-    return;
-  }
-  const type = typeof schema.type === "string" ? schema.type : null;
-  if (type === "object") {
-    if (!isRecord(value)) {
-      errors.push(`${path || "input"} must be an object`);
-      return;
-    }
-    const properties = isRecord(schema.properties) ? schema.properties : {};
-    const required = Array.isArray(schema.required) ? schema.required.filter((key): key is string => typeof key === "string") : [];
-    for (const key of required) {
-      if (!(key in value)) errors.push(`${validationPath(path, key)} is required`);
-    }
-    if (schema.additionalProperties === false) {
-      for (const key of Object.keys(value)) {
-        if (!(key in properties)) errors.push(`${validationPath(path, key)} is not allowed`);
-      }
-    }
-    for (const [key, childSchema] of Object.entries(properties)) {
-      if (key in value && isRecord(childSchema)) validateJsonSchema(childSchema, value[key], validationPath(path, key), errors);
-    }
-    return;
-  }
-  if (type === "array") {
-    if (!Array.isArray(value)) {
-      errors.push(`${path || "input"} must be an array`);
-      return;
-    }
-    if (typeof schema.minItems === "number" && value.length < schema.minItems) errors.push(`${path || "input"} must contain at least ${schema.minItems} item(s)`);
-    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) errors.push(`${path || "input"} must contain at most ${schema.maxItems} item(s)`);
-    if (isRecord(schema.items)) value.forEach((item, index) => validateJsonSchema(schema.items as JsonSchema, item, `${path || "input"}[${index}]`, errors));
-    return;
-  }
-  if (type === "string") {
-    if (typeof value !== "string") {
-      errors.push(`${path || "input"} must be a string`);
-      return;
-    }
-    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(`${path || "input"} is too short`);
-    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(`${path || "input"} is too long`);
-    return;
-  }
-  if (type === "integer" || type === "number") {
-    if (typeof value !== "number" || !Number.isFinite(value) || (type === "integer" && !Number.isInteger(value))) {
-      errors.push(`${path || "input"} must be ${type === "integer" ? "an integer" : "a number"}`);
-      return;
-    }
-    if (typeof schema.minimum === "number" && value < schema.minimum) errors.push(`${path || "input"} must be at least ${schema.minimum}`);
-    if (typeof schema.maximum === "number" && value > schema.maximum) errors.push(`${path || "input"} must be at most ${schema.maximum}`);
-    return;
-  }
-  if (type === "boolean" && typeof value !== "boolean") errors.push(`${path || "input"} must be a boolean`);
+
 }
 
 /**

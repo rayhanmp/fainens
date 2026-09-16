@@ -55,6 +55,7 @@ const envSchema = z.object({
   // Intervals remain the compatibility default. Set queue only when the
   // standalone BullMQ worker is deployed and healthy.
   JOB_RUNNER_MODE: z.enum(["interval", "queue"]).default("interval"),
+  GMAIL_POLL_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(15),
   WORKER_MAINTENANCE_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(2),
   WORKER_RECURRING_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(1),
   WORKER_AGENT_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),

@@ -170,14 +170,14 @@ export const workflows: Workflow[] = [
     }], checks: (r) => [...amountChecks(r, BNI_BALANCE), ...amountChecks(r, 300_000)],
   }] },
   { id: "schema-lease-lifecycle", tags: ["harness", "leases", "parallel"], offlineOnly: true, turns: [{
-    question: "Check BNI and GoPay together.", truth: "Two requested domain schemas appear only for the next assistant turn. Multiple calls to a leased tool are allowed, then the lease expires.",
+    question: "Check BNI and GoPay together.", truth: "Two requested domain schemas remain available for dependent assistant turns without another discovery call.",
     script: [load("get_account_balance", "show_metric"), (request) => {
       const runtime = new Set(["ask_clarification", "invoke_read_tool", "invoke_read_tools", "load_tool_schemas", "update_context"]);
       const domainNames = request.tools.map((t) => t.function.name).filter((name) => !runtime.has(name)).sort();
       if (JSON.stringify(domainNames) !== JSON.stringify(["get_account_balance", "show_metric"])) throw new Error("Lease exposed unexpected schemas");
       return calls(["get_account_balance", { accountName: "BNI" }], ["get_account_balance", { accountName: "GoPay" }]);
     }, (request) => {
-      if (request.tools.some((t) => ["get_account_balance", "show_metric"].includes(t.function.name))) throw new Error("Schema lease did not expire");
+      if (!request.tools.some((t) => t.function.name === "get_account_balance") || !request.tools.some((t) => t.function.name === "show_metric")) throw new Error("Schema lease was not retained");
       return answer("BNI Rp3.960.000; GoPay Rp300.000.");
     }], checks: (r) => [...amountChecks(r, BNI_BALANCE), ...amountChecks(r, 300_000), check("both parallel reads executed", successful(r, "get_account_balance").length === 2)],
   }] },

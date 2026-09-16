@@ -974,6 +974,21 @@ export const pendingTransactions = sqliteTable("pending_transaction", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** OAuth connection used to import transaction notifications from Gmail. */
+export const gmailConnections = sqliteTable("gmail_connection", {
+  ownerEmail: text("owner_email").primaryKey(),
+  googleEmail: text("google_email").notNull(),
+  /** AES-256-GCM encrypted Google refresh token. */
+  refreshToken: text("refresh_token").notNull(),
+  lastSyncedAt: integer("last_synced_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
 /** Splitbill sessions - stores receipt OCR and split history */
 export const splitbillSessions = sqliteTable("splitbill_session", {
   id: integer("id").primaryKey({ autoIncrement: true }),

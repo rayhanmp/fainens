@@ -2,13 +2,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { accounts, agentApprovals, agentConversations, agentPendingActions, auditLogs, budgetPlans, categories, salaryPeriods } from "../db/schema";
+import { accounts, agentApprovals, agentConversations, agentPendingActions, auditLogs, budgetPlans, categories, pendingTransactions, salaryPeriods } from "../db/schema";
 import { invalidateAllAnalytics, invalidateAllInsights, invalidatePeriodSummary, invalidateOnTransactionMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync, getFinancialRevision, getFinancialRevisionSync } from "./financial-revision";
 import { insertPreparedJournalEntrySync, prepareJournalEntry, type JournalLineInput, type PreparedJournalEntry } from "./ledger";
+import { insertSplitBillLoansSync, prepareSplitBillLoans, splitBillLoanInputSchema } from "./split-bill-loans";
 
 export const AGENT_BUDGET_ACTION_KIND = "budget_plan_upsert" as const;
 export const AGENT_TRANSACTION_ACTION_KIND = "transaction_journal_create" as const;
+export const AGENT_SPLIT_BILL_ACTION_KIND = "split_bill_loans_create" as const;
 const ACTION_TTL_MS = 15 * 60 * 1000;
 const MAX_PLAN_ITEMS = 100;
 const MAX_ASSUMPTIONS = 20;
@@ -31,6 +33,8 @@ type TransactionActionInput = {
   categoryAllocations: Array<{ categoryId: number; amount: number }>;
   lines: JournalLineInput[];
   tagIds: number[];
+  pendingTransactionId?: number;
+  pendingTransactionUpdatedAt?: number;
 };
 
 export class AgentActionError extends Error {
@@ -201,6 +205,14 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
     throw new AgentActionError(400, "input.tagIds must contain at most 100 positive integer IDs");
   }
   const tagIds = [...new Set(tagIdsValue as number[])].sort((a, b) => a - b);
+  const pendingTransactionId = value.pendingTransactionId == null ? undefined : value.pendingTransactionId;
+  if (pendingTransactionId != null && (typeof pendingTransactionId !== "number" || !Number.isSafeInteger(pendingTransactionId) || pendingTransactionId <= 0)) {
+    throw new AgentActionError(400, "input.pendingTransactionId must be a positive integer when supplied");
+  }
+  const pendingTransactionUpdatedAt = value.pendingTransactionUpdatedAt == null ? undefined : value.pendingTransactionUpdatedAt;
+  if (pendingTransactionUpdatedAt != null && (typeof pendingTransactionUpdatedAt !== "number" || !Number.isSafeInteger(pendingTransactionUpdatedAt) || pendingTransactionUpdatedAt < 0)) {
+    throw new AgentActionError(400, "input.pendingTransactionUpdatedAt must be a non-negative integer when supplied");
+  }
   return {
     intent: intent as TransactionIntent | null,
     dateMs,
@@ -215,12 +227,15 @@ function parseTransactionActionInput(value: unknown): TransactionActionInput {
     categoryAllocations: parsedAllocations,
     lines,
     tagIds,
+    ...(pendingTransactionId == null ? {} : { pendingTransactionId }),
+    ...(pendingTransactionUpdatedAt == null ? {} : { pendingTransactionUpdatedAt }),
   };
 }
 
 function normalizeInput(kind: string, input: unknown): string {
   if (kind === AGENT_BUDGET_ACTION_KIND) return JSON.stringify(parseBudgetActionInput(input));
   if (kind === AGENT_TRANSACTION_ACTION_KIND) return JSON.stringify(parseTransactionActionInput(input));
+  if (kind === AGENT_SPLIT_BILL_ACTION_KIND) return JSON.stringify(splitBillLoanInputSchema.parse(input));
   throw new AgentActionError(400, `Unsupported agent action kind: ${kind}`);
 }
 
@@ -399,6 +414,8 @@ export async function prepareAgentAction(args: {
   } else if (transactionInput) {
     const prepared = await prepareTransactionAction(transactionInput);
     details = await loadTransactionDetails(transactionInput, prepared);
+  } else if (kind === AGENT_SPLIT_BILL_ACTION_KIND) {
+    details = (await prepareSplitBillLoans(splitBillLoanInputSchema.parse(args.input))).details;
   }
   const revision = await getFinancialRevision();
   const key = idempotencyKey(args.ownerEmail, kind, normalizedInput, revision, args.idempotencyKey);
@@ -410,12 +427,7 @@ export async function prepareAgentAction(args: {
     if (existingAction.kind !== kind || existingAction.normalizedInput !== normalizedInput) {
       throw new AgentActionError(409, "That idempotency key is already bound to a different proposal");
     }
-    const existingDetails = existingAction.kind === AGENT_BUDGET_ACTION_KIND
-      ? await loadBudgetDetails(parseBudgetActionInput(parseJson(existingAction.normalizedInput, {})))
-      : await loadTransactionDetails(
-        parseTransactionActionInput(parseJson(existingAction.normalizedInput, {})),
-        await prepareTransactionAction(parseTransactionActionInput(parseJson(existingAction.normalizedInput, {}))),
-      );
+    const existingDetails = await loadStoredActionDetails(existingAction);
     return actionView(existingAction, existingApproval, existingDetails, null);
   }
 
@@ -468,8 +480,11 @@ type BudgetExecutionReceipt = {
 type TransactionExecutionReceipt = {
   actionId: number;
   approvalId: number;
-  kind: typeof AGENT_TRANSACTION_ACTION_KIND;
+  kind: typeof AGENT_TRANSACTION_ACTION_KIND | typeof AGENT_SPLIT_BILL_ACTION_KIND;
   transactionId: number;
+  loanIds?: number[];
+  tagIds?: number[];
+  splitBillId?: number;
   periodId: number | null;
   auditLogIds: number[];
   financialRevision: number;
@@ -489,6 +504,9 @@ function parseStoredTransactionInput(action: typeof agentPendingActions.$inferSe
 }
 
 async function loadStoredActionDetails(action: typeof agentPendingActions.$inferSelect): Promise<unknown> {
+  if (action.kind === AGENT_SPLIT_BILL_ACTION_KIND) {
+    return (await prepareSplitBillLoans(splitBillLoanInputSchema.parse(JSON.parse(action.normalizedInput)))).details;
+  }
   if (action.kind === AGENT_BUDGET_ACTION_KIND) {
     const input = parseStoredBudgetInput(action);
     const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, status: salaryPeriods.status, isActive: salaryPeriods.isActive })
@@ -574,8 +592,12 @@ async function executeTransactionApproval(args: {
   if (args.approvalHint.status === "executed" && args.approvalHint.executionReceipt) {
     return { receipt: JSON.parse(args.approvalHint.executionReceipt) as TransactionExecutionReceipt, replay: true };
   }
-  const transactionInput = parseStoredTransactionInput(args.actionHint);
-  const prepared = await prepareTransactionAction(transactionInput);
+  const splitInput = args.actionHint.kind === AGENT_SPLIT_BILL_ACTION_KIND ? splitBillLoanInputSchema.parse(JSON.parse(args.actionHint.normalizedInput)) : null;
+  const splitDraft = splitInput ? await prepareSplitBillLoans(splitInput) : null;
+  const transactionInput = splitInput ? null : parseStoredTransactionInput(args.actionHint);
+  const pendingTransactionId = transactionInput?.pendingTransactionId;
+  const pendingTransactionUpdatedAt = transactionInput?.pendingTransactionUpdatedAt;
+  const prepared = splitDraft?.prepared ?? await prepareTransactionAction(transactionInput as TransactionActionInput);
   const result = db.transaction((tx) => {
     const approval = tx.select().from(agentApprovals)
       .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail), eq(agentApprovals.tokenHash, args.suppliedHash))).limit(1).all()[0];
@@ -591,17 +613,40 @@ async function executeTransactionApproval(args: {
       return { error: new AgentActionError(410, "Approval expired; prepare a fresh proposal") } as const;
     }
     const action = tx.select().from(agentPendingActions).where(eq(agentPendingActions.id, approval.pendingActionId)).limit(1).all()[0];
-    if (!action || action.status !== "pending" || action.kind !== AGENT_TRANSACTION_ACTION_KIND) return { error: new AgentActionError(409, "Pending transaction action is no longer executable") } as const;
+    if (!action || action.status !== "pending" || (action.kind !== AGENT_TRANSACTION_ACTION_KIND && action.kind !== AGENT_SPLIT_BILL_ACTION_KIND)) return { error: new AgentActionError(409, "Pending transaction action is no longer executable") } as const;
     const currentRevision = getFinancialRevisionSync(tx);
     if (currentRevision !== action.baseFinancialRevision) {
       tx.update(agentApprovals).set({ status: "superseded" }).where(eq(agentApprovals.id, approval.id)).run();
       tx.update(agentPendingActions).set({ status: "superseded", updatedAt: new Date(nowMs) }).where(eq(agentPendingActions.id, action.id)).run();
       return { error: new AgentActionError(409, "Financial data changed since this proposal; review a fresh proposal") } as const;
     }
-    const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+    if (pendingTransactionId != null) {
+      const pending = tx.select({ status: pendingTransactions.status, updatedAt: pendingTransactions.updatedAt }).from(pendingTransactions)
+        .where(eq(pendingTransactions.id, pendingTransactionId)).limit(1).all()[0];
+      if (!pending) return { error: new AgentActionError(404, "Pending transaction not found") } as const;
+      if (pending.status !== "pending") return { error: new AgentActionError(409, `Pending transaction is already ${pending.status}`) } as const;
+      if (pendingTransactionUpdatedAt != null && timestampMs(pending.updatedAt) !== pendingTransactionUpdatedAt) {
+        return { error: new AgentActionError(409, "Pending transaction changed since this proposal; review a fresh proposal") } as const;
+      }
+    }
+    const splitResult = splitInput && splitDraft ? insertSplitBillLoansSync(tx, splitInput, splitDraft, insertPreparedJournalEntrySync) : null;
+    const transactionId = splitResult?.transactionId ?? insertPreparedJournalEntrySync(tx, prepared);
     const audit = tx.select({ id: auditLogs.id }).from(auditLogs)
       .where(and(eq(auditLogs.entityType, "transaction"), eq(auditLogs.entityId, transactionId), eq(auditLogs.action, "create")))
       .orderBy(desc(auditLogs.id)).limit(1).all()[0];
+    let pendingAudit: typeof auditLogs.$inferSelect | undefined;
+    if (pendingTransactionId != null) {
+      const updatedPending = tx.update(pendingTransactions).set({ status: "approved", updatedAt: new Date(nowMs) })
+        .where(and(eq(pendingTransactions.id, pendingTransactionId), eq(pendingTransactions.status, "pending")))
+        .returning().all()[0];
+      if (!updatedPending) throw new AgentActionError(409, "Pending transaction changed before it could be approved");
+      pendingAudit = tx.insert(auditLogs).values({
+        entityType: "pending_transaction",
+        entityId: pendingTransactionId,
+        action: "agent_approve",
+        afterSnapshot: Buffer.from(JSON.stringify({ status: "approved", transactionId })),
+      }).returning().all()[0];
+    }
     const financialRevision = getFinancialRevisionSync(tx);
     // A multi-transaction request creates independently approved actions.
     // Posting one advances the ledger revision, but must not stale untouched
@@ -618,10 +663,11 @@ async function executeTransactionApproval(args: {
     const receipt: TransactionExecutionReceipt = {
       actionId: action.id,
       approvalId: approval.id,
-      kind: AGENT_TRANSACTION_ACTION_KIND,
+      kind: splitResult ? AGENT_SPLIT_BILL_ACTION_KIND : AGENT_TRANSACTION_ACTION_KIND,
       transactionId,
+      ...(splitResult ? { loanIds: splitResult.loanIds, tagIds: splitResult.tagIds, splitBillId: splitResult.splitBillId } : {}),
       periodId: prepared.periodId,
-      auditLogIds: audit ? [audit.id] : [],
+      auditLogIds: [audit?.id, pendingAudit?.id].filter((id): id is number => id != null),
       financialRevision,
       executedAt: nowMs,
     };
@@ -649,7 +695,7 @@ export async function executeAgentApproval(args: { ownerEmail: string; approvalI
     .where(and(eq(agentApprovals.id, args.approvalId), eq(agentApprovals.ownerEmail, args.ownerEmail), eq(agentApprovals.tokenHash, suppliedHash))).limit(1);
   if (approvalHint[0]) {
     const actionHint = await db.select().from(agentPendingActions).where(eq(agentPendingActions.id, approvalHint[0].pendingActionId)).limit(1);
-    if (actionHint[0]?.kind === AGENT_TRANSACTION_ACTION_KIND) {
+    if (actionHint[0]?.kind === AGENT_TRANSACTION_ACTION_KIND || actionHint[0]?.kind === AGENT_SPLIT_BILL_ACTION_KIND) {
       const result = await executeTransactionApproval({ ownerEmail: args.ownerEmail, approvalId: args.approvalId, suppliedHash, approvalHint: approvalHint[0], actionHint: actionHint[0] });
       return { status: "executed" as const, ...result };
     }

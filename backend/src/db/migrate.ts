@@ -480,6 +480,7 @@ function assertRequiredSchema(): void {
     transaction_category_allocation: ["transaction_id", "category_id", "amount"],
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],
+    gmail_connection: ["owner_email", "google_email", "refresh_token", "last_synced_at", "created_at", "updated_at"],
     splitbill_session: ["total_cents", "status"],
     reconciliation_session: ["as_of_date", "status", "lifecycle_status", "voided_at", "void_reason", "kind", "note"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],

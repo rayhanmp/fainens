@@ -41,6 +41,7 @@ import moneyAnomalyRoutes from "./routes/money-anomalies";
 import reimbursementRoutes from "./routes/reimbursements";
 import profileRoutes from "./routes/profile";
 import jobsRoutes from "./routes/jobs";
+import gmailRoutes from "./routes/gmail";
 import { closeQueues, getJobQueueHealth } from "./jobs/queue";
 
 export type AppRuntime = "server" | "contract";
@@ -121,6 +122,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(agentRoutes);
   app.register(moneyAnomalyRoutes);
   app.register(jobsRoutes);
+  app.register(gmailRoutes);
   // Queue instances are module-level so feature code shares one producer
   // connection. Close them with the app as well, including contract-only
   // OpenAPI generation, so one-shot tooling never leaves Redis handles alive.

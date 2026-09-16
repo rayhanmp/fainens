@@ -10,6 +10,7 @@ import { db } from "./db/client";
 import { env } from "./lib/env";
 import { enqueueMaintenance, enqueueRecurring, maintenanceQueue } from "./jobs/queue";
 import { configureJobSchedulers } from "./jobs/schedulers";
+import { pollConnectedGmail } from "./services/gmail-sync";
 
 async function start() {
   const app = await buildApp();
@@ -64,6 +65,16 @@ async function start() {
         if (result.processed || result.failed) app.log.info({ backgroundTasks: result }, "agent background tasks processed");
       } catch (err) { app.log.warn({ err }, "agent background tasks failed"); }
     };
+    let gmailPollInFlight = false;
+    const runGmailPoll = async () => {
+      if (gmailPollInFlight) return;
+      gmailPollInFlight = true;
+      try {
+        const result = await pollConnectedGmail();
+        if (result.imported || result.skipped) app.log.info({ gmail: result }, "Gmail polling completed");
+      } catch (err) { app.log.warn({ err }, "Gmail polling failed"); }
+      finally { gmailPollInFlight = false; }
+    };
     if (env.JOB_RUNNER_MODE === "queue") {
       app.log.info("BullMQ background mode enabled; scheduler and worker own background execution");
       try {
@@ -89,6 +100,8 @@ async function start() {
       intervals.push(setInterval(() => void runBackgroundTasks(), 30_000));
       intervals.push(setInterval(() => void runRenewals(), 60 * 60 * 1000));
       intervals.push(setInterval(() => void runSalaryPosting(), 60 * 60 * 1000));
+      intervals.push(setInterval(() => void runGmailPoll(), env.GMAIL_POLL_INTERVAL_MINUTES * 60_000));
+      void runGmailPoll();
     }
     await app.listen({ port: env.PORT, host: env.HOST });
   } catch (err) {

@@ -41,6 +41,22 @@ const pendingApproveResponseSchema = z.object({ success: z.literal(true), transa
 const pendingSuccessResponseSchema = z.object({ success: z.literal(true) }).passthrough();
 const pendingRetryResponseSchema = z.object({ success: z.boolean(), parsed: z.unknown().optional(), error: z.string().optional() }).passthrough();
 
+function parseStoredPendingData(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {
+      type: "expense",
+      amount: 0,
+      description: "Needs review",
+      category: "Others",
+      date: null,
+      confidence: 0,
+      notes: "Pending data could not be read. Edit this item before approving it.",
+    };
+  }
+}
+
 export default async function pendingRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
   // List all pending transactions
@@ -56,7 +72,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     return pending.map((p) => ({
       id: p.id,
       rawMessage: p.rawMessage,
-      parsedData: JSON.parse(p.parsedData),
+      parsedData: parseStoredPendingData(p.parsedData),
       status: p.status,
       parseAttempts: p.parseAttempts,
       lastError: p.lastError,
@@ -176,7 +192,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: "Pending transaction already processed" });
     }
 
-    const parsed = JSON.parse(pending.parsedData) as {
+    const parsed = parseStoredPendingData(pending.parsedData) as {
       type: string;
       amount: number;
       description: string;
@@ -185,7 +201,15 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       place?: string;
       notes?: string;
       toAccount?: string;
+      fromAccount?: string;
+      fromAccountId?: number | null;
+      reference?: string | null;
     };
+
+    const parsedValidation = pendingParsedTransactionSchema.safeParse(parsed);
+    if (!parsedValidation.success) {
+      return reply.code(400).send({ error: "Pending transaction data is incomplete; edit it before approving" });
+    }
 
     // Find category by name
     const [category] = await db
@@ -206,12 +230,19 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       });
     }
 
-    // Find default active wallet account
-    const [account] = await db
+    // Prefer the account resolved by an importer (or by the user's edit),
+    // then fall back to a name match and finally the first active wallet for
+    // backwards compatibility with WhatsApp/web pending transactions.
+    const walletAccounts = await db
       .select()
       .from(accounts)
       .where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true)))
-      .limit(1);
+      ;
+    const requestedAccountId = Number(parsed.fromAccountId);
+    const requestedName = parsed.fromAccount?.trim().toLowerCase();
+    const account = walletAccounts.find((candidate) => Number.isSafeInteger(requestedAccountId) && candidate.id === requestedAccountId)
+      ?? (requestedName ? walletAccounts.find((candidate) => candidate.name.toLowerCase().includes(requestedName) || requestedName.includes(candidate.name.toLowerCase())) : undefined)
+      ?? walletAccounts[0];
 
     if (!account) {
       return reply.code(400).send({ error: "No wallet account found" });
@@ -247,6 +278,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
         .values({
           date: new Date(txDate),
           description: parsed.description.trim(),
+          reference: parsed.reference || null,
           notes: parsed.notes || null,
           place: parsed.place || null,
           txType: `simple_${kind}`,
@@ -345,7 +377,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     return {
       id: pending.id,
       rawMessage: pending.rawMessage,
-      parsedData: JSON.parse(pending.parsedData),
+      parsedData: parseStoredPendingData(pending.parsedData),
       status: pending.status,
       parseAttempts: pending.parseAttempts,
       lastError: pending.lastError,

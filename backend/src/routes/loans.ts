@@ -11,6 +11,8 @@ import {
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { insertDomainReversalSync, prepareDomainReversal } from "../services/domain-reversal";
+import { loadLoanSourceLinks } from "../services/split-bill-loans";
+import { getLoanOverdueStatus } from "../services/loan-overdue";
 
 // System account keys for loans
 const SYSTEM_KEYS = {
@@ -146,23 +148,17 @@ export default async function (fastify: FastifyInstance) {
       .orderBy(desc(loans.createdAt));
 
     // Check for overdue loans
+    const sourceLinks = await loadLoanSourceLinks(allLoans.map(({ loan }) => loan));
     const now = Date.now();
     const loansWithOverdue = allLoans.map(({ loan, contact }) => {
-      const dueDateMs = loan.dueDate ? loan.dueDate.getTime() : null;
-      const isOverdue = loan.status === 'active' && 
-                        dueDateMs && 
-                        dueDateMs < now;
-      
       return {
         ...loan,
+        ...sourceLinks.get(loan.sourceTransactionId ?? loan.lendingTransactionId ?? -1),
         contact: {
           id: contact.id,
           name: contact.name,
         },
-        isOverdue,
-        daysOverdue: isOverdue && dueDateMs 
-          ? Math.floor((now - dueDateMs) / (1000 * 60 * 60 * 24))
-          : 0,
+        ...getLoanOverdueStatus(loan.status, loan.dueDate, now),
       };
     });
 
@@ -221,6 +217,7 @@ export default async function (fastify: FastifyInstance) {
     }
 
     const { loan, contact } = loanResult;
+    const sourceLinks = await loadLoanSourceLinks([loan]);
 
     // Get payment history
     const payments = await db
@@ -231,22 +228,16 @@ export default async function (fastify: FastifyInstance) {
 
     // Calculate if overdue
     const now = Date.now();
-    const dueDateMs = loan.dueDate ? loan.dueDate.getTime() : null;
-    const isOverdue = loan.status === 'active' && 
-                      dueDateMs && 
-                      dueDateMs < now;
 
     return {
       ...loan,
+      ...sourceLinks.get(loan.sourceTransactionId ?? loan.lendingTransactionId ?? -1),
       contact: {
         id: contact.id,
         name: contact.name,
       },
       payments,
-      isOverdue,
-      daysOverdue: isOverdue && dueDateMs 
-        ? Math.floor((now - dueDateMs) / (1000 * 60 * 60 * 24))
-        : 0,
+      ...getLoanOverdueStatus(loan.status, loan.dueDate, now),
     };
   });
 
@@ -430,18 +421,22 @@ export default async function (fastify: FastifyInstance) {
         getLoansPayableAccount(db),
       ]);
       const loanAccountId = loanSnapshot.direction === "lent" ? loansReceivable.id : loansPayable.id;
+      const sourceLinks = await loadLoanSourceLinks([loanSnapshot]);
+      const sourceTags = sourceLinks.get(loanSnapshot.sourceTransactionId ?? loanSnapshot.lendingTransactionId ?? -1)?.tags ?? [];
+      const isSplitBill = loanSnapshot.sourceType === "split_bill";
       const journalInput = {
         date: body.paymentDate || Date.now(),
         description: `Payment on loan - ${contact?.name ?? "contact"}`,
         txType: "loan_payment",
+        tagIds: sourceTags.map((tag) => tag.id),
         lines: loanSnapshot.direction === "lent"
           ? [
-              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "investing" as const : undefined },
+              { accountId: body.walletAccountId, debit: body.amountCents, credit: 0, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? (isSplitBill ? "operating" as const : "investing" as const) : undefined },
               { accountId: loanAccountId, debit: 0, credit: body.amountCents },
             ]
           : [
               { accountId: loanAccountId, debit: body.amountCents, credit: 0 },
-              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "financing" as const : undefined },
+              { accountId: body.walletAccountId, debit: 0, credit: body.amountCents, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? (isSplitBill ? "operating" as const : "financing" as const) : undefined },
             ],
       };
       const prepared = await prepareJournalEntry(journalInput, db);
@@ -529,6 +524,8 @@ export default async function (fastify: FastifyInstance) {
         return reply.code(409).send({ error: "A posted loan payment is required for reversal" });
       }
       const reversal = await prepareDomainReversal(payment.transactionId, reason, db);
+      const paymentLinks = await loadLoanSourceLinks([{ sourceTransactionId: payment.transactionId, lendingTransactionId: null }]);
+      reversal.prepared.tagIds = paymentLinks.get(payment.transactionId)?.tags.map((tag) => tag.id) ?? [];
       const result = db.transaction((tx) => {
         const currentPayment = tx.select().from(loanPayments).where(eq(loanPayments.id, paymentId)).limit(1).all()[0];
         if (!currentPayment || currentPayment.status !== "posted" || currentPayment.transactionId !== payment.transactionId) {
@@ -690,6 +687,7 @@ export default async function (fastify: FastifyInstance) {
       const changingToWriteoff = body.status === "written_off" && loan.remainingCents > 0;
       let prepared: Awaited<ReturnType<typeof prepareJournalEntry>> | null = null;
       if (changingToWriteoff) {
+        const sourceLinks = await loadLoanSourceLinks([loan]);
         const [contact] = await db.select({ name: contacts.name }).from(contacts)
           .where(eq(contacts.id, loan.contactId)).limit(1);
         const loansReceivable = await getLoansReceivableAccount(db);
@@ -708,6 +706,7 @@ export default async function (fastify: FastifyInstance) {
             ? `Write off bad debt - ${contact?.name ?? "contact"}`
             : `Forgive loan payable - ${contact?.name ?? "contact"}`,
           txType: "loan_writeoff",
+          tagIds: sourceLinks.get(loan.sourceTransactionId ?? loan.lendingTransactionId ?? -1)?.tags.map((tag) => tag.id) ?? [],
           lines: journalLines,
         }, db);
       }

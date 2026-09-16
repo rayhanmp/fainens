@@ -3,9 +3,20 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("../db/client", () => ({ db: {} }));
 
 let exportReportToCSV: typeof import("./reports").exportReportToCSV;
+let getReportStatus: typeof import("./reports").getReportStatus;
 
 beforeAll(async () => {
-  ({ exportReportToCSV } = await import("./reports"));
+  ({ exportReportToCSV, getReportStatus } = await import("./reports"));
+});
+
+describe("getReportStatus", () => {
+  it("marks a report generated before period end as temporary", () => {
+    expect(getReportStatus(2_000, 1_999)).toEqual({ generatedAt: 1_999, isTemporary: true });
+  });
+
+  it("does not mark a report generated at period end as temporary", () => {
+    expect(getReportStatus(2_000, 2_000)).toEqual({ generatedAt: 2_000, isTemporary: false });
+  });
 });
 
 describe("exportReportToCSV", () => {

@@ -32,6 +32,17 @@ export function evidenceStateSize(state: Map<string, ModelEvidence>): number {
   return JSON.stringify([...state.values()]).length;
 }
 
+/** Keep the newest evidence entries within the model context budget. The
+ * backend owns eviction so a model does not have to spend a tool call managing
+ * memory before it can continue a dependent workflow. */
+export function trimEvidenceState(state: Map<string, ModelEvidence>, maxChars = AGENT_EVIDENCE_HARD_CHARS - 1): void {
+  while (state.size > 1 && evidenceStateSize(state) > maxChars) {
+    const oldest = state.keys().next().value as string | undefined;
+    if (oldest == null) break;
+    state.delete(oldest);
+  }
+}
+
 export function evidenceStateBlock(state: Map<string, ModelEvidence>, insights: string[] = []): string {
   if (state.size === 0 && insights.length === 0) return "";
   const size = evidenceStateSize(state);
@@ -52,7 +63,7 @@ export function evidenceStateBlock(state: Map<string, ModelEvidence>, insights: 
 
 function isInjectedEvidenceState(message: AgentChatMessage): boolean {
   if (message.role !== "system" || typeof message.content !== "string") return false;
-  return message.content.startsWith("CURRENT COMPACT EVIDENCE STATE (")
+  return message.content.startsWith("CURRENT COMPACT EVIDENCE STATE (derived tool evidence;")
     || message.content.startsWith("ACTIVE RETAINED INSIGHTS (");
 }
 
@@ -60,10 +71,18 @@ export function compactToolTranscript(
   messages: AgentChatMessage[],
   state: Map<string, ModelEvidence>,
   insights: string[] = [],
+  maxTranscriptChars = AGENT_EVIDENCE_WARNING_CHARS,
 ): AgentChatMessage[] {
   const lastToolAssistant = messages.reduce((index, message, candidateIndex) =>
     message.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length > 0 ? candidateIndex : index, -1);
   if (lastToolAssistant < 0) return messages;
+  const firstToolAssistant = messages.findIndex((message) => message.role === "assistant" && (message.tool_calls?.length ?? 0) > 0);
+  const contextUpdated = messages[lastToolAssistant].tool_calls?.some((call) => call.function.name === "update_context");
+  // Short workflows stay append-only, allowing the previous request to be a
+  // complete cache prefix. Compact only when tool history needs a bound, or
+  // immediately when the model explicitly releases/retains evidence.
+  if (!contextUpdated && !messages.some(isInjectedEvidenceState)
+    && JSON.stringify(messages.slice(firstToolAssistant)).length < maxTranscriptChars) return messages;
   const prefix = messages.slice(0, lastToolAssistant).filter((message) =>
     message.role !== "tool"
     && !(message.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length > 0)
@@ -71,12 +90,9 @@ export function compactToolTranscript(
     // another system message containing the same evidence.
     && !isInjectedEvidenceState(message));
   const evidence = evidenceStateBlock(state, insights);
-  const firstNonSystem = prefix.findIndex((message) => message.role !== "system");
-  const systemBoundary = firstNonSystem < 0 ? prefix.length : firstNonSystem;
   return [
-    ...prefix.slice(0, systemBoundary),
+    ...prefix,
     ...(evidence ? [{ role: "system" as const, content: evidence }] : []),
-    ...prefix.slice(systemBoundary),
     ...messages.slice(lastToolAssistant),
   ];
 }

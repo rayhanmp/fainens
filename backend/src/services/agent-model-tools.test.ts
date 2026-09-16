@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { agentModelTools, agentModelToolMap, agentReadToolNames, agentToolCatalog, ModelToolInputValidationError, modelToolsForNames, projectModelToolResult, validateModelToolInput } from "./agent-model-tools";
-import { getAgentProviderSchemaMetrics, normalizeLeasedToolInput, normalizeOptimisticReadInput, parseOptimisticReadBatchInvocation, requestedToolCost, retainEvidenceBatch } from "../routes/agent";
+import { buildConversationHistory, getAgentProviderSchemaMetrics, modelToolsForLease, normalizeLeasedToolInput, normalizeOptimisticReadInput, parseOptimisticReadBatchInvocation, requestedToolCost, retainEvidenceBatch } from "../routes/agent";
 import type { ModelEvidence } from "./agent-evidence";
 
 describe("model-driven tool registry", () => {
@@ -41,11 +41,90 @@ describe("model-driven tool registry", () => {
     const accountBalances = agentModelToolMap.get("get_account_balances");
     expect(accountBalances).toBeDefined();
     validateModelToolInput(accountBalances!, { selection: { mode: "total" } });
+    validateModelToolInput(agentModelToolMap.get("find_similar_transactions")!, { amountCents: 50_000, selection: { mode: "top", count: 3 } });
+  });
+
+  it("canonicalizes generated-form placeholders and legacy scope fields before validation", () => {
+    const transactions = normalizeOptimisticReadInput("find_transactions", {
+      periodId: 2,
+      pageSize: 20,
+      filters: {
+        accountId: 0,
+        categoryId: 0,
+        accountName: "",
+        categoryName: "",
+        transactionType: "",
+        direction: "",
+        text: "",
+        minAmount: 150_000,
+        maxAmount: 0,
+      },
+    });
+    expect(transactions.filters).toEqual({ minAmount: 150_000 });
+    validateModelToolInput(agentModelToolMap.get("find_transactions")!, transactions);
+
+    const period = normalizeOptimisticReadInput("get_period_summary", {
+      startMs: Date.parse("2026-09-01T00:00:00+07:00"),
+      endMs: Date.parse("2026-09-30T23:59:59+07:00"),
+      periodName: "September 2026",
+    });
+    expect(period).not.toHaveProperty("startMs");
+    expect(period).not.toHaveProperty("endMs");
+    expect(period).not.toHaveProperty("periodName");
+    expect(period.startDate).toBeTypeOf("string");
+    validateModelToolInput(agentModelToolMap.get("get_period_summary")!, period);
+
+    const categories = normalizeOptimisticReadInput("get_categories", { selection: { mode: "all" } });
+    expect(categories).toEqual({});
+    validateModelToolInput(agentModelToolMap.get("get_categories")!, categories);
+    const topCategories = normalizeOptimisticReadInput("get_categories", { selection: { mode: "top", count: 5 } });
+    expect(topCategories).toEqual({ limit: 5 });
+    validateModelToolInput(agentModelToolMap.get("get_categories")!, topCategories);
+  });
+
+  it("enforces branch, type, and property constraints in canonical schemas", () => {
+    const account = agentModelToolMap.get("get_account_balance")!;
+    expect(() => validateModelToolInput(account, {})).toThrow(ModelToolInputValidationError);
+    expect(() => validateModelToolInput(account, { accountId: 0 })).toThrow(ModelToolInputValidationError);
+    expect(() => validateModelToolInput(account, { accountId: Number.MAX_SAFE_INTEGER + 1 })).toThrow(ModelToolInputValidationError);
+    expect(() => validateModelToolInput(account, { accountId: 1, unexpected: true })).toThrow(ModelToolInputValidationError);
+
+    for (const name of ["show_projection", "show_scenario_comparison", "show_allocation", "show_goal_tracker"]) {
+      const schema = agentModelToolMap.get(name)!.inputSchema;
+      expect(schema.properties).toHaveProperty("title");
+    }
+    expect(agentModelToolMap.get("show_cash_flow")!.inputSchema.properties).not.toHaveProperty("net");
   });
 
   it("does not admit actions through the optimistic read gateway allowlist", () => {
     expect(agentReadToolNames.has("prepare_expense")).toBe(false);
     expect(agentReadToolNames.has("show_metric")).toBe(false);
+    expect(agentReadToolNames.has("prepare_split_bill_loans")).toBe(false);
+  });
+
+  it("makes contact-name discovery available to read gateways and preserves candidate identities", () => {
+    const tool = agentModelToolMap.get("find_contacts")!;
+    expect(agentReadToolNames.has("find_contacts")).toBe(true);
+    validateModelToolInput(tool, { query: "Hilma", selection: { mode: "all" } });
+    validateModelToolInput(tool, { query: "Hil", selection: { mode: "page", limit: 1, offset: 0 } });
+    expect(() => validateModelToolInput(tool, { query: "Hilma" })).toThrow();
+    const result = projectModelToolResult(tool, { data: { contacts: [{ id: 42, name: "Hilma", fullName: "Hilma Test", kind: "person", isActive: true, matchType: "exact", matchedField: "name", phone: "private" }], availableCount: 1, exactMatchCount: 1, ambiguous: false, complete: true } }, {}, "contact", 1);
+    expect(result.data).toMatchObject({ contacts: [{ id: 42, name: "Hilma", matchType: "exact" }], ambiguous: false });
+    expect(JSON.stringify(result)).not.toContain("private");
+    validateModelToolInput(agentModelToolMap.get("find_loans")!, { contactId: 42, status: "all" });
+    expect(() => validateModelToolInput(agentModelToolMap.get("find_loans")!, { contactId: -1, status: "all" })).toThrow();
+  });
+
+  it("offers linked split-bill proposals and projects review details without tokens", () => {
+    const tool = agentModelToolMap.get("prepare_split_bill_loans")!;
+    expect(tool.kind).toBe("action");
+    const input = { title: "Dinner", date: "2026-09-12T12:00:00+07:00", walletAccountId: 1, personalShareCents: 10000, receiptTotalCents: 20000, receivables: [{ name: "Hilma", amountCents: 10000 }] };
+    validateModelToolInput(tool, input);
+    expect(() => validateModelToolInput(tool, { ...input, receivables: [{ name: "Hilma", amountCents: -1 }] })).toThrow();
+    const evidence = projectModelToolResult(tool, { data: { kind: "split_bill_loans_create", approvalId: 1, status: "pending", approvalToken: "secret-token", details: { title: "Dinner", receiptTotalCents: 20000, totalReceivableCents: 10000, receivables: input.receivables, tagNames: ["Split bill"] } } }, input, "split-action", 1);
+    expect(evidence.data).toMatchObject({ kind: "split_bill_loans_create", details: { totalReceivableCents: 10000, tagNames: ["Split bill"] } });
+    expect(JSON.stringify(evidence)).not.toContain("secret-token");
+    expect(normalizeLeasedToolInput("prepare_split_bill_loans", { date: "2026-09-12", dueDate: "2026-09-20" })).toEqual({ date: "2026-09-12T12:00:00+07:00", dueDate: "2026-09-20T12:00:00+07:00" });
   });
 
   it("validates read batches, rejects duplicate calls, actions, and more than four children", () => {
@@ -233,7 +312,38 @@ describe("model-driven tool registry", () => {
     expect(normalizeLeasedToolInput("prepare_transfer", { date: "2026-08-30T09:15", amountCents: 1 }))
       .toMatchObject({ date: "2026-08-30T09:15+07:00" });
     expect(normalizeLeasedToolInput("prepare_income", { date: "2026-08-30", dateMs: 1_787_999_400_000 }))
-      .toMatchObject({ date: new Date(1_787_999_400_000).toISOString(), dateMs: 1_787_999_400_000 });
+      .toEqual({ date: new Date(1_787_999_400_000).toISOString() });
+    expect(normalizeLeasedToolInput("prepare_expense", { date: "2026-08-30" }, "America/New_York"))
+      .toMatchObject({ date: "2026-08-30T12:00:00-04:00" });
+  });
+
+  it("rehydrates same-revision read evidence for a follow-up turn", () => {
+    const responseJson = JSON.stringify({
+      revision: 7,
+      toolCalls: [{ id: "budget-call", name: "get_budget_breakdown", input: { periodId: 18, selection: { mode: "all" } } }],
+      toolResults: [{ id: "budget-call", name: "get_budget_breakdown", result: {
+        tool: "get_budget_facts", revision: 7, readOnly: true, data: {
+          period: { periodId: 18, name: "September 2026", startMs: 1, endMs: 2 },
+          budgets: [{ categoryId: 4, category: "Utilities", plannedCents: 150_000, spentCents: 160_000 }],
+          selectionApplied: { mode: "all" }, complete: true,
+        },
+      } }],
+    });
+    const history = buildConversationHistory([{ role: "assistant", content: "Your budget is ready.", responseJson }], null, 7);
+    expect(history[0]?.role).toBe("system");
+    expect(history[0]?.content).toContain("get_budget_breakdown");
+    expect(history[0]?.content).toContain("Utilities");
+    expect(history[0]?.content).not.toContain("evidenceId");
+    const stale = buildConversationHistory([{ role: "assistant", content: "Your budget is ready.", responseJson }], null, 8);
+    expect(stale).toHaveLength(1);
+    expect(stale[0]?.role).toBe("assistant");
+  });
+
+  it("serializes the same leased tool set identically regardless of discovery order", () => {
+    const first = modelToolsForLease(["show_budget_progress", "prepare_expense", "show_budget_progress"]);
+    const second = modelToolsForLease(["prepare_expense", "show_budget_progress"]);
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(first.slice(-2).map((tool) => tool.function.name)).toEqual(["prepare_expense", "show_budget_progress"]);
   });
 
   it("keeps presentation type discriminators out of the leased split schema", async () => {

@@ -1,9 +1,10 @@
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, inArray, or } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { splitbillSessions, contacts, loans, loanPayments, accounts, auditLogs, transactions } from "../db/schema";
+import { splitbillSessions, contacts, loans, loanPayments, accounts, auditLogs, transactions, transactionLines } from "../db/schema";
+import { ensureSplitBillTagsSync, linkSplitBillReferenceTagSync, splitBillTagNames } from "../services/split-bill-loans";
 import { uploadFile, generatePresignedDownloadUrl } from "../services/r2";
 import { callOpenRouterVision } from "../services/openrouter";
 import { getAgentProviderConfig } from "../services/agent-provider-config";
@@ -538,7 +539,9 @@ export default async function (fastify: FastifyInstance) {
         }, db);
 
         const result = db.transaction((tx) => {
-          const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+          const tagIds = ensureSplitBillTagsSync(tx, splitBillTagNames(merchantName || "Split bill", new Date(prepared.dateMs).toISOString()));
+          const transactionId = insertPreparedJournalEntrySync(tx, { ...prepared, tagIds: [...new Set([...prepared.tagIds, ...tagIds])] });
+          tagIds.push(linkSplitBillReferenceTagSync(tx, transactionId));
           const loansToCreate = isBorrower
             ? [{
                 contactId: payerContactId as number,
@@ -575,6 +578,17 @@ export default async function (fastify: FastifyInstance) {
               afterSnapshot: Buffer.from(JSON.stringify({ loan, transactionId })),
             }).run();
           }
+          const session = tx.insert(splitbillSessions).values({
+            merchantName: merchantName || "Split bill",
+            receiptDate: new Date(prepared.dateMs),
+            totalCents: targetTotal,
+            peopleJson: JSON.stringify(splitResults.map((row) => ({ id: row.personId, name: row.personName }))),
+            splitResultJson: JSON.stringify(normalizedRows),
+            loanIds: JSON.stringify(createdLoans.map((loan) => loan.id)),
+            status: "completed",
+          }).returning().all()[0];
+          if (!session) throw new Error("Failed to create split-bill history");
+          tx.insert(auditLogs).values({ entityType: "splitbill_session", entityId: session.id, action: "create", afterSnapshot: Buffer.from(JSON.stringify({ session, transactionId, tagIds })) }).run();
           return { transactionId, createdLoans };
         });
         await invalidateOnTransactionMutation({
@@ -644,6 +658,59 @@ export default async function (fastify: FastifyInstance) {
     } catch (error) {
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to reverse split bill" });
     }
+  });
+
+  fastify.get<{ Params: { transactionId: string } }>("/api/splitbill/transactions/:transactionId", {
+    schema: {
+      operationId: "getSplitBillTransactionDetail", tags: ["splitbill"], params: splitbillTransactionParamsSchema,
+      response: { 200: z.object({
+        sourceTransactionId: z.number().int(), personalShareCents: z.number().int(), totalPaidCents: z.number().int(), isBorrower: z.boolean(),
+        payment: z.object({ id: z.number().int(), loanId: z.number().int(), contactName: z.string(), amountCents: z.number().int(), status: z.string(), direction: z.string() }).nullable(),
+        session: splitbillSessionSchema.nullable(),
+        loans: z.array(splitbillLoanResponseSchema.extend({ contactName: z.string() })),
+      }).nullable(), 404: splitbillErrorSchema },
+    },
+  }, async (request, reply) => {
+    const transactionId = Number(request.params.transactionId);
+    const [source] = await db.select({ txType: transactions.txType }).from(transactions)
+      .where(eq(transactions.id, transactionId)).limit(1);
+    if (!source) {
+      return reply.code(404).send({ error: "Split-bill transaction not found" });
+    }
+    const [paymentLink] = source.txType === 'loan_payment' ? await db.select({ payment: loanPayments, loan: loans, contactName: contacts.name })
+      .from(loanPayments).innerJoin(loans, eq(loanPayments.loanId, loans.id)).innerJoin(contacts, eq(loans.contactId, contacts.id))
+      .where(eq(loanPayments.transactionId, transactionId)).limit(1) : [];
+    // Ordinary loan payments have no split-bill panel. Resolve split-bill
+    // repayments through the payment -> loan -> source transaction relation.
+    if (source.txType === 'loan_payment' && paymentLink?.loan.sourceType !== 'split_bill') return null;
+    const sourceTransactionId = paymentLink
+      ? paymentLink.loan.sourceTransactionId ?? paymentLink.loan.lendingTransactionId : transactionId;
+    if (sourceTransactionId == null) return null;
+    const [bill] = await db.select({ txType: transactions.txType }).from(transactions)
+      .where(eq(transactions.id, sourceTransactionId)).limit(1);
+    if (!bill || !['split_bill_lent', 'split_bill_borrowed'].includes(bill.txType)) return null;
+    const linked = await db.select({ loan: loans, contactName: contacts.name }).from(loans)
+      .innerJoin(contacts, eq(loans.contactId, contacts.id))
+      .where(or(eq(loans.sourceTransactionId, sourceTransactionId), eq(loans.lendingTransactionId, sourceTransactionId))).orderBy(loans.id);
+    const [amounts] = await db.select({
+      personalShareCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
+      totalPaidCents: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+    }).from(transactionLines).innerJoin(accounts, eq(transactionLines.accountId, accounts.id))
+      .where(eq(transactionLines.transactionId, sourceTransactionId));
+    const loanIds = linked.map(({ loan }) => loan.id);
+    // Sessions predate the source-transaction link. Use their saved loan IDs,
+    // never merchant/date matching or the truncated history endpoint.
+    const [session] = loanIds.length ? await db.select().from(splitbillSessions).where(sql`exists (
+      select 1 from json_each(case when json_valid(${splitbillSessions.loanIds}) then ${splitbillSessions.loanIds} else '[]' end) as linked_id
+      where ${inArray(sql`linked_id.value`, loanIds)}
+    )`).orderBy(desc(splitbillSessions.id)).limit(1) : [];
+    return {
+      sourceTransactionId, personalShareCents: Number(amounts?.personalShareCents ?? 0), totalPaidCents: Number(amounts?.totalPaidCents ?? 0),
+      isBorrower: bill.txType === 'split_bill_borrowed',
+      payment: paymentLink ? { id: paymentLink.payment.id, loanId: paymentLink.loan.id, contactName: paymentLink.contactName,
+        amountCents: paymentLink.payment.amountCents, status: paymentLink.payment.status, direction: paymentLink.loan.direction } : null,
+      session: session ?? null, loans: linked.map(({ loan, contactName }) => ({ ...loan, contactName })),
+    };
   });
 
   fastify.get("/api/splitbill/history", {

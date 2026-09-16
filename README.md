@@ -175,6 +175,7 @@ The complete template is in [.env.example](.env.example). The most important pro
 | `ALLOWED_EMAIL` | The email allowed to sign in |
 | `SESSION_SECRET` | Secret used to protect sessions; keep it private and stable |
 | `REDIS_URL` | Redis connection used by the API and worker |
+| `GMAIL_POLL_INTERVAL_MINUTES` | Automatic BNI Gmail polling interval; defaults to 15 minutes |
 | `OPENROUTER_API_KEY` | Optional server-side key for the Agent |
 | `AGENT_OPENROUTER_MODEL` | Optional default Agent model |
 | `VITE_DEV_PORT` | Local Vite port |
@@ -195,6 +196,26 @@ For production, the deploy wizard automatically switches the job runner to queue
 
 5. Put the client ID, client secret, public URL, and allowed email into the wizard or `.env`.
 6. Restart the backend after changing OAuth settings.
+
+Fainens can also connect the signed-in account to Gmail for read-only BNI
+transaction imports. In Google Auth Platform > Data Access, add
+`https://www.googleapis.com/auth/gmail.readonly`, enable the Gmail API, and
+add the following Gmail callback URI to the same Web OAuth client:
+
+```text
+http://localhost:8080/api/integrations/gmail/callback
+```
+
+For the production deployment, use:
+
+```text
+https://fins.rayhan.id/api/integrations/gmail/callback
+```
+
+The importer polls connected Gmail accounts automatically every 15 minutes by
+default (configurable with `GMAIL_POLL_INTERVAL_MINUTES`). It only creates
+pending transactions and never posts a financial transaction until the user
+reviews and approves it.
 
 The callback URL, frontend URL, and CORS origin must use the same public origin. Google will reject a callback URL that differs by scheme, hostname, port, or path.
 

@@ -11,6 +11,7 @@ import {
   generateCashFlowStatement,
   generateSpendingBreakdown,
   exportReportToCSV,
+  getReportStatus,
 } from "../services/reports";
 import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
@@ -53,6 +54,8 @@ const incomeStatementSchema = z.object({
   periodName: z.string().optional(),
   startDate: z.number().optional(),
   endDate: z.number().optional(),
+  generatedAt: z.number().int().nonnegative().optional(),
+  isTemporary: z.boolean().optional(),
   coverage: reportCoverageSchema.optional(),
 }).passthrough();
 const balanceSheetItemSchema = z.object({ name: z.string(), code: z.string(), balance: z.number(), level: z.number().int(), isTotal: z.boolean().optional() }).passthrough();
@@ -64,6 +67,8 @@ const balanceSheetSchema = z.object({
   totalLiabilities: z.number(),
   totalEquity: z.number(),
   asOfDate: z.string(),
+  generatedAt: z.number().int().nonnegative().optional(),
+  isTemporary: z.boolean().optional(),
 }).passthrough();
 const cashFlowItemSchema = z.object({ category: z.string(), description: z.string(), amount: z.number(), type: z.enum(["operating", "investing", "financing"]), classificationSource: z.enum(["explicit", "legacy_inference"]) }).passthrough();
 const cashFlowSchema = z.object({
@@ -78,10 +83,12 @@ const cashFlowSchema = z.object({
   beginningCash: z.number(),
   endingCash: z.number(),
   periodName: z.string().optional(),
+  generatedAt: z.number().int().nonnegative().optional(),
+  isTemporary: z.boolean().optional(),
   coverage: reportCoverageSchema.optional(),
 }).passthrough();
 const spendingBreakdownSchema = z.object({ category: z.string(), accountId: z.number().int(), amount: z.number(), percentage: z.number() }).passthrough();
-const spendingReportSchema = z.object({ breakdown: z.array(spendingBreakdownSchema), total: z.number(), coverage: reportCoverageSchema }).passthrough();
+const spendingReportSchema = z.object({ breakdown: z.array(spendingBreakdownSchema), total: z.number(), generatedAt: z.number().int().nonnegative(), isTemporary: z.boolean(), coverage: reportCoverageSchema }).passthrough();
 const monthlyReportSchema = z.object({
   revision: z.number().int(),
   period: z.object({ id: z.number().int(), name: z.string(), startDate: z.number(), endDate: z.number() }).passthrough(),
@@ -97,9 +104,11 @@ const monthlyReportSchema = z.object({
   budgetComparison: z.array(z.object({ category: z.string(), budget: z.number(), actual: z.number(), variance: z.number() }).passthrough()),
   transactions: z.array(z.object({ id: z.number().int(), date: z.number(), description: z.string(), category: z.string(), amountCents: z.number(), type: z.enum(["income", "expense", "transfer"]) }).passthrough()),
   coverage: reportCoverageSchema,
+  generatedAt: z.number().int().nonnegative(),
+  isTemporary: z.boolean(),
   provenance: z.object({ source: z.string(), asOfMs: z.number(), includesDrafts: z.boolean() }).passthrough(),
 }).passthrough();
-const trendRowSchema = z.object({ periodId: z.number().int(), periodName: z.string(), startDate: z.number(), endDate: z.number(), revenue: z.number(), expenses: z.number(), netIncome: z.number(), coverage: reportCoverageSchema.optional() }).passthrough();
+const trendRowSchema = z.object({ periodId: z.number().int(), periodName: z.string(), startDate: z.number(), endDate: z.number(), revenue: z.number(), expenses: z.number(), netIncome: z.number(), generatedAt: z.number().int().nonnegative().optional(), isTemporary: z.boolean().optional(), coverage: reportCoverageSchema.optional() }).passthrough();
 const reportTypeParamsSchema = z.object({ reportType: z.enum(["income-statement", "balance-sheet", "cash-flow"]) });
 const trendQuerySchema = z.object({ periodCount: z.coerce.number().int().min(1).max(24).optional() });
 const reportExportQuerySchema = periodQuerySchema.extend({ asOfDate: z.coerce.number().int().nonnegative().optional() });
@@ -200,7 +209,13 @@ export default async function (fastify: FastifyInstance) {
         }
       }
       const coverage = await getPeriodCoverage(coverageStart, coverageEnd);
-      return { breakdown, total: breakdown.reduce((sum, b) => sum + b.amount, 0), coverage };
+      const reportStatus = getReportStatus(inclusiveEnd(coverageEnd));
+      return {
+        breakdown,
+        total: breakdown.reduce((sum, b) => sum + b.amount, 0),
+        ...reportStatus,
+        coverage,
+      };
     } catch (err) {
       return reportError(fastify, reply, err, "Failed to generate spending breakdown");
     }
@@ -217,6 +232,7 @@ export default async function (fastify: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { periodId } = z.object({ periodId: z.coerce.number().int().positive() }).parse(request.query);
+      const generatedAt = Date.now();
       const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
         .from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1);
       if (!period) return reply.code(404).send({ error: "Period not found" });
@@ -272,7 +288,11 @@ export default async function (fastify: FastifyInstance) {
         provenance: { source: "canonical-financial-facts", asOfMs: inclusiveEnd(period.endDate), includesDrafts: false },
       };
       const reportHash = createHash("sha256").update(JSON.stringify(reportBody)).digest("hex");
-      return { ...reportBody, reportHash };
+      return {
+        ...reportBody,
+        reportHash,
+        ...getReportStatus(inclusiveEnd(period.endDate), generatedAt),
+      };
     } catch (err) {
       return reportError(fastify, reply, err, "Failed to generate monthly report");
     }
@@ -367,6 +387,8 @@ export default async function (fastify: FastifyInstance) {
             revenue: stmt.totalRevenue,
             expenses: stmt.totalExpenses,
             netIncome: stmt.netIncome,
+            generatedAt: stmt.generatedAt,
+            isTemporary: stmt.isTemporary,
             coverage: stmt.coverage,
           };
         })

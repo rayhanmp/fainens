@@ -55,7 +55,9 @@ export async function resetFixture() {
   journal(2, "Opening GoPay", 300_000, 2, 12, null, null, "opening_balance", "2026-07-01T12:00:00+07:00");
   journal(3, "Opening investments", 9_000_000, 3, 12, null, null, "opening_balance", "2026-07-01T12:00:00+07:00");
   CATEGORY_AMOUNTS.forEach((amount, i) => journal(100 + i, `${CATEGORY_NAMES[i]} purchase`, amount, 10, 1, i + 1, PERIOD));
-  sqlite.prepare("INSERT INTO agent_profile (owner_email,nickname) VALUES (?,?)").run(OWNER, "Ray");
+  // The current schema calls this table user_profile; agent_profile was the
+  // pre-migration name and no longer exists in a freshly generated fixture.
+  sqlite.prepare("INSERT INTO user_profile (owner_email,nickname) VALUES (?,?)").run(OWNER, "Ray");
   sqlite.prepare("INSERT INTO agent_memory (owner_email,label,content) VALUES (?,?,?)")
     .run(OWNER, "Display name", "Call me Ray. Split bills are calculation-only unless I explicitly request recording.");
   sqlite.prepare("INSERT INTO financial_state (id,revision) VALUES (1,223)").run();

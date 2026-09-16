@@ -1,6 +1,6 @@
 import type { AgentChatTool } from "./agent-llm";
 
-export const agentToolGroupNames = ["overview", "accounts", "transaction_history", "transactions", "planning", "metadata", "obligations", "reimbursements", "audit", "currency", "charts", "scenarios", "split_bill"] as const;
+export const agentToolGroupNames = ["overview", "accounts", "transaction_history", "transactions", "pending_transactions", "planning", "metadata", "obligations", "reimbursements", "audit", "currency", "charts", "scenarios", "split_bill"] as const;
 export type AgentToolGroup = typeof agentToolGroupNames[number];
 
 export const agentToolGroups: Record<AgentToolGroup, readonly string[]> = {
@@ -8,15 +8,16 @@ export const agentToolGroups: Record<AgentToolGroup, readonly string[]> = {
   accounts: ["get_account_balances"],
   transaction_history: ["search_transactions", "get_transaction_details", "find_similar_transactions"],
   transactions: ["get_account_balances", "get_categories", "get_transport_route_templates", "get_tags", "prepare_transaction", "prepare_transactions"],
+  pending_transactions: ["find_pending_transactions", "get_account_balances", "get_categories", "update_pending_transaction", "resolve_pending_transaction"],
   planning: ["get_budget_facts", "get_category_variance", "compare_periods", "forecast_cash_position", "preview_budget_plan", "review_budget_patterns", "list_periods", "get_categories", "prepare_budget"],
   metadata: ["search_transactions", "get_transaction_details", "get_tags", "create_tag", "update_transaction_tags", "update_transaction_metadata"],
-  obligations: ["get_loan_balances", "get_paylater_obligations", "get_due_recurring", "get_salary_catch_up", "list_periods"],
+  obligations: ["find_contacts", "get_loan_balances", "get_paylater_obligations", "get_due_recurring", "get_salary_catch_up", "list_periods"],
   reimbursements: ["get_reimbursement_claims"],
   audit: ["get_account_balances", "get_account_health", "get_money_anomalies", "get_reconciliation_status", "find_similar_transactions", "get_transaction_details"],
   currency: ["get_currency_exchange_rate", "calculate", "get_current_datetime", "calculate_date_difference"],
   charts: ["show_chart"],
   scenarios: ["show_scenario", "show_worksheet", "calculate"],
-  split_bill: ["show_split_bill"],
+  split_bill: ["find_contacts", "show_split_bill"],
 };
 
 export const loadToolGroupTool: AgentChatTool = {
@@ -32,7 +33,7 @@ export const loadToolGroupTool: AgentChatTool = {
         group: {
           type: "string",
           enum: agentToolGroupNames,
-          description: "overview=period totals/categories; accounts=focused account balances; transaction_history=posted activity lookup; transactions=prepare entries; planning=budgets/forecast; metadata=notes/tags; obligations=loans/pay-later/recurring; reimbursements=claims and receivable state; audit=reconciliation/anomalies; currency=rates/date math; charts=static charts; scenarios=editable what-ifs; split_bill=editable receipt split.",
+          description: "overview=period totals/categories; accounts=focused account balances; transaction_history=posted activity lookup; transactions=prepare entries; pending_transactions=unposted imports and review actions; planning=budgets/forecast; metadata=notes/tags; obligations=loans/pay-later/recurring; reimbursements=claims and receivable state; audit=reconciliation/anomalies; currency=rates/date math; charts=static charts; scenarios=editable what-ifs; split_bill=editable receipt split.",
         },
       },
     },
@@ -64,6 +65,7 @@ export function selectInitialToolGroups(question: string, historyText = "", hasI
   }
   if (accountRequest) groups.add("accounts");
   if (transactionHistoryRequest && !preparingTransaction) groups.add("transaction_history");
+  if (matches(text, /\b(pending|unposted|imported|gmail|email|resolve|approve|reject|clarif(?:y|ication))\b/)) groups.add("pending_transactions");
   if (matches(text, /\b(tag|tags|note|notes|annotate|annotation|label|metadata)\b/)) groups.add("metadata");
   if (matches(text, /\b(budget|plan|planning|saving|savings|forecast|project|projection|goal|runway|variance|compare|comparison|versus|trend|scenario|allocation|what if)\b/)) {
     groups.add("planning");

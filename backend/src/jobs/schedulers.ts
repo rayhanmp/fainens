@@ -1,4 +1,5 @@
 import { agentQueue, maintenanceQueue, recurringQueue } from "./queue";
+import { env } from "../lib/env";
 
 type SchedulerQueue = { upsertJobScheduler?: (...args: any[]) => Promise<unknown> };
 
@@ -31,5 +32,6 @@ export async function configureJobSchedulers(): Promise<void> {
     upsert(maintenanceQueue, "maintenance-storage-cleanup", 5 * 60_000, "storage-deletion-outbox", { attempts: 5, delay: 30_000, completeAge: 7 * 24 * 60 * 60, completeCount: 500, failAge: 30 * 24 * 60 * 60, failCount: 1_000 }),
     upsert(recurringQueue, "recurring-subscriptions", 60 * 60_000, "subscription-renewals"),
     upsert(recurringQueue, "recurring-salary", 60 * 60_000, "salary-posting"),
+    upsert(recurringQueue, "recurring-gmail-sync", env.GMAIL_POLL_INTERVAL_MINUTES * 60_000, "gmail-sync"),
   ]);
 }

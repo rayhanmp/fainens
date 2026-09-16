@@ -28,6 +28,7 @@ export interface AgentChatResponse {
   message: AgentChatMessage;
   usage?: {
     prompt_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
     completion_tokens?: number;
     total_tokens?: number;
     /** OpenRouter includes this when the provider exposes request pricing. */

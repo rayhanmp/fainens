@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
+import { loadLoanSourceLinks } from "../services/split-bill-loans";
 import { auditLogs, contacts, loans, reimbursementClaims } from "../db/schema";
 
 const contactErrorSchema = z.object({ error: z.string() }).passthrough();
@@ -125,10 +126,11 @@ export default async function (fastify: FastifyInstance) {
       .where(and(eq(loans.contactId, contact.id), eq(loans.isActive, true)));
 
     const summary = loanSummary[0];
+    const sourceLinks = await loadLoanSourceLinks(contactLoans);
 
     return {
       ...contact,
-      loans: contactLoans,
+      loans: contactLoans.map((loan) => ({ ...loan, ...sourceLinks.get(loan.sourceTransactionId ?? loan.lendingTransactionId ?? -1) })),
       summary: {
         totalLent: summary?.totalLent || 0,
         totalBorrowed: summary?.totalBorrowed || 0,

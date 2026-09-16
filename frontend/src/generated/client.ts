@@ -6399,6 +6399,8 @@ export type GetIncomeStatement200 = {
   periodName?: string;
   startDate?: number;
   endDate?: number;
+  generatedAt?: number;
+  isTemporary?: boolean;
   coverage?: GetIncomeStatement200Coverage;
   [key: string]: unknown;
 };
@@ -6470,6 +6472,8 @@ export type GetBalanceSheet200 = {
   totalLiabilities: number;
   totalEquity: number;
   asOfDate: string;
+  generatedAt?: number;
+  isTemporary?: boolean;
   [key: string]: unknown;
 };
 
@@ -6609,6 +6613,8 @@ export type GetCashFlowStatement200 = {
   beginningCash: number;
   endingCash: number;
   periodName?: string;
+  generatedAt?: number;
+  isTemporary?: boolean;
   coverage?: GetCashFlowStatement200Coverage;
   [key: string]: unknown;
 };
@@ -6668,6 +6674,8 @@ export type GetSpendingReport200Coverage = {
 export type GetSpendingReport200 = {
   breakdown: GetSpendingReport200BreakdownItem[];
   total: number;
+  generatedAt: number;
+  isTemporary: boolean;
   coverage: GetSpendingReport200Coverage;
   [key: string]: unknown;
 };
@@ -6749,6 +6757,8 @@ export type GetMonthlyReport200IncomeStatement = {
   periodName?: string;
   startDate?: number;
   endDate?: number;
+  generatedAt?: number;
+  isTemporary?: boolean;
   coverage?: GetMonthlyReport200IncomeStatementCoverage;
   [key: string]: unknown;
 };
@@ -6800,6 +6810,8 @@ export type GetMonthlyReport200BalanceSheet = {
   totalLiabilities: number;
   totalEquity: number;
   asOfDate: string;
+  generatedAt?: number;
+  isTemporary?: boolean;
   [key: string]: unknown;
 };
 
@@ -6884,6 +6896,8 @@ export type GetMonthlyReport200 = {
   budgetComparison: GetMonthlyReport200BudgetComparisonItem[];
   transactions: GetMonthlyReport200TransactionsItem[];
   coverage: GetMonthlyReport200Coverage;
+  generatedAt: number;
+  isTemporary: boolean;
   provenance: GetMonthlyReport200Provenance;
   [key: string]: unknown;
 };
@@ -6971,6 +6985,8 @@ export type GetReportTrends200Item = {
   revenue: number;
   expenses: number;
   netIncome: number;
+  generatedAt?: number;
+  isTemporary?: boolean;
   coverage?: GetReportTrends200ItemCoverage;
   [key: string]: unknown;
 };
@@ -12888,6 +12904,7 @@ export type PrepareAgentActionBodyKind = typeof PrepareAgentActionBodyKind[keyof
 export const PrepareAgentActionBodyKind = {
   budget_plan_upsert: 'budget_plan_upsert',
   transaction_journal_create: 'transaction_journal_create',
+  split_bill_loans_create: 'split_bill_loans_create',
 } as const;
 
 export type PrepareAgentActionBody = {
@@ -12918,6 +12935,7 @@ export type PrepareAgentAction201Kind = typeof PrepareAgentAction201Kind[keyof t
 export const PrepareAgentAction201Kind = {
   budget_plan_upsert: 'budget_plan_upsert',
   transaction_journal_create: 'transaction_journal_create',
+  split_bill_loans_create: 'split_bill_loans_create',
 } as const;
 
 export type PrepareAgentAction201 = {
@@ -12994,6 +13012,7 @@ export type ListAgentActions200ActionsItemKind = typeof ListAgentActions200Actio
 export const ListAgentActions200ActionsItemKind = {
   budget_plan_upsert: 'budget_plan_upsert',
   transaction_journal_create: 'transaction_journal_create',
+  split_bill_loans_create: 'split_bill_loans_create',
 } as const;
 
 export type ListAgentActions200ActionsItem = {

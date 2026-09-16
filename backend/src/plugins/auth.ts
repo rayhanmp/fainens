@@ -33,6 +33,15 @@ declare module "fastify" {
         access_token: string;
       }>;
     };
+    googleGmailOAuth2: {
+      generateAuthorizationUri: (request: FastifyRequest, reply: FastifyReply) => Promise<string>;
+      getAccessTokenFromAuthorizationCodeFlow: (request: FastifyRequest) => Promise<{
+        token: {
+          access_token: string;
+          refresh_token?: string;
+        };
+      }>;
+    };
   }
 }
 
@@ -66,6 +75,26 @@ export default fp(async function (fastify: FastifyInstance) {
     },
     startRedirectPath: "/api/auth/google",
     callbackUri: env.GOOGLE_CALLBACK_URL,
+  });
+
+  // Gmail uses a separate, incremental OAuth consent flow. The normal login
+  // flow intentionally keeps its basic identity scopes only.
+  await fastify.register(oauth2, {
+    name: "googleGmailOAuth2",
+    scope: ["https://www.googleapis.com/auth/gmail.readonly"],
+    credentials: {
+      client: {
+        id: env.GOOGLE_CLIENT_ID,
+        secret: env.GOOGLE_CLIENT_SECRET,
+      },
+      auth: oauth2.GOOGLE_CONFIGURATION,
+    },
+    callbackUri: new URL("/api/integrations/gmail/callback", env.GOOGLE_CALLBACK_URL).toString(),
+    callbackUriParams: {
+      access_type: "offline",
+      prompt: "consent",
+      include_granted_scopes: "true",
+    },
   });
 
   // Auth middleware decorator

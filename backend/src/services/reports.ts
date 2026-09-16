@@ -25,6 +25,10 @@ export interface IncomeStatement {
   startDate?: number;
   endDate?: number;
   coverage?: PeriodCoverage;
+  /** Timestamp at which this report was fully generated. */
+  generatedAt?: number;
+  /** True when the report was generated before the selected range ended. */
+  isTemporary?: boolean;
 }
 
 export interface BalanceSheetItem {
@@ -43,6 +47,10 @@ export interface BalanceSheet {
   totalLiabilities: number;
   totalEquity: number;
   asOfDate: string;
+  /** Timestamp at which this report was fully generated. */
+  generatedAt?: number;
+  /** True when the report was generated before the as-of date. */
+  isTemporary?: boolean;
 }
 
 export interface CashFlowItem {
@@ -67,6 +75,10 @@ export interface CashFlowStatement {
   endingCash: number;
   periodName?: string;
   coverage?: PeriodCoverage;
+  /** Timestamp at which this report was fully generated. */
+  generatedAt?: number;
+  /** True when the report was generated before the selected range ended. */
+  isTemporary?: boolean;
 }
 
 export interface SpendingBreakdown {
@@ -77,6 +89,11 @@ export interface SpendingBreakdown {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Reports for an open range are explicitly marked temporary in every format. */
+export function getReportStatus(periodEnd: number, generatedAt = Date.now()): { generatedAt: number; isTemporary: boolean } {
+  return { generatedAt, isTemporary: generatedAt < periodEnd };
+}
 
 const periodMembership = (periodId?: number) => assignedPeriodMembership(periodId, transactions.periodId);
 // Reversal journals and their reversed source journals are correction metadata,
@@ -245,6 +262,7 @@ export async function generateIncomeStatement(
   }
 
   const coverage = await getPeriodCoverage(periodStart, periodEnd);
+  const reportStatus = getReportStatus(periodEnd);
   return {
     revenue: revenueItems,
     expenses: expenseItems,
@@ -255,6 +273,7 @@ export async function generateIncomeStatement(
     startDate: periodStart,
     endDate: periodEnd,
     coverage,
+    ...reportStatus,
   };
 }
 
@@ -351,6 +370,7 @@ export async function generateBalanceSheet(asOfDate?: number): Promise<BalanceSh
     // Ignore if no transactions
   }
 
+  const reportStatus = getReportStatus(date);
   return {
     assets: assetItems,
     liabilities: liabilityItems,
@@ -359,6 +379,7 @@ export async function generateBalanceSheet(asOfDate?: number): Promise<BalanceSh
     totalLiabilities,
     totalEquity,
     asOfDate: dateStr,
+    ...reportStatus,
   };
 }
 
@@ -409,6 +430,7 @@ export async function generateCashFlowStatement(
     ));
   const cashAccountIds = cashAccounts.map((a) => a.id);
   const coverage = await getPeriodCoverage(periodStart, periodEnd);
+  const reportStatus = getReportStatus(periodEnd);
 
   if (cashAccountIds.length === 0) {
     return {
@@ -423,6 +445,7 @@ export async function generateCashFlowStatement(
       beginningCash: 0,
       endingCash: 0,
       periodName,
+      ...reportStatus,
       coverage,
     };
   }
@@ -568,7 +591,6 @@ export async function generateCashFlowStatement(
 
   const netChange = netOperating + netInvesting + netFinancing;
   const endingCash = beginningCash + netChange + historicalRecoveryBridge;
-
   return {
     operating,
     investing,
@@ -582,6 +604,7 @@ export async function generateCashFlowStatement(
     endingCash,
     periodName,
     coverage,
+    ...reportStatus,
   };
 }
 
@@ -646,6 +669,8 @@ export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashF
     // Income Statement
     row("INCOME STATEMENT");
     row("Period", report.periodName || "All Periods");
+    row("Report status", report.isTemporary ? "TEMPORARY - GENERATED BEFORE PERIOD END" : "FINAL - GENERATED AFTER PERIOD END");
+    if (report.generatedAt !== undefined) row("Generated at", new Date(report.generatedAt).toISOString());
     lines.push("");
     row("REVENUE");
     for (const item of report.revenue) {
@@ -664,6 +689,8 @@ export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashF
     // Balance Sheet
     row("BALANCE SHEET");
     row("As of", report.asOfDate);
+    row("Report status", report.isTemporary ? "TEMPORARY - GENERATED BEFORE AS-OF DATE" : "FINAL - GENERATED ON OR AFTER AS-OF DATE");
+    if (report.generatedAt !== undefined) row("Generated at", new Date(report.generatedAt).toISOString());
     lines.push("");
     row("ASSETS");
     for (const item of report.assets) {
@@ -687,6 +714,8 @@ export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashF
   } else if ("operating" in report) {
     row("CASH FLOW STATEMENT");
     row("Period", report.periodName || "All Periods");
+    row("Report status", report.isTemporary ? "TEMPORARY - GENERATED BEFORE PERIOD END" : "FINAL - GENERATED AFTER PERIOD END");
+    if (report.generatedAt !== undefined) row("Generated at", new Date(report.generatedAt).toISOString());
     lines.push("");
     for (const [title, items, total] of [
       ["OPERATING ACTIVITIES", report.operating, report.netOperating],
