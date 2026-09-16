@@ -176,7 +176,7 @@ The complete template is in [.env.example](.env.example). The most important pro
 | `SESSION_SECRET` | Secret used to protect sessions; keep it private and stable |
 | `REDIS_URL` | Redis connection used by the API and worker |
 | `GMAIL_POLL_INTERVAL_MINUTES` | Automatic BNI Gmail polling interval; defaults to 15 minutes |
-| `DATABASE_BACKUP_ENABLED` | Upload weekly SQLite snapshots to the configured R2 bucket; defaults to `true` |
+| `DATABASE_BACKUP_ENABLED` | Server-level permission for scheduled R2 snapshots; defaults to `true` (the user setting is enabled by default) |
 | `DATABASE_BACKUP_POLL_INTERVAL_MINUTES` | How often the background worker checks whether a user-selected backup is due; defaults to 60 minutes |
 | `OPENROUTER_API_KEY` | Optional server-side key for the Agent |
 | `AGENT_OPENROUTER_MODEL` | Optional default Agent model |

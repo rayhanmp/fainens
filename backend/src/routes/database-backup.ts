@@ -18,8 +18,15 @@ const responseSchema = z.object({
   lastBackupAt: z.number().int().nonnegative().nullable(),
   nextBackupAt: z.number().int().nonnegative().nullable(),
   backups: z.array(backupSchema),
+  pagination: z.object({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    hasNext: z.boolean(),
+  }),
 });
 const updateSchema = z.object({ enabled: z.boolean().optional(), frequency: frequencySchema.optional() }).passthrough();
+const querySchema = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(10) }).passthrough();
 const runResponseSchema = z.object({ backup: z.object({ key: z.string(), size: z.number().int().nonnegative(), createdAt: z.string() }).passthrough(), settings: responseSchema });
 
 function ownerEmail(request: FastifyRequest): string {
@@ -32,9 +39,12 @@ export default async function databaseBackupRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
   fastify.get("/api/settings/database-backup", {
-    schema: { operationId: "getDatabaseBackupSettings", tags: ["settings"], response: { 200: responseSchema, 401: errorSchema } },
+    schema: { operationId: "getDatabaseBackupSettings", tags: ["settings"], querystring: querySchema, response: { 200: responseSchema, 401: errorSchema } },
   }, async (request, reply) => {
-    try { return reply.send(responseSchema.parse(await getDatabaseBackupSettings(ownerEmail(request)))); }
+    try {
+      const query = querySchema.parse(request.query);
+      return reply.send(responseSchema.parse(await getDatabaseBackupSettings(ownerEmail(request), query.page, query.pageSize)));
+    }
     catch (error) { return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not load database backup settings" }); }
   });
 

@@ -14510,6 +14510,19 @@ export type SyncGmailTransactions502 = {
   [key: string]: unknown;
 };
 
+export type GetDatabaseBackupSettingsParams = {
+/**
+ * @minimum 1
+ * @maximum 9007199254740991
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+pageSize?: number;
+};
+
 export type GetDatabaseBackupSettings200Frequency = typeof GetDatabaseBackupSettings200Frequency[keyof typeof GetDatabaseBackupSettings200Frequency];
 
 
@@ -14536,6 +14549,25 @@ export type GetDatabaseBackupSettings200BackupsItem = {
   [key: string]: unknown;
 };
 
+export type GetDatabaseBackupSettings200Pagination = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  page: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  pageSize: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  total: number;
+  hasNext: boolean;
+};
+
 export type GetDatabaseBackupSettings200 = {
   enabled: boolean;
   frequency: GetDatabaseBackupSettings200Frequency;
@@ -14552,6 +14584,7 @@ export type GetDatabaseBackupSettings200 = {
    */
   nextBackupAt: number | null;
   backups: GetDatabaseBackupSettings200BackupsItem[];
+  pagination: GetDatabaseBackupSettings200Pagination;
 };
 
 export type GetDatabaseBackupSettings401 = {
@@ -14602,6 +14635,25 @@ export type UpdateDatabaseBackupSettings200BackupsItem = {
   [key: string]: unknown;
 };
 
+export type UpdateDatabaseBackupSettings200Pagination = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  page: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  pageSize: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  total: number;
+  hasNext: boolean;
+};
+
 export type UpdateDatabaseBackupSettings200 = {
   enabled: boolean;
   frequency: UpdateDatabaseBackupSettings200Frequency;
@@ -14618,6 +14670,7 @@ export type UpdateDatabaseBackupSettings200 = {
    */
   nextBackupAt: number | null;
   backups: UpdateDatabaseBackupSettings200BackupsItem[];
+  pagination: UpdateDatabaseBackupSettings200Pagination;
 };
 
 export type UpdateDatabaseBackupSettings400 = {
@@ -14667,6 +14720,25 @@ export type RunDatabaseBackup200SettingsBackupsItem = {
   [key: string]: unknown;
 };
 
+export type RunDatabaseBackup200SettingsPagination = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  page: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  pageSize: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  total: number;
+  hasNext: boolean;
+};
+
 export type RunDatabaseBackup200Settings = {
   enabled: boolean;
   frequency: RunDatabaseBackup200SettingsFrequency;
@@ -14683,6 +14755,7 @@ export type RunDatabaseBackup200Settings = {
    */
   nextBackupAt: number | null;
   backups: RunDatabaseBackup200SettingsBackupsItem[];
+  pagination: RunDatabaseBackup200SettingsPagination;
 };
 
 export type RunDatabaseBackup200 = {
@@ -15008,7 +15081,7 @@ export const getListTransactionsUrl = (params?: ListTransactionsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    
+
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : value.toString())
     }
@@ -24825,17 +24898,24 @@ export type getDatabaseBackupSettingsResponseError = (getDatabaseBackupSettingsR
 
 export type getDatabaseBackupSettingsResponse = (getDatabaseBackupSettingsResponseSuccess | getDatabaseBackupSettingsResponseError)
 
-export const getGetDatabaseBackupSettingsUrl = () => {
+export const getGetDatabaseBackupSettingsUrl = (params?: GetDatabaseBackupSettingsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
-  
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/settings/database-backup`
+  return stringifiedParams.length > 0 ? `/api/settings/database-backup?${stringifiedParams}` : `/api/settings/database-backup`
 }
 
-export const getDatabaseBackupSettings = async ( options?: RequestInit): Promise<getDatabaseBackupSettingsResponse> => {
+export const getDatabaseBackupSettings = async (params?: GetDatabaseBackupSettingsParams, options?: RequestInit): Promise<getDatabaseBackupSettingsResponse> => {
   
-  return generatedFetch<getDatabaseBackupSettingsResponse>(getGetDatabaseBackupSettingsUrl(),
+  return generatedFetch<getDatabaseBackupSettingsResponse>(getGetDatabaseBackupSettingsUrl(params),
   {      
     ...options,
     method: 'GET'

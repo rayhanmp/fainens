@@ -40,6 +40,7 @@ export type DatabaseBackupSettingsView = {
   lastBackupAt: number | null;
   nextBackupAt: number | null;
   backups: DatabaseBackupEntry[];
+  pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
 };
 
 export function isBackupFrequency(value: unknown): value is BackupFrequency {
@@ -112,12 +113,24 @@ export async function createDatabaseBackup(now = new Date()): Promise<DatabaseBa
   }
 }
 
-export async function listDatabaseBackups(): Promise<DatabaseBackupEntry[]> {
+export async function listDatabaseBackups(page = 1, pageSize = 10): Promise<{ backups: DatabaseBackupEntry[]; latestCreatedAt: number | null; total: number; page: number; pageSize: number }> {
   const objects = await listFiles(BACKUP_PREFIX);
-  return objects
+  const allBackups = objects
     .filter((object) => object.key.endsWith(".db"))
     .map((object) => ({ key: object.key, size: object.size, createdAt: object.lastModified?.getTime() ?? 0 }))
     .sort((a, b) => b.createdAt - a.createdAt || b.key.localeCompare(a.key));
+  const safePageSize = Math.min(50, Math.max(1, Math.floor(pageSize) || 10));
+  const total = allBackups.length;
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const safePage = Math.min(totalPages, Math.max(1, Math.floor(page) || 1));
+  const start = (safePage - 1) * safePageSize;
+  return {
+    backups: allBackups.slice(start, start + safePageSize),
+    latestCreatedAt: allBackups[0]?.createdAt || null,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+  };
 }
 
 function normalizedOwnerEmail(ownerEmail: string): string {
@@ -129,16 +142,17 @@ async function settingsRow(ownerEmail: string) {
     .where(eq(databaseBackupSettings.ownerEmail, normalizedOwnerEmail(ownerEmail))).limit(1))[0];
 }
 
-export async function getDatabaseBackupSettings(ownerEmail: string): Promise<DatabaseBackupSettingsView> {
-  const [row, backups] = await Promise.all([settingsRow(ownerEmail), listDatabaseBackups()]);
+export async function getDatabaseBackupSettings(ownerEmail: string, page = 1, pageSize = 10): Promise<DatabaseBackupSettingsView> {
+  const [row, backupPage] = await Promise.all([settingsRow(ownerEmail), listDatabaseBackups(page, pageSize)]);
   const frequency = isBackupFrequency(row?.frequency) ? row.frequency : "weekly";
-  const lastBackupAt = row?.lastBackupAt?.getTime() ?? backups[0]?.createdAt ?? null;
+  const lastBackupAt = row?.lastBackupAt?.getTime() ?? backupPage.latestCreatedAt;
   return {
     enabled: row?.enabled ?? env.DATABASE_BACKUP_ENABLED,
     frequency,
     lastBackupAt,
     nextBackupAt: nextDatabaseBackupAt(lastBackupAt, frequency),
-    backups,
+    backups: backupPage.backups,
+    pagination: { page: backupPage.page, pageSize: backupPage.pageSize, total: backupPage.total, hasNext: backupPage.page * backupPage.pageSize < backupPage.total },
   };
 }
 

@@ -80,6 +80,7 @@ type DatabaseBackupSettings = {
   lastBackupAt: number | null;
   nextBackupAt: number | null;
   backups: Array<{ key: string; size: number; createdAt: number }>;
+  pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
 };
 
 type AgentModel = {
@@ -286,7 +287,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [agentProviderBusy, setAgentProviderBusy] = useState(false);
   const [agentProviderNotice, setAgentProviderNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [agentModels, setAgentModels] = useState<AgentModel[]>([]);
-  const [databaseBackup, setDatabaseBackup] = useState<DatabaseBackupSettings>({ enabled: true, frequency: 'weekly', lastBackupAt: null, nextBackupAt: null, backups: [] });
+  const [databaseBackup, setDatabaseBackup] = useState<DatabaseBackupSettings>({ enabled: true, frequency: 'weekly', lastBackupAt: null, nextBackupAt: null, backups: [], pagination: { page: 1, pageSize: 10, total: 0, hasNext: false } });
+  const [backupPage, setBackupPage] = useState(1);
   const [databaseBackupBusy, setDatabaseBackupBusy] = useState(false);
   const [databaseBackupNotice, setDatabaseBackupNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [agentModelDraft, setAgentModelDraft] = useState({ name: '', model: '', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '' });
@@ -327,8 +329,11 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
       }
     }).catch(() => setProfileNotice({ tone: 'error', text: 'Could not load your profile.' }));
     void api.agentProvider.models.list().then(setAgentModels).catch(() => setAgentProviderNotice({ tone: 'error', text: 'Could not load Agent models.' }));
-    void api.databaseBackup.get().then(setDatabaseBackup).catch(() => setDatabaseBackupNotice({ tone: 'error', text: 'Could not load database backup settings.' }));
   }, [legacyBirthDate]);
+
+  useEffect(() => {
+    void api.databaseBackup.get({ page: backupPage, pageSize: 10 }).then(setDatabaseBackup).catch(() => setDatabaseBackupNotice({ tone: 'error', text: 'Could not load database backup settings.' }));
+  }, [backupPage]);
 
   const saveProfile = async () => {
     setProfileBusy(true);
@@ -429,6 +434,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     setDatabaseBackupNotice(null);
     try {
       const saved = await api.databaseBackup.update(input);
+      setBackupPage(1);
       setDatabaseBackup(saved);
       setDatabaseBackupNotice({ tone: 'success', text: 'Database backup settings saved.' });
     } catch (error) {
@@ -441,6 +447,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     setDatabaseBackupNotice(null);
     try {
       const result = await api.databaseBackup.run();
+      setBackupPage(1);
       setDatabaseBackup(result.settings);
       setDatabaseBackupNotice({ tone: 'success', text: `Backup uploaded (${formatBytes(result.backup.size)}).` });
     } catch (error) {
@@ -973,24 +980,42 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     </Button>
                   </div>
                   {databaseBackupNotice && <p role="status" className={cn('text-sm', databaseBackupNotice.tone === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{databaseBackupNotice.text}</p>}
-                  <div className="border-t border-[var(--color-border)] pt-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold">Existing backups</p>
-                      <span className="text-xs text-[var(--color-muted)]">{databaseBackup.backups.length} snapshot{databaseBackup.backups.length === 1 ? '' : 's'}</span>
-                    </div>
-                    {databaseBackup.backups.length === 0 ? (
-                      <p className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-text-secondary)]">No cloud database backups found.</p>
-                    ) : (
-                      <div className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
-                        {databaseBackup.backups.map((backup) => (
-                          <div key={backup.key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-xs">
-                            <span className="min-w-0 truncate font-medium" title={backup.key}>{backup.key.split('/').pop()}</span>
-                            <span className="shrink-0 text-[var(--color-text-secondary)]">{formatBytes(backup.size)} · {backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown date'}</span>
+                  <details className="group">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                      <span>
+                        <span className="block text-sm font-semibold">Existing backups</span>
+                        <span className="mt-1 block text-xs text-[var(--color-muted)]">
+                          {databaseBackup.pagination.total} snapshot{databaseBackup.pagination.total === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
+                    </summary>
+                    <div className="pt-3">
+                      {databaseBackup.backups.length === 0 ? (
+                        <p className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-text-secondary)]">No cloud database backups found.</p>
+                      ) : (
+                        <div className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
+                          {databaseBackup.backups.map((backup) => (
+                            <div key={backup.key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-xs">
+                              <span className="min-w-0 truncate font-medium" title={backup.key}>{backup.key.split('/').pop()}</span>
+                              <span className="shrink-0 text-[var(--color-text-secondary)]">{formatBytes(backup.size)} · {backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown date'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {databaseBackup.pagination.total > databaseBackup.pagination.pageSize && (
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <span className="text-xs text-[var(--color-text-secondary)]">
+                            Page {databaseBackup.pagination.page} of {Math.max(1, Math.ceil(databaseBackup.pagination.total / databaseBackup.pagination.pageSize))}
+                          </span>
+                          <div className="flex gap-2">
+                            <Button type="button" size="sm" variant="secondary" onClick={() => setBackupPage((page) => Math.max(1, page - 1))} disabled={databaseBackup.pagination.page <= 1 || databaseBackupBusy}>Previous</Button>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => setBackupPage((page) => page + 1)} disabled={!databaseBackup.pagination.hasNext || databaseBackupBusy}>Next</Button>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 </div>
               </SettingsSection>
               <SettingsSection

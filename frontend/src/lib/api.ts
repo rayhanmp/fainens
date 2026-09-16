@@ -454,19 +454,21 @@ export const api = {
   },
 
   databaseBackup: {
-    get: () => fetchApi<{
+    get: (params?: { page?: number; pageSize?: number }) => fetchApi<{
       enabled: boolean;
       frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
       lastBackupAt: number | null;
       nextBackupAt: number | null;
       backups: Array<{ key: string; size: number; createdAt: number }>;
-    }>('/settings/database-backup'),
+      pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
+    }>(`/settings/database-backup?page=${params?.page ?? 1}&pageSize=${params?.pageSize ?? 10}`),
     update: (input: { enabled?: boolean; frequency?: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' }) => fetchApi<{
       enabled: boolean;
       frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
       lastBackupAt: number | null;
       nextBackupAt: number | null;
       backups: Array<{ key: string; size: number; createdAt: number }>;
+      pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
     }>('/settings/database-backup', { method: 'PUT', body: JSON.stringify(input) }),
     run: () => fetchApi<{
       backup: { key: string; size: number; createdAt: string };
@@ -476,6 +478,7 @@ export const api = {
         lastBackupAt: number | null;
         nextBackupAt: number | null;
         backups: Array<{ key: string; size: number; createdAt: number }>;
+        pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
       };
     }>('/settings/database-backup/run', { method: 'POST' }),
   },
