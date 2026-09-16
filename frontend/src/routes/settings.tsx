@@ -228,7 +228,7 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
   const exportDataMutation = useExportDataMutation();
   const queryClient = useQueryClient();
   const accountsQuery = useAccountsLedgerQuery();
@@ -1225,31 +1225,6 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="pt-6 border-t border-[var(--color-border)]">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-[var(--color-muted)]">
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              <span>Logged in as {user?.email || "Unknown user"}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span>Fainens v1.0.0</span>
-              <Button variant="secondary" size="sm" onClick={async () => {
-                const confirmed = await confirm({
-                  title: 'Sign Out',
-                  message: 'Are you sure you want to sign out?',
-                  confirmLabel: 'Sign Out',
-                  variant: 'default',
-                });
-                if (confirmed) {
-                  await logout();
-                }
-              }}>
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </div>
             </div>
 
         {/* Clear Cache Modal */}
