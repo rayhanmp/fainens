@@ -2147,9 +2147,28 @@ export function TransactionModal({
           {inputMode === 'journal' && <><ArrowRightLeft className="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100" /> Simple</>}
         </button>
       }
+      footer={inputMode === 'journal' ? (
+        <div className="w-full space-y-3">
+          {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+            <Button type="button" variant="secondary" onClick={onClose} className="rounded-full py-3 sm:min-w-[120px]">Cancel</Button>
+            <Button type="submit" form="journal-transaction-form" isLoading={isSubmitting} className="rounded-full py-3 shadow-lg sm:min-w-[200px]">
+              <Save className="h-5 w-5" /> Record journal
+            </Button>
+          </div>
+        </div>
+      ) : inputMode === 'simple' && !pendingTransaction ? (
+        <div className="w-full space-y-3">
+          {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+          <Button type="submit" form="simple-transaction-form" isLoading={isSubmitting} className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none">
+            {simpleForm.type === 'paylater' ? <CreditCard className="w-5 h-5" /> : <Save className="w-5 h-5" />}
+            {simpleForm.type === 'paylater' ? 'Record settlement' : 'Save transaction'}
+          </Button>
+        </div>
+      ) : undefined}
     >
       {inputMode === 'journal' ? (
-        <form onSubmit={handleJournalSubmit} className="flex flex-col gap-0">
+        <form id="journal-transaction-form" onSubmit={handleJournalSubmit} className="flex flex-col gap-0">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           <div className="lg:col-span-8 space-y-6 lg:space-y-8">
             <div>
@@ -2337,22 +2356,6 @@ export function TransactionModal({
           </div>
           </div>
 
-          <div className={stickyFooter}>
-            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-              <Button type="button" variant="secondary" onClick={onClose} className="rounded-full py-3 sm:min-w-[120px]">
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                isLoading={isSubmitting}
-                className="rounded-full py-3 shadow-lg sm:min-w-[200px]"
-              >
-                <Save className="w-5 h-5" />
-                Record journal
-              </Button>
-            </div>
-          </div>
         </form>
       ) : inputMode === 'ai' ? (
         <div className="flex flex-col gap-4">
@@ -2492,7 +2495,7 @@ export function TransactionModal({
           )}
         </div>
       ) : (
-        <form onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
+        <form id="simple-transaction-form" onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
           {!editingTransaction && !pendingTransaction && (
             <div className="space-y-5 lg:hidden">
               <div
@@ -3333,9 +3336,9 @@ export function TransactionModal({
           </div>
           </div>
 
+          {pendingTransaction && (
           <div className={stickyFooter}>
             {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
-            {pendingTransaction ? (
               <div className="flex gap-2 w-full max-w-md mx-auto">
                 <Button
                   type="button"
@@ -3406,23 +3409,8 @@ export function TransactionModal({
                   Approve
                 </Button>
               </div>
-            ) : (
-              <Button
-                type="submit"
-                isLoading={isSubmitting}
-                className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none"
-              >
-                {simpleForm.type === 'paylater' ? (
-                  <CreditCard className="w-5 h-5" />
-                ) : (
-                  <Save className="w-5 h-5" />
-                )}
-                {simpleForm.type === 'paylater'
-                  ? 'Record settlement'
-                  : 'Save transaction'}
-              </Button>
-            )}
           </div>
+          )}
         </form>
       )}
 
