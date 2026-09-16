@@ -518,9 +518,9 @@ function SubscriptionsPage() {
                         <div className="space-y-2">
                           {renew7.map((r) => (
                             <div key={r.id} className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-4">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
-                                <span className="text-sm font-bold text-[var(--ref-on-surface)]">
+                              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                                <span className="min-w-0 break-words text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
+                                <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">
                                   {formatCurrency(r.amount)}
                                 </span>
                               </div>
@@ -546,9 +546,9 @@ function SubscriptionsPage() {
                         <div className="space-y-2">
                           {renew30.map((r) => (
                             <div key={r.id} className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-4">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
-                                <span className="text-sm font-bold text-[var(--ref-on-surface)]">
+                              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                                <span className="min-w-0 break-words text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
+                                <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">
                                   {formatCurrency(r.amount)}
                                 </span>
                               </div>
