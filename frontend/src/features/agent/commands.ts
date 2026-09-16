@@ -22,9 +22,12 @@ export type AgentApprovalExecution = {
   receipt: {
     actionId: number;
     approvalId: number;
-    kind: 'budget_plan_upsert' | 'transaction_journal_create';
+    kind: 'budget_plan_upsert' | 'transaction_journal_create' | 'split_bill_loans_create';
     periodId?: number | null;
     transactionId?: number;
+    loanIds?: number[];
+    splitBillId?: number;
+    tagIds?: number[];
     changed?: Array<{ planId: number; categoryId: number; plannedAmountCents: number; operation: 'created' | 'updated' }>;
     changedCount?: number;
     auditLogIds: number[];

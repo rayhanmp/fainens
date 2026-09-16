@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { RetirementPlanner } from '../components/savings/RetirementPlanner';
 import { formatCurrency, cn } from '../lib/utils';
 import {
   TrendingUp,
@@ -18,6 +19,7 @@ import {
   Trash2,
   Edit2,
   Calculator,
+  Landmark,
 } from 'lucide-react';
 import {
   Line,
@@ -34,7 +36,7 @@ export const Route = createFileRoute('/savings-simulator')({
   component: SavingsSimulatorPage,
 } as any);
 
-type Tab = 'projection' | 'scenarios' | 'goals';
+type Tab = 'projection' | 'scenarios' | 'goals' | 'retirement';
 
 interface Scenario {
   id: string;
@@ -246,11 +248,18 @@ function SavingsSimulatorPage() {
             icon={Target}
             label="Goals"
           />
+          <TabButton
+            active={activeTab === 'retirement'}
+            onClick={() => setActiveTab('retirement')}
+            icon={Landmark}
+            label="Retirement"
+          />
         </div>
 
         {activeTab === 'projection' && <ProjectionTab />}
         {activeTab === 'scenarios' && <ScenariosTab />}
         {activeTab === 'goals' && <GoalsTab />}
+        {activeTab === 'retirement' && <RetirementPlanner />}
       </PageContainer>
     </RequireAuth>
   );

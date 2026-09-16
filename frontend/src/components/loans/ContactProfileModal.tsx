@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/utils';
@@ -38,6 +39,9 @@ interface Loan {
   status: 'active' | 'repaid' | 'defaulted' | 'written_off';
   description: string | null;
   createdAt: number;
+  sourceType?: string;
+  sourceTransactionId?: number | null;
+  tags?: Array<{ id: number; name: string; color: string }>;
 }
 
 interface ContactDetails {
@@ -580,6 +584,8 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                                 {loan.description}
                               </p>
                             )}
+                            {loan.sourceType === 'split_bill' && loan.sourceTransactionId && <Link to="/transactions" search={{ periodId: 'all', transactionId: String(loan.sourceTransactionId) }} onClick={onClose} className="mt-1 block text-xs text-[var(--ref-primary)]">Split bill · source payment #{loan.sourceTransactionId} ↗</Link>}
+                            {!!loan.tags?.length && <div className="mt-1 flex flex-wrap gap-1">{loan.tags.map((tag) => <span key={tag.id} className="rounded-full bg-[var(--ref-primary)]/8 px-2 py-0.5 text-[10px] text-[var(--ref-primary)]">{tag.name}</span>)}</div>}
                             <p className="text-xs text-[var(--color-muted)] mt-1">
                               {formatDate(loan.startDate, { month: 'short', day: 'numeric', year: 'numeric' })}
                             </p>

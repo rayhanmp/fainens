@@ -29,14 +29,17 @@ export function PendingTransactionsModal({
   const pendingTxs = pendingQuery.data ?? [];
   const isLoading = pendingQuery.isPending && !pendingQuery.data;
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
 
   const handleApprove = async (id: number) => {
     setActionLoading(id);
+    setActionError('');
     try {
       await approveMutation.mutateAsync(id);
       onRefresh();
     } catch (err) {
       console.error('Failed to approve:', err);
+      setActionError(err instanceof Error ? err.message : 'Failed to approve transaction');
     } finally {
       setActionLoading(null);
     }
@@ -44,11 +47,13 @@ export function PendingTransactionsModal({
 
   const handleReject = async (id: number) => {
     setActionLoading(id);
+    setActionError('');
     try {
       await rejectMutation.mutateAsync(id);
       onRefresh();
     } catch (err) {
       console.error('Failed to reject:', err);
+      setActionError(err instanceof Error ? err.message : 'Failed to reject transaction');
     } finally {
       setActionLoading(null);
     }
@@ -62,9 +67,17 @@ export function PendingTransactionsModal({
       subtitle="Review and approve AI-parsed transactions"
       size="xl"
     >
+      {actionError && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">{actionError}</div>}
       {isLoading ? (
         <div className="flex justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-[var(--color-muted)]" />
+        </div>
+      ) : pendingQuery.isError ? (
+        <div className="py-8 text-center">
+          <p className="text-sm text-red-600">Could not load pending transactions.</p>
+          <Button variant="secondary" onClick={() => void pendingQuery.refetch()} className="mt-4 rounded-full">
+            Retry
+          </Button>
         </div>
       ) : pendingTxs.length === 0 ? (
         <div className="py-8 text-center text-[var(--color-muted)]">

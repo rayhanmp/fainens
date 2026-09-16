@@ -32,15 +32,15 @@ function presentationSource(value: unknown): string | null {
   }
 }
 
-export function AgentMessage({ children, accounts = [], presentations = [] }: { children: string; accounts?: SplitBillAccount[]; presentations?: unknown[] }) {
+export function AgentMessage({ children, accounts = [], presentations = [], currentUserName = '' }: { children: string; accounts?: SplitBillAccount[]; presentations?: unknown[]; currentUserName?: string }) {
   const structuredPresentations = presentations.flatMap((presentation) => {
     const source = presentationSource(presentation);
     return source ? [source] : [];
   });
   return <div className="agent-message-content">
     {splitMessage(children).map((part, index) => part.kind === 'visualization'
-      ? <AgentVisualizationBlock key={`viz-${index}`} source={part.source} accounts={accounts} />
+      ? <AgentVisualizationBlock key={`viz-${index}`} source={part.source} accounts={accounts} currentUserName={currentUserName} />
       : part.text ? <MarkdownMessage key={`md-${index}`}>{part.text}</MarkdownMessage> : null)}
-    {structuredPresentations.map((source, index) => <AgentVisualizationBlock key={`structured-viz-${index}`} source={source} accounts={accounts} />)}
+    {structuredPresentations.map((source, index) => <AgentVisualizationBlock key={`structured-viz-${index}`} source={source} accounts={accounts} currentUserName={currentUserName} />)}
   </div>;
 }

@@ -15,6 +15,7 @@ import {
   Images,
   LoaderCircle,
   Pencil,
+  Plus,
   RefreshCw,
   ReceiptText,
   Send,
@@ -57,6 +58,7 @@ import {
   initialTransactionProposalStatus,
   isBudgetProposal,
   isTransactionProposal,
+  isSplitBillLoanProposal,
   journalLinesForAmount,
   proposalUsesExpenseCategory,
   transactionIntentLabel,
@@ -66,6 +68,7 @@ import {
   type TransactionEditDraft,
   type TransactionProposalStatus,
 } from '../features/agent/proposal-utils';
+import { SplitBillLoanProposalCard } from '../components/agent/SplitBillLoanProposalCard';
 
 export const Route = createFileRoute('/agent')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -467,6 +470,10 @@ function ToolTrace({ response }: { response: AgentResponse }) {
       )}
     </div>
   );
+}
+
+function activityText(step: AgentActivityStep): string {
+  return step.detail ? `${step.label} · ${step.detail}` : step.label;
 }
 
 function ClarificationCard({
@@ -948,17 +955,17 @@ function AgentPage() {
   const setIsSending = (sending: boolean) => setSessionStreamStatus(sending ? 'streaming' : 'idle');
   const [streamActivity, setStreamActivity] = useState<string | null>(null);
   const [activityTimeline, setActivityTimeline] = useState<AgentActivityStep[]>([]);
+  const [isActivityExpanded, setIsActivityExpanded] = useState(false);
   const [copiedAssistantId, setCopiedAssistantId] = useState<string | null>(null);
   const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
   const [editingUserMessageText, setEditingUserMessageText] = useState('');
   const [revealedMessageActionsId, setRevealedMessageActionsId] = useState<string | null>(null);
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
-  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [isMemoryFormOpen, setIsMemoryFormOpen] = useState(false);
   const [memoryLabel, setMemoryLabel] = useState('');
   const [memoryContent, setMemoryContent] = useState('');
   const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
   const [isSavingMemory, setIsSavingMemory] = useState(false);
-  const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -1000,7 +1007,6 @@ function AgentPage() {
   const messageActionHoldTimerRef = useRef<number | null>(null);
   const agentRequestRef = useRef<AbortController | null>(null);
   const conversationLoadMoreTimerRef = useRef<number | null>(null);
-  const lastProfileNicknameRef = useRef<string | null>(null);
   const hydratedConversationIdRef = useRef<number | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [floatingComposerBounds, setFloatingComposerBounds] = useState<FloatingComposerBounds | null>(null);
@@ -1120,14 +1126,6 @@ function AgentPage() {
     setSessionAttachmentIds(pendingImages.map((image) => image.id));
   }, [pendingImages, setSessionAttachmentIds]);
 
-  useEffect(() => {
-    if (!profileQuery.data) return;
-    if (lastProfileNicknameRef.current == null || lastProfileNicknameRef.current === nickname) {
-      setNicknameDraft(nickname);
-    }
-    lastProfileNicknameRef.current = nickname;
-  }, [nickname, profileQuery.data]);
-
   useLayoutEffect(() => {
     const column = chatColumnRef.current;
     if (!column) return;
@@ -1238,33 +1236,22 @@ function AgentPage() {
     }
   };
 
-  const saveNickname = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const value = nicknameDraft.trim();
-    if (value.length > 80) {
-      setMemoryError('Your preferred name must be at most 80 characters.');
-      return;
-    }
-    setIsSavingNickname(true);
-    setMemoryError(null);
-    try {
-      const response = await agentCommands.profile.update(value || null);
-      const saved = response.nickname ?? '';
-      setNicknameDraft(saved);
-      queryClient.setQueryData(queryKeys.agent.profile, response);
-      setStartupSelection(createStartupSelection(saved));
-      setNotice(saved ? 'Preferred name updated.' : 'Preferred name cleared.');
-    } catch (caught) {
-      setMemoryError(caught instanceof Error ? caught.message : 'Could not save your preferred name.');
-    } finally {
-      setIsSavingNickname(false);
-    }
-  };
-
   const resetMemoryForm = () => {
     setEditingMemoryId(null);
     setMemoryLabel('');
     setMemoryContent('');
+  };
+
+  const openMemoryForm = (memory?: AgentMemory) => {
+    if (memory) {
+      setEditingMemoryId(memory.id);
+      setMemoryLabel(memory.label);
+      setMemoryContent(memory.content);
+    } else {
+      resetMemoryForm();
+    }
+    setMemoryError(null);
+    setIsMemoryFormOpen(true);
   };
 
   const saveMemory = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1285,6 +1272,7 @@ function AgentPage() {
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
       resetMemoryForm();
+      setIsMemoryFormOpen(false);
     } catch (caught) {
       setMemoryError(caught instanceof Error ? caught.message : 'Could not save agent memory.');
     } finally {
@@ -1292,12 +1280,7 @@ function AgentPage() {
     }
   };
 
-  const editMemory = (memory: AgentMemory) => {
-    setEditingMemoryId(memory.id);
-    setMemoryLabel(memory.label);
-    setMemoryContent(memory.content);
-    setMemoryError(null);
-  };
+  const editMemory = (memory: AgentMemory) => openMemoryForm(memory);
 
   const deleteMemory = async (memory: AgentMemory) => {
     if (!window.confirm('Delete “' + memory.label + '” from Fainens memory?')) return;
@@ -1305,7 +1288,10 @@ function AgentPage() {
     try {
       await agentCommands.memories.delete(memory.id);
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent.memories });
-      if (editingMemoryId === memory.id) resetMemoryForm();
+      if (editingMemoryId === memory.id) {
+        resetMemoryForm();
+        setIsMemoryFormOpen(false);
+      }
     } catch (caught) {
       setMemoryError(caught instanceof Error ? caught.message : 'Could not delete agent memory.');
     }
@@ -1408,9 +1394,8 @@ function AgentPage() {
   useEffect(() => {
     if (isMemoryOpen) {
       void memoriesQuery.refetch();
-      void profileQuery.refetch();
     }
-  }, [isMemoryOpen, memoriesQuery.refetch, profileQuery.refetch]);
+  }, [isMemoryOpen, memoriesQuery.refetch]);
 
   useEffect(() => {
     if (search.prompt?.trim()) {
@@ -1437,10 +1422,6 @@ function AgentPage() {
   useEffect(() => {
     if (memoriesQuery.isError && isMemoryOpen) setMemoryError('Could not load agent memory.');
   }, [isMemoryOpen, memoriesQuery.isError]);
-
-  useEffect(() => {
-    if (profileQuery.isError && isMemoryOpen) setMemoryError('Could not load your preferred name.');
-  }, [isMemoryOpen, profileQuery.isError]);
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId),
@@ -1605,6 +1586,7 @@ function AgentPage() {
       );
     });
     setIsSending(true);
+    setIsActivityExpanded(false);
     setStreamActivity('Thinking…');
     setActivityTimeline([{ id: 'request-' + Date.now(), label: 'Starting request', status: 'active' }]);
     const requestController = new AbortController();
@@ -1658,7 +1640,8 @@ function AgentPage() {
           ));
         }
         if (event.type === 'progress') {
-          setStreamActivity((event.detail ?? event.label) + (event.status === 'completed' ? '' : '…'));
+          const activity = event.detail ? `${event.label} · ${event.detail}` : event.label;
+          setStreamActivity(activity + (event.status === 'completed' ? '' : '…'));
           setActiveActivity(event.label, event.status, event.detail);
         }
         if (event.type === 'complete') {
@@ -2022,7 +2005,7 @@ function AgentPage() {
                         </div>
                       )}
                       {message.role === 'assistant'
-                        ? <AgentMessage accounts={accounts} presentations={message.response?.presentations}>{message.text || '…'}</AgentMessage>
+                        ? <AgentMessage accounts={accounts} presentations={message.response?.presentations} currentUserName={nickname}>{message.text || '…'}</AgentMessage>
                         : editingUserMessageId === message.id
                           ? <div className="space-y-2"><textarea ref={editingUserMessageTextareaRef} value={editingUserMessageText} onChange={(event) => setEditingUserMessageText(event.target.value)} className="brutalist-input max-h-40 min-h-12 w-full resize-none overflow-y-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)]" maxLength={2000} autoFocus /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => { setEditingUserMessageId(null); setEditingUserMessageText(''); }} disabled={isSending}>Cancel</Button><Button size="sm" onClick={() => void saveEditedLastUserMessage(message)} disabled={isSending}>Send</Button></div></div>
                           : <p className="whitespace-pre-wrap break-words leading-6">{message.text}</p>}
@@ -2059,6 +2042,7 @@ function AgentPage() {
                           {message.response.pendingActions?.map((action, index) => {
                             if (isBudgetProposal(action)) return <BudgetProposalCard key={`${action.approvalId}-${index}`} proposal={action} periods={periods} />;
                             if (isTransactionProposal(action)) return <TransactionProposalCard key={`${action.approvalId}-${index}`} proposal={action} categories={categories} accounts={accounts} periods={periods} conversationId={message.response.conversationId ?? activeConversationId} />;
+                            if (isSplitBillLoanProposal(action)) return <SplitBillLoanProposalCard key={`${action.approvalId}-${index}`} proposal={action} />;
                             return null;
                           })}
                         </>
@@ -2078,20 +2062,36 @@ function AgentPage() {
 
                 {isSending && (
                   <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2.5" aria-live="polite">
-                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
-                      <AgentOrb active className="agent-orb-small" />
-                      <span>{streamActivity ?? 'Reading your ledger…'}</span>
-                    </div>
-                    {activityTimeline.length > 0 && (
-                      <ol className="mt-2 space-y-1 border-l border-[var(--color-border)] pl-3 text-xs text-[var(--color-text-secondary)]">
-                        {activityTimeline.map((step) => (
-                          <li key={step.id} className="flex items-center gap-2">
-                            {step.status === 'active' ? <LoaderCircle className="h-3 w-3 animate-spin text-[var(--ref-primary)]" /> : <Check className="h-3 w-3 text-[var(--color-success)]" />}
-                            <span>{step.label}{step.detail ? ' · ' + step.detail : ''}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
+                    {(() => {
+                      const currentActivity = activityTimeline[activityTimeline.length - 1];
+                      const visibleActivity = currentActivity ? activityText(currentActivity) : (streamActivity ?? 'Reading your ledger…');
+                      return <>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                          <AgentOrb active className="agent-orb-small" />
+                          <span className="min-w-0 flex-1 truncate">{visibleActivity}{currentActivity?.status === 'active' ? '…' : ''}</span>
+                          {activityTimeline.length > 1 && <button
+                            type="button"
+                            onClick={() => setIsActivityExpanded((value) => !value)}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--ref-primary)]"
+                            aria-expanded={isActivityExpanded}
+                            aria-controls="agent-activity-history"
+                            aria-label={isActivityExpanded ? 'Hide previous agent steps' : `Show ${activityTimeline.length - 1} previous agent step${activityTimeline.length === 2 ? '' : 's'}`}
+                            title={isActivityExpanded ? 'Hide completed steps' : 'Show completed steps'}
+                          >
+                            {isActivityExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+                            {!isActivityExpanded && <span>{activityTimeline.length - 1} previous</span>}
+                          </button>}
+                        </div>
+                        {isActivityExpanded && activityTimeline.length > 1 && <ol id="agent-activity-history" className="mt-2 space-y-1 border-l border-[var(--color-border)] pl-3 text-xs text-[var(--color-text-secondary)]" aria-label="Agent activity history">
+                          {activityTimeline.slice(0, -1).map((step) => (
+                            <li key={step.id} className="flex items-center gap-2">
+                              <Check className="h-3 w-3 shrink-0 text-[var(--color-success)]" />
+                              <span className="truncate">{activityText(step)}</span>
+                            </li>
+                          ))}
+                        </ol>}
+                      </>;
+                    })()}
                   </div>
                 )}
                 {error && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
@@ -2341,93 +2341,80 @@ function AgentPage() {
 
             <Modal
               isOpen={isMemoryOpen}
-              onClose={() => { setIsMemoryOpen(false); setMemoryError(null); resetMemoryForm(); }}
+              onClose={() => { setIsMemoryOpen(false); setMemoryError(null); resetMemoryForm(); setIsMemoryFormOpen(false); }}
               title="Agent memory"
-              subtitle="Preferences and stable background Fainens can use in future chats. Memory is not ledger evidence or permission to change your data."
-              size="xl"
+              subtitle="Stable context Fainens can use in future chats."
             >
-              <div className="grid gap-5 sm:grid-cols-2">
-                <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3">
-                  <div className="mb-3">
-                    <h3 className="text-sm font-semibold">How should Fainens address you?</h3>
-                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">This is separate from memories and is used for greetings and natural replies.</p>
-                  </div>
-                  <form className="flex flex-col gap-2 sm:flex-row sm:items-end" onSubmit={(event) => void saveNickname(event)}>
-                    <div className="min-w-0 flex-1">
-                      <Input
-                        label="Preferred name"
-                        value={nicknameDraft}
-                        onChange={(event) => setNicknameDraft(event.target.value)}
-                        placeholder="e.g. Ray"
-                        maxLength={80}
-                      />
-                    </div>
-                    <Button type="submit" size="sm" isLoading={isSavingNickname} disabled={isSavingMemory}>Save name</Button>
-                  </form>
-                </section>
-
-                <form className="space-y-3" onSubmit={(event) => void saveMemory(event)}>
-                  <Input
-                    label="Memory name"
-                    value={memoryLabel}
-                    onChange={(event) => setMemoryLabel(event.target.value)}
-                    placeholder="e.g. Financial goal"
-                    maxLength={memoryLimits.maxLabelLength}
-                    required
-                  />
-                  <div className="space-y-1">
-                    <label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should Fainens remember?</label>
-                    <textarea
-                      id="agent-memory-content"
-                      value={memoryContent}
-                      onChange={(event) => setMemoryContent(event.target.value)}
-                      placeholder="e.g. I prefer conservative suggestions when planning."
-                      maxLength={memoryLimits.maxContentLength}
-                      required
-                      rows={3}
-                      className="brutalist-input min-h-24 w-full resize-y"
-                    />
-                    <p className="text-right text-[11px] text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" size="sm" isLoading={isSavingMemory} disabled={memories.length >= memoryLimits.maxItems && editingMemoryId == null}>
-                      {editingMemoryId == null ? 'Add memory' : 'Save changes'}
-                    </Button>
-                    {editingMemoryId != null && <Button type="button" size="sm" variant="secondary" onClick={resetMemoryForm} disabled={isSavingMemory}>Cancel</Button>}
-                  </div>
-                </form>
-
-                {memoryError && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)] sm:col-span-2">{memoryError}</p>}
-
-                <div className="border-t border-[var(--color-border)] pt-4 sm:col-span-2">
-                  <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
                     <h3 className="text-sm font-semibold">Saved memories</h3>
-                    <span className="text-xs text-[var(--color-text-secondary)]">{memories.length}/{memoryLimits.maxItems}</span>
+                    <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">Context only—not ledger evidence or permission to change data.</p>
                   </div>
+                  <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={() => openMemoryForm()} disabled={memories.length >= memoryLimits.maxItems}><Plus className="h-4 w-4" /> Add memory</Button>
+                </div>
+                {memoryError && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{memoryError}</p>}
                   {isLoadingMemories ? (
                     <p className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading memories…</p>
                   ) : memories.length === 0 ? (
-                    <p className="text-sm text-[var(--color-text-secondary)]">No memory saved yet.</p>
+                    <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-6 text-center">
+                      <p className="text-sm text-[var(--color-text-secondary)]">No memory saved yet.</p>
+                      <p className="mt-1 text-xs text-[var(--color-muted)]">Add a preference or background that should carry into future chats.</p>
+                    </div>
                   ) : (
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="divide-y divide-[var(--color-border)] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
                       {memories.map((memory) => (
-                        <div key={memory.id} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3">
-                          <div className="flex gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-semibold">{memory.label}</p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">{memory.content}</p>
-                            </div>
-                            <div className="flex shrink-0 items-start gap-1">
-                              <button type="button" onClick={() => editMemory(memory)} disabled={isSavingMemory} className="rounded p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)] disabled:opacity-50" aria-label={'Edit ' + memory.label} title="Edit memory"><Pencil className="h-4 w-4" /></button>
-                              <button type="button" onClick={() => void deleteMemory(memory)} disabled={isSavingMemory} className="rounded p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)] disabled:opacity-50" aria-label={'Delete ' + memory.label} title="Delete memory"><Trash2 className="h-4 w-4" /></button>
-                            </div>
+                        <div key={memory.id} className="flex items-start gap-3 px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">{memory.label}</p>
+                            <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[var(--color-text-secondary)]">{memory.content}</p>
+                          </div>
+                          <div className="flex shrink-0 items-start gap-1">
+                            <button type="button" onClick={() => editMemory(memory)} disabled={isSavingMemory} className="rounded-md p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)] disabled:opacity-50" aria-label={'Edit ' + memory.label} title="Edit memory"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button type="button" onClick={() => void deleteMemory(memory)} disabled={isSavingMemory} className="rounded-md p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)] disabled:opacity-50" aria-label={'Delete ' + memory.label} title="Delete memory"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
               </div>
+            </Modal>
+
+            <Modal
+              isOpen={isMemoryFormOpen}
+              onClose={() => { setIsMemoryFormOpen(false); setMemoryError(null); resetMemoryForm(); }}
+              title={editingMemoryId == null ? 'Add memory' : 'Edit memory'}
+              subtitle="Keep it short and useful for future chats."
+            >
+              <form className="space-y-4" onSubmit={(event) => void saveMemory(event)}>
+                <Input
+                  label="Memory name"
+                  value={memoryLabel}
+                  onChange={(event) => setMemoryLabel(event.target.value)}
+                  placeholder="e.g. Financial goal"
+                  maxLength={memoryLimits.maxLabelLength}
+                  required
+                />
+                <div className="space-y-1">
+                  <label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should Fainens remember?</label>
+                  <textarea
+                    id="agent-memory-content"
+                    value={memoryContent}
+                    onChange={(event) => setMemoryContent(event.target.value)}
+                    placeholder="e.g. I prefer conservative suggestions when planning."
+                    maxLength={memoryLimits.maxContentLength}
+                    required
+                    rows={4}
+                    className="brutalist-input min-h-28 w-full resize-y"
+                  />
+                  <p className="text-right text-[11px] text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p>
+                </div>
+                {memoryError && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{memoryError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" size="sm" isLoading={isSavingMemory}>{editingMemoryId == null ? 'Add memory' : 'Save changes'}</Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => { setIsMemoryFormOpen(false); setMemoryError(null); resetMemoryForm(); }} disabled={isSavingMemory}>Cancel</Button>
+                </div>
+              </form>
             </Modal>
 
             {previewImage && (

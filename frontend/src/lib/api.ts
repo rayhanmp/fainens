@@ -18,6 +18,33 @@ type ImportResult = ConfirmTransactionImport201;
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
+export type SplitBillTransactionDetail = {
+  sourceTransactionId: number;
+  personalShareCents: number;
+  totalPaidCents: number;
+  isBorrower: boolean;
+  payment: { id: number; loanId: number; contactName: string; amountCents: number; status: string; direction: string } | null;
+  session: {
+    id: number;
+    merchantName: string | null;
+    totalCents: number;
+    splitResultJson: string | null;
+    parsedItemsJson: string | null;
+    taxCents: number | null;
+    serviceFeeCents: number | null;
+    discountCents: number | null;
+  } | null;
+  loans: Array<{
+    id: number;
+    contactId: number;
+    contactName: string;
+    direction: string;
+    amountCents: number;
+    remainingCents: number;
+    status: string;
+  }>;
+};
+
 // Generic fetch wrapper
 async function fetchApi<T>(
   endpoint: string,
@@ -246,7 +273,7 @@ export type AgentMemory = {
 export type AgentActionProposal = {
   pendingActionId: number;
   approvalId: number;
-  kind: 'budget_plan_upsert' | 'transaction_journal_create';
+  kind: 'budget_plan_upsert' | 'transaction_journal_create' | 'split_bill_loans_create';
   status: string;
   input: unknown;
   assumptions: string[];
@@ -296,6 +323,21 @@ export type AgentBudgetActionProposal = AgentActionProposal & {
   kind: 'budget_plan_upsert';
   input: { periodId: number; plans: Array<{ categoryId: number; plannedAmountCents: number }> };
   details: Array<{ categoryId: number; category: string; plannedAmountCents: number }>;
+};
+
+export type AgentSplitBillActionProposal = AgentActionProposal & {
+  kind: 'split_bill_loans_create';
+  details: {
+    title: string;
+    dateMs: number;
+    walletAccountId: number;
+    walletName: string;
+    personalShareCents: number;
+    receiptTotalCents: number;
+    totalReceivableCents: number;
+    receivables: Array<{ contactId: number | null; name: string; amountCents: number; createsContact: boolean }>;
+    tagNames: string[];
+  };
 };
 
 export type AgentTransactionActionProposal = AgentActionProposal & {
@@ -381,6 +423,26 @@ export const api = {
     logout: () => fetchApi<{ success: boolean }>('/auth/logout', { method: 'POST' }),
     onboardingStatus: () =>
       fetchApi<{ needsOnboarding: boolean }>('/auth/onboarding-status'),
+  },
+
+  gmail: {
+    status: () => fetchApi<{
+      connected: boolean;
+      email: string | null;
+      lastSyncedAt: number | string | null;
+    }>('/integrations/gmail/status'),
+    connectUrl: () => `${API_BASE}/integrations/gmail/connect`,
+    disconnect: () => fetchApi<void>('/integrations/gmail', { method: 'DELETE' }),
+    sync: (days = 30) => fetchApi<{
+      connected: true;
+      imported: number;
+      skipped: number;
+      pendingIds: number[];
+      lastSyncedAt: number | string;
+    }>('/integrations/gmail/sync', {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    }),
   },
 
   profile: {
@@ -2213,7 +2275,7 @@ export const api = {
       }> }>(`/agent/actions${conversationId ? `?conversationId=${conversationId}` : ''}`),
       prepare: (data: {
         conversationId?: number | null;
-        kind: 'budget_plan_upsert' | 'transaction_journal_create';
+        kind: 'budget_plan_upsert' | 'transaction_journal_create' | 'split_bill_loans_create';
         input: unknown;
         assumptions?: string[];
         missingFields?: string[];
@@ -2249,7 +2311,7 @@ export const api = {
       execute: (approvalId: number, token: string) => fetchApi<{ receipt: {
         actionId: number;
         approvalId: number;
-        kind: 'budget_plan_upsert' | 'transaction_journal_create';
+        kind: 'budget_plan_upsert' | 'transaction_journal_create' | 'split_bill_loans_create';
         periodId?: number | null;
         transactionId?: number;
         changed?: Array<{ planId: number; categoryId: number; plannedAmountCents: number; operation: 'created' | 'updated' }>;
@@ -2363,6 +2425,8 @@ export const api = {
 
   // Splitbill
   splitbill: {
+    transaction: (transactionId: number, signal?: AbortSignal) =>
+      fetchApi<SplitBillTransactionDetail | null>(`/splitbill/transactions/${transactionId}`, { signal }),
     scan: (imageData: string, filename: string) =>
       fetchApi<{
         parsed: {

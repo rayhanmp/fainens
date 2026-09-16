@@ -100,6 +100,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
         provenance: monthly.provenance,
         allTransactions,
         coverage: monthly.coverage,
+        generatedAt: monthly.generatedAt,
+        isTemporary: monthly.isTemporary,
       };
       
       setReportData(newReportData);
@@ -139,6 +141,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
           budgetComparison={reportData.budgetComparison}
           allTransactions={reportData.allTransactions}
           coverage={reportData.coverage}
+          generatedAt={reportData.generatedAt}
+          isTemporary={reportData.isTemporary}
         />
       );
       const sourceBlob = await pdf(doc).toBlob();
@@ -257,7 +261,10 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
           <div className="border-t border-[var(--color-border)] pt-5">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">Report preview</h4>
-              <span className="text-xs text-[var(--color-text-secondary)]">{reportData.periodName}</span>
+              <div className="flex items-center gap-2">
+                {reportData.isTemporary && <span className="rounded-full border border-amber-300/70 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-800">Temporary</span>}
+                <span className="text-xs text-[var(--color-text-secondary)]">{reportData.periodName}</span>
+              </div>
             </div>
             <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <div>
@@ -287,6 +294,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
                 <span className="ml-2 font-medium">{reportData.revision}</span>
               </div>
             </div>
+            {reportData.isTemporary && <p className="mt-4 text-xs text-[var(--color-text-secondary)]">This snapshot is still in progress; figures can change before the period ends.</p>}
             {reportData.coverage && !reportData.coverage.isComparable && <p className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">Coverage warning: {reportData.coverage.warnings.join(' ')}</p>}
           </div>
         )}

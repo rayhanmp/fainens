@@ -1,25 +1,25 @@
 import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle,
   ArrowRight,
+  BarChart3,
+  Bell,
   CalendarClock,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
+  Flame,
   Info,
-  Landmark,
+  Percent,
   Plus,
   ReceiptText,
-  Send,
   ShieldCheck,
   Wallet,
 } from 'lucide-react';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
-import { Button } from '../components/ui/Button';
-import { Select } from '../components/ui/Select';
-import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
-import { RequireAuth } from '../lib/auth';
+import { RequireAuth, useAuth } from '../lib/auth';
 import type { api, AgentFinancialFacts, BudgetOutlook, BudgetPlan, BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { cn, findCurrentPeriod, formatCurrency, formatDate } from '../lib/utils';
@@ -41,6 +41,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../features/core/query-keys';
 import { useReviewBudgetOutlookMutation } from '../features/budgets/queries';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useUiStore } from '../stores/ui-store';
+import { useNetWorthTrendQuery } from '../features/analytics/queries';
+import { useAgentProfileQuery } from '../features/agent/queries';
+import { usePendingTransactionsQuery } from '../features/transactions/queries';
+import mountainHero from '../assets/dashboard-mountain-hero.png';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -83,6 +88,12 @@ type Attention = {
   to: '/accounts' | '/budget' | '/loans' | '/paylater' | '/periods' | '/subscriptions' | '/transactions';
   action: string;
 };
+
+const attentionReadStoragePrefix = 'fainens.dashboard.notifications.read';
+
+function attentionReadKey(item: Attention): string {
+  return `${item.id}|${item.title}|${item.detail}`;
+}
 
 function classifyTx(tx: RecentTransaction): 'expense' | 'income' | 'neutral' {
   const expense = tx.expenseCents ?? 0;
@@ -135,17 +146,51 @@ function formatConfidenceLabel(confidence: BudgetOutlook['confidence']): string 
   return confidence.charAt(0).toUpperCase() + confidence.slice(1);
 }
 
+function timeOfDayGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function fallbackName(email: string | undefined): string {
+  const localPart = email?.split('@')[0].replace(/[._-]+/g, ' ').trim();
+  if (!localPart || localPart === 'demo') return 'there';
+  return localPart.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function MetricHint({ children }: { children: ReactNode }) {
+  return (
+    <span className="group relative inline-flex">
+      <button type="button" aria-label="More information" className="grid h-5 w-5 place-items-center rounded-full text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">
+        <Info className="h-3.5 w-3.5" />
+      </button>
+      <span role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-0 z-30 hidden w-56 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs leading-relaxed text-[var(--ref-on-surface)] shadow-xl group-hover:block group-focus-within:block">
+        {children}
+      </span>
+    </span>
+  );
+}
+
 function DashboardPage() {
   const isMobile = useMediaQuery('(max-width: 767px)');
+  const [dashboardNow] = useState(() => Date.now());
+  const { user } = useAuth();
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false);
+  const periodPickerRef = useRef<HTMLDivElement>(null);
+  const periodPickerTriggerRef = useRef<HTMLButtonElement>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
-  const [isAttentionExpanded, setIsAttentionExpanded] = useState(false);
-  const [agentPrompt, setAgentPrompt] = useState('');
   const reviewedOutlookRevisionRef = useRef<string | null>(null);
+  const [readAttentionIds, setReadAttentionIds] = useState<Set<string>>(() => new Set());
+  const [readAttentionStateLoaded, setReadAttentionStateLoaded] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const reviewBudgetOutlookMutation = useReviewBudgetOutlookMutation();
+  const setDashboardNotificationCount = useUiStore((state) => state.setDashboardNotificationCount);
+  const netWorthTrendQuery = useNetWorthTrendQuery('30d');
+  const agentProfileQuery = useAgentProfileQuery();
 
   const periodsQuery = usePeriodsQuery();
   const accountsQuery = useAccountsLedgerQuery();
@@ -156,6 +201,7 @@ function DashboardPage() {
   const loansQuery = useDashboardLoansQuery();
   const paylaterQuery = useDashboardPayLaterQuery();
   const subscriptionsQuery = useDashboardSubscriptionsQuery();
+  const pendingTransactionsQuery = usePendingTransactionsQuery();
   const periods = (periodsQuery.data ?? []) as Period[];
   const accounts = (accountsQuery.data ?? []) as Account[];
   const categories = (categoriesQuery.data ?? []) as Category[];
@@ -165,6 +211,8 @@ function DashboardPage() {
   const loans = (loansQuery.data ?? []) as Loan[];
   const paylater = (paylaterQuery.data ?? null) as PayLaterObligations | null;
   const subscriptions = (subscriptionsQuery.data ?? null) as SubscriptionData | null;
+  const pendingTransactionCount = pendingTransactionsQuery.data?.length ?? 0;
+  const attentionReadStorageKey = `${attentionReadStoragePrefix}:${user?.email ?? 'default'}`;
   const overviewQueries = [periodsQuery, accountsQuery, categoriesQuery, tagsQuery, analyticsQuery, reconciliationQuery, loansQuery, paylaterQuery, subscriptionsQuery];
   const isLoading = overviewQueries.some((query) => query.isLoading);
   const loadError = overviewQueries.find((query) => query.error)?.error?.message ?? null;
@@ -223,8 +271,30 @@ function DashboardPage() {
     };
   }, [budgetRows, selectedPeriod]);
 
+  const commitmentCutoff = dashboardNow + 30 * DAY_MS;
+  const upcomingSubscriptions = [...(subscriptions?.subscriptions ?? [])]
+    .filter((item) => item.status === 'active' && item.nextRenewalAt <= commitmentCutoff)
+    .sort((a, b) => a.nextRenewalAt - b.nextRenewalAt);
+  const upcomingPayLater = paylater?.obligations.filter((item) => item.outstandingCents > 0 && item.dueDateMs != null && item.dueDateMs <= commitmentCutoff) ?? [];
+  const upcomingLoans = loans.filter((loan) => loan.direction === 'borrowed' && loan.status === 'active' && loan.remainingCents > 0 && loan.dueDate != null && loan.dueDate <= commitmentCutoff);
+  const subscriptionCommitmentTotal = upcomingSubscriptions.reduce((sum, item) => sum + item.amount, 0);
+  const payLaterCommitmentTotal = upcomingPayLater.reduce((sum, item) => sum + item.outstandingCents, 0);
+  const loanCommitmentTotal = upcomingLoans.reduce((sum, item) => sum + item.remainingCents, 0);
+  const upcomingCommitmentTotal = subscriptionCommitmentTotal + payLaterCommitmentTotal + loanCommitmentTotal;
+  const upcomingCommitmentCount = upcomingSubscriptions.length + upcomingPayLater.length + upcomingLoans.length;
+
   const attentionItems = useMemo<Attention[]>(() => {
     const next: Attention[] = [];
+    if (pendingTransactionCount > 0) {
+      next.push({
+        id: 'pending-transactions',
+        tone: 'warning',
+        title: `${pendingTransactionCount} pending transaction${pendingTransactionCount === 1 ? '' : 's'}`,
+        detail: 'Review imported or AI-parsed activity before it is posted to the ledger.',
+        to: '/transactions',
+        action: 'Review pending transactions',
+      });
+    }
     if (!analytics?.trialBalance.isBalanced) {
       next.push({ id: 'trial-balance', tone: 'danger', title: 'Ledger needs review', detail: 'The trial balance is not currently balanced.', to: '/accounts', action: 'Review accounts' });
     }
@@ -236,7 +306,7 @@ function DashboardPage() {
       next.push({ id: 'coverage', tone: selectedPeriod.coverageStatus === 'partial' ? 'warning' : 'danger', title: coverageLabel(selectedPeriod.coverageStatus), detail, to: '/periods', action: 'Review period' });
     }
     const latestReconciliation = reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active');
-    const reconciliationAgeDays = latestReconciliation ? Math.floor((Date.now() - latestReconciliation.asOfDate) / DAY_MS) : null;
+    const reconciliationAgeDays = latestReconciliation ? Math.floor((dashboardNow - latestReconciliation.asOfDate) / DAY_MS) : null;
     if (!latestReconciliation || (reconciliationAgeDays != null && reconciliationAgeDays > 30)) {
       next.push({
         id: 'reconciliation', tone: 'warning', title: latestReconciliation ? 'Accounts need a fresh check' : 'No account reconciliation yet',
@@ -245,34 +315,89 @@ function DashboardPage() {
       });
     }
     const overdueLoans = loans.filter((loan) => loan.isOverdue);
+    const dueSoonLoans = upcomingLoans.filter((loan) => loan.dueDate != null && loan.dueDate > dashboardNow && loan.dueDate <= dashboardNow + 7 * DAY_MS);
     if (overdueLoans.length > 0) {
       next.push({ id: 'loans', tone: 'danger', title: `${overdueLoans.length} loan${overdueLoans.length === 1 ? '' : 's'} overdue`, detail: 'Review repayment status and follow up with the counterparty.', to: '/loans', action: 'Open loans' });
+    } else if (dueSoonLoans.length > 0) {
+      const dueSoonTotal = dueSoonLoans.reduce((sum, loan) => sum + loan.remainingCents, 0);
+      next.push({ id: 'loans-soon', tone: 'warning', title: `${dueSoonLoans.length} loan${dueSoonLoans.length === 1 ? '' : 's'} due in 7 days`, detail: `${formatCurrency(dueSoonTotal)} due next, starting ${formatDate(dueSoonLoans[0].dueDate!)}`, to: '/loans', action: 'Open loans' });
+    } else if (upcomingLoans.length > 0) {
+      next.push({ id: 'loans-upcoming', tone: 'info', title: `${upcomingLoans.length} loan${upcomingLoans.length === 1 ? '' : 's'} due in 30 days`, detail: `${formatCurrency(loanCommitmentTotal)} outstanding, next due ${formatDate(upcomingLoans[0].dueDate!)}.`, to: '/loans', action: 'Open loans' });
     }
     const overduePaylater = paylater?.obligations.filter((item) => item.status === 'overdue') ?? [];
     const soonPaylater = paylater?.obligations.filter((item) => item.status === 'due_soon') ?? [];
     if (overduePaylater.length > 0 || soonPaylater.length > 0) {
-      const count = overduePaylater.length || soonPaylater.length;
-      next.push({ id: 'paylater', tone: overduePaylater.length ? 'danger' : 'warning', title: overduePaylater.length ? `${overduePaylater.length} PayLater payment${overduePaylater.length === 1 ? '' : 's'} overdue` : `${count} PayLater payment${count === 1 ? '' : 's'} due soon`, detail: 'Review the outstanding balance and upcoming due dates.', to: '/paylater', action: 'Open PayLater' });
+      next.push({ id: 'paylater', tone: overduePaylater.length ? 'danger' : 'warning', title: overduePaylater.length ? `${overduePaylater.length} PayLater payment${overduePaylater.length === 1 ? '' : 's'} overdue` : `${soonPaylater.length} PayLater payment${soonPaylater.length === 1 ? '' : 's'} due soon`, detail: `${formatCurrency((overduePaylater.length ? overduePaylater : soonPaylater).reduce((sum, item) => sum + item.outstandingCents, 0))} outstanding across these payments.`, to: '/paylater', action: 'Open PayLater' });
+    } else if (upcomingPayLater.length > 0) {
+      next.push({ id: 'paylater-upcoming', tone: 'info', title: `${upcomingPayLater.length} PayLater payment${upcomingPayLater.length === 1 ? '' : 's'} due in 30 days`, detail: `${formatCurrency(payLaterCommitmentTotal)} outstanding, review the next due dates.`, to: '/paylater', action: 'Open PayLater' });
     }
-    const dueSubscriptions = subscriptions?.renewalPreview.occurrences.filter((occurrence) => occurrence.dueAt <= Date.now() + 7 * DAY_MS) ?? [];
-    if (dueSubscriptions.length > 0) {
-      next.push({ id: 'subscriptions', tone: 'info', title: `${dueSubscriptions.length} subscription renewal${dueSubscriptions.length === 1 ? '' : 's'} due soon`, detail: 'Review upcoming recurring charges before they post.', to: '/subscriptions', action: 'Review subscriptions' });
+    const overdueSubscriptions = subscriptions?.renewalPreview.occurrences.filter((occurrence) => occurrence.dueAt <= dashboardNow) ?? [];
+    const dueSoonSubscriptions = upcomingSubscriptions.filter((subscription) => subscription.nextRenewalAt > dashboardNow && subscription.nextRenewalAt <= dashboardNow + 7 * DAY_MS);
+    if (overdueSubscriptions.length > 0) {
+      const overdueTotal = overdueSubscriptions.reduce((sum, occurrence) => sum + occurrence.amount, 0);
+      next.push({ id: 'subscriptions-overdue', tone: 'danger', title: `${overdueSubscriptions.length} subscription renewal${overdueSubscriptions.length === 1 ? '' : 's'} overdue`, detail: `${formatCurrency(overdueTotal)} is waiting for review before it is posted.`, to: '/subscriptions', action: 'Review subscriptions' });
+    } else if (dueSoonSubscriptions.length > 0) {
+      const dueSoonTotal = dueSoonSubscriptions.reduce((sum, subscription) => sum + subscription.amount, 0);
+      next.push({ id: 'subscriptions-soon', tone: 'warning', title: `${dueSoonSubscriptions.length} subscription${dueSoonSubscriptions.length === 1 ? '' : 's'} due in 7 days`, detail: `${formatCurrency(dueSoonTotal)} due next, starting ${formatDate(dueSoonSubscriptions[0].nextRenewalAt)}.`, to: '/subscriptions', action: 'Review subscriptions' });
+    } else if (upcomingSubscriptions.length > 0) {
+      next.push({ id: 'subscriptions-upcoming', tone: 'info', title: `${upcomingSubscriptions.length} subscription${upcomingSubscriptions.length === 1 ? '' : 's'} due in 30 days`, detail: `${formatCurrency(subscriptionCommitmentTotal)} total, next due ${formatDate(upcomingSubscriptions[0].nextRenewalAt)}.`, to: '/subscriptions', action: 'Review subscriptions' });
     }
-    const riskyBudget = budgetSummary.isTracked ? budgetRows.find((row) => row.percentUsed >= 100) : undefined;
-    const projectedBudget = budgetSummary.isTracked && !riskyBudget
-      ? budgetOutlook?.categories.find((row) => row.riskStatus === 'at_risk')
-      : undefined;
-    if (riskyBudget || projectedBudget) {
-      const row = riskyBudget ?? projectedBudget!;
-      next.push({ id: 'budget', tone: riskyBudget ? 'danger' : 'warning', title: riskyBudget ? `${row.categoryName} is over budget` : `${row.categoryName} may exceed its budget`, detail: riskyBudget ? `${formatCurrency(row.actualAmount)} spent against ${formatCurrency(row.plannedAmount)} planned.` : 'Completed-period history suggests this budget may be exceeded.', to: '/budget', action: 'Review budget' });
+    const overBudgetRows = budgetSummary.isTracked ? budgetRows.filter((row) => row.percentUsed >= 100) : [];
+    const projectedBudgetRows = budgetSummary.isTracked && overBudgetRows.length === 0
+      ? (budgetOutlook?.categories.filter((row) => row.riskStatus === 'at_risk') ?? [])
+      : [];
+    if (overBudgetRows.length > 0) {
+      const overrunTotal = overBudgetRows.reduce((sum, row) => sum + Math.max(0, row.actualAmount - row.plannedAmount), 0);
+      const topCategories = overBudgetRows.slice(0, 2).map((row) => row.categoryName).join(' and ');
+      next.push({ id: 'budget-overrun', tone: 'danger', title: `${overBudgetRows.length} categor${overBudgetRows.length === 1 ? 'y is' : 'ies are'} over budget`, detail: `${formatCurrency(overrunTotal)} over plan, led by ${topCategories}.`, to: '/budget', action: 'Review budget' });
+    } else if (projectedBudgetRows.length > 0) {
+      const topCategories = projectedBudgetRows.slice(0, 2).map((row) => row.categoryName).join(' and ');
+      next.push({ id: 'budget-risk', tone: 'warning', title: `${projectedBudgetRows.length} categor${projectedBudgetRows.length === 1 ? 'y is' : 'ies are'} at risk`, detail: `${topCategories} may exceed the plan based on the current outlook.`, to: '/budget', action: 'Review budget' });
     }
     const unallocated = facts?.facts.byCategory.find((row) => row.categoryId == null && row.spentCents > 0);
     if (unallocated) {
       next.push({ id: 'unallocated', tone: 'info', title: 'Some spending is unallocated', detail: `${formatCurrency(unallocated.spentCents)} cannot yet be attributed to a category.`, to: '/transactions', action: 'Classify activity' });
     }
     const priority = { danger: 0, warning: 1, info: 2 } as const;
-    return next.sort((a, b) => priority[a.tone] - priority[b.tone]).slice(0, 5);
-  }, [analytics, budgetOutlook, budgetRows, budgetSummary.isTracked, facts, loans, paylater, reconciliation, selectedPeriod, subscriptions]);
+    return next.sort((a, b) => priority[a.tone] - priority[b.tone]).slice(0, 8);
+  }, [analytics, budgetOutlook, budgetRows, budgetSummary.isTracked, dashboardNow, facts, loans, paylater, pendingTransactionCount, reconciliation, selectedPeriod, subscriptionCommitmentTotal, subscriptions, upcomingSubscriptions]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(attentionReadStorageKey) ?? '[]');
+      setReadAttentionIds(new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : []));
+    } catch {
+      setReadAttentionIds(new Set());
+    } finally {
+      setReadAttentionStateLoaded(true);
+    }
+  }, [attentionReadStorageKey]);
+
+  useEffect(() => {
+    if (!readAttentionStateLoaded) return;
+    try {
+      localStorage.setItem(attentionReadStorageKey, JSON.stringify([...readAttentionIds]));
+    } catch {
+      // Browser storage can be unavailable in private or restricted contexts.
+    }
+  }, [attentionReadStorageKey, readAttentionIds, readAttentionStateLoaded]);
+
+  const unreadAttentionItems = useMemo(
+    () => attentionItems.filter((item) => !readAttentionIds.has(attentionReadKey(item))),
+    [attentionItems, readAttentionIds],
+  );
+
+  const markAttentionRead = (item: Attention) => {
+    setReadAttentionIds((current) => new Set(current).add(attentionReadKey(item)));
+  };
+
+  const markAllAttentionRead = () => {
+    setReadAttentionIds((current) => {
+      const next = new Set(current);
+      attentionItems.forEach((item) => next.add(attentionReadKey(item)));
+      return next;
+    });
+  };
 
   const planRows = useMemo(() => {
     if (budgetOutlook && budgetOutlook.periodId === selectedPeriod?.id && budgetOutlook.categories.length > 0) {
@@ -292,20 +417,71 @@ function DashboardPage() {
       .map((row) => ({ name: row.category, actual: row.spentCents, planned: 0, outlook: null }));
   }, [budgetOutlook, budgetRows, facts, selectedPeriod]);
 
-  const coverageWarnings = facts?.coverage.warnings ?? [];
   const periodIncome = facts?.facts.totalIncomeCents ?? 0;
   const periodExpense = facts?.facts.totalSpentCents ?? 0;
   const periodIsTracked = selectedPeriod?.coverageStatus === 'complete' || selectedPeriod?.coverageStatus === 'partial';
   const periodNet = periodIsTracked ? periodIncome - periodExpense : null;
-  const selectedPeriodAsOf = facts?.facts.asOfMs ?? Date.now();
-  const notificationItems = attentionItems.filter((item) => item.id !== 'coverage');
+  const selectedPeriodAsOf = facts?.facts.asOfMs ?? dashboardNow;
   const visibleRecent = recent.filter((transaction) => !isTransferFee(transaction));
   const budgetRemaining = budgetOutlook?.total.remainingAmount ?? budgetSummary.remaining ?? 0;
   const dailyBudget = budgetOutlook && budgetOutlook.daysRemaining > 0 ? Math.max(0, Math.round(budgetRemaining / budgetOutlook.daysRemaining)) : null;
-  const openAgent = (prompt = agentPrompt) => {
+  const savingsRate = periodIsTracked && periodIncome > 0 ? (periodNet! / periodIncome) * 100 : null;
+  const preferredName = agentProfileQuery.data?.nickname?.trim() || fallbackName(user?.email);
+  const netWorthSeries = netWorthTrendQuery.data?.series ?? [];
+  const netWorthAtStart = netWorthSeries[0]?.netWorth;
+  const netWorthNow = netWorthSeries.at(-1)?.netWorth;
+  const netWorthChangePercent = netWorthAtStart != null && netWorthNow != null && netWorthAtStart !== 0
+    ? ((netWorthNow - netWorthAtStart) / Math.abs(netWorthAtStart)) * 100
+    : null;
+  const budgetOverrun = periodIsTracked && budgetRemaining < 0;
+  const heroHeadline = budgetOverrun
+    ? 'Your budget needs attention.'
+    : netWorthChangePercent == null
+      ? upcomingCommitmentTotal > 0 ? 'Your next moves are visible.' : 'Your position is taking shape.'
+      : netWorthChangePercent >= 10
+        ? 'Strong momentum is building.'
+        : netWorthChangePercent > 0
+          ? 'Progress is moving in the right direction.'
+          : netWorthChangePercent < -5
+            ? 'Let\u2019s protect your runway.'
+            : netWorthChangePercent < 0
+              ? 'A small reset can help.'
+              : upcomingCommitmentTotal > 0
+                ? 'Your next commitments are in view.'
+                : 'You\u2019re holding steady.';
+  const heroMessage = budgetOverrun
+    ? `${formatCurrency(Math.abs(budgetRemaining))} over the ${selectedPeriod?.name ?? 'current'} budget. Review the categories driving the overrun.`
+    : netWorthChangePercent == null
+      ? upcomingCommitmentTotal > 0
+        ? `${formatCurrency(upcomingCommitmentTotal)} in commitments are due within the next 30 days. Keep them in your plan.`
+        : 'Keep building your financial history. A clearer trend is just ahead.'
+      : netWorthChangePercent > 0
+        ? `Your net worth increased by ${Math.abs(netWorthChangePercent).toFixed(1)}% in the last 30 days.${upcomingCommitmentTotal > 0 ? ` Upcoming commitments total ${formatCurrency(upcomingCommitmentTotal)}.` : ' Keep building momentum.'}`
+        : netWorthChangePercent < 0
+          ? `Your net worth decreased by ${Math.abs(netWorthChangePercent).toFixed(1)}% in the last 30 days. Review the trend and plan your next move.`
+          : upcomingCommitmentTotal > 0
+            ? `Your net worth held steady over the last 30 days. Upcoming commitments total ${formatCurrency(upcomingCommitmentTotal)}.`
+            : 'Your net worth held steady over the last 30 days. Consistency is a strong foundation.';
+  const selectedPeriodIndex = periods.findIndex((period) => String(period.id) === selectedPeriodId);
+  const olderPeriod = selectedPeriodIndex >= 0 ? periods[selectedPeriodIndex + 1] : undefined;
+  const newerPeriod = selectedPeriodIndex > 0 ? periods[selectedPeriodIndex - 1] : undefined;
+  const openAgent = (prompt = '') => {
     const text = prompt.trim();
     void navigate({ to: '/agent', search: text ? { prompt: text } : {} } as any);
   };
+
+  useEffect(() => {
+    setDashboardNotificationCount(unreadAttentionItems.length);
+  }, [setDashboardNotificationCount, unreadAttentionItems.length]);
+
+  useEffect(() => {
+    if (!isPeriodPickerOpen) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (periodPickerRef.current && !periodPickerRef.current.contains(event.target as Node)) setIsPeriodPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [isPeriodPickerOpen]);
 
   if (isLoading) {
     return <RequireAuth><PageContainer><div className="h-8 w-56 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((key) => <div key={key} className="h-44 animate-pulse rounded-3xl bg-[var(--ref-surface-container-highest)]" />)}</div></PageContainer></RequireAuth>;
@@ -313,19 +489,89 @@ function DashboardPage() {
 
   return (
     <RequireAuth>
-      <PageContainer>
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <PageHeader subtext="Decision centre" title="Your financial position" description={`Current position as of ${formatAsOf(Date.now())}${selectedPeriod ? ` · period view: ${selectedPeriod.name}` : ''}`} />
-          <div className="flex flex-wrap items-center gap-2">
-            {periods.length > 0 && <Select value={selectedPeriodId} onChange={(event) => setSelectedPeriodId(event.target.value)} options={periods.map((period) => ({ value: String(period.id), label: period.name }))} className="min-w-[170px] rounded-full border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-xs font-bold" />}
-            <button type="button" onClick={() => setIsReportOpen(true)} className="hidden rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-xs font-bold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-surface-container-low)] md:inline-flex">Export report</button>
-            <Button className="hidden rounded-full md:inline-flex" onClick={() => setIsTransactionOpen(true)}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
+      <PageContainer className="space-y-4 sm:space-y-4">
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Decision centre</p>
+            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of {formatAsOf(dashboardNow)}</p>
+          </div>
+          <div className="flex items-center justify-between gap-2 sm:justify-end">
+            {periods.length > 0 && <div className="flex w-fit max-w-full shrink-0 items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1 shadow-sm">
+              <button type="button" disabled={!olderPeriod} onClick={() => olderPeriod && setSelectedPeriodId(String(olderPeriod.id))} className="grid h-9 w-9 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Previous period" title={olderPeriod ? `Previous: ${olderPeriod.name}` : 'No previous period'}><ChevronLeft className="h-4 w-4" /></button>
+              <div ref={periodPickerRef} className="relative w-[min(145px,calc(100vw-7rem))] shrink-0">
+                <button ref={periodPickerTriggerRef} type="button" onClick={() => setIsPeriodPickerOpen((open) => !open)} onKeyDown={(event) => { if (event.key === 'Escape') { setIsPeriodPickerOpen(false); periodPickerTriggerRef.current?.focus(); } }} className={cn('relative flex h-9 w-full items-center justify-center rounded-lg px-4 text-center text-xs font-bold text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]', isPeriodPickerOpen && 'bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]')} aria-haspopup="listbox" aria-expanded={isPeriodPickerOpen} aria-label="Dashboard period">
+                  <span className="-translate-x-1 truncate text-center">{selectedPeriod?.name ?? 'Select period'}</span><ChevronDown className={cn('absolute right-2 h-4 w-4 transition-transform', isPeriodPickerOpen && 'rotate-180')} />
+                </button>
+                {isPeriodPickerOpen && <div role="listbox" aria-label="Dashboard periods" className="period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-60 w-full overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-2xl">
+                  {periods.map((period) => <button key={period.id} type="button" role="option" aria-selected={String(period.id) === selectedPeriodId} onClick={() => { setSelectedPeriodId(String(period.id)); setIsPeriodPickerOpen(false); periodPickerTriggerRef.current?.focus(); }} onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); setIsPeriodPickerOpen(false); periodPickerTriggerRef.current?.focus(); } }} className={cn('w-full rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors', String(period.id) === selectedPeriodId ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>{period.name}</button>)}
+                </div>}
+              </div>
+              <button type="button" disabled={!newerPeriod} onClick={() => newerPeriod && setSelectedPeriodId(String(newerPeriod.id))} className="grid h-9 w-9 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Next period" title={newerPeriod ? `Next: ${newerPeriod.name}` : 'No next period'}><ChevronRight className="h-4 w-4" /></button>
+            </div>}
+            <details className="group relative">
+              <summary className="relative grid h-11 w-11 cursor-pointer list-none place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)] [&::-webkit-details-marker]:hidden" aria-label="Dashboard notifications">
+                <Bell className="h-5 w-5" />
+                {unreadAttentionItems.length > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-[var(--color-background)]">{Math.min(unreadAttentionItems.length, 9)}</span>}
+              </summary>
+              <div className="absolute right-0 top-[calc(100%+0.65rem)] z-40 w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-2xl">
+                <div className="flex items-center justify-between gap-3 px-2 py-1"><h2 className="font-headline text-base font-extrabold">Notifications</h2><div className="flex items-center gap-2"><span className="text-xs text-[var(--ref-on-surface-variant)]">{unreadAttentionItems.length || 'All clear'}</span>{unreadAttentionItems.length > 0 && <button type="button" onClick={markAllAttentionRead} className="text-[11px] font-bold text-[var(--ref-primary)] hover:underline">Mark all read</button>}</div></div>
+                {attentionItems.length === 0 ? <p className="px-2 py-5 text-sm text-[var(--ref-on-surface-variant)]">Nothing needs your attention right now.</p> : <div className="mt-2 divide-y divide-[var(--color-border)]">{attentionItems.map((item) => { const isRead = readAttentionIds.has(attentionReadKey(item)); return <div key={item.id} className={cn('flex items-start gap-2', isRead && 'opacity-60')}><Link to={item.to} className="flex min-w-0 flex-1 gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)]"><span className={cn('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', isRead ? 'bg-slate-400' : item.tone === 'danger' ? 'bg-rose-500' : item.tone === 'warning' ? 'bg-amber-500' : 'bg-sky-500')} /><span className="min-w-0"><strong className="block text-sm">{item.title}</strong><span className="mt-0.5 block text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{item.detail}</span><span className="mt-1.5 block text-xs font-bold text-[var(--ref-primary)]">{item.action}</span></span></Link><button type="button" onClick={() => markAttentionRead(item)} className="mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline">{isRead ? 'Read' : 'Mark read'}</button></div>; })}</div>}
+              </div>
+            </details>
           </div>
         </div>
 
+        <section className="relative rounded-3xl bg-[#102b4d] text-white" aria-labelledby="dashboard-hero-title">
+            <img src={mountainHero} alt="" className="absolute inset-0 h-full w-full rounded-3xl object-cover object-center" />
+            <div className="absolute inset-0 rounded-3xl bg-[linear-gradient(90deg,rgba(7,29,55,0.98)_0%,rgba(9,35,66,0.88)_48%,rgba(12,41,72,0.35)_100%)]" />
+            <div className="absolute inset-0 rounded-3xl bg-[linear-gradient(0deg,rgba(5,24,44,0.5),transparent_55%)]" />
+            <div className="relative grid gap-5 p-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,1fr)] lg:items-center">
+              <div className="min-w-0">
+                <div>
+                <p className="text-sm font-semibold text-white/88">{timeOfDayGreeting()}, {preferredName}</p>
+                  <h1 id="dashboard-hero-title" className="mt-1 text-2xl leading-tight tracking-tight text-white sm:text-3xl">{heroHeadline}</h1>
+                  <p className="mt-2 text-sm leading-relaxed text-white/88">{heroMessage}</p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => setIsTransactionOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#10243e] shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-[#132747] text-white"><Plus className="h-3.5 w-3.5" strokeWidth={3} /></span>
+                  Add transaction
+                </button>
+                <button type="button" onClick={() => setIsReportOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-full border border-white/55 bg-white/5 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                  <BarChart3 className="h-5 w-5" />
+                  View report
+                </button>
+                </div>
+              </div>
+              <aside className="hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm lg:block" aria-label="Financial summary">
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-white/65">At a glance</p><Wallet className="h-4 w-4 text-white/75" /></div>
+                <Link to="/accounts" className="mt-3 block"><span className="text-xs text-white/70">Available cash</span><strong className="mt-0.5 block truncate text-xl">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</strong></Link>
+                <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-xs">
+                  <Link to="/accounts"><span className="block text-white/60">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatCurrency(analytics.netWorth.netWorth) : '—'}</strong></Link>
+                  <Link to="/budget"><span className="block text-white/60">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatCurrency(budgetRemaining) : 'Review'}</strong></Link>
+                  <div className="group relative min-w-0">
+                    <button type="button" className="block w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-describedby="upcoming-commitments-tip">
+                      <span className="block truncate text-white/60">Due · 30d</span>
+                      <strong className="mt-1 block truncate">{upcomingCommitmentCount > 0 ? formatCurrency(upcomingCommitmentTotal) : 'None'}</strong>
+                    </button>
+                    <div id="upcoming-commitments-tip" role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+0.75rem)] right-0 z-30 hidden max-h-60 w-64 overflow-y-auto rounded-xl border border-white/20 bg-[#07182d] p-3 text-left shadow-xl group-hover:block group-focus-within:block">
+                      <p className="font-bold text-white">Upcoming commitments</p>
+                      {upcomingCommitmentCount === 0 ? <p className="mt-1 text-[11px] leading-relaxed text-white/70">No subscriptions, PayLater, or borrowed loans due in the next 30 days.</p> : <div className="mt-2 space-y-1.5 text-[11px] text-white/70">
+                        {upcomingSubscriptions.length > 0 && <p className="flex justify-between gap-3"><span>Subscriptions · {upcomingSubscriptions.length}</span><strong className="text-white">{formatCurrency(subscriptionCommitmentTotal)}</strong></p>}
+                        {upcomingSubscriptions.length > 0 && <div className="mt-2 space-y-1 border-t border-white/15 pt-2">
+                          {upcomingSubscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate text-white/75">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-white/45">· {formatDate(subscription.nextRenewalAt)}</span></span><strong className="shrink-0 text-white">{formatCurrency(subscription.amount)}</strong></p>)}
+                        </div>}
+                        {upcomingPayLater.length > 0 && <p className="flex justify-between gap-3"><span>PayLater · {upcomingPayLater.length}</span><strong className="text-white">{formatCurrency(payLaterCommitmentTotal)}</strong></p>}
+                        {upcomingLoans.length > 0 && <p className="flex justify-between gap-3"><span>Borrowed loans · {upcomingLoans.length}</span><strong className="text-white">{formatCurrency(loanCommitmentTotal)}</strong></p>}
+                      </div>}
+                    </div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+        </section>
+
         {combinedLoadError && <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{combinedLoadError}</div>}
-        {coverageWarnings.length > 0 && <Link to="/periods" className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Read this period carefully.</strong> {coverageWarnings[0]} <span className="ml-1 font-semibold underline">Review coverage</span></span></Link>}
-        {notificationItems.length > 0 && <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm"><div className="flex items-center gap-3"><AlertTriangle className={cn('h-5 w-5 shrink-0', notificationItems[0].tone === 'danger' ? 'text-rose-600' : notificationItems[0].tone === 'warning' ? 'text-amber-600' : 'text-sky-600')} /><p className="min-w-0 flex-1 font-bold">{notificationItems.length} item{notificationItems.length === 1 ? '' : 's'} may need your attention.</p><button type="button" onClick={() => setIsAttentionExpanded((current) => !current)} aria-expanded={isAttentionExpanded} aria-controls="dashboard-attention-details" className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-primary)]/10">{isAttentionExpanded ? 'Hide details' : 'View details'}<ChevronDown className={cn('h-4 w-4 transition-transform', isAttentionExpanded && 'rotate-180')} /></button></div>{isAttentionExpanded && <div id="dashboard-attention-details" className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">{notificationItems.map((item) => <div key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><p className="min-w-0 flex-1 text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">{item.title}:</span> {item.detail}</p><Link to={item.to} className="shrink-0 font-semibold text-[var(--ref-primary)] hover:underline">{item.action}</Link></div>)}</div>}</div>}
 
         <section className="mt-5 space-y-4 md:hidden" aria-label="Today">
           <div className="cash-satin rounded-[1.75rem] bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]">
@@ -344,14 +590,33 @@ function DashboardPage() {
         </section>
 
         {!isMobile && <div>
-        <section className="mt-6 hidden grid-cols-1 gap-4 md:grid md:grid-cols-2 xl:grid-cols-4">
-          <article className="cash-satin relative overflow-hidden rounded-3xl bg-[var(--ref-primary-container)] p-6 text-[var(--ref-on-primary-container)]"><Wallet className="h-5 w-5" /><p className="mt-4 text-xs font-bold uppercase tracking-widest">Available cash</p><p className="mt-3 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</p><p className="mt-4 text-xs">Cash-equivalent assets only · current balance</p></article>
-          <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><Landmark className="h-5 w-5 text-[var(--ref-primary)]" /><p className="mt-4 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Net worth</p><p className="mt-2 font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{analytics ? formatCurrency(analytics.netWorth.netWorth) : '—'}</p><p className="mt-3 text-xs text-[var(--ref-on-surface-variant)]">Assets {analytics ? formatCurrency(analytics.netWorth.totalAssets) : '—'} · Liabilities {analytics ? formatCurrency(analytics.netWorth.totalLiabilities) : '—'}</p></article>
-          <article className="relative rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><CalendarClock className="h-5 w-5 text-[var(--ref-primary)]" />{analytics?.runway && <div className="group relative"><button type="button" aria-label="Show runway calculation" title="Show runway calculation" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-4 w-4" /></button><div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Runway calculation</p>{analytics.runway.isUnbounded ? <p className="mt-1 leading-relaxed">No recorded monthly burn, so the estimate is unbounded.</p> : <p className="mt-1 leading-relaxed">{formatCurrency(analytics.runway.liquidAssets)} cash ÷ {formatCurrency(analytics.runway.grossBurnRate)} average monthly burn = {analytics.runway.runwayMonths?.toLocaleString('en-US', { maximumFractionDigits: 1 })} months.</p>}<p className="mt-2 text-[var(--ref-on-surface-variant)]">Based on recorded operating expenses over the last three months.</p></div></div>}</div><p className="mt-4 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Cash runway</p><p className="mt-2 font-headline text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">{analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>{analytics?.runway && <p className="mt-3 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{analytics.runway.isUnbounded ? `${formatCurrency(analytics.runway.liquidAssets)} available · no recorded burn` : 'Covers spending at current burn.'}</p>}</article>
-          <article className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><CircleDollarSign className="h-5 w-5 text-[var(--ref-primary)]" /><p className="mt-4 text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Period cash flow</p><p className={cn('mt-2 font-headline text-3xl font-extrabold tracking-tight', periodNet == null ? 'text-[var(--ref-on-surface)]' : periodNet >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{periodNet == null ? 'Not tracked' : `${periodNet >= 0 ? '+' : ''}${formatCurrency(periodNet)}`}</p><p className="mt-3 text-xs text-[var(--ref-on-surface-variant)]">{periodIsTracked ? `Income ${formatCurrency(periodIncome)} · Spending ${formatCurrency(periodExpense)}` : 'Coverage is incomplete; recorded totals are not comparable.'}</p></article>
+        <section aria-label="Financial pulse" className="grid grid-cols-1 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0 pb-4 md:pb-0 md:pr-5">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CircleDollarSign className="h-4 w-4" />Period cash flow <MetricHint>{periodIsTracked ? `${formatCurrency(periodIncome)} income minus ${formatCurrency(periodExpense)} spending.` : 'Complete period coverage to calculate cash flow.'}</MetricHint></p>
+            <p className={cn('mt-1 break-words text-xl font-bold tabular-nums', periodNet == null ? '' : periodNet >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{periodNet == null ? 'Not tracked' : `${periodNet >= 0 ? '+' : ''}${formatCurrency(periodNet)}`}</p>
+          </div>
+          <div className="min-w-0 border-t border-[var(--color-border)] py-4 md:border-l md:border-t-0 md:px-5 md:py-0">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Percent className="h-4 w-4" />Savings rate <MetricHint>{savingsRate == null ? 'Needs tracked income for this period.' : 'Share of period income retained after recorded spending.'}</MetricHint></p>
+            <p className={cn('mt-1 text-xl font-bold tabular-nums', savingsRate != null && savingsRate < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface)]')}>{savingsRate == null ? '—' : `${savingsRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`}</p>
+          </div>
+          <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:pr-5 xl:border-l xl:px-5 xl:pt-0">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Flame className="h-4 w-4" />Monthly burn <MetricHint>Average operating spend over the last three months.</MetricHint></p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatCurrency(analytics.burnRate.grossBurnRate) : '—'}</p>
+          </div>
+          <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:border-l md:pl-5 xl:pt-0">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CalendarClock className="h-4 w-4" />Cash runway <MetricHint>Estimated months of liquid cash at the current monthly burn.</MetricHint></p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>
+          </div>
         </section>
 
-        <section className="mt-6 grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3"><div className="h-full xl:col-span-2"><NetWorthChart /></div><div className="flex h-full flex-col gap-5"><SpendingTrendChart periodId={selectedPeriod?.id ?? null} /><aside className="relative self-start overflow-hidden rounded-3xl bg-[var(--ref-secondary-container)] p-5 text-[var(--ref-on-secondary-container)]"><div className="relative flex flex-col gap-4"><div className="min-w-0"><div className="flex items-center gap-3"><AgentOrbActions state={agentPrompt.trim() ? 'ready' : 'idle'} onPrompt={(prompt) => { setAgentPrompt(prompt); requestAnimationFrame(() => document.getElementById('dashboard-agent-prompt')?.focus()); }} /><p className="text-xs font-bold uppercase tracking-widest opacity-70">Ask Fainens</p></div><h2 className="mt-1 font-headline text-2xl font-extrabold">What do you want to understand?</h2><p className="mt-2 text-sm leading-relaxed opacity-90">Ask about spending, balances, obligations, or a purchase decision.</p></div><form className="relative min-w-0" onSubmit={(event) => { event.preventDefault(); openAgent(); }}><label htmlFor="dashboard-agent-prompt" className="sr-only">Ask Fainens a question</label><div className="flex gap-2"><input id="dashboard-agent-prompt" value={agentPrompt} onChange={(event) => setAgentPrompt(event.target.value)} placeholder="e.g. Where did most of my money go?" className="min-w-0 flex-1 rounded-xl border border-black/10 bg-white/80 px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:ring-2 focus:ring-black/20" /><button type="submit" disabled={agentPrompt.trim().length < 2} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[var(--ref-on-secondary-container)] px-3 py-2.5 text-sm font-bold text-[var(--ref-secondary-container)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"><Send className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Ask</span></button></div><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setAgentPrompt('What were my top 10 expenses recently?')} className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-semibold hover:bg-black/15">Top expenses</button><button type="button" onClick={() => setAgentPrompt('How is my budget tracking this period?')} className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-semibold hover:bg-black/15">Budget pace</button><button type="button" onClick={() => setAgentPrompt('What bills and obligations are coming up?')} className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-semibold hover:bg-black/15">Upcoming bills</button></div></form></div></aside></div></section>
+        <section className="mt-6 grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
+          <NetWorthChart className="xl:col-span-2 xl:h-[24rem]" />
+          <SpendingTrendChart periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />
+        </section>
+
+        <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7">
+          <AgentOrbActions state="idle" onPrompt={openAgent} />
+        </div>
 
         <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm xl:col-span-2">

@@ -885,10 +885,10 @@ function SparklineCard({ visualization }: { visualization: SparklineVisualizatio
   </article>;
 }
 
-export function AgentVisualizationBlock({ source, accounts = [] }: { source: string; accounts?: SplitBillAccount[] }) {
+export function AgentVisualizationBlock({ source, accounts = [], currentUserName = '' }: { source: string; accounts?: SplitBillAccount[]; currentUserName?: string }) {
   const visualization = parseVisualization(source);
   if (!visualization) return null;
-  if (visualization.type === 'split_bill') return <SplitBillCard visualization={visualization} accounts={accounts} />;
+  if (visualization.type === 'split_bill') return <SplitBillCard visualization={visualization} accounts={accounts} currentUserName={currentUserName} />;
   if (visualization.type === 'metric') return <MetricCard visualization={visualization} />;
   if (visualization.type === 'ranked_bar') return <RankedBarCard visualization={visualization} />;
   if (visualization.type === 'comparison') return <ComparisonCard visualization={visualization} />;

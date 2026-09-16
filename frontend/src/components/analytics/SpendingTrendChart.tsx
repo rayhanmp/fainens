@@ -37,7 +37,7 @@ function coverageText(point: Point): string {
   return 'Unknown coverage';
 }
 
-export function SpendingTrendChart({ periodId = null }: { periodId?: number | null } = {}) {
+export function SpendingTrendChart({ periodId = null, className }: { periodId?: number | null; className?: string } = {}) {
   const [dataScope, setDataScope] = useState<'30d' | 'period'>('30d');
   const [view, setView] = useState<ViewMode>('calendar');
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
@@ -105,11 +105,11 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
   };
 
   if (isLoading) {
-    return <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="h-5 w-40 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-4 h-10 w-48 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-5 h-52 rounded-xl bg-[var(--ref-surface-container-highest)]/60" /></div>;
+    return <div className={cn('flex h-[18rem] flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5', className)}><div className="h-5 w-40 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-4 h-10 w-48 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-5 min-h-0 flex-1 rounded-xl bg-[var(--ref-surface-container-highest)]/60" /></div>;
   }
 
   return (
-    <div className="relative rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5">
+    <div className={cn('relative flex h-[18rem] min-w-0 flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5', className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Spending activity</h3>
@@ -174,17 +174,18 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
         </div>
       )}
 
-      {loadError ? <p className="mt-4 text-sm text-[var(--color-danger)]">{loadError}</p> : points.every((point) => point.spent === 0) ? (
-        <div className="mt-4 flex min-h-52 items-center justify-center px-3 text-center text-sm text-[var(--ref-on-surface-variant)]">No posted spending recorded for this view.</div>
+      <div className="mt-4 min-h-0 flex-1">
+      {loadError ? <div className="flex h-full items-center justify-center px-3 text-center text-sm text-[var(--color-danger)]">{loadError}</div> : points.every((point) => point.spent === 0) ? (
+        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-[var(--ref-on-surface-variant)]">No posted spending recorded for this view.</div>
       ) : view === 'calendar' ? (
-        <div className="mt-5">
-          <div className="grid grid-cols-7 gap-1.5" role="img" aria-label="Spending activity by day; darker cells mean more spending">
-            {heatmapCells.map((point, index) => point == null ? <span key={`empty-${index}`} className="aspect-square" aria-hidden="true" /> : (
+        <div className="flex h-full flex-col">
+          <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 gap-1.5" role="img" aria-label="Spending activity by day; darker cells mean more spending">
+            {heatmapCells.map((point, index) => point == null ? <span key={`empty-${index}`} className="h-full w-full" aria-hidden="true" /> : (
               <span
                 key={point.startMs}
                 title={`${shortDate(point.startMs)} · ${formatCurrency(point.spent)} · ${point.transactionCount} expense${point.transactionCount === 1 ? '' : 's'} · ${coverageText(point)}`}
                 className={cn(
-                  'aspect-square rounded-md border transition-transform hover:scale-105',
+                  'h-full w-full rounded-md border transition-transform hover:scale-[1.02]',
                   point.coverageStatus === 'complete' ? 'border-transparent' : 'border-dashed border-amber-500/70',
                   point.spent > 0 ? 'bg-[var(--ref-primary)]' : 'bg-[var(--ref-surface-container-highest)]',
                 )}
@@ -199,7 +200,7 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
           </div>
         </div>
       ) : view === 'weekly' ? (
-        <div className="mt-4 h-52 w-full">
+        <div className="h-full w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weeklyPoints} margin={{ top: 8, right: 2, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" stroke="var(--ref-outline)" />
@@ -218,7 +219,7 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="mt-4 h-52 w-full">
+        <div className="h-full w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={cumulativePoints} margin={{ top: 8, right: 2, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" stroke="var(--ref-outline)" />
@@ -237,8 +238,9 @@ export function SpendingTrendChart({ periodId = null }: { periodId?: number | nu
           </ResponsiveContainer>
         </div>
       )}
+      </div>
 
-      {hasIncompleteCoverage && <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-medium leading-relaxed text-[var(--ref-on-surface)]">Dashed cells and coverage gaps mean activity is unknown—not zero.</p>}
+      {hasIncompleteCoverage && <p className="absolute bottom-3 left-5 right-5 max-h-9 overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-medium leading-relaxed text-[var(--ref-on-surface)]">Dashed cells and coverage gaps mean activity is unknown—not zero.</p>}
     </div>
   );
 }

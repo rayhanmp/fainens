@@ -37,7 +37,6 @@ import {
   TrendingDown,
   MoreVertical,
   MoreHorizontal,
-  ArrowRightLeft,
   Search,
   ArrowUp,
   ArrowDown,
@@ -55,6 +54,8 @@ import {
 } from 'recharts';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { AIInsightCard } from '../components/insights/AIInsightCard';
+import { useDashboardSubscriptionsQuery } from '../features/dashboard/queries';
+import { getSubscriptionDueByCategory } from '../features/budgets/subscription-budget';
 
 export const Route = createFileRoute('/budget')({
   component: BudgetPage,
@@ -140,6 +141,7 @@ function BudgetPage() {
   const { confirm } = useConfirm();
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const subscriptionAutoFillRef = useRef<{ categoryId: string; amount: number } | null>(null);
   const queryClient = useQueryClient();
 
   // Close menus on outside click
@@ -185,6 +187,7 @@ function BudgetPage() {
     comparePeriodId ? parseInt(comparePeriodId, 10) : null,
   );
   const templatesQuery = useBudgetTemplatesQuery();
+  const subscriptionsQuery = useDashboardSubscriptionsQuery();
   const createBudgetMutation = useCreateBudgetMutation();
   const updateBudgetMutation = useUpdateBudgetMutation();
   const deleteBudgetMutation = useDeleteBudgetMutation();
@@ -200,7 +203,7 @@ function BudgetPage() {
   const periodIncome = budgetSummary?.income ?? 0;
   const budgetPercentOfIncome = budgetSummary?.percentOfIncome ?? 0;
   const comparisonData = (comparisonQuery.data ?? []) as ComparisonData[];
-  const isLoading = periodsQuery.isLoading || categoriesQuery.isLoading || budgetQuery.isLoading || templatesQuery.isLoading;
+  const isLoading = periodsQuery.isLoading || categoriesQuery.isLoading || budgetQuery.isLoading || templatesQuery.isLoading || subscriptionsQuery.isLoading;
   const loadError = periodsQuery.error?.message ?? categoriesQuery.error?.message ?? budgetQuery.error?.message ?? templatesQuery.error?.message ?? null;
 
   useEffect(() => {
@@ -218,6 +221,16 @@ function BudgetPage() {
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
   const isPeriodClosed = selectedPeriod?.status === 'closed';
   const isPeriodTracked = selectedPeriod?.coverageStatus === 'complete' || selectedPeriod?.coverageStatus === 'partial';
+  const subscriptionDueByCategory = useMemo(
+    () => selectedPeriod
+      ? getSubscriptionDueByCategory(
+        subscriptionsQuery.data?.subscriptions ?? [],
+        selectedPeriod.startDate,
+        selectedPeriod.endDate,
+      )
+      : new Map<number, number>(),
+    [selectedPeriod, subscriptionsQuery.data?.subscriptions],
+  );
 
   const handleCreateBudget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,6 +385,7 @@ function BudgetPage() {
 
   const openBudgetModal = () => {
     if (isPeriodClosed) return;
+    subscriptionAutoFillRef.current = null;
     setBudgetForm({ categoryId: '', plannedAmount: '' });
     setFormError('');
     setIsModalOpen(true);
@@ -379,6 +393,7 @@ function BudgetPage() {
 
   const closeBudgetModal = () => {
     setIsModalOpen(false);
+    subscriptionAutoFillRef.current = null;
     setBudgetForm({ categoryId: '', plannedAmount: '' });
     setFormError('');
   };
@@ -1008,7 +1023,6 @@ function BudgetPage() {
                                           openMoveModal(row);
                                         }}
                                       >
-                                        <ArrowRightLeft className="h-3.5 w-3.5" />
                                         Move to period
                                       </button>
                                       <button
@@ -1185,7 +1199,27 @@ function BudgetPage() {
               <Select
                 label="Category"
                 value={budgetForm.categoryId}
-                onChange={(e) => setBudgetForm({ ...budgetForm, categoryId: e.target.value })}
+                onChange={(e) => {
+                  const categoryId = e.target.value;
+                  const subscriptionAmount = subscriptionDueByCategory.get(Number(categoryId)) ?? 0;
+                  const currentAmount = parseIdNominalToInt(budgetForm.plannedAmount);
+                  const previousAutoFill = subscriptionAutoFillRef.current;
+                  const isPreviousAutoFill = previousAutoFill != null
+                    && currentAmount === previousAutoFill.amount;
+                  const hasManualAmount = budgetForm.plannedAmount !== '' && !isPreviousAutoFill;
+
+                  setBudgetForm({
+                    categoryId,
+                    plannedAmount: hasManualAmount
+                      ? budgetForm.plannedAmount
+                      : subscriptionAmount > 0
+                        ? formatIdNominalInput(String(subscriptionAmount))
+                        : '',
+                  });
+                  subscriptionAutoFillRef.current = subscriptionAmount > 0
+                    ? { categoryId, amount: subscriptionAmount }
+                    : null;
+                }}
                 options={[
                   { value: '', label: 'Select a category…' },
                   ...categories.map((c) => ({
@@ -1207,6 +1241,12 @@ function BudgetPage() {
               required
               error={formError}
             />
+
+            {budgetForm.categoryId && subscriptionDueByCategory.has(Number(budgetForm.categoryId)) && (
+              <p className="-mt-3 text-xs text-[var(--color-text-secondary)]">
+                Default subscription payment for {selectedPeriod?.name}: {formatCurrency(subscriptionDueByCategory.get(Number(budgetForm.categoryId)) ?? 0)}. You can adjust this amount if needed.
+              </p>
+            )}
 
             <div className="flex flex-wrap gap-3 pt-2">
               <Button type="submit" isLoading={isSubmitting} className="min-w-[140px]">

@@ -11,6 +11,7 @@ import { cn } from '../../lib/utils';
 import { MobileMenu } from './MobileMenu';
 import { navigationActive } from './navigation';
 import { useUiStore } from '../../stores/ui-store';
+import { usePendingTransactionsQuery } from '../../features/transactions/queries';
 
 /** Primary mobile navigation — desktop uses the sidebar. */
 const items = [
@@ -24,6 +25,8 @@ export function MobileBottomNav() {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const openTransactionComposer = useUiStore((state) => state.openTransactionComposer);
+  const dashboardNotificationCount = useUiStore((state) => state.dashboardNotificationCount);
+  const pendingTransactionCount = usePendingTransactionsQuery().data?.length ?? 0;
   const search = location.search as Record<string, unknown>;
   const contextualPrefill = {
     accountId: typeof search.accountId === 'string' && Number.isSafeInteger(Number(search.accountId)) ? Number(search.accountId) : undefined,
@@ -51,7 +54,7 @@ export function MobileBottomNav() {
                       : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
                   )}
                 >
-                  <Icon className="w-6 h-6" strokeWidth={active ? 2.5 : 2} />
+                  <span className="relative"><Icon className="h-6 w-6" strokeWidth={active ? 2.5 : 2} />{to === '/' && dashboardNotificationCount > 0 && <span className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[var(--color-surface)]" aria-label={`${dashboardNotificationCount} dashboard notifications`} />}{to === '/transactions' && pendingTransactionCount > 0 && <span className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-[var(--color-surface)]" aria-label={`${pendingTransactionCount} pending transactions`} />}</span>
                   <span className="truncate max-w-full">{label}</span>
                 </Link>
               </li>

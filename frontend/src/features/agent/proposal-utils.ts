@@ -1,4 +1,4 @@
-import type { AgentBudgetActionProposal, AgentTransactionActionProposal } from '../../lib/api';
+import type { AgentBudgetActionProposal, AgentTransactionActionProposal, AgentSplitBillActionProposal } from '../../lib/api';
 
 export type AgentTransactionProposal = AgentTransactionActionProposal;
 
@@ -24,6 +24,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function isTransactionProposal(value: unknown): value is AgentTransactionProposal {
   if (!isRecord(value) || value.kind !== 'transaction_journal_create' || typeof value.approvalId !== 'number') return false;
   return isRecord(value.details) && Array.isArray(value.details.lines) && typeof value.details.totalDebit === 'number';
+}
+
+export function isSplitBillLoanProposal(value: unknown): value is AgentSplitBillActionProposal {
+  return isRecord(value) && value.kind === 'split_bill_loans_create'
+    && typeof value.approvalId === 'number' && isRecord(value.details)
+    && typeof value.details.receiptTotalCents === 'number' && Array.isArray(value.details.receivables)
+    && Array.isArray(value.details.tagNames);
 }
 
 export function isBudgetProposal(value: unknown): value is AgentBudgetActionProposal {

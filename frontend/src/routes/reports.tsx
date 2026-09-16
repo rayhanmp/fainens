@@ -65,6 +65,18 @@ function inclusivePeriodEnd(timestamp: number): number {
   return timestamp % 86_400_000 === 0 ? timestamp + 86_400_000 - 1 : timestamp;
 }
 
+function TemporaryReportBadge({ isTemporary }: { isTemporary?: boolean }) {
+  if (!isTemporary) return null;
+  return (
+    <span
+      className="rounded-full border border-amber-300/70 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-800"
+      title="This report was generated before the selected period ended and may change."
+    >
+      Temporary
+    </span>
+  );
+}
+
 function ReportsPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/reports' }) as { periodId?: string; tab?: ReportTab };
@@ -226,6 +238,12 @@ function ReportsPage() {
           <div role="status" className="flex items-start gap-3 rounded-2xl border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-[var(--color-text-primary)]">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--color-warning)]/15 text-[var(--color-warning)]"><AlertTriangle className="h-4 w-4" /></span>
             <span className="pt-1"><strong className="font-semibold">{selectedPeriod.coverageStatus} coverage.</strong> {selectedPeriod.coverageReason ?? 'Recorded figures do not establish complete activity for this period; empty totals are not zero activity.'}</span>
+          </div>
+        )}
+        {selectedPeriod && Date.now() < inclusivePeriodEnd(selectedPeriod.endDate) && (
+          <div role="status" className="flex items-center gap-2 px-1 text-xs text-[var(--color-text-secondary)]">
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-800">Temporary</span>
+            <span>This period is still in progress, so its figures may change.</span>
           </div>
         )}
 
@@ -425,6 +443,7 @@ function IncomeStatementReport({
   const handlePDFExport = () => {
     if (!data) return;
     const exportData = [
+      { Type: 'Status', Item: data.isTemporary ? 'Temporary - generated before period end' : 'Final', Amount: '' },
       ...data.revenue.map(r => ({ Type: 'Revenue', Item: r.name, Amount: r.amount })),
       { Type: 'Total', Item: 'Total Revenue', Amount: data.totalRevenue },
       ...data.expenses.map(e => ({ Type: 'Expense', Item: e.name, Amount: e.amount })),
@@ -461,7 +480,7 @@ function IncomeStatementReport({
   return (
     <Card
       className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6"
-      title={`Income Statement - ${data.periodName || 'All Periods'}`}
+      title={<span className="flex items-center gap-2">Income Statement - {data.periodName || 'All Periods'} <TemporaryReportBadge isTemporary={data.isTemporary} /></span>}
       action={
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" className="rounded-full" onClick={handlePDFExport}>
@@ -625,7 +644,7 @@ function BalanceSheetReport({
   return (
     <Card
       className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6"
-      title={`Balance Sheet - As of ${data.asOfDate}`}
+      title={<span className="flex items-center gap-2">Balance Sheet - As of {data.asOfDate} <TemporaryReportBadge isTemporary={data.isTemporary} /></span>}
       action={
         <Button variant="secondary" size="sm" className="rounded-full" onClick={onExport}>
           <Download className="w-4 h-4 mr-2" />
@@ -761,7 +780,7 @@ function CashFlowReport({
   return (
     <Card
       className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6"
-      title="Cash Flow Statement"
+      title={<span className="flex items-center gap-2">Cash Flow Statement <TemporaryReportBadge isTemporary={data.isTemporary} /></span>}
       action={
         <Button variant="secondary" size="sm" className="rounded-full" onClick={onExport}>
           <Download className="w-4 h-4 mr-2" />
@@ -864,7 +883,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
   }
 
   return (
-    <Card className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6" title={`Spending Breakdown - Total: ${formatCurrency(data.total)}`}>
+    <Card className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6" title={<span className="flex items-center gap-2">Spending Breakdown - Total: {formatCurrency(data.total)} <TemporaryReportBadge isTemporary={data.isTemporary} /></span>}>
       {data.coverage && !data.coverage.isComparable && <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">{data.coverage.warnings.join(' ')}</div>}
       <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.1fr)]">
         {/* Pie Chart */}

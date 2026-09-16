@@ -1,4 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import './loans.css';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -23,10 +24,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Wallet,
-  History,
+  Search,
+  Users,
+  ReceiptText,
+  ChevronRight,
+  CheckCircle2,
   AlertCircle,
-  User,
-  Clock,
   Trash2,
   Archive,
   RotateCcw,
@@ -49,6 +52,10 @@ type Loan = {
   contact: { id: number; name: string };
   isOverdue: boolean;
   daysOverdue: number;
+  sourceType?: string;
+  sourceTransactionId?: number | null;
+  sourceDescription?: string;
+  tags?: Array<{ id: number; name: string; color: string }>;
 };
 
 type ContactSummary = {
@@ -92,6 +99,16 @@ function LoansPage() {
     .filter((contact) => showArchived || contact.isActive) as ContactSummary[];
   const summary = (loansQuery.data?.summary ?? null) as Summary | null;
   const isLoading = loansQuery.isPending && !loansQuery.data;
+  const splitBills = useMemo(() => {
+    const grouped = new Map<number, Loan[]>();
+    for (const loan of loans) {
+      if (loan.sourceType !== 'split_bill' || !loan.sourceTransactionId) continue;
+      const group = grouped.get(loan.sourceTransactionId) ?? [];
+      group.push(loan);
+      grouped.set(loan.sourceTransactionId, group);
+    }
+    return [...grouped.entries()].sort((a, b) => b[0] - a[0]);
+  }, [loans]);
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -110,23 +127,41 @@ function LoansPage() {
     return [...contacts].sort((a, b) => Math.abs(b.netBalance) - Math.abs(a.netBalance));
   }, [contacts]);
 
-  // Recent activity (last 5 loans, sorted: active first, then by date)
-  const recentActivity = useMemo(() => {
-    return [...loans]
-      .sort((a, b) => {
-        if (a.status === 'active' && b.status !== 'active') return -1;
-        if (b.status === 'active' && a.status !== 'active') return 1;
-        return b.startDate - a.startDate;
-      })
-      .slice(0, 5)
-      .map(loan => ({
-        ...loan,
-        date: new Date(loan.startDate).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        }),
-      }));
-  }, [loans]);
+  const [view, setView] = useState<'loans' | 'contacts' | 'split'>('loans');
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('all');
+  const [direction, setDirection] = useState('all');
+  const searchTerm = search.trim().toLowerCase();
+  const overdueCount = loans.filter(loan => loan.status === 'active' && loan.isOverdue).length;
+  const matchesSearch = (loan: Loan) => [loan.contact.name, loan.description, loan.sourceDescription, ...(loan.tags?.map(tag => tag.name) ?? [])].join(' ').toLowerCase().includes(searchTerm);
+  const filteredLoans = [...loans]
+    .filter(loan => (status === 'all' || (status === 'overdue' ? loan.status === 'active' && loan.isOverdue : loan.status === status))
+      && (direction === 'all' || loan.direction === direction) && matchesSearch(loan))
+    .sort((a, b) => Number(b.status === 'active' && b.isOverdue) - Number(a.status === 'active' && a.isOverdue)
+      || Number(b.status === 'active') - Number(a.status === 'active') || b.startDate - a.startDate);
+  const filteredContacts = contactsWithLoans.filter(contact => contact.name.toLowerCase().includes(searchTerm));
+  const filteredSplitBills = splitBills.filter(([, group]) => group.some(matchesSearch));
+
+  const openContact = (contactId: number) => {
+    setSelectedContactId(contactId);
+    setIsContactProfileOpen(true);
+  };
+
+  const handleDeleteLoan = async (loan: Loan) => {
+    const confirmed = await confirm({
+      title: 'Delete loan',
+      message: 'Delete this loan? This will also delete the associated transaction.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await deleteLoanMutation.mutateAsync(loan.id);
+      void loadData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
 
   const handleLoanCreated = () => {
     setIsNewLoanModalOpen(false);
@@ -185,355 +220,83 @@ function LoansPage() {
 
   return (
     <RequireAuth>
-      <PageContainer>
-        {/* Hero Section */}
-        <section className="mb-12">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <PageHeader
-              subtext="Lending & borrowing"
-              title="Loans"
-              description="Manage your private lending circle with precision."
-            />
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => {}}
-                className="flex items-center gap-2"
-                disabled
-              >
-                <History className="w-4 h-4" />
-                History
-              </Button>
-              <Button
-                onClick={() => setIsNewLoanModalOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                New Loan
-              </Button>
-            </div>
+      <PageContainer className="loans-page">
+        <div className="loans-heading">
+          <PageHeader subtext="Lending & borrowing" title="Loans" description="A clear view of what you owe and what comes back to you." />
+          <div className="loans-heading-actions">
+            <Button variant="secondary" onClick={() => setIsNewContactModalOpen(true)}><Users size={16} /> Add contact</Button>
+            <Button onClick={() => setIsNewLoanModalOpen(true)}><Plus size={16} /> New loan</Button>
           </div>
-
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Total Lent */}
-            <div className="bg-[var(--ref-primary-container)] p-8 rounded-2xl flex flex-col justify-between min-h-[200px]">
-              <div className="flex justify-between items-start">
-                <div className="p-3 bg-white/10 rounded-xl">
-                  <ArrowUpRight className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-white/60 text-sm font-medium">Lending Activity</span>
-              </div>
-              <div>
-                <p className="text-white/80 font-medium mb-1">Total Lent Out</p>
-                <h2 className="text-white text-4xl font-bold">
-                  {formatCurrency(summary?.totalLent || 0)}
-                </h2>
-              </div>
-            </div>
-
-            {/* Total Borrowed */}
-            <div className="bg-[var(--ref-surface-container-lowest)] p-8 rounded-2xl flex flex-col justify-between min-h-[200px] editorial-shadow border border-[var(--color-border)]">
-              <div className="flex justify-between items-start">
-                <div className="p-3 bg-[var(--ref-secondary-container)] rounded-xl">
-                  <ArrowDownRight className="w-6 h-6 text-[var(--ref-on-secondary-container)]" />
-                </div>
-                <span className="text-[var(--color-muted)] text-sm font-medium">Debt Portfolio</span>
-              </div>
-              <div>
-                <p className="text-[var(--color-muted)] font-medium mb-1">My Total Debt</p>
-                <h2 className="text-[var(--color-text-primary)] text-4xl font-bold">
-                  {formatCurrency(summary?.totalBorrowed || 0)}
-                </h2>
-              </div>
-            </div>
-
-            {/* Net Position */}
-            <div className={cn(
-              "p-8 rounded-2xl flex flex-col justify-between min-h-[200px]",
-              (summary?.netPosition || 0) >= 0 
-                ? "bg-[var(--ref-secondary)]" 
-                : "bg-[var(--ref-error)]"
-            )}>
-              <div className="flex justify-between items-start">
-                <div className="p-3 bg-white/10 rounded-xl">
-                  <Wallet className="w-6 h-6 text-white" />
-                </div>
-                <div className={cn(
-                  "flex items-center gap-1 px-2 py-1 rounded-full",
-                  "bg-white/20"
-                )}>
-                  {(summary?.netPosition || 0) >= 0 ? (
-                    <ArrowUpRight className="w-4 h-4 text-white" />
-                  ) : (
-                    <ArrowDownRight className="w-4 h-4 text-white" />
-                  )}
-                  <span className="text-white text-xs font-bold">
-                    {(summary?.netPosition || 0) >= 0 ? '+' : ''}
-                    {formatCurrency(Math.abs(summary?.netPosition || 0))}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <p className="text-white/80 font-medium mb-1">Net Position</p>
-                <h2 className="text-white text-4xl font-bold">
-                  {formatCurrency(summary?.netPosition || 0)}
-                </h2>
-              </div>
-            </div>
+        </div>
+        {loansQuery.isError && <div className="loans-error" role="alert"><AlertCircle size={18} /><span>We couldn't load your loans. Please try again.</span><Button size="sm" variant="secondary" onClick={() => void loansQuery.refetch()}>Retry</Button></div>}
+        <section className="loans-summary" aria-label="Loan balances">
+          <div className="loans-stat">
+            <div className="loans-stat-label"><span className="loans-stat-icon loans-positive"><ArrowUpRight size={19} /></span> Owed to you</div>
+            <p className="loans-stat-value">{formatCurrency(summary?.totalLent ?? 0)}</p>
+            <p className="loans-caption">Outstanding money you've lent</p>
+          </div>
+          <div className="loans-stat">
+            <div className="loans-stat-label"><span className="loans-stat-icon loans-debt"><ArrowDownRight size={19} /></span> You owe</div>
+            <p className="loans-stat-value">{formatCurrency(summary?.totalBorrowed ?? 0)}</p>
+            <p className="loans-caption">Outstanding money you've borrowed</p>
+          </div>
+          <div className="loans-stat loans-stat-net">
+            <div className="loans-stat-label"><span className="loans-stat-icon"><Wallet size={19} /></span> Net balance</div>
+            <p className="loans-stat-value">{formatCurrency(summary?.netPosition ?? 0)}</p>
+            <p className="loans-caption">{(summary?.netPosition ?? 0) === 0 ? 'Lending and borrowing are in balance' : (summary?.netPosition ?? 0) > 0 ? 'More owed to you than you owe' : 'More to pay back than to receive'}</p>
           </div>
         </section>
-
-        {/* Contact Network Grid */}
-        <section className="mb-12">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h3 className="text-2xl font-bold text-[var(--color-text-primary)]">Contact Network</h3>
-              <p className="mt-1 text-sm text-[var(--color-muted)]">
-                {showArchived ? 'Active and archived contacts' : 'Active contacts'}
-              </p>
-            </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 self-start text-sm font-semibold text-[var(--color-muted)] sm:self-auto">
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(event) => setShowArchived(event.target.checked)}
-                className="h-4 w-4 rounded border-[var(--color-border)] text-[var(--ref-primary)] focus:ring-[var(--ref-primary)]"
-              />
-              Show archived
-            </label>
+        <div className="loans-overview">
+          <span><span className="loans-dot" /><strong>{summary?.activeLoansCount ?? 0}</strong> active loans</span>
+          <span><CheckCircle2 size={15} /><strong>{summary?.repaidLoansCount ?? 0}</strong> repaid</span>
+          {overdueCount > 0 && <button className="loans-overdue-link" onClick={() => { setView('loans'); setStatus('overdue'); setDirection('all'); setSearch(''); }}><AlertCircle size={15} />{overdueCount} overdue <ChevronRight size={14} /></button>}
+        </div>
+        <section className="loans-workspace" aria-label="Loan records and contacts">
+          <div className="loans-tabs" aria-label="Views">
+            {([
+              ['loans', 'All loans', ReceiptText, loans.length],
+              ['contacts', 'Contacts', Users, contacts.length],
+              ['split', 'Split bills', Wallet, splitBills.length],
+            ] as const).map(([key, label, Icon, count]) => <button key={key} aria-pressed={view === key} className={cn('loans-tab', view === key && 'is-selected')} onClick={() => { setView(key); setSearch(''); }}><Icon size={17} /><span>{label}</span><span className="loans-tab-count">{count}</span></button>)}
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {contactsWithLoans.map((contact) => (
-              <div
-                key={contact.id}
-                className={cn(
-                  'rounded-2xl border bg-[var(--ref-surface-container-lowest)] p-6 editorial-shadow transition-shadow hover:shadow-lg',
-                  !contact.isActive && 'border-dashed opacity-85',
-                )}
-              >
-                <div className="mb-6 flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--ref-primary-container)] text-lg font-bold text-white">
-                      {getInitials(contact.name)}
-                    </div>
-                    <div>
-                      <h4 className="text-lg font-bold text-[var(--color-text-primary)]">{contact.name}</h4>
-                      <p className="flex items-center gap-1 text-sm text-[var(--color-muted)]">
-                        <span
-                          className={cn(
-                            'h-2 w-2 rounded-full',
-                            contact.netBalance > 0
-                              ? 'bg-[var(--ref-secondary)]'
-                              : contact.netBalance < 0
-                              ? 'bg-[var(--ref-error)]'
-                              : 'bg-[var(--color-muted)]',
-                          )}
-                        />
-                        {contact.netBalance > 0 ? 'Owes You' : contact.netBalance < 0 ? 'You Owe' : 'Settled'}
-                      </p>
-                    </div>
-                  </div>
-                  {!contact.isActive && (
-                    <span className="shrink-0 rounded-full bg-[var(--ref-surface-container-high)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                      Archived
-                    </span>
-                  )}
-                </div>
-
-                <div className="mb-6 bg-[var(--ref-surface-container-low)] p-4 rounded-xl">
-                  <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-1">
-                    {contact.netBalance > 0 ? 'Balance Owed to You' : 'Balance You Owe'}
-                  </p>
-                  <p
-                    className={cn(
-                      'text-2xl font-bold',
-                      contact.netBalance > 0
-                        ? 'text-[var(--ref-secondary)]'
-                        : 'text-[var(--ref-error)]'
-                    )}
-                  >
-                    {formatCurrency(Math.abs(contact.netBalance))}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const loan = loans.find(
-                        l => l.contactId === contact.id && l.status === 'active'
-                      );
-                      if (loan) openPaymentModal(loan);
-                    }}
-                    disabled={!loans.some(
-                      l => l.contactId === contact.id && l.status === 'active'
-                    )}
-                  >
-                    {contact.netBalance > 0 ? 'Record' : 'Pay'}
-                  </Button>
-                  <Button 
-                    variant="secondary" 
-                    size="sm"
-                    onClick={() => {
-                      setSelectedContactId(contact.id);
-                      setIsContactProfileOpen(true);
-                    }}
-                  >
-                    Details
-                  </Button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleContactLifecycle(contact)}
-                  disabled={archiveContactMutation.isPending || restoreContactMutation.isPending}
-                  className={cn(
-                    'mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-                    contact.isActive
-                      ? 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--ref-error)]/40 hover:bg-[var(--ref-error)]/5 hover:text-[var(--ref-error)]'
-                      : 'border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--ref-primary)]/40 hover:bg-[var(--ref-primary)]/5 hover:text-[var(--ref-primary)]',
-                  )}
-                >
-                  {contact.isActive ? <Archive className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
-                  {contact.isActive ? 'Archive contact' : 'Restore contact'}
-                </button>
-              </div>
-            ))}
-
-            {/* Add Contact Card */}
-            <button
-              onClick={() => setIsNewContactModalOpen(true)}
-              className="border-2 border-dashed border-[var(--color-border)] rounded-2xl p-6 flex flex-col items-center justify-center min-h-[250px] group cursor-pointer hover:border-[var(--ref-primary)]/50 transition-colors text-left"
-            >
-              <div className="w-12 h-12 rounded-full bg-[var(--ref-surface-container-high)] flex items-center justify-center mb-4 group-hover:bg-[var(--ref-primary-container)] transition-colors">
-                <User className="w-6 h-6 text-[var(--color-muted)] group-hover:text-white" />
-              </div>
-              <p className="font-bold text-[var(--color-text-primary)]">Add Contact</p>
-              <p className="text-sm text-[var(--color-muted)] text-center mt-1">
-                Start tracking a new loan
-              </p>
-            </button>
+          <div className="loans-toolbar">
+            <label className="loans-search"><Search size={17} /><input aria-label={'Search ' + (view === 'split' ? 'split bills' : view)} placeholder={view === 'contacts' ? 'Search contacts...' : 'Search by name or description...'} value={search} onChange={event => setSearch(event.target.value)} /></label>
+            {view === 'loans' && <div className="loans-filters">
+              <select aria-label="Loan direction" value={direction} onChange={event => setDirection(event.target.value)}><option value="all">All directions</option><option value="lent">Owed to you</option><option value="borrowed">You owe</option></select>
+              <select aria-label="Loan status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="overdue">Overdue</option><option value="repaid">Repaid</option><option value="defaulted">Defaulted</option><option value="written_off">Written off</option></select>
+            </div>}
+            {view === 'contacts' && <label className="loans-archived"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} /> Show archived</label>}
           </div>
-        </section>
-
-        {/* Bottom Section: Recent Activity */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Cash Flow Narrative */}
-          <div className="bg-[var(--ref-surface-container-low)] rounded-2xl p-8 relative overflow-hidden">
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold mb-4">Cash Flow Narrative</h3>
-              <p className="text-[var(--color-muted)] leading-relaxed mb-8 max-w-md">
-                Your lending activity shows a healthy balance. You are currently a net{' '}
-                {(summary?.netPosition || 0) >= 0 ? 'lender' : 'borrower'} with{' '}
-                {formatCurrency(Math.abs(summary?.netPosition || 0))} in{' '}
-                {(summary?.netPosition || 0) >= 0 ? 'outstanding receivables' : 'outstanding payables'}.
-              </p>
-              <div className="flex items-center gap-6">
-                <div>
-                  <p className="text-xs font-bold text-[var(--color-muted)] uppercase tracking-widest mb-1">
-                    Active Loans
-                  </p>
-                  <p className="text-2xl font-bold">{summary?.activeLoansCount || 0}</p>
-                </div>
-                <div className="w-px h-10 bg-[var(--color-border)]" />
-                <div>
-                  <p className="text-xs font-bold text-[var(--color-muted)] uppercase tracking-widest mb-1">
-                    Active Contacts
-                  </p>
-                  <p className="text-2xl font-bold">{contactsWithLoans.length}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity List */}
-          <div className="bg-[var(--ref-surface-container-lowest)] rounded-2xl p-8 editorial-shadow border border-[var(--color-border)]">
-            <h3 className="text-xl font-bold mb-6">Recent Records</h3>
-            <div className="space-y-4">
-              {recentActivity.length === 0 ? (
-                <p className="text-[var(--color-muted)] text-center py-8">
-                  No recent loan activity
-                </p>
-              ) : (
-                recentActivity.map((loan) => (
-                  <div key={loan.id} className="flex items-center justify-between group">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={cn(
-                          'p-2 rounded-lg',
-                          loan.direction === 'lent'
-                            ? 'bg-[var(--ref-secondary-container)]'
-                            : 'bg-[var(--ref-primary-container)]'
-                        )}
-                      >
-                        {loan.direction === 'lent' ? (
-                          <ArrowUpRight className="w-5 h-5 text-[var(--ref-on-secondary-container)]" />
-                        ) : (
-                          <ArrowDownRight className="w-5 h-5 text-white" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-bold text-[var(--color-text-primary)]">
-                          {loan.direction === 'lent' ? 'Lent to' : 'Borrowed from'}{' '}
-                          {loan.contact.name}
-                        </p>
-                        <p className="text-xs text-[var(--color-muted)] flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {loan.date}
-                          {loan.status === 'active' && loan.isOverdue && (
-                            <span className="text-[var(--ref-error)] flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              Overdue
-                            </span>
-                          )}
-                          {loan.status === 'repaid' && (
-                            <span className="text-[var(--ref-secondary)] bg-[var(--ref-secondary-container)] px-1.5 py-0.5 rounded text-xs">
-                              Repaid
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <p
-                        className={cn(
-                          'font-bold',
-                          loan.direction === 'lent'
-                            ? 'text-[var(--color-text-primary)]'
-                            : 'text-[var(--ref-error)]'
-                        )}
-                      >
-                        {formatCurrency(loan.amountCents)}
-                      </p>
-                      <button
-                        onClick={async () => {
-                          const confirmed = await confirm({
-                            title: 'Delete Loan',
-                            message: 'Delete this loan? This will also delete the associated transaction.',
-                            confirmLabel: 'Delete',
-                            variant: 'danger',
-                          });
-                          if (confirmed) {
-                            try {
-                              await deleteLoanMutation.mutateAsync(loan.id);
-                              void loadData();
-                            } catch (err) {
-                              alert((err as Error).message);
-                            }
-                          }
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-2 text-[var(--color-muted)] hover:text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10 rounded-lg transition-all"
-                        title="Delete loan"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          {view === 'loans' && <>
+            {filteredLoans.length > 0 ? <div className="loans-list">
+              <div className="loans-list-heading" aria-hidden="true"><span>Contact / loan</span><span>Balance remaining</span><span>Due date</span><span>Status</span><span /></div>
+              {filteredLoans.map(loan => <article className="loans-row" key={loan.id}>
+                <div className="loans-person"><span className={cn('loans-avatar', loan.direction === 'lent' ? 'loans-positive' : 'loans-debt')}>{loan.direction === 'lent' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}</span><div className="loans-person-copy"><button className="loans-name" onClick={() => openContact(loan.contactId)}>{loan.contact.name}</button><p className="loans-caption loans-description" title={loan.description ?? undefined}>{loan.description || (loan.direction === 'lent' ? 'Money lent' : 'Money borrowed')}</p><span className="loans-direction">{loan.direction === 'lent' ? 'Owes you' : 'You owe'}</span></div></div>
+                <div className="loans-amount"><strong>{formatCurrency(loan.remainingCents)}</strong><span className="loans-caption">of {formatCurrency(loan.amountCents)}</span></div>
+                <div className="loans-due"><span className="loans-mobile-label">Due </span>{loan.dueDate ? new Date(loan.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date'}</div>
+                <div className="loans-status"><span className={cn('loans-badge', loan.status === 'active' && loan.isOverdue ? 'is-overdue' : loan.status === 'repaid' ? 'is-repaid' : loan.status === 'active' ? 'is-active' : '')}>{loan.status === 'active' && loan.isOverdue ? 'Overdue' : loan.status === 'written_off' ? 'Written off' : loan.status.charAt(0).toUpperCase() + loan.status.slice(1)}</span></div>
+                <div className="loans-row-actions">{loan.status === 'active' && loan.remainingCents > 0 ? <Button variant="secondary" size="sm" onClick={() => openPaymentModal(loan)}>Record payment</Button> : <button className="loans-details" onClick={() => openContact(loan.contactId)}>Details <ChevronRight size={15} /></button>}<button className="loans-icon-button" aria-label={'Delete loan for ' + loan.contact.name} title="Delete loan" disabled={deleteLoanMutation.isPending} onClick={() => void handleDeleteLoan(loan)}><Trash2 size={15} /></button></div>
+              </article>)}
+              <div className="loans-list-footer">Showing {filteredLoans.length} of {loans.length} loans <span>Overdue and active loans appear first</span></div>
+            </div> : <div className="loans-empty"><span className="loans-empty-icon"><ReceiptText size={26} /></span><h2>{loans.length === 0 ? 'Your loans, all in one place' : 'No loans match these filters'}</h2><p>{loans.length === 0 ? 'Add money you have lent or borrowed to start tracking repayments.' : 'Try another name, direction, or status.'}</p>{loans.length === 0 ? <Button onClick={() => setIsNewLoanModalOpen(true)}><Plus size={16} /> Add your first loan</Button> : <Button variant="secondary" onClick={() => { setSearch(''); setStatus('all'); setDirection('all'); }}>Clear filters</Button>}</div>}
+          </>}
+          {view === 'contacts' && <div className="loans-contacts">
+            {filteredContacts.map(contact => <article className="loans-contact" key={contact.id}>
+              <div className="loans-person"><span className="loans-avatar">{getInitials(contact.name)}</span><div className="loans-person-copy"><button className="loans-name" onClick={() => openContact(contact.id)}>{contact.name}</button><p className="loans-caption">{contact.activeLoansCount} active {contact.activeLoansCount === 1 ? 'loan' : 'loans'}{!contact.isActive && ' · Archived'}</p></div></div>
+              <div className="loans-contact-balance"><span className="loans-caption">{contact.netBalance > 0 ? 'Owes you' : contact.netBalance < 0 ? 'You owe' : 'Settled up'}</span><strong className={cn(contact.netBalance > 0 && 'loans-positive-text', contact.netBalance < 0 && 'loans-debt-text')}>{formatCurrency(Math.abs(contact.netBalance))}</strong></div>
+              <div className="loans-contact-actions"><button className="loans-details" onClick={() => openContact(contact.id)}>View details <ChevronRight size={15} /></button><button className="loans-icon-button" aria-label={(contact.isActive ? 'Archive ' : 'Restore ') + contact.name} title={contact.isActive ? 'Archive contact' : 'Restore contact'} disabled={archiveContactMutation.isPending || restoreContactMutation.isPending} onClick={() => void handleContactLifecycle(contact)}>{contact.isActive ? <Archive size={16} /> : <RotateCcw size={16} />}</button></div>
+            </article>)}
+            {filteredContacts.length === 0 && <div className="loans-empty"><Users size={28} /><h2>{searchTerm ? 'No matching contacts' : 'Your lending circle starts here'}</h2><p>{searchTerm ? 'Try searching for another name.' : 'Add a contact to keep your loans organized by person.'}</p><Button variant="secondary" onClick={() => setIsNewContactModalOpen(true)}>Add contact</Button></div>}
+          </div>}
+          {view === 'split' && <div className="loans-split-list">
+            {filteredSplitBills.map(([sourceId, group]) => <article className="loans-split-card" key={sourceId}>
+              <div className="loans-split-heading"><div><span className="loans-eyebrow">Shared expense · {group.length} {group.length === 1 ? 'person' : 'people'}</span><h2>{(group[0]?.sourceDescription ?? group[0]?.description ?? 'Split bill').replace(/^Split bill - /, '')}</h2></div><Link to="/transactions" search={{ periodId: 'all', transactionId: String(sourceId) }} className="loans-details">Source payment <ArrowUpRight size={15} /></Link></div>
+              <div className="loans-tags">{group[0]?.tags?.map(tag => <span key={tag.id}>{tag.name}</span>)}</div>
+              {group.map(loan => <div className="loans-split-person" key={loan.id}><button className="loans-name" onClick={() => openContact(loan.contactId)}>{loan.contact.name}<span className="loans-caption">{loan.direction === 'lent' ? 'Owes you' : 'You owe'}</span></button><span className="loans-caption">{loan.status === 'written_off' ? 'Written off' : loan.status}</span><strong>{formatCurrency(loan.remainingCents)}</strong>{loan.status === 'active' && loan.remainingCents > 0 && <Button variant="secondary" size="sm" onClick={() => openPaymentModal(loan)}>Record payment</Button>}</div>)}
+              <div className="loans-split-footer"><div><span>To receive <strong>{formatCurrency(group.filter(loan => loan.direction === 'lent' && loan.status === 'active').reduce((sum, loan) => sum + loan.remainingCents, 0))}</strong></span>{group.some(loan => loan.direction === 'borrowed') && <span>To pay <strong>{formatCurrency(group.filter(loan => loan.direction === 'borrowed' && loan.status === 'active').reduce((sum, loan) => sum + loan.remainingCents, 0))}</strong></span>}</div>{group[0]?.tags?.filter(tag => tag.name === 'Split bill #' + sourceId).map(tag => <Link key={tag.id} to="/transactions" search={{ periodId: 'all', tagId: String(tag.id) }} className="loans-details">Bill activity <ChevronRight size={15} /></Link>)}</div>
+            </article>)}
+            {filteredSplitBills.length === 0 && <div className="loans-empty"><ReceiptText size={28} /><h2>{searchTerm ? 'No matching split bills' : 'No split bills yet'}</h2><p>{searchTerm ? 'Try another name or description.' : 'Shared expenses linked to your loans will appear here.'}</p></div>}
+          </div>}
         </section>
       </PageContainer>
 

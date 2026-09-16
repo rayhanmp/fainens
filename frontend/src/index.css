@@ -1197,6 +1197,10 @@ button[data-variant="danger"]:focus-visible,
   transform-origin: top center;
   animation: ui-popover-in 160ms cubic-bezier(.2, .8, .2, 1) both;
 }
+.period-picker-scroll { scrollbar-width: thin; scrollbar-color: var(--color-border-strong) transparent; }
+.period-picker-scroll::-webkit-scrollbar { width: 6px; }
+.period-picker-scroll::-webkit-scrollbar-track { background: transparent; }
+.period-picker-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--color-border-strong); }
 @keyframes ui-popover-in {
   from { opacity: 0; transform: translateY(-4px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }

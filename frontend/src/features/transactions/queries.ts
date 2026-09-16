@@ -44,12 +44,14 @@ export function useTransactionList(filters: ListTransactionsParams = {}) {
 export function usePendingTransactionsQuery() {
   return useQuery({
     queryKey: queryKeys.transactions.pending,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
     queryFn: async ({ signal }) => {
       const response = await listPendingTransactions({ signal });
       if (response.status !== 200) throw new Error('Failed to load pending transactions');
       return response.data.map((item) => ({
         ...item,
-        parsedData: pendingParsedTransactionSchema.parse(item.parsedData),
+        parsedData: parsePendingTransactionData(item.parsedData),
       })) as PendingTransactionListItem[];
     },
     placeholderData: (previous) => previous,
@@ -196,6 +198,34 @@ const pendingParsedTransactionSchema = z.object({
   toAccount: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1),
 }).passthrough();
+
+function parsePendingTransactionData(value: unknown): PendingTransactionParsed {
+  const parsed = pendingParsedTransactionSchema.safeParse(value);
+  if (parsed.success) return parsed.data as PendingTransactionParsed;
+
+  // Older/manual pending rows may be incomplete. Keep one bad row from
+  // taking down the entire pending list; show it as an editable low-confidence
+  // item so the user can repair it instead of losing access to the queue.
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    ...raw,
+    type: raw.type === 'income' || raw.type === 'transfer' ? raw.type : 'expense',
+    amount: typeof raw.amount === 'number' && Number.isFinite(raw.amount) ? Math.max(0, Math.trunc(raw.amount)) : 0,
+    description: typeof raw.description === 'string' && raw.description.trim() ? raw.description : 'Needs review',
+    category: typeof raw.category === 'string' && raw.category.trim() ? raw.category : 'Others',
+    date: typeof raw.date === 'string' ? raw.date : null,
+    place: typeof raw.place === 'string' ? raw.place : null,
+    notes: typeof raw.notes === 'string' ? raw.notes : null,
+    memo: typeof raw.memo === 'string' ? raw.memo : null,
+    fromAccount: typeof raw.fromAccount === 'string' ? raw.fromAccount : null,
+    toAccount: typeof raw.toAccount === 'string' ? raw.toAccount : null,
+    confidence: typeof raw.confidence === 'number' && Number.isFinite(raw.confidence)
+      ? Math.min(1, Math.max(0, raw.confidence))
+      : 0,
+  };
+}
 
 export function usePreviewPendingTransactionMutation() {
   return useMutation<PendingTransactionPreview, Error, string>({

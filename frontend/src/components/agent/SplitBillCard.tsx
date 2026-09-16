@@ -104,8 +104,10 @@ export function parseSplitBillVisualization(value: unknown): SplitBillVisualizat
       return name ? [{ id: normalizeId(person.id, `person_${index + 1}`), name }] : [];
     })
     : [];
+  // A split payload can name the account holder with a regular participant ID
+  // (for example, "rayhan"). Do not invent a second, zero-value "You" row:
+  // it changes both the displayed headcount and the meaning of the split.
   if (participants.length === 0) participants.push({ id: 'me', name: 'You' });
-  if (!participants.some((person) => person.id === 'me')) participants.unshift({ id: 'me', name: 'You' });
   const uniqueParticipants = participants.filter((person, index) => participants.findIndex((candidate) => candidate.id === person.id) === index);
 
   const participantIds = new Set(uniqueParticipants.map((person) => person.id));
@@ -183,6 +185,33 @@ function chargeRuleLabel(rule: SplitChargeRule): string {
 function isDefaultPaymentAccount(account: SplitBillAccount) {
   const label = `${account.name} ${account.provider ?? ''}`.trim().toLowerCase();
   return /(^|[\s_-])bni($|[\s_-])/.test(label) || (/(^|[\s_-])gopay($|[\s_-])/.test(label) && !label.includes('gopaylater'));
+}
+
+function namesReferToSamePerson(left: string, right: string): boolean {
+  const normalize = (value: string) => value.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const normalizedLeft = normalize(left);
+  const normalizedRight = normalize(right);
+  if (!normalizedLeft || !normalizedRight) return false;
+  if (normalizedLeft === normalizedRight) return true;
+  // Split prompts often use a first name while Settings contains a full name.
+  return normalizedLeft.split(' ')[0] === normalizedRight.split(' ')[0];
+}
+
+function formatSplitBillDate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isFinite(timestamp)) return trimmed;
+
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+  const formatted = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    ...(isDateOnly ? {} : { hour: '2-digit', minute: '2-digit', hour12: false }),
+  }).format(new Date(timestamp));
+  return isDateOnly ? formatted : `${formatted} WIB`;
 }
 
 async function writeClipboardText(text: string) {
@@ -373,7 +402,7 @@ async function downloadCardAsPng(element: HTMLElement) {
   URL.revokeObjectURL(pngUrl);
 }
 
-export function SplitBillCard({ visualization, accounts = [] }: { visualization: SplitBillVisualization; accounts?: SplitBillAccount[] }) {
+export function SplitBillCard({ visualization, accounts = [], currentUserName = '' }: { visualization: SplitBillVisualization; accounts?: SplitBillAccount[]; currentUserName?: string }) {
   const [title, setTitle] = useState(visualization.title);
   const [merchant, setMerchant] = useState(visualization.merchant ?? '');
   const [date, setDate] = useState(visualization.date ?? '');
@@ -443,6 +472,9 @@ export function SplitBillCard({ visualization, accounts = [] }: { visualization:
   }, [charges, items, participants, payerId]);
 
   const payer = participants.find((person) => person.id === payerId);
+  const isCurrentUserParticipant = (person: DraftParticipant) => person.id === 'me' || namesReferToSamePerson(person.name, currentUserName);
+  const isCurrentUserPayer = payer != null && isCurrentUserParticipant(payer);
+  const displayedDate = formatSplitBillDate(date);
   const settlement = participants.filter((person) => person.id !== payerId && calculation.totals[person.id] > 0);
   const calculatedNote = note.trim() || (payer
     ? settlement.length === 0
@@ -458,7 +490,7 @@ export function SplitBillCard({ visualization, accounts = [] }: { visualization:
     setParticipants((current) => [...current, { id, name: `Guest ${current.length}` }]);
   };
   const removeParticipant = (id: string) => {
-    if (id === 'me') return;
+    if (participants.some((person) => person.id === id && isCurrentUserParticipant(person))) return;
     setParticipants((current) => current.filter((person) => person.id !== id));
     setItems((current) => current.map((item) => ({ ...item, participantIds: item.participantIds.filter((participantId) => participantId !== id) })));
     if (payerId === id) setPayerId('');
@@ -492,12 +524,12 @@ export function SplitBillCard({ visualization, accounts = [] }: { visualization:
       return `- ${item.name}: ${item.quantity} pcs · ${formatCurrency(Math.round(item.amount / item.quantity))} each · ${formatCurrency(item.amount)} (${people})`;
     });
     const shareLines = participants.map((person) => `- ${person.name}${person.id === payerId ? ' (Payer)' : ''}: Items ${formatCurrency(calculation.subtotals[person.id] ?? 0)} · Tax ${formatCurrency(calculation.tax[person.id] ?? 0)} · Service ${formatCurrency(calculation.service[person.id] ?? 0)} · Total ${formatCurrency(calculation.totals[person.id] ?? 0)}`);
-    const paymentLines = payerId === 'me' && selectedPaymentAccounts.length > 0
+    const paymentLines = isCurrentUserPayer && selectedPaymentAccounts.length > 0
       ? ['', 'Payment details', ...selectedPaymentAccounts.map((account) => `- ${account.name}${account.provider ? ` · ${account.provider}` : ''}: ${account.accountNumber}`)]
       : [];
     const summary = [
       `Split bill: ${merchant || title}`,
-      date ? `Date: ${date}` : '',
+      displayedDate ? `Date: ${displayedDate}` : '',
       payer ? `Paid by: ${payer.name}` : '',
       '',
       `Total: ${formatCurrency(calculation.total)}`,
@@ -540,7 +572,7 @@ export function SplitBillCard({ visualization, accounts = [] }: { visualization:
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-[var(--ref-primary)]"><ReceiptText data-export-split-bill-icon="true" className="h-4 w-4" /><span data-export-split-bill-label="true" className="text-xs font-bold uppercase tracking-wide">Split bill</span></div>
         {activeHeaderField === 'merchant' ? <input autoFocus aria-label="Merchant or bill title" value={merchant || title} onChange={(event) => { setMerchant(event.target.value.slice(0, 120)); if (!merchant) setTitle(event.target.value.slice(0, 120)); }} onBlur={() => setActiveHeaderField(null)} className="mt-1 w-full max-w-sm rounded-md border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-base font-bold text-[var(--color-text-primary)]" /> : <button type="button" onClick={() => setActiveHeaderField('merchant')} className="group mt-1 flex items-center rounded px-1 -ml-1 text-left text-base font-bold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]">{merchant || title}</button>}
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-[var(--color-text-secondary)]">{activeHeaderField === 'date' ? <input autoFocus aria-label="Bill date" value={date} onChange={(event) => setDate(event.target.value.slice(0, 40))} onBlur={() => setActiveHeaderField(null)} placeholder="YYYY-MM-DD" className="w-24 rounded bg-[var(--ref-surface-container-lowest)] px-1.5 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /> : <button type="button" onClick={() => setActiveHeaderField('date')} className="rounded px-1 -ml-1 hover:bg-[var(--ref-surface-container-low)]">{date || 'Calculation only'}</button>}<span>· {participants.length} people · {items.length} item{items.length === 1 ? '' : 's'}</span></div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-[var(--color-text-secondary)]">{activeHeaderField === 'date' ? <input autoFocus aria-label="Bill date" value={date} onChange={(event) => setDate(event.target.value.slice(0, 40))} onBlur={() => setActiveHeaderField(null)} placeholder="YYYY-MM-DD" className="w-24 rounded bg-[var(--ref-surface-container-lowest)] px-1.5 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /> : <button type="button" onClick={() => setActiveHeaderField('date')} className="rounded px-1 -ml-1 hover:bg-[var(--ref-surface-container-low)]">{displayedDate || 'Calculation only'}</button>}<span>· {participants.length} people · {items.length} item{items.length === 1 ? '' : 's'}</span></div>
         {activeHeaderField === 'payer' ? <select autoFocus aria-label="Who paid" value={payerId} onChange={(event) => setPayerId(event.target.value)} onBlur={() => setActiveHeaderField(null)} className="mt-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-[11px] font-semibold text-[var(--ref-primary)]"><option value="">Payer not set</option>{participants.map((person) => <option key={person.id} value={person.id}>Paid by {person.name}</option>)}</select> : payer ? <button type="button" onClick={() => setActiveHeaderField('payer')} data-export-pill="paid-by" className="mt-2 inline-flex items-center rounded-full bg-[var(--ref-primary)]/10 px-2 py-1 text-[11px] font-semibold text-[var(--ref-primary)]"><span data-export-pill-label="paid-by">Paid by {payer.name}</span></button> : <button type="button" onClick={() => setActiveHeaderField('payer')} className="mt-2 rounded-full bg-[var(--ref-surface-container-low)] px-2 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container)]">Set payer</button>}
       </div>
       <div data-export-hide="true" className="flex flex-wrap gap-2">
@@ -566,7 +598,7 @@ export function SplitBillCard({ visualization, accounts = [] }: { visualization:
     </div>
 
     <div className="mt-4 border-b border-[var(--color-border)] pb-4">
-      <div className="flex items-center justify-between gap-3"><p className="text-xs font-bold text-[var(--color-text-primary)]">Items</p><div className="flex items-center gap-2"><button type="button" onClick={addItem} disabled={items.length >= MAX_ITEMS} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--ref-primary)] disabled:opacity-50"><Plus className="h-3.5 w-3.5" />Add item</button><p className="text-[11px] text-[var(--color-text-secondary)]">{items.length} line{items.length === 1 ? '' : 's'}</p></div></div>
+      <div className="flex items-center justify-between gap-3"><p className="text-xs font-bold text-[var(--color-text-primary)]">Items</p><div className="flex items-center gap-2"><button data-export-hide="true" type="button" onClick={addItem} disabled={items.length >= MAX_ITEMS} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--ref-primary)] disabled:opacity-50"><Plus className="h-3.5 w-3.5" />Add item</button><p className="text-[11px] text-[var(--color-text-secondary)]">{items.length} line{items.length === 1 ? '' : 's'}</p></div></div>
       <div data-export-divider-list="items" className="mt-2 divide-y divide-[var(--color-border)]/60">
         {items.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
           <div className="min-w-0 flex-1">
@@ -582,13 +614,13 @@ export function SplitBillCard({ visualization, accounts = [] }: { visualization:
       <div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setEditingSection(isSharesEditing ? null : 'shares')} className="group/shares hidden items-center gap-1 rounded px-1 -ml-1 text-xs font-bold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)] sm:inline-flex">Shares<Pencil className="h-3 w-3 text-[var(--color-text-secondary)] opacity-0 transition-opacity group-hover/shares:opacity-70" /></button><button type="button" onClick={() => setMobileSheet('shares')} className="inline-flex items-center gap-1 rounded px-1 -ml-1 text-xs font-bold text-[var(--color-text-primary)] sm:hidden">Shares<Pencil className="h-3 w-3 text-[var(--color-text-secondary)]" /></button>{isSharesEditing ? <div className="hidden items-center gap-2 sm:flex"><button type="button" onClick={addParticipant} disabled={participants.length >= MAX_PARTICIPANTS} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--ref-primary)] disabled:opacity-50"><UserPlus className="h-3.5 w-3.5" />Add guest</button><button type="button" onClick={() => setEditingSection(null)} className="text-[11px] font-semibold text-[var(--ref-primary)]">Done</button></div> : null}</div>
       <div data-export-divider-list="shares" className="mt-2 divide-y divide-[var(--color-border)]/60">
       {participants.map((person) => <div key={person.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-        <div className="min-w-0 flex-1">{isSharesEditing ? <div className="flex items-center gap-2"><input value={person.name} onChange={(event) => setParticipants((current) => current.map((candidate) => candidate.id === person.id ? { ...candidate, name: event.target.value.slice(0, 60) } : candidate))} className="min-w-0 flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm font-semibold text-[var(--color-text-primary)]" aria-label={'Name for ' + person.name} /><button type="button" onClick={() => removeParticipant(person.id)} disabled={person.id === 'me'} className="rounded p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)] disabled:opacity-30" aria-label={'Remove ' + person.name}><Trash2 className="h-3.5 w-3.5" /></button></div> : <div className="flex items-center gap-2"><p className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{person.name}</p>{person.id === payerId && <span data-export-pill="payer" className="shrink-0 rounded-full bg-[var(--ref-primary)]/10 px-1.5 py-0.5 text-[10px] font-bold text-[var(--ref-primary)]"><span data-export-pill-label="payer">Payer</span></span>}</div>}<p className="text-[11px] text-[var(--color-text-secondary)]">Items {formatCurrency(calculation.subtotals[person.id] ?? 0)} · Tax {formatCurrency(calculation.tax[person.id] ?? 0)} · Service {formatCurrency(calculation.service[person.id] ?? 0)}</p></div>
+        <div className="min-w-0 flex-1">{isSharesEditing ? <div className="flex items-center gap-2"><input value={person.name} onChange={(event) => setParticipants((current) => current.map((candidate) => candidate.id === person.id ? { ...candidate, name: event.target.value.slice(0, 60) } : candidate))} className="min-w-0 flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm font-semibold text-[var(--color-text-primary)]" aria-label={'Name for ' + person.name} /><button type="button" onClick={() => removeParticipant(person.id)} disabled={isCurrentUserParticipant(person)} className="rounded p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)] disabled:opacity-30" aria-label={'Remove ' + person.name}><Trash2 className="h-3.5 w-3.5" /></button></div> : <div className="flex items-center gap-2"><p className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{person.name}</p>{person.id === payerId && <span data-export-pill="payer" className="shrink-0 rounded-full bg-[var(--ref-primary)]/10 px-1.5 py-0.5 text-[10px] font-bold text-[var(--ref-primary)]"><span data-export-pill-label="payer">Payer</span></span>}</div>}<p className="text-[11px] text-[var(--color-text-secondary)]">Items {formatCurrency(calculation.subtotals[person.id] ?? 0)} · Tax {formatCurrency(calculation.tax[person.id] ?? 0)} · Service {formatCurrency(calculation.service[person.id] ?? 0)}</p></div>
         <p className="shrink-0 text-base font-bold tabular-nums text-[var(--ref-primary)]">{formatCurrency(calculation.totals[person.id] ?? 0)}</p>
       </div>)}
       </div>
     </div>
 
-    {payerId === 'me' && <div className="mt-4 border-b border-[var(--color-border)] pb-4"><div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setIsPaymentPickerOpen(true)} className="group/payment hidden items-center gap-1 rounded px-1 -ml-1 text-xs font-bold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)] sm:inline-flex">Payment details<Pencil className="h-3 w-3 text-[var(--color-text-secondary)] opacity-0 transition-opacity group-hover/payment:opacity-70" /></button><button type="button" onClick={() => setMobileSheet('payment')} className="inline-flex items-center gap-1 rounded px-1 -ml-1 text-xs font-bold text-[var(--color-text-primary)] sm:hidden">Payment details<Pencil className="h-3 w-3 text-[var(--color-text-secondary)]" /></button><p className="text-[11px] text-[var(--color-text-secondary)]">For repayment</p></div>{selectedPaymentAccounts.length > 0 ? <div className="mt-2 space-y-2">{selectedPaymentAccounts.map((account) => <div key={account.id} className="text-xs"><p className="font-semibold text-[var(--color-text-primary)]">{account.name}{account.provider ? ` · ${account.provider}` : ''}</p><p className="mt-0.5 tabular-nums text-[var(--color-text-secondary)]">{account.accountNumber}</p></div>)}</div> : <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Choose an account to show on the card.</p>}</div>}
+    {isCurrentUserPayer && <div className="mt-4 border-b border-[var(--color-border)] pb-4"><div className="flex items-center justify-between gap-3"><button type="button" onClick={() => setIsPaymentPickerOpen(true)} className="group/payment hidden items-center gap-1 rounded px-1 -ml-1 text-xs font-bold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)] sm:inline-flex">Payment details<Pencil className="h-3 w-3 text-[var(--color-text-secondary)] opacity-0 transition-opacity group-hover/payment:opacity-70" /></button><button type="button" onClick={() => setMobileSheet('payment')} className="inline-flex items-center gap-1 rounded px-1 -ml-1 text-xs font-bold text-[var(--color-text-primary)] sm:hidden">Payment details<Pencil className="h-3 w-3 text-[var(--color-text-secondary)]" /></button><p className="text-[11px] text-[var(--color-text-secondary)]">For repayment</p></div>{selectedPaymentAccounts.length > 0 ? <div className="mt-2 space-y-2">{selectedPaymentAccounts.map((account) => <div key={account.id} className="text-xs"><p className="font-semibold text-[var(--color-text-primary)]">{account.name}{account.provider ? ` · ${account.provider}` : ''}</p><p className="mt-0.5 tabular-nums text-[var(--color-text-secondary)]">{account.accountNumber}</p></div>)}</div> : <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Choose an account to show on the card.</p>}</div>}
 
     <div className="mt-4 flex flex-wrap items-start justify-between gap-2"><div className="min-w-0 flex-1"><p className="text-xs font-bold text-[var(--color-text-primary)]">Note</p>{isNoteEditing ? <textarea autoFocus value={note} onChange={(event) => setNote(event.target.value.slice(0, 500))} onBlur={() => setEditingSection(null)} placeholder="Optional note for your friend" rows={2} className="mt-1 w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-2 text-sm text-[var(--color-text-primary)]" /> : <button type="button" onClick={() => setEditingSection('note')} className="mt-1 rounded px-1 -ml-1 text-left text-sm text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)]">{calculatedNote}</button>}</div><button data-export-hide="true" type="button" onClick={() => void copyNote()} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10">{copied ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}{copied ? 'Copied' : 'Copy note'}</button></div>
     {(calculation.unassignedItems > 0 || calculation.chargeNeedsPayer || calculation.allocated !== calculation.total) && <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--color-text-primary)]"><Calculator className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-warning)]" /><span>{calculation.unassignedItems > 0 ? `${formatCurrency(calculation.unassignedItems)} of items still need a person. ` : ''}{calculation.chargeNeedsPayer ? 'Choose who paid to use a “paid by payer” charge rule. ' : ''}{calculation.allocated !== calculation.total ? `Assigned total is ${formatCurrency(calculation.allocated)}; bill total is ${formatCurrency(calculation.total)}.` : ''}</span></div>}

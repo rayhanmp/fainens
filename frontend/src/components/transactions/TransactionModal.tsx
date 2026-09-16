@@ -59,6 +59,8 @@ import {
   toTimeInputLocal,
 } from '../../features/transactions/modal-helpers';
 import { useSimpleTransactionForm } from '../../features/transactions/modal-controller';
+import { transactionDisplayAmounts } from '../../features/transactions/display-amounts';
+import { SplitBillTransactionDetail } from './SplitBillTransactionDetail';
 import { TransferFeePanel, type TransferFeeDetails } from '../../features/transactions/TransferFeePanel';
 import {
   useApprovePendingTransactionMutation,
@@ -132,6 +134,9 @@ export type EditingTransaction = {
   place?: string;
   categoryId?: number | null;
   txType?: string;
+  expenseCents?: number;
+  incomeCents?: number;
+  displayPart?: 'expense' | 'loan';
   lines: TxLine[];
   categoryAllocations?: Array<{ categoryId: number; amount: number; categoryName?: string | null }>;
   tags: Array<{ tagId: number; name: string; color: string }>;
@@ -259,18 +264,31 @@ export function TransactionModal({
     
     const parsed = pendingTransaction.parsedData;
     const cat = categories.find(c => c.name === parsed.category);
-    const fromAcc = accounts.find(a => a.name.toLowerCase().includes((parsed.fromAccount || '').toLowerCase()));
+    const rawFromAccountId = (parsed as Record<string, unknown>).fromAccountId;
+    const parsedFromAccountId = typeof rawFromAccountId === 'number'
+      ? rawFromAccountId
+      : typeof rawFromAccountId === 'string' && Number.isSafeInteger(Number(rawFromAccountId))
+        ? Number(rawFromAccountId)
+        : undefined;
+    const fromAcc = accounts.find(a => a.id === parsedFromAccountId)
+      ?? (parsed.fromAccount?.trim()
+        ? accounts.find(a => a.name.toLowerCase().includes(parsed.fromAccount!.trim().toLowerCase()))
+        : undefined);
+    const transactionTime = (parsed as Record<string, unknown>).transactionTime;
+    const time = typeof transactionTime === 'string' && /^\d{1,2}:\d{2}/.test(transactionTime)
+      ? transactionTime.slice(0, 5)
+      : `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}`;
     
     setSimpleForm(prev => ({
       ...prev,
       subscriptionId: '',
-      dateTime: parsed.date ? `${parsed.date}T${new Date().getHours().toString().padStart(2,'0')}:${new Date().getMinutes().toString().padStart(2,'0')}` : toDatetimeLocal(),
+      dateTime: parsed.date ? `${parsed.date}T${time}` : toDatetimeLocal(),
       type: parsed.type === 'income' ? 'income' : parsed.type === 'transfer' ? 'transfer' : 'expense',
       fromAccountId: fromAcc?.id.toString() || '',
       categoryId: cat?.id.toString() || '',
       amount: parsed.amount.toString(),
       description: parsed.description,
-      notes: parsed.memo || '',
+      notes: parsed.memo || parsed.notes || '',
       place: parsed.place || '',
     }));
     setInputMode('simple');
@@ -651,7 +669,7 @@ export function TransactionModal({
           amount: allocation.amount.toString(),
         })),
       });
-    } else {
+    } else if (!pendingTransaction) {
       setInputMode('simple');
       setRouteTemplateName('');
       setSelectedRouteTemplateId(null);
@@ -714,7 +732,7 @@ export function TransactionModal({
       } else journalForm.reset(journalDefaults);
     }
     setFormError('');
-  }, [isOpen, editingTransaction, initialPrefill]);
+  }, [isOpen, editingTransaction, initialPrefill, pendingTransaction]);
 
   useEffect(() => {
     if (!isOpen || !editingTransaction || !attachmentsQuery.data) return;
@@ -1480,8 +1498,10 @@ export function TransactionModal({
     // View Mode - Show transaction details read-only
     if (viewMode) {
       const category = editingTransaction.categoryId ? categories.find(c => c.id === editingTransaction.categoryId) : null;
-      const amount = editingTransaction.lines?.length ? Math.max(...editingTransaction.lines.map(l => Math.max(l.debit, l.credit))) : 0;
       const accountForLine = (line: TxLine) => accounts.find((account) => account.id === line.accountId);
+      const amounts = transactionDisplayAmounts(editingTransaction.lines.map((line) => ({
+        ...line, accountType: accountForLine(line)?.type ?? line.accountType,
+      })));
       const hasExpenseLine = editingTransaction.lines.some((line) =>
         (accountForLine(line)?.type ?? line.accountType) === 'expense' && line.debit > line.credit,
       );
@@ -1496,14 +1516,21 @@ export function TransactionModal({
       );
       // Agent-posted journals have txType "manual". Infer their display type
       // from the balanced ledger lines so the wallet (for example BNI) remains visible.
-      const isExpense = !isTransfer && (editingTransaction.txType?.includes('expense') || hasExpenseLine);
+      const isSplitBillPayment = editingTransaction.txType === 'split_bill_lent' || editingTransaction.txType === 'split_bill_borrowed';
+      const isLoanPayment = editingTransaction.txType === 'loan_payment';
+      const isLoanAdvance = editingTransaction.displayPart === 'loan';
+      const isExpense = !isTransfer && (isSplitBillPayment || editingTransaction.txType?.includes('expense') || hasExpenseLine);
       const isIncome = !isTransfer && (editingTransaction.txType?.includes('income') || hasIncomeLine);
+      const amount = isLoanAdvance ? Math.max(0, amounts.totalPaidCents - (editingTransaction.expenseCents ?? amounts.expenseCents))
+        : isLoanPayment ? amounts.journalAmount : isExpense ? Math.max(0, editingTransaction.expenseCents ?? amounts.expenseCents)
+        : isIncome ? Math.max(0, editingTransaction.incomeCents ?? amounts.incomeCents) : amounts.journalAmount;
       const detailDate = editMeta.date
         ? new Date(`${editMeta.date}T${editMeta.time || '00:00'}:00`)
         : new Date(editingTransaction.date);
       
       // Find the wallet account: for expense it's the line with credit, for income it's the line with debit
       const walletAccount = editingTransaction.lines.find(l => {
+        if (isLoanPayment) return accountForLine(l)?.liquidityClass === 'cash_equivalent' || (l.cashFlowClass != null && l.accountType === 'asset');
         if (isExpense) return l.credit > 0;
         if (isIncome) return l.debit > 0;
         return false;
@@ -1689,7 +1716,7 @@ export function TransactionModal({
         <Modal
           isOpen={isOpen}
           onClose={() => { void closeDetail(); }}
-          title={isExpense ? "Expense Detail" : "Income Detail"}
+          title={isLoanPayment ? "Loan Payment Detail" : isLoanAdvance ? "Loan Detail" : isExpense ? "Expense Detail" : "Income Detail"}
           subtitle={hasPendingMetadataChanges ? 'Unsaved edits' : `ID: #${editingTransaction.id}`}
           size="default"
           className="max-w-4xl"
@@ -1740,6 +1767,8 @@ export function TransactionModal({
                   </span>
                 </div>
               </div>
+
+              {(isSplitBillPayment || isLoanPayment) && <SplitBillTransactionDetail transactionId={editingTransaction.id} personalShare={isLoanPayment ? 0 : Math.max(0, editingTransaction.expenseCents ?? amounts.expenseCents)} totalPaid={isLoanPayment ? 0 : amounts.totalPaidCents} isBorrower={editingTransaction.txType === 'split_bill_borrowed'} paymentLookup={isLoanPayment} />}
 
               {/* Bento Grid Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[var(--color-border)]/30 pt-6 mb-6">
@@ -3316,6 +3345,7 @@ export function TransactionModal({
                     setIsSubmitting(true);
                     try {
                       await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {
+                        ...pendingTransaction.parsedData,
                         type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
                         amount: parseIdNominalToInt(simpleForm.amount) || 0,
                         description: simpleForm.description,
@@ -3324,6 +3354,7 @@ export function TransactionModal({
                         place: simpleForm.place || undefined,
                         memo: simpleForm.notes || undefined,
                         fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
+                        fromAccountId: simpleForm.fromAccountId ? Number(simpleForm.fromAccountId) : null,
                         toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
                         confidence: 1,
                       }});
@@ -3347,6 +3378,7 @@ export function TransactionModal({
                     setIsSubmitting(true);
                     try {
                       await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {
+                        ...pendingTransaction.parsedData,
                         type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
                         amount: parseIdNominalToInt(simpleForm.amount) || 0,
                         description: simpleForm.description,
@@ -3355,6 +3387,7 @@ export function TransactionModal({
                         place: simpleForm.place || undefined,
                         memo: simpleForm.notes || undefined,
                         fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
+                        fromAccountId: simpleForm.fromAccountId ? Number(simpleForm.fromAccountId) : null,
                         toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
                         confidence: 1,
                       }});

@@ -55,13 +55,12 @@ export function useLoansQuery(includeInactive = false) {
   return useQuery<LoansPageData>({
     queryKey: queryKeys.loans.list({ includeInactive }),
     queryFn: async () => {
-      const [activeLoans, repaidLoans, contacts, summary] = await Promise.all([
-        unwrapGenerated(listLoans({ status: 'active' }), 200, 'Failed to load active loans'),
-        unwrapGenerated(listLoans({ status: 'repaid' }), 200, 'Failed to load repaid loans'),
+      const [loans, contacts, summary] = await Promise.all([
+        unwrapGenerated(listLoans({ includeHistory: 'true' }), 200, 'Failed to load loans'),
         unwrapGenerated(listContacts(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load contacts'),
         unwrapGenerated(getLoanSummary(), 200, 'Failed to load loan summary'),
       ]);
-      return { loans: [...activeLoans, ...repaidLoans], contacts, summary };
+      return { loans, contacts, summary };
     },
     placeholderData: (previous) => previous,
   });

@@ -9,6 +9,8 @@ type UiStore = {
   settingsOpen: boolean;
   openSettings: () => void;
   closeSettings: () => void;
+  dashboardNotificationCount: number;
+  setDashboardNotificationCount: (count: number) => void;
   transactionComposer: {
     isOpen: boolean;
     prefill?: { accountId?: number; categoryId?: number; periodId?: number };
@@ -25,6 +27,8 @@ export const useUiStore = create<UiStore>()(persist((set) => ({
   settingsOpen: false,
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+  dashboardNotificationCount: 0,
+  setDashboardNotificationCount: (dashboardNotificationCount) => set({ dashboardNotificationCount }),
   transactionComposer: { isOpen: false },
   openTransactionComposer: (prefill) => set({ transactionComposer: { isOpen: true, prefill } }),
   closeTransactionComposer: () => set({ transactionComposer: { isOpen: false } }),

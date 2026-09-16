@@ -12,7 +12,7 @@ const s = StyleSheet.create({
   footer: { height: 20, position: 'absolute', bottom: 25, left: 40, right: 40, flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: C.line, paddingTop: 8 }, pageNumber: { position: 'absolute', right: 0, top: 8, width: 68, textAlign: 'right', color: C.muted, fontFamily: 'Helvetica-Bold' },
   eyebrow: { color: C.blue, fontSize: 8, fontFamily: 'Helvetica-Bold', letterSpacing: 1.4, textTransform: 'uppercase' },
   title: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 5, lineHeight: 1.15 }, lead: { color: C.muted, fontSize: 9, marginTop: 8, lineHeight: 1.5 },
-  coverTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, badge: { height: 25, minWidth: 98, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line, paddingHorizontal: 10, borderRadius: 13 }, badgeText: { color: C.muted, fontSize: 7, letterSpacing: 1 },
+  coverTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, coverBadges: { flexDirection: 'row', alignItems: 'center' }, badge: { height: 25, minWidth: 98, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.line, paddingHorizontal: 10, borderRadius: 13 }, badgeText: { color: C.muted, fontSize: 7, letterSpacing: 1 }, temporaryBadge: { height: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#F1C27D', backgroundColor: '#FFF8EE', paddingHorizontal: 10, borderRadius: 13, marginRight: 7 }, temporaryBadgeText: { color: '#995500', fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: .8 },
   coverIntro: { marginTop: 92 }, coverTitle: { fontSize: 42, fontFamily: 'Helvetica-Bold', lineHeight: 1.1, color: C.ink, marginTop: 14 }, coverPeriod: { fontSize: 23, color: C.blue, marginTop: 18 },
   coverHero: { marginTop: 38, padding: 24, backgroundColor: C.blue, borderRadius: 12 }, coverHeroLabel: { color: '#D9E6FF', fontSize: 8 }, coverHeroValue: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 31, marginTop: 7 },
   coverMetrics: { flexDirection: 'row', alignItems: 'stretch', marginTop: 24, borderTopWidth: 1, borderTopColor: '#568DDD', paddingTop: 16 }, coverMetric: { flex: 1, minHeight: 43, justifyContent: 'center' }, coverMetricValue: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 13, marginTop: 5 },
@@ -44,6 +44,8 @@ export interface MonthlyReportProps {
   budgetComparison: Array<{ category: string; budget: number; actual: number; variance: number }>;
   allTransactions: Array<{ date: string; description: string; category: string; amount: number; type: string }>;
   coverage?: { isComparable: boolean; warnings: string[] };
+  generatedAt?: number;
+  isTemporary?: boolean;
 }
 
 function Brand() {
@@ -74,7 +76,7 @@ function IncomeActivity({ transactions }: { transactions: MonthlyReportProps['al
 }
 
 export function MonthlyReportPDF(p: MonthlyReportProps) {
-  const generatedAt = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
+  const generatedAt = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(p.generatedAt ?? Date.now()));
   const plan = p.budgetComparison.reduce((sum, row) => sum + row.budget, 0);
   const spent = p.budgetComparison.reduce((sum, row) => sum + row.actual, 0);
   const hasBudget = p.budgetComparison.length > 0;
@@ -83,7 +85,7 @@ export function MonthlyReportPDF(p: MonthlyReportProps) {
 
   return <Document title={`Fainens - ${p.periodName}`} author="Fainens" subject="Personal financial report">
     <Page size="A4" style={s.cover}>
-      <View style={s.coverTop}><Brand /><View style={s.badge}><Text style={s.badgeText}>PRIVATE REPORT</Text></View></View>
+      <View style={s.coverTop}><Brand /><View style={s.coverBadges}>{p.isTemporary && <View style={s.temporaryBadge}><Text style={s.temporaryBadgeText}>TEMPORARY</Text></View>}<View style={s.badge}><Text style={s.badgeText}>PRIVATE REPORT</Text></View></View></View>
       <View style={s.coverIntro}><Text style={s.eyebrow}>Your money, in perspective</Text><Text style={s.coverTitle}>Monthly financial{'\n'}report</Text><Text style={s.coverPeriod}>{p.periodName}</Text><Text style={s.lead}>{p.fullName ? `For ${p.fullName} · ` : ''}{p.startDate} - {p.endDate}</Text></View>
       <View style={s.coverHero} wrap={false}>
         <Text style={s.coverHeroLabel}>NET INCOME FOR THE PERIOD</Text><Text style={s.coverHeroValue}>{money(p.netIncome)}</Text>
@@ -127,7 +129,7 @@ export function MonthlyReportPDF(p: MonthlyReportProps) {
       <View style={s.notesBlock} wrap={false}><Text style={s.notesTitle}>What this report covers</Text><Text style={s.notesCopy}>Figures reflect the transactions, balances, categories, and coverage available in Fainens for {p.periodName}. Pending, missing, or uncategorized records can affect totals. Cash movement tracks cash-equivalent accounts, while income and spending follow the recorded ledger classification.</Text></View>
       <View style={s.notesBlock} wrap={false}><Text style={s.notesTitle}>Reading the numbers</Text><Text style={s.notesCopy}>Net income is recorded income less expenses. Savings rate is net income divided by income; it is shown as N/A when income is zero or negative. Budget variance is planned spending minus recorded spending, so a positive value is still available and a negative value is over plan. Charts show the share of each source or category, with smaller items grouped together.</Text></View>
       <View style={s.notesBlock} wrap={false}><Text style={s.notesTitle}>Personal use and privacy</Text><Text style={s.notesCopy}>This is a personal financial record, not professional tax, legal, investment, or accounting advice. Verify underlying entries before relying on the figures. Store the report securely and share it only with intended recipients.</Text></View>
-      <View style={s.note} wrap={false}><Text style={s.notesTitle}>Report identity</Text><Text style={s.notesCopy}>Prepared {generatedAt}. The snapshot fingerprint below identifies the period data and ledger revision used to generate this report.</Text><Text style={s.hash}>SHA-256 / {p.reportHash}</Text></View><Footer />
+      <View style={s.note} wrap={false}><Text style={s.notesTitle}>Report identity</Text><Text style={s.notesCopy}>Prepared {generatedAt}. {p.isTemporary ? 'This report was generated before the period ended and should be treated as temporary until the period is complete. ' : ''}The snapshot fingerprint below identifies the period data and ledger revision used to generate this report.</Text><Text style={s.hash}>SHA-256 / {p.reportHash}</Text></View><Footer />
     </Page>
   </Document>;
 }

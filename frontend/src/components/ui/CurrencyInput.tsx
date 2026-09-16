@@ -14,6 +14,7 @@ interface CurrencyInputProps {
   hintInline?: boolean;
   showDivider?: boolean;
   currencySymbol?: string;
+  tone?: 'default' | 'inverse';
 }
 
 export function CurrencyInput({
@@ -29,6 +30,7 @@ export function CurrencyInput({
   hintInline = false,
   showDivider = true,
   currencySymbol = 'Rp',
+  tone = 'default',
 }: CurrencyInputProps) {
   const id = useId();
   const errorId = error ? `${id}-error` : undefined;
@@ -209,14 +211,20 @@ export function CurrencyInput({
       {label && (
         <label
           htmlFor={id}
-          className="block text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]"
+          className={cn(
+            'block text-xs font-bold uppercase tracking-widest',
+            tone === 'inverse' ? 'text-[#b9d0ff]' : 'text-[var(--color-muted)]',
+          )}
         >
           {label}
           {required && <span className="text-[var(--color-danger)] ml-1">*</span>}
         </label>
       )}
       <div className="relative flex items-baseline gap-2 min-w-0">
-        <span className="text-2xl sm:text-3xl font-headline font-bold text-[var(--color-accent)] shrink-0">
+        <span className={cn(
+          'text-2xl sm:text-3xl font-headline font-bold shrink-0',
+          tone === 'inverse' ? 'text-[#91b8ff]' : 'text-[var(--color-accent)]',
+        )}>
           {currencySymbol}
         </span>
         <input
@@ -235,22 +243,28 @@ export function CurrencyInput({
           aria-invalid={error ? 'true' : undefined}
           aria-describedby={errorId}
           className={cn(
-            'font-headline font-extrabold w-full min-w-0 leading-none bg-transparent border-none focus:ring-0 p-0 placeholder:text-[var(--ref-surface-container-highest)] text-[var(--color-text-primary)]',
+            'font-headline font-extrabold w-full min-w-0 leading-none bg-transparent border-none focus:ring-0 p-0',
+            tone === 'inverse'
+              ? 'text-white placeholder:text-[#91a9d1]'
+              : 'placeholder:text-[var(--ref-surface-container-highest)] text-[var(--color-text-primary)]',
             sizeClasses[size]
           )}
         />
         {hint && hintInline && (
           <span
-            className="shrink-0 max-w-[42%] text-left text-[10px] sm:text-xs leading-tight text-[var(--color-text-secondary)]"
+            className={cn(
+              'shrink-0 max-w-[42%] text-left text-[10px] sm:text-xs leading-tight',
+              tone === 'inverse' ? 'text-[#d7e4ff]' : 'text-[var(--color-text-secondary)]',
+            )}
             title={hint}
           >
             {hint}
           </span>
         )}
       </div>
-      {hint && !hintInline && <p className="-mt-2 text-xs text-[var(--color-text-secondary)]">{hint}</p>}
+      {hint && !hintInline && <p className={cn('-mt-2 text-xs', tone === 'inverse' ? 'text-[#d7e4ff]' : 'text-[var(--color-text-secondary)]')}>{hint}</p>}
       {showDivider && (
-        <div className="h-px w-full bg-[var(--ref-surface-container-highest)]" />
+        <div className={cn('h-px w-full', tone === 'inverse' ? 'bg-[#5773a6]' : 'bg-[var(--ref-surface-container-highest)]')} />
       )}
       {error && (
         <p id={errorId} className="text-sm text-[var(--color-danger)]" role="alert">

@@ -854,14 +854,14 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
                 </summary>
                 <div className="pb-5">
-                    <div className="space-y-4">
-                    <p className="text-sm text-[var(--color-text-secondary)]">Save stable preferences or background that helps Agent personalize future chats. Memories are context only—not ledger evidence or permission to change data.</p>
+                    <div className="space-y-3">
+                    <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">Save stable preferences or background for future chats. Memories are context only—not ledger evidence or permission to change data.</p>
                     {!showMemoryForm && <Button type="button" size="sm" variant="secondary" onClick={openMemoryForm} disabled={memories.length >= memoryLimits.maxItems}><Plus className="h-4 w-4" /> Add memory</Button>}
                     {showMemoryForm && (
-                      <form className="space-y-4 border-t border-[var(--color-border)] pt-5" onSubmit={(event) => void saveMemory(event)}>
+                      <form className="grid gap-3 border-t border-[var(--color-border)] pt-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]" onSubmit={(event) => void saveMemory(event)}>
                         <Input label="Memory name" value={memoryLabel} onChange={(event) => setMemoryLabel(event.target.value)} placeholder="e.g. Financial goal" maxLength={memoryLimits.maxLabelLength} required />
                         <div className="space-y-1"><label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should Agent remember?</label><textarea id="agent-memory-content" value={memoryContent} onChange={(event) => setMemoryContent(event.target.value)} placeholder="e.g. I am saving for a down payment and prefer conservative suggestions." maxLength={memoryLimits.maxContentLength} required rows={3} className="brutalist-input min-h-24 w-full resize-y" /><p className="text-xs text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p></div>
-                        <div className="flex flex-wrap gap-2"><Button type="submit" isLoading={isSavingMemory}>{editingMemoryId == null ? 'Add memory' : 'Save changes'}</Button><Button type="button" variant="secondary" onClick={resetMemoryForm} disabled={isSavingMemory}>Cancel</Button></div>
+                        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" size="sm" isLoading={isSavingMemory}>{editingMemoryId == null ? 'Add memory' : 'Save changes'}</Button><Button type="button" size="sm" variant="secondary" onClick={resetMemoryForm} disabled={isSavingMemory}>Cancel</Button></div>
                       </form>
                     )}
                     {memories.length >= memoryLimits.maxItems && !showMemoryForm && <p className="text-xs text-[var(--color-warning)]">You have reached the {memoryLimits.maxItems}-memory limit.</p>}
@@ -871,11 +871,11 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     ) : memories.length === 0 ? (
                       <p className="border-y border-[var(--color-border)] py-4 text-sm text-[var(--color-text-secondary)]">No memories saved yet.</p>
                     ) : (
-                      <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
+                      <div className="divide-y divide-[var(--color-border)] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
                         {memories.map((memory) => (
-                          <div key={memory.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0"><p className="font-semibold">{memory.label}</p><p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">{memory.content}</p></div>
-                            <div className="flex shrink-0 gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => editMemory(memory)} disabled={isSavingMemory}><Pencil className="h-3.5 w-3.5" /> Edit</Button><Button type="button" size="sm" variant="danger" onClick={() => void deleteMemory(memory)} disabled={isSavingMemory}><Trash2 className="h-3.5 w-3.5" /> Delete</Button></div>
+                          <div key={memory.id} className="flex items-start gap-3 px-3 py-2.5 sm:justify-between">
+                            <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{memory.label}</p><p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[var(--color-text-secondary)]">{memory.content}</p></div>
+                            <div className="flex shrink-0 gap-1"><Button type="button" size="sm" variant="secondary" className="px-2" onClick={() => editMemory(memory)} disabled={isSavingMemory} aria-label={'Edit ' + memory.label}><Pencil className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button><Button type="button" size="sm" variant="danger" className="px-2" onClick={() => void deleteMemory(memory)} disabled={isSavingMemory} aria-label={'Delete ' + memory.label}><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></Button></div>
                           </div>
                         ))}
                       </div>

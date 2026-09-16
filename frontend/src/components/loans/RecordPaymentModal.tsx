@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -14,6 +15,10 @@ interface Loan {
   amountCents: number;
   remainingCents: number;
   contact: { id: number; name: string };
+  sourceType?: string;
+  sourceTransactionId?: number | null;
+  lendingTransactionId?: number | null;
+  sourceDescription?: string;
 }
 
 interface RecordPaymentModalProps {
@@ -33,7 +38,7 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
   const [error, setError] = useState('');
   
   const [formData, setFormData] = useState({
-    amount: (loan.remainingCents / 100).toLocaleString('id-ID'),
+    amount: loan.remainingCents.toLocaleString('id-ID'),
     rawAmount: loan.remainingCents.toString(),
     paymentDate: new Date().toISOString().split('T')[0],
     paymentTime: new Date().toTimeString().slice(0, 5),
@@ -53,7 +58,7 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
   const handleFullPayment = () => {
     setFormData({
       ...formData,
-      amount: (loan.remainingCents / 100).toLocaleString('id-ID'),
+      amount: loan.remainingCents.toLocaleString('id-ID'),
       rawAmount: loan.remainingCents.toString(),
     });
   };
@@ -102,6 +107,7 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
   const isRepaying = loan.direction === 'borrowed';
   const amountCents = parseInt(formData.rawAmount) || 0;
   const selectedWallet = accounts.find(a => a.id.toString() === formData.walletAccountId);
+  const splitBillSourceId = loan.sourceType === 'split_bill' ? loan.sourceTransactionId ?? loan.lendingTransactionId : null;
 
   return (
     <Modal 
@@ -134,6 +140,12 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
       }
     >
       <form id="payment-form" onSubmit={handleSubmit} className="flex flex-col gap-0">
+        {splitBillSourceId != null && <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 text-sm">
+          <p className="font-semibold">{loan.sourceDescription || 'Split bill repayment'}</p>
+          <p className="mt-1 text-[var(--color-muted)]">This payment reduces the {isRepaying ? `debt owed to ${loan.contact.name}` : `receivable from ${loan.contact.name}`}. It is not new income or expense.</p>
+          {amountCents > 0 && amountCents <= loan.remainingCents && <p className="mt-2">Remaining after this payment: <span className="font-semibold">{formatCurrency(loan.remainingCents - amountCents)}</span></p>}
+          <Link to="/transactions" search={{ periodId: 'all', transactionId: String(splitBillSourceId) }} className="mt-2 inline-block font-semibold text-[var(--color-primary)]">View original bill →</Link>
+        </div>}
         {error && (
           <div className="p-4 bg-[var(--ref-error-container)] text-[var(--ref-on-error-container)] rounded-xl text-sm font-medium mb-4">
             {error}
