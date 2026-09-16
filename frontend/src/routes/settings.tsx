@@ -72,7 +72,7 @@ interface ExportOptions {
   memories: boolean;
 }
 
-type TabType = 'profile' | 'general' | 'accounts' | 'appearance' | 'agent' | 'data';
+type TabType = 'profile' | 'general' | 'accounts' | 'appearance' | 'agent' | 'data' | 'backups' | 'reports';
 type DatabaseBackupFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
 type DatabaseBackupSettings = {
   enabled: boolean;
@@ -221,6 +221,8 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'agent', label: 'Agent', icon: Brain },
   { id: 'data', label: 'Data', icon: Database },
+  { id: 'backups', label: 'Backups', icon: CloudUpload },
+  { id: 'reports', label: 'PDF reports', icon: LockKeyhole },
 ];
 
 export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
@@ -948,6 +950,13 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   ].map(item => <Link key={item.to} to={item.to} className="flex items-center justify-between gap-4 py-4 text-sm hover:text-[var(--color-accent)]"><span><strong className="block font-semibold">{item.label}</strong><span className="mt-1 block text-[var(--color-text-secondary)]">{item.description}</span></span><ChevronRight className="h-4 w-4 shrink-0" /></Link>)}
                 </div>
               </SettingsSection>
+
+            </div>
+          )}
+
+          {/* Backups Tab */}
+          {activeTab === 'backups' && (
+            <div className="space-y-4 animate-in fade-in duration-300">
               <SettingsSection
                 title={
                   <div className="flex items-center gap-2">
@@ -1018,6 +1027,13 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   </details>
                 </div>
               </SettingsSection>
+
+            </div>
+          )}
+
+          {/* PDF Reports Tab */}
+          {activeTab === 'reports' && (
+            <div className="space-y-4 animate-in fade-in duration-300">
               <SettingsSection
                 title={
                   <div className="flex items-center gap-2">
@@ -1073,6 +1089,13 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   <p className="text-xs leading-relaxed text-[var(--color-muted)]">Birthday-based passwords are convenient but easier to guess than a unique password. Your birthday is managed securely in Profile; this page only controls whether the report password is enabled and how it is formatted.</p>
                 </div>
               </SettingsSection>
+
+            </div>
+          )}
+
+          {/* Data tools and import/export */}
+          {activeTab === 'data' && (
+            <div className="space-y-4 animate-in fade-in duration-300">
 
               {/* Export Section */}
               <SettingsSection
