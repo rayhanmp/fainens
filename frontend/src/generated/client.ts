@@ -170,6 +170,54 @@ export const ListTransactions200DataItemActivityKind = {
   other: 'other',
 } as const;
 
+export type ListTransactions200DataItemLoanActivityRole = typeof ListTransactions200DataItemLoanActivityRole[keyof typeof ListTransactions200DataItemLoanActivityRole];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListTransactions200DataItemLoanActivityRole = {
+  origin: 'origin',
+  payment: 'payment',
+} as const;
+
+export type ListTransactions200DataItemLoanActivityLoansItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  contactName: string;
+  direction: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  remainingCents: number;
+  status: string;
+};
+
+export type ListTransactions200DataItemLoanActivityPayment = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  status: string;
+};
+
+/**
+ * @nullable
+ */
+export type ListTransactions200DataItemLoanActivity = {
+  role: ListTransactions200DataItemLoanActivityRole;
+  loans: ListTransactions200DataItemLoanActivityLoansItem[];
+  payment?: ListTransactions200DataItemLoanActivityPayment;
+} | null;
+
 /**
  * @nullable
  */
@@ -286,6 +334,8 @@ export type ListTransactions200DataItem = {
    * @maximum 9007199254740991
    */
   remainingReimbursableExpense?: number;
+  /** @nullable */
+  loanActivity?: ListTransactions200DataItemLoanActivity;
   lines?: ListTransactions200DataItemLinesItem[];
   tags?: ListTransactions200DataItemTagsItem[];
   categoryAllocations?: ListTransactions200DataItemCategoryAllocationsItem[];
@@ -580,6 +630,54 @@ export const GetTransaction200ActivityKind = {
   other: 'other',
 } as const;
 
+export type GetTransaction200LoanActivityRole = typeof GetTransaction200LoanActivityRole[keyof typeof GetTransaction200LoanActivityRole];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetTransaction200LoanActivityRole = {
+  origin: 'origin',
+  payment: 'payment',
+} as const;
+
+export type GetTransaction200LoanActivityLoansItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  contactName: string;
+  direction: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  remainingCents: number;
+  status: string;
+};
+
+export type GetTransaction200LoanActivityPayment = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  status: string;
+};
+
+/**
+ * @nullable
+ */
+export type GetTransaction200LoanActivity = {
+  role: GetTransaction200LoanActivityRole;
+  loans: GetTransaction200LoanActivityLoansItem[];
+  payment?: GetTransaction200LoanActivityPayment;
+} | null;
+
 /**
  * @nullable
  */
@@ -696,6 +794,8 @@ export type GetTransaction200 = {
    * @maximum 9007199254740991
    */
   remainingReimbursableExpense?: number;
+  /** @nullable */
+  loanActivity?: GetTransaction200LoanActivity;
   lines?: GetTransaction200LinesItem[];
   tags?: GetTransaction200TagsItem[];
   categoryAllocations?: GetTransaction200CategoryAllocationsItem[];
@@ -811,6 +911,54 @@ export const UpdateTransaction200ActivityKind = {
   reimbursement: 'reimbursement',
   other: 'other',
 } as const;
+
+export type UpdateTransaction200LoanActivityRole = typeof UpdateTransaction200LoanActivityRole[keyof typeof UpdateTransaction200LoanActivityRole];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTransaction200LoanActivityRole = {
+  origin: 'origin',
+  payment: 'payment',
+} as const;
+
+export type UpdateTransaction200LoanActivityLoansItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  contactName: string;
+  direction: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  remainingCents: number;
+  status: string;
+};
+
+export type UpdateTransaction200LoanActivityPayment = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  status: string;
+};
+
+/**
+ * @nullable
+ */
+export type UpdateTransaction200LoanActivity = {
+  role: UpdateTransaction200LoanActivityRole;
+  loans: UpdateTransaction200LoanActivityLoansItem[];
+  payment?: UpdateTransaction200LoanActivityPayment;
+} | null;
 
 /**
  * @nullable
@@ -928,6 +1076,8 @@ export type UpdateTransaction200 = {
    * @maximum 9007199254740991
    */
   remainingReimbursableExpense?: number;
+  /** @nullable */
+  loanActivity?: UpdateTransaction200LoanActivity;
   lines?: UpdateTransaction200LinesItem[];
   tags?: UpdateTransaction200TagsItem[];
   categoryAllocations?: UpdateTransaction200CategoryAllocationsItem[];
@@ -6399,6 +6549,10 @@ export type GetIncomeStatement200 = {
   periodName?: string;
   startDate?: number;
   endDate?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt?: number;
   isTemporary?: boolean;
   coverage?: GetIncomeStatement200Coverage;
@@ -6472,6 +6626,10 @@ export type GetBalanceSheet200 = {
   totalLiabilities: number;
   totalEquity: number;
   asOfDate: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt?: number;
   isTemporary?: boolean;
   [key: string]: unknown;
@@ -6613,6 +6771,10 @@ export type GetCashFlowStatement200 = {
   beginningCash: number;
   endingCash: number;
   periodName?: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt?: number;
   isTemporary?: boolean;
   coverage?: GetCashFlowStatement200Coverage;
@@ -6674,6 +6836,10 @@ export type GetSpendingReport200Coverage = {
 export type GetSpendingReport200 = {
   breakdown: GetSpendingReport200BreakdownItem[];
   total: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt: number;
   isTemporary: boolean;
   coverage: GetSpendingReport200Coverage;
@@ -6757,6 +6923,10 @@ export type GetMonthlyReport200IncomeStatement = {
   periodName?: string;
   startDate?: number;
   endDate?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt?: number;
   isTemporary?: boolean;
   coverage?: GetMonthlyReport200IncomeStatementCoverage;
@@ -6810,6 +6980,10 @@ export type GetMonthlyReport200BalanceSheet = {
   totalLiabilities: number;
   totalEquity: number;
   asOfDate: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt?: number;
   isTemporary?: boolean;
   [key: string]: unknown;
@@ -6896,6 +7070,10 @@ export type GetMonthlyReport200 = {
   budgetComparison: GetMonthlyReport200BudgetComparisonItem[];
   transactions: GetMonthlyReport200TransactionsItem[];
   coverage: GetMonthlyReport200Coverage;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt: number;
   isTemporary: boolean;
   provenance: GetMonthlyReport200Provenance;
@@ -6985,6 +7163,10 @@ export type GetReportTrends200Item = {
   revenue: number;
   expenses: number;
   netIncome: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   generatedAt?: number;
   isTemporary?: boolean;
   coverage?: GetReportTrends200ItemCoverage;
@@ -12087,6 +12269,159 @@ export type ReverseSplitBill409 = {
 /**
  * @nullable
  */
+export type GetSplitBillTransactionDetail200Payment = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  loanId: number;
+  contactName: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  status: string;
+  direction: string;
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetSplitBillTransactionDetail200SessionReceiptDate = string | string | number | null;
+
+export type GetSplitBillTransactionDetail200SessionCreatedAt = string | string | number;
+
+export type GetSplitBillTransactionDetail200SessionUpdatedAt = string | string | number;
+
+/**
+ * @nullable
+ */
+export type GetSplitBillTransactionDetail200Session = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /** @nullable */
+  merchantName: string | null;
+  /** @nullable */
+  receiptDate: GetSplitBillTransactionDetail200SessionReceiptDate;
+  /** @nullable */
+  receiptImageR2Key: string | null;
+  /** @nullable */
+  parsedItemsJson: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  subtotalCents: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  taxCents: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  serviceFeeCents: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  discountCents: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  totalCents: number;
+  /** @nullable */
+  peopleJson: string | null;
+  /** @nullable */
+  assignmentsJson: string | null;
+  /** @nullable */
+  splitResultJson: string | null;
+  /** @nullable */
+  loanIds: string | null;
+  status: string;
+  createdAt: GetSplitBillTransactionDetail200SessionCreatedAt;
+  updatedAt: GetSplitBillTransactionDetail200SessionUpdatedAt;
+  [key: string]: unknown;
+} | null;
+
+export type GetSplitBillTransactionDetail200LoansItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  contactId: number;
+  direction: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amountCents: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  remainingCents: number;
+  status: string;
+  contactName: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type GetSplitBillTransactionDetail200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sourceTransactionId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  personalShareCents: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  totalPaidCents: number;
+  isBorrower: boolean;
+  /** @nullable */
+  payment: GetSplitBillTransactionDetail200Payment;
+  /** @nullable */
+  session: GetSplitBillTransactionDetail200Session;
+  loans: GetSplitBillTransactionDetail200LoansItem[];
+} | null;
+
+export type GetSplitBillTransactionDetail404 = {
+  error: string;
+  message?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
 export type ListSplitBillHistory200ItemReceiptDate = string | string | number | null;
 
 export type ListSplitBillHistory200ItemCreatedAt = string | string | number;
@@ -14088,6 +14423,281 @@ export type CancelBackgroundTask404 = {
 
 export type CancelBackgroundTask409 = {
   error: string;
+};
+
+export type ConnectGmail401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type HandleGmailCallback403 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type HandleGmailCallback500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type GetGmailStatus200LastSyncedAt = string | string | number | null;
+
+export type GetGmailStatus200 = {
+  connected: boolean;
+  /**
+   * @nullable
+   * @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+   */
+  email: string | null;
+  /** @nullable */
+  lastSyncedAt: GetGmailStatus200LastSyncedAt;
+  [key: string]: unknown;
+};
+
+export type GetGmailStatus401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DisconnectGmail401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SyncGmailTransactionsBody = {
+  /**
+   * @minimum 1
+   * @maximum 365
+   */
+  days?: number;
+  [key: string]: unknown;
+};
+
+export type SyncGmailTransactions200LastSyncedAt = string | string | number;
+
+export type SyncGmailTransactions200 = {
+  connected: boolean;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  imported: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  skipped: number;
+  pendingIds: number[];
+  lastSyncedAt: SyncGmailTransactions200LastSyncedAt;
+  [key: string]: unknown;
+};
+
+export type SyncGmailTransactions401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SyncGmailTransactions409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SyncGmailTransactions502 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetDatabaseBackupSettings200Frequency = typeof GetDatabaseBackupSettings200Frequency[keyof typeof GetDatabaseBackupSettings200Frequency];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetDatabaseBackupSettings200Frequency = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+} as const;
+
+export type GetDatabaseBackupSettings200BackupsItem = {
+  key: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  size: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  createdAt: number;
+  [key: string]: unknown;
+};
+
+export type GetDatabaseBackupSettings200 = {
+  enabled: boolean;
+  frequency: GetDatabaseBackupSettings200Frequency;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  lastBackupAt: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  nextBackupAt: number | null;
+  backups: GetDatabaseBackupSettings200BackupsItem[];
+};
+
+export type GetDatabaseBackupSettings401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateDatabaseBackupSettingsBodyFrequency = typeof UpdateDatabaseBackupSettingsBodyFrequency[keyof typeof UpdateDatabaseBackupSettingsBodyFrequency];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateDatabaseBackupSettingsBodyFrequency = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+} as const;
+
+export type UpdateDatabaseBackupSettingsBody = {
+  enabled?: boolean;
+  frequency?: UpdateDatabaseBackupSettingsBodyFrequency;
+  [key: string]: unknown;
+};
+
+export type UpdateDatabaseBackupSettings200Frequency = typeof UpdateDatabaseBackupSettings200Frequency[keyof typeof UpdateDatabaseBackupSettings200Frequency];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateDatabaseBackupSettings200Frequency = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+} as const;
+
+export type UpdateDatabaseBackupSettings200BackupsItem = {
+  key: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  size: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  createdAt: number;
+  [key: string]: unknown;
+};
+
+export type UpdateDatabaseBackupSettings200 = {
+  enabled: boolean;
+  frequency: UpdateDatabaseBackupSettings200Frequency;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  lastBackupAt: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  nextBackupAt: number | null;
+  backups: UpdateDatabaseBackupSettings200BackupsItem[];
+};
+
+export type UpdateDatabaseBackupSettings400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateDatabaseBackupSettings401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RunDatabaseBackup200Backup = {
+  key: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  size: number;
+  createdAt: string;
+  [key: string]: unknown;
+};
+
+export type RunDatabaseBackup200SettingsFrequency = typeof RunDatabaseBackup200SettingsFrequency[keyof typeof RunDatabaseBackup200SettingsFrequency];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const RunDatabaseBackup200SettingsFrequency = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+} as const;
+
+export type RunDatabaseBackup200SettingsBackupsItem = {
+  key: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  size: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  createdAt: number;
+  [key: string]: unknown;
+};
+
+export type RunDatabaseBackup200Settings = {
+  enabled: boolean;
+  frequency: RunDatabaseBackup200SettingsFrequency;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  lastBackupAt: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  nextBackupAt: number | null;
+  backups: RunDatabaseBackup200SettingsBackupsItem[];
+};
+
+export type RunDatabaseBackup200 = {
+  backup: RunDatabaseBackup200Backup;
+  settings: RunDatabaseBackup200Settings;
+};
+
+export type RunDatabaseBackup400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RunDatabaseBackup401 = {
+  error: string;
+  [key: string]: unknown;
 };
 
 export type ServeLocalAttachment404 = {
@@ -22458,6 +23068,46 @@ export const reverseSplitBill = async (transactionId: number,
 
 
 
+export type getSplitBillTransactionDetailResponse200 = {
+  data: GetSplitBillTransactionDetail200
+  status: 200
+}
+
+export type getSplitBillTransactionDetailResponse404 = {
+  data: GetSplitBillTransactionDetail404
+  status: 404
+}
+    
+export type getSplitBillTransactionDetailResponseSuccess = (getSplitBillTransactionDetailResponse200) & {
+  headers: Headers;
+};
+export type getSplitBillTransactionDetailResponseError = (getSplitBillTransactionDetailResponse404) & {
+  headers: Headers;
+};
+
+export type getSplitBillTransactionDetailResponse = (getSplitBillTransactionDetailResponseSuccess | getSplitBillTransactionDetailResponseError)
+
+export const getGetSplitBillTransactionDetailUrl = (transactionId: number,) => {
+
+
+  
+
+  return `/api/splitbill/transactions/${transactionId}`
+}
+
+export const getSplitBillTransactionDetail = async (transactionId: number, options?: RequestInit): Promise<getSplitBillTransactionDetailResponse> => {
+  
+  return generatedFetch<getSplitBillTransactionDetailResponse>(getGetSplitBillTransactionDetailUrl(transactionId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
 export type listSplitBillHistoryResponse200 = {
   data: ListSplitBillHistory200Item[]
   status: 200
@@ -23934,6 +24584,349 @@ export const getCancelBackgroundTaskUrl = (id: string,) => {
 export const cancelBackgroundTask = async (id: string, options?: RequestInit): Promise<cancelBackgroundTaskResponse> => {
   
   return generatedFetch<cancelBackgroundTaskResponse>(getCancelBackgroundTaskUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type connectGmailResponse302 = {
+  data: unknown
+  status: 302
+}
+
+export type connectGmailResponse401 = {
+  data: ConnectGmail401
+  status: 401
+}
+    
+;
+export type connectGmailResponseError = (connectGmailResponse302 | connectGmailResponse401) & {
+  headers: Headers;
+};
+
+export type connectGmailResponse = (connectGmailResponseError)
+
+export const getConnectGmailUrl = () => {
+
+
+  
+
+  return `/api/integrations/gmail/connect`
+}
+
+export const connectGmail = async ( options?: RequestInit): Promise<connectGmailResponse> => {
+  
+  return generatedFetch<connectGmailResponse>(getConnectGmailUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type handleGmailCallbackResponse302 = {
+  data: unknown
+  status: 302
+}
+
+export type handleGmailCallbackResponse403 = {
+  data: HandleGmailCallback403
+  status: 403
+}
+
+export type handleGmailCallbackResponse500 = {
+  data: HandleGmailCallback500
+  status: 500
+}
+    
+;
+export type handleGmailCallbackResponseError = (handleGmailCallbackResponse302 | handleGmailCallbackResponse403 | handleGmailCallbackResponse500) & {
+  headers: Headers;
+};
+
+export type handleGmailCallbackResponse = (handleGmailCallbackResponseError)
+
+export const getHandleGmailCallbackUrl = () => {
+
+
+  
+
+  return `/api/integrations/gmail/callback`
+}
+
+export const handleGmailCallback = async ( options?: RequestInit): Promise<handleGmailCallbackResponse> => {
+  
+  return generatedFetch<handleGmailCallbackResponse>(getHandleGmailCallbackUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getGmailStatusResponse200 = {
+  data: GetGmailStatus200
+  status: 200
+}
+
+export type getGmailStatusResponse401 = {
+  data: GetGmailStatus401
+  status: 401
+}
+    
+export type getGmailStatusResponseSuccess = (getGmailStatusResponse200) & {
+  headers: Headers;
+};
+export type getGmailStatusResponseError = (getGmailStatusResponse401) & {
+  headers: Headers;
+};
+
+export type getGmailStatusResponse = (getGmailStatusResponseSuccess | getGmailStatusResponseError)
+
+export const getGetGmailStatusUrl = () => {
+
+
+  
+
+  return `/api/integrations/gmail/status`
+}
+
+export const getGmailStatus = async ( options?: RequestInit): Promise<getGmailStatusResponse> => {
+  
+  return generatedFetch<getGmailStatusResponse>(getGetGmailStatusUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type disconnectGmailResponse204 = {
+  data: unknown
+  status: 204
+}
+
+export type disconnectGmailResponse401 = {
+  data: DisconnectGmail401
+  status: 401
+}
+    
+export type disconnectGmailResponseSuccess = (disconnectGmailResponse204) & {
+  headers: Headers;
+};
+export type disconnectGmailResponseError = (disconnectGmailResponse401) & {
+  headers: Headers;
+};
+
+export type disconnectGmailResponse = (disconnectGmailResponseSuccess | disconnectGmailResponseError)
+
+export const getDisconnectGmailUrl = () => {
+
+
+  
+
+  return `/api/integrations/gmail`
+}
+
+export const disconnectGmail = async ( options?: RequestInit): Promise<disconnectGmailResponse> => {
+  
+  return generatedFetch<disconnectGmailResponse>(getDisconnectGmailUrl(),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type syncGmailTransactionsResponse200 = {
+  data: SyncGmailTransactions200
+  status: 200
+}
+
+export type syncGmailTransactionsResponse401 = {
+  data: SyncGmailTransactions401
+  status: 401
+}
+
+export type syncGmailTransactionsResponse409 = {
+  data: SyncGmailTransactions409
+  status: 409
+}
+
+export type syncGmailTransactionsResponse502 = {
+  data: SyncGmailTransactions502
+  status: 502
+}
+    
+export type syncGmailTransactionsResponseSuccess = (syncGmailTransactionsResponse200) & {
+  headers: Headers;
+};
+export type syncGmailTransactionsResponseError = (syncGmailTransactionsResponse401 | syncGmailTransactionsResponse409 | syncGmailTransactionsResponse502) & {
+  headers: Headers;
+};
+
+export type syncGmailTransactionsResponse = (syncGmailTransactionsResponseSuccess | syncGmailTransactionsResponseError)
+
+export const getSyncGmailTransactionsUrl = () => {
+
+
+  
+
+  return `/api/integrations/gmail/sync`
+}
+
+export const syncGmailTransactions = async (syncGmailTransactionsBody: SyncGmailTransactionsBody, options?: RequestInit): Promise<syncGmailTransactionsResponse> => {
+  
+  return generatedFetch<syncGmailTransactionsResponse>(getSyncGmailTransactionsUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      syncGmailTransactionsBody,)
+  }
+);}
+
+
+
+export type getDatabaseBackupSettingsResponse200 = {
+  data: GetDatabaseBackupSettings200
+  status: 200
+}
+
+export type getDatabaseBackupSettingsResponse401 = {
+  data: GetDatabaseBackupSettings401
+  status: 401
+}
+    
+export type getDatabaseBackupSettingsResponseSuccess = (getDatabaseBackupSettingsResponse200) & {
+  headers: Headers;
+};
+export type getDatabaseBackupSettingsResponseError = (getDatabaseBackupSettingsResponse401) & {
+  headers: Headers;
+};
+
+export type getDatabaseBackupSettingsResponse = (getDatabaseBackupSettingsResponseSuccess | getDatabaseBackupSettingsResponseError)
+
+export const getGetDatabaseBackupSettingsUrl = () => {
+
+
+  
+
+  return `/api/settings/database-backup`
+}
+
+export const getDatabaseBackupSettings = async ( options?: RequestInit): Promise<getDatabaseBackupSettingsResponse> => {
+  
+  return generatedFetch<getDatabaseBackupSettingsResponse>(getGetDatabaseBackupSettingsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type updateDatabaseBackupSettingsResponse200 = {
+  data: UpdateDatabaseBackupSettings200
+  status: 200
+}
+
+export type updateDatabaseBackupSettingsResponse400 = {
+  data: UpdateDatabaseBackupSettings400
+  status: 400
+}
+
+export type updateDatabaseBackupSettingsResponse401 = {
+  data: UpdateDatabaseBackupSettings401
+  status: 401
+}
+    
+export type updateDatabaseBackupSettingsResponseSuccess = (updateDatabaseBackupSettingsResponse200) & {
+  headers: Headers;
+};
+export type updateDatabaseBackupSettingsResponseError = (updateDatabaseBackupSettingsResponse400 | updateDatabaseBackupSettingsResponse401) & {
+  headers: Headers;
+};
+
+export type updateDatabaseBackupSettingsResponse = (updateDatabaseBackupSettingsResponseSuccess | updateDatabaseBackupSettingsResponseError)
+
+export const getUpdateDatabaseBackupSettingsUrl = () => {
+
+
+  
+
+  return `/api/settings/database-backup`
+}
+
+export const updateDatabaseBackupSettings = async (updateDatabaseBackupSettingsBody: UpdateDatabaseBackupSettingsBody, options?: RequestInit): Promise<updateDatabaseBackupSettingsResponse> => {
+  
+  return generatedFetch<updateDatabaseBackupSettingsResponse>(getUpdateDatabaseBackupSettingsUrl(),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateDatabaseBackupSettingsBody,)
+  }
+);}
+
+
+
+export type runDatabaseBackupResponse200 = {
+  data: RunDatabaseBackup200
+  status: 200
+}
+
+export type runDatabaseBackupResponse400 = {
+  data: RunDatabaseBackup400
+  status: 400
+}
+
+export type runDatabaseBackupResponse401 = {
+  data: RunDatabaseBackup401
+  status: 401
+}
+    
+export type runDatabaseBackupResponseSuccess = (runDatabaseBackupResponse200) & {
+  headers: Headers;
+};
+export type runDatabaseBackupResponseError = (runDatabaseBackupResponse400 | runDatabaseBackupResponse401) & {
+  headers: Headers;
+};
+
+export type runDatabaseBackupResponse = (runDatabaseBackupResponseSuccess | runDatabaseBackupResponseError)
+
+export const getRunDatabaseBackupUrl = () => {
+
+
+  
+
+  return `/api/settings/database-backup/run`
+}
+
+export const runDatabaseBackup = async ( options?: RequestInit): Promise<runDatabaseBackupResponse> => {
+  
+  return generatedFetch<runDatabaseBackupResponse>(getRunDatabaseBackupUrl(),
   {      
     ...options,
     method: 'POST'

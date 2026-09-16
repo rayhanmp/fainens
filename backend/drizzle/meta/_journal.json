@@ -281,6 +281,13 @@
       "when": 1788087000000,
       "tag": "0039_gmail_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788088000000,
+      "tag": "0040_database_backup_settings",
+      "breakpoints": true
     }
   ]
 }

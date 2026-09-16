@@ -43,6 +43,7 @@ import {
   Plus,
   LockKeyhole,
   Search,
+  CloudUpload,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
@@ -72,6 +73,14 @@ interface ExportOptions {
 }
 
 type TabType = 'profile' | 'general' | 'accounts' | 'appearance' | 'agent' | 'data';
+type DatabaseBackupFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+type DatabaseBackupSettings = {
+  enabled: boolean;
+  frequency: DatabaseBackupFrequency;
+  lastBackupAt: number | null;
+  nextBackupAt: number | null;
+  backups: Array<{ key: string; size: number; createdAt: number }>;
+};
 
 type AgentModel = {
   id: number;
@@ -139,6 +148,11 @@ const DATE_FORMATS = [
   { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
   { value: 'DD MMM YYYY', label: 'DD MMM YYYY' },
 ];
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 const TIMEZONES = [
   { value: 'Asia/Jakarta', label: 'Jakarta (UTC+7)' },
@@ -272,6 +286,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [agentProviderBusy, setAgentProviderBusy] = useState(false);
   const [agentProviderNotice, setAgentProviderNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [agentModels, setAgentModels] = useState<AgentModel[]>([]);
+  const [databaseBackup, setDatabaseBackup] = useState<DatabaseBackupSettings>({ enabled: true, frequency: 'weekly', lastBackupAt: null, nextBackupAt: null, backups: [] });
+  const [databaseBackupBusy, setDatabaseBackupBusy] = useState(false);
+  const [databaseBackupNotice, setDatabaseBackupNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [agentModelDraft, setAgentModelDraft] = useState({ name: '', model: '', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '' });
   const [editingAgentModelId, setEditingAgentModelId] = useState<number | null>(null);
   const [showAgentModelForm, setShowAgentModelForm] = useState(false);
@@ -310,6 +327,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
       }
     }).catch(() => setProfileNotice({ tone: 'error', text: 'Could not load your profile.' }));
     void api.agentProvider.models.list().then(setAgentModels).catch(() => setAgentProviderNotice({ tone: 'error', text: 'Could not load Agent models.' }));
+    void api.databaseBackup.get().then(setDatabaseBackup).catch(() => setDatabaseBackupNotice({ tone: 'error', text: 'Could not load database backup settings.' }));
   }, [legacyBirthDate]);
 
   const saveProfile = async () => {
@@ -404,6 +422,30 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     try { await api.agentProvider.models.remove(id); setAgentModels(await api.agentProvider.models.list()); setAgentProviderNotice({ tone: 'success', text: 'Agent model deleted.' }); }
     catch (error) { setAgentProviderNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not delete the model.' }); }
     finally { setAgentProviderBusy(false); }
+  };
+
+  const saveDatabaseBackupSettings = async (input: { enabled?: boolean; frequency?: DatabaseBackupFrequency }) => {
+    setDatabaseBackupBusy(true);
+    setDatabaseBackupNotice(null);
+    try {
+      const saved = await api.databaseBackup.update(input);
+      setDatabaseBackup(saved);
+      setDatabaseBackupNotice({ tone: 'success', text: 'Database backup settings saved.' });
+    } catch (error) {
+      setDatabaseBackupNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not save database backup settings.' });
+    } finally { setDatabaseBackupBusy(false); }
+  };
+
+  const runDatabaseBackup = async () => {
+    setDatabaseBackupBusy(true);
+    setDatabaseBackupNotice(null);
+    try {
+      const result = await api.databaseBackup.run();
+      setDatabaseBackup(result.settings);
+      setDatabaseBackupNotice({ tone: 'success', text: `Backup uploaded (${formatBytes(result.backup.size)}).` });
+    } catch (error) {
+      setDatabaseBackupNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not create database backup.' });
+    } finally { setDatabaseBackupBusy(false); }
   };
 
   // Auto-save with 500ms debounce
@@ -897,6 +939,58 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     { to: '/gallery', label: 'Image storage', description: 'Manage receipt, conversation, and wishlist images.' },
                     { to: '/audit-log', label: 'Security audit', description: 'Review account activity and security events.' },
                   ].map(item => <Link key={item.to} to={item.to} className="flex items-center justify-between gap-4 py-4 text-sm hover:text-[var(--color-accent)]"><span><strong className="block font-semibold">{item.label}</strong><span className="mt-1 block text-[var(--color-text-secondary)]">{item.description}</span></span><ChevronRight className="h-4 w-4 shrink-0" /></Link>)}
+                </div>
+              </SettingsSection>
+              <SettingsSection
+                title={
+                  <div className="flex items-center gap-2">
+                    <CloudUpload className="h-5 w-5" />
+                    Cloud database backups
+                  </div>
+                }
+              >
+                <div className="space-y-4">
+                  <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                    Keep encrypted, integrity-checked SQLite snapshots in your existing R2 bucket. Your attachments stay in their existing storage paths.
+                  </p>
+                  <SettingsRow
+                    label="Automatic backups"
+                    description="Turn scheduled database snapshots on or off."
+                    action={<input type="checkbox" aria-label="Enable automatic database backups" checked={databaseBackup.enabled} onChange={(event) => void saveDatabaseBackupSettings({ enabled: event.target.checked })} disabled={databaseBackupBusy} className="h-4 w-4 accent-[var(--color-accent)]" />}
+                  />
+                  <SettingsRow
+                    label="Backup frequency"
+                    description="The worker checks hourly and creates a snapshot when this cadence is due."
+                    action={<Select label="" aria-label="Database backup frequency" value={databaseBackup.frequency} onChange={(event) => void saveDatabaseBackupSettings({ frequency: event.target.value as DatabaseBackupFrequency })} disabled={!databaseBackup.enabled || databaseBackupBusy} options={[{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Every two weeks' }, { value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly' }]} />}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-4">
+                    <div className="text-xs text-[var(--color-text-secondary)]">
+                      <p>{databaseBackup.lastBackupAt ? `Last backup: ${new Date(databaseBackup.lastBackupAt).toLocaleString()}` : 'No backup has been recorded yet.'}</p>
+                      {databaseBackup.enabled && databaseBackup.nextBackupAt && <p className="mt-1">Next scheduled backup: {new Date(databaseBackup.nextBackupAt).toLocaleString()}</p>}
+                    </div>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void runDatabaseBackup()} disabled={databaseBackupBusy} isLoading={databaseBackupBusy}>
+                      <CloudUpload className="h-4 w-4" /> Back up now
+                    </Button>
+                  </div>
+                  {databaseBackupNotice && <p role="status" className={cn('text-sm', databaseBackupNotice.tone === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{databaseBackupNotice.text}</p>}
+                  <div className="border-t border-[var(--color-border)] pt-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold">Existing backups</p>
+                      <span className="text-xs text-[var(--color-muted)]">{databaseBackup.backups.length} snapshot{databaseBackup.backups.length === 1 ? '' : 's'}</span>
+                    </div>
+                    {databaseBackup.backups.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-text-secondary)]">No cloud database backups found.</p>
+                    ) : (
+                      <div className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
+                        {databaseBackup.backups.map((backup) => (
+                          <div key={backup.key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-xs">
+                            <span className="min-w-0 truncate font-medium" title={backup.key}>{backup.key.split('/').pop()}</span>
+                            <span className="shrink-0 text-[var(--color-text-secondary)]">{formatBytes(backup.size)} · {backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown date'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </SettingsSection>
               <SettingsSection

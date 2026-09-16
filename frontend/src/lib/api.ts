@@ -453,6 +453,33 @@ export const api = {
     }),
   },
 
+  databaseBackup: {
+    get: () => fetchApi<{
+      enabled: boolean;
+      frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+      lastBackupAt: number | null;
+      nextBackupAt: number | null;
+      backups: Array<{ key: string; size: number; createdAt: number }>;
+    }>('/settings/database-backup'),
+    update: (input: { enabled?: boolean; frequency?: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' }) => fetchApi<{
+      enabled: boolean;
+      frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+      lastBackupAt: number | null;
+      nextBackupAt: number | null;
+      backups: Array<{ key: string; size: number; createdAt: number }>;
+    }>('/settings/database-backup', { method: 'PUT', body: JSON.stringify(input) }),
+    run: () => fetchApi<{
+      backup: { key: string; size: number; createdAt: string };
+      settings: {
+        enabled: boolean;
+        frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+        lastBackupAt: number | null;
+        nextBackupAt: number | null;
+        backups: Array<{ key: string; size: number; createdAt: number }>;
+      };
+    }>('/settings/database-backup/run', { method: 'POST' }),
+  },
+
   agentProvider: {
     get: () => fetchApi<{
       id?: number;

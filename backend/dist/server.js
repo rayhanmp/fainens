@@ -140,7 +140,7 @@ async function start() {
         };
         const runDatabaseBackup = async () => {
             try {
-                const result = await (0, database_backup_1.createDatabaseBackup)();
+                const result = await (0, database_backup_1.processDueDatabaseBackup)();
                 if (result)
                     app.log.info({ databaseBackup: result }, "Database backup uploaded");
             }
@@ -176,7 +176,7 @@ async function start() {
             intervals.push(setInterval(() => void runRenewals(), 60 * 60 * 1000));
             intervals.push(setInterval(() => void runSalaryPosting(), 60 * 60 * 1000));
             intervals.push(setInterval(() => void runGmailPoll(), env_1.env.GMAIL_POLL_INTERVAL_MINUTES * 60000));
-            intervals.push(setInterval(() => void runDatabaseBackup(), env_1.env.DATABASE_BACKUP_INTERVAL_HOURS * 60 * 60000));
+            intervals.push(setInterval(() => void runDatabaseBackup(), env_1.env.DATABASE_BACKUP_POLL_INTERVAL_MINUTES * 60000));
             void runGmailPoll();
         }
         await app.listen({ port: env_1.env.PORT, host: env_1.env.HOST });

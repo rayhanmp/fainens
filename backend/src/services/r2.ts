@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promises as fs } from "fs";
@@ -166,6 +167,56 @@ export async function deleteFile(key: string): Promise<void> {
   });
 
   await r2Client.send(command);
+}
+
+export type StoredObject = {
+  key: string;
+  size: number;
+  lastModified: Date | null;
+};
+
+async function listLocalFiles(directory: string, prefix: string, result: StoredObject[]): Promise<void> {
+  let entries;
+  try {
+    entries = await fs.readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  for (const entry of entries) {
+    const absolutePath = join(directory, entry.name);
+    const key = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      await listLocalFiles(absolutePath, key, result);
+    } else if (entry.isFile()) {
+      const stat = await fs.stat(absolutePath);
+      result.push({ key, size: stat.size, lastModified: stat.mtime });
+    }
+  }
+}
+
+/** List objects for user-facing storage inventories such as database backups. */
+export async function listFiles(prefix: string): Promise<StoredObject[]> {
+  if (!isR2Configured()) {
+    const result: StoredObject[] = [];
+    await listLocalFiles(resolveLocalStorageKey(prefix), prefix.replace(/\/$/, ""), result);
+    return result;
+  }
+
+  const result: StoredObject[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const response = await getR2Client().send(new ListObjectsV2Command({
+      Bucket: bucketName,
+      Prefix: prefix,
+      ContinuationToken: continuationToken,
+    }));
+    for (const object of response.Contents ?? []) {
+      if (object.Key) result.push({ key: object.Key, size: object.Size ?? 0, lastModified: object.LastModified ?? null });
+    }
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return result;
 }
 
 export function getPublicUrl(key: string): string | null {

@@ -343,6 +343,7 @@ function repairMigrationHistory(journal: MigrationJournal): void {
       && has("reimbursement_operation", "idempotency_key", "operation", "request_hash", "result_json"),
     "0035_reimbursement_writeoff_reversal": has("reimbursement_claim", "writeoff_transaction_id"),
     "0036_agent_models": has("agent_model", "id", "name", "model", "base_url", "is_default"),
+    "0040_database_backup_settings": has("database_backup_settings", "owner_email", "enabled", "frequency", "last_backup_at", "updated_at"),
   };
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
@@ -481,6 +482,7 @@ function assertRequiredSchema(): void {
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],
     gmail_connection: ["owner_email", "google_email", "refresh_token", "last_synced_at", "created_at", "updated_at"],
+    database_backup_settings: ["owner_email", "enabled", "frequency", "last_backup_at", "updated_at"],
     splitbill_session: ["total_cents", "status"],
     reconciliation_session: ["as_of_date", "status", "lifecycle_status", "voided_at", "void_reason", "kind", "note"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],

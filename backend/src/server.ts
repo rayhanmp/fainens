@@ -11,7 +11,7 @@ import { env } from "./lib/env";
 import { enqueueMaintenance, enqueueRecurring, maintenanceQueue } from "./jobs/queue";
 import { configureJobSchedulers } from "./jobs/schedulers";
 import { pollConnectedGmail } from "./services/gmail-sync";
-import { createDatabaseBackup } from "./services/database-backup";
+import { processDueDatabaseBackup } from "./services/database-backup";
 
 async function start() {
   const app = await buildApp();
@@ -78,7 +78,7 @@ async function start() {
     };
     const runDatabaseBackup = async () => {
       try {
-        const result = await createDatabaseBackup();
+        const result = await processDueDatabaseBackup();
         if (result) app.log.info({ databaseBackup: result }, "Database backup uploaded");
       } catch (err) { app.log.warn({ err }, "Database backup failed"); }
     };
@@ -108,7 +108,7 @@ async function start() {
       intervals.push(setInterval(() => void runRenewals(), 60 * 60 * 1000));
       intervals.push(setInterval(() => void runSalaryPosting(), 60 * 60 * 1000));
       intervals.push(setInterval(() => void runGmailPoll(), env.GMAIL_POLL_INTERVAL_MINUTES * 60_000));
-      intervals.push(setInterval(() => void runDatabaseBackup(), env.DATABASE_BACKUP_INTERVAL_HOURS * 60 * 60_000));
+      intervals.push(setInterval(() => void runDatabaseBackup(), env.DATABASE_BACKUP_POLL_INTERVAL_MINUTES * 60_000));
       void runGmailPoll();
     }
     await app.listen({ port: env.PORT, host: env.HOST });

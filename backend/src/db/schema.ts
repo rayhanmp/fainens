@@ -989,6 +989,17 @@ export const gmailConnections = sqliteTable("gmail_connection", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** User-facing cadence and last-success state for automated database backups. */
+export const databaseBackupSettings = sqliteTable("database_backup_settings", {
+  ownerEmail: text("owner_email").primaryKey(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  frequency: text("frequency").notNull().default("weekly"),
+  lastBackupAt: integer("last_backup_at", { mode: "timestamp_ms" }),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
 /** Splitbill sessions - stores receipt OCR and split history */
 export const splitbillSessions = sqliteTable("splitbill_session", {
   id: integer("id").primaryKey({ autoIncrement: true }),

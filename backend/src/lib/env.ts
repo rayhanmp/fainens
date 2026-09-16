@@ -57,7 +57,7 @@ const envSchema = z.object({
   JOB_RUNNER_MODE: z.enum(["interval", "queue"]).default("interval"),
   GMAIL_POLL_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(15),
   DATABASE_BACKUP_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
-  DATABASE_BACKUP_INTERVAL_HOURS: z.coerce.number().int().min(1).max(24 * 365).default(7 * 24),
+  DATABASE_BACKUP_POLL_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(60),
   WORKER_MAINTENANCE_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(2),
   WORKER_RECURRING_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(1),
   WORKER_AGENT_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
