@@ -180,6 +180,7 @@ function DashboardPage() {
   const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false);
   const periodPickerRef = useRef<HTMLDivElement>(null);
   const periodPickerTriggerRef = useRef<HTMLButtonElement>(null);
+  const notificationPopoverRef = useRef<HTMLDetailsElement>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const reviewedOutlookRevisionRef = useRef<string | null>(null);
@@ -191,6 +192,22 @@ function DashboardPage() {
   const setDashboardNotificationCount = useUiStore((state) => state.setDashboardNotificationCount);
   const netWorthTrendQuery = useNetWorthTrendQuery('30d');
   const agentProfileQuery = useAgentProfileQuery();
+
+  useEffect(() => {
+    const closeNotificationPopover = (event: PointerEvent) => {
+      const popover = notificationPopoverRef.current;
+      if (popover?.open && event.target instanceof Node && !popover.contains(event.target)) popover.open = false;
+    };
+    const closeNotificationPopoverOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && notificationPopoverRef.current?.open) notificationPopoverRef.current.open = false;
+    };
+    document.addEventListener('pointerdown', closeNotificationPopover);
+    document.addEventListener('keydown', closeNotificationPopoverOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeNotificationPopover);
+      document.removeEventListener('keydown', closeNotificationPopoverOnEscape);
+    };
+  }, []);
 
   const periodsQuery = usePeriodsQuery();
   const accountsQuery = useAccountsLedgerQuery();
@@ -508,7 +525,7 @@ function DashboardPage() {
               </div>
               <button type="button" disabled={!newerPeriod} onClick={() => newerPeriod && setSelectedPeriodId(String(newerPeriod.id))} className="grid h-9 w-9 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Next period" title={newerPeriod ? `Next: ${newerPeriod.name}` : 'No next period'}><ChevronRight className="h-4 w-4" /></button>
             </div>}
-            <details className="group relative">
+            <details ref={notificationPopoverRef} className="group relative">
               <summary className="relative grid h-11 w-11 cursor-pointer list-none place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)] [&::-webkit-details-marker]:hidden" aria-label="Dashboard notifications">
                 <Bell className="h-5 w-5" />
                 {unreadAttentionItems.length > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-[var(--color-background)]">{Math.min(unreadAttentionItems.length, 9)}</span>}
