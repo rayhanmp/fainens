@@ -958,7 +958,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
               >
                 <div className="space-y-4">
                   <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                    Keep encrypted, integrity-checked SQLite snapshots in your existing R2 bucket. Your attachments stay in their existing storage paths.
+                    Keep integrity-checked SQLite snapshots in your existing storage. Cloudflare R2 encrypts objects at rest; local fallback storage is not encrypted by this feature.
                   </p>
                   <SettingsRow
                     label="Automatic backups"
@@ -970,7 +970,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     description="The worker checks hourly and creates a snapshot when this cadence is due."
                     action={<Select label="" aria-label="Database backup frequency" value={databaseBackup.frequency} onChange={(event) => void saveDatabaseBackupSettings({ frequency: event.target.value as DatabaseBackupFrequency })} disabled={!databaseBackup.enabled || databaseBackupBusy} options={[{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Every two weeks' }, { value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly' }]} />}
                   />
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
                     <div className="text-xs text-[var(--color-text-secondary)]">
                       <p>{databaseBackup.lastBackupAt ? `Last backup: ${new Date(databaseBackup.lastBackupAt).toLocaleString()}` : 'No backup has been recorded yet.'}</p>
                       {databaseBackup.enabled && databaseBackup.nextBackupAt && <p className="mt-1">Next scheduled backup: {new Date(databaseBackup.nextBackupAt).toLocaleString()}</p>}
