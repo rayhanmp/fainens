@@ -33,5 +33,6 @@ export async function configureJobSchedulers(): Promise<void> {
     upsert(recurringQueue, "recurring-subscriptions", 60 * 60_000, "subscription-renewals"),
     upsert(recurringQueue, "recurring-salary", 60 * 60_000, "salary-posting"),
     upsert(recurringQueue, "recurring-gmail-sync", env.GMAIL_POLL_INTERVAL_MINUTES * 60_000, "gmail-sync"),
+    upsert(recurringQueue, "recurring-database-backup", env.DATABASE_BACKUP_INTERVAL_HOURS * 60 * 60_000, "database-backup"),
   ]);
 }

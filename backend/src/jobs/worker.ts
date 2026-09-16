@@ -9,6 +9,7 @@ import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { processDueSubscriptionRenewals } from "../services/subscription-renewals";
 import { postSalaryIfPayrollDay } from "../services/salary-posting";
 import { pollConnectedGmail } from "../services/gmail-sync";
+import { createDatabaseBackup } from "../services/database-backup";
 import { cancelBackgroundTask, claimBackgroundTask, completeBackgroundTask, dispatchDueBackgroundTasks, failBackgroundTask } from "../services/background-tasks";
 import { configureJobSchedulers } from "./schedulers";
 import { agentQueue, maintenanceQueue, recurringQueue, type AgentJobName, type MaintenanceJobName, type RecurringJobName } from "./queue";
@@ -46,6 +47,9 @@ async function processRecurring(job: Job<undefined, void, RecurringJobName>): Pr
       return;
     case "gmail-sync":
       await pollConnectedGmail();
+      return;
+    case "database-backup":
+      await createDatabaseBackup();
       return;
   }
 }

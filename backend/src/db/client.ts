@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 
 const backendRoot = path.resolve(__dirname, "..", "..");
 const configuredDbPath = process.env.FAINENS_DB_PATH?.trim();
-const dbPath = configuredDbPath
+export const dbPath = configuredDbPath
   ? path.resolve(configuredDbPath)
   : path.join(backendRoot, "data", "fainens.db");
 

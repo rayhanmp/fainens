@@ -176,6 +176,8 @@ The complete template is in [.env.example](.env.example). The most important pro
 | `SESSION_SECRET` | Secret used to protect sessions; keep it private and stable |
 | `REDIS_URL` | Redis connection used by the API and worker |
 | `GMAIL_POLL_INTERVAL_MINUTES` | Automatic BNI Gmail polling interval; defaults to 15 minutes |
+| `DATABASE_BACKUP_ENABLED` | Upload weekly SQLite snapshots to the configured R2 bucket; defaults to `true` |
+| `DATABASE_BACKUP_INTERVAL_HOURS` | Database backup interval in hours; defaults to 168 (weekly) |
 | `OPENROUTER_API_KEY` | Optional server-side key for the Agent |
 | `AGENT_OPENROUTER_MODEL` | Optional default Agent model |
 | `VITE_DEV_PORT` | Local Vite port |
@@ -216,6 +218,12 @@ The importer polls connected Gmail accounts automatically every 15 minutes by
 default (configurable with `GMAIL_POLL_INTERVAL_MINUTES`). It only creates
 pending transactions and never posts a financial transaction until the user
 reviews and approves it.
+
+When R2 is configured, Fainens also uploads a SQLite-consistent database
+snapshot every 168 hours by default under the `database-backups/` prefix in
+the same bucket. The snapshot is integrity-checked before upload. Set
+`DATABASE_BACKUP_ENABLED=false` to disable it or adjust
+`DATABASE_BACKUP_INTERVAL_HOURS` if a different cadence is required.
 
 The callback URL, frontend URL, and CORS origin must use the same public origin. Google will reject a callback URL that differs by scheme, hostname, port, or path.
 

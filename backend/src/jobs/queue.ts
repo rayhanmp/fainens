@@ -17,7 +17,7 @@ export type MaintenanceJobName =
   | "cache-invalidation-outbox"
   | "storage-deletion-outbox"
   | "precompute-warmup";
-export type RecurringJobName = "subscription-renewals" | "salary-posting" | "gmail-sync";
+export type RecurringJobName = "subscription-renewals" | "salary-posting" | "gmail-sync" | "database-backup";
 export type AgentJobName = "conversation-title" | "budget-outlier-review";
 export type JobName = MaintenanceJobName | RecurringJobName | AgentJobName;
 
