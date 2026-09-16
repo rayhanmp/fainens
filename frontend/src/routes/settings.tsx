@@ -958,7 +958,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
               >
                 <div className="space-y-4">
                   <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                    Keep integrity-checked SQLite snapshots in your existing storage. Cloudflare R2 encrypts objects at rest; local fallback storage is not encrypted by this feature.
+                    Keep integrity-checked SQLite snapshots in your existing storage.
                   </p>
                   <SettingsRow
                     label="Automatic backups"
