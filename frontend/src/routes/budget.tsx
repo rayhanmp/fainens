@@ -1951,7 +1951,6 @@ function BudgetPage() {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-bold text-[var(--ref-on-surface)]">Available categories</h3>
-                      <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Drag across, or tap +</p>
                     </div>
                     <span className="rounded-full bg-[var(--ref-surface-container-high)] px-2.5 py-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">{availableCategories.length}</span>
                   </div>
