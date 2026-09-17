@@ -158,6 +158,7 @@ export type BudgetPlan = {
   variance: number;
   percentUsed: number;
   categoryName: string;
+  note: string | null;
 };
 
 export type BudgetSummary = {
@@ -167,6 +168,10 @@ export type BudgetSummary = {
   percentOfIncome: number;
   coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown';
   coverageReason: string | null;
+  budgetNote: string | null;
+  savingsTargetAmount: number;
+  savingsTargetMode: 'amount' | 'income_percent';
+  savingsTargetRate: number;
   coverage: {
     complete: number[];
     partial: number[];
@@ -1051,10 +1056,20 @@ export const api = {
       const query = periodId ? `?periodId=${periodId}` : '';
       return fetchApi<BudgetSummary | BudgetSummary[]>(`/budgets${query}`);
     },
-    create: (data: { periodId: number; categoryId: number; plannedAmount: number }) =>
+    create: (data: { periodId: number; categoryId: number; plannedAmount: number; note?: string | null }) =>
       fetchApi('/budgets', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: number, data: Partial<{ plannedAmount: number }>) =>
+    createLines: (data: {
+      periodId: number;
+      items: Array<{ categoryId: number; plannedAmount: number; note?: string | null }>;
+      savingsTargetOverride?: { savingsTargetAmount: number; savingsTargetMode: 'amount' | 'income_percent'; savingsTargetRate: number };
+    }) =>
+      fetchApi<{ created: number }>('/budgets/bulk', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<{ plannedAmount: number; periodId: number; note: string | null }>) =>
       fetchApi(`/budgets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    updatePeriodPlan: (periodId: number, data: { budgetNote?: string | null; savingsTargetAmount?: number; savingsTargetMode?: 'amount' | 'income_percent'; savingsTargetRate?: number }) =>
+      fetchApi<{ periodId: number; budgetNote: string | null; savingsTargetAmount: number; savingsTargetMode: 'amount' | 'income_percent'; savingsTargetRate: number }>(`/budgets/periods/${periodId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    copyPeriodPlan: (periodId: number, sourcePeriodId: number) =>
+      fetchApi<{ copied: number; skipped: number }>(`/budgets/periods/${periodId}/copy`, { method: 'POST', body: JSON.stringify({ sourcePeriodId }) }),
     delete: (id: number) => fetchApi(`/budgets/${id}`, { method: 'DELETE' }),
     outlook: (periodId: number) => fetchApi<BudgetOutlook>(`/budgets/${periodId}/outlook`),
     reviewOutlook: (periodId: number) => fetchApi<{ applied: boolean; reason: string; reviews: unknown[] }>(`/budgets/${periodId}/outlook/review`, { method: 'POST' }),
@@ -2216,6 +2231,13 @@ export const api = {
       method: 'POST', 
       body: JSON.stringify({ periodId }) 
     }),
+    generateBudgetDraft: (data: {
+      periodName: string;
+      income: number;
+      currentSavingsTarget: number;
+      proposedSavingsTarget: number;
+      categories: Array<{ name: string; plannedAmount: number; note?: string | null }>;
+    }) => fetchApi<{ insight: string }>('/insights/budget-draft', { method: 'POST', body: JSON.stringify(data) }),
     getDashboardLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null; sourceRevision: number | null; stale: boolean }>(`/insights/dashboard/latest${periodId ? `?periodId=${periodId}` : ''}`),
     getBudgetLatest: (periodId?: number) => fetchApi<{ insight: string | null; generatedAt: string | null; sourceRevision: number | null; stale: boolean }>(`/insights/budget/latest${periodId ? `?periodId=${periodId}` : ''}`),
   },

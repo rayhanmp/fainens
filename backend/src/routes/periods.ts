@@ -30,6 +30,10 @@ const periodSchema = z.object({
   archivedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
   coverageStatus: z.enum(["complete", "partial", "skipped", "unknown"]),
   coverageReason: z.string().nullable().optional(),
+  budgetNote: z.string().nullable().optional(),
+  savingsTargetAmount: z.number().int().nonnegative().optional(),
+  savingsTargetMode: z.enum(["amount", "income_percent"]).optional(),
+  savingsTargetRate: z.number().min(0).max(100).optional(),
 }).passthrough();
 const periodSummarySchema = z.unknown().nullable();
 const periodBudgetSchema = z.object({

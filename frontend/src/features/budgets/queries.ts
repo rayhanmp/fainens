@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   applyBudgetTemplate,
-  createBudget,
   createBudgetTemplate,
   deleteBudget,
   deleteBudgetTemplate,
@@ -12,9 +11,9 @@ import {
   listBudgetTemplates,
   listBudgets,
   listPeriods,
-  updateBudget,
   type ListBudgetsParams,
 } from '../../generated/client';
+import { api } from '../../lib/api';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
 
@@ -85,7 +84,15 @@ export function useBudgetTemplatesQuery() {
 export function useCreateBudgetMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof createBudget>[0]) => unwrapGenerated(createBudget(input), 201, 'Failed to create budget'),
+    mutationFn: (input: Parameters<typeof api.budgets.create>[0]) => api.budgets.create(input),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useCreateBudgetLinesMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof api.budgets.createLines>[0]) => api.budgets.createLines(input),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -93,7 +100,23 @@ export function useCreateBudgetMutation() {
 export function useUpdateBudgetMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateBudget>[1] }) => unwrapGenerated(updateBudget(id, data), 200, 'Failed to update budget'),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.budgets.update>[1] }) => api.budgets.update(id, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useUpdateBudgetPeriodPlanMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ periodId, data }: { periodId: number; data: Parameters<typeof api.budgets.updatePeriodPlan>[1] }) => api.budgets.updatePeriodPlan(periodId, data),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useCopyBudgetPeriodPlanMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ periodId, sourcePeriodId }: { periodId: number; sourcePeriodId: number }) => api.budgets.copyPeriodPlan(periodId, sourcePeriodId),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

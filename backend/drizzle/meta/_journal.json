@@ -288,6 +288,20 @@
       "when": 1788088000000,
       "tag": "0040_database_backup_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788089000000,
+      "tag": "0041_budget_intent",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788090000000,
+      "tag": "0042_category_color_uniqueness",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ interface CurrencyInputProps {
   placeholder?: string;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  labelClassName?: string;
   required?: boolean;
   error?: string;
   hint?: string;
@@ -24,6 +25,7 @@ export function CurrencyInput({
   placeholder = '0',
   size = 'md',
   className,
+  labelClassName,
   required,
   error,
   hint,
@@ -214,6 +216,7 @@ export function CurrencyInput({
           className={cn(
             'block text-xs font-bold uppercase tracking-widest',
             tone === 'inverse' ? 'text-[#b9d0ff]' : 'text-[var(--color-muted)]',
+            labelClassName,
           )}
         >
           {label}
@@ -222,7 +225,8 @@ export function CurrencyInput({
       )}
       <div className="relative flex items-baseline gap-2 min-w-0">
         <span className={cn(
-          'text-2xl sm:text-3xl font-headline font-bold shrink-0',
+          size === 'sm' ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl',
+          'font-headline font-bold shrink-0',
           tone === 'inverse' ? 'text-[#91b8ff]' : 'text-[var(--color-accent)]',
         )}>
           {currencySymbol}

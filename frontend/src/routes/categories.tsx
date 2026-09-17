@@ -17,6 +17,7 @@ import {
   useUpdateTagMutation,
 } from '../features/categories/queries';
 import { cn } from '../lib/utils';
+import { PRESET_COLORS } from '../lib/constants';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import {
   Plus,
@@ -59,20 +60,9 @@ interface TxRow {
   tags: Array<{ tagId: number; name: string; color: string }>;
 }
 
-const PRESET_COLORS = [
-  '#F59E0B',
-  '#3B82F6',
-  '#8B5CF6',
-  '#EC4899',
-  '#10B981',
-  '#64748B',
-  '#EF4444',
-  '#14B8A6',
-];
-
 function CategoriesPage() {
   const [showArchived, setShowArchived] = useState(false);
-  const categoriesQuery = useCategoriesPageQuery(showArchived);
+  const categoriesQuery = useCategoriesPageQuery(true);
   const createCategoryMutation = useCreateCategoryMutation();
   const updateCategoryMutation = useUpdateCategoryMutation();
   const deleteCategoryMutation = useDeleteCategoryMutation();
@@ -80,7 +70,11 @@ function CategoriesPage() {
   const createTagMutation = useCreateTagMutation();
   const updateTagMutation = useUpdateTagMutation();
   const deleteTagMutation = useDeleteTagMutation();
-  const categories = (categoriesQuery.data?.categories ?? []) as Category[];
+  const allCategories = useMemo(
+    () => (categoriesQuery.data?.categories ?? []) as Category[],
+    [categoriesQuery.data?.categories],
+  );
+  const categories = showArchived ? allCategories : allCategories.filter((category) => category.isActive);
   const tags = (categoriesQuery.data?.tags ?? []) as TagRow[];
   const transactions = (categoriesQuery.data?.transactions ?? []) as TxRow[];
   const expenseAccounts = (categoriesQuery.data?.expenseAccounts ?? []) as ExpenseAccount[];
@@ -97,6 +91,14 @@ function CategoriesPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
+
+  const usedCategoryColors = useMemo(() => new Set(
+    allCategories
+      .filter((category) => category.id !== editingCategory?.id)
+      .map((category) => category.color?.toUpperCase())
+      .filter((color): color is string => Boolean(color)),
+  ), [allCategories, editingCategory?.id]);
+  const firstAvailableCategoryColor = PRESET_COLORS.find((color) => !usedCategoryColors.has(color)) ?? PRESET_COLORS[0];
 
   const stats = useMemo(() => {
     const byCat: Record<number, number> = {};
@@ -204,7 +206,7 @@ function CategoriesPage() {
       });
     } else {
       setEditingCategory(null);
-      setCategoryForm({ name: '', icon: '📌', color: PRESET_COLORS[0], reportingAccountId: '' });
+      setCategoryForm({ name: '', icon: '📌', color: firstAvailableCategoryColor, reportingAccountId: '' });
     }
     setFormError('');
     setIsCategoryModalOpen(true);
@@ -514,21 +516,47 @@ function CategoriesPage() {
             <div>
               <label className="mb-2 block font-mono text-sm font-medium">Color</label>
               <div className="flex flex-wrap gap-2">
-                {PRESET_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setCategoryForm({ ...categoryForm, color })}
-                    className={cn(
-                      'h-9 w-9 rounded-full border-2',
-                      categoryForm.color === color
-                        ? 'border-[var(--color-text-primary)]'
-                        : 'border-transparent',
-                    )}
-                    style={{ backgroundColor: color }}
+                {PRESET_COLORS.map((color) => {
+                  const isUsed = usedCategoryColors.has(color);
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => { setCategoryForm({ ...categoryForm, color }); setFormError(''); }}
+                      disabled={isUsed}
+                      aria-label={`${color}${isUsed ? ', already used by another category' : ''}`}
+                      aria-pressed={categoryForm.color.toUpperCase() === color}
+                      title={isUsed ? 'Already used by another category' : color}
+                      className={cn(
+                        'h-9 w-9 rounded-full border-2 disabled:cursor-not-allowed disabled:opacity-25',
+                        categoryForm.color.toUpperCase() === color
+                          ? 'border-[var(--color-text-primary)]'
+                          : 'border-transparent',
+                      )}
+                      style={{ backgroundColor: color }}
+                    />
+                  );
+                })}
+                <label className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-[var(--color-border)] text-xs font-bold" title="Choose a custom color">
+                  <span aria-hidden="true">+</span>
+                  <input
+                    type="color"
+                    value={/^#[0-9A-Fa-f]{6}$/.test(categoryForm.color) ? categoryForm.color : '#000000'}
+                    aria-label="Choose a custom category color"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const color = event.target.value.toUpperCase();
+                      if (usedCategoryColors.has(color)) {
+                        setFormError('That color is already assigned to another category.');
+                        return;
+                      }
+                      setCategoryForm({ ...categoryForm, color });
+                      setFormError('');
+                    }}
                   />
-                ))}
+                </label>
               </div>
+              <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Each category needs a unique color. Used colors are dimmed.</p>
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium">Reporting expense account</label>

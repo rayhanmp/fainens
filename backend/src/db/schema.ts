@@ -9,7 +9,9 @@ export const categories: any = sqliteTable("category", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   /** Optional expense/revenue account used for new categorized journal lines. */
   reportingAccountId: integer("reporting_account_id").references(() => accounts.id, { onDelete: "set null" }),
-});
+}, (table) => [
+  uniqueIndex("category_color_unique_idx").on(sql`upper(${table.color})`).where(sql`${table.color} IS NOT NULL`),
+]);
 
 /** Wallet / ledger accounts — optional systemKey for internal GL accounts */
 export const accounts: any = sqliteTable("account", {
@@ -190,6 +192,12 @@ export const salaryPeriods = sqliteTable("salary_period", {
   /** Completeness of captured activity; independent from open/closed/archive lifecycle. */
   coverageStatus: text("coverage_status").notNull().default("unknown"), // complete | partial | skipped | unknown
   coverageReason: text("coverage_reason"),
+  /** User-authored intent for this period's budget, separate from accounting coverage notes. */
+  budgetNote: text("budget_note"),
+  /** Explicit amount the user intends to save during this period. */
+  savingsTargetAmount: integer("savings_target_amount").notNull().default(0),
+  savingsTargetMode: text("savings_target_mode").notNull().default("amount"), // amount | income_percent
+  savingsTargetRate: real("savings_target_rate").notNull().default(0),
 });
 
 export const budgetPlans = sqliteTable("budget_plan", {
@@ -201,6 +209,7 @@ export const budgetPlans = sqliteTable("budget_plan", {
     .notNull()
     .references(() => categories.id),
   plannedAmount: integer("planned_amount").notNull(), // cents
+  note: text("note"),
 });
 
 /** Optional revision-bound adjudication of historical spending patterns. */

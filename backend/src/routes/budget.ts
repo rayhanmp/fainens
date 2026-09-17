@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
@@ -19,6 +19,7 @@ const budgetPlanSchema = z.object({
   periodId: z.number().int(),
   categoryId: z.number().int(),
   plannedAmount: z.number(),
+  note: z.string().nullable().optional(),
   categoryName: z.string().optional(),
   actualAmount: z.number().optional(),
   variance: z.number().optional(),
@@ -39,6 +40,10 @@ const budgetSummarySchema = z.object({
   percentOfIncome: z.number(),
   coverageStatus: z.enum(["complete", "partial", "skipped", "unknown"]),
   coverageReason: z.string().nullable(),
+  budgetNote: z.string().nullable(),
+  savingsTargetAmount: z.number().int().nonnegative(),
+  savingsTargetMode: z.enum(["amount", "income_percent"]),
+  savingsTargetRate: z.number().min(0).max(100),
   coverage: budgetCoverageSchema,
   plans: z.array(budgetPlanSchema),
 }).passthrough();
@@ -50,11 +55,43 @@ const budgetCreateBodySchema = z.object({
   periodId: z.number().int().positive(),
   categoryId: z.number().int().positive(),
   plannedAmount: z.number().int().nonnegative(),
+  note: z.string().trim().max(1000).nullable().optional(),
+});
+const budgetBulkCreateBodySchema = z.object({
+  periodId: z.number().int().positive(),
+  items: z.array(z.object({
+    categoryId: z.number().int().positive(),
+    plannedAmount: z.number().int().positive(),
+    note: z.string().trim().max(1000).nullable().optional(),
+  })).min(1).max(100),
+  savingsTargetOverride: z.object({
+    savingsTargetAmount: z.number().int().nonnegative(),
+    savingsTargetMode: z.enum(["amount", "income_percent"]),
+    savingsTargetRate: z.number().min(0).max(100),
+  }).optional(),
+}).superRefine((body, context) => {
+  const ids = body.items.map((item) => item.categoryId);
+  if (new Set(ids).size !== ids.length) context.addIssue({ code: "custom", message: "A category can only appear once in the plan", path: ["items"] });
 });
 const budgetUpdateBodySchema = z.object({
   plannedAmount: z.number().int().nonnegative().optional(),
   periodId: z.number().int().positive().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
 });
+const budgetPeriodPlanBodySchema = z.object({
+  budgetNote: z.string().trim().max(2000).nullable().optional(),
+  savingsTargetAmount: z.number().int().nonnegative().optional(),
+  savingsTargetMode: z.enum(["amount", "income_percent"]).optional(),
+  savingsTargetRate: z.number().min(0).max(100).optional(),
+});
+const budgetPeriodPlanSchema = z.object({
+  periodId: z.number().int(),
+  budgetNote: z.string().nullable(),
+  savingsTargetAmount: z.number().int().nonnegative(),
+  savingsTargetMode: z.enum(["amount", "income_percent"]),
+  savingsTargetRate: z.number().min(0).max(100),
+});
+const budgetCopyBodySchema = z.object({ sourcePeriodId: z.number().int().positive() });
 const budgetOutlookCategorySchema = z.object({
   categoryId: z.number().int(), categoryName: z.string(), plannedAmount: z.number(), actualAmount: z.number(),
   remainingAmount: z.number(), scheduledRemainingAmount: z.number(), historicalRemainingAmount: z.number().nullable(),
@@ -124,12 +161,17 @@ export default async function (fastify: FastifyInstance) {
       percentOfIncome: number;
       coverageStatus: "complete" | "partial" | "skipped" | "unknown";
       coverageReason: string | null;
+      budgetNote: string | null;
+      savingsTargetAmount: number;
+      savingsTargetMode: "amount" | "income_percent";
+      savingsTargetRate: number;
       coverage: Awaited<ReturnType<typeof getPeriodCoverage>>;
       plans: Array<{
         id: number;
         periodId: number;
         categoryId: number;
         plannedAmount: number;
+        note: string | null;
         categoryName: string;
         actualAmount: number;
         variance: number;
@@ -165,6 +207,7 @@ export default async function (fastify: FastifyInstance) {
           periodId: budgetPlans.periodId,
           categoryId: budgetPlans.categoryId,
           plannedAmount: budgetPlans.plannedAmount,
+          note: budgetPlans.note,
           categoryName: categories.name,
         })
         .from(budgetPlans)
@@ -199,6 +242,10 @@ export default async function (fastify: FastifyInstance) {
         percentOfIncome,
         coverageStatus: (period?.coverageStatus as "complete" | "partial" | "skipped" | "unknown" | undefined) ?? "unknown",
         coverageReason: period?.coverageReason ?? null,
+        budgetNote: period?.budgetNote ?? null,
+        savingsTargetAmount: period?.savingsTargetAmount ?? 0,
+        savingsTargetMode: period?.savingsTargetMode === "income_percent" ? "income_percent" : "amount",
+        savingsTargetRate: period?.savingsTargetRate ?? 0,
         coverage,
         plans: plansWithActual,
       });
@@ -270,6 +317,158 @@ export default async function (fastify: FastifyInstance) {
     return { updated: true, periodId, transactionId, userWeight: weight };
   });
 
+  fastify.patch("/api/budgets/periods/:periodId", {
+    schema: {
+      operationId: "updateBudgetPeriodPlan",
+      tags: ["budgets"],
+      params: budgetPeriodParamsSchema,
+      body: budgetPeriodPlanBodySchema,
+      response: { 200: budgetPeriodPlanSchema, 404: budgetErrorSchema, 409: budgetErrorSchema },
+    },
+  }, async (request, reply) => {
+    const periodId = Number((request.params as { periodId: string }).periodId);
+    const body = request.body as {
+      budgetNote?: string | null;
+      savingsTargetAmount?: number;
+      savingsTargetMode?: "amount" | "income_percent";
+      savingsTargetRate?: number;
+    };
+    const [existing] = await db.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1);
+    if (!existing) return reply.code(404).send({ error: "Salary period not found" });
+    if (existing.status === "closed") return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget plan" });
+
+    const updated = db.transaction((tx) => {
+      const row = tx.update(salaryPeriods).set({
+        ...(body.budgetNote !== undefined && { budgetNote: body.budgetNote?.trim() || null }),
+        ...(body.savingsTargetAmount !== undefined && { savingsTargetAmount: body.savingsTargetAmount }),
+        ...(body.savingsTargetMode !== undefined && { savingsTargetMode: body.savingsTargetMode }),
+        ...(body.savingsTargetRate !== undefined && { savingsTargetRate: body.savingsTargetRate }),
+      }).where(eq(salaryPeriods.id, periodId)).returning().all()[0];
+      if (!row) throw new Error("Budget period plan was changed; retry the update");
+      tx.insert(auditLogs).values({
+        entityType: "salary_period",
+        entityId: periodId,
+        action: "update_budget_plan",
+        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+        afterSnapshot: Buffer.from(JSON.stringify(row)),
+      }).run();
+      bumpFinancialRevisionSync(tx);
+      return row;
+    });
+
+    await invalidateBudgetMutation([periodId]);
+    return {
+      periodId,
+      budgetNote: updated.budgetNote ?? null,
+      savingsTargetAmount: updated.savingsTargetAmount ?? 0,
+      savingsTargetMode: updated.savingsTargetMode === "income_percent" ? "income_percent" : "amount",
+      savingsTargetRate: updated.savingsTargetRate ?? 0,
+    };
+  });
+
+  fastify.post("/api/budgets/periods/:periodId/copy", {
+    schema: {
+      operationId: "copyBudgetPeriodPlan",
+      tags: ["budgets"],
+      params: budgetPeriodParamsSchema,
+      body: budgetCopyBodySchema,
+      response: { 200: z.object({ copied: z.number().int(), skipped: z.number().int() }), 404: budgetErrorSchema, 409: budgetErrorSchema },
+    },
+  }, async (request, reply) => {
+    const periodId = Number((request.params as { periodId: string }).periodId);
+    const { sourcePeriodId } = request.body as { sourcePeriodId: number };
+    if (sourcePeriodId === periodId) return reply.code(409).send({ error: "Choose a different source period" });
+
+    const [target, source] = await Promise.all([
+      db.select().from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1).then((rows) => rows[0]),
+      db.select().from(salaryPeriods).where(eq(salaryPeriods.id, sourcePeriodId)).limit(1).then((rows) => rows[0]),
+    ]);
+    if (!target || !source) return reply.code(404).send({ error: "Source or target salary period not found" });
+    if (target.status === "closed") return reply.code(409).send({ error: "Period is closed; reopen it before copying a budget" });
+
+    const sourcePlans = await db.select({
+      categoryId: budgetPlans.categoryId,
+      plannedAmount: budgetPlans.plannedAmount,
+    }).from(budgetPlans).where(eq(budgetPlans.periodId, sourcePeriodId));
+    const existingPlans = await db.select({ categoryId: budgetPlans.categoryId })
+      .from(budgetPlans).where(eq(budgetPlans.periodId, periodId));
+    const existingCategoryIds = new Set(existingPlans.map((plan) => plan.categoryId));
+    const plansToCopy = sourcePlans.filter((plan) => !existingCategoryIds.has(plan.categoryId));
+
+    db.transaction((tx) => {
+      if (plansToCopy.length > 0) {
+        tx.insert(budgetPlans).values(plansToCopy.map((plan) => ({ ...plan, periodId }))).run();
+      }
+      tx.update(salaryPeriods).set({
+        savingsTargetAmount: source.savingsTargetAmount ?? 0,
+        savingsTargetMode: source.savingsTargetMode === "income_percent" ? "income_percent" : "amount",
+        savingsTargetRate: source.savingsTargetRate ?? 0,
+      })
+        .where(eq(salaryPeriods.id, periodId)).run();
+      bumpFinancialRevisionSync(tx);
+    });
+    await invalidateBudgetMutation([periodId]);
+    return { copied: plansToCopy.length, skipped: sourcePlans.length - plansToCopy.length };
+  });
+
+  fastify.post("/api/budgets/bulk", {
+    schema: {
+      operationId: "createBudgetLines",
+      tags: ["budgets"],
+      body: budgetBulkCreateBodySchema,
+      response: { 201: z.object({ created: z.number().int() }), 404: budgetErrorSchema, 409: budgetErrorSchema },
+    },
+  }, async (request, reply) => {
+    const body = request.body as {
+      periodId: number;
+      items: Array<{ categoryId: number; plannedAmount: number; note?: string | null }>;
+      savingsTargetOverride?: {
+        savingsTargetAmount: number;
+        savingsTargetMode: "amount" | "income_percent";
+        savingsTargetRate: number;
+      };
+    };
+    const [period] = await db.select()
+      .from(salaryPeriods).where(eq(salaryPeriods.id, body.periodId)).limit(1);
+    if (!period) return reply.code(404).send({ error: "Salary period not found" });
+    if (period.status === "closed") return reply.code(409).send({ error: "Period is closed; reopen it before changing its budget" });
+
+    const categoryIds = body.items.map((item) => item.categoryId);
+    const existingCategories = await db.select({ categoryId: budgetPlans.categoryId })
+      .from(budgetPlans).where(and(eq(budgetPlans.periodId, body.periodId), inArray(budgetPlans.categoryId, categoryIds)));
+    if (existingCategories.length > 0) {
+      const names = await db.select({ id: categories.id, name: categories.name })
+        .from(categories).where(inArray(categories.id, existingCategories.map((row) => row.categoryId)));
+      return reply.code(409).send({ error: `A budget already exists for ${names.map((row) => row.name).join(", ")}` });
+    }
+    const validCategories = await db.select({ id: categories.id }).from(categories).where(inArray(categories.id, categoryIds));
+    if (validCategories.length !== categoryIds.length) return reply.code(404).send({ error: "One or more categories were not found" });
+
+    db.transaction((tx) => {
+      tx.insert(budgetPlans).values(body.items.map((item) => ({
+        periodId: body.periodId,
+        categoryId: item.categoryId,
+        plannedAmount: item.plannedAmount,
+        note: item.note?.trim() || null,
+      }))).run();
+      if (body.savingsTargetOverride) {
+        const updatedPeriod = tx.update(salaryPeriods).set(body.savingsTargetOverride)
+          .where(eq(salaryPeriods.id, body.periodId)).returning().all()[0];
+        if (!updatedPeriod) throw new Error("Budget period plan was changed; retry the update");
+        tx.insert(auditLogs).values({
+          entityType: "salary_period",
+          entityId: body.periodId,
+          action: "adjust_savings_target_for_budget",
+          beforeSnapshot: Buffer.from(JSON.stringify(period)),
+          afterSnapshot: Buffer.from(JSON.stringify(updatedPeriod)),
+        }).run();
+      }
+      bumpFinancialRevisionSync(tx);
+    });
+    await invalidateBudgetMutation([body.periodId]);
+    return reply.code(201).send({ created: body.items.length });
+  });
+
   fastify.post("/api/budgets", {
     schema: {
       operationId: "createBudget",
@@ -282,6 +481,7 @@ export default async function (fastify: FastifyInstance) {
       periodId: number;
       categoryId: number;
       plannedAmount: number;
+      note?: string | null;
     };
 
     const [period] = await db
@@ -327,6 +527,7 @@ export default async function (fastify: FastifyInstance) {
           periodId: body.periodId,
           categoryId: body.categoryId,
           plannedAmount: body.plannedAmount,
+          note: body.note?.trim() || null,
         })
         .returning().all()[0];
       if (!inserted) throw new Error("Failed to create budget plan");
@@ -352,6 +553,7 @@ export default async function (fastify: FastifyInstance) {
     const body = request.body as Partial<{
       plannedAmount: number;
       periodId: number;
+      note: string | null;
     }>;
 
     const [existing] = await db
@@ -389,6 +591,7 @@ export default async function (fastify: FastifyInstance) {
         .set({
           periodId: targetPeriodId,
           ...(body.plannedAmount !== undefined && { plannedAmount: body.plannedAmount }),
+          ...(body.note !== undefined && { note: body.note?.trim() || null }),
         })
         .where(eq(budgetPlans.id, parseInt(id)))
         .returning().all()[0];

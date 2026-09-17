@@ -30,16 +30,26 @@ export const TIME = {
 
 // Preset colors for categories
 export const PRESET_COLORS = [
-  '#F59E0B', // Amber
-  '#3B82F6', // Blue
-  '#8B5CF6', // Violet
-  '#EF4444', // Red
-  '#10B981', // Emerald
-  '#F97316', // Orange
-  '#06B6D4', // Cyan
-  '#EC4899', // Pink
-  '#84CC16', // Lime
-  '#6366F1', // Indigo
+  '#E4572E', // Vermilion
+  '#F2A541', // Orange
+  '#B08900', // Gold
+  '#718E23', // Olive
+  '#3A9D5D', // Green
+  '#008C70', // Teal
+  '#168AAD', // Cyan
+  '#2878B5', // Ocean blue
+  '#3155A4', // Royal blue
+  '#5E60CE', // Indigo
+  '#7950A1', // Purple
+  '#A44A9C', // Magenta
+  '#D45087', // Rose
+  '#D1495B', // Red
+  '#9C6644', // Brown
+  '#577590', // Slate blue
+  '#8AC926', // Lime
+  '#FF006E', // Hot pink
+  '#5B8E7D', // Sage
+  '#6C757D', // Slate
 ] as const;
 
 // Default settings

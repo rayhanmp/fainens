@@ -16,9 +16,59 @@ function sanitizeSearchInput(input: string): string {
 const categorySchema = z.object({
   name: z.string().min(1).max(100),
   icon: z.string().max(10).nullable().optional(),
-  color: z.string().max(20).nullable().optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
   reportingAccountId: z.number().int().positive().nullable().optional(),
 });
+
+const CATEGORY_COLOR_PRESETS = [
+  '#E4572E', '#F2A541', '#B08900', '#718E23', '#3A9D5D', '#008C70', '#168AAD', '#2878B5',
+  '#3155A4', '#5E60CE', '#7950A1', '#A44A9C', '#D45087', '#D1495B', '#9C6644', '#577590',
+  '#8AC926', '#FF006E', '#5B8E7D', '#6C757D',
+];
+
+function hslToHex(hue: number): string {
+  const saturation = 0.68;
+  const lightness = 0.46;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const segment = hue / 60;
+  const secondary = chroma * (1 - Math.abs(segment % 2 - 1));
+  const [red, green, blue] = segment < 1 ? [chroma, secondary, 0]
+    : segment < 2 ? [secondary, chroma, 0]
+      : segment < 3 ? [0, chroma, secondary]
+        : segment < 4 ? [0, secondary, chroma]
+          : segment < 5 ? [secondary, 0, chroma]
+            : [chroma, 0, secondary];
+  const offset = lightness - chroma / 2;
+  return `#${[red, green, blue].map((value) => Math.round((value + offset) * 255).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function getAvailableCategoryColor(excludingId?: number): string {
+  const rows = db.$client.prepare(
+    "SELECT color FROM category WHERE color IS NOT NULL AND (? IS NULL OR id != ?)",
+  ).all(excludingId ?? null, excludingId ?? null) as Array<{ color: string }>;
+  const usedColors = new Set(rows.map(({ color }) => color.toUpperCase()));
+  const preset = CATEGORY_COLOR_PRESETS.find((color) => !usedColors.has(color));
+  if (preset) return preset;
+
+  // Keep onboarding usable even after all visible swatches have been used.
+  for (let index = 0; index < 360; index++) {
+    const color = hslToHex((index * 137.508) % 360);
+    if (!usedColors.has(color)) return color;
+  }
+  throw new Error("Unable to assign a unique category color");
+}
+
+function categoryColorConflict(color: string, excludingId?: number): boolean {
+  const row = db.$client.prepare(
+    "SELECT 1 AS found FROM category WHERE color IS NOT NULL AND upper(color) = upper(?) AND (? IS NULL OR id != ?) LIMIT 1",
+  ).get(color, excludingId ?? null, excludingId ?? null);
+  return Boolean(row);
+}
+
+function isCategoryColorUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Error
+    && error.message.includes("category_color_unique_idx");
+}
 
 // Keep input and output contracts separate. Database rows include identity and
 // lifecycle fields which callers need for selections and cache reconciliation.
@@ -36,8 +86,8 @@ const categoryListQuerySchema = z.object({
 const categoryErrorSchema = z.object({ error: z.string() }).passthrough();
 const categoryListResponse = { 200: z.array(categoryRecordSchema), 400: categoryErrorSchema };
 const categoryRecordResponse = { 200: categoryRecordSchema, 400: categoryErrorSchema, 404: categoryErrorSchema };
-const categoryCreateResponse = { 201: categoryRecordSchema, 400: categoryErrorSchema, 500: categoryErrorSchema };
-const categoryUpdateResponse = { 200: categoryRecordSchema, 400: categoryErrorSchema, 404: categoryErrorSchema, 500: categoryErrorSchema };
+const categoryCreateResponse = { 201: categoryRecordSchema, 400: categoryErrorSchema, 409: categoryErrorSchema, 500: categoryErrorSchema };
+const categoryUpdateResponse = { 200: categoryRecordSchema, 400: categoryErrorSchema, 404: categoryErrorSchema, 409: categoryErrorSchema, 500: categoryErrorSchema };
 const categoryDeleteResponse = { 204: z.void(), 400: categoryErrorSchema, 404: categoryErrorSchema, 409: categoryErrorSchema };
 const categoryDependencyResponse = {
   200: z.object({
@@ -109,6 +159,10 @@ export default async function (fastify: FastifyInstance) {
     }
 
     const body = parseResult.data;
+    const color = body.color?.toUpperCase() ?? getAvailableCategoryColor();
+    if (categoryColorConflict(color)) {
+      return reply.code(409).send({ error: "That color is already assigned to another category. Choose a different color." });
+    }
 
     if (body.reportingAccountId != null) {
       const [account] = await db.select({ type: accounts.type, isActive: accounts.isActive }).from(accounts)
@@ -123,7 +177,7 @@ export default async function (fastify: FastifyInstance) {
         const inserted = (tx.insert(categories).values({
           name: body.name.trim(),
           icon: body.icon ?? null,
-          color: body.color ?? null,
+          color,
           isActive: true,
           reportingAccountId: body.reportingAccountId ?? null,
         }).returning().all() as any[])[0];
@@ -139,6 +193,9 @@ export default async function (fastify: FastifyInstance) {
       });
       reply.code(201).send(category);
     } catch (error) {
+      if (isCategoryColorUniqueConstraintError(error)) {
+        return reply.code(409).send({ error: "That color is already assigned to another category. Choose a different color." });
+      }
       fastify.log.error(error);
       reply.code(500).send({ error: error instanceof Error ? error.message : 'Failed to create category' });
     }
@@ -159,6 +216,13 @@ export default async function (fastify: FastifyInstance) {
     }
     
     const body = parseResult.data;
+    const categoryId = Number(id);
+    const color = body.color === undefined
+      ? undefined
+      : body.color?.toUpperCase() ?? getAvailableCategoryColor(categoryId);
+    if (color && categoryColorConflict(color, categoryId)) {
+      return reply.code(409).send({ error: "That color is already assigned to another category. Choose a different color." });
+    }
 
     if (body.reportingAccountId != null) {
       const [account] = await db.select({ type: accounts.type, isActive: accounts.isActive }).from(accounts)
@@ -175,26 +239,32 @@ export default async function (fastify: FastifyInstance) {
       return;
     }
 
-    const updated = db.transaction((tx) => {
-      const row = (tx.update(categories).set({
-        ...(body.name !== undefined && { name: body.name.trim() }),
-        ...(body.icon !== undefined && { icon: body.icon }),
-        ...(body.color !== undefined && { color: body.color }),
-        ...(body.reportingAccountId !== undefined && { reportingAccountId: body.reportingAccountId }),
-      }).where(eq(categories.id, parseInt(id))).returning().all() as any[])[0];
-      if (!row) throw new Error("Category update failed");
-      tx.insert(auditLogs).values({
-        entityType: "category",
-        entityId: parseInt(id),
-        action: "update",
-        beforeSnapshot: Buffer.from(JSON.stringify(existing)),
-        afterSnapshot: Buffer.from(JSON.stringify(row)),
-      }).run();
-      bumpFinancialRevisionSync(tx);
-      return row;
-    });
-
-    return updated;
+    try {
+      const updated = db.transaction((tx) => {
+        const row = (tx.update(categories).set({
+          ...(body.name !== undefined && { name: body.name.trim() }),
+          ...(body.icon !== undefined && { icon: body.icon }),
+          ...(color !== undefined && { color }),
+          ...(body.reportingAccountId !== undefined && { reportingAccountId: body.reportingAccountId }),
+        }).where(eq(categories.id, parseInt(id))).returning().all() as any[])[0];
+        if (!row) throw new Error("Category update failed");
+        tx.insert(auditLogs).values({
+          entityType: "category",
+          entityId: parseInt(id),
+          action: "update",
+          beforeSnapshot: Buffer.from(JSON.stringify(existing)),
+          afterSnapshot: Buffer.from(JSON.stringify(row)),
+        }).run();
+        bumpFinancialRevisionSync(tx);
+        return row;
+      });
+      return updated;
+    } catch (error) {
+      if (isCategoryColorUniqueConstraintError(error)) {
+        return reply.code(409).send({ error: "That color is already assigned to another category. Choose a different color." });
+      }
+      throw error;
+    }
   });
 
   fastify.delete("/api/categories/:id", {

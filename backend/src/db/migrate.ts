@@ -27,6 +27,12 @@ function triggerExists(name: string): boolean {
   ).get(name));
 }
 
+function indexExists(name: string): boolean {
+  return Boolean(db.$client.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1",
+  ).get(name));
+}
+
 function foreignKeyExists(table: string, fromColumn: string, toTable: string): boolean {
   const safeTable = table.replace(/[^a-zA-Z0-9_]/g, "");
   const rows = db.$client.prepare(`PRAGMA foreign_key_list('${safeTable}')`).all() as Array<{ from: string; table: string }>;
@@ -344,6 +350,8 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     "0035_reimbursement_writeoff_reversal": has("reimbursement_claim", "writeoff_transaction_id"),
     "0036_agent_models": has("agent_model", "id", "name", "model", "base_url", "is_default"),
     "0040_database_backup_settings": has("database_backup_settings", "owner_email", "enabled", "frequency", "last_backup_at", "updated_at"),
+    "0041_budget_intent": has("salary_period", "budget_note", "savings_target_amount", "savings_target_mode", "savings_target_rate") && has("budget_plan", "note"),
+    "0042_category_color_uniqueness": indexExists("category_color_unique_idx"),
   };
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
@@ -392,6 +400,31 @@ function ensureUserProfileTable(): void {
       updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
     )
   `);
+}
+
+/**
+ * Repair databases where the budget-intent migration was recorded before its
+ * full set of savings-target columns was present. Keep this idempotent so the
+ * current migration remains safe for both upgraded and fresh databases.
+ */
+function ensureBudgetIntentColumns(): void {
+  if (tableExists("salary_period")) {
+    if (!columnExists("salary_period", "budget_note")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN budget_note text");
+    }
+    if (!columnExists("salary_period", "savings_target_amount")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN savings_target_amount integer DEFAULT 0 NOT NULL");
+    }
+    if (!columnExists("salary_period", "savings_target_mode")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN savings_target_mode text DEFAULT 'amount' NOT NULL");
+    }
+    if (!columnExists("salary_period", "savings_target_rate")) {
+      db.$client.exec("ALTER TABLE salary_period ADD COLUMN savings_target_rate real DEFAULT 0 NOT NULL");
+    }
+  }
+  if (tableExists("budget_plan") && !columnExists("budget_plan", "note")) {
+    db.$client.exec("ALTER TABLE budget_plan ADD COLUMN note text");
+  }
 }
 
 function ensureForecastReviewTable(): void {
@@ -486,7 +519,8 @@ function assertRequiredSchema(): void {
     splitbill_session: ["total_cents", "status"],
     reconciliation_session: ["as_of_date", "status", "lifecycle_status", "voided_at", "void_reason", "kind", "note"],
     reconciliation_item: ["session_id", "account_id", "difference", "status"],
-    salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at", "is_active", "archived_at", "coverage_status", "coverage_reason"],
+    salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at", "is_active", "archived_at", "coverage_status", "coverage_reason", "budget_note", "savings_target_amount", "savings_target_mode", "savings_target_rate"],
+    budget_plan: ["id", "period_id", "category_id", "planned_amount", "note"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
     loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
     paylater_settlement_allocation: ["settlement_tx_id", "installment_id", "amount_cents"],
@@ -583,6 +617,7 @@ export async function bootstrapDb() {
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as MigrationJournal;
   if (journal.entries.length === 0) throw new Error("Migration journal is empty");
   baselineLegacyPushDatabase(journal);
+  ensureBudgetIntentColumns();
   repairMigrationHistory(journal);
 
   // The better-sqlite3 migrator is synchronous and records every applied

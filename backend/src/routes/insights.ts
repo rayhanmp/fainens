@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client";
-import { generateDashboardInsight, generateBudgetInsight } from "../services/insightGenerator";
+import { generateDashboardInsight, generateBudgetInsight, generateBudgetDraftInsight } from "../services/insightGenerator";
 import { getRedisClient } from "../cache/redis";
 import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
@@ -13,6 +13,17 @@ const insightErrorSchema = z.object({ error: z.string() }).passthrough();
 const insightPeriodQuerySchema = z.object({ periodId: z.string().regex(/^\d+$/).optional() });
 const insightResponseSchema = z.object({ insight: z.string(), generatedAt: z.string(), sourceRevision: z.number().int(), stale: z.literal(false) }).passthrough();
 const latestInsightResponseSchema = z.object({ insight: z.string().nullable(), generatedAt: z.string().nullable(), sourceRevision: z.number().int().nullable(), stale: z.boolean() }).passthrough();
+const budgetDraftInsightBodySchema = z.object({
+  periodName: z.string().trim().min(1).max(200),
+  income: z.number().int().nonnegative(),
+  currentSavingsTarget: z.number().int().nonnegative(),
+  proposedSavingsTarget: z.number().int().nonnegative(),
+  categories: z.array(z.object({
+    name: z.string().trim().min(1).max(200),
+    plannedAmount: z.number().int().nonnegative(),
+    note: z.string().trim().max(1000).nullable().optional(),
+  })).max(100),
+});
 
 function getWeekDistribution(totalDays: number): number[] {
   const base = Math.floor(totalDays / 4);
@@ -532,6 +543,24 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
     } catch (err) {
       fastify.log.error(err);
       reply.code(500).send({ error: "Failed to generate insight" });
+    }
+  });
+
+  fastify.post("/api/insights/budget-draft", {
+    schema: {
+      operationId: "generateBudgetDraftInsight",
+      tags: ["insights"],
+      body: budgetDraftInsightBodySchema,
+      response: { 200: z.object({ insight: z.string() }), 500: insightErrorSchema },
+    },
+  }, async (request, reply) => {
+    try {
+      const body = request.body as z.infer<typeof budgetDraftInsightBodySchema>;
+      const insight = await generateBudgetDraftInsight(body);
+      reply.send({ insight });
+    } catch (err) {
+      fastify.log.error(err);
+      reply.code(500).send({ error: err instanceof Error ? err.message : "Failed to generate budget draft insight" });
     }
   });
 
