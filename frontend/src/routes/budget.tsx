@@ -180,6 +180,7 @@ function BudgetPage() {
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [menuRowId, setMenuRowId] = useState<number | null>(null);
+  const [animatedSpendingProgress, setAnimatedSpendingProgress] = useState(0);
 
   const [budgetForm, setBudgetForm] = useState({
     categoryId: '',
@@ -687,6 +688,15 @@ function BudgetPage() {
   const totalSpent = budgetRows.reduce((sum, cat) => sum + cat.actualAmount, 0);
   const totalRemaining = totalBudgeted - totalSpent;
   const spendingProgress = totalBudgeted > 0 ? (totalSpent / totalBudgeted) * 100 : 0;
+  useEffect(() => {
+    setAnimatedSpendingProgress(0);
+    if (budgetQuery.isLoading) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      setAnimatedSpendingProgress(Math.max(0, Math.min(spendingProgress, 100)));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [budgetQuery.dataUpdatedAt, budgetQuery.isLoading, selectedPeriodId, spendingProgress]);
   const savingsTargetMode = budgetSummary?.savingsTargetMode ?? 'amount';
   const savingsTargetRate = budgetSummary?.savingsTargetRate ?? 0;
   const savingsTargetAmount = savingsTargetMode === 'income_percent'
@@ -707,7 +717,6 @@ function BudgetPage() {
     && plannedBudgetAfterDraft > periodIncome - savingsTargetAmount
     ? Math.max(0, plannedIncomeRemainder)
     : savingsTargetAmount;
-  const plannedSavingsRateAfterDraft = periodIncome > 0 ? (plannedSavingsTargetAfterDraft / periodIncome) * 100 : 0;
   const plannedIncomeLeftAfterSavings = plannedIncomeRemainder - plannedSavingsTargetAfterDraft;
   const budgetFooterRemaining = isBudgetReviewStep && periodIncome > 0 ? plannedIncomeLeftAfterSavings : availableBudgetAfterDraft;
   const savingsTargetWillAdjust = isPeriodTracked && periodIncome > 0
@@ -739,6 +748,19 @@ function BudgetPage() {
     : 0;
   const incomePlanUnassignedShare = Math.max(0, 100 - incomePlanCategoryShare - incomePlanSavingsShare);
   const incomePlanColors = { budgeted: '#B9D1FF', savings: '#FFC46B', unassigned: '#55D6BE' };
+  const topAllocationTotal = budgetReviewAllocations.slice(0, 3).reduce((sum, allocation) => sum + allocation.plannedAmount, 0);
+  const topAllocationShare = plannedBudgetAfterDraft > 0 ? topAllocationTotal / plannedBudgetAfterDraft * 100 : 0;
+  const topAllocationNames = budgetReviewAllocations.slice(0, 3).map((allocation) => allocation.categoryName);
+  const reviewAllocationByCategory = new Map(budgetReviewAllocations.map((allocation) => [allocation.categoryId, allocation.plannedAmount]));
+  const recurringCommitmentTotal = [...subscriptionDueByCategory.values()].reduce((sum, amount) => sum + amount, 0);
+  const recurringFundingGap = [...subscriptionDueByCategory.entries()].reduce(
+    (sum, [categoryId, amount]) => sum + Math.max(0, amount - (reviewAllocationByCategory.get(categoryId) ?? 0)),
+    0,
+  );
+  const recurringCoverageShare = recurringCommitmentTotal > 0
+    ? Math.max(0, Math.min(100, (recurringCommitmentTotal - recurringFundingGap) / recurringCommitmentTotal * 100))
+    : 100;
+  const allocationsWithContext = budgetReviewAllocations.filter((allocation) => allocation.note?.trim()).length;
   const reviewCurrentByCategory = new Map(budgetReviewAllocations.map((allocation) => [allocation.categoryId, allocation]));
   const reviewComparisonByCategory = new Map(reviewComparisonRows.map((row) => [row.categoryId, row]));
   const noLongerPlannedComparedCategories = reviewComparisonRows
@@ -1024,8 +1046,8 @@ function BudgetPage() {
                 <div className="mt-10">
                   <div className="h-3 overflow-hidden rounded-full bg-white/20">
                     <div
-                      className={cn('h-full rounded-full transition-all', spendingProgress > 100 ? 'bg-rose-300' : 'bg-white')}
-                      style={{ width: `${Math.min(spendingProgress, 100)}%` }}
+                      className={cn('h-full rounded-full transition-[width] duration-1000 ease-out motion-reduce:transition-none', spendingProgress > 100 ? 'bg-rose-300' : 'bg-white')}
+                      style={{ width: `${animatedSpendingProgress}%` }}
                     />
                   </div>
                   <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
@@ -1721,28 +1743,24 @@ function BudgetPage() {
                 )}
                   </section>
 
-                {isPeriodTracked && periodIncome > 0 && savingsTargetWillAdjust && (
-                  <section className="rounded-2xl border border-[var(--ref-error)]/30 bg-[var(--ref-error)]/5 px-4 py-3">
-                    <h3 className="text-sm font-bold text-[var(--ref-on-surface)]">Savings target will change</h3>
-                    <p className="text-sm text-[var(--ref-on-surface-variant)]">
-                      {formatCurrency(savingsTargetAmount)} ({savingsRate.toFixed(1)}%) → {formatCurrency(plannedSavingsTargetAfterDraft)} ({plannedSavingsRateAfterDraft.toFixed(1)}% of income). You’ll confirm before saving.
-                    </p>
-                  </section>
-                )}
-
-                <section className="rounded-2xl border border-[var(--ref-primary)]/20 bg-[var(--ref-primary)]/5 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 shrink-0 text-[var(--ref-primary)]" />
-                    <h3 className="text-sm font-bold text-[var(--ref-on-surface)]">AI plan insight</h3>
-                    <button
-                      type="button"
-                      title="Generated automatically using this plan’s income, category names, amounts, and notes via your configured AI provider."
-                      aria-label="About this AI insight"
-                      className="rounded-full text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"
-                    ><Info className="h-3.5 w-3.5" /></button>
+                <section className="overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
+                  <div className="px-4 pb-3 pt-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--ref-primary)]">Plan checks</p>
+                    <h3 className="mt-1 text-lg font-bold text-[var(--ref-on-surface)]">Before you save</h3>
                   </div>
-                  <div className="pl-6">
-                    <p aria-live="polite" className="mt-0.5 text-sm leading-snug text-[var(--ref-on-surface-variant)]">
+
+                  <div className="border-y border-[var(--color-border)] bg-[var(--ref-primary)]/5 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 shrink-0 text-[var(--ref-primary)]" />
+                      <p className="text-xs font-bold text-[var(--ref-on-surface)]">AI read</p>
+                      <button
+                        type="button"
+                        title="Generated automatically using this plan’s income, category names, amounts, and notes via your configured AI provider."
+                        aria-label="About this AI insight"
+                        className="rounded-full text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"
+                      ><Info className="h-3.5 w-3.5" /></button>
+                    </div>
+                    <p aria-live="polite" className="mt-1 text-sm leading-snug text-[var(--ref-on-surface-variant)]">
                       {currentBudgetDraftInsight
                         ?? (isGeneratingBudgetDraftInsight
                           ? 'Looking for useful patterns in this plan…'
@@ -1757,6 +1775,79 @@ function BudgetPage() {
                         className="mt-1 rounded-md text-xs font-semibold text-[var(--ref-primary)] hover:underline"
                       >Try again</button>
                     )}
+                  </div>
+
+                  <div className="divide-y divide-[var(--color-border)] px-4">
+                    <div className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--ref-on-surface)]">Income & savings</p>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                          periodIncome <= 0 || savingsTargetWillAdjust || plannedIncomeLeftAfterSavings < 0
+                            ? 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]'
+                            : 'bg-[var(--color-success)]/15 text-[var(--color-success)]',
+                        )}>
+                          {periodIncome <= 0 ? 'Needs income' : savingsTargetWillAdjust ? 'Will adjust' : plannedIncomeLeftAfterSavings < 0 ? 'Over income' : 'On track'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
+                        {periodIncome <= 0
+                          ? isPeriodTracked ? 'Record period income to validate this plan and its savings target.' : 'Income tracking is unavailable for this period.'
+                          : savingsTargetWillAdjust
+                            ? `Savings would change from ${formatCurrency(savingsTargetAmount)} to ${formatCurrency(plannedSavingsTargetAfterDraft)}.`
+                            : plannedIncomeLeftAfterSavings < 0
+                              ? `${formatCurrency(Math.abs(plannedIncomeLeftAfterSavings))} exceeds recorded income after savings.`
+                              : `${formatCurrency(plannedIncomeLeftAfterSavings)} remains after the savings target.`}
+                      </p>
+                    </div>
+
+                    <div className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--ref-on-surface)]">Concentration</p>
+                        <span className="text-xs font-bold tabular-nums text-[var(--ref-on-surface)]">{topAllocationShare.toFixed(1)}%</span>
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]">
+                        <div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${Math.min(100, topAllocationShare)}%` }} />
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
+                        {topAllocationNames.length > 0
+                          ? `${topAllocationNames.join(', ')} make up the largest share of this plan.`
+                          : 'Add allocations to see where the plan is concentrated.'}
+                      </p>
+                    </div>
+
+                    <div className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--ref-on-surface)]">Recurring commitments</p>
+                        <span className="text-xs font-bold tabular-nums text-[var(--ref-on-surface)]">
+                          {recurringCommitmentTotal > 0 ? `${recurringCoverageShare.toFixed(0)}% covered` : 'None due'}
+                        </span>
+                      </div>
+                      {recurringCommitmentTotal > 0 && (
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]">
+                          <div className={cn('h-full rounded-full', recurringFundingGap > 0 ? 'bg-[var(--color-warning)]' : 'bg-[var(--color-success)]')} style={{ width: `${recurringCoverageShare}%` }} />
+                        </div>
+                      )}
+                      <p className="mt-1.5 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
+                        {recurringCommitmentTotal === 0
+                          ? 'No subscription commitments are due in this period.'
+                          : recurringFundingGap > 0
+                            ? `${formatCurrency(recurringFundingGap)} of ${formatCurrency(recurringCommitmentTotal)} still needs coverage.`
+                            : `${formatCurrency(recurringCommitmentTotal)} due this period is fully covered.`}
+                      </p>
+                    </div>
+
+                    <div className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--ref-on-surface)]">Plan context</p>
+                        <span className="text-xs font-bold tabular-nums text-[var(--ref-on-surface)]">{allocationsWithContext}/{budgetReviewAllocations.length} noted</span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
+                        {allocationsWithContext > 0
+                          ? `${allocationsWithContext} allocation${allocationsWithContext === 1 ? '' : 's'} include a reason you can reference next period.`
+                          : 'Add a reason to unusual allocations so the next review has context.'}
+                      </p>
+                    </div>
                   </div>
                 </section>
                 </div>
@@ -1825,7 +1916,7 @@ function BudgetPage() {
                               <p className="font-semibold tabular-nums text-[var(--ref-on-surface)]">
                                 {formatCurrency(allocation.plannedAmount)} <span className="inline-block w-12 text-xs font-medium text-[var(--ref-on-surface-variant)]">{share.toFixed(1)}%</span>
                               </p>
-                              {reviewComparePeriodId && !reviewComparisonQuery.isLoading && difference != null && (
+                              {reviewComparePeriodId && !reviewComparisonQuery.isLoading && previous && difference != null && (
                                 <p className="text-[10px] tabular-nums text-[var(--ref-on-surface-variant)]" title={`Compared with ${reviewComparisonPeriod?.name ?? 'selected period'} plan of ${formatCurrency(previous.plannedAmount)}`}>
                                   {difference === 0 ? 'No change' : `${difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(difference))}`} vs {reviewComparisonPeriod?.name ?? 'prior'}
                                 </p>
