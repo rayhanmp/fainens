@@ -684,7 +684,7 @@ function BudgetPage() {
     ? Math.min(Math.max(0, 100 - incomePlanCategoryShare), plannedSavingsTargetAfterDraft / periodIncome * 100)
     : 0;
   const incomePlanUnassignedShare = Math.max(0, 100 - incomePlanCategoryShare - incomePlanSavingsShare);
-  const incomePlanColors = { categories: '#FFFFFF', savings: '#FFD166', unassigned: '#67D8F3' };
+  const incomePlanColors = { budgeted: '#B9D1FF', savings: '#FFC46B', unassigned: '#55D6BE' };
   const budgetDraftInsightKey = JSON.stringify({
     promptVersion: 2,
     periodName: selectedPeriod?.name ?? 'Selected period',
@@ -1639,16 +1639,16 @@ function BudgetPage() {
                     </div>
                     <div
                       role="img"
-                      aria-label={`Income split: categories ${formatCurrency(plannedBudgetAfterDraft)}, savings target ${formatCurrency(plannedSavingsTargetAfterDraft)}, unassigned ${formatCurrency(plannedIncomeLeftAfterSavings)}`}
+                      aria-label={`Income split: budgeted ${formatCurrency(plannedBudgetAfterDraft)}, savings target ${formatCurrency(plannedSavingsTargetAfterDraft)}, unassigned ${formatCurrency(plannedIncomeLeftAfterSavings)}`}
                       className="flex h-3 overflow-hidden rounded-full bg-white/10"
                     >
-                      {incomePlanCategoryShare > 0 && <span className="h-full" style={{ width: `${incomePlanCategoryShare}%`, backgroundColor: incomePlanColors.categories }} />}
+                      {incomePlanCategoryShare > 0 && <span className="h-full" style={{ width: `${incomePlanCategoryShare}%`, backgroundColor: incomePlanColors.budgeted }} />}
                       {incomePlanSavingsShare > 0 && <span className="h-full" style={{ width: `${incomePlanSavingsShare}%`, backgroundColor: incomePlanColors.savings }} />}
                       {incomePlanUnassignedShare > 0 && <span className="h-full flex-1" style={{ backgroundColor: incomePlanColors.unassigned }} />}
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] leading-tight">
                       <div className="min-w-0">
-                        <span className="flex items-center gap-1 opacity-80"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: incomePlanColors.categories }} />Categories</span>
+                        <span className="flex items-center gap-1 opacity-80"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: incomePlanColors.budgeted }} />Budgeted</span>
                         <strong className="mt-0.5 block truncate tabular-nums">{formatCurrency(plannedBudgetAfterDraft)}</strong>
                       </div>
                       <div className="min-w-0">
