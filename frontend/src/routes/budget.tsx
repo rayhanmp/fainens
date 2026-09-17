@@ -1080,13 +1080,6 @@ function BudgetPage() {
                   </p>
                 </div>
               </div>
-              {isPeriodTracked && periodIncome > 0 && (
-                <p className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] px-4 py-3 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  {unassignedIncome >= 0
-                    ? `${formatCurrency(unassignedIncome)} is still available to assign to spending or savings.`
-                    : `This plan exceeds income and savings capacity by ${formatCurrency(Math.abs(unassignedIncome))}.`}
-                </p>
-              )}
             </div>
           </section>
         )}
