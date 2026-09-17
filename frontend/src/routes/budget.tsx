@@ -188,6 +188,7 @@ function BudgetPage() {
   });
   const [budgetDraftLines, setBudgetDraftLines] = useState<BudgetDraftLine[]>([]);
   const [nextBudgetDraftId, setNextBudgetDraftId] = useState(1);
+  const [budgetDraftPresetNotice, setBudgetDraftPresetNotice] = useState('');
   const [draftMenuId, setDraftMenuId] = useState<number | null>(null);
   const [isBudgetReviewStep, setIsBudgetReviewStep] = useState(false);
   const [budgetDraftInsight, setBudgetDraftInsight] = useState<{ key: string; text: string } | null>(null);
@@ -475,6 +476,7 @@ function BudgetPage() {
   const openBudgetModal = () => {
     if (isPeriodClosed) return;
     setBudgetDraftLines([]);
+    setBudgetDraftPresetNotice('');
     setDraftMenuId(null);
     setReviewComparePeriodId(previousBudgetPeriod?.id.toString() ?? '');
     setIsBudgetReviewStep(false);
@@ -488,6 +490,7 @@ function BudgetPage() {
   const closeBudgetModal = () => {
     setIsModalOpen(false);
     setBudgetDraftLines([]);
+    setBudgetDraftPresetNotice('');
     setDraftMenuId(null);
     setIsBudgetReviewStep(false);
     setIsBudgetDropActive(false);
@@ -510,6 +513,41 @@ function BudgetPage() {
       note: '',
       noteOpen: false,
     }]);
+    setFormError('');
+  };
+
+  const addTemplateToBudgetDraft = (templateId: number) => {
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) return;
+
+    const unavailableCategoryIds = new Set([
+      ...budgetRows.map((row) => row.categoryId),
+      ...budgetDraftLines.map((line) => Number(line.categoryId)),
+    ]);
+    const availableCategoryIds = new Set(categories.map((category) => category.id));
+    const seenCategoryIds = new Set<number>();
+    const linesToAdd = template.items.filter((item) => {
+      if (!availableCategoryIds.has(item.categoryId) || unavailableCategoryIds.has(item.categoryId) || seenCategoryIds.has(item.categoryId)) return false;
+      seenCategoryIds.add(item.categoryId);
+      return true;
+    });
+
+    if (linesToAdd.length > 0) {
+      const newLines = linesToAdd.map((item, index): BudgetDraftLine => ({
+        id: nextBudgetDraftId + index,
+        categoryId: String(item.categoryId),
+        plannedAmount: formatIdNominalInput(String(item.plannedAmount)),
+        note: '',
+        noteOpen: false,
+      }));
+      setBudgetDraftLines((current) => [...current, ...newLines]);
+      setNextBudgetDraftId((current) => current + newLines.length);
+    }
+
+    const skippedCount = template.items.length - linesToAdd.length;
+    setBudgetDraftPresetNotice(linesToAdd.length > 0
+      ? `Added ${linesToAdd.length} categor${linesToAdd.length === 1 ? 'y' : 'ies'} from “${template.name}”${skippedCount > 0 ? ` · skipped ${skippedCount} already planned or unavailable` : ''}. You can edit these amounts before saving.`
+      : `All categories in “${template.name}” are already planned or unavailable.`);
     setFormError('');
   };
 
@@ -961,7 +999,7 @@ function BudgetPage() {
               disabled={!selectedPeriod || isPeriodClosed}
             >
               <Copy className="h-4 w-4" />
-              Presets
+              Manage presets
             </Button>
             
             <Button
@@ -1241,11 +1279,13 @@ function BudgetPage() {
                   <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">Use {previousBudgetPeriod.name} as your baseline.</span>
                 </button>
               )}
-              <button type="button" onClick={() => { setSelectedTemplateId(null); setIsApplyTemplateModalOpen(true); }} disabled={isPeriodClosed} className="rounded-2xl border border-[var(--color-border)] p-5 text-left transition-colors hover:border-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/5 disabled:opacity-50">
-                <Save className="h-5 w-5 text-[var(--ref-primary)]" />
-                <strong className="mt-3 block text-sm">Use a preset</strong>
-                <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">Apply a reusable spending baseline.</span>
-              </button>
+              {templates.length > 0 && (
+                <button type="button" onClick={openBudgetModal} disabled={isPeriodClosed} className="rounded-2xl border border-[var(--color-border)] p-5 text-left transition-colors hover:border-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/5 disabled:opacity-50">
+                  <Save className="h-5 w-5 text-[var(--ref-primary)]" />
+                  <strong className="mt-3 block text-sm">Build from a preset</strong>
+                  <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">Load it in the builder, then review and adjust.</span>
+                </button>
+              )}
               <button type="button" onClick={openBudgetModal} disabled={isPeriodClosed} className="rounded-2xl border border-[var(--color-border)] p-5 text-left transition-colors hover:border-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/5 disabled:opacity-50">
                 <Plus className="h-5 w-5 text-[var(--ref-primary)]" />
                 <strong className="mt-3 block text-sm">Start from scratch</strong>
@@ -1915,6 +1955,27 @@ function BudgetPage() {
                     </div>
                     <span className="rounded-full bg-[var(--ref-surface-container-high)] px-2.5 py-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">{availableCategories.length}</span>
                   </div>
+                  {templates.length > 0 && (
+                    <div className="mb-3">
+                      <label htmlFor="budget-draft-preset" className="mb-1.5 block text-xs font-semibold text-[var(--ref-on-surface-variant)]">Start from a preset</label>
+                      <select
+                        id="budget-draft-preset"
+                        defaultValue=""
+                        onChange={(event) => {
+                          const templateId = Number(event.currentTarget.value);
+                          if (templateId > 0) addTemplateToBudgetDraft(templateId);
+                          event.currentTarget.value = '';
+                        }}
+                        className="min-h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-3 py-2 text-sm text-[var(--ref-on-surface)] focus:border-[var(--ref-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]/20"
+                      >
+                        <option value="">Choose a saved preset…</option>
+                        {templates.map((template) => (
+                          <option key={template.id} value={template.id}>{template.name} · {template.items.length} categories</option>
+                        ))}
+                      </select>
+                      {budgetDraftPresetNotice && <p role="status" className="mt-2 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{budgetDraftPresetNotice}</p>}
+                    </div>
+                  )}
                   <div className="max-h-[min(58vh,620px)] space-y-2 overflow-y-auto pr-1">
                     {availableCategories.length > 0 ? availableCategories.map((category) => {
                       const recurringAmount = subscriptionDueByCategory.get(category.id) ?? 0;
