@@ -155,6 +155,8 @@ function formatPeriodRange(p: Period) {
   })}`;
 }
 
+const budgetToolLinkClass = 'inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] hover:shadow-sm active:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)] focus-visible:outline-offset-2';
+
 function BudgetPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/budget' }) as { periodId?: string };
@@ -974,10 +976,10 @@ function BudgetPage() {
         </div>
 
         <nav aria-label="Budget planning tools" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          <Link to="/subscriptions" className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold"><Repeat className="h-3.5 w-3.5" />Recurring commitments</Link>
-          <Link to="/wishlist" className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold"><Sparkles className="h-3.5 w-3.5" />Planned purchases</Link>
-          <Link to="/categories" className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold"><Tag className="h-3.5 w-3.5" />Manage categories</Link>
-          <Link to="/savings-simulator" className="shrink-0 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold">Savings simulator</Link>
+          <Link to="/subscriptions" className={budgetToolLinkClass}><Repeat className="h-3.5 w-3.5" />Recurring commitments</Link>
+          <Link to="/wishlist" className={budgetToolLinkClass}><Sparkles className="h-3.5 w-3.5" />Planned purchases</Link>
+          <Link to="/categories" className={budgetToolLinkClass}><Tag className="h-3.5 w-3.5" />Manage categories</Link>
+          <Link to="/savings-simulator" className={budgetToolLinkClass}>Savings simulator</Link>
         </nav>
 
         {loadError && (
