@@ -2,9 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { CheckCircle, AlertTriangle, Info, X, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-type ToastType = 'success' | 'error' | 'warning' | 'info';
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
-interface Toast {
+export interface Toast {
   id: string;
   type: ToastType;
   title: string;
@@ -15,6 +15,10 @@ interface Toast {
 // Toast Item Component
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   const [isExiting, setIsExiting] = useState(false);
+  const handleRemove = useCallback(() => {
+    setIsExiting(true);
+    setTimeout(() => onRemove(toast.id), 300);
+  }, [onRemove, toast.id]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -22,12 +26,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     }, toast.duration || 5000);
 
     return () => clearTimeout(timer);
-  }, [toast.duration]);
-
-  const handleRemove = () => {
-    setIsExiting(true);
-    setTimeout(() => onRemove(toast.id), 300);
-  };
+  }, [handleRemove, toast.duration]);
 
   const icons = {
     success: <CheckCircle className="w-5 h-5" />,
@@ -36,33 +35,44 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     info: <Info className="w-5 h-5" />,
   };
 
-  const styles = {
-    success: 'bg-[var(--color-success)]/10 border-[var(--color-success)] text-[var(--color-success)]',
-    error: 'bg-[var(--color-danger)]/10 border-[var(--color-danger)] text-[var(--color-danger)]',
-    warning: 'bg-[var(--color-warning)]/10 border-[var(--color-warning)] text-[var(--color-warning)]',
-    info: 'bg-[var(--color-accent)]/10 border-[var(--color-accent)] text-[var(--color-accent)]',
+  const accents = {
+    success: 'var(--color-success)',
+    error: 'var(--color-danger)',
+    warning: 'var(--color-warning)',
+    info: 'var(--color-accent)',
   };
+  const accent = accents[toast.type];
 
   return (
     <div
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
       className={cn(
-        'border-2 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] transition-all duration-300',
-        styles[toast.type],
-        isExiting ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0'
+        'pointer-events-auto w-full overflow-hidden rounded-2xl border border-[var(--color-border)] border-l-4 bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface)] shadow-[0_16px_48px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] transition-all duration-300',
+        isExiting ? 'translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
       )}
+      style={{ borderLeftColor: accent }}
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5">{icons[toast.type]}</div>
-        <div className="flex-1 min-w-0">
-          <p className="font-mono font-bold text-sm">{toast.title}</p>
+      <div className="flex items-start gap-3.5 p-4">
+        <div
+          className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full"
+          style={{ color: accent, backgroundColor: `color-mix(in srgb, ${accent} 12%, transparent)` }}
+          aria-hidden="true"
+        >
+          {icons[toast.type]}
+        </div>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="text-sm font-semibold leading-5">{toast.title}</p>
           {toast.message && (
-            <p className="text-sm mt-1 opacity-90">{toast.message}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">{toast.message}</p>
           )}
         </div>
         <button
+          type="button"
           onClick={handleRemove}
-          className="cursor-pointer p-1 hover:bg-black/10 transition-colors"
-          aria-label="Close"
+          className="-mr-1 -mt-1 grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"
+          aria-label={`Dismiss notification: ${toast.title}`}
         >
           <X className="w-4 h-4" />
         </button>
@@ -81,44 +91,10 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
   if (!toasts || toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-3 w-full max-w-sm">
+    <div className="pointer-events-none fixed right-4 top-4 z-[100] flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 overflow-y-auto">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
     </div>
   );
-}
-
-// Hook for using toasts
-export function useToast() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts((prev) => [...prev, { ...toast, id }]);
-    return id;
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const success = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'success', title, message, duration }), [addToast]);
-
-  const error = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'error', title, message, duration: duration || 8000 }), [addToast]);
-
-  const warning = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'warning', title, message, duration }), [addToast]);
-
-  const info = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'info', title, message, duration }), [addToast]);
-
-  // Create a bound ToastContainer component
-  const BoundToastContainer = useCallback(() => (
-    <ToastContainer toasts={toasts} onRemove={removeToast} />
-  ), [toasts, removeToast]);
-
-  return { toasts, addToast, removeToast, success, error, warning, info, ToastContainer: BoundToastContainer };
 }

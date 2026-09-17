@@ -9,7 +9,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { GlobalTransactionComposer } from '../transactions/GlobalTransactionComposer';
 import { SettingsPage } from '../../routes/settings';
 import { ConfirmProvider } from '../ui/ConfirmDialog';
-import { useToast } from '../ui/Toast';
+import { useToast } from '../ui/useToast';
 import { usePendingTransactionsQuery } from '../../features/transactions/queries';
 
 interface ShellProps {
