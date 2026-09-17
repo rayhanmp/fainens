@@ -263,6 +263,8 @@ function BudgetPage() {
   const selectedPeriodIndex = periods.findIndex((period) => period.id === selectedPeriod?.id);
   const previousBudgetPeriod = selectedPeriodIndex >= 0 ? periods[selectedPeriodIndex + 1] : undefined;
   const reviewComparisonPeriod = periods.find((period) => period.id.toString() === reviewComparePeriodId);
+  const reviewComparisonTracksActuals = reviewComparisonPeriod?.coverageStatus === 'complete'
+    || reviewComparisonPeriod?.coverageStatus === 'partial';
   const isPeriodClosed = selectedPeriod?.status === 'closed';
   const isPeriodTracked = selectedPeriod?.coverageStatus === 'complete' || selectedPeriod?.coverageStatus === 'partial';
   const subscriptionDueByCategory = useMemo(
@@ -699,29 +701,41 @@ function BudgetPage() {
     : 0;
   const incomePlanUnassignedShare = Math.max(0, 100 - incomePlanCategoryShare - incomePlanSavingsShare);
   const incomePlanColors = { budgeted: '#B9D1FF', savings: '#FFC46B', unassigned: '#55D6BE' };
-  const reviewComparisonTotal = reviewComparisonRows.reduce((sum, row) => sum + row.plannedAmount, 0);
-  const reviewComparisonMax = Math.max(plannedBudgetAfterDraft, reviewComparisonTotal, 1);
-  const reviewComparisonDifference = plannedBudgetAfterDraft - reviewComparisonTotal;
-  const reviewComparisonPercent = reviewComparisonTotal > 0
-    ? reviewComparisonDifference / reviewComparisonTotal * 100
-    : null;
   const reviewCurrentByCategory = new Map(budgetReviewAllocations.map((allocation) => [allocation.categoryId, allocation]));
   const reviewComparisonByCategory = new Map(reviewComparisonRows.map((row) => [row.categoryId, row]));
-  const reviewComparisonCategoryChanges = [...new Set([
-    ...budgetReviewAllocations.map((allocation) => allocation.categoryId),
-    ...reviewComparisonRows.map((row) => row.categoryId),
-  ])]
-    .map((categoryId) => {
-      const current = reviewCurrentByCategory.get(categoryId);
-      const previous = reviewComparisonByCategory.get(categoryId);
+  const reviewComparisonCategoryChanges = budgetReviewAllocations
+    .map((current) => {
+      const previous = reviewComparisonByCategory.get(current.categoryId);
       return {
-        categoryName: current?.categoryName ?? previous?.categoryName ?? 'Category',
-        difference: (current?.plannedAmount ?? 0) - (previous?.plannedAmount ?? 0),
+        categoryName: current.categoryName,
+        currentPlanned: current.plannedAmount,
+        previousPlanned: previous?.plannedAmount ?? 0,
+        previousActual: previous?.actualAmount ?? 0,
+        hasPreviousPlan: Boolean(previous),
+        difference: current.plannedAmount - (previous?.plannedAmount ?? 0),
+        spentDifference: reviewComparisonTracksActuals
+          ? current.plannedAmount - (previous?.actualAmount ?? 0)
+          : null,
       };
     })
-    .filter((change) => change.difference !== 0)
-    .sort((left, right) => Math.abs(right.difference) - Math.abs(left.difference))
-    .slice(0, 2);
+    .filter((change) => change.hasPreviousPlan && (
+      change.difference !== 0 || (change.spentDifference != null && change.spentDifference !== 0)
+    ))
+    .sort((left, right) => {
+      const leftMagnitude = Math.max(Math.abs(left.difference), Math.abs(left.spentDifference ?? 0));
+      const rightMagnitude = Math.max(Math.abs(right.difference), Math.abs(right.spentDifference ?? 0));
+      return rightMagnitude - leftMagnitude;
+    })
+    .slice(0, 3);
+  const reviewComparisonBarMax = Math.max(
+    1,
+    ...reviewComparisonCategoryChanges.flatMap((change) => [change.currentPlanned, change.previousPlanned]),
+  );
+  const newlyPlannedComparedCategories = budgetReviewAllocations
+    .filter((allocation) => !reviewComparisonByCategory.has(allocation.categoryId));
+  const noLongerPlannedComparedCategories = reviewComparisonRows
+    .filter((row) => !reviewCurrentByCategory.has(row.categoryId) && row.actualAmount > 0)
+    .sort((left, right) => right.actualAmount - left.actualAmount);
   const budgetDraftInsightKey = JSON.stringify({
     promptVersion: 2,
     periodName: selectedPeriod?.name ?? 'Selected period',
@@ -1792,38 +1806,70 @@ function BudgetPage() {
                     <div className="mb-4 rounded-2xl bg-[var(--ref-surface-container-low)] p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="truncate text-[10px] font-bold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">
-                          Plan vs {reviewComparisonPeriod?.name ?? 'selected period'}
+                          Category changes vs {reviewComparisonPeriod?.name ?? 'selected period'}
                         </p>
                         {reviewComparisonQuery.isLoading ? (
                           <span className="shrink-0 text-xs text-[var(--ref-on-surface-variant)]">Loading…</span>
                         ) : reviewComparisonRows.length > 0 ? (
-                          <strong className="shrink-0 text-xs tabular-nums text-[var(--ref-on-surface)]">
-                            {reviewComparisonDifference > 0 ? '+' : reviewComparisonDifference < 0 ? '−' : ''}{formatCurrency(Math.abs(reviewComparisonDifference))}
-                            {reviewComparisonPercent != null && ` · ${Math.abs(reviewComparisonPercent).toFixed(1)}%`}
-                          </strong>
+                          <span className="shrink-0 text-[10px] text-[var(--ref-on-surface-variant)]">Plan vs prior plan</span>
                         ) : (
                           <span className="shrink-0 text-xs text-[var(--ref-on-surface-variant)]">No saved budget</span>
                         )}
                       </div>
                       {reviewComparisonRows.length > 0 && !reviewComparisonQuery.isLoading ? (
                         <>
-                          <div className="mt-2 space-y-2">
-                            {[
-                              { name: reviewComparisonPeriod?.name ?? 'Previous plan', amount: reviewComparisonTotal, color: 'var(--ref-outline)' },
-                              { name: 'This plan', amount: plannedBudgetAfterDraft, color: 'var(--ref-primary)' },
-                            ].map((comparison) => (
-                              <div key={comparison.name} className="grid grid-cols-[minmax(72px,auto)_minmax(40px,1fr)_auto] items-center gap-2 text-[10px]">
-                                <span className="truncate text-[var(--ref-on-surface-variant)]">{comparison.name}</span>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]">
-                                  <div className="h-full rounded-full" style={{ width: `${comparison.amount / reviewComparisonMax * 100}%`, backgroundColor: comparison.color }} />
-                                </div>
-                                <strong className="text-right tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(comparison.amount)}</strong>
-                              </div>
-                            ))}
+                          <div className="mt-2 flex justify-end gap-3 text-[9px] text-[var(--ref-on-surface-variant)]">
+                            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[var(--ref-outline)]" />Prior plan</span>
+                            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[var(--ref-primary)]" />This plan</span>
                           </div>
-                          {reviewComparisonCategoryChanges.length > 0 && (
-                            <p className="mt-2 truncate text-[10px] text-[var(--ref-on-surface-variant)]" title={reviewComparisonCategoryChanges.map((change) => `${change.categoryName} ${change.difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(change.difference))}`).join(' · ')}>
-                              Biggest changes: {reviewComparisonCategoryChanges.map((change) => `${change.categoryName} ${change.difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(change.difference))}`).join(' · ')}
+                          {reviewComparisonCategoryChanges.length > 0 ? (
+                            <ul className="mt-1 space-y-2">
+                              {reviewComparisonCategoryChanges.map((change) => (
+                                <li key={change.categoryName}>
+                                  <div className="flex items-baseline justify-between gap-2 text-[10px]">
+                                    <strong className="truncate text-[var(--ref-on-surface)]">{change.categoryName}</strong>
+                                    <span className="shrink-0 tabular-nums text-[var(--ref-on-surface-variant)]">
+                                      {change.difference === 0
+                                        ? 'Same as prior budget'
+                                        : `${change.difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(change.difference))} vs prior budget`}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 space-y-1">
+                                    {[
+                                      { label: 'Prior', amount: change.previousPlanned, color: 'var(--ref-outline)' },
+                                      { label: 'Now', amount: change.currentPlanned, color: 'var(--ref-primary)' },
+                                    ].map((bar) => (
+                                      <div key={bar.label} className="grid grid-cols-[28px_minmax(24px,1fr)_auto] items-center gap-1.5 text-[9px]">
+                                        <span className="text-[var(--ref-on-surface-variant)]">{bar.label}</span>
+                                        <div className="h-1 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]">
+                                          <div className="h-full rounded-full" style={{ width: `${bar.amount / reviewComparisonBarMax * 100}%`, backgroundColor: bar.color }} />
+                                        </div>
+                                        <span className="tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(bar.amount)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <p className="mt-0.5 pl-[34px] text-[9px] text-[var(--ref-on-surface-variant)]">
+                                    {change.spentDifference == null
+                                      ? 'Actual spending was not tracked last period'
+                                      : change.spentDifference === 0
+                                        ? `Plan matches last period spend (${formatCurrency(change.previousActual)})`
+                                        : `Plan is ${formatCurrency(Math.abs(change.spentDifference))} ${change.spentDifference > 0 ? 'above' : 'below'} last period spend (${formatCurrency(change.previousActual)})`}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-[10px] text-[var(--ref-on-surface-variant)]">No changes to shared category allocations.</p>
+                          )}
+                          {newlyPlannedComparedCategories.length > 0 && (
+                            <p className="mt-2 text-[10px] text-[var(--ref-on-surface-variant)]">
+                              New: {newlyPlannedComparedCategories.slice(0, 2).map((category) => category.categoryName).join(', ')}
+                              {newlyPlannedComparedCategories.length > 2 && ` +${newlyPlannedComparedCategories.length - 2}`}
+                            </p>
+                          )}
+                          {noLongerPlannedComparedCategories[0] && (
+                            <p className="mt-1 truncate text-[10px] text-[var(--ref-on-surface-variant)]" title={`Not planned now: ${noLongerPlannedComparedCategories[0].categoryName}; spent ${formatCurrency(noLongerPlannedComparedCategories[0].actualAmount)} last period`}>
+                              Not planned now: {noLongerPlannedComparedCategories[0].categoryName} · spent {formatCurrency(noLongerPlannedComparedCategories[0].actualAmount)} last period
                             </p>
                           )}
                         </>
