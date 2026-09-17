@@ -1612,7 +1612,10 @@ function BudgetPage() {
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className={cn('min-w-0', isBudgetReviewStep ? 'px-1' : 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-sm')}>
                 {isBudgetReviewStep && <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--ref-primary)]">Ready to save</p>}
-                <div className={cn(isBudgetReviewStep && 'mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5')}>
+                <div className={cn(
+                  'flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1',
+                  isBudgetReviewStep && 'mt-0.5 gap-x-2 gap-y-0.5',
+                )}>
                   <span className="text-sm text-[var(--ref-on-surface-variant)]">
                     {isBudgetReviewStep
                       ? `${budgetReviewAllocations.length} categories · ${formatCurrency(plannedBudgetAfterDraft)} planned`
