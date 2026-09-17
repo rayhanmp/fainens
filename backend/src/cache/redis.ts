@@ -30,9 +30,22 @@ export function getRedisClient(): Redis {
 }
 
 export async function closeRedisConnection(): Promise<void> {
-  if (redisClient) {
-    await redisClient.quit();
-    redisClient = null;
+  const client = redisClient;
+  redisClient = null;
+  if (!client) return;
+
+  // `quit()` itself needs a writable connection. During startup failures or
+  // shutdown races the client can still be connecting (or already closed),
+  // and with offline queuing disabled ioredis throws instead of queueing QUIT.
+  if (client.status !== "ready") {
+    client.disconnect();
+    return;
+  }
+
+  try {
+    await client.quit();
+  } catch {
+    client.disconnect();
   }
 }
 
