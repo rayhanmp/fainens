@@ -17,6 +17,7 @@ import {
   useApplyBudgetTemplateMutation,
   useBudgetCategoriesQuery,
   useBudgetComparisonQuery,
+  useBudgetPeriodQuery,
   useBudgetPeriodsQuery,
   useBudgetQuery,
   useBudgetTemplatesQuery,
@@ -159,6 +160,7 @@ function BudgetPage() {
   const search = useSearch({ from: '/budget' }) as { periodId?: string };
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>(search.periodId || '');
   const [comparePeriodId, setComparePeriodId] = useState<string>('');
+  const [reviewComparePeriodId, setReviewComparePeriodId] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -213,6 +215,9 @@ function BudgetPage() {
   const periodsQuery = useBudgetPeriodsQuery();
   const categoriesQuery = useBudgetCategoriesQuery();
   const budgetQuery = useBudgetQuery(selectedPeriodId ? parseInt(selectedPeriodId, 10) : undefined);
+  const reviewComparisonQuery = useBudgetPeriodQuery(
+    isBudgetReviewStep && reviewComparePeriodId ? parseInt(reviewComparePeriodId, 10) : null,
+  );
   const comparisonQuery = useBudgetComparisonQuery(
     selectedPeriodId ? parseInt(selectedPeriodId, 10) : null,
     comparePeriodId ? parseInt(comparePeriodId, 10) : null,
@@ -233,6 +238,9 @@ function BudgetPage() {
   const budgetPayload = budgetQuery.data;
   const budgetSummary = (Array.isArray(budgetPayload) ? budgetPayload[0] : budgetPayload) as BudgetSummaryData | undefined;
   const budgetRows = budgetSummary?.plans ?? [];
+  const reviewComparisonPayload = reviewComparisonQuery.data;
+  const reviewComparisonSummary = (Array.isArray(reviewComparisonPayload) ? reviewComparisonPayload[0] : reviewComparisonPayload) as BudgetSummaryData | undefined | null;
+  const reviewComparisonRows = reviewComparisonSummary?.plans ?? [];
   const periodIncome = budgetSummary?.income ?? 0;
   const budgetPercentOfIncome = budgetSummary?.percentOfIncome ?? 0;
   const comparisonData = (comparisonQuery.data ?? []) as ComparisonData[];
@@ -252,6 +260,9 @@ function BudgetPage() {
   };
 
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
+  const selectedPeriodIndex = periods.findIndex((period) => period.id === selectedPeriod?.id);
+  const previousBudgetPeriod = selectedPeriodIndex >= 0 ? periods[selectedPeriodIndex + 1] : undefined;
+  const reviewComparisonPeriod = periods.find((period) => period.id.toString() === reviewComparePeriodId);
   const isPeriodClosed = selectedPeriod?.status === 'closed';
   const isPeriodTracked = selectedPeriod?.coverageStatus === 'complete' || selectedPeriod?.coverageStatus === 'partial';
   const subscriptionDueByCategory = useMemo(
@@ -461,6 +472,7 @@ function BudgetPage() {
     if (isPeriodClosed) return;
     setBudgetDraftLines([]);
     setDraftMenuId(null);
+    setReviewComparePeriodId(previousBudgetPeriod?.id.toString() ?? '');
     setIsBudgetReviewStep(false);
     setNextBudgetDraftId(0);
     setIsBudgetNoteOpen(false);
@@ -664,6 +676,7 @@ function BudgetPage() {
   const budgetReviewAllocations = [
     ...budgetRows.map((row, index) => ({
       key: `existing-${row.id}`,
+      categoryId: row.categoryId,
       categoryName: row.categoryName,
       plannedAmount: row.plannedAmount,
       note: row.note ?? null,
@@ -672,6 +685,7 @@ function BudgetPage() {
     })),
     ...budgetDraftLines.map((line, index) => ({
       key: `draft-${line.id}`,
+      categoryId: Number(line.categoryId),
       categoryName: categories.find((category) => String(category.id) === line.categoryId)?.name ?? 'Category',
       plannedAmount: parseIdNominalToInt(line.plannedAmount) || 0,
       note: line.note || null,
@@ -685,6 +699,29 @@ function BudgetPage() {
     : 0;
   const incomePlanUnassignedShare = Math.max(0, 100 - incomePlanCategoryShare - incomePlanSavingsShare);
   const incomePlanColors = { budgeted: '#B9D1FF', savings: '#FFC46B', unassigned: '#55D6BE' };
+  const reviewComparisonTotal = reviewComparisonRows.reduce((sum, row) => sum + row.plannedAmount, 0);
+  const reviewComparisonMax = Math.max(plannedBudgetAfterDraft, reviewComparisonTotal, 1);
+  const reviewComparisonDifference = plannedBudgetAfterDraft - reviewComparisonTotal;
+  const reviewComparisonPercent = reviewComparisonTotal > 0
+    ? reviewComparisonDifference / reviewComparisonTotal * 100
+    : null;
+  const reviewCurrentByCategory = new Map(budgetReviewAllocations.map((allocation) => [allocation.categoryId, allocation]));
+  const reviewComparisonByCategory = new Map(reviewComparisonRows.map((row) => [row.categoryId, row]));
+  const reviewComparisonCategoryChanges = [...new Set([
+    ...budgetReviewAllocations.map((allocation) => allocation.categoryId),
+    ...reviewComparisonRows.map((row) => row.categoryId),
+  ])]
+    .map((categoryId) => {
+      const current = reviewCurrentByCategory.get(categoryId);
+      const previous = reviewComparisonByCategory.get(categoryId);
+      return {
+        categoryName: current?.categoryName ?? previous?.categoryName ?? 'Category',
+        difference: (current?.plannedAmount ?? 0) - (previous?.plannedAmount ?? 0),
+      };
+    })
+    .filter((change) => change.difference !== 0)
+    .sort((left, right) => Math.abs(right.difference) - Math.abs(left.difference))
+    .slice(0, 2);
   const budgetDraftInsightKey = JSON.stringify({
     promptVersion: 2,
     periodName: selectedPeriod?.name ?? 'Selected period',
@@ -700,8 +737,6 @@ function BudgetPage() {
     !budgetRows.some((row) => row.categoryId === category.id)
     && !budgetDraftLines.some((line) => Number(line.categoryId) === category.id),
   );
-  const selectedPeriodIndex = periods.findIndex((period) => period.id === selectedPeriod?.id);
-  const previousBudgetPeriod = selectedPeriodIndex >= 0 ? periods[selectedPeriodIndex + 1] : undefined;
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
   const selectedTemplateExistingCount = selectedTemplate
     ? selectedTemplate.items.filter((item) => budgetRows.some((row) => row.categoryId === item.categoryId)).length
@@ -1713,9 +1748,25 @@ function BudgetPage() {
                       <h3 className="mt-1 text-lg font-bold text-[var(--ref-on-surface)]">Where your money goes</h3>
                       <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Largest allocations appear first.</p>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{budgetReviewAllocations.length} categories</p>
-                      <p className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(plannedBudgetAfterDraft)}</p>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <div className="text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{budgetReviewAllocations.length} categories</p>
+                        <p className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(plannedBudgetAfterDraft)}</p>
+                      </div>
+                      <label>
+                        <span className="sr-only">Compare this plan with another period</span>
+                        <select
+                          aria-label="Compare this plan with another period"
+                          value={reviewComparePeriodId}
+                          onChange={(event) => setReviewComparePeriodId(event.target.value)}
+                          className="h-8 max-w-[180px] cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 text-xs text-[var(--ref-on-surface)] focus:border-[var(--ref-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]/15"
+                        >
+                          <option value="">No comparison</option>
+                          {periods.filter((period) => period.id.toString() !== selectedPeriodId).map((period) => (
+                            <option key={period.id} value={period.id.toString()}>vs {period.name}</option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                   </div>
                   {plannedBudgetAfterDraft > 0 && (
@@ -1735,6 +1786,50 @@ function BudgetPage() {
                           }}
                         />
                       ))}
+                    </div>
+                  )}
+                  {reviewComparePeriodId && (
+                    <div className="mb-4 rounded-2xl bg-[var(--ref-surface-container-low)] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-[10px] font-bold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">
+                          Plan vs {reviewComparisonPeriod?.name ?? 'selected period'}
+                        </p>
+                        {reviewComparisonQuery.isLoading ? (
+                          <span className="shrink-0 text-xs text-[var(--ref-on-surface-variant)]">Loading…</span>
+                        ) : reviewComparisonRows.length > 0 ? (
+                          <strong className="shrink-0 text-xs tabular-nums text-[var(--ref-on-surface)]">
+                            {reviewComparisonDifference > 0 ? '+' : reviewComparisonDifference < 0 ? '−' : ''}{formatCurrency(Math.abs(reviewComparisonDifference))}
+                            {reviewComparisonPercent != null && ` · ${Math.abs(reviewComparisonPercent).toFixed(1)}%`}
+                          </strong>
+                        ) : (
+                          <span className="shrink-0 text-xs text-[var(--ref-on-surface-variant)]">No saved budget</span>
+                        )}
+                      </div>
+                      {reviewComparisonRows.length > 0 && !reviewComparisonQuery.isLoading ? (
+                        <>
+                          <div className="mt-2 space-y-2">
+                            {[
+                              { name: reviewComparisonPeriod?.name ?? 'Previous plan', amount: reviewComparisonTotal, color: 'var(--ref-outline)' },
+                              { name: 'This plan', amount: plannedBudgetAfterDraft, color: 'var(--ref-primary)' },
+                            ].map((comparison) => (
+                              <div key={comparison.name} className="grid grid-cols-[minmax(72px,auto)_minmax(40px,1fr)_auto] items-center gap-2 text-[10px]">
+                                <span className="truncate text-[var(--ref-on-surface-variant)]">{comparison.name}</span>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]">
+                                  <div className="h-full rounded-full" style={{ width: `${comparison.amount / reviewComparisonMax * 100}%`, backgroundColor: comparison.color }} />
+                                </div>
+                                <strong className="text-right tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(comparison.amount)}</strong>
+                              </div>
+                            ))}
+                          </div>
+                          {reviewComparisonCategoryChanges.length > 0 && (
+                            <p className="mt-2 truncate text-[10px] text-[var(--ref-on-surface-variant)]" title={reviewComparisonCategoryChanges.map((change) => `${change.categoryName} ${change.difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(change.difference))}`).join(' · ')}>
+                              Biggest changes: {reviewComparisonCategoryChanges.map((change) => `${change.categoryName} ${change.difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(change.difference))}`).join(' · ')}
+                            </p>
+                          )}
+                        </>
+                      ) : !reviewComparisonQuery.isLoading && reviewComparisonPeriod ? (
+                        <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">Choose another period to compare against a saved plan.</p>
+                      ) : null}
                     </div>
                   )}
                   <ul className="divide-y divide-[var(--color-border)]">

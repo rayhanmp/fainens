@@ -23,6 +23,14 @@ export const useBudgetQuery = (periodId?: number) => useQuery({
   placeholderData: (previous) => previous,
 });
 
+export const useBudgetPeriodQuery = (periodId: number | null) => useQuery({
+  queryKey: periodId == null ? [...queryKeys.budgets.all, 'comparison-period'] : queryKeys.budgets.period(periodId),
+  queryFn: ({ signal }) => periodId == null
+    ? Promise.resolve(null)
+    : unwrapGenerated(listBudgets({ periodId: String(periodId) } satisfies ListBudgetsParams, { signal }), 200, 'Failed to load comparison budget'),
+  enabled: periodId != null,
+});
+
 export const useBudgetOutlookQuery = (periodId?: number) => useQuery({
   queryKey: periodId == null ? [...queryKeys.budgets.all, 'outlook'] : queryKeys.budgets.outlook(periodId),
   queryFn: ({ signal }) => periodId == null ? Promise.resolve(null) : unwrapGenerated(getBudgetOutlook(periodId, { signal }), 200, 'Failed to load budget outlook'),
