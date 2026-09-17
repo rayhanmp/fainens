@@ -967,8 +967,8 @@ function BudgetPage() {
               onClick={openBudgetModal}
               disabled={!selectedPeriod || isPeriodClosed}
             >
-              <Plus className="h-4 w-4" />
-              Add categories
+              {budgetRows.length === 0 ? <Plus className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+              {budgetRows.length === 0 ? 'Manage budget' : 'Modify budget'}
             </Button>
           </div>
         </div>
