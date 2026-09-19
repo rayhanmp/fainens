@@ -13,11 +13,41 @@ export class ApiError extends Error {
 }
 
 const apiBase = import.meta.env.VITE_API_BASE || "/api";
+const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string> | null = null;
+
+/** Fetch the synchronizer token once; the secret itself remains in an HttpOnly cookie. */
+export async function ensureCsrfToken(): Promise<string> {
+  if (csrfToken) return csrfToken;
+  if (!csrfTokenPromise) {
+    const endpoint = `${apiBase.replace(/\/$/, "")}/auth/csrf-token`;
+    csrfTokenPromise = fetch(endpoint, { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Could not obtain CSRF token (HTTP ${response.status})`);
+        const body = await response.json() as { csrfToken?: unknown };
+        if (typeof body.csrfToken !== "string" || body.csrfToken.length === 0) {
+          throw new Error("CSRF token response was invalid");
+        }
+        csrfToken = body.csrfToken;
+        return csrfToken;
+      })
+      .finally(() => {
+        csrfTokenPromise = null;
+      });
+  }
+  return csrfTokenPromise;
+}
 
 export async function generatedFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const target = url.startsWith("http") ? url : `${apiBase}${url.replace(/^\/api/, "")}`;
+  const isApiRequest = !url.startsWith("http");
+  const target = isApiRequest ? `${apiBase}${url.replace(/^\/api/, "")}` : url;
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const method = (options.method || "GET").toUpperCase();
+  if (isApiRequest && unsafeMethods.has(method) && !headers.has("x-csrf-token")) {
+    headers.set("x-csrf-token", await ensureCsrfToken());
+  }
   const response = await fetch(target, { ...options, headers, credentials: "include" });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ message: "Something went wrong" })) as ApiErrorEnvelope;

@@ -5,6 +5,7 @@ config({ path: resolve(__dirname, "../../.env") });
 
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import csrf from "@fastify/csrf-protection";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
@@ -68,6 +69,21 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(helmet, { contentSecurityPolicy: { directives: {
     defaultSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", "data:", "https:"], scriptSrc: ["'self'"], connectSrc: ["'self'", "https://openrouter.ai"],
   } } });
+  // The API authenticates with a browser cookie, so protect every unsafe
+  // method at the application boundary. Read methods and CORS preflights do
+  // not mutate state and must remain available without a CSRF token.
+  await app.register(csrf, {
+    cookieOpts: { path: "/", sameSite: "strict", httpOnly: true, secure: env.NODE_ENV === "production" },
+  });
+  // Use preHandler so @fastify/cookie has already initialized request.cookies,
+  // including on requests that arrive without a Cookie header.
+  app.addHook("preHandler", (request, reply, done) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      done();
+      return;
+    }
+    app.csrfProtection(request, reply, done);
+  });
   const errorResponse = (message: string) => (_request: unknown, context: { after: string | number }) => ({ statusCode: 429, error: "Too Many Requests", message: `${message} Try again in ${context.after}`, retryAfter: context.after });
   const keyGenerator = (request: { user?: { email?: string }; ip: string }) => request.user?.email || request.ip;
   const redis = runtime === "server" ? getRedisClient() : undefined;

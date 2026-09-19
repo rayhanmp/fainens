@@ -6,6 +6,7 @@ import {
   type ConfirmTransactionImport201,
   type PreviewTransactionImport200AnyOfFour,
 } from '../generated/client';
+import { ensureCsrfToken } from './generated-fetch';
 
 // Compatibility aliases keep the handwritten transport facade stable while the
 // generated operation names remain the source of truth for the wire contract.
@@ -53,17 +54,18 @@ async function fetchApi<T>(
   const url = `${API_BASE}${endpoint}`;
 
   // Only set Content-Type for requests with a body
-  const headers: Record<string, string> = {};
-  if (options.body) {
-    headers['Content-Type'] = 'application/json';
+  const headers = new Headers(options.headers);
+  if (options.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !headers.has('x-csrf-token')) {
+    headers.set('x-csrf-token', await ensureCsrfToken());
   }
 
   const response = await fetch(url, {
     ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
+    headers,
     credentials: 'include', // Include cookies for auth
   });
 
@@ -377,9 +379,11 @@ async function streamAgentQuery(
   onEvent: (event: AgentStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<AgentQueryResponse> {
+  const headers = new Headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' });
+  headers.set('x-csrf-token', await ensureCsrfToken());
   const response = await fetch(`${API_BASE}/agent/query/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers,
     credentials: 'include',
     body: JSON.stringify(data),
     signal,
@@ -1888,9 +1892,11 @@ export const api = {
       body: JSON.stringify({ transactionId }),
     }),
     scrape: async (url: string) => {
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      headers.set('x-csrf-token', await ensureCsrfToken());
       const response = await fetch(`${API_BASE}/wishlist/scrape`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ url }),
         credentials: 'include',
       });
@@ -1931,9 +1937,11 @@ export const api = {
       };
     },
     scrapeAdvanced: async (url: string) => {
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      headers.set('x-csrf-token', await ensureCsrfToken());
       const response = await fetch(`${API_BASE}/wishlist/scrape-advanced`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ url }),
         credentials: 'include',
       });

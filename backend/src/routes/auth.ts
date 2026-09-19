@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { eq } from "drizzle-orm";
-import csrf from "@fastify/csrf-protection";
 import { z } from "zod";
 
 import { env } from "../lib/env";
@@ -14,11 +13,6 @@ const onboardingStatusResponseSchema = z.object({ needsOnboarding: z.boolean() }
 const logoutResponseSchema = z.object({ success: z.literal(true) }).passthrough();
 
 export default async function (fastify: FastifyInstance) {
-  // Register CSRF protection
-  await fastify.register(csrf, {
-    cookieOpts: { path: "/", sameSite: "strict", httpOnly: true, secure: env.NODE_ENV === "production" },
-  });
-
   // CSRF token endpoint
   fastify.get("/api/auth/csrf-token", {
     schema: { operationId: "getCsrfToken", tags: ["auth"], response: { 200: csrfResponseSchema } },
@@ -122,8 +116,8 @@ export default async function (fastify: FastifyInstance) {
     return { needsOnboarding };
   });
 
-  // Logout - protected by CSRF
-  fastify.post("/api/auth/logout", { preHandler: fastify.csrfProtection, schema: { operationId: "logout", tags: ["auth"], response: { 200: logoutResponseSchema, 403: authErrorSchema } } }, async (request: FastifyRequest, reply: FastifyReply) => {
+  // Logout is protected by the application-wide CSRF hook.
+  fastify.post("/api/auth/logout", { schema: { operationId: "logout", tags: ["auth"], response: { 200: logoutResponseSchema, 403: authErrorSchema } } }, async (request: FastifyRequest, reply: FastifyReply) => {
     reply
       .clearCookie("token", { path: "/" })
       .send({ success: true });
