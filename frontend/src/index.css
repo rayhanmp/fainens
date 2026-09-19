@@ -118,6 +118,15 @@ h6 {
   letter-spacing: -0.02em;
 }
 
+.finance-page-header {
+  animation: finance-page-header-in 280ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes finance-page-header-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .font-headline {
   font-family: var(--font-heading);
 }
@@ -1167,7 +1176,7 @@ button[data-variant="danger"]:focus-visible,
   }
   .mobile-sheet-full .mobile-sheet-handle { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .finance-sidebar, .finance-brand, .finance-wordmark-label, .finance-wordmark-expand, .finance-collapse, .finance-nav-link, .finance-add, .finance-profile summary { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .finance-page-header { animation: none !important; } .finance-sidebar, .finance-brand, .finance-wordmark-label, .finance-wordmark-expand, .finance-collapse, .finance-nav-link, .finance-add, .finance-profile summary { transition: none !important; } }
 .finance-navigation { scrollbar-width: thin; scrollbar-color: var(--nav-border) transparent; }
 
 /* Selection moves as one surface while labels remain fixed and readable. */

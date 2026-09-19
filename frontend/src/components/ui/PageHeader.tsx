@@ -10,7 +10,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ subtext, title, description, className }: PageHeaderProps) {
   return (
-    <div className={cn(className)}>
+    <div className={cn('finance-page-header', className)}>
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)] mb-2">
         {subtext}
       </p>
