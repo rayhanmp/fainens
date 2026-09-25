@@ -91,6 +91,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
         previousBalance: monthly.previousBalance,
         totalIncoming: monthly.totalIncoming,
         totalOutgoing: monthly.totalOutgoing,
+        balanceAdjustments: monthly.balanceAdjustments,
+        historicalRecoveryBridge: monthly.historicalRecoveryBridge,
         closingBalance: monthly.closingBalance,
         reportHash: monthly.reportHash,
         incomeBySource: monthly.incomeBySource,
@@ -134,6 +136,8 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
           previousBalance={reportData.previousBalance}
           totalIncoming={reportData.totalIncoming}
           totalOutgoing={reportData.totalOutgoing}
+          balanceAdjustments={reportData.balanceAdjustments}
+          historicalRecoveryBridge={reportData.historicalRecoveryBridge}
           closingBalance={reportData.closingBalance}
           reportHash={reportData.reportHash}
           incomeBySource={reportData.incomeBySource}

@@ -805,6 +805,12 @@ function CashFlowReport({
           <span>Beginning Cash</span>
           <span className="font-mono">{formatCurrency(data.beginningCash)}</span>
         </div>
+        {data.balanceAdjustments ? (
+          <div className="flex justify-between text-[var(--color-warning)]" title="Not operating, investing, or financing cash flow">
+            <span>Balance adjustments</span>
+            <span className="font-mono">{data.balanceAdjustments > 0 ? '+' : ''}{formatCurrency(data.balanceAdjustments)}</span>
+          </div>
+        ) : null}
         {data.historicalRecoveryBridge ? (
           <div className="flex justify-between text-[var(--color-warning)]" title="Not operating, investing, or financing cash flow">
             <span>Historical recovery bridge</span>

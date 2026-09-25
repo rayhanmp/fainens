@@ -164,7 +164,7 @@ function AccountsPage() {
     debouncedSearch.length > 0 || typeFilter !== 'all';
 
   const latestReconciliationByAccount = useMemo(() => {
-    const result = new Map<number, { asOfDate: number; status: string; difference: number }>();
+    const result = new Map<number, { asOfDate: number; status: string; difference: number; kind: string }>();
     for (const session of reconciliationSessions) {
       if (session.lifecycleStatus === 'voided') continue;
       for (const item of session.items) {
@@ -173,6 +173,7 @@ function AccountsPage() {
             asOfDate: session.asOfDate,
             status: item.status,
             difference: item.difference,
+            kind: session.kind ?? 'control',
           });
         }
       }
@@ -182,7 +183,10 @@ function AccountsPage() {
 
   const reconciliationSummary = useMemo(() => {
     const checked = userAccounts.filter((account) => latestReconciliationByAccount.has(account.id));
-    const issues = checked.filter((account) => latestReconciliationByAccount.get(account.id)?.difference !== 0);
+    const issues = checked.filter((account) => {
+      const latestCheck = latestReconciliationByAccount.get(account.id);
+      return latestCheck?.kind === 'control' && latestCheck.status === 'needs_classification';
+    });
     const latest = checked
       .map((account) => latestReconciliationByAccount.get(account.id)?.asOfDate ?? 0)
       .filter(Boolean)
@@ -542,7 +546,7 @@ function LedgerColumn({
   onRestore: (id: number) => void;
   cardVariant: 'cash' | 'ewallet' | 'investment' | 'receivable' | 'credit' | 'paylater';
   footerSummary?: number;
-  reconciliationByAccount: Map<number, { asOfDate: number; status: string; difference: number }>;
+  reconciliationByAccount: Map<number, { asOfDate: number; status: string; difference: number; kind: string }>;
 }) {
   const countLabel =
     cardVariant === 'credit' && accounts.some((a) => a.type === 'liability')
@@ -591,18 +595,20 @@ function AccountTile({
   onEdit: () => void;
   onDelete: () => void;
   onRestore: () => void;
-  reconciliation?: { asOfDate: number; status: string; difference: number };
+  reconciliation?: { asOfDate: number; status: string; difference: number; kind?: string };
 }) {
   const accent = a.color || 'var(--ref-primary-container)';
   const identifier = maskAccountNumber(a.accountNumber);
 
   const reconciliationLabel = reconciliation
-    ? reconciliation.difference === 0
+    ? reconciliation.status === 'adjusted'
+      ? `Aligned ${formatShortDate(reconciliation.asOfDate)}`
+      : reconciliation.difference === 0
       ? `Checked ${formatShortDate(reconciliation.asOfDate)}`
       : `Review difference ${formatCurrency(Math.abs(reconciliation.difference))}`
     : 'Not checked yet';
   const reconciliationClass = reconciliation
-    ? reconciliation.difference === 0
+    ? reconciliation.status === 'adjusted' || reconciliation.difference === 0
       ? 'text-[var(--ref-secondary)]'
       : 'text-[var(--ref-error)]'
     : 'text-[var(--ref-outline)]';

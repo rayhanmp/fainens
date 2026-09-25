@@ -3,11 +3,12 @@ import { useId } from 'react';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  labelClassName?: string;
   error?: string;
   variant?: 'default' | 'wide' | 'currency';
 }
 
-export function Input({ label, error, variant = 'default', className, required, ...props }: InputProps) {
+export function Input({ label, labelClassName, error, variant = 'default', className, required, ...props }: InputProps) {
   const variantClasses = {
     default: '',
     wide: 'brutalist-input--wide',
@@ -22,7 +23,7 @@ export function Input({ label, error, variant = 'default', className, required, 
       {label && (
         <label 
           htmlFor={id}
-          className="block text-sm font-medium text-[var(--color-text-secondary)]"
+          className={cn('block text-sm font-medium text-[var(--color-text-secondary)]', labelClassName)}
         >
           {label}
           {required && (

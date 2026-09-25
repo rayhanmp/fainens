@@ -14,15 +14,17 @@ async function invalidateReconciliationQueries(queryClient: { invalidateQueries:
   ]);
 }
 
-/** Reconciliation writes are control evidence, except recovery which also
- * posts a disclosed bridge journal. Keep both behind typed feature commands
- * so callers cannot forget the history/dashboard invalidation. */
+/** Reconciliation writes can post neutral equity adjustments, so refresh
+ * ledger summaries as well as balance-check history. */
 export function useCreateReconciliationMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof createReconciliation>[0]) =>
-      unwrapGenerated(createReconciliation(input), 201, 'Failed to reconcile'),
-    onSuccess: () => invalidateReconciliationQueries(queryClient),
+    mutationFn: (input: Parameters<typeof createReconciliation>[0] & { confirmed?: boolean; note?: string | null }) =>
+      unwrapGenerated(createReconciliation(input as Parameters<typeof createReconciliation>[0]), 201, 'Failed to reconcile'),
+    onSuccess: async () => Promise.all([
+      invalidateFinancialSummaries(queryClient),
+      invalidateReconciliationQueries(queryClient),
+    ]),
   });
 }
 
@@ -31,7 +33,10 @@ export function useCreateRecoveryReconciliationMutation() {
   return useMutation({
     mutationFn: (input: Parameters<typeof createRecoveryReconciliation>[0]) =>
       unwrapGenerated(createRecoveryReconciliation(input), 201, 'Failed to create recovery bridge'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
+    onSuccess: async () => Promise.all([
+      invalidateFinancialSummaries(queryClient),
+      invalidateReconciliationQueries(queryClient),
+    ]),
   });
 }
 

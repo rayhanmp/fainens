@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { cn, parseIdNominalToInt } from '../../lib/utils';
-import { useCreateAccountMutation, useUpdateAccountMutation } from '../../features/accounts/queries';
+import { useCreateAccountMutation, useSetAccountOpeningBalanceMutation, useUpdateAccountMutation } from '../../features/accounts/queries';
 import { Wallet, CreditCard } from 'lucide-react';
 
 type AccountType = 'asset' | 'liability';
@@ -24,6 +24,7 @@ interface AccountModalProps {
     billingDate?: number | null;
     provider?: string | null;
     liquidityClass?: LiquidityClass | null;
+    balance?: number;
   } | null;
 }
 
@@ -40,6 +41,7 @@ const PROVIDERS = [
 export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: AccountModalProps) {
   const createAccountMutation = useCreateAccountMutation();
   const updateAccountMutation = useUpdateAccountMutation();
+  const setOpeningBalanceMutation = useSetAccountOpeningBalanceMutation();
   const [formData, setFormData] = useState({
     name: '',
     type: 'asset' as AccountType,
@@ -50,6 +52,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
     billingDate: '',
     provider: '',
     liquidityClass: 'cash_equivalent' as LiquidityClass,
+    openingBalance: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,6 +71,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
           billingDate: editingAccount.billingDate ? String(editingAccount.billingDate) : '',
           provider: editingAccount.provider || '',
           liquidityClass: editingAccount.liquidityClass || (editingAccount.type === 'asset' ? 'cash_equivalent' : 'non_cash'),
+          openingBalance: '',
         });
       } else {
         setFormData({
@@ -80,6 +84,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
           billingDate: '',
           provider: '',
           liquidityClass: 'cash_equivalent',
+          openingBalance: '',
         });
       }
       setFormError('');
@@ -132,10 +137,21 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
         }
       }
 
+      let accountId = editingAccount?.id;
       if (editingAccount) {
         await updateAccountMutation.mutateAsync({ id: editingAccount.id, data: payload });
       } else {
-        await createAccountMutation.mutateAsync(payload);
+        const created = await createAccountMutation.mutateAsync(payload);
+        accountId = created.id;
+      }
+
+      const openingBalance = formData.openingBalance ? parseIdNominalToInt(formData.openingBalance) : 0;
+      if (openingBalance > 0 && accountId != null) {
+        await setOpeningBalanceMutation.mutateAsync({
+          id: accountId,
+          balance: openingBalance,
+          note: `Opening balance when ${formData.name.trim()} was added`,
+        });
       }
 
       onSaved();
@@ -257,6 +273,18 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
           </div>
         )}
 
+        {(!editingAccount || editingAccount.balance === 0) && (
+          <CurrencyInput
+            label="Current balance (optional)"
+            value={formData.openingBalance}
+            onChange={(value) => setFormData({ ...formData, openingBalance: value })}
+            placeholder="0"
+            size="sm"
+            showDivider={false}
+            hint="Recorded as an opening balance adjustment—not income. Leave at 0 if you’ll enter it later."
+          />
+        )}
+
         {/* Liability-specific fields */}
         {formData.type === 'liability' && (
           <div className="grid grid-cols-3 gap-3">
@@ -321,7 +349,7 @@ export function AccountModal({ isOpen, onClose, onSaved, editingAccount }: Accou
           </Button>
           <Button
             type="submit"
-            isLoading={isSubmitting}
+            isLoading={isSubmitting || setOpeningBalanceMutation.isPending}
             className="rounded-full py-2 shadow-lg"
           >
             {editingAccount ? 'Save changes' : 'Create account'}

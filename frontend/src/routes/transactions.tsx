@@ -476,7 +476,7 @@ function TransactionsPage() {
           const transferSource = transaction.lines.find((line) => line.credit > 0 && line.accountType === 'asset');
           const transferDestination = transaction.lines.find((line) => line.debit > 0 && line.accountType === 'asset');
           const accountName = walletLine?.accountName ?? accounts.find((account) => account.id === walletLine?.accountId)?.name;
-          const correction = transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment';
+          const correction = transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment' || transaction.txType === 'balance_adjustment';
           const dateLabel = new Date(transaction.date).toLocaleDateString('en-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
           const showDate = sort !== 'largest' && (index === 0 || new Date(transactionRows[index - 1]!.date).toDateString() !== new Date(transaction.date).toDateString());
           return <Fragment key={rowKey}>{showDate && <h2 className="bg-[var(--ref-surface-container-low)] px-5 py-2 text-xs font-semibold text-[var(--ref-on-surface-variant)]">{dateLabel}</h2>}<SwipeReveal
@@ -516,7 +516,7 @@ function TransactionsPage() {
       const kind = getKind(actionTransaction);
       const reimbursementLine = actionTransaction.lines.find((line) => line.accountType === 'expense' && line.debit > line.credit);
       const reimbursable = actionTransaction.status === 'posted' && kind === 'expense' && reimbursementLine != null && remainingReimbursableExpense(actionTransaction) > 0;
-      const correction = actionTransaction.status === 'reversed' || actionTransaction.txType === 'reversal' || actionTransaction.txType === 'domain_reversal' || actionTransaction.txType === 'historical_recovery_adjustment';
+      const correction = actionTransaction.status === 'reversed' || actionTransaction.txType === 'reversal' || actionTransaction.txType === 'domain_reversal' || actionTransaction.txType === 'historical_recovery_adjustment' || actionTransaction.txType === 'balance_adjustment';
       return <Modal isOpen onClose={() => setRowActionsId(null)} title="Transaction actions" subtitle={actionTransaction.description} contentClassName="p-3">
         <div className="space-y-1">
           <button type="button" onClick={() => { setRowActionsId(null); window.setTimeout(() => openModal(actionTransaction, 'view'), 0); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-5 w-5 text-[var(--ref-primary)]" />View details</button>

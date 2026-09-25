@@ -10,6 +10,7 @@ import {
   type ListAccounts200Item,
   type ListAccountsParams,
 } from '../../generated/client';
+import { api } from '../../lib/api';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 import { normalizeTimestamp, unwrapGenerated } from '../core/generated-response';
 
@@ -123,6 +124,21 @@ export function useUpdateAccountMutation() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateAccount>[1] }) => unwrapGenerated(updateAccount(id, data), 200, 'Failed to update account'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useSetAccountOpeningBalanceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, balance, note }: { id: number; balance: number; note?: string | null }) =>
+      api.accounts.setOpeningBalance(id, { balance, note }),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateFinancialSummaries(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts.reconciliation(25) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.reconciliation }),
+      ]);
+    },
   });
 }
 
