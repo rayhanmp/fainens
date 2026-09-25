@@ -392,7 +392,7 @@ function compactResultData(name: string, result: unknown, input: unknown): { dat
       const statement = asRecord(raw.statement);
       return {
         scope: asRecord(raw.scope),
-        data: { ...compactObject(statement, ["periodName", "netOperating", "netInvesting", "netFinancing", "netChange", "historicalRecoveryBridge", "beginningCash", "endingCash"]), coverage: projectCoverage(raw.coverage ?? statement.coverage) },
+        data: { ...compactObject(statement, ["periodName", "netOperating", "netInvesting", "netFinancing", "netChange", "balanceAdjustments", "historicalRecoveryBridge", "beginningCash", "endingCash"]), coverage: projectCoverage(raw.coverage ?? statement.coverage) },
         complete: true,
       };
     }

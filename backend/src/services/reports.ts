@@ -69,7 +69,9 @@ export interface CashFlowStatement {
   netInvesting: number;
   netFinancing: number;
   netChange: number;
-  /** Disclosed balance bridge from an intentionally untracked historical span. */
+  /** Disclosed cash-equivalent balance corrections, outside ordinary cash flow. */
+  balanceAdjustments?: number;
+  /** Disclosed bridge from an intentionally untracked historical span. */
   historicalRecoveryBridge?: number;
   beginningCash: number;
   endingCash: number;
@@ -441,6 +443,7 @@ export async function generateCashFlowStatement(
       netInvesting: 0,
       netFinancing: 0,
       netChange: 0,
+      balanceAdjustments: 0,
       historicalRecoveryBridge: 0,
       beginningCash: 0,
       endingCash: 0,
@@ -526,6 +529,7 @@ export async function generateCashFlowStatement(
   let netOperating = 0;
   let netInvesting = 0;
   let netFinancing = 0;
+  let balanceAdjustments = 0;
   let historicalRecoveryBridge = 0;
 
   for (const tx of cashTxs) {
@@ -539,11 +543,12 @@ export async function generateCashFlowStatement(
     let classificationSource: "explicit" | "legacy_inference" = "legacy_inference";
 
     if (tx.cashFlowClass === "transfer") continue;
-    // A recovery adjustment reconciles an untracked historical balance. It is
-    // deliberately excluded from operating/investing/financing cash flow, but
-    // disclosed separately so the reported ending cash still reconciles.
+    // Opening-balance and reconciliation adjustments are excluded from
+    // operating/investing/financing cash flow, but disclosed separately so
+    // reported ending cash still reconciles to the ledger.
     if (tx.cashFlowClass === "recovery") {
-      historicalRecoveryBridge += amount;
+      if (tx.txType === "balance_adjustment") balanceAdjustments += amount;
+      else historicalRecoveryBridge += amount;
       continue;
     }
     if (tx.cashFlowClass === "operating" || tx.cashFlowClass === "investing" || tx.cashFlowClass === "financing") {
@@ -590,7 +595,7 @@ export async function generateCashFlowStatement(
   }
 
   const netChange = netOperating + netInvesting + netFinancing;
-  const endingCash = beginningCash + netChange + historicalRecoveryBridge;
+  const endingCash = beginningCash + netChange + balanceAdjustments + historicalRecoveryBridge;
   return {
     operating,
     investing,
@@ -599,6 +604,7 @@ export async function generateCashFlowStatement(
     netInvesting,
     netFinancing,
     netChange,
+    balanceAdjustments,
     historicalRecoveryBridge,
     beginningCash,
     endingCash,
@@ -729,9 +735,8 @@ export function exportReportToCSV(report: IncomeStatement | BalanceSheet | CashF
     }
     row("BEGINNING CASH", report.beginningCash);
     row("NET CHANGE", report.netChange);
-    if (report.historicalRecoveryBridge) {
-      row("HISTORICAL RECOVERY BRIDGE (NOT CFO/CFI/CFF)", report.historicalRecoveryBridge);
-    }
+    if (report.balanceAdjustments) row("BALANCE ADJUSTMENTS (NOT CFO/CFI/CFF)", report.balanceAdjustments);
+    if (report.historicalRecoveryBridge) row("HISTORICAL RECOVERY BRIDGE (NOT CFO/CFI/CFF)", report.historicalRecoveryBridge);
     row("ENDING CASH", report.endingCash);
     for (const warning of report.coverage?.warnings ?? []) row("COVERAGE WARNING", warning);
   } else {

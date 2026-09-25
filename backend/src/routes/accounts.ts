@@ -4,9 +4,11 @@ import { z } from "zod";
 
 import { db } from "../db/client";
 import { accounts, auditLogs, budgetPlans, categories, reconciliationItems, reconciliationSessions, transactionLines, transactions } from "../db/schema";
-import { computeAccountBalance, computeAccountBalanceRolledUp } from "../services/ledger";
+import { computeAccountBalance, computeAccountBalanceRolledUp, insertPreparedJournalEntrySync } from "../services/ledger";
 import { precomputeAccountBalance } from "../cache/precompute";
 import { calculateReconciliationItem } from "../services/reconciliation";
+import { prepareBalanceAdjustmentJournal } from "../services/balance-adjustments";
+import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { createRecoveryReconciliation } from "../services/recovery-reconciliation";
 
@@ -64,11 +66,11 @@ const accountDependencyPreviewSchema = z.object({
 const reconciliationSessionSchema = z.object({
   id: z.number().int(),
   asOfDate: z.union([z.date(), z.string(), z.number()]),
-  status: z.enum(["reconciled", "needs_classification", "recovered"]),
+  status: z.enum(["reconciled", "adjusted", "needs_classification", "recovered"]),
   lifecycleStatus: z.enum(["active", "voided"]),
   voidedAt: z.union([z.date(), z.string(), z.number()]).nullable().optional(),
   voidReason: z.string().nullable().optional(),
-  kind: z.enum(["control", "recovery"]),
+  kind: z.enum(["control", "recovery", "adjustment", "opening_balance"]),
   note: z.string().nullable().optional(),
   createdAt: z.union([z.date(), z.string(), z.number()]),
 }).passthrough();
@@ -80,7 +82,7 @@ const reconciliationItemSchema = z.object({
   ledgerBalance: z.number(),
   actualBalance: z.number(),
   difference: z.number(),
-  status: z.enum(["matched", "needs_classification"]),
+  status: z.enum(["matched", "adjusted", "needs_classification"]),
   correctionTransactionId: z.number().int().nullable().optional(),
 }).passthrough();
 const reconciliationHistorySchema = z.object({
@@ -89,12 +91,28 @@ const reconciliationHistorySchema = z.object({
 const reconciliationBodySchema = z.object({
   balances: z.array(z.object({ accountId: z.number().int().positive(), actualBalance: z.number().int() }).passthrough()).min(1),
   asOfDate: z.number().int().nonnegative().optional(),
+  confirmed: z.boolean().optional(),
+  note: z.string().max(1000).nullable().optional(),
 }).passthrough();
 const reconciliationResultSchema = z.object({
   success: z.boolean(),
   requiresClassification: z.boolean(),
   session: reconciliationSessionSchema,
   results: z.array(reconciliationItemSchema),
+  adjustmentTransactionId: z.number().int().nullable().optional(),
+  message: z.string(),
+}).passthrough();
+const openingBalanceBodySchema = z.object({
+  balance: z.number().int().positive(),
+  asOfDate: z.number().int().nonnegative().optional(),
+  note: z.string().max(1000).nullable().optional(),
+}).passthrough();
+const openingBalanceResultSchema = z.object({
+  success: z.literal(true),
+  accountId: z.number().int(),
+  balance: z.number().int(),
+  transactionId: z.number().int(),
+  session: reconciliationSessionSchema,
   message: z.string(),
 }).passthrough();
 const recoveryBodySchema = reconciliationBodySchema.extend({
@@ -115,6 +133,46 @@ const reconciliationErrorSchema = z.object({ error: z.string() }).passthrough();
 function sanitizeSearchInput(input: string): string {
   // Remove SQL special characters that could be used for injection
   return input.replace(/[%_\[\]]/g, '');
+}
+
+function calculateReconciliationItemsSync(
+  executor: any,
+  balances: Array<{ accountId: number; actualBalance: number }>,
+  accountRows: Array<{ id: number; name: string; type: string; liquidityClass?: string }>,
+  asOfDate: number,
+) {
+  return balances.map((item) => {
+    const account = accountRows.find((row) => row.id === item.accountId)!;
+    const sums = executor
+      .select({
+        debit: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
+        credit: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
+      })
+      .from(transactionLines)
+      .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+      .where(and(
+        eq(transactionLines.accountId, item.accountId),
+        sql`${transactions.date} <= ${asOfDate}`,
+        sql`${transactions.status} <> 'draft'`,
+      ))
+      .all()[0];
+    const calculated = calculateReconciliationItem({
+      accountType: account.type as "asset" | "liability",
+      debit: Number(sums?.debit ?? 0),
+      credit: Number(sums?.credit ?? 0),
+      actualBalance: item.actualBalance,
+    });
+    return {
+      accountId: item.accountId,
+      accountName: account.name,
+      accountType: account.type as "asset" | "liability",
+      liquidityClass: account.liquidityClass ?? "non_cash",
+      ledgerBalance: calculated.ledgerBalance,
+      actualBalance: item.actualBalance,
+      difference: calculated.difference,
+      status: calculated.status,
+    };
+  });
 }
 
 export default async function (fastify: FastifyInstance) {
@@ -467,8 +525,109 @@ export default async function (fastify: FastifyInstance) {
     return restored;
   });
 
-  // Reconciliation history is read-only evidence. It is intentionally
-  // separate from transactions and includes voided entries for auditability.
+  fastify.post("/api/accounts/:id/opening-balance", {
+    schema: {
+      operationId: "setAccountOpeningBalance",
+      tags: ["accounts"],
+      params: accountIdParamsSchema,
+      body: openingBalanceBodySchema,
+      response: { 201: openingBalanceResultSchema, 400: reconciliationErrorSchema, 404: reconciliationErrorSchema, 409: reconciliationErrorSchema },
+    },
+  }, async (request, reply) => {
+    const accountId = Number((request.params as { id: string }).id);
+    const body = request.body as { balance: number; asOfDate?: number; note?: string | null };
+    const asOfDate = body.asOfDate ?? Date.now();
+    if (!Number.isSafeInteger(body.balance) || body.balance <= 0) {
+      return reply.code(400).send({ error: "Opening balance must be a positive whole-rupiah amount" });
+    }
+    if (!Number.isSafeInteger(asOfDate) || asOfDate < 0 || asOfDate > Date.now()) {
+      return reply.code(400).send({ error: "asOfDate must be a current or historical timestamp" });
+    }
+
+    const [account] = await db.select({
+      id: accounts.id,
+      name: accounts.name,
+      type: accounts.type,
+      liquidityClass: accounts.liquidityClass,
+      systemKey: accounts.systemKey,
+      isActive: accounts.isActive,
+    }).from(accounts).where(eq(accounts.id, accountId)).limit(1);
+    if (!account) return reply.code(404).send({ error: "Account not found" });
+    if (!account.isActive || !["asset", "liability"].includes(account.type) || account.systemKey) {
+      return reply.code(400).send({ error: "Opening balances are available only for active user asset and liability accounts" });
+    }
+    const [existingLine] = await db.select({ id: transactionLines.id }).from(transactionLines)
+      .where(eq(transactionLines.accountId, accountId)).limit(1);
+    if (existingLine) return reply.code(409).send({ error: "This account already has ledger activity; use Reconcile to align it instead" });
+
+    const note = body.note?.trim() || `Starting balance when ${account.name} was added`;
+    try {
+      const prepared = await prepareBalanceAdjustmentJournal({
+        date: asOfDate,
+        description: `Opening balance · ${account.name}`,
+        note,
+        items: [{
+          accountId: account.id,
+          accountName: account.name,
+          accountType: account.type as "asset" | "liability",
+          liquidityClass: account.liquidityClass,
+          difference: body.balance,
+        }],
+      });
+      if (!prepared) return reply.code(400).send({ error: "Opening balance must be greater than zero" });
+
+      const result = db.transaction((tx) => {
+        const [concurrentLine] = tx.select({ id: transactionLines.id }).from(transactionLines)
+          .where(eq(transactionLines.accountId, accountId)).limit(1).all();
+        if (concurrentLine) throw new Error("This account already has ledger activity; use Reconcile to align it instead");
+        const transactionId = insertPreparedJournalEntrySync(tx, prepared);
+        const session = tx.insert(reconciliationSessions).values({
+          asOfDate: new Date(asOfDate),
+          status: "adjusted",
+          kind: "opening_balance",
+          note,
+        }).returning().all()[0];
+        if (!session) throw new Error("Failed to record opening balance evidence");
+        const item = {
+          sessionId: session.id,
+          accountId,
+          ledgerBalance: 0,
+          actualBalance: body.balance,
+          difference: body.balance,
+          status: "adjusted",
+          correctionTransactionId: transactionId,
+        };
+        tx.insert(reconciliationItems).values(item).run();
+        tx.insert(auditLogs).values({
+          entityType: "reconciliation_session",
+          entityId: session.id,
+          action: "create_opening_balance",
+          afterSnapshot: Buffer.from(JSON.stringify({ session, item, transactionId })),
+        }).run();
+        return { session, transactionId };
+      });
+      await invalidateOnTransactionMutation({
+        transactionId: result.transactionId,
+        affectedAccountIds: prepared.accountIds,
+        affectedPeriodIds: prepared.periodId != null ? [prepared.periodId] : undefined,
+        revisionBumped: true,
+      });
+      return reply.code(201).send({
+        success: true as const,
+        accountId,
+        balance: body.balance,
+        transactionId: result.transactionId,
+        session: result.session,
+        message: "Opening balance recorded as a separate equity adjustment, not income",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to set opening balance";
+      if (message.includes("already has ledger activity")) return reply.code(409).send({ error: message });
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  // Reconciliation history is auditable balance evidence and links any posted adjustment journal.
   fastify.get("/api/reconciliation", {
     schema: { operationId: "listReconciliation", tags: ["reconciliation"], querystring: z.object({ limit: z.string().regex(/^\d+$/).optional() }), response: { 200: reconciliationHistorySchema, 400: reconciliationErrorSchema } },
   }, async (request, reply) => {
@@ -504,11 +663,13 @@ export default async function (fastify: FastifyInstance) {
 
   // Reconciliation endpoint
   fastify.post("/api/reconciliation", {
-    schema: { operationId: "createReconciliation", tags: ["reconciliation"], body: reconciliationBodySchema, response: { 201: reconciliationResultSchema, 400: reconciliationErrorSchema, 500: reconciliationErrorSchema } },
+    schema: { operationId: "createReconciliation", tags: ["reconciliation"], body: reconciliationBodySchema, response: { 201: reconciliationResultSchema, 400: reconciliationErrorSchema, 409: reconciliationErrorSchema, 500: reconciliationErrorSchema } },
   }, async (request, reply) => {
-    const { balances, asOfDate: requestedAsOf } = request.body as {
+    const { balances, asOfDate: requestedAsOf, confirmed, note } = request.body as {
       balances: Array<{ accountId: number; actualBalance: number }>;
       asOfDate?: number;
+      confirmed?: boolean;
+      note?: string | null;
     };
 
     if (!Array.isArray(balances) || balances.length === 0) {
@@ -531,7 +692,7 @@ export default async function (fastify: FastifyInstance) {
 
     try {
       const accountRows = await db
-        .select({ id: accounts.id, name: accounts.name, type: accounts.type, isActive: accounts.isActive })
+        .select({ id: accounts.id, name: accounts.name, type: accounts.type, liquidityClass: accounts.liquidityClass, isActive: accounts.isActive })
         .from(accounts)
         .where(inArray(accounts.id, accountIds));
       if (accountRows.length !== accountIds.length) {
@@ -546,43 +707,33 @@ export default async function (fastify: FastifyInstance) {
         });
       }
 
+      const initialItems = calculateReconciliationItemsSync(db, balances, accountRows, asOfDate);
+      const changedItems = initialItems.filter((item) => item.difference !== 0);
+      if (changedItems.length > 0 && confirmed !== true) {
+        return reply.code(400).send({ error: "Confirm posting the displayed differences as balance adjustments" });
+      }
+      const prepared = changedItems.length > 0
+        ? await prepareBalanceAdjustmentJournal({
+          date: asOfDate,
+          description: "Balance reconciliation adjustment",
+          note: note?.trim() || null,
+          items: changedItems,
+        })
+        : null;
+
       const result = db.transaction((tx) => {
-        const items = balances.map((item) => {
-          const account = accountRows.find((row) => row.id === item.accountId)!;
-          const sums = tx
-            .select({
-              debit: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-              credit: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
-            })
-            .from(transactionLines)
-            .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
-            .where(and(
-              eq(transactionLines.accountId, item.accountId),
-              sql`${transactions.date} <= ${asOfDate}`,
-              sql`${transactions.status} <> 'draft'`,
-            ))
-            .all()[0];
-          const calculated = calculateReconciliationItem({
-            accountType: account.type as "asset" | "liability",
-            debit: Number(sums?.debit ?? 0),
-            credit: Number(sums?.credit ?? 0),
-            actualBalance: item.actualBalance,
-          });
-          return {
-            accountId: item.accountId,
-            accountName: account.name,
-            ledgerBalance: calculated.ledgerBalance,
-            actualBalance: item.actualBalance,
-            difference: calculated.difference,
-            status: calculated.status,
-          };
-        });
-        const allMatched = items.every((item) => item.difference === 0);
+        const items = calculateReconciliationItemsSync(tx, balances, accountRows, asOfDate);
+        if (items.some((item, index) => item.ledgerBalance !== initialItems[index]?.ledgerBalance)) {
+          throw new Error("Balances changed while preparing reconciliation; review and retry");
+        }
+        const adjustmentTransactionId = prepared == null ? null : insertPreparedJournalEntrySync(tx, prepared);
         const session = tx
           .insert(reconciliationSessions)
           .values({
             asOfDate: new Date(asOfDate),
-            status: allMatched ? "reconciled" : "needs_classification",
+            status: adjustmentTransactionId == null ? "reconciled" : "adjusted",
+            kind: adjustmentTransactionId == null ? "control" : "adjustment",
+            note: note?.trim() || null,
           })
           .returning()
           .all()[0];
@@ -595,7 +746,8 @@ export default async function (fastify: FastifyInstance) {
             ledgerBalance: item.ledgerBalance,
             actualBalance: item.actualBalance,
             difference: item.difference,
-            status: item.status,
+            status: item.difference === 0 ? "matched" : adjustmentTransactionId == null ? "needs_classification" : "adjusted",
+            correctionTransactionId: item.difference === 0 ? null : adjustmentTransactionId,
           })))
           .returning()
           .all();
@@ -603,23 +755,37 @@ export default async function (fastify: FastifyInstance) {
           entityType: "reconciliation_session",
           entityId: session.id,
           action: "create",
-          afterSnapshot: Buffer.from(JSON.stringify({ session, items })),
+          afterSnapshot: Buffer.from(JSON.stringify({ session, items, adjustmentTransactionId })),
         }).run();
-        return { session, items: insertedItems.map((row, index) => ({ ...row, accountName: items[index].accountName })) };
+        return {
+          session,
+          items: insertedItems.map((row, index) => ({ ...row, accountName: items[index].accountName })),
+          adjustmentTransactionId,
+        };
       });
-      const requiresClassification = result.items.some((item) => item.difference !== 0);
+      if (result.adjustmentTransactionId != null && prepared != null) {
+        await invalidateOnTransactionMutation({
+          transactionId: result.adjustmentTransactionId,
+          affectedAccountIds: prepared.accountIds,
+          affectedPeriodIds: prepared.periodId != null ? [prepared.periodId] : undefined,
+          revisionBumped: true,
+        });
+      }
       return reply.code(201).send({
-        success: !requiresClassification,
-        requiresClassification,
+        success: true,
+        requiresClassification: false,
         session: result.session,
         results: result.items,
-        message: requiresClassification
-          ? "Differences were recorded for review; no income or expense transaction was created"
-          : "Balances matched; reconciliation evidence was recorded",
+        adjustmentTransactionId: result.adjustmentTransactionId,
+        message: result.adjustmentTransactionId == null
+          ? "Balances matched; reconciliation evidence was recorded"
+          : `Balances were aligned using a separate equity adjustment (${changedItems.length} account${changedItems.length === 1 ? "" : "s"}); no income, expense, budget actual, or ordinary cash flow was created`,
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to record reconciliation";
+      if (message.includes("Balances changed while preparing")) return reply.code(409).send({ error: message });
       fastify.log.error(err);
-      return reply.code(500).send({ error: "Failed to record reconciliation" });
+      return reply.code(400).send({ error: message });
     }
   });
 
@@ -662,9 +828,9 @@ export default async function (fastify: FastifyInstance) {
     }
   });
 
-  // A reconciliation is control evidence, not a journal. If an entered bank
-  // balance was wrong, retain that evidence and explicitly void it rather than
-  // deleting it or manufacturing an accounting reversal.
+  // Matched control sessions are evidence only and can be voided. Sessions
+  // that posted balance adjustments are immutable; a later reconciliation
+  // records the next correction without rewriting the audit trail.
   fastify.post("/api/reconciliation/:id/void", {
     schema: { operationId: "voidReconciliation", tags: ["reconciliation"], params: z.object({ id: z.coerce.number().int().positive() }), body: z.object({ reason: z.string().trim().min(1).max(500) }).passthrough(), response: { 200: reconciliationSessionSchema, 400: reconciliationErrorSchema, 404: reconciliationErrorSchema, 409: reconciliationErrorSchema } },
   }, async (request, reply) => {
@@ -682,8 +848,8 @@ export default async function (fastify: FastifyInstance) {
         const session = tx.select().from(reconciliationSessions)
           .where(eq(reconciliationSessions.id, sessionId)).limit(1).all()[0];
         if (!session) throw new Error("Reconciliation session not found");
-        if (session.kind === "recovery") {
-          throw new Error("Recovery reconciliations cannot be voided; create a later recovery correction so the ledger remains auditable");
+        if (session.kind !== "control") {
+          throw new Error("Posted balance adjustments cannot be voided; create a later reconciliation so the ledger remains auditable");
         }
         if (session.lifecycleStatus !== "active") throw new Error("Reconciliation session is already voided");
         const updated = tx.update(reconciliationSessions)

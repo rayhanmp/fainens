@@ -81,6 +81,7 @@ const SYSTEM_KEYS = {
   autoIncome: "auto-income",
   autoExpense: "auto-expense",
   historicalRecoveryEquity: "historical-recovery-equity",
+  balanceAdjustmentEquity: "balance-adjustment-equity",
 } as const;
 
 async function getOrCreateSystemAccount(
@@ -141,6 +142,16 @@ export async function getOrCreateHistoricalRecoveryEquityAccount(dbLike: any = d
   return getOrCreateSystemAccount(
     SYSTEM_KEYS.historicalRecoveryEquity,
     "Historical recovery adjustment",
+    "equity",
+    dbLike,
+  );
+}
+
+/** Equity counterpart for user-confirmed opening balances and routine reconciliations. */
+export async function getOrCreateBalanceAdjustmentEquityAccount(dbLike: any = defaultDb): Promise<{ id: number }> {
+  return getOrCreateSystemAccount(
+    SYSTEM_KEYS.balanceAdjustmentEquity,
+    "Balance adjustments",
     "equity",
     dbLike,
   );
@@ -492,8 +503,8 @@ export async function prepareJournalEntry(
     if (account?.liquidityClass !== "cash_equivalent" && line.cashFlowClass != null) {
       throw new Error(`cashFlowClass may be set only on cash-equivalent account lines (account ${line.accountId})`);
     }
-    if (line.cashFlowClass === "recovery" && input.txType !== "historical_recovery_adjustment") {
-      throw new Error("cashFlowClass recovery is reserved for the recovery reconciliation workflow");
+    if (line.cashFlowClass === "recovery" && !["historical_recovery_adjustment", "balance_adjustment"].includes(input.txType ?? "manual")) {
+      throw new Error("cashFlowClass recovery is reserved for balance-adjustment workflows");
     }
   }
   const accountTypeById = new Map([...accountById].map(([id, account]) => [id, account.type]));

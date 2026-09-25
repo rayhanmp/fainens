@@ -316,13 +316,13 @@ export const storageDeletionOutbox = sqliteTable("storage_deletion_outbox", {
 export const reconciliationSessions = sqliteTable("reconciliation_session", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   asOfDate: integer("as_of_date", { mode: "timestamp_ms" }).notNull(),
-  status: text("status").notNull(), // reconciled | needs_classification
+  status: text("status").notNull(), // reconciled | adjusted | needs_classification
   /** Control-evidence lifecycle; a void never alters the ledger. */
   lifecycleStatus: text("lifecycle_status").notNull().default("active"), // active | voided
   voidedAt: integer("voided_at", { mode: "timestamp_ms" }),
   voidReason: text("void_reason"),
-  /** A control snapshot never posts; recovery snapshots may post one disclosed bridge journal. */
-  kind: text("kind").notNull().default("control"), // control | recovery
+  /** Periodic and opening-balance snapshots may post disclosed balance-adjustment journals. */
+  kind: text("kind").notNull().default("control"), // control | recovery | adjustment | opening_balance
   note: text("note"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
@@ -340,7 +340,7 @@ export const reconciliationItems = sqliteTable("reconciliation_item", {
   ledgerBalance: integer("ledger_balance").notNull(),
   actualBalance: integer("actual_balance").notNull(),
   difference: integer("difference").notNull(),
-  status: text("status").notNull(), // matched | needs_classification
+  status: text("status").notNull(), // matched | adjusted | needs_classification
   correctionTransactionId: integer("correction_transaction_id")
     .references(() => transactions.id, { onDelete: "set null" }),
 }, (table) => ({

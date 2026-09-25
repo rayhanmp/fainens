@@ -4411,6 +4411,256 @@
         }
       }
     },
+    "/api/accounts/{id}/opening-balance": {
+      "post": {
+        "operationId": "setAccountOpeningBalance",
+        "tags": [
+          "accounts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "balance": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "asOfDate": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "note": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "balance"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "accountId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "balance": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "transactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "session": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "asOfDate": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "reconciled",
+                            "adjusted",
+                            "needs_classification",
+                            "recovered"
+                          ]
+                        },
+                        "lifecycleStatus": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "voided"
+                          ]
+                        },
+                        "voidedAt": {
+                          "nullable": true,
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "voidReason": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "control",
+                            "recovery",
+                            "adjustment",
+                            "opening_balance"
+                          ]
+                        },
+                        "note": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "asOfDate",
+                        "status",
+                        "lifecycleStatus",
+                        "kind",
+                        "createdAt"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "accountId",
+                    "balance",
+                    "transactionId",
+                    "session",
+                    "message"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reconciliation": {
       "get": {
         "operationId": "listReconciliation",
@@ -4464,6 +4714,7 @@
                             "type": "string",
                             "enum": [
                               "reconciled",
+                              "adjusted",
                               "needs_classification",
                               "recovered"
                             ]
@@ -4498,7 +4749,9 @@
                             "type": "string",
                             "enum": [
                               "control",
-                              "recovery"
+                              "recovery",
+                              "adjustment",
+                              "opening_balance"
                             ]
                           },
                           "note": {
@@ -4555,6 +4808,7 @@
                                   "type": "string",
                                   "enum": [
                                     "matched",
+                                    "adjusted",
                                     "needs_classification"
                                   ]
                                 },
@@ -4659,6 +4913,14 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "confirmed": {
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   }
                 },
                 "required": [
@@ -4709,6 +4971,7 @@
                           "type": "string",
                           "enum": [
                             "reconciled",
+                            "adjusted",
                             "needs_classification",
                             "recovered"
                           ]
@@ -4743,7 +5006,9 @@
                           "type": "string",
                           "enum": [
                             "control",
-                            "recovery"
+                            "recovery",
+                            "adjustment",
+                            "opening_balance"
                           ]
                         },
                         "note": {
@@ -4811,6 +5076,7 @@
                             "type": "string",
                             "enum": [
                               "matched",
+                              "adjusted",
                               "needs_classification"
                             ]
                           },
@@ -4832,6 +5098,12 @@
                         "additionalProperties": {}
                       }
                     },
+                    "adjustmentTransactionId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "message": {
                       "type": "string"
                     }
@@ -4849,6 +5121,25 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -4931,18 +5222,18 @@
                     "minimum": 0,
                     "maximum": 9007199254740991
                   },
-                  "acknowledgement": {
-                    "type": "string"
-                  },
-                  "note": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "confirmed": {
                     "type": "boolean",
                     "enum": [
                       true
                     ]
+                  },
+                  "note": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "acknowledgement": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -4994,6 +5285,7 @@
                           "type": "string",
                           "enum": [
                             "reconciled",
+                            "adjusted",
                             "needs_classification",
                             "recovered"
                           ]
@@ -5028,7 +5320,9 @@
                           "type": "string",
                           "enum": [
                             "control",
-                            "recovery"
+                            "recovery",
+                            "adjustment",
+                            "opening_balance"
                           ]
                         },
                         "note": {
@@ -5096,6 +5390,7 @@
                             "type": "string",
                             "enum": [
                               "matched",
+                              "adjusted",
                               "needs_classification"
                             ]
                           },
@@ -5250,6 +5545,7 @@
                       "type": "string",
                       "enum": [
                         "reconciled",
+                        "adjusted",
                         "needs_classification",
                         "recovered"
                       ]
@@ -5284,7 +5580,9 @@
                       "type": "string",
                       "enum": [
                         "control",
-                        "recovery"
+                        "recovery",
+                        "adjustment",
+                        "opening_balance"
                       ]
                     },
                     "note": {
@@ -5431,7 +5729,7 @@
                       "color": {
                         "nullable": true,
                         "type": "string",
-                        "maxLength": 20
+                        "pattern": "^#[0-9A-Fa-f]{6}$"
                       },
                       "reportingAccountId": {
                         "nullable": true,
@@ -5505,7 +5803,7 @@
                   "color": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 20
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
                   },
                   "reportingAccountId": {
                     "nullable": true,
@@ -5542,7 +5840,7 @@
                     "color": {
                       "nullable": true,
                       "type": "string",
-                      "maxLength": 20
+                      "pattern": "^#[0-9A-Fa-f]{6}$"
                     },
                     "reportingAccountId": {
                       "nullable": true,
@@ -5570,6 +5868,25 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -5649,7 +5966,7 @@
                     "color": {
                       "nullable": true,
                       "type": "string",
-                      "maxLength": 20
+                      "pattern": "^#[0-9A-Fa-f]{6}$"
                     },
                     "reportingAccountId": {
                       "nullable": true,
@@ -5741,7 +6058,7 @@
                   "color": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 20
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
                   },
                   "reportingAccountId": {
                     "nullable": true,
@@ -5787,7 +6104,7 @@
                     "color": {
                       "nullable": true,
                       "type": "string",
-                      "maxLength": 20
+                      "pattern": "^#[0-9A-Fa-f]{6}$"
                     },
                     "reportingAccountId": {
                       "nullable": true,
@@ -5834,6 +6151,25 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -6001,7 +6337,7 @@
                         "color": {
                           "nullable": true,
                           "type": "string",
-                          "maxLength": 20
+                          "pattern": "^#[0-9A-Fa-f]{6}$"
                         },
                         "reportingAccountId": {
                           "nullable": true,
@@ -6159,7 +6495,7 @@
                     "color": {
                       "nullable": true,
                       "type": "string",
-                      "maxLength": 20
+                      "pattern": "^#[0-9A-Fa-f]{6}$"
                     },
                     "reportingAccountId": {
                       "nullable": true,
@@ -7410,6 +7746,27 @@
                       "coverageReason": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "budgetNote": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "savingsTargetAmount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "savingsTargetMode": {
+                        "type": "string",
+                        "enum": [
+                          "amount",
+                          "income_percent"
+                        ]
+                      },
+                      "savingsTargetRate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
                       }
                     },
                     "required": [
@@ -7552,6 +7909,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -7656,6 +8034,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -7839,6 +8238,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     },
                     "summary": {
                       "nullable": true
@@ -8042,6 +8462,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -8146,6 +8587,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -8522,6 +8984,27 @@
                           "coverageReason": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "budgetNote": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "savingsTargetAmount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "savingsTargetMode": {
+                            "type": "string",
+                            "enum": [
+                              "amount",
+                              "income_percent"
+                            ]
+                          },
+                          "savingsTargetRate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
                           }
                         },
                         "required": [
@@ -8642,6 +9125,27 @@
                           "coverageReason": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "budgetNote": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "savingsTargetAmount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "savingsTargetMode": {
+                            "type": "string",
+                            "enum": [
+                              "amount",
+                              "income_percent"
+                            ]
+                          },
+                          "savingsTargetRate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
                           }
                         },
                         "required": [
@@ -8849,6 +9353,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -9032,6 +9557,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -9215,6 +9761,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -9398,6 +9965,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -9581,6 +10169,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -9789,6 +10398,27 @@
                     "coverageReason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
                     }
                   },
                   "required": [
@@ -9881,6 +10511,27 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "budgetNote": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "savingsTargetAmount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "savingsTargetMode": {
+                          "type": "string",
+                          "enum": [
+                            "amount",
+                            "income_percent"
+                          ]
+                        },
+                        "savingsTargetRate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
                         "coverage": {
                           "type": "object",
                           "properties": {
@@ -9959,6 +10610,10 @@
                               "plannedAmount": {
                                 "type": "number"
                               },
+                              "note": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "categoryName": {
                                 "type": "string"
                               },
@@ -9989,6 +10644,10 @@
                         "percentOfIncome",
                         "coverageStatus",
                         "coverageReason",
+                        "budgetNote",
+                        "savingsTargetAmount",
+                        "savingsTargetMode",
+                        "savingsTargetRate",
                         "coverage",
                         "plans"
                       ],
@@ -10025,6 +10684,27 @@
                           "coverageReason": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "budgetNote": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "savingsTargetAmount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "savingsTargetMode": {
+                            "type": "string",
+                            "enum": [
+                              "amount",
+                              "income_percent"
+                            ]
+                          },
+                          "savingsTargetRate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
                           },
                           "coverage": {
                             "type": "object",
@@ -10104,6 +10784,10 @@
                                 "plannedAmount": {
                                   "type": "number"
                                 },
+                                "note": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
                                 "categoryName": {
                                   "type": "string"
                                 },
@@ -10134,6 +10818,10 @@
                           "percentOfIncome",
                           "coverageStatus",
                           "coverageReason",
+                          "budgetNote",
+                          "savingsTargetAmount",
+                          "savingsTargetMode",
+                          "savingsTargetRate",
                           "coverage",
                           "plans"
                         ],
@@ -10173,6 +10861,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "note": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   }
                 },
                 "required": [
@@ -10209,6 +10902,10 @@
                     },
                     "plannedAmount": {
                       "type": "number"
+                    },
+                    "note": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "categoryName": {
                       "type": "string"
@@ -10904,6 +11601,399 @@
         }
       }
     },
+    "/api/budgets/periods/{periodId}": {
+      "patch": {
+        "operationId": "updateBudgetPeriodPlan",
+        "tags": [
+          "budgets"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "budgetNote": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "savingsTargetAmount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "savingsTargetMode": {
+                    "type": "string",
+                    "enum": [
+                      "amount",
+                      "income_percent"
+                    ]
+                  },
+                  "savingsTargetRate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "periodId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "budgetNote": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "savingsTargetAmount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "savingsTargetMode": {
+                      "type": "string",
+                      "enum": [
+                        "amount",
+                        "income_percent"
+                      ]
+                    },
+                    "savingsTargetRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "periodId",
+                    "budgetNote",
+                    "savingsTargetAmount",
+                    "savingsTargetMode",
+                    "savingsTargetRate"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/budgets/periods/{periodId}/copy": {
+      "post": {
+        "operationId": "copyBudgetPeriodPlan",
+        "tags": [
+          "budgets"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourcePeriodId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "sourcePeriodId"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "copied": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "skipped": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "copied",
+                    "skipped"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/budgets/bulk": {
+      "post": {
+        "operationId": "createBudgetLines",
+        "tags": [
+          "budgets"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "periodId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "items": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "categoryId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "plannedAmount": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "note": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 1000
+                        }
+                      },
+                      "required": [
+                        "categoryId",
+                        "plannedAmount"
+                      ]
+                    }
+                  },
+                  "savingsTargetOverride": {
+                    "type": "object",
+                    "properties": {
+                      "savingsTargetAmount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "savingsTargetMode": {
+                        "type": "string",
+                        "enum": [
+                          "amount",
+                          "income_percent"
+                        ]
+                      },
+                      "savingsTargetRate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "savingsTargetAmount",
+                      "savingsTargetMode",
+                      "savingsTargetRate"
+                    ]
+                  }
+                },
+                "required": [
+                  "periodId",
+                  "items"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "created"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/budgets/{id}": {
       "patch": {
         "operationId": "updateBudget",
@@ -10926,6 +12016,11 @@
                     "type": "integer",
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
+                  },
+                  "note": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   }
                 }
               }
@@ -10969,6 +12064,10 @@
                     },
                     "plannedAmount": {
                       "type": "number"
+                    },
+                    "note": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "categoryName": {
                       "type": "string"
@@ -15503,6 +16602,9 @@
                     "netChange": {
                       "type": "number"
                     },
+                    "balanceAdjustments": {
+                      "type": "number"
+                    },
                     "historicalRecoveryBridge": {
                       "type": "number"
                     },
@@ -16200,6 +17302,12 @@
                     "totalOutgoing": {
                       "type": "number"
                     },
+                    "balanceAdjustments": {
+                      "type": "number"
+                    },
+                    "historicalRecoveryBridge": {
+                      "type": "number"
+                    },
                     "closingBalance": {
                       "type": "number"
                     },
@@ -16406,6 +17514,8 @@
                     "previousBalance",
                     "totalIncoming",
                     "totalOutgoing",
+                    "balanceAdjustments",
+                    "historicalRecoveryBridge",
                     "closingBalance",
                     "reportHash",
                     "incomeBySource",
@@ -26780,6 +27890,121 @@
                     "error"
                   ],
                   "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/insights/budget-draft": {
+      "post": {
+        "operationId": "generateBudgetDraftInsight",
+        "tags": [
+          "insights"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "periodName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "income": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "currentSavingsTarget": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "proposedSavingsTarget": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "categories": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "plannedAmount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "note": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 1000
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "plannedAmount"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "periodName",
+                  "income",
+                  "currentSavingsTarget",
+                  "proposedSavingsTarget",
+                  "categories"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "insight": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "insight"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

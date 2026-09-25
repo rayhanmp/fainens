@@ -850,7 +850,7 @@ RULES:
     // feed, while allowing audit/history consumers to opt in explicitly.
     if (includeReversalsParam !== "true") {
       baseConditions.push(
-        notInArray(transactions.txType, ["reversal", "domain_reversal", "historical_recovery_adjustment"]),
+        notInArray(transactions.txType, ["reversal", "domain_reversal", "historical_recovery_adjustment", "balance_adjustment"]),
         ne(transactions.status, "reversed"),
       );
     }
@@ -1220,6 +1220,7 @@ RULES:
         "paylater_recognition", "paylater_interest", "paylater_settlement",
         "loan_lending", "loan_payment", "loan_writeoff", "split_bill_lent", "split_bill_borrowed",
         "historical_recovery_adjustment",
+        "balance_adjustment",
       ].includes(original.txType)) {
         return reply.code(409).send({
           error: "This domain-owned transaction must use its dedicated correction workflow",

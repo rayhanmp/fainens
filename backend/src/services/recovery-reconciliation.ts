@@ -35,7 +35,7 @@ type CalculatedRecoveryItem = RecoveryBalanceInput & {
   liquidityClass: string;
   ledgerBalance: number;
   difference: number;
-  status: "matched" | "needs_classification";
+  status: "matched" | "adjusted" | "needs_classification";
 };
 
 function assertRecoveryInputs(input: {
@@ -171,7 +171,11 @@ export async function createRecoveryReconciliation(input: {
       throw new Error("Ledger changed while preparing recovery reconciliation; review and retry");
     }
     const recoveryTransactionId = prepared == null ? null : insertPreparedJournalEntrySync(tx, prepared);
-    const allMatched = currentItems.every((item) => item.difference === 0);
+    const settledItems = currentItems.map((item) => ({
+      ...item,
+      status: item.difference === 0 ? "matched" as const : "adjusted" as const,
+    }));
+    const allMatched = settledItems.every((item) => item.difference === 0);
     const session = tx.insert(reconciliationSessions).values({
       asOfDate: new Date(input.asOfDate),
       status: allMatched ? "reconciled" : "recovered",
@@ -179,7 +183,7 @@ export async function createRecoveryReconciliation(input: {
       note: input.note?.trim() || input.acknowledgement.trim(),
     }).returning().all()[0];
     if (!session) throw new Error("Failed to create recovery reconciliation session");
-    tx.insert(reconciliationItems).values(currentItems.map((item) => ({
+    tx.insert(reconciliationItems).values(settledItems.map((item) => ({
       sessionId: session.id,
       accountId: item.accountId,
       ledgerBalance: item.ledgerBalance,
@@ -211,12 +215,12 @@ export async function createRecoveryReconciliation(input: {
       afterSnapshot: Buffer.from(JSON.stringify({
         session,
         acknowledgement: input.acknowledgement.trim(),
-        items: currentItems,
+        items: settledItems,
         recoveryTransactionId,
       })),
     }).run();
     if (prepared == null) bumpFinancialRevisionSync(tx);
-    return { session, items: currentItems, recoveryTransactionId };
+    return { session, items: settledItems, recoveryTransactionId };
   });
 
   if (prepared != null && result.recoveryTransactionId != null) {

@@ -39,6 +39,25 @@ describe("exportReportToCSV", () => {
     expect(csv).toContain('"ENDING CASH","15000"');
   });
 
+  it("keeps routine balance adjustments separate from historical recovery in cash-flow exports", () => {
+    const csv = exportReportToCSV({
+      operating: [],
+      investing: [],
+      financing: [],
+      netOperating: 0,
+      netInvesting: 0,
+      netFinancing: 0,
+      netChange: 0,
+      balanceAdjustments: 159_000,
+      historicalRecoveryBridge: 25_000,
+      beginningCash: 0,
+      endingCash: 184_000,
+    });
+
+    expect(csv).toContain('"BALANCE ADJUSTMENTS (NOT CFO/CFI/CFF)","159000"');
+    expect(csv).toContain('"HISTORICAL RECOVERY BRIDGE (NOT CFO/CFI/CFF)","25000"');
+  });
+
   it("quotes CSV fields and neutralizes untrusted spreadsheet formulas", () => {
     const csv = exportReportToCSV({
       revenue: [{ name: '=HYPERLINK("https://invalid")', amount: 1_000, level: 0 }],

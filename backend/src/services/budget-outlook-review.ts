@@ -66,6 +66,7 @@ async function findLargeHistoricalPurchases(outlook: Awaited<ReturnType<typeof g
       ne(transactions.txType, "reversal"),
       ne(transactions.txType, "domain_reversal"),
       ne(transactions.txType, "historical_recovery_adjustment"),
+      ne(transactions.txType, "balance_adjustment"),
     ))
     .groupBy(transactions.id, salaryPeriods.id, transactions.date, transactions.description, transactions.categoryId, transactionCategoryAllocations.categoryId, categories.name)
     .orderBy(sql`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0) DESC`)

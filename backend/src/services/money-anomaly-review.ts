@@ -49,7 +49,7 @@ export async function scanMoneyAnomalies(): Promise<{ created: number; candidate
     // Recovery reconciliation is a deliberate, disclosed equity bridge and
     // must not be re-flagged as a legacy balancing plug. Only historic
     // reconciliation-labelled journals remain candidates for review.
-    if (haystack.includes("reconciliation") && row.txType !== "historical_recovery_adjustment") {
+    if (haystack.includes("reconciliation") && !["historical_recovery_adjustment", "balance_adjustment"].includes(row.txType)) {
       add({
         fingerprint: `legacy-reconciliation:${row.transactionId}`,
         kind: "legacy_reconciliation_plug",

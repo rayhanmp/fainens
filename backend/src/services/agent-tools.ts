@@ -47,7 +47,7 @@ const MAX_RECONCILIATION_SESSIONS = 50;
 const CURRENCY_RATE_API = "https://api.frankfurter.app";
 const CURRENCY_RATE_CACHE_TTL_MS = 5 * 60_000;
 const currencyRateCache = new Map<string, { expiresAt: number; payload: CurrencyRatePayload }>();
-const INTERNAL_CORRECTION_TX_TYPES = ["reversal", "domain_reversal", "historical_recovery_adjustment"] as const;
+const INTERNAL_CORRECTION_TX_TYPES = ["reversal", "domain_reversal", "historical_recovery_adjustment", "balance_adjustment"] as const;
 const GMAIL_PENDING_SOURCE = "gmail_bni";
 
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
@@ -385,7 +385,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
   },
   {
     name: "get_cash_flow",
-    description: "Read the canonical cash-flow statement: operating, investing, financing, recovery bridge, and coverage. Use for 'where did cash go?' rather than category spending or a P&L overview.",
+    description: "Read the canonical cash-flow statement: operating, investing, financing, separately disclosed balance adjustments, and coverage. Use for 'where did cash go?' rather than category spending or a P&L overview.",
     inputSchema: scopeSchema(),
   },
   {
@@ -1477,7 +1477,7 @@ export async function searchTransactionsTool(input: unknown) {
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
       AND t.status = 'posted'
-      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment', 'balance_adjustment')
       ${accountIdFilter == null ? sql`` : sql`AND EXISTS (SELECT 1 FROM transaction_line filter_line WHERE filter_line.transaction_id = t.id AND filter_line.account_id = ${accountIdFilter})`}
       ${categoryIdFilter == null ? sql`` : sql`AND t.category_id = ${categoryIdFilter}`}
       ${transactionType == null ? sql`` : sql`AND t.tx_type = ${transactionType}`}
@@ -1565,7 +1565,7 @@ export async function summarizeTransactionsTool(input: unknown) {
     WHERE t.date >= ${scope.startMs}
       AND t.date <= ${scope.endMs}
       AND t.status = 'posted'
-      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment', 'balance_adjustment')
       ${scope.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(scope.periodId, sql`t.period_id`)}`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
       ${accountId == null ? sql`` : sql`AND EXISTS (SELECT 1 FROM transaction_line filter_line WHERE filter_line.transaction_id = t.id AND filter_line.account_id = ${accountId})`}
@@ -1670,7 +1670,7 @@ export async function findSimilarTransactionsTool(input: unknown) {
     LEFT JOIN account a ON a.id = tl.account_id
     LEFT JOIN category c ON c.id = t.category_id
     WHERE t.status = 'posted'
-      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment')
+      AND t.tx_type NOT IN ('reversal', 'domain_reversal', 'historical_recovery_adjustment', 'balance_adjustment')
     GROUP BY t.id, t.date, t.description, t.category_id, c.name
     ORDER BY t.date DESC, t.id DESC
   `) as unknown as Array<Record<string, unknown>>;

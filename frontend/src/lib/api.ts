@@ -628,6 +628,15 @@ export const api = {
     }>) => fetchApi(`/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: number) => fetchApi(`/accounts/${id}`, { method: 'DELETE' }),
     restore: (id: number) => fetchApi(`/accounts/${id}/restore`, { method: 'POST' }),
+    setOpeningBalance: (id: number, data: { balance: number; asOfDate?: number; note?: string | null }) =>
+      fetchApi<{
+        success: true;
+        accountId: number;
+        balance: number;
+        transactionId: number;
+        session: { id: number; asOfDate: number; status: string; kind: string };
+        message: string;
+      }>(`/accounts/${id}/opening-balance`, { method: 'POST', body: JSON.stringify(data) }),
     dependencyPreview: (id: number) => fetchApi<{
       account: unknown;
       canArchive: boolean;
@@ -1694,6 +1703,7 @@ export const api = {
         netInvesting: number;
         netFinancing: number;
         netChange: number;
+        balanceAdjustments?: number;
         historicalRecoveryBridge?: number;
         beginningCash: number;
         endingCash: number;

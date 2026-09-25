@@ -79,6 +79,7 @@ const cashFlowSchema = z.object({
   netInvesting: z.number(),
   netFinancing: z.number(),
   netChange: z.number(),
+  balanceAdjustments: z.number().optional(),
   historicalRecoveryBridge: z.number().optional(),
   beginningCash: z.number(),
   endingCash: z.number(),
@@ -97,6 +98,8 @@ const monthlyReportSchema = z.object({
   previousBalance: z.number(),
   totalIncoming: z.number(),
   totalOutgoing: z.number(),
+  balanceAdjustments: z.number(),
+  historicalRecoveryBridge: z.number(),
   closingBalance: z.number(),
   reportHash: z.string().regex(/^[a-f0-9]{64}$/),
   incomeBySource: z.array(z.object({ name: z.string(), amount: z.number() }).passthrough()),
@@ -262,7 +265,6 @@ export default async function (fastify: FastifyInstance) {
         ...cashFlow.operating,
         ...cashFlow.investing,
         ...cashFlow.financing,
-        ...(cashFlow.historicalRecoveryBridge ? [{ amount: cashFlow.historicalRecoveryBridge }] : []),
       ].map((item) => item.amount);
       const totalIncoming = cashFlowAmounts.reduce((sum, amount) => sum + (amount > 0 ? amount : 0), 0);
       const totalOutgoing = cashFlowAmounts.reduce((sum, amount) => sum + (amount < 0 ? Math.abs(amount) : 0), 0);
@@ -274,6 +276,8 @@ export default async function (fastify: FastifyInstance) {
         previousBalance: cashFlow.beginningCash,
         totalIncoming,
         totalOutgoing,
+        balanceAdjustments: cashFlow.balanceAdjustments ?? 0,
+        historicalRecoveryBridge: cashFlow.historicalRecoveryBridge ?? 0,
         closingBalance: cashFlow.endingCash,
         incomeBySource: incomeStatement.revenue.filter((row) => row.amount !== 0).map((row) => ({ name: row.name, amount: row.amount })),
         expensesByCategory: facts.byCategory.filter((row) => row.spentCents !== 0).map((row) => ({ name: row.category, amount: row.spentCents })),
