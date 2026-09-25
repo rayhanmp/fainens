@@ -94,6 +94,9 @@ interface BudgetDraftLine {
   plannedAmount: string;
   note: string;
   noteOpen: boolean;
+  existingBudgetId?: number;
+  originalPlannedAmount?: number;
+  originalNote?: string | null;
 }
 
 interface Period {
@@ -280,7 +283,7 @@ function BudgetPage() {
     [selectedPeriod, subscriptionsQuery.data?.subscriptions],
   );
 
-  const handleCreateBudget = async (e: React.FormEvent) => {
+  const handleSaveBudgetDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     if (budgetDraftLines.length === 0) {
@@ -293,17 +296,26 @@ function BudgetPage() {
       setIsSubmitting(false);
       return;
     }
-    const items = budgetDraftLines.map((line) => ({
+    const lines = budgetDraftLines.map((line) => ({
+      line,
       categoryId: Number(line.categoryId),
       plannedAmount: line.plannedAmount.trim() ? parseIdNominalToInt(line.plannedAmount) : Number.NaN,
       note: line.note.trim() || null,
     }));
-    if (items.some((item) => !Number.isFinite(item.plannedAmount) || item.plannedAmount <= 0)) {
+    if (lines.some((item) => !Number.isFinite(item.plannedAmount) || item.plannedAmount <= 0)) {
       setFormError('Enter a valid amount in IDR for every budget line');
       return;
     }
+    const updates = lines.filter(({ line, plannedAmount, note }) => line.existingBudgetId != null
+      && (plannedAmount !== line.originalPlannedAmount || note !== (line.originalNote?.trim() || null)));
+    const items = lines.filter(({ line }) => line.existingBudgetId == null)
+      .map(({ categoryId, plannedAmount, note }) => ({ categoryId, plannedAmount, note }));
+    if (updates.length === 0 && items.length === 0) {
+      setFormError('Change an existing amount or note, or add a category before saving');
+      return;
+    }
 
-    const plannedTotalAfterSave = totalBudgeted + items.reduce((sum, item) => sum + item.plannedAmount, 0);
+    const plannedTotalAfterSave = plannedBudgetAfterDraft;
     let savingsTargetOverride: {
       savingsTargetAmount: number;
       savingsTargetMode: 'amount' | 'income_percent';
@@ -331,11 +343,21 @@ function BudgetPage() {
 
     setIsSubmitting(true);
     try {
-      await createBudgetLinesMutation.mutateAsync({
-        periodId: parseInt(selectedPeriodId, 10),
-        items,
-        ...(savingsTargetOverride && { savingsTargetOverride }),
-      });
+      await Promise.all([
+        ...updates.map(({ line, plannedAmount, note }) => updateBudgetMutation.mutateAsync({
+          id: line.existingBudgetId!,
+          data: { plannedAmount, note },
+        })),
+        ...(items.length > 0 ? [createBudgetLinesMutation.mutateAsync({
+          periodId: parseInt(selectedPeriodId, 10),
+          items,
+          ...(savingsTargetOverride && { savingsTargetOverride }),
+        })] : []),
+        ...(items.length === 0 && savingsTargetOverride ? [updateBudgetPeriodPlanMutation.mutateAsync({
+          periodId: parseInt(selectedPeriodId, 10),
+          data: savingsTargetOverride,
+        })] : []),
+      ]);
       closeBudgetModal();
     } catch (err) {
       setFormError((err as Error).message);
@@ -474,7 +496,16 @@ function BudgetPage() {
 
   const openBudgetModal = () => {
     if (isPeriodClosed) return;
-    setBudgetDraftLines([]);
+    setBudgetDraftLines(budgetRows.map((row) => ({
+      id: -row.id,
+      categoryId: String(row.categoryId),
+      plannedAmount: formatIdNominalInput(String(row.plannedAmount)),
+      note: row.note ?? '',
+      noteOpen: false,
+      existingBudgetId: row.id,
+      originalPlannedAmount: row.plannedAmount,
+      originalNote: row.note,
+    })));
     setBudgetDraftPresetNotice('');
     setDraftMenuId(null);
     setReviewComparePeriodId(previousBudgetPeriod?.id.toString() ?? '');
@@ -707,7 +738,15 @@ function BudgetPage() {
     : periodIncome > 0 ? (savingsTargetAmount / periodIncome) * 100 : 0;
   const potentialSavingsAmount = periodIncome - totalBudgeted;
   const unassignedIncome = potentialSavingsAmount - savingsTargetAmount;
-  const draftBudgetTotal = budgetDraftLines.reduce((sum, line) => sum + (parseIdNominalToInt(line.plannedAmount) || 0), 0);
+  const draftBudgetTotal = budgetDraftLines.reduce((sum, line) => {
+    const plannedAmount = parseIdNominalToInt(line.plannedAmount) || 0;
+    return sum + plannedAmount - (line.originalPlannedAmount ?? 0);
+  }, 0);
+  const hasBudgetDraftChanges = budgetDraftLines.some((line) => {
+    if (line.existingBudgetId == null) return true;
+    const plannedAmount = parseIdNominalToInt(line.plannedAmount) || 0;
+    return plannedAmount !== line.originalPlannedAmount || (line.note.trim() || null) !== (line.originalNote?.trim() || null);
+  });
   const categoryBudgetLimit = isPeriodTracked && periodIncome > 0 ? periodIncome - savingsTargetAmount : null;
   const availableBudgetBeforeDraft = categoryBudgetLimit == null ? null : categoryBudgetLimit - totalBudgeted;
   const availableBudgetAfterDraft = availableBudgetBeforeDraft == null ? null : availableBudgetBeforeDraft - draftBudgetTotal;
@@ -722,26 +761,19 @@ function BudgetPage() {
   const savingsTargetWillAdjust = isPeriodTracked && periodIncome > 0
     && plannedBudgetAfterDraft > periodIncome - savingsTargetAmount;
   const budgetChartPalette = ['#3157c8', '#18a27a', '#e39a2b', '#8b5cf6', '#e05b72', '#2999b5', '#82913a'];
-  const budgetReviewAllocations = [
-    ...budgetRows.map((row, index) => ({
-      key: `existing-${row.id}`,
-      categoryId: row.categoryId,
-      categoryName: row.categoryName,
-      plannedAmount: row.plannedAmount,
-      note: row.note ?? null,
-      isNew: false,
-      color: categories.find((category) => category.id === row.categoryId)?.color ?? budgetChartPalette[index % budgetChartPalette.length],
-    })),
-    ...budgetDraftLines.map((line, index) => ({
-      key: `draft-${line.id}`,
-      categoryId: Number(line.categoryId),
-      categoryName: categories.find((category) => String(category.id) === line.categoryId)?.name ?? 'Category',
-      plannedAmount: parseIdNominalToInt(line.plannedAmount) || 0,
-      note: line.note || null,
-      isNew: true,
-      color: categories.find((category) => String(category.id) === line.categoryId)?.color ?? budgetChartPalette[(budgetRows.length + index) % budgetChartPalette.length],
-    })),
-  ].sort((left, right) => right.plannedAmount - left.plannedAmount);
+  const budgetReviewAllocations = budgetDraftLines.map((line, index) => ({
+    key: `${line.existingBudgetId == null ? 'draft' : 'existing'}-${line.id}`,
+    categoryId: Number(line.categoryId),
+    categoryName: categories.find((category) => String(category.id) === line.categoryId)?.name ?? 'Category',
+    plannedAmount: parseIdNominalToInt(line.plannedAmount) || 0,
+    note: line.note || null,
+    isNew: line.existingBudgetId == null,
+    isChanged: line.existingBudgetId != null && (
+      (parseIdNominalToInt(line.plannedAmount) || 0) !== line.originalPlannedAmount
+      || (line.note.trim() || null) !== (line.originalNote?.trim() || null)
+    ),
+    color: categories.find((category) => String(category.id) === line.categoryId)?.color ?? budgetChartPalette[index % budgetChartPalette.length],
+  })).sort((left, right) => right.plannedAmount - left.plannedAmount);
   const incomePlanCategoryShare = periodIncome > 0 ? Math.min(100, plannedBudgetAfterDraft / periodIncome * 100) : 0;
   const incomePlanSavingsShare = periodIncome > 0
     ? Math.min(Math.max(0, 100 - incomePlanCategoryShare), plannedSavingsTargetAfterDraft / periodIncome * 100)
@@ -1626,10 +1658,14 @@ function BudgetPage() {
         <Modal
           isOpen={isModalOpen}
           onClose={closeBudgetModal}
-          title={isBudgetReviewStep ? 'Review your budget' : 'Build your budget'}
+          title={isBudgetReviewStep
+            ? budgetRows.length > 0 ? 'Review your budget changes' : 'Review your budget'
+            : budgetRows.length > 0 ? 'Modify your budget' : 'Build your budget'}
           subtitle={isBudgetReviewStep
             ? `Review the plan for ${selectedPeriod?.name} before saving.`
-            : `Add categories for ${selectedPeriod?.name}. Available budget already accounts for your savings target.`}
+            : budgetRows.length > 0
+              ? `Edit current allocations or add categories for ${selectedPeriod?.name}.`
+              : `Add categories for ${selectedPeriod?.name}. Available budget already accounts for your savings target.`}
           size="xl"
           footer={(
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -1642,7 +1678,7 @@ function BudgetPage() {
                   <span className="text-sm text-[var(--ref-on-surface-variant)]">
                     {isBudgetReviewStep
                       ? `${budgetReviewAllocations.length} categories · ${formatCurrency(plannedBudgetAfterDraft)} planned`
-                      : `${budgetDraftLines.length} categor${budgetDraftLines.length === 1 ? 'y' : 'ies'} · ${formatCurrency(draftBudgetTotal)} planned`}
+                      : `${budgetDraftLines.length} categor${budgetDraftLines.length === 1 ? 'y' : 'ies'} · ${formatCurrency(plannedBudgetAfterDraft)} total planned`}
                   </span>
                   <span className={cn('text-sm font-semibold', budgetFooterRemaining != null && budgetFooterRemaining < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]')}>
                   {isBudgetReviewStep && periodIncome > 0
@@ -1661,8 +1697,8 @@ function BudgetPage() {
                 {isBudgetReviewStep ? (
                   <>
                     <Button type="button" variant="secondary" onClick={() => { setIsBudgetReviewStep(false); setFormError(''); }}>Back</Button>
-                    <Button type="submit" form="create-budget-form" isLoading={isSubmitting} disabled={budgetDraftLines.length === 0} className="min-w-[140px]">
-                      Save budget
+                    <Button type="submit" form="create-budget-form" isLoading={isSubmitting} disabled={!hasBudgetDraftChanges} className="min-w-[140px]">
+                      {budgetRows.length > 0 ? 'Save changes' : 'Save budget'}
                     </Button>
                   </>
                 ) : (
@@ -1678,7 +1714,7 @@ function BudgetPage() {
           <form
             id="create-budget-form"
             onSubmit={(event) => {
-              if (isBudgetReviewStep) void handleCreateBudget(event);
+              if (isBudgetReviewStep) void handleSaveBudgetDraft(event);
               else {
                 event.preventDefault();
                 continueToBudgetReview();
@@ -1911,6 +1947,7 @@ function BudgetPage() {
                               <i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: allocation.color }} />
                               <span className="truncate">{allocation.categoryName}</span>
                               {allocation.isNew && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-[var(--ref-primary)]">New</span>}
+                              {allocation.isChanged && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-[var(--color-warning)]">Edited</span>}
                             </span>
                             <div className="shrink-0 text-right">
                               <p className="font-semibold tabular-nums text-[var(--ref-on-surface)]">
@@ -2061,6 +2098,7 @@ function BudgetPage() {
                       <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_minmax(112px,0.8fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-[var(--color-border)] py-2 last:border-b-0 sm:gap-x-3">
                         <div className="min-w-0">
                           <h3 className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{categoryName}</h3>
+                          {line.existingBudgetId != null && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Current allocation · {formatCurrency(line.originalPlannedAmount ?? 0)}</p>}
                           {lineAmount > 0 && <p className="mt-0.5 truncate text-[10px] font-medium text-[var(--ref-primary)]">{allocationShare.toFixed(1)}% of planned total</p>}
                           {subscriptionAmount > 0 && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Recurring · {formatCurrency(subscriptionAmount)}</p>}
                         </div>
@@ -2105,15 +2143,17 @@ function BudgetPage() {
                                     }}
                                   >{line.note ? 'Edit note' : 'Add note'}</button>
                                 )}
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="flex min-h-10 w-full items-center px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                                  onClick={() => {
-                                    setDraftMenuId(null);
-                                    setBudgetDraftLines((current) => current.filter((item) => item.id !== line.id));
-                                  }}
-                                >Remove</button>
+                                {line.existingBudgetId == null && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="flex min-h-10 w-full items-center px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                                    onClick={() => {
+                                      setDraftMenuId(null);
+                                      setBudgetDraftLines((current) => current.filter((item) => item.id !== line.id));
+                                    }}
+                                  >Remove</button>
+                                )}
                               </div>
                             </>
                           )}
