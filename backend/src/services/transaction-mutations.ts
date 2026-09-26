@@ -1,3 +1,4 @@
+import { assertNotReallocated } from "./transaction-reallocations";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import { invalidateOnTransactionMutation } from "../cache";
@@ -62,6 +63,7 @@ function findPeriodInCandidates(
 }
 
 function assertGenericMutationAllowed(tx: any, executor: any): void {
+  assertNotReallocated(tx.id, executor);
   const reasons = getIntrinsicTransactionProtectionReasons(tx);
 
   const incomingLink = executor
@@ -341,6 +343,7 @@ export async function updateTransactionAtomically(
       .limit(1)
       .all()[0];
     if (!fresh) throw new TransactionMutationError("Transaction not found", 404);
+    if (hasProtectedAccountingChange) assertNotReallocated(transactionId, tx);
     const freshLines = tx.select().from(transactionLines)
       .where(eq(transactionLines.transactionId, transactionId)).all();
     const freshTags = tx.select({ tagId: transactionTags.tagId })

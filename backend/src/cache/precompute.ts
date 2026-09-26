@@ -1,3 +1,4 @@
+import { personalExpenseLine, personalIncomeLine } from "../services/reallocation-effects";
 import { eq, sql, and } from "drizzle-orm";
 
 import { db } from "../db/client";
@@ -148,7 +149,7 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     ? [{ total: 0 }]
     : await db
       .select({
-        total: sql<number>`coalesce(sum(${transactionLines.credit} - ${transactionLines.debit}), 0)`,
+        total: sql<number>`coalesce(sum(${personalIncomeLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
       })
       .from(transactionLines)
       .where(
@@ -169,7 +170,7 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     ? [{ total: 0 }]
     : await db
       .select({
-        total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
+        total: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
       })
       .from(transactionLines)
       .where(
@@ -259,7 +260,7 @@ export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCa
     ? [{ total: 0 }]
     : await db
       .select({
-        total: sql<number>`coalesce(sum(${transactionLines.debit} - ${transactionLines.credit}), 0)`,
+        total: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
       })
       .from(transactionLines)
       .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))

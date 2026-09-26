@@ -1,3 +1,4 @@
+import { personalExpenseLine, personalIncomeLine } from "./reallocation-effects";
 import { and, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
@@ -50,7 +51,7 @@ async function findLargeHistoricalPurchases(outlook: Awaited<ReturnType<typeof g
     description: transactions.description,
     categoryId: sql<number | null>`coalesce(${transactionCategoryAllocations.categoryId}, ${transactions.categoryId})`,
     category: categories.name,
-    amount: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
+    amount: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0)`,
   }).from(transactions)
     .innerJoin(salaryPeriods, and(
       inArray(salaryPeriods.id, periodIds),
@@ -69,7 +70,7 @@ async function findLargeHistoricalPurchases(outlook: Awaited<ReturnType<typeof g
       ne(transactions.txType, "balance_adjustment"),
     ))
     .groupBy(transactions.id, salaryPeriods.id, transactions.date, transactions.description, transactions.categoryId, transactionCategoryAllocations.categoryId, categories.name)
-    .orderBy(sql`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0) DESC`)
+    .orderBy(sql`coalesce(sum(case when ${accounts.type} = 'expense' then ${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0) DESC`)
     .limit(200);
   // Candidate selection is deliberately broad. A purchase can be material
   // even when its category has historically high totals, so do not let the

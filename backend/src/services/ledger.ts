@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { accounts, auditLogs, categories, tags, transactionCategoryAllocations, transactionLines, transactions, transactionTags } from "../db/schema";
+import { accounts, auditLogs, categories, tags, transactionCategoryAllocations, transactionLines, transactions, transactionTags, transactionReallocations } from "../db/schema";
 import { db as defaultDb } from "../db/client";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { validateJournalLines } from "./journal-validation";
@@ -599,6 +599,12 @@ export async function prepareJournalEntry(
  * caller's outer transaction.
  */
 export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJournalEntry): number {
+  const reversalOf = prepared.transactionValues.reversalOfTxId;
+  if (reversalOf != null) {
+    const linked = tx.select({ id: transactionReallocations.id }).from(transactionReallocations)
+      .where(sql`${transactionReallocations.incomingTransactionId} = ${reversalOf} OR ${transactionReallocations.outgoingTransactionId} = ${reversalOf}`).limit(1).all()[0];
+    if (linked) throw new Error("Unlink the reallocation before correcting this transaction");
+  }
   assertPreparedJournalPeriodOpenSync(tx, prepared);
   const inserted = tx
     .insert(transactions)

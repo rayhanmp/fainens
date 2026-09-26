@@ -108,6 +108,19 @@ export const transactionLines = sqliteTable("transaction_line", {
   cashFlowClass: text("cash_flow_class"), // operating | investing | financing | transfer | recovery
 });
 
+/** Personal-reporting metadata; the original journals remain unchanged. */
+export const transactionReallocations = sqliteTable("transaction_reallocation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  incomingTransactionId: integer("incoming_transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+  outgoingTransactionId: integer("outgoing_transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+  amount: integer("amount").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => [
+  uniqueIndex("reallocation_incoming_unique").on(table.incomingTransactionId),
+  uniqueIndex("reallocation_outgoing_unique").on(table.outgoingTransactionId),
+]);
+
 /** Explicit category amounts for a journal; supports multi-category journals. */
 export const transactionCategoryAllocations = sqliteTable("transaction_category_allocation", {
   id: integer("id").primaryKey({ autoIncrement: true }),

@@ -1,3 +1,4 @@
+import { personalExpenseLine, personalIncomeLine } from "./reallocation-effects";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, inArray, like, lte, ne, sql } from "drizzle-orm";
 
@@ -1468,8 +1469,8 @@ export async function searchTransactionsTool(input: unknown) {
       c.name AS category,
       COALESCE(SUM(tl.debit), 0) AS debit_cents,
       COALESCE(SUM(tl.credit), 0) AS credit_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit - tl.debit ELSE 0 END), 0) AS income_cents
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS expense_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN ${personalIncomeLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS income_cents
     FROM "transaction" t
     LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
@@ -1486,7 +1487,7 @@ export async function searchTransactionsTool(input: unknown) {
       ${scope.periodId == null ? sql`` : sql`AND ${assignedPeriodMembership(scope.periodId, sql`t.period_id`)}`}
       ${pattern == null ? sql`` : sql`AND (lower(t.description) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.notes, '')) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(t.reference, '')) LIKE ${pattern} ESCAPE '\\')`}
     GROUP BY t.id, t.date, t.description, t.reference, t.notes, t.tx_type, t.status, t.period_id, t.category_id, c.name
-    ${minAmount == null && maxAmount == null ? sql`` : minAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0)) <= ${maxAmount}` : maxAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0)) >= ${minAmount}` : sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0)) BETWEEN ${minAmount} AND ${maxAmount}`}
+    ${minAmount == null && maxAmount == null ? sql`` : minAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0)) <= ${maxAmount}` : maxAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0)) >= ${minAmount}` : sql`HAVING ABS(COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0)) BETWEEN ${minAmount} AND ${maxAmount}`}
     ORDER BY t.date DESC, t.id DESC
     LIMIT ${limit + 1}
   `) as unknown as Array<Record<string, unknown>>;
@@ -1556,8 +1557,8 @@ export async function summarizeTransactionsTool(input: unknown) {
   const rows = await db.all(sql`
     SELECT ${sql.raw(groupExpression)} AS group_key,
       COUNT(DISTINCT t.id) AS transaction_count,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit - tl.debit ELSE 0 END), 0) AS income_cents
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS expense_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN ${personalIncomeLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS income_cents
     FROM "transaction" t
     LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
@@ -1577,7 +1578,7 @@ export async function summarizeTransactionsTool(input: unknown) {
         FROM transaction_line filter_line
         INNER JOIN account filter_account ON filter_account.id = filter_line.account_id
         GROUP BY filter_line.transaction_id
-        ${minAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN filter_line.debit - filter_line.credit ELSE 0 END), 0)) <= ${maxAmount}` : maxAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN filter_line.debit - filter_line.credit ELSE 0 END), 0)) >= ${minAmount}` : sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN filter_line.debit - filter_line.credit ELSE 0 END), 0)) BETWEEN ${minAmount} AND ${maxAmount}`}
+        ${minAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN ${personalExpenseLine(sql`filter_line.transaction_id`, sql`filter_line.debit`, sql`filter_line.credit`)} ELSE 0 END), 0)) <= ${maxAmount}` : maxAmount == null ? sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN ${personalExpenseLine(sql`filter_line.transaction_id`, sql`filter_line.debit`, sql`filter_line.credit`)} ELSE 0 END), 0)) >= ${minAmount}` : sql`HAVING ABS(COALESCE(SUM(CASE WHEN filter_account.type = 'expense' THEN ${personalExpenseLine(sql`filter_line.transaction_id`, sql`filter_line.debit`, sql`filter_line.credit`)} ELSE 0 END), 0)) BETWEEN ${minAmount} AND ${maxAmount}`}
       )`}
     GROUP BY ${sql.raw(groupExpression)}
     ORDER BY expense_cents DESC, group_key ASC
@@ -1656,7 +1657,7 @@ export async function findSimilarTransactionsTool(input: unknown) {
     if (!seed) throw new Error("Seed transaction not found");
     query = query ?? seed.description;
     seedCategoryId = seed.categoryId;
-    const [amount] = await db.select({ amount: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)` })
+    const [amount] = await db.select({ amount: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0)` })
       .from(transactionLines).innerJoin(accounts, eq(transactionLines.accountId, accounts.id)).where(eq(transactionLines.transactionId, transactionId));
     amountCents = amountCents ?? Math.abs(Number(amount?.amount ?? 0));
   }
@@ -1664,7 +1665,7 @@ export async function findSimilarTransactionsTool(input: unknown) {
   const tokens = (query ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 2).slice(0, 8);
   const rows = await db.all(sql`
     SELECT t.id, t.date, t.description, t.category_id AS category_id, c.name AS category,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS expense_cents
     FROM "transaction" t
     LEFT JOIN transaction_line tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id

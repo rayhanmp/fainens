@@ -1,3 +1,4 @@
+import { assertNotReallocated, ReallocationError } from "./transaction-reallocations";
 import { createHash } from "crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
@@ -108,12 +109,21 @@ async function assertControlReconciled() {
   }
 }
 
+function assertSourceNotReallocated(id: number, executor: any) {
+  try { assertNotReallocated(id, executor); }
+  catch (error) {
+    if (error instanceof ReallocationError) throw new ReimbursementError(error.message, 409);
+    throw error;
+  }
+}
+
 async function validateDraftInput(input: CreateClaimInput, dbLike: any = db) {
   assertId(input.contactId, "contactId");
   if (!input.title?.trim()) throw new ReimbursementError("title is required");
   if (!Array.isArray(input.sources) || input.sources.length === 0) throw new ReimbursementError("At least one expense source is required");
   const unique = new Set<string>();
   for (const source of input.sources) {
+    assertSourceNotReallocated(source.sourceTransactionId, dbLike);
     assertId(source.sourceTransactionId, "sourceTransactionId");
     assertId(source.expenseLineId, "expenseLineId");
     assertPositiveInt(source.amount, "source amount");
@@ -139,6 +149,7 @@ async function claimOutstanding(claimId: number, dbLike: any = db): Promise<numb
 }
 
 async function assertSourceAvailable(source: ReimbursementSourceInput, dbLike: any = db) {
+  assertSourceNotReallocated(source.sourceTransactionId, dbLike);
   const [line] = await dbLike.select({
     id: transactionLines.id,
     transactionId: transactionLines.transactionId,
@@ -240,6 +251,7 @@ async function prepareRecognition(claim: any, sources: ReimbursementSourceInput[
 export async function createReimbursementClaim(input: CreateClaimInput) {
   await validateDraftInput(input);
   const result = db.transaction((tx) => {
+    for (const source of input.sources) assertSourceNotReallocated(source.sourceTransactionId, tx);
     const claim = tx.insert(reimbursementClaims).values({ contactId: input.contactId, title: input.title.trim(), dueDate: input.dueDate ? new Date(input.dueDate) : null, notes: input.notes ?? null }).returning().all()[0];
     if (!claim) throw new Error("Failed to create reimbursement claim");
     tx.insert(reimbursementClaimSources).values(input.sources.map((source) => ({ claimId: claim.id, sourceTransactionId: source.sourceTransactionId, expenseLineId: source.expenseLineId, categoryId: source.categoryId ?? null, amount: source.amount }))).run();
@@ -253,6 +265,7 @@ export async function updateReimbursementClaim(id: number, input: CreateClaimInp
   assertId(id, "claim id");
   await validateDraftInput(input);
   db.transaction((tx) => {
+    for (const source of input.sources) assertSourceNotReallocated(source.sourceTransactionId, tx);
     const current = tx.select().from(reimbursementClaims).where(eq(reimbursementClaims.id, id)).limit(1).all()[0];
     if (!current) throw new ReimbursementError("Claim not found", 404);
     if (!['draft', 'submitted'].includes(current.status)) throw new ReimbursementError("Only draft or submitted claims can be edited", 409);

@@ -352,6 +352,8 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     "0040_database_backup_settings": has("database_backup_settings", "owner_email", "enabled", "frequency", "last_backup_at", "updated_at"),
     "0041_budget_intent": has("salary_period", "budget_note", "savings_target_amount", "savings_target_mode", "savings_target_rate") && has("budget_plan", "note"),
     "0042_category_color_uniqueness": indexExists("category_color_unique_idx"),
+    "0043_transaction_reallocation": has("transaction_reallocation", "id", "incoming_transaction_id", "outgoing_transaction_id", "amount", "reason", "created_at")
+      && indexExists("reallocation_incoming_unique") && indexExists("reallocation_outgoing_unique") && triggerExists("reallocation_pair_unique"),
   };
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
@@ -512,6 +514,7 @@ function assertRequiredSchema(): void {
     transaction_line: ["transaction_id", "account_id", "debit", "credit", "cash_flow_class"],
     money_anomaly_review: ["fingerprint", "kind", "transaction_id", "detected_amount", "reason", "status"],
     transaction_category_allocation: ["transaction_id", "category_id", "amount"],
+    transaction_reallocation: ["id", "incoming_transaction_id", "outgoing_transaction_id", "amount", "reason", "created_at"],
     storage_deletion_outbox: ["r2_key", "status", "attempts"],
     pending_transaction: ["raw_message", "status"],
     gmail_connection: ["owner_email", "google_email", "refresh_token", "last_synced_at", "created_at", "updated_at"],

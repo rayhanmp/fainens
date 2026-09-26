@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 
+import { personalExpenseLine, personalIncomeLine, personalExpenseAdjustment } from "./reallocation-effects";
 import { db } from "../db/client";
 import { assignedPeriodMembership } from "./period-locking";
 
@@ -32,7 +33,8 @@ export interface FinancialFacts {
  * Canonical read model for narrative/reporting consumers. Amounts come from
  * account normal balances, never from a transaction's arbitrary line side:
  * expense = expense debits minus credits and income = revenue credits minus
- * debits. Reversal journals are correction metadata, not new activity, so
+ * debits, adjusted for linked reallocations in personal-reporting mode.
+ * Wallet balances always retain the original ledger effects. Reversal journals are correction metadata, not new activity, so
  * both reversed originals and their reversal entries are omitted.
  */
 export async function getFinancialFacts(input: {
@@ -42,6 +44,7 @@ export async function getFinancialFacts(input: {
   periodId?: number;
   /** Exclude known recurring transactions when another read model supplies their future schedule separately. */
   excludeTxTypes?: string[];
+  reportingBasis?: "personal" | "ledger";
 }): Promise<FinancialFacts> {
   if (!Number.isFinite(input.startMs) || !Number.isFinite(input.endMs) || input.endMs < input.startMs) {
     throw new Error("Invalid financial facts date range");
@@ -56,8 +59,8 @@ export async function getFinancialFacts(input: {
       t.category_id AS category_id,
       c.name AS category,
       t.tx_type AS tx_type,
-      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN tl.debit - tl.credit ELSE 0 END), 0) AS expense_cents,
-      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN tl.credit - tl.debit ELSE 0 END), 0) AS income_cents
+      COALESCE(SUM(CASE WHEN a.type = 'expense' THEN ${input.reportingBasis === 'ledger' ? sql`tl.debit - tl.credit` : personalExpenseLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS expense_cents,
+      COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN ${input.reportingBasis === 'ledger' ? sql`tl.credit - tl.debit` : personalIncomeLine(sql`t.id`, sql`tl.debit`, sql`tl.credit`)} ELSE 0 END), 0) AS income_cents
     FROM "transaction" t
     LEFT JOIN "transaction_line" tl ON tl.transaction_id = t.id
     LEFT JOIN account a ON a.id = tl.account_id
@@ -86,7 +89,7 @@ export async function getFinancialFacts(input: {
   }));
 
   const allocationRows = normalizedRows.length === 0 ? [] : await db.all(sql`
-    SELECT tca.transaction_id AS transaction_id, tca.category_id AS category_id, c.name AS category, tca.amount AS amount
+    SELECT tca.transaction_id AS transaction_id, tca.category_id AS category_id, c.name AS category, tca.amount + ${input.reportingBasis === 'ledger' ? sql`0` : personalExpenseAdjustment(sql`tca.transaction_id`)} AS amount
     FROM transaction_category_allocation tca
     INNER JOIN category c ON c.id = tca.category_id
     WHERE tca.transaction_id IN (${sql.join(normalizedRows.map((row) => sql`${row.id}`), sql`, `)})

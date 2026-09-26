@@ -1,3 +1,5 @@
+import { personalExpenseLine, personalIncomeLine, personalExpenseAdjustment } from "../services/reallocation-effects";
+import { assertNotReallocated, linkReallocation, unlinkReallocation, loadReallocationCandidates, reallocationReportingFields, ReallocationError } from "../services/transaction-reallocations";
 import { aggregateTransactionActivity, type DailyTransactionActivity } from "../services/transaction-activity";
 import { loadTransactionLoanActivity } from "../services/transaction-loan-activity";
 import { eq, and, asc, desc, sql, inArray, count, ne, notInArray, or, SQL } from "drizzle-orm";
@@ -51,6 +53,10 @@ const transactionAllocationSchema = z.object({
   amount: z.number(),
   categoryName: z.string().nullable().optional(),
 }).passthrough();
+const reallocationSchema = z.object({
+  id: z.number().int(), counterpartTransactionId: z.number().int(), counterpartDescription: z.string(),
+  amount: z.number().int().positive(), reason: z.string(), role: z.enum(["incoming", "outgoing"]),
+});
 const transactionRecordSchema = z.object({
   id: z.number().int(),
   date: timestampValueSchema,
@@ -69,6 +75,10 @@ const transactionRecordSchema = z.object({
   debitCents: z.number().optional(),
   creditCents: z.number().optional(),
   expenseCents: z.number().optional(),
+  personalExpenseCents: z.number().optional(),
+  personalIncomeCents: z.number().optional(),
+  reallocation: reallocationSchema.nullable().optional(),
+  reallocationEligibleRole: z.enum(["incoming", "outgoing"]).nullable().optional(),
   incomeCents: z.number().optional(),
   activityKind: z.enum(["expense", "income", "transfer", "loan", "reimbursement", "other"]).optional(),
   remainingReimbursableExpense: z.number().int().nonnegative().optional(),
@@ -458,10 +468,10 @@ function buildBaseConditions(
 
 function activityKindCondition(kind: string): SQL | null {
   if (kind === "expense") {
-    return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'expense' and kind_line.debit > kind_line.credit)`;
+    return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'expense' and ${personalExpenseLine(sql`kind_line.transaction_id`, sql`kind_line.debit`, sql`kind_line.credit`)} > 0)`;
   }
   if (kind === "income") {
-    return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'revenue' and kind_line.credit > kind_line.debit)`;
+    return sql`exists (select 1 from transaction_line kind_line inner join account kind_account on kind_account.id = kind_line.account_id where kind_line.transaction_id = ${transactions.id} and kind_account.type = 'revenue' and ${personalIncomeLine(sql`kind_line.transaction_id`, sql`kind_line.debit`, sql`kind_line.credit`)} > 0)`;
   }
   if (kind === "transfer") return sql`${transactions.txType} in ('simple_transfer', 'transfer')`;
   if (kind === "loan") return sql`(${transactions.txType} like '%loan%' or ${transactions.txType} in ('split_bill_lent', 'split_bill_borrowed'))`;
@@ -489,8 +499,8 @@ async function fetchTransactionInsights(whereCondition: SQL | undefined): Promis
     .select({
       transactionId: transactions.id,
       date: transactions.date,
-      incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${transactionLines.credit} - ${transactionLines.debit} else 0 end), 0)`,
-      expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
+      incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${personalIncomeLine(sql`${transactions.id}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0)`,
+      expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${personalExpenseLine(sql`${transactions.id}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0)`,
       legacyCategoryName: categories.name,
     })
     .from(transactions)
@@ -504,7 +514,7 @@ async function fetchTransactionInsights(whereCondition: SQL | undefined): Promis
     .select({
       transactionId: transactionCategoryAllocations.transactionId,
       categoryName: categories.name,
-      amount: transactionCategoryAllocations.amount,
+      amount: sql<number>`${transactionCategoryAllocations.amount} + ${personalExpenseAdjustment(sql`${transactions.id}`)}`,
     })
     .from(transactionCategoryAllocations)
     .innerJoin(transactions, eq(transactionCategoryAllocations.transactionId, transactions.id))
@@ -933,8 +943,8 @@ RULES:
     const [countRows, summaryRows, transactionInsights] = await Promise.all([
       db.select({ count: count() }).from(transactions).where(whereCondition || sql`1=1`),
       db.select({
-        expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${transactionLines.debit} - ${transactionLines.credit} else 0 end), 0)`,
-        incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${transactionLines.credit} - ${transactionLines.debit} else 0 end), 0)`,
+        expenseCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'expense' then ${personalExpenseLine(sql`${transactions.id}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0)`,
+        incomeCents: sql<number>`coalesce(sum(case when ${accounts.type} = 'revenue' then ${personalIncomeLine(sql`${transactions.id}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)} else 0 end), 0)`,
       }).from(transactions).innerJoin(transactionLines, eq(transactions.id, transactionLines.transactionId)).innerJoin(accounts, eq(transactionLines.accountId, accounts.id)).where(whereCondition || sql`1=1`),
       fetchTransactionInsights(whereCondition),
     ]);
@@ -952,6 +962,7 @@ RULES:
     const effectsByTxId = await fetchTransactionEffects(txIds);
     const remainingReimbursableByTxId = await fetchRemainingReimbursableExpenses(txIds, effectsByTxId);
     const loanActivityByTxId = await loadTransactionLoanActivity(txIds);
+    const reallocationCandidates = loadReallocationCandidates(txIds);
 
     // Map transactions with their details
     const transactionsWithDetails = txList.map((tx) => {
@@ -962,9 +973,10 @@ RULES:
         tags: tagsByTxId.get(tx.id) || [],
         categoryAllocations: allocationsByTxId.get(tx.id) || [],
         ...effects,
+        ...reallocationReportingFields(reallocationCandidates.get(tx.id)),
         loanActivity: loanActivityByTxId.get(tx.id) ?? null,
         activityKind: reimbursementActivityKind(tx.txType, effects.expenseCents, effects.incomeCents),
-        remainingReimbursableExpense: remainingReimbursableByTxId.get(tx.id) ?? 0,
+        remainingReimbursableExpense: reallocationCandidates.get(tx.id)?.reallocation ? 0 : remainingReimbursableByTxId.get(tx.id) ?? 0,
       };
     });
 
@@ -982,6 +994,33 @@ RULES:
         ...transactionInsights,
       },
     };
+  });
+
+  fastify.post("/api/transactions/:id/reallocation", {
+    schema: {
+      operationId: "linkTransactionReallocation", tags: ["transactions"], params: transactionIdParamsSchema,
+      body: z.object({ counterpartTransactionId: z.number().int().positive(), reason: z.string().trim().min(1).max(500).default("Original spending predates tracking") }),
+      response: { 201: reallocationSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: number };
+    const { counterpartTransactionId, reason } = request.body as { counterpartTransactionId: number; reason: string };
+    try { return reply.code(201).send(await linkReallocation(id, counterpartTransactionId, reason)); }
+    catch (error) {
+      if (!(error instanceof ReallocationError)) throw error;
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
+  });
+
+  fastify.delete("/api/transactions/:id/reallocation", {
+    schema: { operationId: "unlinkTransactionReallocation", tags: ["transactions"], params: transactionIdParamsSchema,
+      response: { 204: z.null(), 404: transactionErrorSchema, 409: transactionErrorSchema } },
+  }, async (request, reply) => {
+    try { await unlinkReallocation((request.params as { id: number }).id); return reply.code(204).send(); }
+    catch (error) {
+      if (!(error instanceof ReallocationError)) throw error;
+      return reply.code(error.statusCode === 404 ? 404 : 409).send({ error: error.message });
+    }
   });
 
   fastify.get("/api/transactions/:id", {
@@ -1050,8 +1089,9 @@ RULES:
       tags: txTagRows,
       categoryAllocations: categoryAllocationRows,
       ...effects,
+      ...reallocationReportingFields(loadReallocationCandidates([tx.id]).get(tx.id)),
       activityKind: reimbursementActivityKind(tx.txType, effects.expenseCents, effects.incomeCents),
-      remainingReimbursableExpense: Math.max(0, effects.expenseCents - Number(claimed?.amount ?? 0)),
+      remainingReimbursableExpense: loadReallocationCandidates([tx.id]).get(tx.id)?.reallocation ? 0 : Math.max(0, effects.expenseCents - Number(claimed?.amount ?? 0)),
     };
   });
 
@@ -1212,6 +1252,7 @@ RULES:
     const transactionId = parseIdParam((request.params as { id?: string }).id);
     if (transactionId === null) return reply.code(400).send({ error: "Invalid transaction ID" });
     try {
+      assertNotReallocated(transactionId);
       const [original] = await db.select().from(transactions)
         .where(eq(transactions.id, transactionId)).limit(1);
       if (!original) return reply.code(404).send({ error: "Transaction not found" });
@@ -1269,6 +1310,7 @@ RULES:
       }, db);
 
       const result = db.transaction((tx) => {
+        assertNotReallocated(transactionId, tx);
         const fresh = tx.select().from(transactions)
           .where(eq(transactions.id, transactionId)).limit(1).all()[0];
         if (!fresh || fresh.status !== "posted") throw new Error("Transaction was changed; retry reversal");
@@ -1338,7 +1380,7 @@ RULES:
       return reply.code(200).send(updated);
     } catch (err) {
       fastify.log.error(err);
-      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
+      const status = transactionRouteErrorStatus((err instanceof TransactionMutationError || err instanceof ReallocationError) ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to update transaction",
       });
@@ -1363,7 +1405,7 @@ RULES:
       return reply.code(204).send();
     } catch (err) {
       fastify.log.error(err);
-      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
+      const status = transactionRouteErrorStatus((err instanceof TransactionMutationError || err instanceof ReallocationError) ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to delete transaction",
       });
@@ -1391,7 +1433,7 @@ RULES:
       });
     } catch (err) {
       fastify.log.error(err);
-      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
+      const status = transactionRouteErrorStatus((err instanceof TransactionMutationError || err instanceof ReallocationError) ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to bulk delete transactions",
       });
@@ -1505,7 +1547,7 @@ RULES:
       return reply.code(201).send({ imported: results.length, skipped: 0, errors: [], transactions: results, legacyRows: hasLegacyRows });
     } catch (err) {
       fastify.log.error(err);
-      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
+      const status = transactionRouteErrorStatus((err instanceof TransactionMutationError || err instanceof ReallocationError) ? err.statusCode : 500);
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to import transactions",
       });
