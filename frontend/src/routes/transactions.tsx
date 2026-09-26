@@ -18,7 +18,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import type { ListTransactionsParams } from '../generated/client';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, formatIdNominalInput } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList, type PendingTransactionListItem } from '../features/transactions/queries';
@@ -222,7 +222,7 @@ function TransactionsPage() {
     const destination = transaction.lines.find((line) => line.accountType === 'asset' && line.debit > 0);
     openModal(undefined, 'edit', {
       type: kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense',
-      amount: String(Math.abs(displayAmount(transaction))),
+      amount: formatIdNominalInput(String(Math.abs(displayAmount(transaction)))),
       description: transaction.description,
       categoryId: transaction.categoryId ?? transaction.categoryAllocations[0]?.categoryId,
       fromAccountId: source?.accountId,
