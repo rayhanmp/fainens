@@ -1,3 +1,5 @@
+import { ReallocationDetails } from "./ReallocationDetails";
+import type { ReallocationInfo } from "../../features/transactions/reallocation";
 import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useFieldArray, useForm } from 'react-hook-form';
@@ -134,6 +136,7 @@ export type EditingTransaction = {
   place?: string;
   categoryId?: number | null;
   txType?: string;
+  reallocation?: ReallocationInfo | null;
   expenseCents?: number;
   incomeCents?: number;
   displayPart?: 'expense' | 'loan';
@@ -1521,7 +1524,7 @@ export function TransactionModal({
       const isLoanAdvance = editingTransaction.displayPart === 'loan';
       const isExpense = !isTransfer && (isSplitBillPayment || editingTransaction.txType?.includes('expense') || hasExpenseLine);
       const isIncome = !isTransfer && (editingTransaction.txType?.includes('income') || hasIncomeLine);
-      const amount = isLoanAdvance ? Math.max(0, amounts.totalPaidCents - (editingTransaction.expenseCents ?? amounts.expenseCents))
+      const amount = editingTransaction.reallocation ? amounts.journalAmount : isLoanAdvance ? Math.max(0, amounts.totalPaidCents - (editingTransaction.expenseCents ?? amounts.expenseCents))
         : isLoanPayment ? amounts.journalAmount : isExpense ? Math.max(0, editingTransaction.expenseCents ?? amounts.expenseCents)
         : isIncome ? Math.max(0, editingTransaction.incomeCents ?? amounts.incomeCents) : amounts.journalAmount;
       const detailDate = editMeta.date
@@ -1716,7 +1719,7 @@ export function TransactionModal({
         <Modal
           isOpen={isOpen}
           onClose={() => { void closeDetail(); }}
-          title={isLoanPayment ? "Loan Payment Detail" : isLoanAdvance ? "Loan Detail" : isExpense ? "Expense Detail" : "Income Detail"}
+          title={editingTransaction.reallocation ? "Reallocation Detail" : isLoanPayment ? "Loan Payment Detail" : isLoanAdvance ? "Loan Detail" : isExpense ? "Expense Detail" : "Income Detail"}
           subtitle={hasPendingMetadataChanges ? 'Unsaved edits' : `ID: #${editingTransaction.id}`}
           size="default"
           className="max-w-4xl"
@@ -1769,6 +1772,8 @@ export function TransactionModal({
               </div>
 
               {(isSplitBillPayment || isLoanPayment) && <SplitBillTransactionDetail transactionId={editingTransaction.id} personalShare={isLoanPayment ? 0 : Math.max(0, editingTransaction.expenseCents ?? amounts.expenseCents)} totalPaid={isLoanPayment ? 0 : amounts.totalPaidCents} isBorrower={editingTransaction.txType === 'split_bill_borrowed'} paymentLookup={isLoanPayment} />}
+
+              {editingTransaction.reallocation && <ReallocationDetails transactionId={editingTransaction.id} reallocation={editingTransaction.reallocation} onUnlinked={() => { onSaved(); onClose(); }} />}
 
               {/* Bento Grid Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[var(--color-border)]/30 pt-6 mb-6">

@@ -1,7 +1,9 @@
+import { ReallocationModal } from "../components/transactions/ReallocationModal";
+import { personalActivityKind, reallocationCashAmount } from "../features/transactions/reallocation";
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, HandCoins, Landmark, Mail, MoreHorizontal, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { SwipeReveal } from '../components/ui/SwipeReveal';
@@ -79,12 +81,10 @@ function getKind(transaction: TransactionRow): ActivityKind {
   if (transaction.displayPart) return transaction.displayPart;
   if (transaction.txType.includes('loan') || transaction.txType === 'split_bill_lent' || transaction.txType === 'split_bill_borrowed') return 'loan';
   if (transaction.txType === 'simple_transfer' || transaction.txType === 'transfer') return 'transfer';
-  if (transaction.expenseCents > 0) return 'expense';
-  if (transaction.incomeCents > 0) return 'income';
-  return 'other';
+  return personalActivityKind(transaction);
 }
 function displayAmount(transaction: TransactionRow) {
-  return transactionActivityAmount(transaction);
+  return reallocationCashAmount(transaction) ?? transactionActivityAmount(transaction);
 }
 function remainingReimbursableExpense(transaction: TransactionRow) {
   return Number((transaction as TransactionRow & { remainingReimbursableExpense?: number }).remainingReimbursableExpense ?? 0);
@@ -134,6 +134,7 @@ function TransactionsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [filterQuery, setFilterQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [reallocationTransaction, setReallocationTransaction] = useState<TransactionRow | null>(null);
   const [rowActionsId, setRowActionsId] = useState<number | null>(null);
   const [swipedRowId, setSwipedRowId] = useState<string | null>(null);
   const [mobileInsightsOpen, setMobileInsightsOpen] = useState(false);
@@ -210,7 +211,7 @@ function TransactionsPage() {
   const openModal = useCallback((transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit', prefill?: TransactionPrefill) => {
     setModalInitialMode(mode);
     setModalPrefill(prefill);
-    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, reference: transaction.reference ?? undefined, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, displayPart: transaction.displayPart, expenseCents: transaction.expenseCents, incomeCents: transaction.incomeCents, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
+    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, reference: transaction.reference ?? undefined, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, displayPart: transaction.displayPart, expenseCents: transaction.expenseCents, incomeCents: transaction.incomeCents, reallocation: transaction.reallocation, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
     setIsModalOpen(true);
   }, []);
 
@@ -289,7 +290,7 @@ function TransactionsPage() {
     const transaction = deepLinkQuery.data;
     // Open a deep link once its asynchronously fetched details arrive.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    openModal({ ...transaction, status: 'posted', periodId: null, linkedTxId: null, reversalOfTxId: null, debitCents: 0, creditCents: 0, expenseCents: 0, incomeCents: 0 } as unknown as TransactionRow, 'view');
+    openModal({ ...transaction, debitCents: transaction.debitCents ?? 0, creditCents: transaction.creditCents ?? 0, expenseCents: transaction.expenseCents ?? 0, incomeCents: transaction.incomeCents ?? 0 } as unknown as TransactionRow, 'view');
   }, [search.transactionId, deepLinkQuery.data, deepLinkQuery.error, openModal]);
 
   const selectedPeriod = periods.find((period) => String(period.id) === search.periodId) ?? null;
@@ -468,7 +469,7 @@ function TransactionsPage() {
           const kind = getKind(transaction); const amount = displayAmount(transaction); const category = transaction.displayPart === 'loan' ? 'Loan' : categoryLabel(transaction, categories);
           const loanLabel = kind === 'loan' ? compactLoanActivityLabel(transaction).replace(/^Split bill/, 'Loans') : null;
           const rowKey = `${transaction.id}:${transaction.displayPart ?? 'transaction'}`;
-          const isCashIn = kind === 'income' || (kind === 'loan' && amount > 0 && transaction.loanActivity != null && transaction.txType !== 'split_bill_borrowed');
+          const isCashIn = transaction.reallocation?.role === 'incoming' || transaction.expenseCents < 0 || kind === 'income' || (kind === 'loan' && amount > 0 && transaction.loanActivity != null && transaction.txType !== 'split_bill_borrowed');
           const reimbursementLine = transaction.lines.find((line) => line.accountType === 'expense' && line.debit > line.credit);
           const reimbursable = transaction.status === 'posted' && kind === 'expense' && reimbursementLine != null && remainingReimbursableExpense(transaction) > 0;
           const walletLine = transaction.lines.find((line) => line.accountType === 'asset' && line.cashFlowClass != null)
@@ -488,7 +489,7 @@ function TransactionsPage() {
               {reimbursable && <button type="button" onClick={() => { setSwipedRowId(null); navigate({ to: '/reimbursements', search: { sourceTransactionId: String(transaction.id), expenseLineId: String(reimbursementLine.id), categoryId: transaction.categoryAllocations.length === 1 ? String(transaction.categoryAllocations[0]!.categoryId) : undefined, amount: String(remainingReimbursableExpense(transaction)) } }); }} className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 bg-[var(--ref-primary)] px-2 text-[11px] font-bold text-white"><HandCoins className="h-5 w-5" />Reimburse</button>}
               {transaction.status === 'draft'
                 ? <button type="button" onClick={() => { setSwipedRowId(null); void handleDeleteDraft(transaction); }} className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 bg-[var(--ref-error)] px-2 text-[11px] font-bold text-white"><Trash2 className="h-5 w-5" />Delete</button>
-                : <button type="button" disabled={correction} onClick={() => { setSwipedRowId(null); void handleCorrect(transaction); }} className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 bg-amber-600 px-2 text-[11px] font-bold text-white disabled:opacity-40"><RotateCcw className="h-5 w-5" />Correct</button>}
+                : <button type="button" disabled={correction || Boolean(transaction.reallocation)} onClick={() => { setSwipedRowId(null); void handleCorrect(transaction); }} className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 bg-amber-600 px-2 text-[11px] font-bold text-white disabled:opacity-40"><RotateCcw className="h-5 w-5" />Correct</button>}
             </>}
           ><div className={cn('group grid grid-cols-[2.5rem_minmax(0,1fr)_2rem] cursor-pointer items-center gap-x-3 gap-y-1 px-4 sm:flex transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', compactTables ? 'py-2.5' : 'py-4', correction && 'bg-[var(--ref-surface-container-low)]/60')}>
             <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
@@ -496,6 +497,7 @@ function TransactionsPage() {
             <div className="hidden w-32 shrink-0 text-right sm:block"><p className="truncate text-xs font-semibold text-[var(--ref-on-surface-variant)]" title={category ?? undefined}>{category ?? (kind === 'income' ? 'Income' : kind === 'transfer' ? 'Transfer' : kind === 'loan' ? 'Loan' : 'Unallocated')}</p>{transaction.categoryAllocations.length > 1 && <p className="mt-0.5 text-[10px] text-[var(--ref-outline)]">Split allocation</p>}</div>
             <div className="col-start-2 row-start-2 text-left sm:ml-auto sm:min-w-32 sm:shrink-0 sm:text-right">
               <p className={cn('font-headline text-sm font-extrabold tabular-nums', isCashIn ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{amount < 0 ? '−' : isCashIn ? '+' : ''}{formatCurrency(Math.abs(amount))}</p>
+              {transaction.reallocation && <p className="mt-1 text-[10px] font-semibold text-[var(--ref-primary)]">Reallocation</p>}
               {loanLabel && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">{loanLabel}</p>}
             </div>
             <div className="relative col-start-3 row-start-1 shrink-0" onClick={(event) => event.stopPropagation()}>
@@ -516,18 +518,20 @@ function TransactionsPage() {
       const kind = getKind(actionTransaction);
       const reimbursementLine = actionTransaction.lines.find((line) => line.accountType === 'expense' && line.debit > line.credit);
       const reimbursable = actionTransaction.status === 'posted' && kind === 'expense' && reimbursementLine != null && remainingReimbursableExpense(actionTransaction) > 0;
-      const correction = actionTransaction.status === 'reversed' || actionTransaction.txType === 'reversal' || actionTransaction.txType === 'domain_reversal' || actionTransaction.txType === 'historical_recovery_adjustment' || actionTransaction.txType === 'balance_adjustment';
+      const correction = actionTransaction.reallocation != null || actionTransaction.status === 'reversed' || actionTransaction.txType === 'reversal' || actionTransaction.txType === 'domain_reversal' || actionTransaction.txType === 'historical_recovery_adjustment' || actionTransaction.txType === 'balance_adjustment';
       return <Modal isOpen onClose={() => setRowActionsId(null)} title="Transaction actions" subtitle={actionTransaction.description} contentClassName="p-3">
         <div className="space-y-1">
           <button type="button" onClick={() => { setRowActionsId(null); window.setTimeout(() => openModal(actionTransaction, 'view'), 0); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-5 w-5 text-[var(--ref-primary)]" />View details</button>
+          {actionTransaction.reallocationEligibleRole && !actionTransaction.reallocation && <button type="button" onClick={() => { setRowActionsId(null); setReallocationTransaction(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10"><ArrowRightLeft className="h-5 w-5" />Link as reallocation</button>}
           {kind !== 'loan' && <button type="button" onClick={() => { setRowActionsId(null); window.setTimeout(() => repeatTransaction(actionTransaction), 0); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-[var(--ref-surface-container-low)]"><CopyPlus className="h-5 w-5 text-[var(--ref-primary)]" />Repeat transaction</button>}
           {reimbursable && <button type="button" onClick={() => { setRowActionsId(null); navigate({ to: '/reimbursements', search: { sourceTransactionId: String(actionTransaction.id), expenseLineId: String(reimbursementLine.id), categoryId: actionTransaction.categoryAllocations.length === 1 ? String(actionTransaction.categoryAllocations[0]!.categoryId) : undefined, amount: String(remainingReimbursableExpense(actionTransaction)) } }); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10"><HandCoins className="h-5 w-5" />Mark reimbursable</button>}
           {actionTransaction.status === 'draft'
             ? <button type="button" onClick={() => { setRowActionsId(null); void handleDeleteDraft(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10"><Trash2 className="h-5 w-5" />Delete draft</button>
-            : <button type="button" disabled={correction} onClick={() => { setRowActionsId(null); void handleCorrect(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-amber-700 hover:bg-amber-500/10 disabled:opacity-40"><RotateCcw className="h-5 w-5" />{correction ? 'Correction cannot be reversed' : 'Correct transaction'}</button>}
+            : <button type="button" disabled={correction} onClick={() => { setRowActionsId(null); void handleCorrect(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-amber-700 hover:bg-amber-500/10 disabled:opacity-40"><RotateCcw className="h-5 w-5" />{actionTransaction.reallocation ? 'Unlink before correcting' : correction ? 'Correction cannot be reversed' : 'Correct transaction'}</button>}
         </div>
       </Modal>;
     })()}
+    {reallocationTransaction && <ReallocationModal transaction={reallocationTransaction} onClose={() => setReallocationTransaction(null)} onSaved={() => void loadData()} />}
     <TransactionModal isOpen={isModalOpen} onClose={closeModal} onSaved={loadData} onSuccess={() => { void loadData(); setEditingPendingTx(null); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={editingTransaction} periodId={search.periodId && search.periodId !== 'all' ? Number(search.periodId) : null} initialMode={modalInitialMode} pendingTransaction={editingPendingTx} initialPrefill={modalPrefill} />
     <ImportCSVModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onSuccess={loadData} />
     <PendingTransactionsModal isOpen={isPendingModalOpen} onClose={() => setIsPendingModalOpen(false)} onEdit={(pending) => { setEditingPendingTx(pending); setIsPendingModalOpen(false); openModal(); }} onRefresh={() => { void pendingQuery.refetch(); }} />

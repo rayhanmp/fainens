@@ -18,6 +18,8 @@ import {
   recommendTransactionCategory,
   rejectPendingTransaction,
   reverseTransaction,
+  linkTransactionReallocation,
+  unlinkTransactionReallocation,
   retryPendingTransaction,
   updatePendingTransaction,
   updateTransaction,
@@ -280,5 +282,21 @@ export function useRetryPendingTransactionMutation() {
   return useMutation({
     mutationFn: (id: number) => unwrapGenerated(retryPendingTransaction(id), 200, 'Failed to retry transaction parsing'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
+  });
+}
+
+export function useLinkReallocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, counterpartTransactionId, reason }: { id: number; counterpartTransactionId: number; reason: string }) => unwrapGenerated(linkTransactionReallocation(id, { counterpartTransactionId, reason }), 201, 'Failed to link reallocation'),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+export function useUnlinkReallocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => unwrapGenerated(unlinkTransactionReallocation(id), 204, 'Failed to unlink reallocation'),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

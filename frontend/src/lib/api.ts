@@ -1,3 +1,4 @@
+import type { ReallocationInfo } from "../features/transactions/reallocation";
 // Typed API client for Fainens backend
 import {
   confirmTransactionImport as generatedConfirmTransactionImport,
@@ -741,6 +742,10 @@ export const api = {
           expenseCents: number;
           incomeCents: number;
           remainingReimbursableExpense?: number;
+          personalExpenseCents?: number;
+          personalIncomeCents?: number;
+          reallocationEligibleRole?: "incoming" | "outgoing" | null;
+          reallocation?: ReallocationInfo | null;
           lines: Array<{
             id: number;
             accountId: number;
@@ -779,6 +784,10 @@ export const api = {
       tags: Array<{ tagId: number; name: string; color: string }>;
       categoryAllocations: Array<{ categoryId: number; amount: number; categoryName: string | null }>;
       expenseCents?: number;
+      personalExpenseCents?: number;
+      personalIncomeCents?: number;
+      reallocationEligibleRole?: "incoming" | "outgoing" | null;
+      reallocation?: ReallocationInfo | null;
     }>(`/transactions/${id}`),
     reverse: (id: number) => fetchApi<{ id: number; reversalOfTxId: number }>(`/transactions/${id}/reverse`, { method: 'POST' }),
     create: (
