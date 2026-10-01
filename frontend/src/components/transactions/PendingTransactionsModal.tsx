@@ -1,7 +1,7 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { formatCurrency } from '../../lib/utils';
 import { Check, X, Edit2, Loader2 } from 'lucide-react';
 import {
   useApprovePendingTransactionMutation,
@@ -23,6 +23,7 @@ export function PendingTransactionsModal({
   onEdit,
   onRefresh,
 }: PendingTransactionsModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const pendingQuery = usePendingTransactionsQuery();
   const approveMutation = useApprovePendingTransactionMutation();
   const rejectMutation = useRejectPendingTransactionMutation();
@@ -109,7 +110,7 @@ export function PendingTransactionsModal({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--color-muted)]">Amount</span>
-                  <span className="font-medium">{formatCurrency(tx.parsedData.amount)}</span>
+                  <span className="font-medium">{formatAmount(tx.parsedData.amount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--color-muted)]">Category</span>

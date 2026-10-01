@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, Link, useSearch, useNavigate } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -161,6 +162,7 @@ function formatPeriodRange(p: Period) {
 const budgetToolLinkClass = 'inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] hover:shadow-sm active:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)] focus-visible:outline-offset-2';
 
 function BudgetPage() {
+  const { formatAmount } = useBalanceVisibility();
   const navigate = useNavigate();
   const search = useSearch({ from: '/budget' }) as { periodId?: string };
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>(search.periodId || '');
@@ -1064,9 +1066,9 @@ function BudgetPage() {
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/70">Spent this period</p>
                     <p className="mt-3 font-headline text-3xl font-extrabold tracking-tight sm:text-5xl">
-                      {isPeriodTracked ? formatCurrency(totalSpent) : 'Not tracked'}
+                      {isPeriodTracked ? formatAmount(totalSpent) : 'Not tracked'}
                     </p>
-                    <p className="mt-2 text-sm font-medium text-white/70">of {formatCurrency(totalBudgeted)} planned</p>
+                    <p className="mt-2 text-sm font-medium text-white/70">of {formatAmount(totalBudgeted)} planned</p>
                     {budgetSummary?.budgetNote && (
                       <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/85">“{budgetSummary.budgetNote}”</p>
                     )}
@@ -1086,7 +1088,7 @@ function BudgetPage() {
                     <div>
                       <p className="text-xs text-white/65">Remaining in budget</p>
                       <p className={cn('mt-1 text-xl font-bold sm:text-2xl', totalRemaining < 0 && 'text-rose-200')}>
-                        {isPeriodTracked ? formatCurrency(totalRemaining) : '—'}
+                        {isPeriodTracked ? formatAmount(totalRemaining) : '—'}
                       </p>
                     </div>
                     <p className="text-xs font-semibold text-white/70">{budgetRows.length} categor{budgetRows.length === 1 ? 'y' : 'ies'} planned</p>
@@ -1105,7 +1107,7 @@ function BudgetPage() {
                   <div>
                     <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Income plan</p>
                     <p className="mt-1 font-headline text-2xl font-bold text-[var(--ref-on-surface)]">
-                      {isPeriodTracked ? formatCurrency(periodIncome) : 'Not tracked'}
+                      {isPeriodTracked ? formatAmount(periodIncome) : 'Not tracked'}
                     </p>
                   </div>
                 </div>
@@ -1130,13 +1132,13 @@ function BudgetPage() {
                 <div>
                   <p className="text-xs text-[var(--ref-on-surface-variant)]">Savings target</p>
                   <p className="mt-1 text-lg font-bold text-[var(--ref-on-surface)]">
-                    {!isPeriodTracked ? '—' : savingsTargetMode === 'income_percent' && periodIncome <= 0 ? 'Add income' : formatCurrency(savingsTargetAmount)}
+                    {!isPeriodTracked ? '—' : savingsTargetMode === 'income_percent' && periodIncome <= 0 ? 'Add income' : formatAmount(savingsTargetAmount)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-[var(--ref-on-surface-variant)]">Still unassigned</p>
                   <p className={cn('mt-1 text-lg font-bold', unassignedIncome < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]')}>
-                    {isPeriodTracked && periodIncome > 0 ? formatCurrency(unassignedIncome) : '—'}
+                    {isPeriodTracked && periodIncome > 0 ? formatAmount(unassignedIncome) : '—'}
                   </p>
                 </div>
               </div>
@@ -1360,14 +1362,14 @@ function BudgetPage() {
                                 )}
                               </div>
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[var(--color-text-secondary)]">
-                                <span>{isPeriodTracked ? `${formatCurrency(row.actualAmount)} of ${formatCurrency(row.plannedAmount)}` : 'Actuals not tracked'}</span>
+                                <span>{isPeriodTracked ? `${formatAmount(row.actualAmount)} of ${formatAmount(row.plannedAmount)}` : 'Actuals not tracked'}</span>
                                 {comparison && (
                                   <span className="flex items-center gap-1">
                                     vs
                                     <span className={cn(
                                       comparison.actualDiff > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]'
                                     )}>
-                                      {comparison.actualDiff > 0 ? '+' : ''}{formatCurrency(Math.abs(comparison.actualDiff))}
+                                      {comparison.actualDiff > 0 ? '+' : ''}{formatAmount(Math.abs(comparison.actualDiff))}
                                     </span>
                                     {comparison.actualDiff > 0 ? (
                                       <TrendingUp className="h-3 w-3 text-[var(--ref-error)]" />
@@ -1383,7 +1385,7 @@ function BudgetPage() {
                               {isPeriodTracked && (
                                 <div className="hidden min-w-[104px] text-right sm:block">
                                   <p className={cn('text-sm font-bold tabular-nums', row.variance < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]')}>
-                                    {formatCurrency(row.variance)}
+                                    {formatAmount(row.variance)}
                                   </p>
                                   <p className="text-[10px] text-[var(--ref-on-surface-variant)]">remaining</p>
                                 </div>
@@ -1643,7 +1645,7 @@ function BudgetPage() {
             <div className="rounded-2xl bg-[var(--ref-surface-container-low)] p-4 text-sm text-[var(--ref-on-surface-variant)]">
               {periodIncome > 0
                 ? periodPlanForm.savingsTargetMode === 'income_percent'
-                  ? `That’s ${formatCurrency(Math.round(periodIncome * (Number(periodPlanForm.savingsTargetRate) || 0) / 100))} at the current recorded income of ${formatCurrency(periodIncome)}.`
+                  ? `That’s ${formatAmount(Math.round(periodIncome * (Number(periodPlanForm.savingsTargetRate) || 0) / 100))} at the current recorded income of ${formatAmount(periodIncome)}.`
                   : `That’s ${((parseIdNominalToInt(periodPlanForm.savingsTargetAmount) || 0) / periodIncome * 100).toFixed(1)}% of the current recorded income.`
                 : 'The saving rate will appear after income is recorded for this period.'}
             </div>
@@ -1677,19 +1679,19 @@ function BudgetPage() {
                 )}>
                   <span className="text-sm text-[var(--ref-on-surface-variant)]">
                     {isBudgetReviewStep
-                      ? `${budgetReviewAllocations.length} categories · ${formatCurrency(plannedBudgetAfterDraft)} planned`
-                      : `${budgetDraftLines.length} categor${budgetDraftLines.length === 1 ? 'y' : 'ies'} · ${formatCurrency(plannedBudgetAfterDraft)} total planned`}
+                      ? `${budgetReviewAllocations.length} categories · ${formatAmount(plannedBudgetAfterDraft)} planned`
+                      : `${budgetDraftLines.length} categor${budgetDraftLines.length === 1 ? 'y' : 'ies'} · ${formatAmount(plannedBudgetAfterDraft)} total planned`}
                   </span>
                   <span className={cn('text-sm font-semibold', budgetFooterRemaining != null && budgetFooterRemaining < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]')}>
                   {isBudgetReviewStep && periodIncome > 0
                     ? plannedIncomeRemainder - plannedSavingsTargetAfterDraft < 0
-                      ? `Over income by ${formatCurrency(Math.abs(plannedIncomeRemainder))}`
-                      : `${formatCurrency(plannedIncomeRemainder - plannedSavingsTargetAfterDraft)} left after savings`
+                      ? `Over income by ${formatAmount(Math.abs(plannedIncomeRemainder))}`
+                      : `${formatAmount(plannedIncomeRemainder - plannedSavingsTargetAfterDraft)} left after savings`
                     : availableBudgetAfterDraft == null
                       ? isPeriodTracked ? 'Add income to see what remains' : 'Income tracking unavailable'
                       : availableBudgetAfterDraft < 0
-                        ? `Over by ${formatCurrency(Math.abs(availableBudgetAfterDraft))}`
-                        : `${formatCurrency(availableBudgetAfterDraft)} left after savings`}
+                        ? `Over by ${formatAmount(Math.abs(availableBudgetAfterDraft))}`
+                        : `${formatAmount(availableBudgetAfterDraft)} left after savings`}
                   </span>
                 </div>
               </div>
@@ -1727,7 +1729,7 @@ function BudgetPage() {
                 <div className="space-y-3">
                   <section className="overflow-hidden rounded-3xl bg-[var(--ref-primary)] p-5 text-white">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] opacity-75">Plan at a glance</p>
-                    <p className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight">{formatCurrency(plannedBudgetAfterDraft)}</p>
+                    <p className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight">{formatAmount(plannedBudgetAfterDraft)}</p>
                     <p className="mt-1 text-xs opacity-75">Planned across {budgetReviewAllocations.length} categories</p>
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <div className="rounded-2xl bg-white/10 px-3 py-2.5">
@@ -1738,7 +1740,7 @@ function BudgetPage() {
                         <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">Left after savings</p>
                         <p className="mt-0.5 truncate text-lg font-bold tabular-nums">
                           {periodIncome > 0
-                            ? plannedIncomeLeftAfterSavings < 0 ? `Over ${formatCurrency(Math.abs(plannedIncomeLeftAfterSavings))}` : formatCurrency(plannedIncomeLeftAfterSavings)
+                            ? plannedIncomeLeftAfterSavings < 0 ? `Over ${formatAmount(Math.abs(plannedIncomeLeftAfterSavings))}` : formatAmount(plannedIncomeLeftAfterSavings)
                             : '—'}
                         </p>
                       </div>
@@ -1748,11 +1750,11 @@ function BudgetPage() {
                   <div className="mt-5 border-t border-white/20 pt-4" aria-label="Income allocation chart">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <h3 className="text-xs font-bold">Income allocation</h3>
-                      <span className="text-[10px] font-semibold opacity-70">{formatCurrency(periodIncome)} income</span>
+                      <span className="text-[10px] font-semibold opacity-70">{formatAmount(periodIncome)} income</span>
                     </div>
                     <div
                       role="img"
-                      aria-label={`Income split: budgeted ${formatCurrency(plannedBudgetAfterDraft)}, savings target ${formatCurrency(plannedSavingsTargetAfterDraft)}, unassigned ${formatCurrency(plannedIncomeLeftAfterSavings)}`}
+                      aria-label={`Income split: budgeted ${formatAmount(plannedBudgetAfterDraft)}, savings target ${formatAmount(plannedSavingsTargetAfterDraft)}, unassigned ${formatAmount(plannedIncomeLeftAfterSavings)}`}
                       className="flex h-3 overflow-hidden rounded-full bg-white/10"
                     >
                       {incomePlanCategoryShare > 0 && <span className="h-full" style={{ width: `${incomePlanCategoryShare}%`, backgroundColor: incomePlanColors.budgeted }} />}
@@ -1762,16 +1764,16 @@ function BudgetPage() {
                     <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] leading-tight">
                       <div className="min-w-0">
                         <span className="flex items-center gap-1 opacity-80"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: incomePlanColors.budgeted }} />Budgeted</span>
-                        <strong className="mt-0.5 block truncate tabular-nums">{formatCurrency(plannedBudgetAfterDraft)}</strong>
+                        <strong className="mt-0.5 block truncate tabular-nums">{formatAmount(plannedBudgetAfterDraft)}</strong>
                       </div>
                       <div className="min-w-0">
                         <span className="flex items-center gap-1 opacity-80"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: incomePlanColors.savings }} />Savings</span>
-                        <strong className="mt-0.5 block truncate tabular-nums">{formatCurrency(plannedSavingsTargetAfterDraft)}</strong>
+                        <strong className="mt-0.5 block truncate tabular-nums">{formatAmount(plannedSavingsTargetAfterDraft)}</strong>
                       </div>
                       <div className="min-w-0">
                         <span className="flex items-center gap-1 opacity-80"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: incomePlanColors.unassigned }} />Unassigned</span>
                         <strong className="mt-0.5 block truncate tabular-nums">
-                          {plannedIncomeLeftAfterSavings < 0 ? `Over ${formatCurrency(Math.abs(plannedIncomeLeftAfterSavings))}` : formatCurrency(plannedIncomeLeftAfterSavings)}
+                          {plannedIncomeLeftAfterSavings < 0 ? `Over ${formatAmount(Math.abs(plannedIncomeLeftAfterSavings))}` : formatAmount(plannedIncomeLeftAfterSavings)}
                         </strong>
                       </div>
                     </div>
@@ -1830,10 +1832,10 @@ function BudgetPage() {
                         {periodIncome <= 0
                           ? isPeriodTracked ? 'Record period income to validate this plan and its savings target.' : 'Income tracking is unavailable for this period.'
                           : savingsTargetWillAdjust
-                            ? `Savings would change from ${formatCurrency(savingsTargetAmount)} to ${formatCurrency(plannedSavingsTargetAfterDraft)}.`
+                            ? `Savings would change from ${formatAmount(savingsTargetAmount)} to ${formatAmount(plannedSavingsTargetAfterDraft)}.`
                             : plannedIncomeLeftAfterSavings < 0
-                              ? `${formatCurrency(Math.abs(plannedIncomeLeftAfterSavings))} exceeds recorded income after savings.`
-                              : `${formatCurrency(plannedIncomeLeftAfterSavings)} remains after the savings target.`}
+                              ? `${formatAmount(Math.abs(plannedIncomeLeftAfterSavings))} exceeds recorded income after savings.`
+                              : `${formatAmount(plannedIncomeLeftAfterSavings)} remains after the savings target.`}
                       </p>
                     </div>
 
@@ -1868,8 +1870,8 @@ function BudgetPage() {
                         {recurringCommitmentTotal === 0
                           ? 'No subscription commitments are due in this period.'
                           : recurringFundingGap > 0
-                            ? `${formatCurrency(recurringFundingGap)} of ${formatCurrency(recurringCommitmentTotal)} still needs coverage.`
-                            : `${formatCurrency(recurringCommitmentTotal)} due this period is fully covered.`}
+                            ? `${formatAmount(recurringFundingGap)} of ${formatAmount(recurringCommitmentTotal)} still needs coverage.`
+                            : `${formatAmount(recurringCommitmentTotal)} due this period is fully covered.`}
                       </p>
                     </div>
 
@@ -1898,7 +1900,7 @@ function BudgetPage() {
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
                       <div className="text-right">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{budgetReviewAllocations.length} categories</p>
-                        <p className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatCurrency(plannedBudgetAfterDraft)}</p>
+                        <p className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(plannedBudgetAfterDraft)}</p>
                       </div>
                       <label>
                         <span className="sr-only">Compare this plan with another period</span>
@@ -1925,7 +1927,7 @@ function BudgetPage() {
                       {budgetReviewAllocations.map((allocation) => (
                         <span
                           key={`mix-${allocation.key}`}
-                          title={`${allocation.categoryName}: ${formatCurrency(allocation.plannedAmount)}`}
+                          title={`${allocation.categoryName}: ${formatAmount(allocation.plannedAmount)}`}
                           className="h-full min-w-0"
                           style={{
                             width: `${Math.max(0, allocation.plannedAmount / plannedBudgetAfterDraft * 100)}%`,
@@ -1951,11 +1953,11 @@ function BudgetPage() {
                             </span>
                             <div className="shrink-0 text-right">
                               <p className="font-semibold tabular-nums text-[var(--ref-on-surface)]">
-                                {formatCurrency(allocation.plannedAmount)} <span className="inline-block w-12 text-xs font-medium text-[var(--ref-on-surface-variant)]">{share.toFixed(1)}%</span>
+                                {formatAmount(allocation.plannedAmount)} <span className="inline-block w-12 text-xs font-medium text-[var(--ref-on-surface-variant)]">{share.toFixed(1)}%</span>
                               </p>
                               {reviewComparePeriodId && !reviewComparisonQuery.isLoading && previous && difference != null && (
-                                <p className="text-[10px] tabular-nums text-[var(--ref-on-surface-variant)]" title={`Compared with ${reviewComparisonPeriod?.name ?? 'selected period'} plan of ${formatCurrency(previous.plannedAmount)}`}>
-                                  {difference === 0 ? 'No change' : `${difference > 0 ? '+' : '−'}${formatCurrency(Math.abs(difference))}`} vs {reviewComparisonPeriod?.name ?? 'prior'}
+                                <p className="text-[10px] tabular-nums text-[var(--ref-on-surface-variant)]" title={`Compared with ${reviewComparisonPeriod?.name ?? 'selected period'} plan of ${formatAmount(previous.plannedAmount)}`}>
+                                  {difference === 0 ? 'No change' : `${difference > 0 ? '+' : '−'}${formatAmount(Math.abs(difference))}`} vs {reviewComparisonPeriod?.name ?? 'prior'}
                                 </p>
                               )}
                             </div>
@@ -1971,8 +1973,8 @@ function BudgetPage() {
                     <p className="mt-3 text-xs text-[var(--ref-on-surface-variant)]">No saved budget for {reviewComparisonPeriod.name}.</p>
                   )}
                   {reviewComparePeriodId && !reviewComparisonQuery.isLoading && noLongerPlannedComparedCategories[0] && (
-                    <p className="mt-3 rounded-xl bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs text-[var(--ref-on-surface-variant)]" title={`Not budgeted now: ${noLongerPlannedComparedCategories[0].categoryName}; spent ${formatCurrency(noLongerPlannedComparedCategories[0].actualAmount)} in ${reviewComparisonPeriod?.name ?? 'the comparison period'}`}>
-                      Not budgeted now: {noLongerPlannedComparedCategories[0].categoryName} · spent {formatCurrency(noLongerPlannedComparedCategories[0].actualAmount)} in {reviewComparisonPeriod?.name ?? 'the comparison period'}
+                    <p className="mt-3 rounded-xl bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs text-[var(--ref-on-surface-variant)]" title={`Not budgeted now: ${noLongerPlannedComparedCategories[0].categoryName}; spent ${formatAmount(noLongerPlannedComparedCategories[0].actualAmount)} in ${reviewComparisonPeriod?.name ?? 'the comparison period'}`}>
+                      Not budgeted now: {noLongerPlannedComparedCategories[0].categoryName} · spent {formatAmount(noLongerPlannedComparedCategories[0].actualAmount)} in {reviewComparisonPeriod?.name ?? 'the comparison period'}
                     </p>
                   )}
                 </section>
@@ -2029,7 +2031,7 @@ function BudgetPage() {
                         >
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{category.name}</p>
-                            {recurringAmount > 0 && <p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">Recurring · {formatCurrency(recurringAmount)}</p>}
+                            {recurringAmount > 0 && <p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">Recurring · {formatAmount(recurringAmount)}</p>}
                           </div>
                           <button
                             type="button"
@@ -2070,14 +2072,14 @@ function BudgetPage() {
                           {availableBudgetBeforeDraft == null
                             ? isPeriodTracked ? 'Add income first' : 'Tracking unavailable'
                             : availableBudgetBeforeDraft < 0
-                              ? `Over by ${formatCurrency(Math.abs(availableBudgetBeforeDraft))}`
-                              : formatCurrency(availableBudgetBeforeDraft)}
+                              ? `Over by ${formatAmount(Math.abs(availableBudgetBeforeDraft))}`
+                              : formatAmount(availableBudgetBeforeDraft)}
                         </p>
                       </div>
                       {isPeriodTracked && periodIncome > 0 && (
                         <p className="text-right text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                          {formatCurrency(periodIncome)} income<br />
-                          − {formatCurrency(savingsTargetAmount)} savings ({savingsRate.toFixed(1)}%)
+                          {formatAmount(periodIncome)} income<br />
+                          − {formatAmount(savingsTargetAmount)} savings ({savingsRate.toFixed(1)}%)
                         </p>
                       )}
                     </div>
@@ -2098,9 +2100,9 @@ function BudgetPage() {
                       <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_minmax(112px,0.8fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-[var(--color-border)] py-2 last:border-b-0 sm:gap-x-3">
                         <div className="min-w-0">
                           <h3 className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{categoryName}</h3>
-                          {line.existingBudgetId != null && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Current allocation · {formatCurrency(line.originalPlannedAmount ?? 0)}</p>}
+                          {line.existingBudgetId != null && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Current allocation · {formatAmount(line.originalPlannedAmount ?? 0)}</p>}
                           {lineAmount > 0 && <p className="mt-0.5 truncate text-[10px] font-medium text-[var(--ref-primary)]">{allocationShare.toFixed(1)}% of planned total</p>}
-                          {subscriptionAmount > 0 && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Recurring · {formatCurrency(subscriptionAmount)}</p>}
+                          {subscriptionAmount > 0 && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Recurring · {formatAmount(subscriptionAmount)}</p>}
                         </div>
                         <div className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2.5 py-1 focus-within:border-[var(--ref-primary)]">
                           <CurrencyInput
@@ -2235,7 +2237,7 @@ function BudgetPage() {
 
             <div className="p-3 bg-[var(--ref-surface-container-low)] rounded-lg">
               <p className="text-xs text-[var(--color-text-secondary)]">
-                Currently spent: {editingBudget && formatCurrency(editingBudget.actualAmount)}
+                Currently spent: {editingBudget && formatAmount(editingBudget.actualAmount)}
               </p>
             </div>
 
@@ -2274,7 +2276,7 @@ function BudgetPage() {
               required
             />
             <div className="rounded-xl bg-[var(--ref-surface-container-low)] p-4 text-sm text-[var(--ref-on-surface-variant)]">
-              The planned amount of {movingBudget ? formatCurrency(movingBudget.plannedAmount) : ''} moves with this line. The target period must not already contain this category.
+              The planned amount of {movingBudget ? formatAmount(movingBudget.plannedAmount) : ''} moves with this line. The target period must not already contain this category.
             </div>
             {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
             <div className="flex flex-wrap gap-3 pt-2">
@@ -2356,7 +2358,7 @@ function BudgetPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-bold">{template.name}</h3>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{template.items.length} categories · {formatCurrency(template.items.reduce((sum, item) => sum + item.plannedAmount, 0))}</p>
+                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{template.items.length} categories · {formatAmount(template.items.reduce((sum, item) => sum + item.plannedAmount, 0))}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <Button type="button" size="sm" variant="secondary" aria-pressed={selectedTemplateId === template.id} onClick={() => setSelectedTemplateId(selectedTemplateId === template.id ? null : template.id)}>
@@ -2386,7 +2388,7 @@ function BudgetPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">Preset total</p>
-                    <p className="mt-1 text-lg font-bold text-[var(--ref-on-surface)]">{formatCurrency(selectedTemplate.items.reduce((sum, item) => sum + item.plannedAmount, 0))}</p>
+                    <p className="mt-1 text-lg font-bold text-[var(--ref-on-surface)]">{formatAmount(selectedTemplate.items.reduce((sum, item) => sum + item.plannedAmount, 0))}</p>
                   </div>
                 </div>
                 <ul className="mt-4 max-h-52 divide-y divide-[var(--color-border)] overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4">
@@ -2394,8 +2396,8 @@ function BudgetPage() {
                     const existing = budgetRows.find((row) => row.categoryId === item.categoryId);
                     return (
                       <li key={item.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                        <span className="min-w-0 truncate font-medium">{item.categoryName}{existing ? <span className="ml-2 text-xs text-[var(--ref-on-surface-variant)]">Current {formatCurrency(existing.plannedAmount)}</span> : <span className="ml-2 text-xs text-[var(--color-success)]">New</span>}</span>
-                        <span className="shrink-0 font-semibold tabular-nums">{formatCurrency(item.plannedAmount)}</span>
+                        <span className="min-w-0 truncate font-medium">{item.categoryName}{existing ? <span className="ml-2 text-xs text-[var(--ref-on-surface-variant)]">Current {formatAmount(existing.plannedAmount)}</span> : <span className="ml-2 text-xs text-[var(--color-success)]">New</span>}</span>
+                        <span className="shrink-0 font-semibold tabular-nums">{formatAmount(item.plannedAmount)}</span>
                       </li>
                     );
                   })}

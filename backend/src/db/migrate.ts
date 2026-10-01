@@ -355,6 +355,9 @@ function repairMigrationHistory(journal: MigrationJournal): void {
     "0043_transaction_reallocation": has("transaction_reallocation", "id", "incoming_transaction_id", "outgoing_transaction_id", "amount", "reason", "created_at")
       && indexExists("reallocation_incoming_unique") && indexExists("reallocation_outgoing_unique") && triggerExists("reallocation_pair_unique"),
   };
+  satisfied["0045_recap_period_story"] = has("recap_period_story", "owner_email", "period_id", "payload_json", "generated_at");
+  satisfied["0046_recap_period_seen"] = has("recap_period_highlight_seen", "owner_email", "period_id", "seen_at");
+  satisfied["0044_recap_story"] = has("recap_story", "owner_email", "month", "payload_json", "generated_at");
   const rows = db.$client.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1").all() as Array<{ created_at: number }>;
   let latest = rows.length > 0 ? Number(rows[0].created_at) : 0;
   const repairRows: Array<{ tag: string; when: number }> = [];
@@ -508,6 +511,9 @@ function ensureTransportRouteTemplateTable(): void {
 
 function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
+    recap_period_story: ["owner_email", "period_id", "payload_json", "generated_at"],
+    recap_period_highlight_seen: ["owner_email", "period_id", "seen_at"],
+    recap_story: ["owner_email", "month", "payload_json", "generated_at"],
     transaction: ["id", "date", "tx_type", "subscription_id", "status", "reversal_of_tx_id"],
     account: ["id", "type", "liquidity_class"],
     category: ["id", "name", "is_active", "reporting_account_id"],

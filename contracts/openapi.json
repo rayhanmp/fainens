@@ -11,6 +11,7 @@
   "paths": {
     "/health": {
       "get": {
+        "operationId": "getHealth",
         "tags": [
           "system"
         ],
@@ -46,6 +47,7 @@
     },
     "/health/worker": {
       "get": {
+        "operationId": "getWorkerHealth",
         "tags": [
           "system"
         ],
@@ -122,6 +124,7 @@
     },
     "/": {
       "get": {
+        "operationId": "getRootHealth",
         "tags": [
           "system"
         ],
@@ -385,6 +388,162 @@
                   "required": [
                     "error"
                   ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions/recommend-tags": {
+      "post": {
+        "operationId": "recommendTransactionTags",
+        "tags": [
+          "transactions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  "place": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "categoryId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "transactionId": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "description"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tags": {
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tags"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
                   "additionalProperties": {}
                 }
               }
@@ -18451,6 +18610,1996 @@
                     "error"
                   ],
                   "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recaps/{periodId}/highlight-state": {
+      "get": {
+        "operationId": "getRecapHighlightState",
+        "tags": [
+          "reports"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "seenAt": {
+                      "nullable": true,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "seenAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recaps/{periodId}/highlight-seen": {
+      "post": {
+        "operationId": "markRecapHighlightSeen",
+        "tags": [
+          "reports"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "seenAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "seenAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recaps/{periodId}/story": {
+      "get": {
+        "operationId": "getSavedRecapStory",
+        "tags": [
+          "reports"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "story": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "personalization": {
+                          "type": "object",
+                          "properties": {
+                            "preferredName": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "language": {
+                              "type": "string",
+                              "enum": [
+                                "en",
+                                "id"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "preferredName",
+                            "language"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "snapshot": {
+                          "type": "object",
+                          "properties": {
+                            "period": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "startDate": {
+                                  "type": "number"
+                                },
+                                "endDate": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "startDate",
+                                "endDate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "startMs": {
+                              "type": "number"
+                            },
+                            "endMs": {
+                              "type": "number"
+                            },
+                            "generatedAt": {
+                              "type": "number"
+                            },
+                            "isPartial": {
+                              "type": "boolean"
+                            },
+                            "coverageComplete": {
+                              "type": "boolean"
+                            },
+                            "income": {
+                              "type": "number"
+                            },
+                            "expenses": {
+                              "type": "number"
+                            },
+                            "net": {
+                              "type": "number"
+                            },
+                            "activityCount": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "purchaseCount": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "spendingDays": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "purchaseProfile": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "totalAmount": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "exclusiveMinimum": true
+                                },
+                                "medianAmount": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "exclusiveMinimum": true
+                                }
+                              },
+                              "required": [
+                                "totalAmount",
+                                "medianAmount"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "highlights": {
+                              "type": "object",
+                              "properties": {
+                                "averagePurchaseAmount": {
+                                  "nullable": true,
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "peakSpendingDay": {
+                                  "nullable": true,
+                                  "type": "object",
+                                  "properties": {
+                                    "date": {
+                                      "type": "number"
+                                    },
+                                    "amount": {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "exclusiveMinimum": true
+                                    },
+                                    "purchaseCount": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "date",
+                                    "amount",
+                                    "purchaseCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "topPurchases": {
+                                  "maxItems": 3,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "description": {
+                                        "type": "string"
+                                      },
+                                      "amount": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      },
+                                      "date": {
+                                        "type": "number"
+                                      },
+                                      "category": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "description",
+                                      "amount",
+                                      "date",
+                                      "category"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "repeatPurchases": {
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "description": {
+                                        "type": "string"
+                                      },
+                                      "occurrences": {
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "totalAmount": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      },
+                                      "category": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "description",
+                                      "occurrences",
+                                      "totalAmount",
+                                      "category"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "averagePurchaseAmount",
+                                "peakSpendingDay"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "categories": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "amount": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "amount"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "baseline": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "periodCount": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 3
+                                },
+                                "matchedElapsed": {
+                                  "type": "boolean"
+                                },
+                                "income": {
+                                  "type": "number"
+                                },
+                                "expenses": {
+                                  "type": "number"
+                                },
+                                "purchaseCount": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "purchaseTotal": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "periodCount",
+                                "matchedElapsed",
+                                "income",
+                                "expenses",
+                                "purchaseCount"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "budget": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "planned": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "spent": {
+                                  "type": "number"
+                                },
+                                "remaining": {
+                                  "type": "number"
+                                },
+                                "percentUsed": {
+                                  "nullable": true,
+                                  "type": "number"
+                                },
+                                "categoryCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unbudgetedExpenses": {
+                                  "type": "number"
+                                },
+                                "overBudgetCategoryCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "overBudgetCategories": {
+                                  "maxItems": 3,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "planned": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      },
+                                      "spent": {
+                                        "type": "number"
+                                      },
+                                      "over": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "planned",
+                                      "spent",
+                                      "over"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "planned",
+                                "spent",
+                                "remaining",
+                                "percentUsed",
+                                "categoryCount",
+                                "unbudgetedExpenses",
+                                "overBudgetCategoryCount",
+                                "overBudgetCategories"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "largestPurchase": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "description": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "number"
+                                },
+                                "date": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "description",
+                                "amount",
+                                "date"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "comparison": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "periodId": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "periodName": {
+                                  "type": "string"
+                                },
+                                "previousExpenses": {
+                                  "type": "number"
+                                },
+                                "changePercent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "periodId",
+                                "periodName",
+                                "previousExpenses",
+                                "changePercent"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "period",
+                            "startMs",
+                            "endMs",
+                            "generatedAt",
+                            "isPartial",
+                            "coverageComplete",
+                            "income",
+                            "expenses",
+                            "net",
+                            "activityCount",
+                            "purchaseCount",
+                            "spendingDays",
+                            "categories",
+                            "largestPurchase",
+                            "comparison"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "copy": {
+                          "type": "object",
+                          "properties": {
+                            "shortLabels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 28
+                              }
+                            },
+                            "headline": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "deck": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 180
+                            },
+                            "chapters": {
+                              "minItems": 3,
+                              "maxItems": 13,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "enum": [
+                                      "intro",
+                                      "overview",
+                                      "budget",
+                                      "categories",
+                                      "spotlight",
+                                      "variety",
+                                      "rhythm",
+                                      "purchases",
+                                      "peak",
+                                      "moment",
+                                      "balance",
+                                      "comparison",
+                                      "closing"
+                                    ]
+                                  },
+                                  "eyebrow": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 48
+                                  },
+                                  "title": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "body": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 260
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "eyebrow",
+                                  "title",
+                                  "body"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "headline",
+                            "deck",
+                            "chapters"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "savedAt": {
+                          "type": "number"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "ai",
+                            "template"
+                          ]
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "snapshot",
+                        "copy",
+                        "savedAt",
+                        "source",
+                        "seed"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "story"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "writeRecapStory",
+        "tags": [
+          "reports"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "regenerate": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "personalization": {
+                      "type": "object",
+                      "properties": {
+                        "preferredName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string",
+                          "enum": [
+                            "en",
+                            "id"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "preferredName",
+                        "language"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "snapshot": {
+                      "type": "object",
+                      "properties": {
+                        "period": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "startDate": {
+                              "type": "number"
+                            },
+                            "endDate": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "startDate",
+                            "endDate"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "startMs": {
+                          "type": "number"
+                        },
+                        "endMs": {
+                          "type": "number"
+                        },
+                        "generatedAt": {
+                          "type": "number"
+                        },
+                        "isPartial": {
+                          "type": "boolean"
+                        },
+                        "coverageComplete": {
+                          "type": "boolean"
+                        },
+                        "income": {
+                          "type": "number"
+                        },
+                        "expenses": {
+                          "type": "number"
+                        },
+                        "net": {
+                          "type": "number"
+                        },
+                        "activityCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "purchaseCount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "spendingDays": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "purchaseProfile": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "totalAmount": {
+                              "type": "number",
+                              "minimum": 0,
+                              "exclusiveMinimum": true
+                            },
+                            "medianAmount": {
+                              "type": "number",
+                              "minimum": 0,
+                              "exclusiveMinimum": true
+                            }
+                          },
+                          "required": [
+                            "totalAmount",
+                            "medianAmount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "highlights": {
+                          "type": "object",
+                          "properties": {
+                            "averagePurchaseAmount": {
+                              "nullable": true,
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "peakSpendingDay": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "date": {
+                                  "type": "number"
+                                },
+                                "amount": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "exclusiveMinimum": true
+                                },
+                                "purchaseCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "date",
+                                "amount",
+                                "purchaseCount"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "topPurchases": {
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "amount": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true
+                                  },
+                                  "date": {
+                                    "type": "number"
+                                  },
+                                  "category": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "description",
+                                  "amount",
+                                  "date",
+                                  "category"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "repeatPurchases": {
+                              "maxItems": 2,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "occurrences": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "totalAmount": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true
+                                  },
+                                  "category": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "description",
+                                  "occurrences",
+                                  "totalAmount",
+                                  "category"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "averagePurchaseAmount",
+                            "peakSpendingDay"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "categories": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "amount"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "baseline": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "periodCount": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3
+                            },
+                            "matchedElapsed": {
+                              "type": "boolean"
+                            },
+                            "income": {
+                              "type": "number"
+                            },
+                            "expenses": {
+                              "type": "number"
+                            },
+                            "purchaseCount": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "purchaseTotal": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "periodCount",
+                            "matchedElapsed",
+                            "income",
+                            "expenses",
+                            "purchaseCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "budget": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "planned": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "spent": {
+                              "type": "number"
+                            },
+                            "remaining": {
+                              "type": "number"
+                            },
+                            "percentUsed": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "categoryCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "unbudgetedExpenses": {
+                              "type": "number"
+                            },
+                            "overBudgetCategoryCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "overBudgetCategories": {
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "planned": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "spent": {
+                                    "type": "number"
+                                  },
+                                  "over": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "planned",
+                                  "spent",
+                                  "over"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "planned",
+                            "spent",
+                            "remaining",
+                            "percentUsed",
+                            "categoryCount",
+                            "unbudgetedExpenses",
+                            "overBudgetCategoryCount",
+                            "overBudgetCategories"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "largestPurchase": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "description": {
+                              "type": "string"
+                            },
+                            "amount": {
+                              "type": "number"
+                            },
+                            "date": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "description",
+                            "amount",
+                            "date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "comparison": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "periodId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "periodName": {
+                              "type": "string"
+                            },
+                            "previousExpenses": {
+                              "type": "number"
+                            },
+                            "changePercent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "periodId",
+                            "periodName",
+                            "previousExpenses",
+                            "changePercent"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "period",
+                        "startMs",
+                        "endMs",
+                        "generatedAt",
+                        "isPartial",
+                        "coverageComplete",
+                        "income",
+                        "expenses",
+                        "net",
+                        "activityCount",
+                        "purchaseCount",
+                        "spendingDays",
+                        "categories",
+                        "largestPurchase",
+                        "comparison"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "copy": {
+                      "type": "object",
+                      "properties": {
+                        "shortLabels": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 28
+                          }
+                        },
+                        "headline": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "deck": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 180
+                        },
+                        "chapters": {
+                          "minItems": 3,
+                          "maxItems": 13,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "intro",
+                                  "overview",
+                                  "budget",
+                                  "categories",
+                                  "spotlight",
+                                  "variety",
+                                  "rhythm",
+                                  "purchases",
+                                  "peak",
+                                  "moment",
+                                  "balance",
+                                  "comparison",
+                                  "closing"
+                                ]
+                              },
+                              "eyebrow": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 48
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
+                              },
+                              "body": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 260
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "eyebrow",
+                              "title",
+                              "body"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "headline",
+                        "deck",
+                        "chapters"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "savedAt": {
+                      "type": "number"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "template"
+                      ]
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "snapshot",
+                    "copy",
+                    "savedAt",
+                    "source",
+                    "seed"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recaps": {
+      "get": {
+        "operationId": "listRecapPeriods",
+        "tags": [
+          "reports"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "startDate": {
+                        "type": "number"
+                      },
+                      "endDate": {
+                        "type": "number"
+                      },
+                      "isPartial": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "startDate",
+                      "endDate",
+                      "isPartial"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recaps/{periodId}": {
+      "get": {
+        "operationId": "getPeriodRecap",
+        "tags": [
+          "reports"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "periodId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "period": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "startDate": {
+                          "type": "number"
+                        },
+                        "endDate": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "startDate",
+                        "endDate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "startMs": {
+                      "type": "number"
+                    },
+                    "endMs": {
+                      "type": "number"
+                    },
+                    "generatedAt": {
+                      "type": "number"
+                    },
+                    "isPartial": {
+                      "type": "boolean"
+                    },
+                    "coverageComplete": {
+                      "type": "boolean"
+                    },
+                    "income": {
+                      "type": "number"
+                    },
+                    "expenses": {
+                      "type": "number"
+                    },
+                    "net": {
+                      "type": "number"
+                    },
+                    "activityCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "purchaseCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "spendingDays": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "purchaseProfile": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "totalAmount": {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
+                        },
+                        "medianAmount": {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
+                        }
+                      },
+                      "required": [
+                        "totalAmount",
+                        "medianAmount"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "highlights": {
+                      "type": "object",
+                      "properties": {
+                        "averagePurchaseAmount": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "peakSpendingDay": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "date": {
+                              "type": "number"
+                            },
+                            "amount": {
+                              "type": "number",
+                              "minimum": 0,
+                              "exclusiveMinimum": true
+                            },
+                            "purchaseCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "amount",
+                            "purchaseCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "topPurchases": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "description": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              },
+                              "date": {
+                                "type": "number"
+                              },
+                              "category": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "description",
+                              "amount",
+                              "date",
+                              "category"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "repeatPurchases": {
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "description": {
+                                "type": "string"
+                              },
+                              "occurrences": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "totalAmount": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              },
+                              "category": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "description",
+                              "occurrences",
+                              "totalAmount",
+                              "category"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "averagePurchaseAmount",
+                        "peakSpendingDay"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "baseline": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "periodCount": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        },
+                        "matchedElapsed": {
+                          "type": "boolean"
+                        },
+                        "income": {
+                          "type": "number"
+                        },
+                        "expenses": {
+                          "type": "number"
+                        },
+                        "purchaseCount": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "purchaseTotal": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "periodCount",
+                        "matchedElapsed",
+                        "income",
+                        "expenses",
+                        "purchaseCount"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "budget": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "planned": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "spent": {
+                          "type": "number"
+                        },
+                        "remaining": {
+                          "type": "number"
+                        },
+                        "percentUsed": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "categoryCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unbudgetedExpenses": {
+                          "type": "number"
+                        },
+                        "overBudgetCategoryCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "overBudgetCategories": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "planned": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "spent": {
+                                "type": "number"
+                              },
+                              "over": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "planned",
+                              "spent",
+                              "over"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "planned",
+                        "spent",
+                        "remaining",
+                        "percentUsed",
+                        "categoryCount",
+                        "unbudgetedExpenses",
+                        "overBudgetCategoryCount",
+                        "overBudgetCategories"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "largestPurchase": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "number"
+                        },
+                        "date": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "description",
+                        "amount",
+                        "date"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "comparison": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "periodId": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "periodName": {
+                          "type": "string"
+                        },
+                        "previousExpenses": {
+                          "type": "number"
+                        },
+                        "changePercent": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "periodId",
+                        "periodName",
+                        "previousExpenses",
+                        "changePercent"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "period",
+                    "startMs",
+                    "endMs",
+                    "generatedAt",
+                    "isPartial",
+                    "coverageComplete",
+                    "income",
+                    "expenses",
+                    "net",
+                    "activityCount",
+                    "purchaseCount",
+                    "spendingDays",
+                    "categories",
+                    "largestPurchase",
+                    "comparison"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useState, useCallback } from 'react';
 import { CheckCircle, AlertTriangle, Info, X, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -14,6 +15,7 @@ export interface Toast {
 
 // Toast Item Component
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
+  const { maskAmounts } = useBalanceVisibility();
   const [isExiting, setIsExiting] = useState(false);
   const handleRemove = useCallback(() => {
     setIsExiting(true);
@@ -63,16 +65,16 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           {icons[toast.type]}
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
-          <p className="text-sm font-semibold leading-5">{toast.title}</p>
+          <p className="text-sm font-semibold leading-5">{maskAmounts(toast.title)}</p>
           {toast.message && (
-            <p className="mt-1 text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">{toast.message}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">{maskAmounts(toast.message)}</p>
           )}
         </div>
         <button
           type="button"
           onClick={handleRemove}
           className="-mr-1 -mt-1 grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"
-          aria-label={`Dismiss notification: ${toast.title}`}
+          aria-label={`Dismiss notification: ${maskAmounts(toast.title)}`}
         >
           <X className="w-4 h-4" />
         </button>

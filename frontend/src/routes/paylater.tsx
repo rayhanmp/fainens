@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -8,7 +9,6 @@ import { RequireAuth } from '../lib/auth';
 import { useMemo, useState } from 'react';
 import type { api } from '../lib/api';
 import { usePaylaterQuery, useSettlePaylaterMutation } from '../features/paylater/queries';
-import { formatCurrency } from '../lib/utils';
 import { PageContainer } from '../components/ui/PageContainer';
 import {
   Calendar,
@@ -53,6 +53,7 @@ function scheduleForDay(
 }
 
 function PaylaterPage() {
+  const { formatAmount } = useBalanceVisibility();
   const paylaterQuery = usePaylaterQuery();
   const settlePaylaterMutation = useSettlePaylaterMutation();
   const obligationsPayload = paylaterQuery.data?.obligations ?? null;
@@ -171,7 +172,7 @@ function PaylaterPage() {
                 Total outstanding
               </p>
               <p className="text-2xl font-black font-headline tracking-tight">
-                {formatCurrency(totalOutstanding)}
+                {formatAmount(totalOutstanding)}
               </p>
             </div>
           </div>
@@ -267,7 +268,7 @@ function PaylaterPage() {
                                 )}
                                 title={ev.description}
                               >
-                                {formatCurrency(ev.amountCents)}
+                                {formatAmount(ev.amountCents)}
                               </div>
                             ))}
                             {onDay.length > 1 && (
@@ -279,7 +280,7 @@ function PaylaterPage() {
                         )}
                         {onDay.length > 2 && totalShown > 0 && (
                           <span className="text-[7px] text-[var(--color-text-secondary)] leading-none truncate">
-                            Σ {formatCurrency(totalShown)}
+                            Σ {formatAmount(totalShown)}
                           </span>
                         )}
                       </div>
@@ -325,7 +326,7 @@ function PaylaterPage() {
                               </p>
                             </div>
                           </div>
-                          <p className="font-bold shrink-0">{formatCurrency(ex.totalOutstandingCents)}</p>
+                          <p className="font-bold shrink-0">{formatAmount(ex.totalOutstandingCents)}</p>
                         </div>
                       ))}
                     </div>
@@ -431,9 +432,9 @@ function PaylaterPage() {
                               <span className="text-[var(--color-text-secondary)]">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-4 font-mono">{formatCurrency(row.principalCents)}</td>
-                          <td className="px-4 py-4 font-mono">{formatCurrency(row.interestPostedCents)}</td>
-                          <td className="px-4 py-4 font-mono font-bold">{formatCurrency(row.outstandingCents)}</td>
+                          <td className="px-4 py-4 font-mono">{formatAmount(row.principalCents)}</td>
+                          <td className="px-4 py-4 font-mono">{formatAmount(row.interestPostedCents)}</td>
+                          <td className="px-4 py-4 font-mono font-bold">{formatAmount(row.outstandingCents)}</td>
                           <td className="px-4 py-4 text-right">
                             {row.outstandingCents > 0 ? (
                               <Button size="sm" onClick={() => openPay(row)}>
@@ -462,7 +463,7 @@ function PaylaterPage() {
               <>
                 {payModal.description}{' '}
                 <span className="text-[var(--color-text-secondary)]">
-                  (remaining {formatCurrency(payModal.outstandingCents)})
+                  (remaining {formatAmount(payModal.outstandingCents)})
                 </span>
               </>
             ) : null

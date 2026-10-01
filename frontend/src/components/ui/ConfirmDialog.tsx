@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useRef, useCallback, createContext, useContext } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
@@ -30,6 +31,7 @@ function ConfirmDialog({
   variant = 'default',
   isLoading = false,
 }: ConfirmDialogProps) {
+  const { maskAmounts } = useBalanceVisibility();
   const icon = {
     danger: <AlertCircle className="w-6 h-6 text-[var(--color-danger)]" />,
     warning: <AlertTriangle className="w-6 h-6 text-[var(--color-warning)]" />,
@@ -46,7 +48,7 @@ function ConfirmDialog({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={title}
+      title={maskAmounts(title)}
       size="default"
     >
       <div className="flex flex-col gap-6">
@@ -60,7 +62,7 @@ function ConfirmDialog({
             {icon}
           </div>
           <p className="text-sm text-[var(--color-text-secondary)] pt-2">
-            {message}
+            {maskAmounts(message)}
           </p>
         </div>
 

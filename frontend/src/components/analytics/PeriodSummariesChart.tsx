@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useMemo } from 'react';
 import {
   Bar,
@@ -11,7 +12,6 @@ import {
   ComposedChart,
 } from 'recharts';
 import { Card } from '../ui/Card';
-import { formatCurrency } from '../../lib/utils';
 import { PieChart } from 'lucide-react';
 import { usePeriodSummariesQuery } from '../../features/analytics/queries';
 
@@ -24,6 +24,7 @@ interface PeriodData {
 }
 
 export function PeriodSummariesChart() {
+  const { formatAmount, maskAmounts } = useBalanceVisibility();
   const periodSummariesQuery = usePeriodSummariesQuery();
   const data = useMemo<PeriodData[]>(() => (periodSummariesQuery.data ?? []).map((period) => ({
     name: period.periodName,
@@ -58,13 +59,13 @@ export function PeriodSummariesChart() {
         <div className="text-center p-2 bg-[var(--color-success)]/10 border-2 border-[var(--color-border)]">
           <p className="text-xs text-[var(--color-text-secondary)]">Total Income</p>
           <p className="font-mono font-bold text-[var(--color-success)]">
-            {formatCurrency(totals.income)}
+            {formatAmount(totals.income)}
           </p>
         </div>
         <div className="text-center p-2 bg-[var(--color-danger)]/10 border-2 border-[var(--color-border)]">
           <p className="text-xs text-[var(--color-text-secondary)]">Total Expenses</p>
           <p className="font-mono font-bold text-[var(--color-danger)]">
-            {formatCurrency(totals.expenses)}
+            {formatAmount(totals.expenses)}
           </p>
         </div>
         <div className="text-center p-2 bg-[var(--color-accent)]/10 border-2 border-[var(--color-border)]">
@@ -91,7 +92,7 @@ export function PeriodSummariesChart() {
               yAxisId="left"
               tick={{ fontSize: 11, fontFamily: 'Space Mono' }}
               stroke="#1A1A1A"
-              tickFormatter={(value) => `Rp ${(value / 1000000).toFixed(0)}M`}
+              tickFormatter={(value) => maskAmounts(`Rp ${(value / 1000000).toFixed(0)}M`)}
             />
             <YAxis
               yAxisId="right"
@@ -110,7 +111,7 @@ export function PeriodSummariesChart() {
                         <p key={index} className="text-sm" style={{ color: entry.color }}>
                           {entry.name}: {entry.name === 'Savings Rate' 
                             ? `${(entry.value as number).toFixed(1)}%`
-                            : formatCurrency(entry.value as number)
+                            : formatAmount(entry.value as number)
                           }
                         </p>
                       ))}

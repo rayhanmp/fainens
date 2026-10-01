@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   Car,
@@ -20,7 +21,7 @@ import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { PageContainer } from '../components/ui/PageContainer';
-import { cn, formatCurrency, parseIdNominalToInt } from '../lib/utils';
+import { cn, parseIdNominalToInt } from '../lib/utils';
 
 export const Route = createFileRoute('/subscriptions')({
   component: SubscriptionsPage,
@@ -120,6 +121,7 @@ function formatBillingCycle(cycle: string) {
 }
 
 function SubscriptionsPage() {
+  const { formatAmount } = useBalanceVisibility();
   const subscriptionsQuery = useSubscriptionsQuery();
   const createSubscriptionMutation = useCreateSubscriptionMutation();
   const updateSubscriptionMutation = useUpdateSubscriptionMutation();
@@ -345,7 +347,7 @@ function SubscriptionsPage() {
               Total monthly commitment
             </p>
             <h1 className="font-headline text-5xl font-extrabold tracking-tighter text-[var(--ref-on-surface)] md:text-6xl lg:text-7xl">
-              {formatCurrency(totalMonthly)}
+              {formatAmount(totalMonthly)}
               <span className="ml-1 text-2xl font-medium text-[var(--ref-on-surface-variant)]">/mo</span>
             </h1>
           </div>
@@ -378,7 +380,7 @@ function SubscriptionsPage() {
                     </p>
                     <p className="mt-2 text-xs">
                       {renewalPreview.occurrences.slice(0, 8).map((item) =>
-                        `${item.subscriptionName} · ${formatShortDate(item.dueAt)} · ${formatCurrency(item.amount)}`
+                        `${item.subscriptionName} · ${formatShortDate(item.dueAt)} · ${formatAmount(item.amount)}`
                       ).join('  |  ')}
                       {renewalPreview.occurrences.length > 8 ? `  |  +${renewalPreview.occurrences.length - 8} more` : ''}
                     </p>
@@ -484,7 +486,7 @@ function SubscriptionsPage() {
                               </p>
                             </div>
                             <p className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">
-                              {formatCurrency(sub.amount)}{formatBillingCycle(sub.billingCycle)}
+                              {formatAmount(sub.amount)}{formatBillingCycle(sub.billingCycle)}
                             </p>
                           </div>
                         </div>
@@ -521,7 +523,7 @@ function SubscriptionsPage() {
                               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                                 <span className="min-w-0 break-words text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
                                 <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">
-                                  {formatCurrency(r.amount)}
+                                  {formatAmount(r.amount)}
                                 </span>
                               </div>
                               <p className="text-[11px] text-[var(--ref-on-surface-variant)]">
@@ -549,7 +551,7 @@ function SubscriptionsPage() {
                               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                                 <span className="min-w-0 break-words text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
                                 <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">
-                                  {formatCurrency(r.amount)}
+                                  {formatAmount(r.amount)}
                                 </span>
                               </div>
                               <p className="text-[11px] text-[var(--ref-on-surface-variant)]">

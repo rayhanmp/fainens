@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { ReallocationDetails } from "./ReallocationDetails";
 import type { ReallocationInfo } from "../../features/transactions/reallocation";
 import { useEffect, useRef, useState } from 'react';
@@ -229,6 +230,7 @@ export function TransactionModal({
   pendingTransaction,
   initialPrefill,
 }: TransactionModalProps) {
+  const { formatAmount, maskAmounts } = useBalanceVisibility();
   const createTransactionMutation = useCreateTransaction();
   const updateTransactionMutation = useUpdateTransaction();
   const previewPendingMutation = usePreviewPendingTransactionMutation();
@@ -622,7 +624,8 @@ export function TransactionModal({
     },
     mode: 'onSubmit',
   });
-  const editMetadataTagIds = editMetadataForm.watch('tagIds');
+  const editMetadataValues = editMetadataForm.watch();
+  const editMetadataTagIds = editMetadataValues.tagIds;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1486,7 +1489,7 @@ export function TransactionModal({
           {a.name}
         </span>
         <span className="text-[10px] text-[var(--color-muted)]">
-          {getAccountTypeLabel(a.type)} · {formatCurrency(a.balance)}
+          {getAccountTypeLabel(a.type)} · {formatAmount(a.balance)}
         </span>
         {disabled && disabledHint && (
           <span className="mt-0.5 text-[10px] font-semibold text-[var(--color-muted)]">
@@ -1570,7 +1573,7 @@ export function TransactionModal({
                 <p className="font-label text-sm text-[var(--color-muted)] mb-2">Total Amount</p>
                 <h2 className="font-headline text-5xl font-extrabold text-[var(--color-on-background)] tracking-tighter">
                   <span className="text-2xl font-bold text-[var(--color-primary)] align-top mr-1">Rp</span>
-                  {amount.toLocaleString('id-ID')}
+                  {formatAmount(amount).replace('Rp ', '')}
                 </h2>
               </div>
 
@@ -1630,7 +1633,7 @@ export function TransactionModal({
                   </div>
                   <div>
                     <p className="font-label text-xs text-[var(--color-muted)]">Purpose</p>
-                    <p className="font-body text-sm font-semibold">{editingTransaction.description}</p>
+                    <p className="font-body text-sm font-semibold">{maskAmounts(editingTransaction.description)}</p>
                   </div>
                 </div>
 
@@ -1663,7 +1666,7 @@ export function TransactionModal({
                   </div>
                   <div className="flex-1">
                     <p className="font-label text-xs text-[var(--color-muted)]">Note</p>
-                    <p className="font-body text-sm font-semibold italic">{editingTransaction.notes}</p>
+                    <p className="font-body text-sm font-semibold italic">{maskAmounts(editingTransaction.notes)}</p>
                   </div>
                 </div>
               )}
@@ -1725,7 +1728,7 @@ export function TransactionModal({
           className="max-w-4xl"
           footer={
             <div className="w-full space-y-3">
-              {formError && <div className="rounded-xl bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{formError}</div>}
+              {formError && <div className="rounded-xl bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{maskAmounts(formError)}</div>}
               <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
                 <p className="text-xs text-[var(--color-muted)]">Click a detail to edit it. Amounts and accounts stay protected.</p>
                 <div className="flex w-full gap-3 md:w-auto">
@@ -1750,7 +1753,7 @@ export function TransactionModal({
                     )}
                   </div>
                   <div>
-                    {activeDetailField === 'description' ? <input autoFocus value={editMeta.description} onChange={(event) => setEditMeta({ ...editMeta, description: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-full rounded-lg bg-[var(--ref-surface-container-low)] px-2 py-1 font-headline text-base font-bold tracking-tight outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('description')} className="group flex items-center gap-1 rounded-lg -ml-2 px-2 py-1 text-left transition-colors hover:bg-[var(--ref-surface-container-low)]"><h1 className="font-headline font-bold text-base tracking-tight text-[var(--color-on-background)]">{editMeta.description || 'Untitled transaction'}</h1><Pencil className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
+                    {activeDetailField === 'description' ? <input autoFocus value={editMeta.description} onChange={(event) => setEditMeta({ ...editMeta, description: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-full rounded-lg bg-[var(--ref-surface-container-low)] px-2 py-1 font-headline text-base font-bold tracking-tight outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('description')} className="group flex items-center gap-1 rounded-lg -ml-2 px-2 py-1 text-left transition-colors hover:bg-[var(--ref-surface-container-low)]"><h1 className="font-headline font-bold text-base tracking-tight text-[var(--color-on-background)]">{maskAmounts(editMeta.description || 'Untitled transaction')}</h1><Pencil className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
                     {activeDetailField === 'date' ? <div className="mt-1 flex gap-1"><input autoFocus type="date" value={editMeta.date} onChange={(event) => setEditMeta({ ...editMeta, date: event.target.value })} className="min-w-0 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /><input type="time" value={editMeta.time} onChange={(event) => setEditMeta({ ...editMeta, time: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-20 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /></div> : <button type="button" onClick={() => setActiveDetailField('date')} className="group mt-0.5 flex items-center gap-1 rounded px-1 -ml-1 text-[var(--color-muted)] font-label text-xs uppercase tracking-widest transition-colors hover:bg-[var(--ref-surface-container-low)]">{detailDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {detailDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}<Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
                   </div>
                 </div>
@@ -1766,7 +1769,7 @@ export function TransactionModal({
                 <div className="flex items-baseline gap-2">
                   <span className="font-headline font-bold text-3xl text-[var(--color-primary)]">Rp</span>
                   <span className="font-headline font-extrabold text-6xl tracking-tighter text-[var(--color-on-background)]">
-                    {amount.toLocaleString('id-ID')}
+                    {formatAmount(amount).replace('Rp ', '')}
                   </span>
                 </div>
               </div>
@@ -1812,7 +1815,7 @@ export function TransactionModal({
                 {/* Tags */}
                 <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
                   <p className="font-label text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Tags</p>
-                  {activeDetailField === 'tags' ? <div className="pt-1"><TagPicker tags={tags} selectedTagIds={editMeta.tagIds} onChange={(tagIds) => setEditMeta({ ...editMeta, tagIds })} /><button type="button" onClick={() => setActiveDetailField(null)} className="mt-2 px-1.5 text-xs font-bold text-[var(--ref-primary)]">Done</button></div> : <button type="button" onClick={() => setActiveDetailField('tags')} className="group flex flex-wrap items-center gap-1.5 text-left">{editMeta.tagIds.length > 0 ? tags.filter((tag) => editMeta.tagIds.includes(tag.id)).map((tag) => <span key={tag.id} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-secondary)]">{tag.name}</span>) : <span className="text-sm text-[var(--color-muted)]">Add tags</span>}<Pencil className="h-3.5 w-3.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
+                  {activeDetailField === 'tags' ? <div className="pt-1"><TagPicker tags={tags} suggestionContext={{ description: editMeta.description, notes: editMeta.notes, place: editMeta.place, categoryId: editMeta.categoryId ? Number(editMeta.categoryId) : undefined, transactionId: editingTransaction.id }} selectedTagIds={editMeta.tagIds} onChange={(tagIds) => setEditMeta({ ...editMeta, tagIds })} /><button type="button" onClick={() => setActiveDetailField(null)} className="mt-2 px-1.5 text-xs font-bold text-[var(--ref-primary)]">Done</button></div> : <button type="button" onClick={() => setActiveDetailField('tags')} className="group flex flex-wrap items-center gap-1.5 text-left">{editMeta.tagIds.length > 0 ? tags.filter((tag) => editMeta.tagIds.includes(tag.id)).map((tag) => <span key={tag.id} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-secondary)]">{tag.name}</span>) : <span className="text-sm text-[var(--color-muted)]">Add tags</span>}<Pencil className="h-3.5 w-3.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                 </div>
 
                 {/* Location */}
@@ -1836,7 +1839,7 @@ export function TransactionModal({
                     <div className="p-1 bg-[var(--ref-surface-container-high)] text-[var(--color-muted)] rounded-md">
                       <StickyNote className="w-3.5 h-3.5" />
                     </div>
-                    {activeDetailField === 'notes' ? <textarea autoFocus value={editMeta.notes} onChange={(event) => setEditMeta({ ...editMeta, notes: event.target.value })} onBlur={() => setActiveDetailField(null)} placeholder="Add a note" rows={2} className="min-w-0 flex-1 resize-none rounded bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-base font-semibold italic outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('notes')} className="group flex min-w-0 items-center gap-1 text-left"><p className={cn('font-headline text-base font-semibold italic', !editMeta.notes && 'text-sm font-normal not-italic text-[var(--color-muted)]')}>{editMeta.notes || 'Add a note'}</p><Pencil className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
+                    {activeDetailField === 'notes' ? <textarea autoFocus value={editMeta.notes} onChange={(event) => setEditMeta({ ...editMeta, notes: event.target.value })} onBlur={() => setActiveDetailField(null)} placeholder="Add a note" rows={2} className="min-w-0 flex-1 resize-none rounded bg-[var(--ref-surface-container-lowest)] px-2 py-1 text-base font-semibold italic outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('notes')} className="group flex min-w-0 items-center gap-1 text-left"><p className={cn('font-headline text-base font-semibold italic', !editMeta.notes && 'text-sm font-normal not-italic text-[var(--color-muted)]')}>{maskAmounts(editMeta.notes || 'Add a note')}</p><Pencil className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-70" /></button>}
                   </div>
                 </div>
                 <div className="space-y-0.5 rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--ref-surface-container-low)]">
@@ -2090,7 +2093,7 @@ export function TransactionModal({
                 <TagIcon className="w-3.5 h-3.5" />
                 Tags
               </label>
-              <TagPicker tags={tags} selectedTagIds={editMetadataTagIds} onChange={(tagIds) => editMetadataForm.setValue('tagIds', tagIds, { shouldDirty: true })} />
+              <TagPicker tags={tags} suggestionContext={{ description: editMetadataValues.description, notes: editMetadataValues.notes, place: editMetadataValues.place, categoryId: editMetadataValues.categoryId ? Number(editMetadataValues.categoryId) : undefined, transactionId: editingTransaction.id }} selectedTagIds={editMetadataTagIds} onChange={(tagIds) => editMetadataForm.setValue('tagIds', tagIds, { shouldDirty: true })} />
             </div>
 
             {/* Notes - Full Width */}
@@ -2110,7 +2113,7 @@ export function TransactionModal({
           {formError && (
             <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-[var(--color-danger)]/10 text-[var(--color-danger)] text-sm">
               <StickyNote className="w-4 h-4" />
-              {formError}
+              {maskAmounts(formError)}
             </div>
           )}
 
@@ -2154,7 +2157,7 @@ export function TransactionModal({
       }
       footer={inputMode === 'journal' ? (
         <div className="w-full space-y-3">
-          {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+          {formError && <p className="text-sm text-[var(--color-danger)]">{maskAmounts(formError)}</p>}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
             <Button type="button" variant="secondary" onClick={onClose} className="rounded-full py-3 sm:min-w-[120px]">Cancel</Button>
             <Button type="submit" form="journal-transaction-form" isLoading={isSubmitting} className="rounded-full py-3 shadow-lg sm:min-w-[200px]">
@@ -2164,7 +2167,7 @@ export function TransactionModal({
         </div>
       ) : inputMode === 'simple' && !pendingTransaction ? (
         <div className="w-full space-y-3">
-          {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+          {formError && <p className="text-sm text-[var(--color-danger)]">{maskAmounts(formError)}</p>}
           <Button type="submit" form="simple-transaction-form" isLoading={isSubmitting} className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none">
             {simpleForm.type === 'paylater' ? <CreditCard className="w-5 h-5" /> : <Save className="w-5 h-5" />}
             {simpleForm.type === 'paylater' ? 'Record settlement' : 'Save transaction'}
@@ -2302,7 +2305,7 @@ export function TransactionModal({
                 const netExpense = calculateJournalNetExpense();
                 const allocated = journalValues.categoryAllocations.reduce((sum, allocation) => sum + (parseInt(allocation.amount, 10) || 0), 0);
                 return <p className={cn('text-xs font-semibold', netExpense === allocated ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]')}>
-                  Allocated {formatCurrency(allocated)} · Net expense {formatCurrency(netExpense)}
+                  Allocated {formatAmount(allocated)} · Net expense {formatAmount(netExpense)}
                 </p>;
               })()}
             </div>
@@ -2318,7 +2321,7 @@ export function TransactionModal({
                       : 'border-[var(--color-warning)] bg-amber-50/80',
                   )}
                 >
-                  Debits: {formatCurrency(totalDebit)} | Credits: {formatCurrency(totalCredit)}
+                  Debits: {formatAmount(totalDebit)} | Credits: {formatAmount(totalCredit)}
                   {!isBalanced && (
                     <span className="ml-2 text-[var(--color-danger)]">Not balanced</span>
                   )}
@@ -2355,7 +2358,7 @@ export function TransactionModal({
                 <label className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 block">
                   Tags
                 </label>
-                <TagPicker tags={tags} selectedTagIds={journalValues.tagIds} onChange={(tagIds) => journalForm.setValue('tagIds', tagIds, { shouldDirty: true })} />
+                <TagPicker tags={tags} suggestionContext={{ description: journalValues.description, notes: journalValues.notes, place: journalValues.place, categoryId: journalValues.categoryAllocations.length === 1 && journalValues.categoryAllocations[0].categoryId ? Number(journalValues.categoryAllocations[0].categoryId) : undefined }} selectedTagIds={journalValues.tagIds} onChange={(tagIds) => journalForm.setValue('tagIds', tagIds, { shouldDirty: true })} />
               </div>
             </div>
           </div>
@@ -2416,7 +2419,7 @@ export function TransactionModal({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--color-muted)]">Amount</span>
-                  <span className="font-medium">{formatCurrency(aiParsed.amount)}</span>
+                  <span className="font-medium">{formatAmount(aiParsed.amount)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--color-muted)]">Category</span>
@@ -2617,7 +2620,7 @@ export function TransactionModal({
                             )}
                           >
                             <span className="block truncate text-sm font-bold">{account.name}</span>
-                            <span className="block truncate text-[10px] text-[var(--color-text-secondary)]">{formatCurrency(account.balance)}</span>
+                            <span className="block truncate text-[10px] text-[var(--color-text-secondary)]">{formatAmount(account.balance)}</span>
                           </button>
                         );
                       })}
@@ -2668,7 +2671,7 @@ export function TransactionModal({
                       </label>
                       <div>
                         <p className="mb-2 text-sm font-semibold">Tags</p>
-                        <TagPicker tags={tags} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
+                        <TagPicker tags={tags} suggestionContext={{ description: simpleForm.description, notes: simpleForm.notes, place: simpleForm.place, categoryId: simpleForm.type === 'expense' && simpleForm.categoryId ? Number(simpleForm.categoryId) : undefined }} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
                       </div>
                       <div>
                         <p className="mb-2 text-sm font-semibold">Receipt or attachment</p>
@@ -2746,7 +2749,7 @@ export function TransactionModal({
               hint={simpleForm.type === 'transfer' ? (() => {
                 const details = calculateTransferDetails();
                 return details && !('error' in details) && details.fee > 0
-                  ? `* ${formatCurrency(details.fee)} transfer fee from ${details.senderPays ? 'sender' : 'recipient'}`
+                  ? `* ${formatAmount(details.fee)} transfer fee from ${details.senderPays ? 'sender' : 'recipient'}`
                   : undefined;
               })() : undefined}
             />
@@ -2894,7 +2897,7 @@ export function TransactionModal({
                               #{inst.installmentNumber} - {new Date(inst.dueDate).toLocaleDateString()}
                             </span>
                             <span className="font-medium text-[var(--color-text-primary)]">
-                              {formatCurrency(inst.totalCents)}
+                              {formatAmount(inst.totalCents)}
                             </span>
                           </div>
                         ))}
@@ -2902,7 +2905,7 @@ export function TransactionModal({
                       <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex justify-between items-center">
                         <span className="text-sm font-semibold text-[var(--color-text-primary)]">Total</span>
                         <span className="font-bold text-[var(--color-accent)]">
-                          {formatCurrency(installmentPreview.reduce((sum, i) => sum + i.totalCents, 0))}
+                          {formatAmount(installmentPreview.reduce((sum, i) => sum + i.totalCents, 0))}
                         </span>
                       </div>
                     </div>
@@ -3129,7 +3132,7 @@ export function TransactionModal({
                         .map((o) => (
                           <option key={o.recognitionTxId} value={o.recognitionTxId}>
                             #{o.recognitionTxId} · {o.description} · {o.liabilityAccountName} · remaining{' '}
-                            {formatCurrency(o.outstandingCents)}
+                            {formatAmount(o.outstandingCents)}
                           </option>
                         ))}
                     </select>
@@ -3314,7 +3317,7 @@ export function TransactionModal({
                   <label className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 block">
                     Tags
                   </label>
-                  <TagPicker tags={tags} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
+                  <TagPicker tags={tags} suggestionContext={{ description: simpleForm.description, notes: simpleForm.notes, place: simpleForm.place, categoryId: simpleForm.type === 'expense' && simpleForm.categoryId ? Number(simpleForm.categoryId) : undefined }} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
                 </div>
               ) : (
                 <p className="text-xs text-[var(--color-text-secondary)]">
@@ -3343,7 +3346,7 @@ export function TransactionModal({
 
           {pendingTransaction && (
           <div className={stickyFooter}>
-            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
+            {formError && <p className="text-sm text-[var(--color-danger)]">{maskAmounts(formError)}</p>}
               <div className="flex gap-2 w-full max-w-md mx-auto">
                 <Button
                   type="button"

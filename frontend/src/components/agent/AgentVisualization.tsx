@@ -1,3 +1,5 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
+import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { BarChart3, CalendarDays, CircleDollarSign, Gauge, PieChart, TrendingUp, Wallet } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -504,6 +506,14 @@ function formatCompactValue(value: number, unit: VisualizationUnit): string {
   return `${value < 0 ? '-' : ''}${prefix}${(absolute / divisor).toLocaleString('en-US', { maximumFractionDigits: digits })}${suffix}${unitSuffix}`;
 }
 
+function useVisualizationFormatters() {
+  const { balancesHidden } = useBalanceVisibility();
+  return {
+    formatValue: (value: number, unit: VisualizationUnit) => balancesHidden && unit === 'IDR' ? HIDDEN_BALANCE : formatValue(value, unit),
+    formatCompactValue: (value: number, unit: VisualizationUnit) => balancesHidden && unit === 'IDR' ? HIDDEN_BALANCE : formatCompactValue(value, unit),
+  };
+}
+
 function toneClass(tone: VisualizationTone): string {
   if (tone === 'positive') return 'text-[var(--color-success)]';
   if (tone === 'negative') return 'text-[var(--color-danger)]';
@@ -515,6 +525,7 @@ function VizHeader({ title, icon }: { title: string; icon: ReactNode }) {
 }
 
 function MetricCard({ visualization }: { visualization: MetricVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<Gauge className="h-4 w-4" />} />
     <p className={`mt-3 text-2xl font-bold tracking-tight ${toneClass(visualization.tone)}`}>{formatValue(visualization.value, visualization.unit)}</p>
@@ -523,6 +534,7 @@ function MetricCard({ visualization }: { visualization: MetricVisualization }) {
 }
 
 function RankedBarCard({ visualization }: { visualization: RankedBarVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const max = Math.max(...visualization.items.map((item) => Math.abs(item.value)), 1);
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<BarChart3 className="h-4 w-4" />} />
@@ -536,6 +548,7 @@ function RankedBarCard({ visualization }: { visualization: RankedBarVisualizatio
 }
 
 function ComparisonCard({ visualization }: { visualization: ComparisonVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const max = Math.max(...visualization.items.flatMap((item) => [Math.abs(item.current), Math.abs(item.previous)]), 1);
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<TrendingUp className="h-4 w-4" />} />
@@ -568,6 +581,7 @@ function donutSegmentPath(startFraction: number, endFraction: number): string {
 }
 
 function DonutCard({ visualization }: { visualization: DonutVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const items = [...visualization.items].sort((left, right) => right.value - left.value);
   const total = items.reduce((sum, item) => sum + item.value, 0) || 1;
   const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState<number | null>(null);
@@ -636,6 +650,7 @@ function DonutCard({ visualization }: { visualization: DonutVisualization }) {
 }
 
 function BudgetProgressCard({ visualization }: { visualization: BudgetProgressVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const percent = visualization.planned > 0 ? visualization.actual / visualization.planned * 100 : 0;
   const remaining = visualization.remaining ?? visualization.planned - visualization.actual;
   const tone = visualization.status === 'negative' || visualization.actual > visualization.planned ? 'negative' : visualization.status === 'positive' ? 'positive' : 'neutral';
@@ -648,6 +663,7 @@ function BudgetProgressCard({ visualization }: { visualization: BudgetProgressVi
 }
 
 function CashFlowCard({ visualization }: { visualization: CashFlowVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<CircleDollarSign className="h-4 w-4" />} />
     {visualization.periodLabel && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{visualization.periodLabel}</p>}
@@ -660,6 +676,7 @@ function CashFlowCard({ visualization }: { visualization: CashFlowVisualization 
 }
 
 function ActivityHeatmapCard({ visualization }: { visualization: ActivityHeatmapVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const max = Math.max(...visualization.cells.map((cell) => cell.value), 1);
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<CalendarDays className="h-4 w-4" />} />
@@ -679,6 +696,7 @@ function ScenarioNumberInput({ label, value, min, max, step, unit, onChange }: {
 }
 
 function ProjectionCard({ visualization }: { visualization: ProjectionVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [contribution, setContribution] = useState(visualization.monthlyContribution);
   const [growthRate, setGrowthRate] = useState(visualization.monthlyGrowthRate);
   const [horizon, setHorizon] = useState(visualization.horizonMonths);
@@ -716,6 +734,7 @@ function ProjectionCard({ visualization }: { visualization: ProjectionVisualizat
 }
 
 function RunwayScenarioCard({ visualization }: { visualization: RunwayScenarioVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [burn, setBurn] = useState(visualization.monthlyBurn);
   const [income, setIncome] = useState(visualization.monthlyIncome);
   const netBurn = burn - income;
@@ -733,6 +752,7 @@ function RunwayScenarioCard({ visualization }: { visualization: RunwayScenarioVi
 }
 
 function CalculationCard({ visualization }: { visualization: CalculationVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [left, setLeft] = useState(visualization.left.value);
   const [right, setRight] = useState(visualization.right.value);
   const result = calculateOperation(visualization.operation, left, right);
@@ -751,6 +771,7 @@ function CalculationCard({ visualization }: { visualization: CalculationVisualiz
 }
 
 function ScenarioCompareCard({ visualization }: { visualization: ScenarioCompareVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [activeIndex, setActiveIndex] = useState(0);
   const active = visualization.scenarios[activeIndex] ?? visualization.scenarios[0];
   if (!active) return null;
@@ -767,6 +788,7 @@ function ScenarioCompareCard({ visualization }: { visualization: ScenarioCompare
 }
 
 function AllocationEditorCard({ visualization }: { visualization: AllocationEditorVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [values, setValues] = useState(() => visualization.rows.map((row) => row.value));
   const assigned = values.reduce((sum, value) => sum + value, 0);
   const remaining = visualization.total - assigned;
@@ -788,6 +810,7 @@ function AllocationEditorCard({ visualization }: { visualization: AllocationEdit
 type TrendPoint = { label: string; value: number };
 
 function TrendLineChart({ title, unit, points }: { title: string; unit: VisualizationUnit; points: TrendPoint[] }) {
+  const { formatCompactValue, formatValue } = useVisualizationFormatters();
   const values = points.map((point) => point.value);
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
@@ -810,6 +833,7 @@ function TrendLineChart({ title, unit, points }: { title: string; unit: Visualiz
 }
 
 function TimeSeriesExplorerCard({ visualization }: { visualization: TimeSeriesExplorerVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [activeIndex, setActiveIndex] = useState(0);
   const [windowSize, setWindowSize] = useState<number | null>(null);
   const active = visualization.series[activeIndex] ?? visualization.series[0];
@@ -830,6 +854,7 @@ function TimeSeriesExplorerCard({ visualization }: { visualization: TimeSeriesEx
 }
 
 function GoalTrackerCard({ visualization }: { visualization: GoalTrackerVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [target, setTarget] = useState(visualization.target);
   const [monthlyContribution, setMonthlyContribution] = useState(visualization.monthlyContribution);
   const [deadlineMonths, setDeadlineMonths] = useState(visualization.deadlineMonths ?? 12);
@@ -848,6 +873,7 @@ function GoalTrackerCard({ visualization }: { visualization: GoalTrackerVisualiz
 }
 
 function WorksheetCard({ visualization }: { visualization: WorksheetVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const [values, setValues] = useState(() => visualization.rows.map((row) => ({ ...row.values })));
   const updateCell = (rowIndex: number, key: string, next: number) => setValues((current) => current.map((row, index) => index === rowIndex ? { ...row, [key]: next } : row));
   const cellValue = (rowIndex: number, key: string): number => values[rowIndex]?.[key] ?? visualization.rows[rowIndex]?.values[key] ?? 0;
@@ -873,6 +899,7 @@ function WorksheetCard({ visualization }: { visualization: WorksheetVisualizatio
 }
 
 function SparklineCard({ visualization }: { visualization: SparklineVisualization }) {
+  const { formatValue } = useVisualizationFormatters();
   const latest = visualization.points[visualization.points.length - 1];
   const first = visualization.points[0];
   const change = latest && first ? latest.value - first.value : 0;

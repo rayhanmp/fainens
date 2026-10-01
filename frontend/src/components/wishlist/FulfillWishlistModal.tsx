@@ -1,7 +1,7 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState } from 'react';
 import { X, CheckCircle2, Calendar, CreditCard, FileText } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { formatCurrency } from '../../lib/utils';
 import { useAssetAccountsQuery } from '../../features/accounts/queries';
 import { useFulfillWishlistMutation } from '../../features/wishlist/queries';
 
@@ -22,6 +22,7 @@ interface FulfillWishlistModalProps {
 }
 
 export function FulfillWishlistModal({ isOpen, onClose, onSuccess, item }: FulfillWishlistModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const fulfillWishlistMutation = useFulfillWishlistMutation();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [accountId, setAccountId] = useState('');
@@ -74,7 +75,7 @@ export function FulfillWishlistModal({ isOpen, onClose, onSuccess, item }: Fulfi
             <div className="text-sm text-[var(--color-text-secondary)] mb-1">Wishlist Item</div>
             <div className="font-bold text-[var(--color-text-primary)]">{item.name}</div>
             <div className="text-lg font-bold text-[var(--color-accent)] mt-1">
-              {formatCurrency(item.amount)}
+              {formatAmount(item.amount)}
             </div>
           </div>
 

@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClock, Info, Landmark, ShieldCheck, WalletCards, ArrowUpRight, ChevronDown, Target } from 'lucide-react';
 import {
@@ -49,6 +50,7 @@ function RetirementMetric({ label, value, detail, tone = 'default' }: { label: s
 }
 
 export function RetirementPlanner() {
+  const { formatAmount, maskAmounts } = useBalanceVisibility();
   const [workerType, setWorkerType] = useState<WorkerType>('pu');
   const [currentAge, setCurrentAge] = useState('30');
   const [retirementAge, setRetirementAge] = useState(String(INDONESIA_RULES_2026.jpRetirementAge));
@@ -203,38 +205,38 @@ export function RetirementPlanner() {
               <span className="rounded-full bg-[var(--ref-surface-container-low)] px-3 py-1 text-xs font-medium">Age {projection.retirementAge} · {projection.yearsToRetirement} years to prepare</span>
             </div>
             <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Projected monthly income</p>
-            <p className="mt-2 break-words font-headline text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">{formatCurrency(projection.estimatedMonthlyIncome)}<span className="ml-2 text-sm font-normal text-[var(--ref-outline)]">/ month</span></p>
-            <div className="mt-6 flex justify-between gap-3 text-xs text-[var(--ref-on-surface-variant)]"><span>{hasTarget ? `${coverage}% of your lifestyle target` : 'Add a lifestyle target to measure your progress'}</span><span>{hasTarget ? formatCurrency(projection.projectedRetirementSpending) : 'In future rupiah'}</span></div>
+            <p className="mt-2 break-words font-headline text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">{formatAmount(projection.estimatedMonthlyIncome)}<span className="ml-2 text-sm font-normal text-[var(--ref-outline)]">/ month</span></p>
+            <div className="mt-6 flex justify-between gap-3 text-xs text-[var(--ref-on-surface-variant)]"><span>{hasTarget ? `${coverage}% of your lifestyle target` : 'Add a lifestyle target to measure your progress'}</span><span>{hasTarget ? formatAmount(projection.projectedRetirementSpending) : 'In future rupiah'}</span></div>
             <div role="progressbar" aria-label="Retirement income target covered" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, coverage)} className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className="h-full rounded-full bg-[var(--ref-primary)] transition-all" style={{ width: `${Math.min(100, coverage)}%` }} /></div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <RetirementMetric label="JHT projected balance" value={formatCurrency(projection.projectedJht)} detail={projection.jhtAvailable ? `Included in assets at age ${projection.retirementAge}, subject to claim eligibility.` : `Excluded before 56 unless you select an eligible early claim.`} />
-            <RetirementMetric label="JP monthly estimate" value={projection.estimatedJpIncome > 0 ? formatCurrency(projection.estimatedJpIncome) : 'Not included'} detail={!projection.jpEligible ? 'JP is modeled for PU participants only.' : !projection.jpAvailable ? `At your planned retirement in ${projection.retirementYear}, the normal JP age is ${projection.jpNormalAgeAtRetirement}; you will be ${projection.retirementAge}. You first meet the moving JP age at ${projection.jpAccessAge} in ${projection.jpAccessYear}, so no JP income is included at retirement.` : `${projection.totalJpContributionYears.toFixed(1)} years modeled; 15 years is needed for monthly JP.`} />
-            <RetirementMetric label="Personal assets" value={formatCurrency(projection.projectedPersonalSavings)} detail={`Your personal balance at age ${projection.retirementAge}.`} />
-            <RetirementMetric label={gapLabel} value={hasTarget ? formatCurrency(Math.abs(projection.monthlyGap)) : '—'} detail={hasTarget ? `Target at retirement: ${formatCurrency(projection.projectedRetirementSpending)} per month.` : 'Enter a target monthly spending amount to see the gap.'} tone={gapTone} />
+            <RetirementMetric label="JHT projected balance" value={formatAmount(projection.projectedJht)} detail={projection.jhtAvailable ? `Included in assets at age ${projection.retirementAge}, subject to claim eligibility.` : `Excluded before 56 unless you select an eligible early claim.`} />
+            <RetirementMetric label="JP monthly estimate" value={projection.estimatedJpIncome > 0 ? formatAmount(projection.estimatedJpIncome) : 'Not included'} detail={!projection.jpEligible ? 'JP is modeled for PU participants only.' : !projection.jpAvailable ? `At your planned retirement in ${projection.retirementYear}, the normal JP age is ${projection.jpNormalAgeAtRetirement}; you will be ${projection.retirementAge}. You first meet the moving JP age at ${projection.jpAccessAge} in ${projection.jpAccessYear}, so no JP income is included at retirement.` : `${projection.totalJpContributionYears.toFixed(1)} years modeled; 15 years is needed for monthly JP.`} />
+            <RetirementMetric label="Personal assets" value={formatAmount(projection.projectedPersonalSavings)} detail={`Your personal balance at age ${projection.retirementAge}.`} />
+            <RetirementMetric label={gapLabel} value={hasTarget ? formatAmount(Math.abs(projection.monthlyGap)) : '—'} detail={hasTarget ? `Target at retirement: ${formatAmount(projection.projectedRetirementSpending)} per month.` : 'Enter a target monthly spending amount to see the gap.'} tone={gapTone} />
           </div>
 
           <Card title="Retirement income plan">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="min-w-0 rounded-xl bg-[var(--ref-surface-container-low)] p-4">
                 <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Target monthly spending</p>
-                <p className="mt-2 font-headline text-xl font-extrabold">{formatCurrency(projection.projectedRetirementSpending)}</p>
+                <p className="mt-2 font-headline text-xl font-extrabold">{formatAmount(projection.projectedRetirementSpending)}</p>
                 <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Nominal rupiah at retirement</p>
               </div>
               <div className="min-w-0 rounded-xl bg-[var(--ref-surface-container-low)] p-4">
                 <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">JP + assets</p>
-                <p className="mt-2 font-headline text-xl font-extrabold text-[var(--color-success)]">{formatCurrency(projection.estimatedMonthlyIncome)}</p>
+                <p className="mt-2 font-headline text-xl font-extrabold text-[var(--color-success)]">{formatAmount(projection.estimatedMonthlyIncome)}</p>
                 <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">JP benefit plus {projection.withdrawalRate}% annual asset drawdown</p>
               </div>
               <div className="min-w-0 rounded-xl border border-[#b8cdf7] bg-[#e7f0ff] p-5 text-[var(--color-text-primary)] dark:border-[#36558b] dark:bg-[#1d3964] dark:text-[#f5f8ff] sm:col-span-2">
                 <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#003b91] dark:text-[#b9d0ff]"><ArrowUpRight className="h-4 w-4" />{projection.yearsToRetirement === 0 ? 'Capital needed today' : 'Extra monthly saving'}</p>
-                <p className="mt-2 break-words font-headline text-2xl font-extrabold">{!hasTarget ? 'Set your lifestyle target' : projection.capitalGap === null ? 'Set a withdrawal rate above 0%' : formatCurrency(projection.yearsToRetirement === 0 ? projection.capitalGap : projection.requiredAdditionalSaving ?? 0)}</p>
+                <p className="mt-2 break-words font-headline text-2xl font-extrabold">{!hasTarget ? 'Set your lifestyle target' : projection.capitalGap === null ? 'Set a withdrawal rate above 0%' : formatAmount(projection.yearsToRetirement === 0 ? projection.capitalGap : projection.requiredAdditionalSaving ?? 0)}</p>
                 <p className="mt-2 text-xs leading-relaxed text-[#334a73] dark:text-[#d4e2ff]">{projection.yearsToRetirement === 0 ? 'There is no time left for new monthly deposits in this scenario.' : 'Additional to your current monthly contribution, saved from now until retirement.'}</p>
               </div>
             </div>
             <p className="mt-4 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-              At the current reported wage, modeled monthly BPJS contributions are JHT {formatCurrency(projection.jhtMonthlyTotal)} ({formatCurrency(projection.jhtMonthlyEmployee)} employee{projection.jhtMonthlyEmployer > 0 ? ` + ${formatCurrency(projection.jhtMonthlyEmployer)} employer` : ''}){projection.jpEligible ? ` and JP ${formatCurrency(projection.jpMonthlyEmployee + projection.jpMonthlyEmployer)} (${formatCurrency(projection.jpMonthlyEmployee)} employee + ${formatCurrency(projection.jpMonthlyEmployer)} employer)` : ''}.
+              At the current reported wage, modeled monthly BPJS contributions are JHT {formatAmount(projection.jhtMonthlyTotal)} ({formatAmount(projection.jhtMonthlyEmployee)} employee{projection.jhtMonthlyEmployer > 0 ? ` + ${formatAmount(projection.jhtMonthlyEmployer)} employer` : ''}){projection.jpEligible ? ` and JP ${formatAmount(projection.jpMonthlyEmployee + projection.jpMonthlyEmployer)} (${formatAmount(projection.jpMonthlyEmployee)} employee + ${formatAmount(projection.jpMonthlyEmployer)} employer)` : ''}.
             </p>
             <div className="mt-6 border-t border-[var(--color-border)] pt-5"><p className="font-semibold">How your assets could grow</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">JHT and personal savings combined · future rupiah</p></div>
             <div className="mt-5 h-72 w-full">
@@ -252,8 +254,8 @@ export function RetirementPlanner() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="age" tickFormatter={(value) => `Age ${value}`} />
-                  <YAxis tickFormatter={(value) => formatCompactCurrency(Number(value))} width={65} />
-                  <Tooltip contentStyle={{ background: 'var(--ref-surface-container-lowest)', border: '1px solid var(--color-border)', borderRadius: 12, color: 'var(--color-text-primary)' }} formatter={(value) => formatCurrency(Number(value))} labelFormatter={(value) => `Age ${value}`} />
+                  <YAxis tickFormatter={(value) => maskAmounts(formatCompactCurrency(Number(value)))} width={65} />
+                  <Tooltip contentStyle={{ background: 'var(--ref-surface-container-lowest)', border: '1px solid var(--color-border)', borderRadius: 12, color: 'var(--color-text-primary)' }} formatter={(value) => formatAmount(Number(value))} labelFormatter={(value) => `Age ${value}`} />
                   <Legend iconType="circle" />
                   <Area type="monotone" stackId="assets" dataKey="jht" name="JHT" stroke="var(--ref-primary)" fill="url(#retirementJht)" strokeWidth={2} isAnimationActive={false} />
                   <Area type="monotone" stackId="assets" dataKey="personal" name="Personal savings" stroke="var(--ref-secondary)" fill="url(#retirementPersonal)" strokeWidth={2} isAnimationActive={false} />
@@ -281,7 +283,7 @@ export function RetirementPlanner() {
               </div>
               <div className="flex items-start gap-3 rounded-xl bg-[var(--ref-surface-container-low)] p-3">
                 <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ref-primary)]" />
-                <div><p className="font-bold">Benefit limits</p><p className="mt-1 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">BPJS lists 2026 JP monthly minimum {formatCurrency(INDONESIA_RULES_2026.jpMinimumMonthlyBenefit)} and maximum {formatCurrency(INDONESIA_RULES_2026.jpMaximumMonthlyBenefit)}. Verify your actual record in JMO.</p></div>
+                <div><p className="font-bold">Benefit limits</p><p className="mt-1 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">BPJS lists 2026 JP monthly minimum {formatAmount(INDONESIA_RULES_2026.jpMinimumMonthlyBenefit)} and maximum {formatAmount(INDONESIA_RULES_2026.jpMaximumMonthlyBenefit)}. Verify your actual record in JMO.</p></div>
               </div>
             </div>
             <p className="mt-4 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Planning estimate, not an official BPJS calculation. JP limits stay at the published 2026 values; future indexation, taxes, and fees are excluded. Fewer than 15 contribution years may qualify for a lump sum, which is not included here. Disability and survivor benefits, BPU participants with past PU entitlement, post-retirement asset depletion, and the period between an early retirement date and normal JP age are not simulated.</p>

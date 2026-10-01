@@ -1,7 +1,7 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Info } from 'lucide-react';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { formatCurrency } from '../../lib/utils';
 
 export type TransferFeeDetails = {
   fee: number;
@@ -30,6 +30,7 @@ export function TransferFeePanel({
   onFeeChange,
   onPayerChange,
 }: TransferFeePanelProps) {
+  const { formatAmount } = useBalanceVisibility();
   if (!details) return null;
   if ('error' in details) {
     return <div className="rounded-xl border border-[var(--color-danger)]/20 bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]">{details.error}</div>;
@@ -47,7 +48,7 @@ export function TransferFeePanel({
   const defaultPayer = details.senderPays ? 'sender' : 'recipient';
   const alternatePayer = defaultPayer === 'sender' ? 'recipient' : 'sender';
   const feeSummary = details.fee > 0
-    ? `${formatCurrency(details.fee)} · ${details.senderPays ? 'Sender pays' : 'Recipient pays'}`
+    ? `${formatAmount(details.fee)} · ${details.senderPays ? 'Sender pays' : 'Recipient pays'}`
     : 'No fee';
 
   return <div className="space-y-2">
@@ -58,7 +59,7 @@ export function TransferFeePanel({
         <span className="group relative inline-flex" tabIndex={0} aria-label="Show transfer fee details">
           <Info className="h-4 w-4" />
           <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 hidden w-72 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs font-normal leading-relaxed text-[var(--color-text-primary)] shadow-lg group-hover:block group-focus-within:block">
-            {formatCurrency(details.fromAmount)} deducted from the source and {formatCurrency(details.toAmount)} received. Applied rule: {ruleLabel}.
+            {formatAmount(details.fromAmount)} deducted from the source and {formatAmount(details.toAmount)} received. Applied rule: {ruleLabel}.
           </span>
         </span>
         <span>{controlsOpen ? 'Done' : 'Adjust'}</span>

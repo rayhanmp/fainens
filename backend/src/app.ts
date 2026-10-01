@@ -28,6 +28,7 @@ import analyticsRoutes from "./routes/analytics";
 import paylaterRoutes from "./routes/paylater";
 import auditLogRoutes from "./routes/audit-log";
 import reportsRoutes from "./routes/reports";
+import recapRoutes from "./routes/recaps";
 import salarySettingsRoutes from "./routes/salary-settings";
 import agentProviderSettingsRoutes from "./routes/agent-provider-settings";
 import subscriptionRoutes from "./routes/subscriptions";
@@ -97,8 +98,8 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register((instance) => limitScope(instance, 30, "1 minute", "Analytics rate limit exceeded."), { prefix: "/reports" });
   app.register((instance) => limitScope(instance, 10, "1 minute", "Scraper rate limit exceeded."), { prefix: "/wishlist" });
 
-  app.get("/health", { schema: { tags: ["system"], response: { 200: z.object({ status: z.literal("ok"), timestamp: z.number() }) } } }, async () => ({ status: "ok" as const, timestamp: Date.now() }));
-  app.get("/health/worker", { schema: { tags: ["system"], response: { 200: z.object({ status: z.literal("ok"), workerCount: z.number().int().nonnegative(), queues: z.array(z.unknown()), timestamp: z.number() }).passthrough(), 503: z.object({ status: z.literal("degraded"), error: z.string(), timestamp: z.number() }).passthrough() } } }, async (_request, reply) => {
+  app.get("/health", { schema: { operationId: "getHealth", tags: ["system"], response: { 200: z.object({ status: z.literal("ok"), timestamp: z.number() }) } } }, async () => ({ status: "ok" as const, timestamp: Date.now() }));
+  app.get("/health/worker", { schema: { operationId: "getWorkerHealth", tags: ["system"], response: { 200: z.object({ status: z.literal("ok"), workerCount: z.number().int().nonnegative(), queues: z.array(z.unknown()), timestamp: z.number() }).passthrough(), 503: z.object({ status: z.literal("degraded"), error: z.string(), timestamp: z.number() }).passthrough() } } }, async (_request, reply) => {
     try {
       const health = await getJobQueueHealth();
       if (health.workerCount < 1) {
@@ -109,7 +110,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
       return reply.code(503).send({ status: "degraded" as const, error: error instanceof Error ? error.message : "Queue unavailable", timestamp: Date.now() });
     }
   });
-  app.get("/", { schema: { tags: ["system"], response: { 200: z.object({ ok: z.literal(true) }) } } }, async () => ({ ok: true as const }));
+  app.get("/", { schema: { operationId: "getRootHealth", tags: ["system"], response: { 200: z.object({ ok: z.literal(true) }) } } }, async () => ({ ok: true as const }));
   app.register(authPlugin);
   app.register(authRoutes);
   app.register(transactionRoutes);
@@ -125,6 +126,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(paylaterRoutes);
   app.register(auditLogRoutes);
   app.register(reportsRoutes);
+  app.register(recapRoutes);
   app.register(salarySettingsRoutes);
   app.register(agentProviderSettingsRoutes);
   app.register(subscriptionRoutes);

@@ -1,8 +1,8 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useMemo } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
-import { formatCurrency } from '../../lib/utils';
 import { useAssetAccountsQuery } from '../../features/accounts/queries';
 import { useContactsQuery, useCreateContactMutation, useCreateLoanMutation } from '../../features/loans/queries';
 import { 
@@ -31,6 +31,7 @@ const RELATIONSHIP_TYPES = [
 const WALLET_ICONS = [Landmark, Wallet, Banknote];
 
 export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const createContactMutation = useCreateContactMutation();
   const createLoanMutation = useCreateLoanMutation();
   const contactsQuery = useContactsQuery(false, isOpen);
@@ -389,7 +390,7 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
                                       {account?.name}
                                     </p>
                                     <p className="text-sm text-[var(--color-muted)]">
-                                      {formatCurrency(account?.balance || 0)}
+                                      {formatAmount(account?.balance || 0)}
                                     </p>
                                   </div>
                                 </>
@@ -473,7 +474,7 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
                                     {account.name}
                                   </p>
                                   <p className="text-xs text-[var(--color-muted)]">
-                                    {formatCurrency(account.balance)}
+                                    {formatAmount(account.balance)}
                                   </p>
                                 </div>
                               </button>

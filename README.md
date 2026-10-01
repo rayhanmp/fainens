@@ -7,6 +7,7 @@ Fainens is a personal finance workspace with double-entry bookkeeping, planning 
 - Double-entry transactions, accounts, categories, tags, transfers, and adjustments
 - Budgeting, income and salary planning, loans, pay-later items, reimbursements, split bills, subscriptions, and savings goals
 - Dashboard, financial reports, trends, CSV export, and PDF report export
+- Dashboard recap highlights opening 12 animated 9:16 stories, saved salary-period editions, optional AI copy, and PNG share cards with financial details hidden by default. Recaps follow the dashboard’s selected salary period, including cross-month ranges. Editions persist until explicitly regenerated; AI uses a bounded period summary and enabled preferred-name/language context through the configured provider.
 - Profile and personalization settings, including preferred name and report personalization
 - Agent context controls, saved memories, response preferences, and configurable OpenAI-compatible models
 - Optional attachment storage through Cloudflare R2

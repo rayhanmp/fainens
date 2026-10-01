@@ -7,6 +7,7 @@ import { usePendingTransactionsQuery } from '../../features/transactions/queries
 import { useUiStore } from '../../stores/ui-store';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { navigationGroups, navigationActive, pathMatches } from './navigation';
+import { BalanceVisibilityToggle } from '../ui/BalanceVisibilityToggle';
 
 export function NavigationLinks({ compact = false, onNavigate, afterNavigation }: { compact?: boolean; onNavigate?: () => void; afterNavigation?: ReactNode }) {
   const { pathname } = useLocation();
@@ -127,7 +128,7 @@ export function Sidebar() {
       </div>
       <div className="finance-action"><AddTransactionLink compact={compactContent} /></div>
       <NavigationLinks compact={compactContent} />
-      <div className="finance-footer"><ProfileMenu compact={compactContent} showDevAuthStatus={isDemoMode} /></div>
+      <div className="finance-footer"><BalanceVisibilityToggle showLabel={!compactContent} className={`mb-2 w-full ${compactContent ? 'px-0' : 'justify-start'}`} /><ProfileMenu compact={compactContent} showDevAuthStatus={isDemoMode} /></div>
     </aside>
   );
 }

@@ -16,6 +16,7 @@ import {
   parsePendingTransaction,
   previewTransactionImport,
   recommendTransactionCategory,
+  recommendTransactionTags,
   rejectPendingTransaction,
   reverseTransaction,
   linkTransactionReallocation,
@@ -242,6 +243,27 @@ export function usePreviewPendingTransactionMutation() {
 export function useRecommendCategoryMutation() {
   return useMutation({
     mutationFn: (name: string) => unwrapGenerated(recommendTransactionCategory({ name }), 200, 'Failed to recommend category'),
+  });
+}
+
+export function useTransactionTagSuggestions(
+  context: Parameters<typeof recommendTransactionTags>[0] | undefined,
+  requestKey: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['transaction-tag-suggestions', requestKey],
+    queryFn: async ({ signal }) => {
+      const response = await recommendTransactionTags(context!, { signal });
+      if (response.status !== 200) throw new Error(response.data.error || 'Failed to suggest tags');
+      return response.data;
+    },
+    enabled: enabled && context != null,
+    retry: false,
+    staleTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 

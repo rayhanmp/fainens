@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useCallback } from 'react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
@@ -11,6 +12,7 @@ interface AIInsightCardProps {
 }
 
 export function AIInsightCard({ type, periodId, className }: AIInsightCardProps) {
+  const { maskAmounts } = useBalanceVisibility();
   const [insight, setInsight] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -125,7 +127,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
             </div>
           ) : (
             <div className="text-base text-[var(--ref-on-surface)] leading-relaxed whitespace-pre-line">
-              {displayedInsight}
+              {maskAmounts(displayedInsight ?? "")}
             </div>
           )}
         </div>

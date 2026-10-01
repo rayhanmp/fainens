@@ -19,6 +19,7 @@ import { cn } from '../../lib/utils';
 import { ProfileMenu } from './Sidebar';
 import { navigationActive } from './navigation';
 import { useUiStore } from '../../stores/ui-store';
+import { BalanceVisibilityToggle } from '../ui/BalanceVisibilityToggle';
 
 const groups = [
   {
@@ -83,7 +84,7 @@ export function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-primary)]">Explore Fainens</p>
             <h2 className="mt-1 font-headline text-2xl font-extrabold text-[var(--ref-on-surface)]">More</h2>
           </div>
-          <button type="button" className="grid h-11 w-11 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]" aria-label="Close menu" onClick={onClose}><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-2"><BalanceVisibilityToggle className="h-11 w-11" /><button type="button" className="grid h-11 w-11 place-items-center rounded-full bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)]" aria-label="Close menu" onClick={onClose}><X className="h-5 w-5" /></button></div>
         </header>
 
         <nav aria-label="More destinations" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5">

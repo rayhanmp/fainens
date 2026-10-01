@@ -20,6 +20,8 @@ interface ModalProps {
   size?: 'default' | 'xl';
   /** Keep wide modal headers compact when an icon-only close affordance is preferred. */
   showCloseLabel?: boolean;
+  /** Custom immersive content supplies its own visible close control. */
+  hideHeader?: boolean;
   /** Footer content rendered at the bottom of the modal */
   footer?: React.ReactNode;
 }
@@ -36,6 +38,7 @@ export function Modal({
   contentClassName,
   size = 'default',
   showCloseLabel = true,
+  hideHeader = false,
   footer,
 }: ModalProps) {
   const [isVisible, setIsVisible] = useState(false);
@@ -201,14 +204,15 @@ export function Modal({
           ...(viewportHeight ? { '--modal-viewport-height': `${viewportHeight}px` } as React.CSSProperties : {}),
         }}
         className={cn(
-          'brutalist-card finance-modal-panel mobile-sheet relative z-10 w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-200 ease-out',
+          'brutalist-card finance-modal-panel relative z-10 w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-200 ease-out',
+          !hideHeader && 'mobile-sheet',
           isVisible ? 'opacity-100 sm:scale-100 sm:translate-y-0' : 'opacity-0 translate-y-full sm:scale-95 sm:translate-y-4',
           isWide ? 'max-w-[min(1024px,92vw)]' : 'max-w-lg',
-          isWide && 'mobile-sheet-full',
+          isWide && !hideHeader && 'mobile-sheet-full',
           className,
         )}
       >
-        <div
+        {!hideHeader && <div
           className="mobile-sheet-handle sm:hidden"
           aria-hidden="true"
           onPointerDown={(event) => {
@@ -224,9 +228,9 @@ export function Modal({
             else setSheetDrag(0);
           }}
           onPointerCancel={() => { sheetDragStartRef.current = null; setSheetDrag(0); }}
-        ><span /></div>
+        ><span /></div>}
         {/* Header */}
-        <div
+        {hideHeader ? <h2 id={titleId} className="sr-only">{title}</h2> : <div
           className={cn(
             'flex shrink-0 border-b border-[var(--color-border)]',
             isWide ? 'items-start justify-between gap-4 p-5 lg:p-6' : 'items-center justify-between p-4',
@@ -273,7 +277,7 @@ export function Modal({
               </button>
             </>
           )}
-        </div>
+        </div>}
 
         {/* Content */}
         <div

@@ -1,6 +1,7 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useMemo } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { cn, formatCurrency } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 
 export interface ActivityDay {
   date: string;
@@ -28,6 +29,7 @@ function dateLabel(date: string) {
 
 /** A supporting sparkline inside the summary, rather than a separate chart panel. */
 export function TransactionActivityChart({ days, kind, loading, updating, error, completeCoverage, startDate, endDate, onSelectDate, onRetry }: Props) {
+  const { formatAmount } = useBalanceVisibility();
   const countMode = kind === 'transfer' || kind === 'loan';
   const incomeMode = kind === 'income';
   const label = countMode ? 'Daily activity' : incomeMode ? 'Daily income' : 'Daily spending';
@@ -75,7 +77,7 @@ export function TransactionActivityChart({ days, kind, loading, updating, error,
               const flipLeft = pointIndex >= Math.max(1, points.length * 0.65);
               return <div role="tooltip" className={cn('pointer-events-none w-max rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-3 py-2 text-xs shadow-lg', flipLeft ? '-ml-2 -translate-x-full' : 'ml-2')}>
                 <p className="font-semibold">{dateLabel(String(date))} · WIB</p>
-                <p className="mt-1">{point?.value == null ? 'Coverage unverified' : `${label}: ${countMode ? Number(payload?.[0]?.value ?? 0).toLocaleString() : formatCurrency(Number(payload?.[0]?.value ?? 0))}`}</p>
+                <p className="mt-1">{point?.value == null ? 'Coverage unverified' : `${label}: ${countMode ? Number(payload?.[0]?.value ?? 0).toLocaleString() : formatAmount(Number(payload?.[0]?.value ?? 0))}`}</p>
                 <p className="mt-1 text-[var(--ref-on-surface-variant)]">Click to view this day</p>
               </div>;
             }} />

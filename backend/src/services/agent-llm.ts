@@ -46,7 +46,7 @@ type StreamDelta = {
   }>;
 };
 
-const DEFAULT_MODEL = "z-ai/glm-5.3-flash";
+const DEFAULT_MODEL = "openai/gpt-6-luna";
 // Completion budget for each provider request. Tool-assisted turns can make
 // several requests, so this is per model response rather than per chat.
 const MAX_AGENT_OUTPUT_TOKENS = 4096;

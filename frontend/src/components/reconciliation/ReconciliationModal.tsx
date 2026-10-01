@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useMemo, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -80,6 +81,7 @@ function rowsFor(accounts: Account[], includeSystemAccounts = false): Reconcilia
 }
 
 export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: ReconciliationModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const [rows, setRows] = useState<ReconciliationRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -487,7 +489,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--ref-primary-container)] text-[var(--ref-on-primary-container)]"><AccountIcon name={row.accountName} /></div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-[var(--ref-on-surface)]">{row.accountName}</p>
-                    <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">In Fainens <span className="font-mono font-semibold text-[var(--ref-on-surface)]">{formatCurrency(row.ledgerBalance)}</span></p>
+                    <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">In Fainens <span className="font-mono font-semibold text-[var(--ref-on-surface)]">{formatAmount(row.ledgerBalance)}</span></p>
                   </div>
                 </div>
                 <div>
@@ -508,7 +510,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:justify-end">
                   <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold', !row.isChecked ? 'bg-[#E2E8F0] text-[#334155]' : !row.isValid ? 'bg-[#FEE2E2] text-[#991B1B]' : row.hasChanges ? 'bg-[#FEF3C7] text-[#78350F]' : 'bg-[#DCFCE7] text-[#166534]')}>
-                    {!row.isChecked ? <><CircleHelp className="h-3.5 w-3.5" />Not checked</> : !row.isValid ? <><AlertCircle className="h-3.5 w-3.5" />Invalid amount</> : row.hasChanges ? <>{row.difference > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}{formatCurrency(Math.abs(row.difference))} difference</> : <><CheckCircle2 className="h-3.5 w-3.5" />Matches</>}
+                    {!row.isChecked ? <><CircleHelp className="h-3.5 w-3.5" />Not checked</> : !row.isValid ? <><AlertCircle className="h-3.5 w-3.5" />Invalid amount</> : row.hasChanges ? <>{row.difference > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}{formatAmount(Math.abs(row.difference))} difference</> : <><CheckCircle2 className="h-3.5 w-3.5" />Matches</>}
                   </span>
                 </div>
               </div>
@@ -537,12 +539,12 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             <div className="rounded-xl bg-[var(--ref-surface-container-lowest)]/85 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Verified</p><p className="mt-1 text-lg font-extrabold text-[var(--ref-on-surface)]">{selectedRows.length}<span className="ml-1 text-xs font-medium text-[var(--ref-outline)]">/ {rows.length}</span></p></div>
             <div className="rounded-xl bg-[var(--ref-surface-container-lowest)]/85 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Matches</p><p className="mt-1 text-lg font-extrabold text-[var(--ref-on-surface)]">{matchedCount}</p></div>
-            <div className="rounded-xl bg-[var(--ref-surface-container-lowest)]/85 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Total difference</p><p className="mt-1 truncate font-mono text-lg font-extrabold text-[var(--ref-on-surface)]">{formatCurrency(totals.absoluteDiff)}</p></div>
+            <div className="rounded-xl bg-[var(--ref-surface-container-lowest)]/85 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--ref-outline)]">Total difference</p><p className="mt-1 truncate font-mono text-lg font-extrabold text-[var(--ref-on-surface)]">{formatAmount(totals.absoluteDiff)}</p></div>
           </div>
           {selectedRows.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-[var(--ref-on-surface-variant)]">
-              <span>Assets: {formatCurrency(totals.actualAssets)} actual <span className="text-[var(--ref-outline)]">vs {formatCurrency(totals.ledgerAssets)} in app</span></span>
-              <span>Liabilities: {formatCurrency(totals.actualLiabilities)} actual <span className="text-[var(--ref-outline)]">vs {formatCurrency(totals.ledgerLiabilities)} in app</span></span>
+              <span>Assets: {formatAmount(totals.actualAssets)} actual <span className="text-[var(--ref-outline)]">vs {formatAmount(totals.ledgerAssets)} in app</span></span>
+              <span>Liabilities: {formatAmount(totals.actualLiabilities)} actual <span className="text-[var(--ref-outline)]">vs {formatAmount(totals.ledgerLiabilities)} in app</span></span>
             </div>
           )}
           {hasChanges && (
@@ -550,8 +552,8 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
               <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-amber-900 dark:text-amber-100">Adjustments to review</p>
               {selectedRows.filter((row) => row.hasChanges).map((row) => (
                 <div key={row.accountId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
-                  <span className="min-w-0 font-semibold text-[var(--ref-on-surface)]">{row.accountName}<span className="ml-2 font-normal text-[var(--ref-on-surface-variant)]">{formatCurrency(row.ledgerBalance)} → {formatCurrency(parseSignedIdNominalToInt(row.actualBalance))}</span></span>
-                  <span className="shrink-0 font-mono font-bold text-amber-900 dark:text-amber-100">{row.difference > 0 ? '+' : '−'}{formatCurrency(Math.abs(row.difference))}</span>
+                  <span className="min-w-0 font-semibold text-[var(--ref-on-surface)]">{row.accountName}<span className="ml-2 font-normal text-[var(--ref-on-surface-variant)]">{formatAmount(row.ledgerBalance)} → {formatAmount(parseSignedIdNominalToInt(row.actualBalance))}</span></span>
+                  <span className="shrink-0 font-mono font-bold text-amber-900 dark:text-amber-100">{row.difference > 0 ? '+' : '−'}{formatAmount(Math.abs(row.difference))}</span>
                 </div>
               ))}
             </div>
@@ -580,7 +582,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <button type="button" aria-expanded={expandedSessionId === session.id} onClick={() => setExpandedSessionId((current) => current === session.id ? null : session.id)} className="min-w-0 flex-1 text-left">
                         <span className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold capitalize text-[var(--ref-on-surface)]">{label}</span><span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', session.lifecycleStatus === 'voided' ? 'bg-[var(--ref-error)]/10 text-[var(--ref-error)]' : adjusted.length ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/25 dark:text-emerald-100')}>{session.lifecycleStatus === 'voided' ? 'Voided' : adjusted.length ? `${adjusted.length} adjusted` : 'Matched'}</span></span>
-                        <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">{new Date(session.asOfDate).toLocaleDateString('en-ID')} · {session.items.length} account{session.items.length === 1 ? '' : 's'}{adjusted.length ? ` · ${formatCurrency(adjusted.reduce((sum, item) => sum + Math.abs(item.difference), 0))} total difference` : ''}</span>
+                        <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">{new Date(session.asOfDate).toLocaleDateString('en-ID')} · {session.items.length} account{session.items.length === 1 ? '' : 's'}{adjusted.length ? ` · ${formatAmount(adjusted.reduce((sum, item) => sum + Math.abs(item.difference), 0))} total difference` : ''}</span>
                       </button>
                       {session.lifecycleStatus === 'active' && (session.kind ?? 'control') === 'control' && (
                         <button type="button" onClick={() => { setPendingVoidSessionId((current) => current === session.id ? null : session.id); setVoidReason(''); }} className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--ref-error)] hover:bg-[var(--ref-error)]/5">{pendingVoidSessionId === session.id ? 'Cancel void' : 'Void check'}</button>
@@ -596,8 +598,8 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                       <div className="mt-3 space-y-1.5 border-t border-[var(--color-border)] pt-3">
                         {session.items.map((item) => (
                           <div key={item.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-                            <span className="min-w-0 text-[var(--ref-on-surface-variant)]">{item.accountName}<span className="mx-1.5 text-[var(--ref-outline)]">·</span>{formatCurrency(item.ledgerBalance)} <span className="text-[var(--ref-outline)]">→</span> {formatCurrency(item.actualBalance)}</span>
-                            <span className={cn('shrink-0 font-mono font-semibold', item.difference > 0 ? 'text-[var(--ref-secondary)]' : item.difference < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-outline)]')}>{item.difference > 0 ? '+' : item.difference < 0 ? '−' : ''}{formatCurrency(Math.abs(item.difference))}</span>
+                            <span className="min-w-0 text-[var(--ref-on-surface-variant)]">{item.accountName}<span className="mx-1.5 text-[var(--ref-outline)]">·</span>{formatAmount(item.ledgerBalance)} <span className="text-[var(--ref-outline)]">→</span> {formatAmount(item.actualBalance)}</span>
+                            <span className={cn('shrink-0 font-mono font-semibold', item.difference > 0 ? 'text-[var(--ref-secondary)]' : item.difference < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-outline)]')}>{item.difference > 0 ? '+' : item.difference < 0 ? '−' : ''}{formatAmount(Math.abs(item.difference))}</span>
                           </div>
                         ))}
                       </div>

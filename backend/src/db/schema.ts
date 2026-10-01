@@ -1,5 +1,26 @@
-import { sqliteTable, integer, text, blob, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, blob, real, index, uniqueIndex, primaryKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
+
+/** Recap editions are retained until the owner explicitly requests a new take. */
+export const recapStories = sqliteTable("recap_story", {
+  ownerEmail: text("owner_email").notNull(),
+  month: text("month").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  generatedAt: integer("generated_at").notNull(),
+}, table => [primaryKey({ columns: [table.ownerEmail, table.month] })]);
+
+/** Salary-period editions never reuse a calendar-month cache. */
+export const recapPeriodStories = sqliteTable("recap_period_story", {
+  ownerEmail: text("owner_email").notNull(), periodId: integer("period_id").notNull(),
+  payloadJson: text("payload_json").notNull(), generatedAt: integer("generated_at").notNull(),
+}, table => [primaryKey({ columns: [table.ownerEmail, table.periodId] })]);
+
+/** Dashboard recap highlight dismissal is private and remembered per owner and salary period. */
+export const recapPeriodHighlightSeen = sqliteTable("recap_period_highlight_seen", {
+  ownerEmail: text("owner_email").notNull(),
+  periodId: integer("period_id").notNull().references(() => salaryPeriods.id, { onDelete: "cascade" }),
+  seenAt: integer("seen_at").notNull(),
+}, table => [primaryKey({ columns: [table.ownerEmail, table.periodId] })]);
 
 export const categories: any = sqliteTable("category", {
   id: integer("id").primaryKey({ autoIncrement: true }),

@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Modal } from '../ui/Modal';
@@ -31,6 +32,7 @@ interface RecordPaymentModalProps {
 const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
 
 export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordPaymentModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const recordLoanPaymentMutation = useRecordLoanPaymentMutation();
   const accountsQuery = useAssetAccountsQuery(isOpen);
   const accounts = (accountsQuery.data ?? []).filter((account) => account.type === 'asset' && !account.systemKey);
@@ -143,7 +145,7 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
         {splitBillSourceId != null && <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 text-sm">
           <p className="font-semibold">{loan.sourceDescription || 'Split bill repayment'}</p>
           <p className="mt-1 text-[var(--color-muted)]">This payment reduces the {isRepaying ? `debt owed to ${loan.contact.name}` : `receivable from ${loan.contact.name}`}. It is not new income or expense.</p>
-          {amountCents > 0 && amountCents <= loan.remainingCents && <p className="mt-2">Remaining after this payment: <span className="font-semibold">{formatCurrency(loan.remainingCents - amountCents)}</span></p>}
+          {amountCents > 0 && amountCents <= loan.remainingCents && <p className="mt-2">Remaining after this payment: <span className="font-semibold">{formatAmount(loan.remainingCents - amountCents)}</span></p>}
           <Link to="/transactions" search={{ periodId: 'all', transactionId: String(splitBillSourceId) }} className="mt-2 inline-block font-semibold text-[var(--color-primary)]">View original bill →</Link>
         </div>}
         {error && (
@@ -290,11 +292,11 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-[var(--color-muted)]">Original</span>
-                  <span className="font-medium text-sm">{formatCurrency(loan.amountCents)}</span>
+                  <span className="font-medium text-sm">{formatAmount(loan.amountCents)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-[var(--color-muted)]">Remaining</span>
-                  <span className="font-bold text-sm text-[var(--color-primary)]">{formatCurrency(loan.remainingCents)}</span>
+                  <span className="font-bold text-sm text-[var(--color-primary)]">{formatAmount(loan.remainingCents)}</span>
                 </div>
               </div>
             </div>
@@ -331,7 +333,7 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess, loan }: RecordP
                     <div className="pt-2 border-t border-[var(--color-border)] flex justify-between">
                       <span className="font-label text-xs text-[var(--color-muted)] uppercase">Amount</span>
                       <span className="font-headline font-bold text-[var(--color-primary)]">
-                        {formatCurrency(amountCents)}
+                        {formatAmount(amountCents)}
                       </span>
                     </div>
                   )}

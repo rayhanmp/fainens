@@ -76,10 +76,11 @@ describe("linked split-bill receivables", () => {
     expect(state.db.select().from(schema.tags).all()).toHaveLength(0);
     const result = await executeAgentApproval({ ownerEmail, approvalId: proposal.approvalId, token: proposal.approvalToken });
     if (result.receipt.kind !== "split_bill_loans_create") throw new Error("Unexpected receipt kind");
+    const transactionId = result.receipt.transactionId;
     const savedLoans = state.db.select().from(schema.loans).all();
     expect(savedLoans).toHaveLength(4);
     expect(savedLoans.reduce((sum: number, loan: any) => sum + loan.amountCents, 0)).toBe(523600);
-    expect(savedLoans.every((loan: any) => loan.sourceTransactionId === result.receipt.transactionId && loan.sourceType === "split_bill")).toBe(true);
+    expect(savedLoans.every((loan: any) => loan.sourceTransactionId === transactionId && loan.sourceType === "split_bill")).toBe(true);
     expect(state.db.select().from(schema.transactions).all()).toHaveLength(1);
     expect(state.db.select().from(schema.contacts).all()).toHaveLength(4);
     const lines = state.db.select().from(schema.transactionLines).all();

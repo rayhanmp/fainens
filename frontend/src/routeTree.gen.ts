@@ -18,6 +18,7 @@ import { Route as SavingsSimulatorRouteImport } from './routes/savings-simulator
 import { Route as SalaryIncomeRouteImport } from './routes/salary-income'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ReimbursementsRouteImport } from './routes/reimbursements'
+import { Route as RecapsRouteImport } from './routes/recaps'
 import { Route as PeriodsRouteImport } from './routes/periods'
 import { Route as PaylaterRouteImport } from './routes/paylater'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -76,6 +77,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const ReimbursementsRoute = ReimbursementsRouteImport.update({
   id: '/reimbursements',
   path: '/reimbursements',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecapsRoute = RecapsRouteImport.update({
+  id: '/recaps',
+  path: '/recaps',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PeriodsRoute = PeriodsRouteImport.update({
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
   '/periods': typeof PeriodsRoute
+  '/recaps': typeof RecapsRoute
   '/reimbursements': typeof ReimbursementsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
   '/periods': typeof PeriodsRoute
+  '/recaps': typeof RecapsRoute
   '/reimbursements': typeof ReimbursementsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
@@ -215,6 +223,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/paylater': typeof PaylaterRoute
   '/periods': typeof PeriodsRoute
+  '/recaps': typeof RecapsRoute
   '/reimbursements': typeof ReimbursementsRoute
   '/reports': typeof ReportsRoute
   '/salary-income': typeof SalaryIncomeRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/paylater'
     | '/periods'
+    | '/recaps'
     | '/reimbursements'
     | '/reports'
     | '/salary-income'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/paylater'
     | '/periods'
+    | '/recaps'
     | '/reimbursements'
     | '/reports'
     | '/salary-income'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/paylater'
     | '/periods'
+    | '/recaps'
     | '/reimbursements'
     | '/reports'
     | '/salary-income'
@@ -318,6 +330,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PaylaterRoute: typeof PaylaterRoute
   PeriodsRoute: typeof PeriodsRoute
+  RecapsRoute: typeof RecapsRoute
   ReimbursementsRoute: typeof ReimbursementsRoute
   ReportsRoute: typeof ReportsRoute
   SalaryIncomeRoute: typeof SalaryIncomeRoute
@@ -392,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/reimbursements'
       fullPath: '/reimbursements'
       preLoaderRoute: typeof ReimbursementsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recaps': {
+      id: '/recaps'
+      path: '/recaps'
+      fullPath: '/recaps'
+      preLoaderRoute: typeof RecapsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/periods': {
@@ -510,6 +530,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PaylaterRoute: PaylaterRoute,
   PeriodsRoute: PeriodsRoute,
+  RecapsRoute: RecapsRoute,
   ReimbursementsRoute: ReimbursementsRoute,
   ReportsRoute: ReportsRoute,
   SalaryIncomeRoute: SalaryIncomeRoute,

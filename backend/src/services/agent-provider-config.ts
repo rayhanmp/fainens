@@ -6,7 +6,7 @@ import { agentModels, agentProviderSettings } from "../db/schema";
 import { env } from "../lib/env";
 
 const SINGLETON_ID = 1;
-const DEFAULT_MODEL = "z-ai/glm-5.3-flash";
+const DEFAULT_MODEL = "openai/gpt-6-luna";
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:/-]{1,199}$/;
 

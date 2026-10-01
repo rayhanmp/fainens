@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -48,6 +49,7 @@ function remarkBreakHtml() {
  * Markdown break for table cells. Math is parsed through remark-math/KaTeX.
  */
 export function MarkdownMessage({ children }: MarkdownMessageProps) {
+  const { maskAmounts } = useBalanceVisibility();
   return (
     <div className="agent-markdown">
       <ReactMarkdown
@@ -61,7 +63,7 @@ export function MarkdownMessage({ children }: MarkdownMessageProps) {
           ),
         }}
       >
-        {children}
+        {maskAmounts(children)}
       </ReactMarkdown>
     </div>
   );

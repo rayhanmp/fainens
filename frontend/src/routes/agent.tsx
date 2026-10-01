@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,7 +38,7 @@ import { GalleryImagePicker } from '../components/gallery/GalleryImagePicker';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory } from '../lib/api';
-import { cn, findCurrentPeriod, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
+import { cn, findCurrentPeriod, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
 import { agentCommands } from '../features/agent/commands';
@@ -565,6 +566,7 @@ function ClarificationCard({
 }
 
 function BudgetProposalCard({ proposal, periods }: { proposal: AgentBudgetActionProposal; periods: Period[] }) {
+  const { formatAmount } = useBalanceVisibility();
   const [currentProposal, setCurrentProposal] = useState(proposal);
   const [status, setStatus] = useState<BudgetProposalStatus>(initialBudgetProposalStatus(proposal.status));
   const [message, setMessage] = useState<string | null>(null);
@@ -632,10 +634,10 @@ function BudgetProposalCard({ proposal, periods }: { proposal: AgentBudgetAction
         {rows.map((row) => (
           <div key={row.categoryId} className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-3 py-2 last:border-b-0">
             <span className="min-w-0 truncate text-sm">{row.category}</span>
-            <span className="shrink-0 font-mono text-sm font-semibold">{formatCurrency(row.plannedAmountCents)}</span>
+            <span className="shrink-0 font-mono text-sm font-semibold">{formatAmount(row.plannedAmountCents)}</span>
           </div>
         ))}
-        <div className="flex items-center justify-between gap-3 bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm font-semibold"><span>Total planned</span><span className="font-mono">{formatCurrency(total)}</span></div>
+        <div className="flex items-center justify-between gap-3 bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm font-semibold"><span>Total planned</span><span className="font-mono">{formatAmount(total)}</span></div>
       </div>
       {currentProposal.assumptions.length > 0 && <p className="mt-3 text-xs text-[var(--color-text-secondary)]">Assumption: {currentProposal.assumptions.join(' · ')}</p>}
       {currentProposal.approvalToken && status === 'pending' && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" onClick={() => void execute()}><Check className="h-4 w-4" /> Confirm budget</Button><Button size="sm" variant="secondary" onClick={() => void reject()}>Dismiss</Button></div>}
@@ -675,6 +677,7 @@ function TransactionProposalCard({
   periods: Period[];
   conversationId?: number | null;
 }) {
+  const { formatAmount } = useBalanceVisibility();
   const [currentProposal, setCurrentProposal] = useState(proposal);
   const [status, setStatus] = useState<TransactionProposalStatus>(initialTransactionProposalStatus(proposal.status));
   const [message, setMessage] = useState<string | null>(null);
@@ -877,7 +880,7 @@ function TransactionProposalCard({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ref-primary)]">{intentLabel}</p>
                 <p className="mt-1 truncate text-base font-semibold text-[var(--color-text-primary)]">{input.description}</p>
               </div>
-              <p className="shrink-0 text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">{formatCurrency(details.totalDebit)}</p>
+              <p className="shrink-0 text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">{formatAmount(details.totalDebit)}</p>
             </div>
           </div>
           <dl className="grid gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
@@ -896,9 +899,9 @@ function TransactionProposalCard({
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-xs font-semibold text-[var(--color-text-secondary)] [&::-webkit-details-marker]:hidden"><span>Ledger entry</span><span className="text-[11px] font-medium text-[var(--ref-primary)]">View accounting details</span></summary>
         <div className="border-t border-[var(--color-border)] px-3.5 py-3">
           <div className="space-y-2 text-xs">
-            {details.lines.map((line, index) => <div key={`${line.accountId}-${index}`} className="flex items-center justify-between gap-3"><span className="min-w-0 truncate text-[var(--color-text-primary)]">{line.account}</span><span className="shrink-0 font-mono font-medium text-[var(--color-text-primary)]">{line.debit > 0 ? `Dr ${formatCurrency(line.debit)}` : `Cr ${formatCurrency(line.credit)}`}</span></div>)}
+            {details.lines.map((line, index) => <div key={`${line.accountId}-${index}`} className="flex items-center justify-between gap-3"><span className="min-w-0 truncate text-[var(--color-text-primary)]">{line.account}</span><span className="shrink-0 font-mono font-medium text-[var(--color-text-primary)]">{line.debit > 0 ? `Dr ${formatAmount(line.debit)}` : `Cr ${formatAmount(line.credit)}`}</span></div>)}
           </div>
-          <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">Balanced at {formatCurrency(details.totalDebit)} · expires {formatDate(currentProposal.expiresAt)}</p>
+          <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">Balanced at {formatAmount(details.totalDebit)} · expires {formatDate(currentProposal.expiresAt)}</p>
         </div>
       </details>
       {currentProposal.approvalToken && status === 'pending' && <div className="mt-4 flex flex-col-reverse gap-2 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:items-center"><Button size="sm" variant="secondary" onClick={beginEdit}><Pencil className="h-4 w-4" /> Edit</Button><Button size="sm" variant="secondary" className="border-transparent bg-transparent shadow-none hover:bg-[var(--ref-surface-container)]" onClick={() => void reject()}>Dismiss</Button><Button size="sm" className="sm:ml-auto" onClick={() => void execute()}><Check className="h-4 w-4" /> Confirm &amp; post</Button></div>}

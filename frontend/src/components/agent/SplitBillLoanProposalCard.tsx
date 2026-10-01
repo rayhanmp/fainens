@@ -1,14 +1,16 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Button } from '../ui/Button';
 import type { AgentSplitBillActionProposal } from '../../lib/api';
-import { formatCurrency, formatDateTime } from '../../lib/utils';
+import { formatDateTime } from '../../lib/utils';
 import { agentCommands } from '../../features/agent/commands';
 import { invalidateFinancialSummaries } from '../../features/core/query-keys';
 import { isSplitBillLoanProposal } from '../../features/agent/proposal-utils';
 
 export function SplitBillLoanProposalCard({ proposal }: { proposal: AgentSplitBillActionProposal }) {
+  const { formatAmount } = useBalanceVisibility();
   const queryClient = useQueryClient();
   const [current, setCurrent] = useState(proposal);
   const [status, setStatus] = useState(proposal.status);
@@ -57,12 +59,12 @@ export function SplitBillLoanProposalCard({ proposal }: { proposal: AgentSplitBi
       </div>
       <p className="text-sm">{formatDateTime(details.dateMs)} · Paid from {details.walletName}</p>
       <div className="rounded-xl bg-[var(--ref-primary)]/5 p-3 space-y-2 text-sm">
-        <div className="flex justify-between gap-3"><span>Receipt payment</span><strong>{formatCurrency(details.receiptTotalCents)}</strong></div>
-        <div className="flex justify-between gap-3"><span>Your share (expense)</span><span>{formatCurrency(details.personalShareCents)}</span></div>
-        <div className="flex justify-between gap-3"><span>Friends owe you (receivables)</span><strong>{formatCurrency(details.totalReceivableCents)}</strong></div>
+        <div className="flex justify-between gap-3"><span>Receipt payment</span><strong>{formatAmount(details.receiptTotalCents)}</strong></div>
+        <div className="flex justify-between gap-3"><span>Your share (expense)</span><span>{formatAmount(details.personalShareCents)}</span></div>
+        <div className="flex justify-between gap-3"><span>Friends owe you (receivables)</span><strong>{formatAmount(details.totalReceivableCents)}</strong></div>
       </div>
       <div className="divide-y divide-[var(--color-border)]">
-        {details.receivables.map((row, index) => <div key={`${row.contactId}-${index}`} className="flex justify-between gap-3 py-2 text-sm"><span>{row.name}{row.createsContact && <span className="ml-2 text-xs text-[var(--color-muted)]">new contact</span>}</span><strong>{formatCurrency(row.amountCents)}</strong></div>)}
+        {details.receivables.map((row, index) => <div key={`${row.contactId}-${index}`} className="flex justify-between gap-3 py-2 text-sm"><span>{row.name}{row.createsContact && <span className="ml-2 text-xs text-[var(--color-muted)]">new contact</span>}</span><strong>{formatAmount(row.amountCents)}</strong></div>)}
       </div>
       <div className="flex flex-wrap gap-2">{details.tagNames.map((name) => <span key={name} className="rounded-full bg-[var(--ref-primary)]/8 px-2 py-1 text-xs text-[var(--ref-primary)]">{name}</span>)}</div>
       <p className="text-xs text-[var(--color-muted)]">One bill, one receipt payment, {details.receivables.length} linked loans. A unique bill-reference tag is added when saved. Repayments reduce the loans, not ordinary income. Confirm only if this receipt payment has not already been recorded.</p>

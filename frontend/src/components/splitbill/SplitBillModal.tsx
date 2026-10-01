@@ -1,5 +1,5 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { formatCurrency } from '../../lib/utils';
 import { useAuth } from '../../lib/auth';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -94,6 +94,7 @@ function allocateLargestRemainder(values: number[], target: number): number[] {
 type Step = 'upload' | 'split';
 
 export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const createContactMutation = useCreateContactMutation();
   const scanReceiptMutation = useScanSplitBillReceiptMutation();
   const createLoansMutation = useCreateSplitBillLoansMutation();
@@ -471,7 +472,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
               <div className="text-right">
                 <span className="text-xs text-[var(--color-text-secondary)]">Total Bill</span>
                 <div className="text-2xl font-bold text-[var(--color-primary)] mt-1">
-                  {formatCurrency(parsedReceipt.total)}
+                  {formatAmount(parsedReceipt.total)}
                 </div>
               </div>
             </div>
@@ -496,7 +497,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
                       <div>
                         <h3 className="font-bold text-base">{item.name}</h3>
                         <p className="font-bold text-[var(--color-primary)] mt-1">
-                          {formatCurrency(item.totalPrice)}
+                          {formatAmount(item.totalPrice)}
                           {item.quantity > 1 && (
                             <span className="text-xs font-normal text-[var(--color-text-secondary)] ml-2">
                               (Qty: {item.quantity})
@@ -539,7 +540,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
                             </span>
                             {isAssigned && (
                               <span className="text-[10px] font-bold bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-1.5 py-0.5 rounded">
-                                {formatCurrency(share)}
+                                {formatAmount(share)}
                               </span>
                             )}
                           </button>
@@ -566,7 +567,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
               <div>
                 <h3 className="font-bold">Tax & Service ({(parsedReceipt.taxPercent || 0) + (parsedReceipt.servicePercent || 0)}%)</h3>
                 <p className="font-bold text-[var(--color-tertiary)] mt-1">
-                  {formatCurrency(parsedReceipt.tax + parsedReceipt.serviceFee)}
+                  {formatAmount(parsedReceipt.tax + parsedReceipt.serviceFee)}
                 </p>
               </div>
               <div className="text-xs text-[var(--color-text-secondary)] italic flex items-center gap-1">
@@ -667,7 +668,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
                       </p>
                     </div>
                   </div>
-                  <p className="font-bold text-lg">{formatCurrency(result.total)}</p>
+                  <p className="font-bold text-lg">{formatAmount(result.total)}</p>
                 </div>
               ))}
             </div>
@@ -675,7 +676,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
             <div className="mt-6 pt-6 border-t border-[var(--color-surface-container-high)]">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium text-[var(--color-text-secondary)]">Allocated</span>
-                <span className="font-bold text-sm">{formatCurrency(totalAllocated)} / {formatCurrency(parsedReceipt.total)}</span>
+                <span className="font-bold text-sm">{formatAmount(totalAllocated)} / {formatAmount(parsedReceipt.total)}</span>
               </div>
               <div className="w-full bg-[var(--color-surface-container-high)] h-2 rounded-full overflow-hidden">
                 <div 
@@ -685,7 +686,7 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
               </div>
               {unallocated > 0 && (
                 <p className="text-[11px] text-red-500 mt-2 flex items-center gap-1 font-medium">
-                  ⚠️ {formatCurrency(unallocated)} unassigned
+                  ⚠️ {formatAmount(unallocated)} unassigned
                 </p>
               )}
             </div>

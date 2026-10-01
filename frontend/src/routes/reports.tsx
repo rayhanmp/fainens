@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -353,6 +354,7 @@ function SummaryCard({
   color: 'success' | 'danger' | 'accent';
   previousAmount?: number;
 }) {
+  const { formatAmount } = useBalanceVisibility();
   const colorClasses = {
     success: 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/30',
     danger: 'bg-[var(--color-danger)]/10 text-[var(--color-danger)] border-[var(--color-danger)]/30',
@@ -372,7 +374,7 @@ function SummaryCard({
         </div>
       </div>
       <p className="font-headline text-2xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
-        {formatCurrency(amount)}
+        {formatAmount(amount)}
       </p>
       {percentageChange !== null && (
         <div className={cn(
@@ -429,6 +431,7 @@ function IncomeStatementReport({
   onExport: () => void;
   onExportPDF: (title: string, data: any[]) => void;
 }) {
+  const { formatAmount } = useBalanceVisibility();
   const query = useIncomeStatementQuery(periodId);
   const data = query.data ?? null;
   const isLoading = query.isPending && !query.data;
@@ -504,13 +507,13 @@ function IncomeStatementReport({
               )}
             >
               <span>{item.name}</span>
-              <span className="font-mono">{formatCurrency(item.amount)}</span>
+              <span className="font-mono">{formatAmount(item.amount)}</span>
             </div>
           ))}
           <div className="mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 font-bold">
             <span>Total Revenue</span>
             <span className="font-mono text-[var(--color-success)]">
-              {formatCurrency(data.totalRevenue)}
+              {formatAmount(data.totalRevenue)}
             </span>
           </div>
         </div>
@@ -529,13 +532,13 @@ function IncomeStatementReport({
               )}
             >
               <span>{item.name}</span>
-              <span className="font-mono">{formatCurrency(item.amount)}</span>
+              <span className="font-mono">{formatAmount(item.amount)}</span>
             </div>
           ))}
           <div className="mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 font-bold">
             <span>Total Expenses</span>
             <span className="font-mono text-[var(--color-danger)]">
-              {formatCurrency(data.totalExpenses)}
+              {formatAmount(data.totalExpenses)}
             </span>
           </div>
         </div>
@@ -550,7 +553,7 @@ function IncomeStatementReport({
             )}
           >
             {data.netIncome >= 0 ? '+' : ''}
-            {formatCurrency(data.netIncome)}
+            {formatAmount(data.netIncome)}
           </span>
         </div>
       </div>
@@ -566,6 +569,7 @@ function BalanceSheetReport({
   periodEndDate?: number;
   onExport: () => void;
 }) {
+  const { formatAmount } = useBalanceVisibility();
   const asOfDate = periodEndDate == null ? undefined : inclusivePeriodEnd(periodEndDate);
   const query = useBalanceSheetQuery(asOfDate);
   const data = query.data ?? null;
@@ -626,12 +630,12 @@ function BalanceSheetReport({
             <span className="text-xs text-[var(--color-muted)] mr-2">{item.code}</span>
             {item.name}
           </span>
-          <span className="font-mono">{formatCurrency(item.balance)}</span>
+          <span className="font-mono">{formatAmount(item.balance)}</span>
         </div>
       ))}
       <div className={cn('mt-3 flex justify-between border-t border-[var(--color-border)] pt-3 font-bold', color)}>
         <span>Total {title}</span>
-        <span className="font-mono">{formatCurrency(total)}</span>
+        <span className="font-mono">{formatAmount(total)}</span>
       </div>
     </div>
   );
@@ -655,14 +659,14 @@ function BalanceSheetReport({
       <div className="flex justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-4 text-base font-bold">
         <span>Total Liabilities + Equity</span>
         <span className="font-mono">
-          {formatCurrency(data.totalLiabilities + data.totalEquity)}
+          {formatAmount(data.totalLiabilities + data.totalEquity)}
         </span>
       </div>
       {data.totalAssets === data.totalLiabilities + data.totalEquity ? (
         <p className="text-sm text-[var(--color-success)] text-center">✓ Balanced</p>
       ) : (
         <p className="text-sm text-[var(--color-danger)] text-center">
-          ⚠ Imbalance: {formatCurrency(data.totalAssets - (data.totalLiabilities + data.totalEquity))}
+          ⚠ Imbalance: {formatAmount(data.totalAssets - (data.totalLiabilities + data.totalEquity))}
         </p>
       )}
     </Card>
@@ -677,6 +681,7 @@ function CashFlowReport({
   periodId?: number;
   onExport: () => void;
 }) {
+  const { formatAmount } = useBalanceVisibility();
   const [expandedSections, setExpandedSections] = useState<{
     operating: boolean;
     investing: boolean;
@@ -739,7 +744,7 @@ function CashFlowReport({
             <span className="flex min-w-0 max-w-[70%] items-center gap-2 truncate"><span className="truncate">{item.description}</span><span className="shrink-0 rounded bg-[var(--ref-surface-container-low)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--ref-on-surface-variant)]">{item.classificationSource === 'explicit' ? 'classified' : 'legacy inference'}</span></span>
             <span className={cn('font-mono', item.amount >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
               {item.amount >= 0 ? '+' : ''}
-              {formatCurrency(item.amount)}
+              {formatAmount(item.amount)}
             </span>
           </div>
         ))}
@@ -765,7 +770,7 @@ function CashFlowReport({
           <span>Net {title}</span>
           <span className={cn('font-mono', total >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
             {total >= 0 ? '+' : ''}
-            {formatCurrency(total)}
+            {formatAmount(total)}
           </span>
         </div>
       </div>
@@ -798,28 +803,28 @@ function CashFlowReport({
           <span>Net Change in Cash</span>
           <span className={cn('font-mono', data.netChange >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>
             {data.netChange >= 0 ? '+' : ''}
-            {formatCurrency(data.netChange)}
+            {formatAmount(data.netChange)}
           </span>
         </div>
         <div className="flex justify-between">
           <span>Beginning Cash</span>
-          <span className="font-mono">{formatCurrency(data.beginningCash)}</span>
+          <span className="font-mono">{formatAmount(data.beginningCash)}</span>
         </div>
         {data.balanceAdjustments ? (
           <div className="flex justify-between text-[var(--color-warning)]" title="Not operating, investing, or financing cash flow">
             <span>Balance adjustments</span>
-            <span className="font-mono">{data.balanceAdjustments > 0 ? '+' : ''}{formatCurrency(data.balanceAdjustments)}</span>
+            <span className="font-mono">{data.balanceAdjustments > 0 ? '+' : ''}{formatAmount(data.balanceAdjustments)}</span>
           </div>
         ) : null}
         {data.historicalRecoveryBridge ? (
           <div className="flex justify-between text-[var(--color-warning)]" title="Not operating, investing, or financing cash flow">
             <span>Historical recovery bridge</span>
-            <span className="font-mono">{data.historicalRecoveryBridge > 0 ? '+' : ''}{formatCurrency(data.historicalRecoveryBridge)}</span>
+            <span className="font-mono">{data.historicalRecoveryBridge > 0 ? '+' : ''}{formatAmount(data.historicalRecoveryBridge)}</span>
           </div>
         ) : null}
         <div className="flex justify-between border-t border-[var(--color-border)] pt-3 text-base font-bold">
           <span>Ending Cash</span>
-          <span className="font-mono">{formatCurrency(data.endingCash)}</span>
+          <span className="font-mono">{formatAmount(data.endingCash)}</span>
         </div>
       </div>
     </Card>
@@ -828,6 +833,7 @@ function CashFlowReport({
 
 // Spending Report
 function SpendingReport({ periodId }: { periodId?: number }) {
+  const { formatAmount } = useBalanceVisibility();
   const query = useSpendingQuery(periodId);
   const data = query.data?.report ?? null;
   const categories = query.data?.categories ?? [];
@@ -884,7 +890,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
   }
 
   return (
-    <Card className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6" title={<span className="flex items-center gap-2">Spending Breakdown - Total: {formatCurrency(data.total)} <TemporaryReportBadge isTemporary={data.isTemporary} /></span>}>
+    <Card className="overflow-hidden rounded-3xl [&>div:first-child]:bg-[var(--ref-surface-container-low)]/45 [&>div:first-child]:p-5 sm:[&>div:first-child]:p-6 [&>div:last-child]:p-5 sm:[&>div:last-child]:p-6" title={<span className="flex items-center gap-2">Spending Breakdown - Total: {formatAmount(data.total)} <TemporaryReportBadge isTemporary={data.isTemporary} /></span>}>
       {data.coverage && !data.coverage.isComparable && <div className="mb-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning)]/10 p-3 text-xs text-[var(--ref-on-surface)]">{data.coverage.warnings.join(' ')}</div>}
       <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.1fr)]">
         {/* Pie Chart */}
@@ -911,7 +917,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
                     return (
                       <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-lg">
                         <p className="text-xs font-semibold text-[var(--color-muted)]">{data.name}</p>
-                        <p className="mt-1 font-mono text-sm font-bold">{formatCurrency(data.value)}</p>
+                        <p className="mt-1 font-mono text-sm font-bold">{formatAmount(data.value)}</p>
                         <p className="mt-0.5 text-xs text-[var(--color-muted)]">{data.percentage.toFixed(1)}%</p>
                       </div>
                     );
@@ -923,7 +929,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Period total</span>
-            <span className="mt-1 font-headline text-lg font-extrabold tracking-tight text-[var(--color-text-primary)]">{formatCurrency(data.total)}</span>
+            <span className="mt-1 font-headline text-lg font-extrabold tracking-tight text-[var(--color-text-primary)]">{formatAmount(data.total)}</span>
           </div>
         </div>
 
@@ -939,7 +945,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
                 <span className="truncate text-sm font-medium">{item.name}</span>
               </div>
               <div className="text-right">
-                <span className="font-mono text-sm font-semibold">{formatCurrency(item.value)}</span>
+                <span className="font-mono text-sm font-semibold">{formatAmount(item.value)}</span>
                 <span className="ml-2 text-xs text-[var(--color-muted)]">
                   {item.percentage.toFixed(1)}%
                 </span>
@@ -954,6 +960,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
 
 // Trends Report
 function TrendsReport() {
+  const { formatAmount, maskAmounts } = useBalanceVisibility();
   const query = useTrendsQuery(6);
   const data = query.data ?? null;
   const isLoading = query.isPending && !query.data;
@@ -988,7 +995,7 @@ function TrendsReport() {
               tickLine={false}
               axisLine={false}
               stroke="var(--color-muted)"
-              tickFormatter={(value) => `Rp ${(value / 1000000).toFixed(0)}M`}
+              tickFormatter={(value) => maskAmounts(`Rp ${(value / 1000000).toFixed(0)}M`)}
             />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -998,7 +1005,7 @@ function TrendsReport() {
                       <p className="text-xs font-semibold text-[var(--color-muted)]">{label}</p>
                       {payload.map((entry, index) => (
                         <p key={index} className="mt-1 text-sm font-semibold" style={{ color: entry.color }}>
-                          {entry.name}: {formatCurrency(entry.value as number)}
+                          {entry.name}: {formatAmount(entry.value as number)}
                         </p>
                       ))}
                     </div>

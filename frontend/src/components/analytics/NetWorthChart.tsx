@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useId, useState } from 'react';
 import {
   AreaChart,
@@ -10,7 +11,8 @@ import {
   ReferenceLine,
   ReferenceDot,
 } from 'recharts';
-import { formatCurrency, cn } from '../../lib/utils';
+import { formatCurrency as visibleCurrency, cn } from '../../lib/utils';
+import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useNetWorthTrendQuery, type NetWorthRange } from '../../features/analytics/queries';
 import type { GetNetWorthTrend200 } from '../../generated/client';
@@ -46,7 +48,10 @@ function chartIndex(state: unknown): number | null {
 
 type Row = GetNetWorthTrend200['series'][number];
 
-export function NetWorthChart({ className = '' }: { className?: string } = {}) {
+export function NetWorthChart({ className = '', hideAmounts }: { className?: string; hideAmounts?: boolean } = {}) {
+  const { balancesHidden } = useBalanceVisibility();
+  const amountsHidden = hideAmounts ?? balancesHidden;
+  const formatCurrency = (value: number) => amountsHidden ? HIDDEN_BALANCE : visibleCurrency(value);
   const gradientId = useId().replace(/:/g, '');
   const [range, setRange] = useState<NetWorthRange>('30d');
   const [compareStartIndex, setCompareStartIndex] = useState<number | null>(null);
@@ -257,7 +262,7 @@ export function NetWorthChart({ className = '' }: { className?: string } = {}) {
                 tickLine={false}
                 tickCount={4}
                 tickMargin={1}
-                tickFormatter={(v) => compactAxisIdr(Number(v))}
+                tickFormatter={(v) => amountsHidden ? '•••' : compactAxisIdr(Number(v))}
                 width={yAxisWidth}
                 className="sm:[&_.recharts-cartesian-axis-tick_text]:text-[11px]"
               />

@@ -17,10 +17,9 @@ import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type PdfPasswordFormat } from '../lib/reportSecurity';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useExportDataMutation, type ExportSelection } from '../features/settings/queries';
 import {
-  Percent,
-  Calendar,
   Database,
   Trash2,
   AlertTriangle,
@@ -33,13 +32,9 @@ import {
   Download,
   Upload,
   ChevronRight,
-  Moon,
-  Sun,
-  Monitor,
   Check,
   Brain,
   Pencil,
-  ArrowRightLeft,
   Plus,
   LockKeyhole,
   Search,
@@ -226,6 +221,7 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 ];
 
 export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
+  const { formatAmount } = useBalanceVisibility();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
@@ -817,7 +813,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     <Select label="Who pays" value={feeRulePayer} onChange={(event) => setFeeRulePayer(event.target.value as TransferFeePayer)} options={[{ value: 'sender', label: 'Sender' }, { value: 'recipient', label: 'Recipient' }]} />
                   </div>
                   <Button type="button" onClick={addTransferFeeRule} disabled={!feeRuleFrom || !feeRuleTo || !feeRuleAmount}><Plus className="h-4 w-4" /> Save pair default</Button>
-                  {settings.transferFeeRules.length > 0 ? <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">{settings.transferFeeRules.map((rule) => <div key={`${rule.fromAccountId}-${rule.toAccountId}`} className="flex items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-semibold">{accounts.find((account) => account.id === rule.fromAccountId)?.name ?? `Account #${rule.fromAccountId}`} → {accounts.find((account) => account.id === rule.toAccountId)?.name ?? `Account #${rule.toAccountId}`}</p><p className="text-xs text-[var(--color-text-secondary)]">{rule.feeCents.toLocaleString('id-ID')} IDR · paid by {rule.payer}</p></div><Button type="button" size="sm" variant="danger" onClick={() => removeTransferFeeRule(rule)}><Trash2 className="h-3.5 w-3.5" /> Remove</Button></div>)}</div> : <p className="text-xs text-[var(--color-muted)]">No pair defaults yet.</p>}
+                  {settings.transferFeeRules.length > 0 ? <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">{settings.transferFeeRules.map((rule) => <div key={`${rule.fromAccountId}-${rule.toAccountId}`} className="flex items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-semibold">{accounts.find((account) => account.id === rule.fromAccountId)?.name ?? `Account #${rule.fromAccountId}`} → {accounts.find((account) => account.id === rule.toAccountId)?.name ?? `Account #${rule.toAccountId}`}</p><p className="text-xs text-[var(--color-text-secondary)]">{formatAmount(rule.feeCents, 'IDR')} · paid by {rule.payer}</p></div><Button type="button" size="sm" variant="danger" onClick={() => removeTransferFeeRule(rule)}><Trash2 className="h-3.5 w-3.5" /> Remove</Button></div>)}</div> : <p className="text-xs text-[var(--color-muted)]">No pair defaults yet.</p>}
                 </div>
               </details>
             </div>

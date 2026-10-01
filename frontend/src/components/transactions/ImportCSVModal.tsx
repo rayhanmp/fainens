@@ -1,7 +1,7 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useCallback } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { formatCurrency } from '../../lib/utils';
 import { useImportTransactions, usePreviewTransactionImportMutation } from '../../features/transactions/queries';
 import { Upload, FileText, AlertCircle, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
@@ -79,6 +79,7 @@ function updateImportRow(row: PreviewRow, updates: Partial<PreviewRow>): Preview
 }
 
 export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const importTransactionsMutation = useImportTransactions();
   const previewImportMutation = usePreviewTransactionImportMutation();
   const [step, setStep] = useState<'upload' | 'preview' | 'result'>('upload');
@@ -400,13 +401,13 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
           <div>
             <span className="text-[var(--color-text-secondary)]">Total Income:</span>
             <span className="ml-2 font-medium text-[var(--color-success)]">
-              {formatCurrency(previewData.summary.totalIncome, 'Rp')}
+              {formatAmount(previewData.summary.totalIncome, 'Rp')}
             </span>
           </div>
           <div>
             <span className="text-[var(--color-text-secondary)]">Total Expense:</span>
             <span className="ml-2 font-medium text-[var(--color-danger)]">
-              {formatCurrency(previewData.summary.totalExpense, 'Rp')}
+              {formatAmount(previewData.summary.totalExpense, 'Rp')}
             </span>
           </div>
         </div>
@@ -542,7 +543,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
                         />
                       </td>
                       <td className="px-3 py-2 text-right font-mono">
-                        {formatCurrency(row.amount, 'Rp')}
+                        {formatAmount(row.amount, 'Rp')}
                       </td>
                       <td className="px-3 py-2">
                         <select

@@ -1,23 +1,25 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { formatCurrency } from '../../lib/utils';
 import { useLinkReallocation, useTransactionList } from '../../features/transactions/queries';
 import { reallocationPreview, type ReallocationTransaction } from '../../features/transactions/reallocation';
 
 function EntrySummary({ entry }: { entry: ReallocationTransaction }) {
+  const { formatAmount } = useBalanceVisibility();
   const wallet = entry.lines?.find(line => line.cashFlowClass != null);
   const amount = Math.abs(entry.expenseCents || entry.incomeCents || 0);
   return <div className="min-w-0">
     <p className="break-words font-semibold">{entry.description}</p>
     <p className="text-xs text-[var(--ref-on-surface-variant)]">{new Date(entry.date).toLocaleDateString('en-ID', { day: 'numeric', month: 'short', year: 'numeric' })} · {wallet?.accountName ?? 'Account'}</p>
-    <p className="mt-1 font-bold tabular-nums">{entry.reallocationEligibleRole === 'incoming' ? '+' : '−'}{formatCurrency(amount)}</p>
+    <p className="mt-1 font-bold tabular-nums">{entry.reallocationEligibleRole === 'incoming' ? '+' : '−'}{formatAmount(amount)}</p>
   </div>;
 }
 
 export function ReallocationModal({ transaction, onClose, onSaved }: {
   transaction: ReallocationTransaction; onClose: () => void; onSaved: () => void;
 }) {
+  const { formatAmount } = useBalanceVisibility();
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [offset, setOffset] = useState(0);
@@ -52,8 +54,8 @@ export function ReallocationModal({ transaction, onClose, onSaved }: {
     <div className="flex justify-between gap-3"><Button variant="secondary" disabled={offset === 0 || results.isFetching} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</Button><Button variant="secondary" disabled={!results.data?.pagination.hasMore || results.isFetching} onClick={() => setOffset(offset + 25)}>Next</Button></div>
     {counterpart && preview && <div className="space-y-2 rounded-xl bg-[var(--ref-surface-container-low)] p-3" aria-live="polite">
       <EntrySummary entry={counterpart} />
-      <p className="text-sm font-bold">{formatCurrency(preview.matchedAmount)} reallocated; {formatCurrency(preview.newSpending)} new spending.</p>
-      {preview.incomingRemainder > 0 && <p className="text-xs">{formatCurrency(preview.incomingRemainder)} of the incoming entry keeps its original reporting treatment.</p>}
+      <p className="text-sm font-bold">{formatAmount(preview.matchedAmount)} reallocated; {formatAmount(preview.newSpending)} new spending.</p>
+      {preview.incomingRemainder > 0 && <p className="text-xs">{formatAmount(preview.incomingRemainder)} of the incoming entry keeps its original reporting treatment.</p>}
     </div>}
     <label className="block text-sm font-semibold">Reason<textarea value={reason} onChange={event => setReason(event.target.value)} maxLength={500} rows={2} className="mt-2 w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 font-normal" /></label>
     <p className="text-xs text-[var(--ref-on-surface-variant)]">The matched amount is excluded from personal income, spending, and budgets. Both bank movements remain recorded.</p>

@@ -1,10 +1,11 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
 import { queryKeys } from '../features/core/query-keys';
-import { formatCurrency, cn } from '../lib/utils';
+import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -103,6 +104,7 @@ function downloadIncomeCsv(rows: TxRow[]) {
 type Account = { id: number; name: string; type: string };
 
 function SalaryIncomePage() {
+  const { formatAmount } = useBalanceVisibility();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const incomeQuery = useSalaryIncomeQuery();
@@ -334,14 +336,14 @@ function SalaryIncomePage() {
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="font-headline text-2xl font-bold text-[var(--color-accent)]">Rp</span>
                 <span className="font-headline text-4xl font-black tracking-tighter text-[var(--color-text-primary)] sm:text-5xl md:text-6xl">
-                  {heroMainAmount.toLocaleString('id-ID')}
+                  {formatAmount(heroMainAmount).replace('Rp ', '')}
                 </span>
               </div>
               {hasPayroll && computed && (
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
                   Ledger this month:{' '}
                   <span className="font-semibold text-[var(--color-text-primary)]">
-                    {formatCurrency(thisMonthIncome)}
+                    {formatAmount(thisMonthIncome)}
                   </span>
                 </p>
               )}
@@ -352,7 +354,7 @@ function SalaryIncomePage() {
                   Gross (payroll)
                 </p>
                 <p className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                  {hasPayroll && computed ? formatCurrency(computed.grossMonthly) : '—'}
+                  {hasPayroll && computed ? formatAmount(computed.grossMonthly) : '—'}
                 </p>
               </div>
               <div>
@@ -360,7 +362,7 @@ function SalaryIncomePage() {
                   Tax &amp; withholdings
                 </p>
                 <p className="font-headline text-xl font-bold text-[var(--color-danger)]">
-                  {hasPayroll && computed ? formatCurrency(computed.pph21Monthly) : '—'}
+                  {hasPayroll && computed ? formatAmount(computed.pph21Monthly) : '—'}
                 </p>
               </div>
               <div>
@@ -369,7 +371,7 @@ function SalaryIncomePage() {
                 </p>
                 <p className="font-headline text-xl font-bold text-[var(--color-success)]">
                   {hasPayroll && computed
-                    ? formatCurrency(
+                    ? formatAmount(
                         computed.jhtMonthly + computed.jpMonthly,
                       )
                     : '—'}
@@ -483,7 +485,7 @@ function SalaryIncomePage() {
                       </div>
                       <div className="text-left sm:text-right">
                         <p className="font-headline font-bold text-[var(--color-text-primary)]">
-                          {formatCurrency(amt)}
+                          {formatAmount(amt)}
                         </p>
                         <span className="mt-1 inline-block rounded bg-[var(--color-success)]/15 px-2 py-0.5 text-[10px] font-bold text-[var(--color-success)]">
                           POSTED
@@ -508,7 +510,7 @@ function SalaryIncomePage() {
                 </p>
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <h4 className="font-headline text-2xl font-bold text-[var(--color-text-primary)]">
-                    {hasPayroll && computed ? formatCurrency(computed.pph21Monthly) : '—'}
+                    {hasPayroll && computed ? formatAmount(computed.pph21Monthly) : '—'}
                   </h4>
                   <span className="text-xs italic text-[var(--color-text-secondary)]">
                     {hasPayroll && computed
@@ -523,11 +525,11 @@ function SalaryIncomePage() {
                 </p>
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <h4 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                    {hasPayroll && computed ? formatCurrency(computed.jhtMonthly + computed.jpMonthly) : '—'}
+                    {hasPayroll && computed ? formatAmount(computed.jhtMonthly + computed.jpMonthly) : '—'}
                   </h4>
                   <span className="text-xs text-[var(--color-text-secondary)]">
                     {hasPayroll && computed
-                      ? `JHT ${formatCurrency(computed.jhtMonthly)} · JP ${formatCurrency(computed.jpMonthly)}`
+                      ? `JHT ${formatAmount(computed.jhtMonthly)} · JP ${formatAmount(computed.jpMonthly)}`
                       : 'Employee share (estimated)'}
                   </span>
                 </div>
@@ -539,7 +541,7 @@ function SalaryIncomePage() {
                   </p>
                   <div className="flex flex-wrap items-end justify-between gap-2">
                     <h4 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                      {hasPayroll && computed ? formatCurrency(computed.bpjsKesehatanMonthly) : '—'}
+                      {hasPayroll && computed ? formatAmount(computed.bpjsKesehatanMonthly) : '—'}
                     </h4>
                     <span className="text-xs text-[var(--color-text-secondary)]">Employee 1% (capped base)</span>
                   </div>
@@ -583,7 +585,7 @@ function SalaryIncomePage() {
                     <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                     <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} />
                     <Tooltip
-                      formatter={(value) => [formatCurrency(Number(value)), 'Income']}
+                      formatter={(value) => [formatAmount(Number(value)), 'Income']}
                       labelStyle={{ color: 'var(--color-text-primary)' }}
                       contentStyle={{
                         borderRadius: 12,

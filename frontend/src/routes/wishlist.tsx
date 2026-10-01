@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,7 +18,7 @@ import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
-import { formatCurrency, cn } from '../lib/utils';
+import { cn } from '../lib/utils';
 import { CreateWishlistModal } from '../components/wishlist/CreateWishlistModal';
 import { FulfillWishlistModal } from '../components/wishlist/FulfillWishlistModal';
 import { LinkTransactionModal } from '../components/wishlist/LinkTransactionModal';
@@ -57,6 +58,7 @@ type FilterStatus = 'all' | 'active' | 'fulfilled';
 type FilterCategory = 'all' | number;
 
 export default function WishlistPage() {
+  const { formatAmount } = useBalanceVisibility();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const wishlistQuery = useWishlistQuery();
@@ -140,7 +142,7 @@ export default function WishlistPage() {
               Target Amount
             </span>
             <span className="text-3xl font-bold font-headline text-[var(--color-text-primary)]">
-              {formatCurrency(totalTargetAmount)}
+              {formatAmount(totalTargetAmount)}
             </span>
           </div>
         </div>
@@ -329,7 +331,7 @@ export default function WishlistPage() {
                       <p className="text-[var(--color-text-secondary)] text-sm mb-3">{item.description}</p>
                     )}
                     <div className="text-2xl font-bold text-[var(--color-accent)]">
-                      {formatCurrency(item.amount)}
+                      {formatAmount(item.amount)}
                     </div>
                   </div>
 
@@ -405,7 +407,7 @@ export default function WishlistPage() {
                       </div>
                     </div>
                     <div className="text-sm font-bold text-[var(--color-success)]">
-                      {formatCurrency(item.amount)}
+                      {formatAmount(item.amount)}
                     </div>
                   </div>
                 ))}
@@ -426,7 +428,7 @@ export default function WishlistPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-[var(--color-text-secondary)]">Total Fulfilled</span>
                   <span className="text-lg font-bold text-[var(--color-success)]">
-                    {formatCurrency(totalFulfilledAmount)}
+                    {formatAmount(totalFulfilledAmount)}
                   </span>
                 </div>
               </div>

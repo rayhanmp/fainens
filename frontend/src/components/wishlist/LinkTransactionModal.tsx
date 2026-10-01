@@ -1,7 +1,7 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useMemo } from 'react';
 import { X, Link, Search, Calendar } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { formatCurrency } from '../../lib/utils';
 import { useLinkWishlistMutation } from '../../features/wishlist/queries';
 import { useTransactionList } from '../../features/transactions/queries';
 
@@ -17,6 +17,7 @@ interface LinkTransactionModalProps {
 }
 
 export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkTransactionModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const linkWishlistMutation = useLinkWishlistMutation();
   const transactionsQuery = useTransactionList({ limit: '50' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,7 +84,7 @@ export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkT
             <div className="text-sm text-[var(--color-text-secondary)] mb-1">Wishlist Item</div>
             <div className="font-bold text-[var(--color-text-primary)]">{item.name}</div>
             <div className="text-lg font-bold text-[var(--color-accent)] mt-1">
-              {formatCurrency(item.amount)}
+              {formatAmount(item.amount)}
             </div>
           </div>
 
@@ -132,7 +133,7 @@ export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkT
                       </div>
                     </div>
                     <div className="font-bold text-[var(--color-text-primary)]">
-                      {formatCurrency(t.amount)}
+                      {formatAmount(t.amount)}
                     </div>
                   </div>
                 </button>

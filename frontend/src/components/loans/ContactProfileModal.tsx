@@ -1,8 +1,8 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useEffect } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/utils';
-import { formatCurrency } from '../../lib/utils';
 import { 
   Phone, 
   Mail, 
@@ -74,6 +74,7 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
 };
 
 export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfileModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const updateContactMutation = useUpdateContactMutation();
   const contactQuery = useContactDetailQuery(isOpen ? contactId : null);
   const [contact, setContact] = useState<ContactDetails | null>(null);
@@ -456,10 +457,10 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                       <span className="text-xs font-medium text-[var(--color-muted)]">You Lent</span>
                     </div>
                     <p className="text-xl font-bold text-[var(--color-text-primary)]">
-                      {formatCurrency(contact.summary.totalLentAllTime)}
+                      {formatAmount(contact.summary.totalLentAllTime)}
                     </p>
                     <p className="text-xs text-[var(--color-muted)] mt-1">
-                      Active: {formatCurrency(contact.summary.totalLent)}
+                      Active: {formatAmount(contact.summary.totalLent)}
                     </p>
                   </div>
 
@@ -469,10 +470,10 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                       <span className="text-xs font-medium text-[var(--color-muted)]">You Borrowed</span>
                     </div>
                     <p className="text-xl font-bold text-[var(--color-text-primary)]">
-                      {formatCurrency(contact.summary.totalBorrowedAllTime)}
+                      {formatAmount(contact.summary.totalBorrowedAllTime)}
                     </p>
                     <p className="text-xs text-[var(--color-muted)] mt-1">
-                      Active: {formatCurrency(contact.summary.totalBorrowed)}
+                      Active: {formatAmount(contact.summary.totalBorrowed)}
                     </p>
                   </div>
                 </div>
@@ -514,7 +515,7 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                           ? 'text-[var(--color-danger)]'
                           : 'text-[var(--color-text-primary)]'
                       )}>
-                        {contact.summary.netBalance > 0 ? '+' : ''}{formatCurrency(contact.summary.netBalance)}
+                        {contact.summary.netBalance > 0 ? '+' : ''}{formatAmount(contact.summary.netBalance)}
                       </p>
                     </div>
                   </div>
@@ -577,7 +578,7 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                           <div>
                             <p className="font-semibold text-sm text-[var(--color-text-primary)]">
                               {loan.direction === 'lent' ? 'Lent' : 'Borrowed'}{' '}
-                              {formatCurrency(loan.amountCents)}
+                              {formatAmount(loan.amountCents)}
                             </p>
                             {loan.description && (
                               <p className="text-xs text-[var(--color-muted)] mt-0.5 line-clamp-1">
@@ -605,7 +606,7 @@ export function ContactProfileModal({ contactId, isOpen, onClose }: ContactProfi
                           </div>
                           {loan.status === 'active' && loan.remainingCents !== loan.amountCents && (
                             <p className="text-xs text-[var(--color-muted)] mt-1">
-                              Remaining: {formatCurrency(loan.remainingCents)}
+                              Remaining: {formatAmount(loan.remainingCents)}
                             </p>
                           )}
                         </div>

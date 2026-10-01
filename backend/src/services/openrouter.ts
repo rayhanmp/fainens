@@ -16,17 +16,19 @@ interface OpenRouterResponse {
   };
 }
 
-const DEFAULT_MODEL = 'google/gemini-3.1-flash-lite-preview';
+const DEFAULT_MODEL = 'openai/gpt-6-luna';
 
 export async function callOpenRouter(
   systemPrompt: string,
   userPrompt: string,
   apiKey: string,
   model: string = DEFAULT_MODEL,
-  baseUrl: string = 'https://openrouter.ai/api/v1'
+  baseUrl: string = 'https://openrouter.ai/api/v1',
+  options: { signal?: AbortSignal; maxTokens?: number } = {},
 ): Promise<string> {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
+    signal: options.signal,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
@@ -39,7 +41,7 @@ export async function callOpenRouter(
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.7,
-      max_tokens: 500,
+      max_tokens: options.maxTokens ?? 500,
     }),
   });
 

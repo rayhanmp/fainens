@@ -64,7 +64,7 @@ export default async function agentProviderSettingsRoutes(fastify: FastifyInstan
     try {
       const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/models`, {
         headers: { Authorization: `Bearer ${config.apiKey}` },
-        signal: request.raw.signal,
+        signal: request.signal,
       });
       if (!response.ok) return reply.code(502).send({ error: "The configured provider rejected the API key or models request." });
       const payload = await response.json() as { data?: Array<{ id?: string }> };

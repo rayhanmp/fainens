@@ -39,7 +39,7 @@ const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   // Model used by the interactive finance agent. Keep this configurable so a
   // provider/account can be changed without silently disagreeing with the UI.
-  OPENROUTER_MODEL: z.string().min(1).default("z-ai/glm-5.3-flash"),
+  OPENROUTER_MODEL: z.string().min(1).default("openai/gpt-6-luna"),
 
   // App
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

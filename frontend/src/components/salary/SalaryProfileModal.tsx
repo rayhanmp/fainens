@@ -1,9 +1,10 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import type { api } from '../../lib/api';
-import { formatCurrency, parseIdNominalToInt, cn } from '../../lib/utils';
+import { parseIdNominalToInt, cn } from '../../lib/utils';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Landmark, Wallet, Banknote, ToggleLeft, ToggleRight, Calculator, Info } from 'lucide-react';
 import { usePreviewSalaryCalculationMutation, useUpdateSalarySettingsMutation } from '../../features/salary/queries';
@@ -72,6 +73,7 @@ interface Props {
 }
 
 export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, accounts, onSaved }: Props) {
+  const { formatAmount } = useBalanceVisibility();
   const updateSalarySettingsMutation = useUpdateSalarySettingsMutation();
   const previewSalaryCalculationMutation = usePreviewSalaryCalculationMutation();
   const [grossStr, setGrossStr] = useState('');
@@ -448,14 +450,14 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
               <div className="space-y-1 pb-3 border-b border-[var(--color-border)]">
                 <p className="text-xs text-[var(--color-text-secondary)]">Tax Basis (Bruto)</p>
                 <p className="font-headline font-bold text-lg text-[var(--color-text-primary)]">
-                  {formatCurrency(preview.taxBasisBruto)}
+                  {formatAmount(preview.taxBasisBruto)}
                 </p>
                 <div className="text-[10px] text-[var(--color-text-secondary)] space-y-0.5">
-                  <p>Base: {formatCurrency(preview.grossMonthly)}</p>
-                  <p>+ JKK ({(jkkRiskGrade / 100).toFixed(2)}%): {formatCurrency(preview.employerJkk)}</p>
-                  <p>+ JKM ({(jkmRate / 100).toFixed(2)}%): {formatCurrency(preview.employerJkm)}</p>
+                  <p>Base: {formatAmount(preview.grossMonthly)}</p>
+                  <p>+ JKK ({(jkkRiskGrade / 100).toFixed(2)}%): {formatAmount(preview.employerJkk)}</p>
+                  <p>+ JKM ({(jkmRate / 100).toFixed(2)}%): {formatAmount(preview.employerJkm)}</p>
                   {bpjsKesehatanActive && (
-                    <p>+ BPJS Kes (4%): {formatCurrency(preview.employerBpjsKes)}</p>
+                    <p>+ BPJS Kes (4%): {formatAmount(preview.employerBpjsKes)}</p>
                   )}
                 </div>
               </div>
@@ -465,27 +467,27 @@ export function SalaryProfileModal({ isOpen, onClose, initial, ptkpOptions, acco
                 <div className="flex justify-between gap-2">
                   <span className="text-[var(--color-text-secondary)]">PPh 21</span>
                   <span className="font-mono font-semibold text-[var(--color-danger)]">
-                    {formatCurrency(preview.pph21Monthly)}
+                    {formatAmount(preview.pph21Monthly)}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-[var(--color-text-secondary)]">JHT (2%)</span>
-                  <span className="font-mono font-semibold">{formatCurrency(preview.jhtMonthly)}</span>
+                  <span className="font-mono font-semibold">{formatAmount(preview.jhtMonthly)}</span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-[var(--color-text-secondary)]">JP (1%)</span>
-                  <span className="font-mono font-semibold">{formatCurrency(preview.jpMonthly)}</span>
+                  <span className="font-mono font-semibold">{formatAmount(preview.jpMonthly)}</span>
                 </div>
                 {bpjsKesehatanActive && (
                   <div className="flex justify-between gap-2">
                     <span className="text-[var(--color-text-secondary)]">BPJS Kes (1%)</span>
-                    <span className="font-mono font-semibold">{formatCurrency(preview.bpjsKesehatanMonthly)}</span>
+                    <span className="font-mono font-semibold">{formatAmount(preview.bpjsKesehatanMonthly)}</span>
                   </div>
                 )}
                 <div className="flex justify-between gap-2 border-t border-[var(--color-border)] pt-2 mt-1">
                   <span className="font-bold text-[var(--color-text-primary)]">Est. net take-home</span>
                   <span className="font-headline font-bold text-[var(--color-accent)]">
-                    {formatCurrency(preview.estimatedNetMonthly)}
+                    {formatAmount(preview.estimatedNetMonthly)}
                   </span>
                 </div>
               </div>

@@ -12,7 +12,6 @@ import {
   Plus,
   ReceiptText,
   ShieldCheck,
-  Wallet,
 } from 'lucide-react';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -40,10 +39,13 @@ import { queryKeys } from '../features/core/query-keys';
 import { useReviewBudgetOutlookMutation } from '../features/budgets/queries';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useUiStore } from '../stores/ui-store';
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
+import { BalanceVisibilityToggle } from '../components/ui/BalanceVisibilityToggle';
 import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery } from '../features/agent/queries';
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import mountainHero from '../assets/dashboard-mountain-hero.png';
+import { DashboardRecap, DashboardRecapControl, DashboardRecapModal } from '../features/recaps/DashboardRecap';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -134,10 +136,10 @@ function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[] | undef
   return Array.isArray(summary?.plans) ? summary.plans : [];
 }
 
-function formatForecastRange(low: number | null, high: number | null, midpoint: number | null): string | null {
+function formatForecastRange(low: number | null, high: number | null, midpoint: number | null, formatAmount = formatCurrency): string | null {
   if (midpoint == null) return null;
-  if (low == null || high == null || low === high) return formatCurrency(midpoint);
-  return `${formatCurrency(low)}–${formatCurrency(high)}`;
+  if (low == null || high == null || low === high) return formatAmount(midpoint);
+  return `${formatAmount(low)}–${formatAmount(high)}`;
 }
 
 function formatConfidenceLabel(confidence: BudgetOutlook['confidence']): string {
@@ -171,6 +173,7 @@ function MetricHint({ children }: { children: ReactNode }) {
 }
 
 function DashboardPage() {
+  const { balancesHidden, formatAmount, maskAmounts } = useBalanceVisibility();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const [dashboardNow] = useState(() => Date.now());
   const { user } = useAuth();
@@ -178,6 +181,7 @@ function DashboardPage() {
   const notificationPopoverRef = useRef<HTMLDetailsElement>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [recapModalPeriodId, setRecapModalPeriodId] = useState<number | null>(null);
   const reviewedOutlookRevisionRef = useRef<string | null>(null);
   const [readAttentionIds, setReadAttentionIds] = useState<Set<string>>(() => new Set());
   const [readAttentionStateLoaded, setReadAttentionStateLoaded] = useState(false);
@@ -462,17 +466,17 @@ function DashboardPage() {
                 ? 'Your next commitments are in view.'
                 : 'You\u2019re holding steady.';
   const heroMessage = budgetOverrun
-    ? `${formatCurrency(Math.abs(budgetRemaining))} over the ${selectedPeriod?.name ?? 'current'} budget. Review the categories driving the overrun.`
+    ? `${formatAmount(Math.abs(budgetRemaining))} over the ${selectedPeriod?.name ?? 'current'} budget. Review the categories driving the overrun.`
     : netWorthChangePercent == null
       ? upcomingCommitmentTotal > 0
-        ? `${formatCurrency(upcomingCommitmentTotal)} in commitments are due within the next 30 days. Keep them in your plan.`
+        ? `${formatAmount(upcomingCommitmentTotal)} in commitments are due within the next 30 days. Keep them in your plan.`
         : 'Keep building your financial history. A clearer trend is just ahead.'
       : netWorthChangePercent > 0
-        ? `Your net worth increased by ${Math.abs(netWorthChangePercent).toFixed(1)}% in the last 30 days.${upcomingCommitmentTotal > 0 ? ` Upcoming commitments total ${formatCurrency(upcomingCommitmentTotal)}.` : ' Keep building momentum.'}`
+        ? `Your net worth increased by ${Math.abs(netWorthChangePercent).toFixed(1)}% in the last 30 days.${upcomingCommitmentTotal > 0 ? ` Upcoming commitments total ${formatAmount(upcomingCommitmentTotal)}.` : ' Keep building momentum.'}`
         : netWorthChangePercent < 0
           ? `Your net worth decreased by ${Math.abs(netWorthChangePercent).toFixed(1)}% in the last 30 days. Review the trend and plan your next move.`
           : upcomingCommitmentTotal > 0
-            ? `Your net worth held steady over the last 30 days. Upcoming commitments total ${formatCurrency(upcomingCommitmentTotal)}.`
+            ? `Your net worth held steady over the last 30 days. Upcoming commitments total ${formatAmount(upcomingCommitmentTotal)}.`
             : 'Your net worth held steady over the last 30 days. Consistency is a strong foundation.';
   const openAgent = (prompt = '') => {
     const text = prompt.trim();
@@ -496,7 +500,9 @@ function DashboardPage() {
             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of {formatAsOf(dashboardNow)}</p>
           </div>
           <div className="flex items-center justify-between gap-2 sm:justify-end">
+            <BalanceVisibilityToggle className="hidden h-11 w-11 md:inline-flex lg:hidden" />
             {periods.length > 0 && <PeriodPicker periods={periods} value={selectedPeriodId} onChange={setSelectedPeriodId} ariaLabel="Dashboard period" />}
+            <DashboardRecapControl periodId={selectedPeriod?.id} onOpen={setRecapModalPeriodId} />
             <details ref={notificationPopoverRef} className="group relative">
               <summary className="relative grid h-11 w-11 cursor-pointer list-none place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)] [&::-webkit-details-marker]:hidden" aria-label="Dashboard notifications">
                 <Bell className="h-5 w-5" />
@@ -504,7 +510,7 @@ function DashboardPage() {
               </summary>
               <div className="absolute right-0 top-[calc(100%+0.65rem)] z-40 w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-2xl">
                 <div className="flex items-center justify-between gap-3 px-2 py-1"><h2 className="font-headline text-base font-extrabold">Notifications</h2><div className="flex items-center gap-2"><span className="text-xs text-[var(--ref-on-surface-variant)]">{unreadAttentionItems.length || 'All clear'}</span>{unreadAttentionItems.length > 0 && <button type="button" onClick={markAllAttentionRead} className="text-[11px] font-bold text-[var(--ref-primary)] hover:underline">Mark all read</button>}</div></div>
-                {attentionItems.length === 0 ? <p className="px-2 py-5 text-sm text-[var(--ref-on-surface-variant)]">Nothing needs your attention right now.</p> : <div className="mt-2 divide-y divide-[var(--color-border)]">{attentionItems.map((item) => { const isRead = readAttentionIds.has(attentionReadKey(item)); return <div key={item.id} className={cn('flex items-start gap-2', isRead && 'opacity-60')}><Link to={item.to} className="flex min-w-0 flex-1 gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)]"><span className={cn('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', isRead ? 'bg-slate-400' : item.tone === 'danger' ? 'bg-rose-500' : item.tone === 'warning' ? 'bg-amber-500' : 'bg-sky-500')} /><span className="min-w-0"><strong className="block text-sm">{item.title}</strong><span className="mt-0.5 block text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{item.detail}</span><span className="mt-1.5 block text-xs font-bold text-[var(--ref-primary)]">{item.action}</span></span></Link><button type="button" onClick={() => markAttentionRead(item)} className="mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline">{isRead ? 'Read' : 'Mark read'}</button></div>; })}</div>}
+                {attentionItems.length === 0 ? <p className="px-2 py-5 text-sm text-[var(--ref-on-surface-variant)]">Nothing needs your attention right now.</p> : <div className="mt-2 divide-y divide-[var(--color-border)]">{attentionItems.map((item) => { const isRead = readAttentionIds.has(attentionReadKey(item)); return <div key={item.id} className={cn('flex items-start gap-2', isRead && 'opacity-60')}><Link to={item.to} className="flex min-w-0 flex-1 gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)]"><span className={cn('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', isRead ? 'bg-slate-400' : item.tone === 'danger' ? 'bg-rose-500' : item.tone === 'warning' ? 'bg-amber-500' : 'bg-sky-500')} /><span className="min-w-0"><strong className="block text-sm">{item.title}</strong><span className="mt-0.5 block text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{maskAmounts(item.detail)}</span><span className="mt-1.5 block text-xs font-bold text-[var(--ref-primary)]">{item.action}</span></span></Link><button type="button" onClick={() => markAttentionRead(item)} className="mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline">{isRead ? 'Read' : 'Mark read'}</button></div>; })}</div>}
               </div>
             </details>
           </div>
@@ -533,25 +539,25 @@ function DashboardPage() {
                 </div>
               </div>
               <aside className="hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm lg:block" aria-label="Financial summary">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-white/65">At a glance</p><Wallet className="h-4 w-4 text-white/75" /></div>
-                <Link to="/accounts" className="mt-3 block"><span className="text-xs text-white/70">Available cash</span><strong className="mt-0.5 block truncate text-xl">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</strong></Link>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-white/65">At a glance</p><BalanceVisibilityToggle inverted className="h-8 w-8" /></div>
+                <Link to="/accounts" className="mt-3 block"><span className="text-xs text-white/70">Available cash</span><strong className="mt-0.5 block truncate text-xl">{analytics ? formatAmount(analytics.netWorth.liquidAssets) : '—'}</strong></Link>
                 <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-xs">
-                  <Link to="/accounts"><span className="block text-white/60">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatCurrency(analytics.netWorth.netWorth) : '—'}</strong></Link>
-                  <Link to="/budget"><span className="block text-white/60">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatCurrency(budgetRemaining) : 'Review'}</strong></Link>
+                  <Link to="/accounts"><span className="block text-white/60">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatAmount(analytics.netWorth.netWorth) : '—'}</strong></Link>
+                  <Link to="/budget"><span className="block text-white/60">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatAmount(budgetRemaining) : 'Review'}</strong></Link>
                   <div className="group relative min-w-0">
                     <button type="button" className="block w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-describedby="upcoming-commitments-tip">
                       <span className="block truncate text-white/60">Due · 30d</span>
-                      <strong className="mt-1 block truncate">{upcomingCommitmentCount > 0 ? formatCurrency(upcomingCommitmentTotal) : 'None'}</strong>
+                      <strong className="mt-1 block truncate">{upcomingCommitmentCount > 0 ? formatAmount(upcomingCommitmentTotal) : 'None'}</strong>
                     </button>
                     <div id="upcoming-commitments-tip" role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+0.75rem)] right-0 z-30 hidden max-h-60 w-64 overflow-y-auto rounded-xl border border-white/20 bg-[#07182d] p-3 text-left shadow-xl group-hover:block group-focus-within:block">
                       <p className="font-bold text-white">Upcoming commitments</p>
                       {upcomingCommitmentCount === 0 ? <p className="mt-1 text-[11px] leading-relaxed text-white/70">No subscriptions, PayLater, or borrowed loans due in the next 30 days.</p> : <div className="mt-2 space-y-1.5 text-[11px] text-white/70">
-                        {upcomingSubscriptions.length > 0 && <p className="flex justify-between gap-3"><span>Subscriptions · {upcomingSubscriptions.length}</span><strong className="text-white">{formatCurrency(subscriptionCommitmentTotal)}</strong></p>}
+                        {upcomingSubscriptions.length > 0 && <p className="flex justify-between gap-3"><span>Subscriptions · {upcomingSubscriptions.length}</span><strong className="text-white">{formatAmount(subscriptionCommitmentTotal)}</strong></p>}
                         {upcomingSubscriptions.length > 0 && <div className="mt-2 space-y-1 border-t border-white/15 pt-2">
-                          {upcomingSubscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate text-white/75">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-white/45">· {formatDate(subscription.nextRenewalAt)}</span></span><strong className="shrink-0 text-white">{formatCurrency(subscription.amount)}</strong></p>)}
+                          {upcomingSubscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate text-white/75">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-white/45">· {formatDate(subscription.nextRenewalAt)}</span></span><strong className="shrink-0 text-white">{formatAmount(subscription.amount)}</strong></p>)}
                         </div>}
-                        {upcomingPayLater.length > 0 && <p className="flex justify-between gap-3"><span>PayLater · {upcomingPayLater.length}</span><strong className="text-white">{formatCurrency(payLaterCommitmentTotal)}</strong></p>}
-                        {upcomingLoans.length > 0 && <p className="flex justify-between gap-3"><span>Borrowed loans · {upcomingLoans.length}</span><strong className="text-white">{formatCurrency(loanCommitmentTotal)}</strong></p>}
+                        {upcomingPayLater.length > 0 && <p className="flex justify-between gap-3"><span>PayLater · {upcomingPayLater.length}</span><strong className="text-white">{formatAmount(payLaterCommitmentTotal)}</strong></p>}
+                        {upcomingLoans.length > 0 && <p className="flex justify-between gap-3"><span>Borrowed loans · {upcomingLoans.length}</span><strong className="text-white">{formatAmount(loanCommitmentTotal)}</strong></p>}
                       </div>}
                     </div>
                   </div>
@@ -560,29 +566,32 @@ function DashboardPage() {
             </div>
         </section>
 
+        <DashboardRecap key={selectedPeriod?.id} periodId={selectedPeriod?.id} now={dashboardNow} onOpen={setRecapModalPeriodId} />
+        {recapModalPeriodId != null && <DashboardRecapModal periodId={recapModalPeriodId} onClose={() => setRecapModalPeriodId(null)} />}
+
         {combinedLoadError && <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{combinedLoadError}</div>}
 
         <section className="mt-5 space-y-4 md:hidden" aria-label="Today">
           <div className="cash-satin rounded-[1.75rem] bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]">
-            <p className="text-[11px] font-bold uppercase tracking-widest opacity-75">Available today</p>
-            <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatCurrency(analytics.netWorth.liquidAssets) : '—'}</p>
+            <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold uppercase tracking-widest opacity-75">Available today</p><BalanceVisibilityToggle className="text-inherit hover:bg-black/5" /></div>
+            <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatAmount(analytics.netWorth.liquidAssets) : '—'}</p>
             <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/10 pt-4 text-sm">
-              <Link to="/budget" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatCurrency(budgetRemaining) : 'Review period'}</strong></Link>
-              <Link to="/accounts" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatCurrency(analytics.netWorth.netWorth) : '—'}</strong></Link>
+              <Link to="/budget" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatAmount(budgetRemaining) : 'Review period'}</strong></Link>
+              <Link to="/accounts" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatAmount(analytics.netWorth.netWorth) : '—'}</strong></Link>
             </div>
           </div>
-          {dailyBudget != null && <Link to="/budget" className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-3"><span><span className="block text-xs text-[var(--ref-on-surface-variant)]">Safe daily pace</span><strong className="text-sm">{formatCurrency(dailyBudget)} per day</strong></span><ArrowRight className="h-4 w-4 text-[var(--ref-primary)]" /></Link>}
+          {dailyBudget != null && <Link to="/budget" className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-3"><span><span className="block text-xs text-[var(--ref-on-surface-variant)]">Safe daily pace</span><strong className="text-sm">{formatAmount(dailyBudget)} per day</strong></span><ArrowRight className="h-4 w-4 text-[var(--ref-primary)]" /></Link>}
           <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4">
             <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="font-headline text-lg font-extrabold">Latest recorded</h2></div><Link to="/transactions" className="rounded-full px-3 py-2 text-xs font-bold text-[var(--ref-primary)]">See all</Link></div>
-            <div className="mt-2 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity in this period.</p> : visibleRecent.slice(0, 4).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="flex items-center justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-sm">{tx.description}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {formatDate(tx.date)}</span></span><strong className={cn('shrink-0 text-sm tabular-nums', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : '')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatCurrency(transactionAmount(tx))}</strong></Link>; })}</div>
+            <div className="mt-2 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity in this period.</p> : visibleRecent.slice(0, 4).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="flex items-center justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(tx.description)}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {formatDate(tx.date)}</span></span><strong className={cn('shrink-0 text-sm tabular-nums', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : '')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</strong></Link>; })}</div>
           </div>
         </section>
 
         {!isMobile && <div>
         <section aria-label="Financial pulse" className="grid grid-cols-1 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
           <div className="min-w-0 pb-4 md:pb-0 md:pr-5">
-            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CircleDollarSign className="h-4 w-4" />Period cash flow <MetricHint>{periodIsTracked ? `${formatCurrency(periodIncome)} income minus ${formatCurrency(periodExpense)} spending.` : 'Complete period coverage to calculate cash flow.'}</MetricHint></p>
-            <p className={cn('mt-1 break-words text-xl font-bold tabular-nums', periodNet == null ? '' : periodNet >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{periodNet == null ? 'Not tracked' : `${periodNet >= 0 ? '+' : ''}${formatCurrency(periodNet)}`}</p>
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CircleDollarSign className="h-4 w-4" />Period cash flow <MetricHint>{periodIsTracked ? `${formatAmount(periodIncome)} income minus ${formatAmount(periodExpense)} spending.` : 'Complete period coverage to calculate cash flow.'}</MetricHint></p>
+            <p className={cn('mt-1 break-words text-xl font-bold tabular-nums', periodNet == null ? '' : periodNet >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{periodNet == null ? 'Not tracked' : `${periodNet >= 0 ? '+' : ''}${formatAmount(periodNet)}`}</p>
           </div>
           <div className="min-w-0 border-t border-[var(--color-border)] py-4 md:border-l md:border-t-0 md:px-5 md:py-0">
             <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Percent className="h-4 w-4" />Savings rate <MetricHint>{savingsRate == null ? 'Needs tracked income for this period.' : 'Share of period income retained after recorded spending.'}</MetricHint></p>
@@ -590,7 +599,7 @@ function DashboardPage() {
           </div>
           <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:pr-5 xl:border-l xl:px-5 xl:pt-0">
             <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Flame className="h-4 w-4" />Monthly burn <MetricHint>Average operating spend over the last three months.</MetricHint></p>
-            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatCurrency(analytics.burnRate.grossBurnRate) : '—'}</p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatAmount(analytics.burnRate.grossBurnRate) : '—'}</p>
           </div>
           <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:border-l md:pl-5 xl:pt-0">
             <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CalendarClock className="h-4 w-4" />Cash runway <MetricHint>Estimated months of liquid cash at the current monthly burn.</MetricHint></p>
@@ -599,8 +608,8 @@ function DashboardPage() {
         </section>
 
         <section className="mt-6 grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
-          <NetWorthChart className="xl:col-span-2 xl:h-[24rem]" />
-          <SpendingTrendChart periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />
+          <NetWorthChart hideAmounts={balancesHidden} className="xl:col-span-2 xl:h-[24rem]" />
+          <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />
         </section>
 
         <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7">
@@ -616,35 +625,35 @@ function DashboardPage() {
               </div>
               {budgetSummary.totalPlanned > 0 && budgetSummary.isTracked ? <div className="flex flex-col items-end text-right">
                 <div className="flex items-center gap-1">
-                  <p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatCurrency(budgetRemaining)} remaining</p>
+                  <p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatAmount(budgetRemaining)} remaining</p>
                   {budgetOutlook?.total.projectedAmount != null && <div className="group relative">
                     <button type="button" aria-label="Show budget outlook" title="Show budget outlook" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-3.5 w-3.5" /></button>
-                    <div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Budget outlook</p><p className="mt-1 leading-relaxed">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount)}.</p>{dailyBudget != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatCurrency(dailyBudget)} daily budget for the remaining days.</p>}<p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatConfidenceLabel(budgetOutlook.confidence)} confidence · based on {budgetOutlook.eligiblePeriodCount} completed periods.</p>{budgetOutlook.patternReview.applied && <><p className="mt-1 text-[var(--ref-on-surface-variant)]">Pattern review applied to {budgetOutlook.patternReview.categoryCount} categor{budgetOutlook.patternReview.categoryCount === 1 ? 'y' : 'ies'}.</p><p className="mt-1 text-[var(--ref-on-surface-variant)]">Flagged purchase{budgetOutlook.patternReview.categoryCount === 1 ? '' : 's'}: {budgetOutlook.categories.filter((row) => row.patternReview).map((row) => `${row.patternReview!.description} (${formatCurrency(row.patternReview!.amount)}, ${row.patternReview!.classification.replace('_', ' ')})`).join(', ')}.</p></>}</div>
+                    <div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Budget outlook</p><p className="mt-1 leading-relaxed">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount, formatAmount)}.</p>{dailyBudget != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatAmount(dailyBudget)} daily budget for the remaining days.</p>}<p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatConfidenceLabel(budgetOutlook.confidence)} confidence · based on {budgetOutlook.eligiblePeriodCount} completed periods.</p>{budgetOutlook.patternReview.applied && <><p className="mt-1 text-[var(--ref-on-surface-variant)]">Pattern review applied to {budgetOutlook.patternReview.categoryCount} categor{budgetOutlook.patternReview.categoryCount === 1 ? 'y' : 'ies'}.</p><p className="mt-1 text-[var(--ref-on-surface-variant)]">Flagged purchase{budgetOutlook.patternReview.categoryCount === 1 ? '' : 's'}: {budgetOutlook.categories.filter((row) => row.patternReview).map((row) => `${row.patternReview!.description} (${formatAmount(row.patternReview!.amount)}, ${row.patternReview!.classification.replace('_', ' ')})`).join(', ')}.</p></>}</div>
                   </div>}
                 </div>
-                {budgetOutlook?.total.projectedAmount != null && <p className="mt-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount)}</p>}
+                {budgetOutlook?.total.projectedAmount != null && <p className="mt-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount, formatAmount)}</p>}
               </div> : <Link to="/budget" className="text-sm font-bold text-[var(--ref-primary)] hover:underline">{budgetSummary.totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</Link>}
             </div>
             {isPeriodLoading ? <div className="mt-6 h-56 animate-pulse rounded-2xl bg-[var(--ref-surface-container-highest)]" /> : !periodIsTracked ? <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">Budget and activity actuals are <strong>not tracked</strong> for this {selectedPeriod?.coverageStatus === 'skipped' ? 'skipped' : 'incomplete'} period. Empty totals are not a zero-activity result.</div> : planRows.length === 0 ? <div className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] p-6 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending for this period yet. Add transactions or set a budget to start planning.</div> : <div className="mt-6 space-y-5">{planRows.map((row) => {
               const ratio = row.planned > 0 ? row.actual / row.planned : 0;
               const actualOverBudget = row.planned > 0 && ratio >= 1;
               const actualNearBudget = row.planned > 0 && ratio >= 0.75;
-              const outlookRange = formatForecastRange(row.outlook?.projectedLowAmount ?? null, row.outlook?.projectedHighAmount ?? null, row.outlook?.projectedAmount ?? null);
+              const outlookRange = formatForecastRange(row.outlook?.projectedLowAmount ?? null, row.outlook?.projectedHighAmount ?? null, row.outlook?.projectedAmount ?? null, formatAmount);
               return <div key={row.outlook?.categoryId ?? row.name}>
                 <div className="flex items-end justify-between gap-3">
                   <div>
                     <p className="font-bold text-[var(--ref-on-surface)]">{row.name}</p>
-                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{row.planned > 0 ? `${formatCurrency(row.actual)} of ${formatCurrency(row.planned)}` : `${formatCurrency(row.actual)} recorded`}</p>
+                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{row.planned > 0 ? `${formatAmount(row.actual)} of ${formatAmount(row.planned)}` : `${formatAmount(row.actual)} recorded`}</p>
                   </div>
-                  <p className={cn('text-sm font-bold', actualOverBudget ? 'text-[var(--color-danger)]' : actualNearBudget ? 'text-amber-700' : 'text-[var(--ref-primary)]')}>{row.planned > 0 ? `${Math.round(ratio * 100)}%` : formatCurrency(row.actual)}</p>
+                  <p className={cn('text-sm font-bold', actualOverBudget ? 'text-[var(--color-danger)]' : actualNearBudget ? 'text-amber-700' : 'text-[var(--ref-primary)]')}>{row.planned > 0 ? `${Math.round(ratio * 100)}%` : formatAmount(row.actual)}</p>
                 </div>
                 <div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={cn('h-full rounded-full', actualOverBudget ? 'bg-[var(--color-danger)]' : actualNearBudget ? 'bg-amber-600' : 'bg-[var(--ref-primary)]')} style={{ width: `${Math.min(100, row.planned > 0 ? ratio * 100 : 100)}%` }} /></div>
-                {outlookRange && <p className={cn('mt-1.5 text-[11px]', row.outlook?.riskStatus === 'at_risk' ? 'text-amber-800' : 'text-[var(--ref-on-surface-variant)]')}>Outlook: likely {outlookRange} by period end{row.outlook?.scheduledRemainingAmount ? ` · includes ${formatCurrency(row.outlook.scheduledRemainingAmount)} scheduled` : ''}.</p>}
+                {outlookRange && <p className={cn('mt-1.5 text-[11px]', row.outlook?.riskStatus === 'at_risk' ? 'text-amber-800' : 'text-[var(--ref-on-surface-variant)]')}>Outlook: likely {outlookRange} by period end{row.outlook?.scheduledRemainingAmount ? ` · includes ${formatAmount(row.outlook.scheduledRemainingAmount)} scheduled` : ''}.</p>}
               </div>;
             })}</div>}
             <Link to="/budget" className="mt-6 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Manage budget <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div><div className="mt-5 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visibleRecent.slice(0, 8).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <div key={tx.id} className="py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{tx.description}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div><p className={cn('shrink-0 font-mono text-sm font-bold', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatCurrency(transactionAmount(tx))}</p></div></div>; })}</div><Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link></div>
+          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div><div className="mt-5 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visibleRecent.slice(0, 8).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <div key={tx.id} className="py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div><p className={cn('shrink-0 font-mono text-sm font-bold', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</p></div></div>; })}</div><Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link></div>
         </section>
 
         <section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(selectedPeriodAsOf)} · reconciliation: {reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active') ? 'recent check on record' : 'no current check on record'}.</p></div></div><Link to="/accounts" className="shrink-0 text-sm font-bold text-[var(--ref-primary)] hover:underline">Review accounts <ArrowRight className="inline h-4 w-4" /></Link></div></div></section>

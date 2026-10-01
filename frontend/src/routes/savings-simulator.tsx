@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState, useMemo } from 'react';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -10,7 +11,7 @@ import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RetirementPlanner } from '../components/savings/RetirementPlanner';
-import { formatCurrency, cn } from '../lib/utils';
+import { cn } from '../lib/utils';
 import {
   TrendingUp,
   Target,
@@ -268,6 +269,7 @@ function SavingsSimulatorPage() {
 type TimeUnit = 'months' | 'years';
 
 function ProjectionTab() {
+  const { formatAmount, balancesHidden } = useBalanceVisibility();
   const [currentSavings, setCurrentSavings] = useState('');
   const [monthlySavings, setMonthlySavings] = useState('');
   const [months, setMonths] = useState('');
@@ -551,35 +553,35 @@ function ProjectionTab() {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-[var(--color-text-secondary)]">Final Balance (Nominal)</span>
-                  <span className="font-bold text-[var(--color-text-primary)]">{formatCurrency(summary.finalBalance)}</span>
+                  <span className="font-bold text-[var(--color-text-primary)]">{formatAmount(summary.finalBalance)}</span>
                 </div>
                 {enableInflation && (
                   <div className="flex justify-between">
                     <span className="text-sm text-[var(--color-text-secondary)]">Final Balance (Real)</span>
-                    <span className="font-bold text-[var(--color-success)]">{formatCurrency(summary.realBalance)}</span>
+                    <span className="font-bold text-[var(--color-success)]">{formatAmount(summary.realBalance)}</span>
                   </div>
                 )}
                 <div className="pt-2 border-t border-[var(--color-border)]">
                   <div className="flex justify-between">
                     <span className="text-sm text-[var(--color-text-secondary)]">Total Contributions</span>
-                    <span className="font-medium text-[var(--color-text-primary)]">{formatCurrency(summary.totalContributions)}</span>
+                    <span className="font-medium text-[var(--color-text-primary)]">{formatAmount(summary.totalContributions)}</span>
                   </div>
                   {enableInflation && (
                     <div className="flex justify-between">
                       <span className="text-sm text-[var(--color-text-secondary)]">Contributions (Real)</span>
-                      <span className="font-medium text-[var(--color-text-primary)]">{formatCurrency(summary.realContributions)}</span>
+                      <span className="font-medium text-[var(--color-text-primary)]">{formatAmount(summary.realContributions)}</span>
                     </div>
                   )}
                 </div>
                 <div className="pt-2 border-t border-[var(--color-border)]">
                   <div className="flex justify-between">
                     <span className="text-sm text-[var(--color-text-secondary)]">Interest Earned</span>
-                    <span className="font-medium text-[var(--color-success)]">+{formatCurrency(summary.totalInterest)}</span>
+                    <span className="font-medium text-[var(--color-success)]">+{formatAmount(summary.totalInterest)}</span>
                   </div>
                   {enableInflation && (
                     <div className="flex justify-between">
                       <span className="text-sm text-[var(--color-text-secondary)]">Interest (Real)</span>
-                      <span className="font-medium text-[var(--color-success)]">+{formatCurrency(summary.realInterest)}</span>
+                      <span className="font-medium text-[var(--color-success)]">+{formatAmount(summary.realInterest)}</span>
                     </div>
                   )}
                 </div>
@@ -648,11 +650,11 @@ function ProjectionTab() {
                     tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
                   />
                   <YAxis
-                    tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
+                    tickFormatter={(value) => balancesHidden ? '•••' : `${(value / 1000000).toFixed(1)}M`}
                     tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
                   />
                   <Tooltip
-                    formatter={(value, name) => [formatCurrency(Number(value) || 0), name]}
+                    formatter={(value, name) => [formatAmount(Number(value) || 0), name]}
                     labelFormatter={(label) => {
                       const dataPoint = chartData.find((d) => d.month === label);
                       const months = dataPoint?.monthIndex || 0;
@@ -779,12 +781,12 @@ function ProjectionTab() {
                   {projectionData.filter((_, i) => i % Math.max(1, Math.floor(projectionData.length / 12)) === 0 || i === projectionData.length - 1).map((row) => (
                     <tr key={row.month} className="border-b border-[var(--color-border)]/50">
                       <td className="py-2 px-3">{formatDateFromToday(row.month)}</td>
-                      <td className="text-right py-2 px-3 font-medium">{formatCurrency(row.balance)}</td>
+                      <td className="text-right py-2 px-3 font-medium">{formatAmount(row.balance)}</td>
                       {enableInflation && (
-                        <td className="text-right py-2 px-3 text-[var(--color-success)]">{formatCurrency(row.realBalance)}</td>
+                        <td className="text-right py-2 px-3 text-[var(--color-success)]">{formatAmount(row.realBalance)}</td>
                       )}
-                      <td className="text-right py-2 px-3 text-[var(--color-text-secondary)]">{formatCurrency(row.contributions)}</td>
-                      <td className="text-right py-2 px-3 text-green-600">+{formatCurrency(row.interest)}</td>
+                      <td className="text-right py-2 px-3 text-[var(--color-text-secondary)]">{formatAmount(row.contributions)}</td>
+                      <td className="text-right py-2 px-3 text-green-600">+{formatAmount(row.interest)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -798,6 +800,7 @@ function ProjectionTab() {
 }
 
 function ScenariosTab() {
+  const { formatAmount } = useBalanceVisibility();
   const { confirm: confirmDialog } = useConfirm();
   const [scenarios, setScenarios] = useState<Scenario[]>(() => {
     const saved = localStorage.getItem('savings-scenarios');
@@ -936,13 +939,13 @@ function ScenariosTab() {
               {scenarioResults.map((scenario) => (
                 <tr key={scenario.id} className="border-b border-[var(--color-border)]/50 hover:bg-[var(--ref-surface-container-low)]">
                   <td className="py-3 px-4 font-medium">{scenario.name}</td>
-                  <td className="text-right py-3 px-4">{formatCurrency(scenario.monthlyIncome)}</td>
-                  <td className="text-right py-3 px-4">{formatCurrency(scenario.monthlySavings)}</td>
-                  <td className="text-right py-3 px-4">{formatCurrency(scenario.currentBalance)}</td>
+                  <td className="text-right py-3 px-4">{formatAmount(scenario.monthlyIncome)}</td>
+                  <td className="text-right py-3 px-4">{formatAmount(scenario.monthlySavings)}</td>
+                  <td className="text-right py-3 px-4">{formatAmount(scenario.currentBalance)}</td>
                   <td className="text-right py-3 px-4">{scenario.months}</td>
                   <td className="text-right py-3 px-4">{scenario.returnRate}%</td>
-                  <td className="text-right py-3 px-4 font-bold text-[var(--color-accent)]">{formatCurrency(scenario.finalBalance)}</td>
-                  <td className="text-right py-3 px-4 text-green-600">+{formatCurrency(scenario.totalInterest)}</td>
+                  <td className="text-right py-3 px-4 font-bold text-[var(--color-accent)]">{formatAmount(scenario.finalBalance)}</td>
+                  <td className="text-right py-3 px-4 text-green-600">+{formatAmount(scenario.totalInterest)}</td>
                   <td className="py-3 px-4">
                     <div className="flex justify-center gap-1">
                       <button
@@ -1031,6 +1034,7 @@ function ScenariosTab() {
 }
 
 function GoalsTab() {
+  const { formatAmount } = useBalanceVisibility();
   const [goalAmount, setGoalAmount] = useState('');
   const [startingBalance, setStartingBalance] = useState('');
   const [monthlyContribution, setMonthlyContribution] = useState('');
@@ -1217,7 +1221,7 @@ function GoalsTab() {
                   const contribution = parseInt(monthlyContribution.replace(/\D/g, '') || '0');
                   return (
                     <p className="text-sm text-[var(--color-text-secondary)]">
-                      Reach your nominal goal of {formatCurrency(goal)} by saving {formatCurrency(contribution)} per month.
+                      Reach your nominal goal of {formatAmount(goal)} by saving {formatAmount(contribution)} per month.
                     </p>
                   );
                 })()}
@@ -1229,7 +1233,7 @@ function GoalsTab() {
                     const realGoal = goal / Math.pow(1 + (parseFloat(inflationRate) || 0) / 100, result.months / 12);
                     return (
                       <p className="text-sm text-[var(--color-success)]">
-                        In today's purchasing power, this goal is equivalent to {formatCurrency(realGoal)}.
+                        In today's purchasing power, this goal is equivalent to {formatAmount(realGoal)}.
                       </p>
                     );
                   })()}
@@ -1266,13 +1270,13 @@ function GoalsTab() {
                       {milestone.percent}%
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium">Target: {formatCurrency(milestone.target)}</p>
+                      <p className="font-medium">Target: {formatAmount(milestone.target)}</p>
                       <p className="text-sm text-[var(--color-text-secondary)]">
-                        Nominal: {formatCurrency(milestone.projectedBalance)}
+                        Nominal: {formatAmount(milestone.projectedBalance)}
                       </p>
                       {enableInflation && (
                         <p className="text-sm text-[var(--color-success)]">
-                          Real: {formatCurrency(milestone.realBalance)}
+                          Real: {formatAmount(milestone.realBalance)}
                         </p>
                       )}
                     </div>

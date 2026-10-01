@@ -309,6 +309,27 @@
       "when": 1788091000000,
       "tag": "0043_transaction_reallocation",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788092000000,
+      "tag": "0044_recap_story",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788093000000,
+      "tag": "0045_recap_period_story",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788094000000,
+      "tag": "0046_recap_period_seen",
+      "breakpoints": true
     }
   ]
 }

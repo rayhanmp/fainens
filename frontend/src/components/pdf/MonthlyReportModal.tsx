@@ -1,7 +1,8 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useEffect } from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { Modal } from '../ui/Modal';
-import { findCurrentPeriod, formatCurrency, formatDate, cn } from '../../lib/utils';
+import { findCurrentPeriod, formatDate, cn } from '../../lib/utils';
 import { MonthlyReportPDF } from './MonthlyReportPDF';
 import { Download, FileText, Loader2 } from 'lucide-react';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type ReportSecuritySettings } from '../../lib/reportSecurity';
@@ -15,6 +16,7 @@ interface MonthlyReportModalProps {
 }
 
 export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps) {
+  const { formatAmount } = useBalanceVisibility();
   const periodsQuery = usePeriodsLedgerQuery();
   const periods = periodsQuery.data ?? [];
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
@@ -277,21 +279,21 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
               </div>
               <div>
                 <span className="text-[var(--color-text-secondary)]">Total Income:</span>
-                <span className="ml-2 font-medium text-green-600">{formatCurrency(reportData.totalIncome)}</span>
+                <span className="ml-2 font-medium text-green-600">{formatAmount(reportData.totalIncome)}</span>
               </div>
               <div>
                 <span className="text-[var(--color-text-secondary)]">Total Expenses:</span>
-                <span className="ml-2 font-medium text-red-600">{formatCurrency(reportData.totalExpenses)}</span>
+                <span className="ml-2 font-medium text-red-600">{formatAmount(reportData.totalExpenses)}</span>
               </div>
               <div>
                 <span className="text-[var(--color-text-secondary)]">Net Income:</span>
                 <span className={cn('ml-2 font-medium', reportData.netIncome >= 0 ? 'text-green-600' : 'text-red-600')}>
-                  {formatCurrency(reportData.netIncome)}
+                  {formatAmount(reportData.netIncome)}
                 </span>
               </div>
               <div>
                 <span className="text-[var(--color-text-secondary)]">Net Worth:</span>
-                <span className="ml-2 font-medium">{formatCurrency(reportData.netWorth)}</span>
+                <span className="ml-2 font-medium">{formatAmount(reportData.netWorth)}</span>
               </div>
               <div>
                 <span className="text-[var(--color-text-secondary)]">Ledger revision:</span>

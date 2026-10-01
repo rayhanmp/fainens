@@ -24,6 +24,7 @@ import {
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { parseIdrInteger } from "../services/money";
 import { findPeriodForDate, inclusivePeriodEnd } from "../services/period-locking";
+import { suggestTransactionTags, TagSuggestionError, type TagSuggestionContext } from "../services/transaction-tag-suggestions";
 
 // Pagination constants
 const MAX_LIMIT = 100;
@@ -709,6 +710,27 @@ function reimbursementActivityKind(txType: string, expenseCents: number, incomeC
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
+
+  fastify.post("/api/transactions/recommend-tags", {
+    schema: {
+      operationId: "recommendTransactionTags",
+      tags: ["transactions"],
+      body: z.object({ description: z.string().trim().min(2).max(500), notes: z.string().max(5000).optional(), place: z.string().max(500).optional(), categoryId: z.number().int().positive().optional(), transactionId: z.number().int().positive().optional() }),
+      response: {
+        200: z.object({ tags: z.array(z.object({ id: z.number().int().positive(), name: z.string(), color: z.string() })).max(3) }),
+        400: transactionErrorSchema,
+        502: transactionErrorSchema,
+        503: transactionErrorSchema,
+      },
+    },
+  }, async (request, reply) => {
+    try {
+      return await suggestTransactionTags(request.body as TagSuggestionContext);
+    } catch (error) {
+      if (error instanceof TagSuggestionError) return reply.code(error.statusCode).send({ error: error.message });
+      throw error;
+    }
+  });
 
   fastify.post("/api/transactions/recommend-category", {
     schema: {

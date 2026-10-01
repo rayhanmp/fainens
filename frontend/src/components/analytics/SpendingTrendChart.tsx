@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
@@ -11,7 +12,8 @@ import {
   YAxis,
 } from 'recharts';
 import { SlidersHorizontal } from 'lucide-react';
-import { cn, formatCurrency } from '../../lib/utils';
+import { cn, formatCurrency as visibleCurrency } from '../../lib/utils';
+import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { useSpendingTrendQuery } from '../../features/analytics/queries';
 import type { GetSpendingTrend200 } from '../../generated/client';
 
@@ -37,7 +39,10 @@ function coverageText(point: Point): string {
   return 'Unknown coverage';
 }
 
-export function SpendingTrendChart({ periodId = null, className }: { periodId?: number | null; className?: string } = {}) {
+export function SpendingTrendChart({ periodId = null, className, hideAmounts }: { periodId?: number | null; className?: string; hideAmounts?: boolean } = {}) {
+  const { balancesHidden } = useBalanceVisibility();
+  const amountsHidden = hideAmounts ?? balancesHidden;
+  const formatCurrency = (value: number) => amountsHidden ? HIDDEN_BALANCE : visibleCurrency(value);
   const [dataScope, setDataScope] = useState<'30d' | 'period'>('30d');
   const [view, setView] = useState<ViewMode>('calendar');
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
@@ -230,7 +235,7 @@ export function SpendingTrendChart({ periodId = null, className }: { periodId?: 
             <BarChart data={weeklyPoints} margin={{ top: 8, right: 2, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" stroke="var(--ref-outline)" />
               <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" interval={0} height={28} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => `Rp ${compactAxisIdr(Number(value))}`} width={52} />
+              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => amountsHidden ? '•••' : `Rp ${compactAxisIdr(Number(value))}`} width={52} />
               <Tooltip
                 cursor={{ fill: 'var(--ref-surface-container-high)', opacity: 0.5 }}
                 content={({ active, payload }) => {
@@ -249,7 +254,7 @@ export function SpendingTrendChart({ periodId = null, className }: { periodId?: 
             <LineChart data={cumulativePoints} margin={{ top: 8, right: 2, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" stroke="var(--ref-outline)" />
               <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" interval={4} height={26} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => `Rp ${compactAxisIdr(Number(value))}`} width={52} />
+              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => amountsHidden ? '•••' : `Rp ${compactAxisIdr(Number(value))}`} width={52} />
               <Tooltip
                 cursor={{ stroke: 'var(--ref-outline)', opacity: 0.4 }}
                 content={({ active, payload }) => {

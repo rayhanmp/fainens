@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 
 type UiStore = {
   compactTables: boolean;
+  balancesHidden: boolean;
+  toggleBalancesHidden: () => void;
   activePanel: string | null;
   setCompactTables: (value: boolean) => void;
   setActivePanel: (panel: string | null) => void;
@@ -21,6 +23,8 @@ type UiStore = {
 
 export const useUiStore = create<UiStore>()(persist((set) => ({
   compactTables: false,
+  balancesHidden: false,
+  toggleBalancesHidden: () => set((state) => ({ balancesHidden: !state.balancesHidden })),
   activePanel: null,
   setCompactTables: (compactTables) => set({ compactTables }),
   setActivePanel: (activePanel) => set({ activePanel }),
@@ -32,4 +36,4 @@ export const useUiStore = create<UiStore>()(persist((set) => ({
   transactionComposer: { isOpen: false },
   openTransactionComposer: (prefill) => set({ transactionComposer: { isOpen: true, prefill } }),
   closeTransactionComposer: () => set({ transactionComposer: { isOpen: false } }),
-}), { name: "fainens-ui", partialize: (state) => ({ compactTables: state.compactTables }) }));
+}), { name: "fainens-ui", partialize: (state) => ({ compactTables: state.compactTables, balancesHidden: state.balancesHidden }) }));

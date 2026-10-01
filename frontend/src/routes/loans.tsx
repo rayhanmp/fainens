@@ -1,3 +1,4 @@
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import './loans.css';
 import { Button } from '../components/ui/Button';
@@ -13,7 +14,7 @@ import {
   useRestoreContactMutation,
 } from '../features/loans/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
-import { formatCurrency, cn } from '../lib/utils';
+import { cn } from '../lib/utils';
 import { NewLoanModal } from '../components/loans/NewLoanModal';
 import { RecordPaymentModal } from '../components/loans/RecordPaymentModal';
 import { ContactProfileModal } from '../components/loans/ContactProfileModal';
@@ -88,6 +89,7 @@ function getInitials(name: string): string {
 }
 
 function LoansPage() {
+  const { formatAmount } = useBalanceVisibility();
   const queryClient = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const loansQuery = useLoansQuery(showArchived);
@@ -232,17 +234,17 @@ function LoansPage() {
         <section className="loans-summary" aria-label="Loan balances">
           <div className="loans-stat">
             <div className="loans-stat-label"><span className="loans-stat-icon loans-positive"><ArrowUpRight size={19} /></span> Owed to you</div>
-            <p className="loans-stat-value">{formatCurrency(summary?.totalLent ?? 0)}</p>
+            <p className="loans-stat-value">{formatAmount(summary?.totalLent ?? 0)}</p>
             <p className="loans-caption">Outstanding money you've lent</p>
           </div>
           <div className="loans-stat">
             <div className="loans-stat-label"><span className="loans-stat-icon loans-debt"><ArrowDownRight size={19} /></span> You owe</div>
-            <p className="loans-stat-value">{formatCurrency(summary?.totalBorrowed ?? 0)}</p>
+            <p className="loans-stat-value">{formatAmount(summary?.totalBorrowed ?? 0)}</p>
             <p className="loans-caption">Outstanding money you've borrowed</p>
           </div>
           <div className="loans-stat loans-stat-net">
             <div className="loans-stat-label"><span className="loans-stat-icon"><Wallet size={19} /></span> Net balance</div>
-            <p className="loans-stat-value">{formatCurrency(summary?.netPosition ?? 0)}</p>
+            <p className="loans-stat-value">{formatAmount(summary?.netPosition ?? 0)}</p>
             <p className="loans-caption">{(summary?.netPosition ?? 0) === 0 ? 'Lending and borrowing are in balance' : (summary?.netPosition ?? 0) > 0 ? 'More owed to you than you owe' : 'More to pay back than to receive'}</p>
           </div>
         </section>
@@ -272,7 +274,7 @@ function LoansPage() {
               <div className="loans-list-heading" aria-hidden="true"><span>Contact / loan</span><span>Balance remaining</span><span>Due date</span><span>Status</span><span /></div>
               {filteredLoans.map(loan => <article className="loans-row" key={loan.id}>
                 <div className="loans-person"><span className={cn('loans-avatar', loan.direction === 'lent' ? 'loans-positive' : 'loans-debt')}>{loan.direction === 'lent' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}</span><div className="loans-person-copy"><button className="loans-name" onClick={() => openContact(loan.contactId)}>{loan.contact.name}</button><p className="loans-caption loans-description" title={loan.description ?? undefined}>{loan.description || (loan.direction === 'lent' ? 'Money lent' : 'Money borrowed')}</p><span className="loans-direction">{loan.direction === 'lent' ? 'Owes you' : 'You owe'}</span></div></div>
-                <div className="loans-amount"><strong>{formatCurrency(loan.remainingCents)}</strong><span className="loans-caption">of {formatCurrency(loan.amountCents)}</span></div>
+                <div className="loans-amount"><strong>{formatAmount(loan.remainingCents)}</strong><span className="loans-caption">of {formatAmount(loan.amountCents)}</span></div>
                 <div className="loans-due"><span className="loans-mobile-label">Due </span>{loan.dueDate ? new Date(loan.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date'}</div>
                 <div className="loans-status"><span className={cn('loans-badge', loan.status === 'active' && loan.isOverdue ? 'is-overdue' : loan.status === 'repaid' ? 'is-repaid' : loan.status === 'active' ? 'is-active' : '')}>{loan.status === 'active' && loan.isOverdue ? 'Overdue' : loan.status === 'written_off' ? 'Written off' : loan.status.charAt(0).toUpperCase() + loan.status.slice(1)}</span></div>
                 <div className="loans-row-actions">{loan.status === 'active' && loan.remainingCents > 0 ? <Button variant="secondary" size="sm" onClick={() => openPaymentModal(loan)}>Record payment</Button> : <button className="loans-details" onClick={() => openContact(loan.contactId)}>Details <ChevronRight size={15} /></button>}<button className="loans-icon-button" aria-label={'Delete loan for ' + loan.contact.name} title="Delete loan" disabled={deleteLoanMutation.isPending} onClick={() => void handleDeleteLoan(loan)}><Trash2 size={15} /></button></div>
@@ -283,7 +285,7 @@ function LoansPage() {
           {view === 'contacts' && <div className="loans-contacts">
             {filteredContacts.map(contact => <article className="loans-contact" key={contact.id}>
               <div className="loans-person"><span className="loans-avatar">{getInitials(contact.name)}</span><div className="loans-person-copy"><button className="loans-name" onClick={() => openContact(contact.id)}>{contact.name}</button><p className="loans-caption">{contact.activeLoansCount} active {contact.activeLoansCount === 1 ? 'loan' : 'loans'}{!contact.isActive && ' · Archived'}</p></div></div>
-              <div className="loans-contact-balance"><span className="loans-caption">{contact.netBalance > 0 ? 'Owes you' : contact.netBalance < 0 ? 'You owe' : 'Settled up'}</span><strong className={cn(contact.netBalance > 0 && 'loans-positive-text', contact.netBalance < 0 && 'loans-debt-text')}>{formatCurrency(Math.abs(contact.netBalance))}</strong></div>
+              <div className="loans-contact-balance"><span className="loans-caption">{contact.netBalance > 0 ? 'Owes you' : contact.netBalance < 0 ? 'You owe' : 'Settled up'}</span><strong className={cn(contact.netBalance > 0 && 'loans-positive-text', contact.netBalance < 0 && 'loans-debt-text')}>{formatAmount(Math.abs(contact.netBalance))}</strong></div>
               <div className="loans-contact-actions"><button className="loans-details" onClick={() => openContact(contact.id)}>View details <ChevronRight size={15} /></button><button className="loans-icon-button" aria-label={(contact.isActive ? 'Archive ' : 'Restore ') + contact.name} title={contact.isActive ? 'Archive contact' : 'Restore contact'} disabled={archiveContactMutation.isPending || restoreContactMutation.isPending} onClick={() => void handleContactLifecycle(contact)}>{contact.isActive ? <Archive size={16} /> : <RotateCcw size={16} />}</button></div>
             </article>)}
             {filteredContacts.length === 0 && <div className="loans-empty"><Users size={28} /><h2>{searchTerm ? 'No matching contacts' : 'Your lending circle starts here'}</h2><p>{searchTerm ? 'Try searching for another name.' : 'Add a contact to keep your loans organized by person.'}</p><Button variant="secondary" onClick={() => setIsNewContactModalOpen(true)}>Add contact</Button></div>}
@@ -292,8 +294,8 @@ function LoansPage() {
             {filteredSplitBills.map(([sourceId, group]) => <article className="loans-split-card" key={sourceId}>
               <div className="loans-split-heading"><div><span className="loans-eyebrow">Shared expense · {group.length} {group.length === 1 ? 'person' : 'people'}</span><h2>{(group[0]?.sourceDescription ?? group[0]?.description ?? 'Split bill').replace(/^Split bill - /, '')}</h2></div><Link to="/transactions" search={{ periodId: 'all', transactionId: String(sourceId) }} className="loans-details">Source payment <ArrowUpRight size={15} /></Link></div>
               <div className="loans-tags">{group[0]?.tags?.map(tag => <span key={tag.id}>{tag.name}</span>)}</div>
-              {group.map(loan => <div className="loans-split-person" key={loan.id}><button className="loans-name" onClick={() => openContact(loan.contactId)}>{loan.contact.name}<span className="loans-caption">{loan.direction === 'lent' ? 'Owes you' : 'You owe'}</span></button><span className="loans-caption">{loan.status === 'written_off' ? 'Written off' : loan.status}</span><strong>{formatCurrency(loan.remainingCents)}</strong>{loan.status === 'active' && loan.remainingCents > 0 && <Button variant="secondary" size="sm" onClick={() => openPaymentModal(loan)}>Record payment</Button>}</div>)}
-              <div className="loans-split-footer"><div><span>To receive <strong>{formatCurrency(group.filter(loan => loan.direction === 'lent' && loan.status === 'active').reduce((sum, loan) => sum + loan.remainingCents, 0))}</strong></span>{group.some(loan => loan.direction === 'borrowed') && <span>To pay <strong>{formatCurrency(group.filter(loan => loan.direction === 'borrowed' && loan.status === 'active').reduce((sum, loan) => sum + loan.remainingCents, 0))}</strong></span>}</div>{group[0]?.tags?.filter(tag => tag.name === 'Split bill #' + sourceId).map(tag => <Link key={tag.id} to="/transactions" search={{ periodId: 'all', tagId: String(tag.id) }} className="loans-details">Bill activity <ChevronRight size={15} /></Link>)}</div>
+              {group.map(loan => <div className="loans-split-person" key={loan.id}><button className="loans-name" onClick={() => openContact(loan.contactId)}>{loan.contact.name}<span className="loans-caption">{loan.direction === 'lent' ? 'Owes you' : 'You owe'}</span></button><span className="loans-caption">{loan.status === 'written_off' ? 'Written off' : loan.status}</span><strong>{formatAmount(loan.remainingCents)}</strong>{loan.status === 'active' && loan.remainingCents > 0 && <Button variant="secondary" size="sm" onClick={() => openPaymentModal(loan)}>Record payment</Button>}</div>)}
+              <div className="loans-split-footer"><div><span>To receive <strong>{formatAmount(group.filter(loan => loan.direction === 'lent' && loan.status === 'active').reduce((sum, loan) => sum + loan.remainingCents, 0))}</strong></span>{group.some(loan => loan.direction === 'borrowed') && <span>To pay <strong>{formatAmount(group.filter(loan => loan.direction === 'borrowed' && loan.status === 'active').reduce((sum, loan) => sum + loan.remainingCents, 0))}</strong></span>}</div>{group[0]?.tags?.filter(tag => tag.name === 'Split bill #' + sourceId).map(tag => <Link key={tag.id} to="/transactions" search={{ periodId: 'all', tagId: String(tag.id) }} className="loans-details">Bill activity <ChevronRight size={15} /></Link>)}</div>
             </article>)}
             {filteredSplitBills.length === 0 && <div className="loans-empty"><ReceiptText size={28} /><h2>{searchTerm ? 'No matching split bills' : 'No split bills yet'}</h2><p>{searchTerm ? 'Try another name or description.' : 'Shared expenses linked to your loans will appear here.'}</p></div>}
           </div>}

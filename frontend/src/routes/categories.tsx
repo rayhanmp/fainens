@@ -86,8 +86,8 @@ function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editingTag, setEditingTag] = useState<TagRow | null>(null);
 
-  const [categoryForm, setCategoryForm] = useState({ name: '', icon: '📌', color: PRESET_COLORS[0], reportingAccountId: '' });
-  const [tagForm, setTagForm] = useState({ name: '', color: PRESET_COLORS[0] });
+  const [categoryForm, setCategoryForm] = useState<{ name: string; icon: string; color: string; reportingAccountId: string }>({ name: '', icon: '📌', color: PRESET_COLORS[0], reportingAccountId: '' });
+  const [tagForm, setTagForm] = useState<{ name: string; color: string }>({ name: '', color: PRESET_COLORS[0] });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);

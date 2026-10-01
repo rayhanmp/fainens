@@ -1,5 +1,7 @@
 import { cn } from '../../lib/utils';
 import { useId, useState, useEffect, useRef } from 'react';
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
+import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 
 interface CurrencyInputProps {
   label?: string;
@@ -34,6 +36,8 @@ export function CurrencyInput({
   currencySymbol = 'Rp',
   tone = 'default',
 }: CurrencyInputProps) {
+  const { balancesHidden, maskAmounts } = useBalanceVisibility();
+  const [isFocused, setIsFocused] = useState(false);
   const id = useId();
   const errorId = error ? `${id}-error` : undefined;
   const [rawInput, setRawInput] = useState('');
@@ -187,6 +191,7 @@ export function CurrencyInput({
   const hasOperator = (str: string) => /[+\-*/]/.test(str);
 
   const handleBlur = () => {
+    setIsFocused(false);
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
@@ -237,7 +242,8 @@ export function CurrencyInput({
           type="text"
           inputMode="numeric"
           autoComplete="off"
-          value={rawInput}
+          value={balancesHidden && !isFocused && rawInput ? HIDDEN_BALANCE : rawInput}
+          onFocus={() => setIsFocused(true)}
           onChange={handleChange}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
@@ -260,19 +266,19 @@ export function CurrencyInput({
               'shrink-0 max-w-[42%] text-left text-[10px] sm:text-xs leading-tight',
               tone === 'inverse' ? 'text-[#d7e4ff]' : 'text-[var(--color-text-secondary)]',
             )}
-            title={hint}
+            title={maskAmounts(hint)}
           >
-            {hint}
+            {maskAmounts(hint)}
           </span>
         )}
       </div>
-      {hint && !hintInline && <p className={cn('-mt-2 text-xs', tone === 'inverse' ? 'text-[#d7e4ff]' : 'text-[var(--color-text-secondary)]')}>{hint}</p>}
+      {hint && !hintInline && <p className={cn('-mt-2 text-xs', tone === 'inverse' ? 'text-[#d7e4ff]' : 'text-[var(--color-text-secondary)]')}>{maskAmounts(hint)}</p>}
       {showDivider && (
         <div className={cn('h-px w-full', tone === 'inverse' ? 'bg-[#5773a6]' : 'bg-[var(--ref-surface-container-highest)]')} />
       )}
       {error && (
         <p id={errorId} className="text-sm text-[var(--color-danger)]" role="alert">
-          {error}
+          {maskAmounts(error)}
         </p>
       )}
     </div>

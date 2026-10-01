@@ -19,16 +19,16 @@ export type GetHealth200 = {
   timestamp: number;
 };
 
-export type GetHealthWorker200Status = typeof GetHealthWorker200Status[keyof typeof GetHealthWorker200Status];
+export type GetWorkerHealth200Status = typeof GetWorkerHealth200Status[keyof typeof GetWorkerHealth200Status];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const GetHealthWorker200Status = {
+export const GetWorkerHealth200Status = {
   ok: 'ok',
 } as const;
 
-export type GetHealthWorker200 = {
-  status: GetHealthWorker200Status;
+export type GetWorkerHealth200 = {
+  status: GetWorkerHealth200Status;
   /**
    * @minimum 0
    * @maximum 9007199254740991
@@ -39,22 +39,22 @@ export type GetHealthWorker200 = {
   [key: string]: unknown;
 };
 
-export type GetHealthWorker503Status = typeof GetHealthWorker503Status[keyof typeof GetHealthWorker503Status];
+export type GetWorkerHealth503Status = typeof GetWorkerHealth503Status[keyof typeof GetWorkerHealth503Status];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const GetHealthWorker503Status = {
+export const GetWorkerHealth503Status = {
   degraded: 'degraded',
 } as const;
 
-export type GetHealthWorker503 = {
-  status: GetHealthWorker503Status;
+export type GetWorkerHealth503 = {
+  status: GetWorkerHealth503Status;
   error: string;
   timestamp: number;
   [key: string]: unknown;
 };
 
-export type Get200 = {
+export type GetRootHealth200 = {
   ok: boolean;
 };
 
@@ -102,6 +102,61 @@ export type Logout200 = {
 
 export type Logout403 = {
   error: string;
+  [key: string]: unknown;
+};
+
+export type RecommendTransactionTagsBody = {
+  /**
+   * @minLength 2
+   * @maxLength 500
+   */
+  description: string;
+  /** @maxLength 5000 */
+  notes?: string;
+  /** @maxLength 500 */
+  place?: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  categoryId?: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  transactionId?: number;
+};
+
+export type RecommendTransactionTags200TagsItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  id: number;
+  name: string;
+  color: string;
+};
+
+export type RecommendTransactionTags200 = {
+  /** @maxItems 3 */
+  tags: RecommendTransactionTags200TagsItem[];
+};
+
+export type RecommendTransactionTags400 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type RecommendTransactionTags502 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type RecommendTransactionTags503 = {
+  error?: string;
+  errors?: string[];
   [key: string]: unknown;
 };
 
@@ -8176,6 +8231,919 @@ export type GetReportTrends500 = {
   [key: string]: unknown;
 };
 
+export type GetRecapHighlightState200 = {
+  /** @nullable */
+  seenAt: number | null;
+};
+
+export type GetRecapHighlightState400 = {
+  error: string;
+};
+
+export type GetRecapHighlightState404 = {
+  error: string;
+};
+
+export type GetRecapHighlightState500 = {
+  error: string;
+};
+
+export type MarkRecapHighlightSeen200 = {
+  seenAt: number;
+};
+
+export type MarkRecapHighlightSeen400 = {
+  error: string;
+};
+
+export type MarkRecapHighlightSeen404 = {
+  error: string;
+};
+
+export type MarkRecapHighlightSeen500 = {
+  error: string;
+};
+
+export type GetSavedRecapStory200StoryPersonalizationLanguage = typeof GetSavedRecapStory200StoryPersonalizationLanguage[keyof typeof GetSavedRecapStory200StoryPersonalizationLanguage];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetSavedRecapStory200StoryPersonalizationLanguage = {
+  en: 'en',
+  id: 'id',
+} as const;
+
+export type GetSavedRecapStory200StoryPersonalization = {
+  /** @nullable */
+  preferredName: string | null;
+  language: GetSavedRecapStory200StoryPersonalizationLanguage;
+};
+
+export type GetSavedRecapStory200StorySnapshotPeriod = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  id: number;
+  name: string;
+  startDate: number;
+  endDate: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200StorySnapshotPurchaseProfile = {
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  totalAmount: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  medianAmount: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200StorySnapshotHighlightsPeakSpendingDay = {
+  date: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+} | null;
+
+export type GetSavedRecapStory200StorySnapshotHighlightsTopPurchasesItem = {
+  description: string;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  date: number;
+  category: string;
+};
+
+export type GetSavedRecapStory200StorySnapshotHighlightsRepeatPurchasesItem = {
+  description: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  occurrences: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  totalAmount: number;
+  category: string;
+};
+
+export type GetSavedRecapStory200StorySnapshotHighlights = {
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  averagePurchaseAmount: number | null;
+  /** @nullable */
+  peakSpendingDay: GetSavedRecapStory200StorySnapshotHighlightsPeakSpendingDay;
+  /** @maxItems 3 */
+  topPurchases?: GetSavedRecapStory200StorySnapshotHighlightsTopPurchasesItem[];
+  /** @maxItems 2 */
+  repeatPurchases?: GetSavedRecapStory200StorySnapshotHighlightsRepeatPurchasesItem[];
+};
+
+export type GetSavedRecapStory200StorySnapshotCategoriesItem = {
+  name: string;
+  amount: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200StorySnapshotBaseline = {
+  /**
+   * @minimum 1
+   * @maximum 3
+   */
+  periodCount: number;
+  matchedElapsed: boolean;
+  income: number;
+  expenses: number;
+  /** @minimum 0 */
+  purchaseCount: number;
+  /** @minimum 0 */
+  purchaseTotal?: number;
+} | null;
+
+export type GetSavedRecapStory200StorySnapshotBudgetOverBudgetCategoriesItem = {
+  name: string;
+  /** @minimum 0 */
+  planned: number;
+  spent: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  over: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200StorySnapshotBudget = {
+  /** @minimum 0 */
+  planned: number;
+  spent: number;
+  remaining: number;
+  /** @nullable */
+  percentUsed: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  categoryCount: number;
+  unbudgetedExpenses: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  overBudgetCategoryCount: number;
+  /** @maxItems 3 */
+  overBudgetCategories: GetSavedRecapStory200StorySnapshotBudgetOverBudgetCategoriesItem[];
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200StorySnapshotLargestPurchase = {
+  description: string;
+  amount: number;
+  date: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200StorySnapshotComparison = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  periodId: number;
+  periodName: string;
+  previousExpenses: number;
+  changePercent: number;
+} | null;
+
+export type GetSavedRecapStory200StorySnapshot = {
+  period: GetSavedRecapStory200StorySnapshotPeriod;
+  startMs: number;
+  endMs: number;
+  generatedAt: number;
+  isPartial: boolean;
+  coverageComplete: boolean;
+  income: number;
+  expenses: number;
+  net: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  activityCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  spendingDays: number;
+  /** @nullable */
+  purchaseProfile?: GetSavedRecapStory200StorySnapshotPurchaseProfile;
+  highlights?: GetSavedRecapStory200StorySnapshotHighlights;
+  categories: GetSavedRecapStory200StorySnapshotCategoriesItem[];
+  /** @nullable */
+  baseline?: GetSavedRecapStory200StorySnapshotBaseline;
+  /** @nullable */
+  budget?: GetSavedRecapStory200StorySnapshotBudget;
+  /** @nullable */
+  largestPurchase: GetSavedRecapStory200StorySnapshotLargestPurchase;
+  /** @nullable */
+  comparison: GetSavedRecapStory200StorySnapshotComparison;
+};
+
+export type GetSavedRecapStory200StoryCopyShortLabels = {[key: string]: string};
+
+export type GetSavedRecapStory200StoryCopyChaptersItemId = typeof GetSavedRecapStory200StoryCopyChaptersItemId[keyof typeof GetSavedRecapStory200StoryCopyChaptersItemId];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetSavedRecapStory200StoryCopyChaptersItemId = {
+  intro: 'intro',
+  overview: 'overview',
+  budget: 'budget',
+  categories: 'categories',
+  spotlight: 'spotlight',
+  variety: 'variety',
+  rhythm: 'rhythm',
+  purchases: 'purchases',
+  peak: 'peak',
+  moment: 'moment',
+  balance: 'balance',
+  comparison: 'comparison',
+  closing: 'closing',
+} as const;
+
+export type GetSavedRecapStory200StoryCopyChaptersItem = {
+  id: GetSavedRecapStory200StoryCopyChaptersItemId;
+  /**
+   * @minLength 1
+   * @maxLength 48
+   */
+  eyebrow: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 260
+   */
+  body: string;
+};
+
+export type GetSavedRecapStory200StoryCopy = {
+  shortLabels?: GetSavedRecapStory200StoryCopyShortLabels;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  headline: string;
+  /**
+   * @minLength 1
+   * @maxLength 180
+   */
+  deck: string;
+  /**
+   * @minItems 3
+   * @maxItems 13
+   */
+  chapters: GetSavedRecapStory200StoryCopyChaptersItem[];
+};
+
+export type GetSavedRecapStory200StorySource = typeof GetSavedRecapStory200StorySource[keyof typeof GetSavedRecapStory200StorySource];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetSavedRecapStory200StorySource = {
+  ai: 'ai',
+  template: 'template',
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetSavedRecapStory200Story = {
+  personalization?: GetSavedRecapStory200StoryPersonalization;
+  snapshot: GetSavedRecapStory200StorySnapshot;
+  copy: GetSavedRecapStory200StoryCopy;
+  savedAt: number;
+  source: GetSavedRecapStory200StorySource;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  seed: number;
+} | null;
+
+export type GetSavedRecapStory200 = {
+  /** @nullable */
+  story: GetSavedRecapStory200Story;
+};
+
+export type GetSavedRecapStory400 = {
+  error: string;
+};
+
+export type GetSavedRecapStory404 = {
+  error: string;
+};
+
+export type GetSavedRecapStory500 = {
+  error: string;
+};
+
+export type WriteRecapStoryBody = {
+  regenerate?: boolean;
+};
+
+export type WriteRecapStory200PersonalizationLanguage = typeof WriteRecapStory200PersonalizationLanguage[keyof typeof WriteRecapStory200PersonalizationLanguage];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const WriteRecapStory200PersonalizationLanguage = {
+  en: 'en',
+  id: 'id',
+} as const;
+
+export type WriteRecapStory200Personalization = {
+  /** @nullable */
+  preferredName: string | null;
+  language: WriteRecapStory200PersonalizationLanguage;
+};
+
+export type WriteRecapStory200SnapshotPeriod = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  id: number;
+  name: string;
+  startDate: number;
+  endDate: number;
+};
+
+/**
+ * @nullable
+ */
+export type WriteRecapStory200SnapshotPurchaseProfile = {
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  totalAmount: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  medianAmount: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type WriteRecapStory200SnapshotHighlightsPeakSpendingDay = {
+  date: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+} | null;
+
+export type WriteRecapStory200SnapshotHighlightsTopPurchasesItem = {
+  description: string;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  date: number;
+  category: string;
+};
+
+export type WriteRecapStory200SnapshotHighlightsRepeatPurchasesItem = {
+  description: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  occurrences: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  totalAmount: number;
+  category: string;
+};
+
+export type WriteRecapStory200SnapshotHighlights = {
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  averagePurchaseAmount: number | null;
+  /** @nullable */
+  peakSpendingDay: WriteRecapStory200SnapshotHighlightsPeakSpendingDay;
+  /** @maxItems 3 */
+  topPurchases?: WriteRecapStory200SnapshotHighlightsTopPurchasesItem[];
+  /** @maxItems 2 */
+  repeatPurchases?: WriteRecapStory200SnapshotHighlightsRepeatPurchasesItem[];
+};
+
+export type WriteRecapStory200SnapshotCategoriesItem = {
+  name: string;
+  amount: number;
+};
+
+/**
+ * @nullable
+ */
+export type WriteRecapStory200SnapshotBaseline = {
+  /**
+   * @minimum 1
+   * @maximum 3
+   */
+  periodCount: number;
+  matchedElapsed: boolean;
+  income: number;
+  expenses: number;
+  /** @minimum 0 */
+  purchaseCount: number;
+  /** @minimum 0 */
+  purchaseTotal?: number;
+} | null;
+
+export type WriteRecapStory200SnapshotBudgetOverBudgetCategoriesItem = {
+  name: string;
+  /** @minimum 0 */
+  planned: number;
+  spent: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  over: number;
+};
+
+/**
+ * @nullable
+ */
+export type WriteRecapStory200SnapshotBudget = {
+  /** @minimum 0 */
+  planned: number;
+  spent: number;
+  remaining: number;
+  /** @nullable */
+  percentUsed: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  categoryCount: number;
+  unbudgetedExpenses: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  overBudgetCategoryCount: number;
+  /** @maxItems 3 */
+  overBudgetCategories: WriteRecapStory200SnapshotBudgetOverBudgetCategoriesItem[];
+} | null;
+
+/**
+ * @nullable
+ */
+export type WriteRecapStory200SnapshotLargestPurchase = {
+  description: string;
+  amount: number;
+  date: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type WriteRecapStory200SnapshotComparison = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  periodId: number;
+  periodName: string;
+  previousExpenses: number;
+  changePercent: number;
+} | null;
+
+export type WriteRecapStory200Snapshot = {
+  period: WriteRecapStory200SnapshotPeriod;
+  startMs: number;
+  endMs: number;
+  generatedAt: number;
+  isPartial: boolean;
+  coverageComplete: boolean;
+  income: number;
+  expenses: number;
+  net: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  activityCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  spendingDays: number;
+  /** @nullable */
+  purchaseProfile?: WriteRecapStory200SnapshotPurchaseProfile;
+  highlights?: WriteRecapStory200SnapshotHighlights;
+  categories: WriteRecapStory200SnapshotCategoriesItem[];
+  /** @nullable */
+  baseline?: WriteRecapStory200SnapshotBaseline;
+  /** @nullable */
+  budget?: WriteRecapStory200SnapshotBudget;
+  /** @nullable */
+  largestPurchase: WriteRecapStory200SnapshotLargestPurchase;
+  /** @nullable */
+  comparison: WriteRecapStory200SnapshotComparison;
+};
+
+export type WriteRecapStory200CopyShortLabels = {[key: string]: string};
+
+export type WriteRecapStory200CopyChaptersItemId = typeof WriteRecapStory200CopyChaptersItemId[keyof typeof WriteRecapStory200CopyChaptersItemId];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const WriteRecapStory200CopyChaptersItemId = {
+  intro: 'intro',
+  overview: 'overview',
+  budget: 'budget',
+  categories: 'categories',
+  spotlight: 'spotlight',
+  variety: 'variety',
+  rhythm: 'rhythm',
+  purchases: 'purchases',
+  peak: 'peak',
+  moment: 'moment',
+  balance: 'balance',
+  comparison: 'comparison',
+  closing: 'closing',
+} as const;
+
+export type WriteRecapStory200CopyChaptersItem = {
+  id: WriteRecapStory200CopyChaptersItemId;
+  /**
+   * @minLength 1
+   * @maxLength 48
+   */
+  eyebrow: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 260
+   */
+  body: string;
+};
+
+export type WriteRecapStory200Copy = {
+  shortLabels?: WriteRecapStory200CopyShortLabels;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  headline: string;
+  /**
+   * @minLength 1
+   * @maxLength 180
+   */
+  deck: string;
+  /**
+   * @minItems 3
+   * @maxItems 13
+   */
+  chapters: WriteRecapStory200CopyChaptersItem[];
+};
+
+export type WriteRecapStory200Source = typeof WriteRecapStory200Source[keyof typeof WriteRecapStory200Source];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const WriteRecapStory200Source = {
+  ai: 'ai',
+  template: 'template',
+} as const;
+
+export type WriteRecapStory200 = {
+  personalization?: WriteRecapStory200Personalization;
+  snapshot: WriteRecapStory200Snapshot;
+  copy: WriteRecapStory200Copy;
+  savedAt: number;
+  source: WriteRecapStory200Source;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  seed: number;
+};
+
+export type WriteRecapStory400 = {
+  error: string;
+};
+
+export type WriteRecapStory404 = {
+  error: string;
+};
+
+export type WriteRecapStory500 = {
+  error: string;
+};
+
+export type WriteRecapStory502 = {
+  error: string;
+};
+
+export type ListRecapPeriods200Item = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  id: number;
+  name: string;
+  startDate: number;
+  endDate: number;
+  isPartial: boolean;
+};
+
+export type ListRecapPeriods500 = {
+  error: string;
+};
+
+export type GetPeriodRecap200Period = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  id: number;
+  name: string;
+  startDate: number;
+  endDate: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetPeriodRecap200PurchaseProfile = {
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  totalAmount: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  medianAmount: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetPeriodRecap200HighlightsPeakSpendingDay = {
+  date: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+} | null;
+
+export type GetPeriodRecap200HighlightsTopPurchasesItem = {
+  description: string;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  date: number;
+  category: string;
+};
+
+export type GetPeriodRecap200HighlightsRepeatPurchasesItem = {
+  description: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  occurrences: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  totalAmount: number;
+  category: string;
+};
+
+export type GetPeriodRecap200Highlights = {
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  averagePurchaseAmount: number | null;
+  /** @nullable */
+  peakSpendingDay: GetPeriodRecap200HighlightsPeakSpendingDay;
+  /** @maxItems 3 */
+  topPurchases?: GetPeriodRecap200HighlightsTopPurchasesItem[];
+  /** @maxItems 2 */
+  repeatPurchases?: GetPeriodRecap200HighlightsRepeatPurchasesItem[];
+};
+
+export type GetPeriodRecap200CategoriesItem = {
+  name: string;
+  amount: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetPeriodRecap200Baseline = {
+  /**
+   * @minimum 1
+   * @maximum 3
+   */
+  periodCount: number;
+  matchedElapsed: boolean;
+  income: number;
+  expenses: number;
+  /** @minimum 0 */
+  purchaseCount: number;
+  /** @minimum 0 */
+  purchaseTotal?: number;
+} | null;
+
+export type GetPeriodRecap200BudgetOverBudgetCategoriesItem = {
+  name: string;
+  /** @minimum 0 */
+  planned: number;
+  spent: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  over: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetPeriodRecap200Budget = {
+  /** @minimum 0 */
+  planned: number;
+  spent: number;
+  remaining: number;
+  /** @nullable */
+  percentUsed: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  categoryCount: number;
+  unbudgetedExpenses: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  overBudgetCategoryCount: number;
+  /** @maxItems 3 */
+  overBudgetCategories: GetPeriodRecap200BudgetOverBudgetCategoriesItem[];
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetPeriodRecap200LargestPurchase = {
+  description: string;
+  amount: number;
+  date: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type GetPeriodRecap200Comparison = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  periodId: number;
+  periodName: string;
+  previousExpenses: number;
+  changePercent: number;
+} | null;
+
+export type GetPeriodRecap200 = {
+  period: GetPeriodRecap200Period;
+  startMs: number;
+  endMs: number;
+  generatedAt: number;
+  isPartial: boolean;
+  coverageComplete: boolean;
+  income: number;
+  expenses: number;
+  net: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  activityCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  spendingDays: number;
+  /** @nullable */
+  purchaseProfile?: GetPeriodRecap200PurchaseProfile;
+  highlights?: GetPeriodRecap200Highlights;
+  categories: GetPeriodRecap200CategoriesItem[];
+  /** @nullable */
+  baseline?: GetPeriodRecap200Baseline;
+  /** @nullable */
+  budget?: GetPeriodRecap200Budget;
+  /** @nullable */
+  largestPurchase: GetPeriodRecap200LargestPurchase;
+  /** @nullable */
+  comparison: GetPeriodRecap200Comparison;
+};
+
+export type GetPeriodRecap400 = {
+  error: string;
+};
+
+export type GetPeriodRecap404 = {
+  error: string;
+};
+
+export type GetPeriodRecap500 = {
+  error: string;
+};
+
 export type GetSalarySettings200Settings = {
   grossMonthly: number;
   /**
@@ -15859,26 +16827,26 @@ export const getHealth = async ( options?: RequestInit): Promise<getHealthRespon
 
 
 
-export type getHealthWorkerResponse200 = {
-  data: GetHealthWorker200
+export type getWorkerHealthResponse200 = {
+  data: GetWorkerHealth200
   status: 200
 }
 
-export type getHealthWorkerResponse503 = {
-  data: GetHealthWorker503
+export type getWorkerHealthResponse503 = {
+  data: GetWorkerHealth503
   status: 503
 }
     
-export type getHealthWorkerResponseSuccess = (getHealthWorkerResponse200) & {
+export type getWorkerHealthResponseSuccess = (getWorkerHealthResponse200) & {
   headers: Headers;
 };
-export type getHealthWorkerResponseError = (getHealthWorkerResponse503) & {
+export type getWorkerHealthResponseError = (getWorkerHealthResponse503) & {
   headers: Headers;
 };
 
-export type getHealthWorkerResponse = (getHealthWorkerResponseSuccess | getHealthWorkerResponseError)
+export type getWorkerHealthResponse = (getWorkerHealthResponseSuccess | getWorkerHealthResponseError)
 
-export const getGetHealthWorkerUrl = () => {
+export const getGetWorkerHealthUrl = () => {
 
 
   
@@ -15886,9 +16854,9 @@ export const getGetHealthWorkerUrl = () => {
   return `/health/worker`
 }
 
-export const getHealthWorker = async ( options?: RequestInit): Promise<getHealthWorkerResponse> => {
+export const getWorkerHealth = async ( options?: RequestInit): Promise<getWorkerHealthResponse> => {
   
-  return generatedFetch<getHealthWorkerResponse>(getGetHealthWorkerUrl(),
+  return generatedFetch<getWorkerHealthResponse>(getGetWorkerHealthUrl(),
   {      
     ...options,
     method: 'GET'
@@ -15899,19 +16867,19 @@ export const getHealthWorker = async ( options?: RequestInit): Promise<getHealth
 
 
 
-export type getResponse200 = {
-  data: Get200
+export type getRootHealthResponse200 = {
+  data: GetRootHealth200
   status: 200
 }
     
-export type getResponseSuccess = (getResponse200) & {
+export type getRootHealthResponseSuccess = (getRootHealthResponse200) & {
   headers: Headers;
 };
 ;
 
-export type getResponse = (getResponseSuccess)
+export type getRootHealthResponse = (getRootHealthResponseSuccess)
 
-export const getGetUrl = () => {
+export const getGetRootHealthUrl = () => {
 
 
   
@@ -15919,9 +16887,9 @@ export const getGetUrl = () => {
   return `/`
 }
 
-export const get = async ( options?: RequestInit): Promise<getResponse> => {
+export const getRootHealth = async ( options?: RequestInit): Promise<getRootHealthResponse> => {
   
-  return generatedFetch<getResponse>(getGetUrl(),
+  return generatedFetch<getRootHealthResponse>(getGetRootHealthUrl(),
   {      
     ...options,
     method: 'GET'
@@ -16156,6 +17124,57 @@ export const logout = async ( options?: RequestInit): Promise<logoutResponse> =>
     method: 'POST'
     
     
+  }
+);}
+
+
+
+export type recommendTransactionTagsResponse200 = {
+  data: RecommendTransactionTags200
+  status: 200
+}
+
+export type recommendTransactionTagsResponse400 = {
+  data: RecommendTransactionTags400
+  status: 400
+}
+
+export type recommendTransactionTagsResponse502 = {
+  data: RecommendTransactionTags502
+  status: 502
+}
+
+export type recommendTransactionTagsResponse503 = {
+  data: RecommendTransactionTags503
+  status: 503
+}
+    
+export type recommendTransactionTagsResponseSuccess = (recommendTransactionTagsResponse200) & {
+  headers: Headers;
+};
+export type recommendTransactionTagsResponseError = (recommendTransactionTagsResponse400 | recommendTransactionTagsResponse502 | recommendTransactionTagsResponse503) & {
+  headers: Headers;
+};
+
+export type recommendTransactionTagsResponse = (recommendTransactionTagsResponseSuccess | recommendTransactionTagsResponseError)
+
+export const getRecommendTransactionTagsUrl = () => {
+
+
+  
+
+  return `/api/transactions/recommend-tags`
+}
+
+export const recommendTransactionTags = async (recommendTransactionTagsBody: RecommendTransactionTagsBody, options?: RequestInit): Promise<recommendTransactionTagsResponse> => {
+  
+  return generatedFetch<recommendTransactionTagsResponse>(getRecommendTransactionTagsUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      recommendTransactionTagsBody,)
   }
 );}
 
@@ -21046,6 +22065,303 @@ export const getGetReportTrendsUrl = (params?: GetReportTrendsParams,) => {
 export const getReportTrends = async (params?: GetReportTrendsParams, options?: RequestInit): Promise<getReportTrendsResponse> => {
   
   return generatedFetch<getReportTrendsResponse>(getGetReportTrendsUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getRecapHighlightStateResponse200 = {
+  data: GetRecapHighlightState200
+  status: 200
+}
+
+export type getRecapHighlightStateResponse400 = {
+  data: GetRecapHighlightState400
+  status: 400
+}
+
+export type getRecapHighlightStateResponse404 = {
+  data: GetRecapHighlightState404
+  status: 404
+}
+
+export type getRecapHighlightStateResponse500 = {
+  data: GetRecapHighlightState500
+  status: 500
+}
+    
+export type getRecapHighlightStateResponseSuccess = (getRecapHighlightStateResponse200) & {
+  headers: Headers;
+};
+export type getRecapHighlightStateResponseError = (getRecapHighlightStateResponse400 | getRecapHighlightStateResponse404 | getRecapHighlightStateResponse500) & {
+  headers: Headers;
+};
+
+export type getRecapHighlightStateResponse = (getRecapHighlightStateResponseSuccess | getRecapHighlightStateResponseError)
+
+export const getGetRecapHighlightStateUrl = (periodId: number,) => {
+
+
+  
+
+  return `/api/recaps/${periodId}/highlight-state`
+}
+
+export const getRecapHighlightState = async (periodId: number, options?: RequestInit): Promise<getRecapHighlightStateResponse> => {
+  
+  return generatedFetch<getRecapHighlightStateResponse>(getGetRecapHighlightStateUrl(periodId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type markRecapHighlightSeenResponse200 = {
+  data: MarkRecapHighlightSeen200
+  status: 200
+}
+
+export type markRecapHighlightSeenResponse400 = {
+  data: MarkRecapHighlightSeen400
+  status: 400
+}
+
+export type markRecapHighlightSeenResponse404 = {
+  data: MarkRecapHighlightSeen404
+  status: 404
+}
+
+export type markRecapHighlightSeenResponse500 = {
+  data: MarkRecapHighlightSeen500
+  status: 500
+}
+    
+export type markRecapHighlightSeenResponseSuccess = (markRecapHighlightSeenResponse200) & {
+  headers: Headers;
+};
+export type markRecapHighlightSeenResponseError = (markRecapHighlightSeenResponse400 | markRecapHighlightSeenResponse404 | markRecapHighlightSeenResponse500) & {
+  headers: Headers;
+};
+
+export type markRecapHighlightSeenResponse = (markRecapHighlightSeenResponseSuccess | markRecapHighlightSeenResponseError)
+
+export const getMarkRecapHighlightSeenUrl = (periodId: number,) => {
+
+
+  
+
+  return `/api/recaps/${periodId}/highlight-seen`
+}
+
+export const markRecapHighlightSeen = async (periodId: number, options?: RequestInit): Promise<markRecapHighlightSeenResponse> => {
+  
+  return generatedFetch<markRecapHighlightSeenResponse>(getMarkRecapHighlightSeenUrl(periodId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type getSavedRecapStoryResponse200 = {
+  data: GetSavedRecapStory200
+  status: 200
+}
+
+export type getSavedRecapStoryResponse400 = {
+  data: GetSavedRecapStory400
+  status: 400
+}
+
+export type getSavedRecapStoryResponse404 = {
+  data: GetSavedRecapStory404
+  status: 404
+}
+
+export type getSavedRecapStoryResponse500 = {
+  data: GetSavedRecapStory500
+  status: 500
+}
+    
+export type getSavedRecapStoryResponseSuccess = (getSavedRecapStoryResponse200) & {
+  headers: Headers;
+};
+export type getSavedRecapStoryResponseError = (getSavedRecapStoryResponse400 | getSavedRecapStoryResponse404 | getSavedRecapStoryResponse500) & {
+  headers: Headers;
+};
+
+export type getSavedRecapStoryResponse = (getSavedRecapStoryResponseSuccess | getSavedRecapStoryResponseError)
+
+export const getGetSavedRecapStoryUrl = (periodId: number,) => {
+
+
+  
+
+  return `/api/recaps/${periodId}/story`
+}
+
+export const getSavedRecapStory = async (periodId: number, options?: RequestInit): Promise<getSavedRecapStoryResponse> => {
+  
+  return generatedFetch<getSavedRecapStoryResponse>(getGetSavedRecapStoryUrl(periodId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type writeRecapStoryResponse200 = {
+  data: WriteRecapStory200
+  status: 200
+}
+
+export type writeRecapStoryResponse400 = {
+  data: WriteRecapStory400
+  status: 400
+}
+
+export type writeRecapStoryResponse404 = {
+  data: WriteRecapStory404
+  status: 404
+}
+
+export type writeRecapStoryResponse500 = {
+  data: WriteRecapStory500
+  status: 500
+}
+
+export type writeRecapStoryResponse502 = {
+  data: WriteRecapStory502
+  status: 502
+}
+    
+export type writeRecapStoryResponseSuccess = (writeRecapStoryResponse200) & {
+  headers: Headers;
+};
+export type writeRecapStoryResponseError = (writeRecapStoryResponse400 | writeRecapStoryResponse404 | writeRecapStoryResponse500 | writeRecapStoryResponse502) & {
+  headers: Headers;
+};
+
+export type writeRecapStoryResponse = (writeRecapStoryResponseSuccess | writeRecapStoryResponseError)
+
+export const getWriteRecapStoryUrl = (periodId: number,) => {
+
+
+  
+
+  return `/api/recaps/${periodId}/story`
+}
+
+export const writeRecapStory = async (periodId: number,
+    writeRecapStoryBody: WriteRecapStoryBody, options?: RequestInit): Promise<writeRecapStoryResponse> => {
+  
+  return generatedFetch<writeRecapStoryResponse>(getWriteRecapStoryUrl(periodId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      writeRecapStoryBody,)
+  }
+);}
+
+
+
+export type listRecapPeriodsResponse200 = {
+  data: ListRecapPeriods200Item[]
+  status: 200
+}
+
+export type listRecapPeriodsResponse500 = {
+  data: ListRecapPeriods500
+  status: 500
+}
+    
+export type listRecapPeriodsResponseSuccess = (listRecapPeriodsResponse200) & {
+  headers: Headers;
+};
+export type listRecapPeriodsResponseError = (listRecapPeriodsResponse500) & {
+  headers: Headers;
+};
+
+export type listRecapPeriodsResponse = (listRecapPeriodsResponseSuccess | listRecapPeriodsResponseError)
+
+export const getListRecapPeriodsUrl = () => {
+
+
+  
+
+  return `/api/recaps`
+}
+
+export const listRecapPeriods = async ( options?: RequestInit): Promise<listRecapPeriodsResponse> => {
+  
+  return generatedFetch<listRecapPeriodsResponse>(getListRecapPeriodsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getPeriodRecapResponse200 = {
+  data: GetPeriodRecap200
+  status: 200
+}
+
+export type getPeriodRecapResponse400 = {
+  data: GetPeriodRecap400
+  status: 400
+}
+
+export type getPeriodRecapResponse404 = {
+  data: GetPeriodRecap404
+  status: 404
+}
+
+export type getPeriodRecapResponse500 = {
+  data: GetPeriodRecap500
+  status: 500
+}
+    
+export type getPeriodRecapResponseSuccess = (getPeriodRecapResponse200) & {
+  headers: Headers;
+};
+export type getPeriodRecapResponseError = (getPeriodRecapResponse400 | getPeriodRecapResponse404 | getPeriodRecapResponse500) & {
+  headers: Headers;
+};
+
+export type getPeriodRecapResponse = (getPeriodRecapResponseSuccess | getPeriodRecapResponseError)
+
+export const getGetPeriodRecapUrl = (periodId: number,) => {
+
+
+  
+
+  return `/api/recaps/${periodId}`
+}
+
+export const getPeriodRecap = async (periodId: number, options?: RequestInit): Promise<getPeriodRecapResponse> => {
+  
+  return generatedFetch<getPeriodRecapResponse>(getGetPeriodRecapUrl(periodId),
   {      
     ...options,
     method: 'GET'
