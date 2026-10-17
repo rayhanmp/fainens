@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dashboardPreset, dashboardSectionIds, dashboardSectionRows, dashboardSectionSize, dashboardSectionWidth, dashboardViewStorageKey, mergeDashboardViewChange, moveDashboardSection, parseDashboardViewPreferences, resetDashboardLayout, resizeDashboardSection, selectedDashboardPreset } from './view-preferences.ts';
+import { dashboardPreset, dashboardSectionIds, dashboardSectionRows, dashboardSectionSize, dashboardSectionWidth, dashboardViewStorageKey, mergeDashboardViewChange, moveDashboardSection, parseDashboardViewPreferences, resetDashboardLayout, resizeDashboardSection, selectedDashboardPreset, usesOriginalDashboardSections } from './view-preferences.ts';
 
 test('missing or corrupt preferences restore the original dashboard', () => {
   for (const raw of [null, '', '{bad', 'null', '42', '[]']) {
@@ -135,4 +135,14 @@ test('explicit section choices and new presets apply from the mobile menu', () =
   const next = { ...mobile, hiddenSections: mobile.hiddenSections.filter(id => id !== 'budget') };
   assert.deepEqual(mergeDashboardViewChange(original, mobile, next), next);
   assert.deepEqual(mergeDashboardViewChange(original, mobile, dashboardPreset('minimal')), dashboardPreset('minimal'));
+});
+
+test('only the original panel arrangement counts as original sections', () => {
+  const original = dashboardPreset('original');
+  assert.equal(usesOriginalDashboardSections(original), true);
+  assert.equal(usesOriginalDashboardSections({ ...original, mainMetric: 'netWorth', sectionSizes: { budget: 'full' } }), true);
+  const reordered = moveDashboardSection(original, 'activity', 'pulse');
+  assert.deepEqual(reordered.hiddenSections, ['payments']);
+  assert.equal(usesOriginalDashboardSections(reordered), false);
+  assert.equal(usesOriginalDashboardSections(dashboardPreset('overview')), false);
 });

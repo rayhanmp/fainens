@@ -48,7 +48,7 @@ import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import mountainHero from '../assets/dashboard-mountain-hero.png';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
-import { mergeDashboardViewChange, selectedDashboardPreset } from '../features/dashboard/view-preferences';
+import { mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections } from '../features/dashboard/view-preferences';
 import { useDashboardViewPreferences } from '../features/dashboard/use-view-preferences';
 import '../features/dashboard/dashboard.css';
 import { DashboardRecap, DashboardRecapControl, DashboardRecapModal } from '../features/recaps/DashboardRecap';
@@ -193,8 +193,8 @@ function DashboardPage() {
   const { balancesHidden, formatAmount, maskAmounts } = useBalanceVisibility();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const isOriginalView = selectedDashboardPreset(preferences) === 'original';
-  const keepsOriginalSections = preferences.hiddenSections.length === 1 && preferences.hiddenSections[0] === 'payments';
-  const visiblePreferences = keepsOriginalSections && isMobile
+  // On phones the original view collapses to recent activity; a customized panel order is left as the user arranged it.
+  const visiblePreferences = usesOriginalDashboardSections(preferences) && isMobile
     ? { ...preferences, hiddenSections: preferences.sectionOrder.filter(id => id !== 'activity') }
     : preferences;
   const updateVisiblePreferences = (next: typeof preferences) => updatePreferences(mergeDashboardViewChange(preferences, visiblePreferences, next));
@@ -255,7 +255,10 @@ function DashboardPage() {
   const pendingTransactionCount = pendingTransactionsQuery.data?.length ?? 0;
   const attentionReadStorageKey = `${attentionReadStoragePrefix}:${user?.email ?? 'default'}`;
   const overviewQueries = [periodsQuery, accountsQuery, categoriesQuery, tagsQuery, analyticsQuery, reconciliationQuery, loansQuery, paylaterQuery, subscriptionsQuery];
-  const isLoading = overviewQueries.some((query) => query.isLoading);
+  // Only period and category lookups gate the page; every other panel shows its own loading state.
+  const isLoading = periodsQuery.isLoading || categoriesQuery.isLoading;
+  const isAnalyticsLoading = analyticsQuery.isLoading;
+  const isCommitmentsLoading = loansQuery.isLoading || paylaterQuery.isLoading || subscriptionsQuery.isLoading;
   const loadError = overviewQueries.find((query) => query.error)?.error?.message ?? null;
   const refreshDashboard = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
@@ -311,21 +314,22 @@ function DashboardPage() {
   const periodLoadError = [periodQueries.facts, periodQueries.budget, periodQueries.recent, periodQueries.outlook].find((query) => query.error)?.error?.message ?? null;
   const combinedLoadError = loadError ?? periodLoadError;
 
+  // The outlier review is an agent task, so only the live period's forecast gets one; browsing past periods never queues it.
+  const currentReviewStatus = (currentPeriodQueries.review.data as { task?: { status?: string } } | undefined)?.task?.status;
+  const currentReviewInFlight = currentReviewStatus === 'queued' || currentReviewStatus === 'running' || currentReviewStatus === 'retrying';
   useEffect(() => {
-    const outlook = periodQueries.outlook.data;
-    if (!selectedPeriod || !outlook || outlook.patternReview.applied || !outlook.categories.some((row) => row.outlierCount > 0)) return;
-    const reviewRevision = outlook.patternReview.evidenceRevision;
-    const reviewKey = `${selectedPeriod.id}:${reviewRevision}`;
+    if (!currentPeriod || !currentOutlook || currentReviewInFlight || currentPeriodQueries.review.isLoading) return;
+    if (currentOutlook.patternReview.applied || !currentOutlook.categories.some((row) => row.outlierCount > 0)) return;
+    const reviewKey = `${currentPeriod.id}:${currentOutlook.patternReview.evidenceRevision}`;
     if (reviewedOutlookRevisionRef.current === reviewKey) return;
     reviewedOutlookRevisionRef.current = reviewKey;
-    void reviewBudgetOutlookMutation.mutateAsync(selectedPeriod.id).catch(() => undefined);
-  }, [periodQueries.outlook.data, reviewBudgetOutlookMutation.mutateAsync, selectedPeriod]);
+    void reviewBudgetOutlookMutation.mutateAsync(currentPeriod.id).catch(() => undefined);
+  }, [currentOutlook, currentPeriod, currentPeriodQueries.review.isLoading, currentReviewInFlight, reviewBudgetOutlookMutation.mutateAsync]);
 
   useEffect(() => {
-    const task = (periodQueries.review.data as { task?: { status?: string } } | undefined)?.task;
-    if (task?.status !== 'completed' || !selectedPeriod) return;
-    void queryClient.invalidateQueries({ queryKey: [...queryKeys.dashboard.period(selectedPeriod.id), 'outlook'] });
-  }, [periodQueries.review.data, queryClient, selectedPeriod]);
+    if (currentReviewStatus !== 'completed' || !currentPeriod) return;
+    void queryClient.invalidateQueries({ queryKey: [...queryKeys.dashboard.period(currentPeriod.id), 'outlook'] });
+  }, [currentPeriod, currentReviewStatus, queryClient]);
 
   const budgetSummary = useMemo(() => {
     const totalPlanned = budgetRows.reduce((sum, row) => sum + row.plannedAmount, 0);
@@ -363,7 +367,7 @@ function DashboardPage() {
         action: 'Review pending transactions',
       });
     }
-    if (!analytics?.trialBalance.isBalanced) {
+    if (analytics && !analytics.trialBalance.isBalanced) {
       next.push({ id: 'trial-balance', tone: 'danger', title: 'Ledger needs review', detail: 'The trial balance is not currently balanced.', to: '/accounts', action: 'Review accounts' });
     }
     if (currentPeriod && currentPeriod.coverageStatus !== 'complete') {
@@ -375,7 +379,7 @@ function DashboardPage() {
     }
     const latestReconciliation = reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active');
     const reconciliationAgeDays = latestReconciliation ? Math.floor((dashboardNow - latestReconciliation.asOfDate) / DAY_MS) : null;
-    if (!latestReconciliation || (reconciliationAgeDays != null && reconciliationAgeDays > 30)) {
+    if (reconciliation && (!latestReconciliation || (reconciliationAgeDays != null && reconciliationAgeDays > 30))) {
       next.push({
         id: `reconciliation:${latestReconciliation?.id ?? 'none'}`, tone: 'warning', title: latestReconciliation ? 'Accounts need a fresh check' : 'No account reconciliation yet',
         detail: latestReconciliation ? `Last checked ${reconciliationAgeDays} days ago.` : 'Confirm your current balances so the position stays trustworthy.',
@@ -501,8 +505,9 @@ function DashboardPage() {
     ? ((netWorthNow - netWorthAtStart) / Math.abs(netWorthAtStart)) * 100
     : null;
   const budgetOverrun = periodIsTracked && budgetRemaining < 0;
+  const selectedPeriodEnded = selectedPeriod != null && selectedPeriod.id !== currentPeriod?.id && selectedPeriod.startDate < dashboardNow;
   const heroHeadline = budgetOverrun
-    ? 'Your budget needs attention.'
+    ? selectedPeriodEnded ? `${selectedPeriod.name} ran over budget.` : 'Your budget needs attention.'
     : netWorthChangePercent == null
       ? upcomingCommitmentTotal > 0 ? 'Your next moves are visible.' : 'Your position is taking shape.'
       : netWorthChangePercent >= 10
@@ -517,7 +522,9 @@ function DashboardPage() {
                 ? 'Your next commitments are in view.'
                 : 'You\u2019re holding steady.';
   const heroMessage = budgetOverrun
-    ? `${formatAmount(Math.abs(budgetRemaining))} over the ${selectedPeriod?.name ?? 'current'} budget. Review the categories driving the overrun.`
+    ? selectedPeriodEnded
+      ? `It finished ${formatAmount(Math.abs(budgetRemaining))} over plan. Check which categories drove it before setting your next budget.`
+      : `${formatAmount(Math.abs(budgetRemaining))} over the ${selectedPeriod?.name ?? 'current'} budget. Review the categories driving the overrun.`
     : netWorthChangePercent == null
       ? upcomingCommitmentTotal > 0
         ? `${formatAmount(upcomingCommitmentTotal)} in commitments are due within the next 30 days. Keep them in your plan.`
@@ -540,9 +547,9 @@ function DashboardPage() {
 
 
   const balanceMetrics = {
-    cash: { label: 'Available cash', value: analytics ? formatAmount(analytics.netWorth.liquidAssets) : '—', context: 'Cash and bank balances available now.', to: '/accounts' as const },
+    cash: { label: 'Available cash', value: analytics ? formatAmount(analytics.netWorth.liquidAssets) : isAnalyticsLoading ? 'Loading…' : '—', context: 'Cash and bank balances available now.', to: '/accounts' as const },
     budget: { label: 'Budget left', value: isPeriodLoading ? 'Loading…' : !periodIsTracked ? 'Not tracked' : budgetSummary.totalPlanned <= 0 ? 'No budget yet' : formatAmount(budgetRemaining), context: !periodIsTracked ? 'Review period coverage before relying on budget totals.' : budgetSummary.totalPlanned <= 0 ? 'Set a budget for ' + (selectedPeriod?.name ?? 'this period') + ' to see what remains.' : 'Remaining from your ' + (selectedPeriod?.name ?? 'current') + ' plan, not your account balance.', to: '/budget' as const },
-    netWorth: { label: 'Net worth', value: analytics ? formatAmount(analytics.netWorth.netWorth) : '—', context: 'Everything you own, minus what you owe.', to: '/accounts' as const },
+    netWorth: { label: 'Net worth', value: analytics ? formatAmount(analytics.netWorth.netWorth) : isAnalyticsLoading ? 'Loading…' : '—', context: 'Everything you own, minus what you owe.', to: '/accounts' as const },
   };
   const mainBalance = balanceMetrics[preferences.mainMetric];
   const paymentRows = [
@@ -562,11 +569,11 @@ function DashboardPage() {
           </div>
           <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:pr-5 xl:border-l xl:px-5 xl:pt-0">
             <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Flame className="h-4 w-4" />Monthly burn <MetricHint>Average operating spend over the last three months.</MetricHint></p>
-            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatAmount(analytics.burnRate.grossBurnRate) : '—'}</p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatAmount(analytics.burnRate.grossBurnRate) : isAnalyticsLoading ? 'Loading…' : '—'}</p>
           </div>
           <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:border-l md:pl-5 xl:pt-0">
             <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CalendarClock className="h-4 w-4" />Cash runway <MetricHint>Estimated months of liquid cash at the current monthly burn.</MetricHint></p>
-            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{isAnalyticsLoading ? 'Loading…' : analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>
           </div>
         </section>),
     netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
@@ -613,7 +620,7 @@ function DashboardPage() {
           </div>) : (<div className="dashboard-activity rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div><div className="mt-5 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visibleRecent.slice(0, 8).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <div key={tx.id} className="dashboard-activity-row py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div><p className={cn('shrink-0 font-mono text-sm font-bold', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</p></div></div>; })}</div><Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link></div>),
     payments: <section className="dashboard-payments" aria-label="Upcoming payments">
       <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Due & upcoming</p><h2 className="mt-1 font-headline text-xl font-extrabold">Next payments</h2></div><CalendarClock className="h-5 w-5 shrink-0 text-[var(--ref-primary)]" aria-hidden /></div>
-      <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{paymentRows.length ? formatAmount(upcomingCommitmentTotal) + ' due in the next 30 days, including overdue items.' : 'No outstanding payments due in the next 30 days.'}</p>
+      <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{isCommitmentsLoading ? 'Loading upcoming payments…' : paymentRows.length ? formatAmount(upcomingCommitmentTotal) + ' due in the next 30 days, including overdue items.' : 'No outstanding payments due in the next 30 days.'}</p>
       <div className="mt-4 divide-y divide-[var(--color-border)]">{paymentRows.slice(0, 5).map(item => <Link key={item.id} to={item.to} className="dashboard-payment-row flex items-center justify-between gap-3"><span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(item.name)}</strong><span className={cn('mt-1 block text-xs', item.date < dashboardNow ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]')}>{item.kind} · {formatDate(item.date)}{item.date < dashboardNow ? ' · Overdue' : ''}</span></span><strong className="shrink-0 text-sm tabular-nums">{formatAmount(item.amount)}</strong></Link>)}</div>
       {paymentRows.length > 5 && <p className="mt-3 text-xs text-[var(--color-muted)]">Showing 5 of {paymentRows.length} payments</p>}
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-[var(--ref-primary)]"><Link to="/subscriptions">Subscriptions →</Link><Link to="/paylater">Pay later →</Link><Link to="/loans">Loans →</Link></div>
@@ -634,7 +641,6 @@ function DashboardPage() {
             {isMobile && <DashboardViewMenu preferences={visiblePreferences} onChange={updateVisiblePreferences} preset={isOriginalView ? 'original' : undefined} onEditLayout={() => setIsEditingLayout(true)} />}
           </div>
           <div className="dashboard-toolbar flex items-center justify-between gap-2 sm:justify-end">
-            <BalanceVisibilityToggle className="hidden h-11 w-11 md:inline-flex lg:hidden" />
             {periods.length > 0 && <PeriodPicker periods={periods} value={selectedPeriodId} onChange={selectPeriod} ariaLabel="Dashboard period" className="dashboard-period-picker" />}
             {!isMobile && <DashboardViewMenu preferences={visiblePreferences} onChange={updateVisiblePreferences} preset={isOriginalView ? 'original' : undefined} onEditLayout={() => setIsEditingLayout(true)} />}
             <DashboardRecapControl periodId={selectedPeriod?.id} onOpen={setRecapModalPeriodId} />
@@ -674,7 +680,7 @@ function DashboardPage() {
                 </button>
                 </div>
               </div>
-              <aside className="dashboard-main-balance hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm lg:block" aria-label="Financial summary">
+              <aside className="dashboard-main-balance hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm md:block" aria-label="Financial summary">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-white/65">At a glance</p><BalanceVisibilityToggle inverted className="h-8 w-8" /></div>
                 <Link to={mainBalance.to} className="mt-3 block"><span className="text-xs text-white/70">{mainBalance.label}</span><strong className="mt-0.5 block truncate text-xl">{mainBalance.value}</strong></Link>
                 <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-xs">
@@ -682,7 +688,7 @@ function DashboardPage() {
                   <div className="group relative min-w-0">
                     <button type="button" className="block w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-describedby="upcoming-commitments-tip">
                       <span className="block truncate text-white/60">Due · 30d</span>
-                      <strong className="mt-1 block truncate">{upcomingCommitmentCount > 0 ? formatAmount(upcomingCommitmentTotal) : 'None'}</strong>
+                      <strong className="mt-1 block truncate">{isCommitmentsLoading ? 'Loading…' : upcomingCommitmentCount > 0 ? formatAmount(upcomingCommitmentTotal) : 'None'}</strong>
                     </button>
                     <div id="upcoming-commitments-tip" role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+0.75rem)] right-0 z-30 hidden max-h-60 w-64 overflow-y-auto rounded-xl border border-white/20 bg-[#07182d] p-3 text-left shadow-xl group-hover:block group-focus-within:block">
                       <p className="font-bold text-white">Upcoming commitments</p>

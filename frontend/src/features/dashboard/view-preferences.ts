@@ -75,6 +75,14 @@ export function selectedDashboardPreset(preferences: DashboardViewPreferences): 
   return 'custom';
 }
 
+/** Whether panels match the original preset, ignoring the main metric and desktop-only widths. */
+export function usesOriginalDashboardSections(preferences: DashboardViewPreferences): boolean {
+  const original = dashboardPreset('original');
+  return original.sectionOrder.join(',') === preferences.sectionOrder.join(',')
+    && original.hiddenSections.length === preferences.hiddenSections.length
+    && original.hiddenSections.every(id => preferences.hiddenSections.includes(id));
+}
+
 export function defaultDashboardSectionSize(id: DashboardSection): DashboardSectionSize {
   return id === 'pulse' ? 'full' : id === 'budget' || id === 'netWorth' ? 'wide' : 'small';
 }
