@@ -27,6 +27,10 @@ out
 *.db-journal
 *.sqlite
 *.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
 data/*.db
 data/*.db-journal
 
