@@ -12,6 +12,7 @@ import { MobileMenu } from './MobileMenu';
 import { navigationActive } from './navigation';
 import { useUiStore } from '../../stores/ui-store';
 import { usePendingTransactionsQuery } from '../../features/transactions/queries';
+import { useContextualTransactionPrefill } from '../../hooks/useContextualTransactionPrefill';
 
 /** Primary mobile navigation — desktop uses the sidebar. */
 const items = [
@@ -27,12 +28,7 @@ export function MobileBottomNav() {
   const openTransactionComposer = useUiStore((state) => state.openTransactionComposer);
   const dashboardNotificationCount = useUiStore((state) => state.dashboardNotificationCount);
   const pendingTransactionCount = usePendingTransactionsQuery().data?.length ?? 0;
-  const search = location.search as Record<string, unknown>;
-  const contextualPrefill = {
-    accountId: typeof search.accountId === 'string' && Number.isSafeInteger(Number(search.accountId)) ? Number(search.accountId) : undefined,
-    categoryId: typeof search.categoryId === 'string' && Number.isSafeInteger(Number(search.categoryId)) ? Number(search.categoryId) : undefined,
-    periodId: typeof search.periodId === 'string' && Number.isSafeInteger(Number(search.periodId)) ? Number(search.periodId) : undefined,
-  };
+  const contextualPrefill = useContextualTransactionPrefill();
 
   return (
     <>

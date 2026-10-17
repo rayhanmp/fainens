@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { useAgentProfileQuery } from '../../features/agent/queries';
 import { usePendingTransactionsQuery } from '../../features/transactions/queries';
 import { useUiStore } from '../../stores/ui-store';
+import { useContextualTransactionPrefill } from '../../hooks/useContextualTransactionPrefill';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { navigationGroups, navigationActive, pathMatches } from './navigation';
 import { BalanceVisibilityToggle } from '../ui/BalanceVisibilityToggle';
@@ -83,8 +84,11 @@ export function ProfileMenu({ compact = false, showDevAuthStatus = false, onNavi
   );
 }
 
-export function AddTransactionLink({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
-  return <Link to="/transactions" search={{ action: 'new' }} onClick={onNavigate} className="finance-add" title={compact ? 'Add transaction' : undefined} aria-label={compact ? 'Add transaction' : undefined}><Plus aria-hidden="true" />{!compact && <span>Add transaction</span>}</Link>;
+/** Opens the global transaction composer over the current page, prefilled from it, like the phone's Add button. */
+export function AddTransactionButton({ compact = false }: { compact?: boolean }) {
+  const openTransactionComposer = useUiStore((state) => state.openTransactionComposer);
+  const prefill = useContextualTransactionPrefill();
+  return <button type="button" onClick={() => openTransactionComposer(prefill)} className="finance-add cursor-pointer" title={compact ? 'Add transaction' : undefined} aria-label={compact ? 'Add transaction' : undefined}><Plus aria-hidden="true" />{!compact && <span>Add transaction</span>}</button>;
 }
 
 export function Sidebar() {
@@ -126,7 +130,7 @@ export function Sidebar() {
           updateSidebar(true);
         }}><PanelLeftClose /></button>
       </div>
-      <div className="finance-action"><AddTransactionLink compact={compactContent} /></div>
+      <div className="finance-action"><AddTransactionButton compact={compactContent} /></div>
       <NavigationLinks compact={compactContent} />
       <div className="finance-footer"><BalanceVisibilityToggle showLabel={!compactContent} className={`mb-2 w-full ${compactContent ? 'px-0' : 'justify-start'}`} /><ProfileMenu compact={compactContent} showDevAuthStatus={isDemoMode} /></div>
     </aside>
