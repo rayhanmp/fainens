@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Link } from '@tanstack/react-router';
-import { ArrowRight, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import type { BudgetOutlook, BudgetPlan } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { PanelLink } from './PanelParts';
+import { panelCard, panelSubtitle, panelTitle, tooltipSurface } from './panel-styles';
 
 type PlanRow = { name: string; actual: number; planned: number; outlook: BudgetOutlook['categories'][number] | null };
 
@@ -55,18 +56,18 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
   const likelyFinish = outlook ? formatForecastRange(outlook.total.projectedLowAmount, outlook.total.projectedHighAmount, outlook.total.projectedAmount, formatAmount) : null;
 
   return (
-    <div className="dashboard-budget rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm">
+    <div className={cn('dashboard-budget', panelCard)}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Budget outlook</p>
-          <h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Spending by category</h2>
+        <div className="min-w-0">
+          <h2 className={panelTitle}>Budget health</h2>
+          <p className={panelSubtitle}>Spending by category</p>
         </div>
         {totalPlanned > 0 && isTracked ? <div className="flex flex-col items-end text-right">
           <div className="flex items-center gap-1">
             <p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatAmount(remaining)} remaining</p>
             {outlook && likelyFinish && <div className="group relative">
               <button type="button" aria-label="Show budget outlook" title="Show budget outlook" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-3.5 w-3.5" /></button>
-              <div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block">
+              <div role="tooltip" className={cn(tooltipSurface, 'right-0 top-full mt-2')}>
                 <p className="font-bold">Budget outlook</p>
                 <p className="mt-1 leading-relaxed">Likely finish {likelyFinish}.</p>
                 {dailyBudget != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatAmount(dailyBudget)} daily budget for the remaining days.</p>}
@@ -79,7 +80,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
             </div>}
           </div>
           {likelyFinish && <p className="mt-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">Likely finish {likelyFinish}</p>}
-        </div> : <Link to="/budget" className="text-sm font-bold text-[var(--ref-primary)] hover:underline">{totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</Link>}
+        </div> : <PanelLink to="/budget">{totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</PanelLink>}
       </div>
       {isLoading
         ? <div className="mt-6 h-56 animate-pulse rounded-2xl bg-[var(--ref-surface-container-highest)]" />
@@ -88,7 +89,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
           : planRows.length === 0
             ? <div className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] p-6 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending for this period yet. Add transactions or set a budget to start planning.</div>
             : <div className="dashboard-budget-rows mt-6 space-y-5">{planRows.map((row) => <BudgetRow key={row.outlook?.categoryId ?? row.name} row={row} formatAmount={formatAmount} />)}</div>}
-      <Link to="/budget" className="mt-6 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Manage budget <ArrowRight className="h-4 w-4" /></Link>
+      <PanelLink to="/budget" className="mt-5">Manage budget</PanelLink>
     </div>
   );
 }

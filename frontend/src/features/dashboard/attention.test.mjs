@@ -4,7 +4,7 @@ import { DAY_MS, upcomingCommitments } from './commitments.ts';
 import { attentionReadKey, buildAttentionItems, parseAttentionReadKeys, serializeAttentionReadKeys, ATTENTION_READ_STORAGE_LIMIT } from './attention.ts';
 
 const NOW = Date.UTC(2026, 9, 17, 12);
-const format = { amount: (cents) => `Rp ${cents}`, date: (ms) => new Date(ms).toISOString().slice(0, 10) };
+const format = { amount: (cents) => `Rp${cents}`, date: (ms) => new Date(ms).toISOString().slice(0, 10) };
 const period = { id: 20, name: 'October 2026', coverageStatus: 'complete', coverageReason: null };
 const noCommitments = upcomingCommitments({ subscriptions: [], payLater: [], loans: [] }, NOW);
 
@@ -72,7 +72,7 @@ test('spending exactly on plan is not over budget', () => {
   const [item] = buildAttentionItems(input({ budgetRows: over }), format);
   assert.equal(item.id, 'budget-overrun:20');
   assert.equal(item.title, '2 categories are over budget');
-  assert.equal(item.detail, 'Rp 170 over plan, led by Food and Fun.');
+  assert.equal(item.detail, 'Rp170 over plan, led by Food and Fun.');
 });
 
 test('budget risk only shows when nothing is already over, and never for untracked periods', () => {
@@ -94,7 +94,7 @@ test('loans escalate from upcoming to due soon to overdue', () => {
     return buildAttentionItems(input({ loans, commitments }), format)[0];
   };
   assert.equal(run([loan(20)]).id, 'loans-upcoming');
-  assert.equal(run([loan(3)]).detail, 'Rp 500 due next, starting 2026-10-20');
+  assert.equal(run([loan(3)]).detail, 'Rp500 due next, starting 2026-10-20');
   assert.deepEqual([run([loan(-2, true)]).id, run([loan(-2, true)]).tone], ['loans', 'danger']);
 });
 
@@ -110,8 +110,8 @@ test('items sort by severity and are capped at eight', () => {
 });
 
 test('read keys ignore live details and migrate keys saved with them', () => {
-  const item = { id: 'budget-overrun:20', title: '1 category is over budget', detail: 'Rp 5 over plan' };
-  assert.equal(attentionReadKey({ ...item, detail: 'Rp 9 over plan' }), attentionReadKey(item));
+  const item = { id: 'budget-overrun:20', title: '1 category is over budget', detail: 'Rp5 over plan' };
+  assert.equal(attentionReadKey({ ...item, detail: 'Rp9 over plan' }), attentionReadKey(item));
   assert.deepEqual(parseAttentionReadKeys(JSON.stringify(['a|Title|Old detail', 'b|Title', 3])), ['a|Title', 'b|Title']);
   assert.deepEqual(parseAttentionReadKeys(null), []);
   assert.deepEqual(parseAttentionReadKeys('{}'), []);

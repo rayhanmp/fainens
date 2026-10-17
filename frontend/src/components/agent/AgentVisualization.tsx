@@ -497,7 +497,7 @@ function formatValue(value: number, unit: VisualizationUnit): string {
 }
 
 function formatCompactValue(value: number, unit: VisualizationUnit): string {
-  const prefix = unit === 'IDR' ? 'Rp ' : '';
+  const prefix = unit === 'IDR' ? 'Rp' : '';
   const unitSuffix = unit === 'percent' ? '%' : unit === 'months' ? ' mo' : '';
   const absolute = Math.abs(value);
   const suffix = absolute >= 1_000_000_000 ? 'B' : absolute >= 1_000_000 ? 'M' : absolute >= 1_000 ? 'K' : '';

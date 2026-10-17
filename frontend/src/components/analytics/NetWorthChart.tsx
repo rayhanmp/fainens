@@ -11,7 +11,7 @@ import {
   ReferenceLine,
   ReferenceDot,
 } from 'recharts';
-import { formatCurrency as visibleCurrency, cn } from '../../lib/utils';
+import { formatCurrency as visibleCurrency, cn, formatDecimal } from '../../lib/utils';
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useNetWorthTrendQuery, type NetWorthRange } from '../../features/analytics/queries';
@@ -32,8 +32,8 @@ const RANGE_OPTIONS: Array<{
 
 function compactAxisIdr(v: number): string {
   const abs = Math.abs(v);
-  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
-  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000_000_000) return `${formatDecimal(v / 1_000_000_000)}B`;
+  if (abs >= 1_000_000) return `${formatDecimal(v / 1_000_000)}M`;
   if (abs >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
   return String(Math.round(v));
 }
@@ -145,9 +145,9 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
     <div className={cn(cardClass, className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-headline text-base font-bold text-[var(--ref-on-surface)] sm:text-lg">
+          <h2 className="font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">
             Net worth trend
-          </h3>
+          </h2>
         </div>
 
         <div
@@ -196,7 +196,7 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                 <>
                   {netWorthChange >= 0 ? '+' : ''}
                   {formatCurrency(netWorthChange)} ({netWorthChangePercent >= 0 ? '+' : ''}
-                  {netWorthChangePercent.toFixed(1)}% {compareLabel})
+                  {formatDecimal(netWorthChangePercent, 1, 1)}% {compareLabel})
                 </>
               ) : (
                 'Add more history to compare'
@@ -281,7 +281,7 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                     ? (comparisonDelta / Math.abs(dragStart.netWorth)) * 100
                     : null;
                   return (
-                    <div className="w-max max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-xl">
+                    <div className="w-max max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left shadow-xl">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">
                         {new Date(p.asOfMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) || label}
                       </p>
@@ -297,7 +297,7 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                         )}>
                           <span>
                             {comparisonDelta >= 0 ? '+' : ''}{formatCurrency(comparisonDelta)}
-                            {' ('}{comparisonPercent != null ? `${comparisonPercent.toFixed(2)}%` : '-'}{') '}
+                            {' ('}{comparisonPercent != null ? `${formatDecimal(comparisonPercent, 2, 2)}%` : '-'}{') '}
                             {comparisonDelta > 0 ? '↑' : comparisonDelta < 0 ? '↓' : '→'}
                           </span>
                           <span className="min-w-0 text-right font-normal text-[var(--ref-on-surface-variant)]">

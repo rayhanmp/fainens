@@ -92,7 +92,7 @@ export function PeriodSummariesChart() {
               yAxisId="left"
               tick={{ fontSize: 11, fontFamily: 'Space Mono' }}
               stroke="#1A1A1A"
-              tickFormatter={(value) => maskAmounts(`Rp ${(value / 1000000).toFixed(0)}M`)}
+              tickFormatter={(value) => maskAmounts(`Rp${(value / 1000000).toFixed(0)}M`)}
             />
             <YAxis
               yAxisId="right"

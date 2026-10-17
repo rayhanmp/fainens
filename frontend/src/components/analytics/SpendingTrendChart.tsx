@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { SlidersHorizontal } from 'lucide-react';
-import { cn, formatCurrency as visibleCurrency } from '../../lib/utils';
+import { cn, formatCurrency as visibleCurrency, formatDecimal } from '../../lib/utils';
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { useSpendingTrendQuery } from '../../features/analytics/queries';
 import type { GetSpendingTrend200 } from '../../generated/client';
@@ -22,8 +22,8 @@ type ViewMode = 'calendar' | 'weekly' | 'cumulative';
 
 function compactAxisIdr(value: number): string {
   const absolute = Math.abs(value);
-  if (absolute >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
-  if (absolute >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (absolute >= 1_000_000_000) return `${formatDecimal(value / 1_000_000_000)}B`;
+  if (absolute >= 1_000_000) return `${formatDecimal(value / 1_000_000)}M`;
   if (absolute >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
   return String(Math.round(value));
 }
@@ -134,14 +134,14 @@ export function SpendingTrendChart({ periodId = null, className, hideAmounts }: 
   };
 
   if (isLoading) {
-    return <div className={cn('flex h-[18rem] flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5', className)}><div className="h-5 w-40 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-4 h-10 w-48 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-5 min-h-0 flex-1 rounded-xl bg-[var(--ref-surface-container-highest)]/60" /></div>;
+    return <div className={cn('flex h-[18rem] flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5 sm:p-6', className)}><div className="h-5 w-40 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-4 h-10 w-48 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-5 min-h-0 flex-1 rounded-xl bg-[var(--ref-surface-container-highest)]/60" /></div>;
   }
 
   return (
-    <div className={cn('relative flex h-[18rem] min-w-0 flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5', className)}>
+    <div className={cn('relative flex h-[18rem] min-w-0 flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5 sm:p-6', className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Spending activity</h3>
+          <h2 className="font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Spending activity</h2>
           <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{dataScope === 'period' && periodId != null ? `${periodName ?? 'Selected salary period'} · recorded expenses` : 'Last 30 days · recorded expenses'}</p>
         </div>
         <div className="flex items-start gap-2">
@@ -168,8 +168,8 @@ export function SpendingTrendChart({ periodId = null, className, hideAmounts }: 
       </div>
 
       {isOptionsOpen && (
-        <div ref={optionsPanelRef} className="absolute right-5 top-[4.75rem] z-20 w-60 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-xl">
-          <p className="px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Time range</p>
+        <div ref={optionsPanelRef} className="absolute right-5 top-[4.75rem] z-20 w-60 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-2xl">
+          <p className="px-1 text-[11px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Time range</p>
           <div className="mt-2 grid grid-cols-2 gap-1">
             <button
               type="button"
@@ -187,7 +187,7 @@ export function SpendingTrendChart({ periodId = null, className, hideAmounts }: 
               This period
             </button>
           </div>
-          <p className="mt-4 px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Chart style</p>
+          <p className="mt-4 px-1 text-[11px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Chart style</p>
           <div className="mt-2 grid gap-1">
             {modeOptions.map((option) => (
               <button
@@ -235,13 +235,13 @@ export function SpendingTrendChart({ periodId = null, className, hideAmounts }: 
             <BarChart data={weeklyPoints} margin={{ top: 8, right: 2, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" stroke="var(--ref-outline)" />
               <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" interval={0} height={28} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => amountsHidden ? '•••' : `Rp ${compactAxisIdr(Number(value))}`} width={52} />
+              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => amountsHidden ? '•••' : `Rp${compactAxisIdr(Number(value))}`} width={52} />
               <Tooltip
                 cursor={{ fill: 'var(--ref-surface-container-high)', opacity: 0.5 }}
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const point = payload[0].payload as (typeof weeklyPoints)[number];
-                  return <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-md"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">{point.label}</p><p className="font-headline text-base font-bold text-[var(--ref-on-surface)]">{formatCurrency(point.spent)}</p><p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">{point.transactionCount} posted expense{point.transactionCount === 1 ? '' : 's'}{point.hasIncompleteCoverage ? ' · coverage gap' : ''}</p></div>;
+                  return <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-xl"><p className="text-[11px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{point.label}</p><p className="font-headline text-base font-bold text-[var(--ref-on-surface)]">{formatCurrency(point.spent)}</p><p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">{point.transactionCount} posted expense{point.transactionCount === 1 ? '' : 's'}{point.hasIncompleteCoverage ? ' · coverage gap' : ''}</p></div>;
                 }}
               />
               <Bar dataKey="spent" fill="var(--ref-primary)" radius={[4, 4, 0, 0]} maxBarSize={34} />
@@ -254,13 +254,13 @@ export function SpendingTrendChart({ periodId = null, className, hideAmounts }: 
             <LineChart data={cumulativePoints} margin={{ top: 8, right: 2, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" stroke="var(--ref-outline)" />
               <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" interval={4} height={26} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => amountsHidden ? '•••' : `Rp ${compactAxisIdr(Number(value))}`} width={52} />
+              <YAxis tick={{ fontSize: 9, fill: 'var(--ref-outline)' }} stroke="var(--ref-outline)" tickFormatter={(value) => amountsHidden ? '•••' : `Rp${compactAxisIdr(Number(value))}`} width={52} />
               <Tooltip
                 cursor={{ stroke: 'var(--ref-outline)', opacity: 0.4 }}
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const point = payload[0].payload as Point & { cumulative: number };
-                  return <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-md"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">{point.label}</p><p className="font-headline text-base font-bold text-[var(--ref-on-surface)]">{formatCurrency(point.cumulative)} known spend</p><p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">{point.transactionCount} posted expense{point.transactionCount === 1 ? '' : 's'} · {coverageText(point)}</p></div>;
+                  return <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-xl"><p className="text-[11px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{point.label}</p><p className="font-headline text-base font-bold text-[var(--ref-on-surface)]">{formatCurrency(point.cumulative)} known spend</p><p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">{point.transactionCount} posted expense{point.transactionCount === 1 ? '' : 's'} · {coverageText(point)}</p></div>;
                 }}
               />
               <Line type="monotone" dataKey="cumulative" stroke="var(--ref-primary)" strokeWidth={3} dot={false} activeDot={{ r: 4 }} />

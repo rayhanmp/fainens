@@ -336,7 +336,7 @@ function SalaryIncomePage() {
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="font-headline text-2xl font-bold text-[var(--color-accent)]">Rp</span>
                 <span className="font-headline text-4xl font-black tracking-tighter text-[var(--color-text-primary)] sm:text-5xl md:text-6xl">
-                  {formatAmount(heroMainAmount).replace('Rp ', '')}
+                  {formatAmount(heroMainAmount).replace('Rp', '')}
                 </span>
               </div>
               {hasPayroll && computed && (

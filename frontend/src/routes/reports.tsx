@@ -995,7 +995,7 @@ function TrendsReport() {
               tickLine={false}
               axisLine={false}
               stroke="var(--color-muted)"
-              tickFormatter={(value) => maskAmounts(`Rp ${(value / 1000000).toFixed(0)}M`)}
+              tickFormatter={(value) => maskAmounts(`Rp${(value / 1000000).toFixed(0)}M`)}
             />
             <Tooltip
               content={({ active, payload, label }) => {

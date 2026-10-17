@@ -10,7 +10,7 @@ export type PaymentRow = {
   name: string;
   amount: number;
   date: number;
-  kind: 'Subscription' | 'Pay later' | 'Loan repayment';
+  kind: 'Subscription' | 'PayLater' | 'Loan repayment';
   to: '/subscriptions' | '/paylater' | '/loans';
 };
 
@@ -49,7 +49,7 @@ export function upcomingCommitments<S extends CommitmentSubscription, P extends 
   const loanTotal = sum(loans.map((item) => item.remainingCents));
   const rows: PaymentRow[] = [
     ...subscriptions.map((item) => ({ id: `subscription-${item.id}`, name: item.name, amount: item.amount, date: item.nextRenewalAt, kind: 'Subscription' as const, to: '/subscriptions' as const })),
-    ...payLater.map((item) => ({ id: `paylater-${item.recognitionTxId}`, name: item.description, amount: item.outstandingCents, date: item.dueDateMs, kind: 'Pay later' as const, to: '/paylater' as const })),
+    ...payLater.map((item) => ({ id: `paylater-${item.recognitionTxId}`, name: item.description, amount: item.outstandingCents, date: item.dueDateMs, kind: 'PayLater' as const, to: '/paylater' as const })),
     ...loans.map((item) => ({ id: `loan-${item.id}`, name: item.contact.name, amount: item.remainingCents, date: item.dueDate, kind: 'Loan repayment' as const, to: '/loans' as const })),
   ].sort((a, b) => a.date - b.date);
   return {

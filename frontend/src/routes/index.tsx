@@ -1,6 +1,6 @@
-import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowRight, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -35,6 +35,7 @@ import { useToast } from '../components/ui/useToast';
 import { ToastContainer } from '../components/ui/Toast';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
+import { PanelLink } from '../features/dashboard/PanelParts';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
 import { DashboardNotifications } from '../features/dashboard/DashboardNotifications';
 import { DashboardHero, DashboardTodayCard, type BalanceMetrics } from '../features/dashboard/DashboardHero';
@@ -76,7 +77,8 @@ type PayLaterObligations = Awaited<ReturnType<typeof api.paylater.obligations>>;
 type SubscriptionData = Awaited<ReturnType<typeof api.subscriptions.list>>;
 
 function formatAsOf(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
+  // Same month-first style as formatDate, so every date on the dashboard reads alike.
+  return new Date(timestamp).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   });
 }
@@ -342,7 +344,7 @@ function DashboardPage() {
         <DashboardTodayCard mainMetric={preferences.mainMetric} metrics={balanceMetrics} dailyBudget={dailyBudget} formatAmount={formatAmount} />
 
         <DashboardSections preferences={visiblePreferences} sections={dashboardSections} editing={isEditingLayout} onChange={next => updatePreferences({ ...preferences, sectionOrder: next.sectionOrder, sectionSizes: next.sectionSizes })} onDone={() => setIsEditingLayout(false)} />
-        {!isMobile && (<section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(facts?.facts.asOfMs ?? dashboardNow)} · reconciliation: {hasRecentReconciliation ? 'recent check on record' : 'no current check on record'}.</p></div></div><Link to="/accounts" className="shrink-0 text-sm font-bold text-[var(--ref-primary)] hover:underline">Review accounts <ArrowRight className="inline h-4 w-4" /></Link></div></div></section>)}
+        {!isMobile && (<section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(facts?.facts.asOfMs ?? dashboardNow)} · reconciliation: {hasRecentReconciliation ? 'recent check on record' : 'no current check on record'}.</p></div></div><PanelLink to="/accounts" className="shrink-0">Review accounts</PanelLink></div></div></section>)}
         {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
         <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} onSuccess={(_id, createdIds) => offerUndo(createdIds)} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         <MonthlyReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />

@@ -17,6 +17,7 @@ test('showing amounts retains the original amount and currency formatting', () =
 test('redacts all currency amounts in notification and forecast copy', () => {
   assert.equal(maskCurrencyAmounts('Rp 47.447.402 cash, Rp 0 debt, IDR 250000 due.'), `${HIDDEN_BALANCE} cash, ${HIDDEN_BALANCE} debt, ${HIDDEN_BALANCE} due.`);
   assert.equal(maskCurrencyAmounts('Rp 100.000–Rp 250.000 by 25 Sept.'), `${HIDDEN_BALANCE}–${HIDDEN_BALANCE} by 25 Sept.`);
+  assert.equal(maskCurrencyAmounts('Rp47.447.402 cash, -Rp25.000 due, Rp100.000–Rp250.000.'), `${HIDDEN_BALANCE} cash, -${HIDDEN_BALANCE} due, ${HIDDEN_BALANCE}–${HIDDEN_BALANCE}.`);
 });
 
 test('masks signed and abbreviated amounts while preserving dates and counts', () => {

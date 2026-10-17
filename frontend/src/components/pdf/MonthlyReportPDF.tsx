@@ -32,7 +32,7 @@ const s = StyleSheet.create({
   notesBlock: { marginTop: 22, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: C.line }, notesTitle: { fontSize: 11, color: C.ink, fontFamily: 'Helvetica-Bold', marginBottom: 7 }, notesCopy: { fontSize: 9, color: C.body, lineHeight: 1.65 }, hash: { fontFamily: 'Courier', fontSize: 7.5, marginTop: 8, color: C.muted },
 });
 
-const money = (value: number) => `${value < 0 ? '-' : ''}Rp ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Math.abs(value))}`;
+const money = (value: number) => `${value < 0 ? '-' : ''}Rp${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Math.abs(value))}`;
 const percent = (value: number, total: number) => total > 0 ? `${(value / total * 100).toFixed(1)}%` : 'N/A';
 
 export interface MonthlyReportProps {

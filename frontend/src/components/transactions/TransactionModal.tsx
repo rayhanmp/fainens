@@ -1576,7 +1576,7 @@ export function TransactionModal({
                 <p className="font-label text-sm text-[var(--color-muted)] mb-2">Total Amount</p>
                 <h2 className="font-headline text-5xl font-extrabold text-[var(--color-on-background)] tracking-tighter">
                   <span className="text-2xl font-bold text-[var(--color-primary)] align-top mr-1">Rp</span>
-                  {formatAmount(amount).replace('Rp ', '')}
+                  {formatAmount(amount).replace('Rp', '')}
                 </h2>
               </div>
 
@@ -1772,7 +1772,7 @@ export function TransactionModal({
                 <div className="flex items-baseline gap-2">
                   <span className="font-headline font-bold text-3xl text-[var(--color-primary)]">Rp</span>
                   <span className="font-headline font-extrabold text-6xl tracking-tighter text-[var(--color-on-background)]">
-                    {formatAmount(amount).replace('Rp ', '')}
+                    {formatAmount(amount).replace('Rp', '')}
                   </span>
                 </div>
               </div>

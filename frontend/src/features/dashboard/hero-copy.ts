@@ -29,7 +29,8 @@ export function heroCopy(input: HeroCopyInput, formatAmount: (cents: number) => 
       : { headline: 'Your position is taking shape.', message: 'Keep building your financial history. A clearer trend is just ahead.' };
   }
 
-  const percent = `${Math.abs(change).toFixed(1)}%`;
+  // Indonesian decimals, matching the Rupiah amounts beside it ("30,1%").
+  const percent = `${Math.abs(change).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
   if (change > 0) {
     return {
       headline: change >= 10 ? 'Strong momentum is building.' : 'Progress is moving in the right direction.',

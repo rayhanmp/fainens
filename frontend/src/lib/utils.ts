@@ -26,7 +26,7 @@ export function parseIdNominalToInt(formatted: string): number {
   return parseInt(digits, 10);
 }
 
-/** Parse a signed IDR display value such as "-Rp 25.000" without losing its sign. */
+/** Parse a signed IDR display value such as "-Rp25.000" (or "-Rp 25.000") without losing its sign. */
 export function parseSignedIdNominalToInt(formatted: string): number {
   let text = formatted.trim();
   if (!text) return Number.NaN;
@@ -51,10 +51,15 @@ export function formatCurrency(amount: number, currency = 'Rp'): string {
   
   // Format with Indonesian number format (dots for thousands, no decimals)
   const formatted = rupiah.toLocaleString('id-ID');
-  return `${sign}${currency} ${formatted}`;
+  return `${sign}${currency}${formatted}`;
 }
 
 // Format date (timestamp ms to locale date)
+/** A plain number in the same Indonesian format as formatCurrency (dot thousands, comma decimals), e.g. "91,1". */
+export function formatDecimal(value: number, maximumFractionDigits = 1, minimumFractionDigits = 0): string {
+  return value.toLocaleString('id-ID', { minimumFractionDigits, maximumFractionDigits });
+}
+
 export function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('en-US', {
     year: 'numeric',

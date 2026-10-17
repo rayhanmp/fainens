@@ -599,21 +599,21 @@ function MiniFeatureDemo() {
       {tab === 'track' && (
         <div className="mt-4 rounded-2xl bg-white/75 p-5 ring-1 ring-[var(--color-border)]/70">
           <div className="flex items-end justify-between gap-3">
-            <div><p className="text-xs font-semibold text-[var(--color-muted)]">September snapshot</p><p className="mt-1 text-4xl font-extrabold tracking-[-0.04em] text-[var(--color-text-primary)]">Rp 2.480.000</p></div>
+            <div><p className="text-xs font-semibold text-[var(--color-muted)]">September snapshot</p><p className="mt-1 text-4xl font-extrabold tracking-[-0.04em] text-[var(--color-text-primary)]">Rp2.480.000</p></div>
             <span className="mb-1 flex items-center gap-1 text-xs font-bold text-emerald-700"><ArrowUpRight className="h-3.5 w-3.5" /> 12% less</span>
           </div>
           <div className="mt-4 space-y-2">
-            {[['Food & Dining', 'Rp 1.240.000', '50%'], ['Transport', 'Rp 680.000', '27%'], ['Shopping', 'Rp 560.000', '23%']].map(([name, amount, width]) => <div key={name}><div className="mb-1 flex justify-between text-[11px]"><span className="font-semibold text-[var(--color-text-secondary)]">{name}</span><span className="font-bold text-[var(--color-text-primary)]">{amount}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width }} /></div></div>)}
+            {[['Food & Dining', 'Rp1.240.000', '50%'], ['Transport', 'Rp680.000', '27%'], ['Shopping', 'Rp560.000', '23%']].map(([name, amount, width]) => <div key={name}><div className="mb-1 flex justify-between text-[11px]"><span className="font-semibold text-[var(--color-text-secondary)]">{name}</span><span className="font-bold text-[var(--color-text-primary)]">{amount}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width }} /></div></div>)}
           </div>
           <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-4 flex w-full cursor-pointer items-center justify-between border-t border-[var(--color-border)] pt-3 text-xs font-bold text-[var(--ref-primary)]"><span>{expanded ? 'Hide sample transaction' : 'Inspect a transaction'}</span><ChevronDown className={`h-4 w-4 transition ${expanded ? 'rotate-180' : ''}`} /></button>
-          {expanded && <div className="mt-3 rounded-xl bg-[var(--ref-surface-container-low)] px-3 py-2.5 text-xs"><div className="flex justify-between font-semibold"><span>Yesterday · Kopi Senja</span><span>−Rp 48.000</span></div><p className="mt-1 text-[var(--color-muted)]">Food & Dining · BCA · receipt attached</p></div>}
+          {expanded && <div className="mt-3 rounded-xl bg-[var(--ref-surface-container-low)] px-3 py-2.5 text-xs"><div className="flex justify-between font-semibold"><span>Yesterday · Kopi Senja</span><span>−Rp48.000</span></div><p className="mt-1 text-[var(--color-muted)]">Food & Dining · BCA · receipt attached</p></div>}
         </div>
       )}
 
       {tab === 'plan' && (
         <div className="mt-4 rounded-2xl bg-white/75 p-5 ring-1 ring-[var(--color-border)]/70">
           <div className="flex items-center justify-between"><div><p className="text-xs font-semibold text-[var(--color-muted)]">Food budget</p><p className="mt-1 text-4xl font-extrabold tracking-[-0.04em] text-[var(--color-text-primary)]">Rp {budget.toLocaleString('id-ID')}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${overBudget ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{overBudget ? 'Over budget' : 'On track'}</span></div>
-          <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-[var(--color-text-secondary)]"><span>Spent Rp 1.240.000</span><span>{budgetPercent}% used</span></div>
+          <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-[var(--color-text-secondary)]"><span>Spent Rp1.240.000</span><span>{budgetPercent}% used</span></div>
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={`h-full rounded-full ${overBudget ? 'bg-rose-500' : 'bg-[var(--ref-secondary)]'}`} style={{ width: `${Math.min(100, budgetPercent)}%` }} /></div>
           <label className="mt-4 block text-[11px] font-semibold text-[var(--color-muted)]">Drag to try a different plan<input aria-label="Sample food budget" type="range" min="1400000" max="3000000" step="50000" value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="mt-2 w-full accent-[var(--ref-primary)]" /></label>
           <p className="mt-3 rounded-xl bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">Fainens turns a target into a simple signal: what’s safe to spend and where you’re drifting.</p>
@@ -623,8 +623,8 @@ function MiniFeatureDemo() {
       {tab === 'ask' && (
         <div className="mt-4 rounded-2xl bg-white/75 p-5 ring-1 ring-[var(--color-border)]/70">
           <p className="text-xs font-semibold text-[var(--color-muted)]">Ask your money assistant</p>
-          <div className="mt-3 flex flex-wrap gap-2">{['Where did I spend most?', 'Can I afford a Rp 500k dinner?', 'Show my biggest purchase'].map((item) => <button key={item} type="button" onClick={() => setQuestion(item)} className={`cursor-pointer rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition ${question === item ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)]'}`}>{item}</button>)}</div>
-          <div className="mt-4 rounded-xl bg-[var(--ref-primary)]/[0.06] p-3"><p className="text-[11px] font-bold text-[var(--ref-primary)]">You asked</p><p className="mt-1 text-xs font-semibold text-[var(--color-text-primary)]">{question}</p><p className="mt-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">Food & Dining is your largest category at Rp 1.240.000, about half of this month’s spending. Your pace is lower than last month.</p></div>
+          <div className="mt-3 flex flex-wrap gap-2">{['Where did I spend most?', 'Can I afford a Rp500k dinner?', 'Show my biggest purchase'].map((item) => <button key={item} type="button" onClick={() => setQuestion(item)} className={`cursor-pointer rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition ${question === item ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)]'}`}>{item}</button>)}</div>
+          <div className="mt-4 rounded-xl bg-[var(--ref-primary)]/[0.06] p-3"><p className="text-[11px] font-bold text-[var(--ref-primary)]">You asked</p><p className="mt-1 text-xs font-semibold text-[var(--color-text-primary)]">{question}</p><p className="mt-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">Food & Dining is your largest category at Rp1.240.000, about half of this month’s spending. Your pace is lower than last month.</p></div>
         </div>
       )}
 
@@ -909,7 +909,7 @@ function StepDone() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold text-[var(--color-muted)]">Current balance</p>
-            <p className="mt-1 text-4xl font-extrabold tracking-[-0.04em] text-[var(--color-text-primary)]">Rp 8.420.000</p>
+            <p className="mt-1 text-4xl font-extrabold tracking-[-0.04em] text-[var(--color-text-primary)]">Rp8.420.000</p>
           </div>
           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Healthy start</span>
         </div>
@@ -920,7 +920,7 @@ function StepDone() {
         </div>
         <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-[var(--color-muted)]"><span>Start of period</span><span>Now</span></div>
         <div className="mt-5 space-y-2 border-t border-[var(--color-border)] pt-4 text-xs">
-          <div className="flex items-center justify-between gap-3"><span className="font-semibold text-[var(--color-text-secondary)]">Spent this period</span><span className="font-bold text-[var(--color-text-primary)]">Rp 2.480.000</span></div>
+          <div className="flex items-center justify-between gap-3"><span className="font-semibold text-[var(--color-text-secondary)]">Spent this period</span><span className="font-bold text-[var(--color-text-primary)]">Rp2.480.000</span></div>
           <div className="flex items-center justify-between gap-3"><span className="font-semibold text-[var(--color-text-secondary)]">Largest category</span><span className="font-bold text-[var(--color-text-primary)]">Food &amp; Dining</span></div>
         </div>
       </div>
