@@ -46,7 +46,7 @@ const amountTone = (kind: Kind, neutral: string) => (kind === 'expense' ? 'text-
 export function ActivityPanel({ transactions, categories, compact, formatAmount, maskAmounts }: {
   transactions: readonly RecentTransaction[];
   categories: readonly { id: number; name: string }[];
-  /** Phone layout: fewer rows, each linking to the transaction. */
+  /** Phone layout: fewer, denser rows and a "See all" link in the header. */
   compact: boolean;
   formatAmount: (cents: number) => string;
   maskAmounts: (text: string) => string;
@@ -74,13 +74,13 @@ export function ActivityPanel({ transactions, categories, compact, formatAmount,
   return (
     <div className="dashboard-activity rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm">
       <div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div>
-      <div className="mt-5 divide-y divide-[var(--color-border)]">
+      <div className="mt-2 divide-y divide-[var(--color-border)]">
         {visible.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visible.slice(0, 8).map((tx) => {
           const kind = classifyTx(tx);
-          return <div key={tx.id} className="dashboard-activity-row py-3 first:pt-0"><div className="flex items-start justify-between gap-3">
+          return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="dashboard-activity-row -mx-2 flex items-start justify-between gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">
             <div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{categoryName(tx) ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div>
             <p className={cn('shrink-0 font-mono text-sm font-bold', amountTone(kind, 'text-[var(--ref-on-surface)]'))}>{sign(kind)}{formatAmount(transactionAmount(tx))}</p>
-          </div></div>;
+          </Link>;
         })}
       </div>
       <Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link>
