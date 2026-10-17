@@ -217,7 +217,8 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
           onMouseDown={(event) => event.preventDefault()}
           onDragStart={(event) => event.preventDefault()}
         >
-          <ResponsiveContainer width="100%" height="100%">
+          {/* Below xl the card has no definite height, so 100% resolves to 0 without a floor. */}
+          <ResponsiveContainer width="100%" height="100%" minHeight={208}>
             <AreaChart
               data={rows}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
