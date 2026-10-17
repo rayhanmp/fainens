@@ -161,7 +161,8 @@ interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
-  onSuccess?: (txId: number) => void;
+  /** Called after a quick-entry create, with every transaction it created (the main one first, then e.g. a transfer fee). */
+  onSuccess?: (txId: number, createdIds: number[]) => void;
   accounts: WalletAccount[];
   categories: CategoryRow[];
   tags: TagRow[];
@@ -1191,6 +1192,7 @@ export function TransactionModal({
       
       // Handle transfer with fee - create main transfer first
       let mainTransaction;
+      const linkedTransactionIds: number[] = [];
       
       if (simpleForm.type === 'transfer') {
         const transferDetails = calculateTransferDetails();
@@ -1218,7 +1220,7 @@ export function TransactionModal({
           // Fee transaction: debit expense and credit the wallet that actually
           // paid it. Recipient-deducted OVO fees reduce the destination wallet.
           const transferFeeCategory = categories.find((category) => category.name === TRANSFER_FEE_CATEGORY_NAME);
-          await createTransactionMutation.mutateAsync({
+          const feeTransaction = await createTransactionMutation.mutateAsync({
             kind: 'expense',
             amountCents: feeAmount,
             description: feeDescription,
@@ -1230,6 +1232,7 @@ export function TransactionModal({
             walletAccountId: transferDetails.senderPays ? walletAccountId : toWalletAccountId!,
             linkedTxId: mainTransaction.id, // Link to parent transfer transaction
           });
+          linkedTransactionIds.push(feeTransaction.id);
         } else {
           // No fee - create normal transfer
           mainTransaction = await createTransactionMutation.mutateAsync({
@@ -1296,7 +1299,7 @@ export function TransactionModal({
       );
       clearStoredDraft(SIMPLE_DRAFT_KEY);
       onSaved();
-      onSuccess?.(mainTransaction.id);
+      onSuccess?.(mainTransaction.id, [mainTransaction.id, ...linkedTransactionIds]);
       onClose();
     } catch (err) {
       setFormError((err as Error).message);

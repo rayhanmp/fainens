@@ -79,3 +79,11 @@
 @media(max-width:360px) { .dashboard-period-picker > div > button { display: none; } }
 @media(max-width:1279px) { .dashboard-resize-handle { display: none; } }
 @media(max-width:767px) { .dashboard-drag-handle { min-height: 44px; } .dashboard-layout-editor > div:last-child { margin-left: auto; } }
+.dashboard-peek { cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; border-radius: 4px; transition: background .15s; }
+.dashboard-peek:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+.dashboard-peek[data-peeking='true'] { background: color-mix(in srgb, currentColor 14%, transparent); }
+.dashboard-position-updated { border-radius: 4px; animation: dashboard-position-updated 1.8s ease-out; }
+@keyframes dashboard-position-updated {
+  0%, 35% { color: var(--ref-primary); background: color-mix(in srgb, var(--ref-primary) 16%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-primary) 16%, transparent); }
+  100% { background: transparent; box-shadow: 0 0 0 3px transparent; }
+}

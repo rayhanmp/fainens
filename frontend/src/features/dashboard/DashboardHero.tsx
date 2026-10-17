@@ -5,9 +5,13 @@ import { formatDate } from '../../lib/utils';
 import mountainHero from '../../assets/dashboard-mountain-hero.png';
 import type { UpcomingCommitments } from './commitments';
 import type { HeroCopy } from './hero-copy';
+import { PeekableAmount } from './PeekableAmount';
 import type { DashboardMetric } from './view-preferences';
 
-export type BalanceMetric = { label: string; value: string; to: '/accounts' | '/budget' };
+/** `value` is the display text (amount, or a state like "Loading…"); `cents` is set when it is an amount that can be peeked. */
+export type BalanceMetric = { label: string; value: string; cents?: number; to: '/accounts' | '/budget' };
+
+const metricValue = (metric: BalanceMetric) => (metric.cents != null ? <PeekableAmount cents={metric.cents} /> : metric.value);
 export type BalanceMetrics = Record<DashboardMetric, BalanceMetric>;
 
 export function DashboardHero({ greeting, copy, mainMetric, metrics, commitments, isCommitmentsLoading, formatAmount, onAddTransaction, onViewReport }: {
@@ -46,9 +50,9 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, commitments
         </div>
         <aside className="dashboard-main-balance hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm md:block" aria-label="Financial summary">
           <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-white/65">At a glance</p><BalanceVisibilityToggle inverted className="h-8 w-8" /></div>
-          <Link to={main.to} className="mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{main.value}</strong></Link>
+          <Link to={main.to} className="mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{metricValue(main)}</strong></Link>
           <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-xs">
-            {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to}><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metrics[id].value}</strong></Link>)}
+            {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to}><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong></Link>)}
             <CommitmentsSummary commitments={commitments} isLoading={isCommitmentsLoading} formatAmount={formatAmount} />
           </div>
         </aside>
@@ -63,7 +67,7 @@ function CommitmentsSummary({ commitments, isLoading, formatAmount }: { commitme
     <div className="group relative min-w-0">
       <button type="button" className="block w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-describedby="upcoming-commitments-tip">
         <span className="block truncate text-white/60">Due · 30d</span>
-        <strong className="mt-1 block truncate">{isLoading ? 'Loading…' : commitments.count > 0 ? formatAmount(commitments.total) : 'None'}</strong>
+        <strong className="mt-1 block truncate">{isLoading ? 'Loading…' : commitments.count > 0 ? <PeekableAmount cents={commitments.total} /> : 'None'}</strong>
       </button>
       <div id="upcoming-commitments-tip" role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+0.75rem)] right-0 z-30 hidden max-h-60 w-64 overflow-y-auto rounded-xl border border-white/20 bg-[#07182d] p-3 text-left shadow-xl group-hover:block group-focus-within:block">
         <p className="font-bold text-white">Upcoming commitments</p>
@@ -94,9 +98,9 @@ export function DashboardTodayCard({ mainMetric, metrics, dailyBudget, formatAmo
     <section className="mt-5 space-y-4 md:hidden" aria-label="Today">
       <div className="cash-satin rounded-[1.75rem] bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]">
         <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold uppercase tracking-widest opacity-75">{mainMetric === 'cash' ? 'Available today' : main.label}</p><BalanceVisibilityToggle className="text-inherit hover:bg-black/5" /></div>
-        <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{main.value}</p>
+        <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{metricValue(main)}</p>
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/10 pt-4 text-sm">
-          {(['budget', 'netWorth', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to} className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">{metrics[id].label}</span><strong className="mt-1 block truncate">{metrics[id].value}</strong></Link>)}
+          {(['budget', 'netWorth', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to} className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong></Link>)}
         </div>
       </div>
       {dailyBudget != null && <Link to="/budget" className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-3"><span><span className="block text-xs text-[var(--ref-on-surface-variant)]">Safe daily pace</span><strong className="text-sm">{formatAmount(dailyBudget)} per day</strong></span><ArrowRight className="h-4 w-4 text-[var(--ref-primary)]" /></Link>}

@@ -30,7 +30,10 @@ import { useNow } from '../hooks/useNow';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery } from '../features/agent/queries';
-import { usePendingTransactionsQuery } from '../features/transactions/queries';
+import { useBulkDeleteTransactions, usePendingTransactionsQuery } from '../features/transactions/queries';
+import { useToast } from '../components/ui/useToast';
+import { ToastContainer } from '../components/ui/Toast';
+import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
 import { DashboardNotifications } from '../features/dashboard/DashboardNotifications';
@@ -44,6 +47,9 @@ import { upcomingCommitments } from '../features/dashboard/commitments';
 import { fallbackName, heroCopy, percentChange, timeOfDayGreeting } from '../features/dashboard/hero-copy';
 import { mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections, type DashboardSection } from '../features/dashboard/view-preferences';
 import { useDashboardViewPreferences } from '../features/dashboard/use-view-preferences';
+import { adjacentPeriodId, swipeStep, type PeriodStep } from '../features/dashboard/navigation';
+import { useDashboardShortcuts } from '../features/dashboard/use-dashboard-shortcuts';
+import { ShortcutsDialog } from '../features/dashboard/ShortcutsDialog';
 import '../features/dashboard/dashboard.css';
 import { DashboardRecap, DashboardRecapControl, DashboardRecapModal } from '../features/recaps/DashboardRecap';
 
@@ -97,6 +103,11 @@ function DashboardPage() {
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [recapModalPeriodId, setRecapModalPeriodId] = useState<number | null>(null);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const { toasts, addToast, removeToast } = useToast();
+  const { mutateAsync: deleteTransactions } = useBulkDeleteTransactions();
+  const toggleBalancesHidden = useUiStore((state) => state.toggleBalancesHidden);
   const reviewedOutlookRevisionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -136,6 +147,10 @@ function DashboardPage() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.periods.all });
   }, [queryClient]);
   const positionUpdatedAt = analyticsQuery.dataUpdatedAt || dashboardNow;
+  // Pulse the "as of" time whenever fresh analytics arrive after the page first loaded.
+  const analyticsUpdateCount = queryClient.getQueryState(queryKeys.dashboard.analytics)?.dataUpdateCount ?? 0;
+  const [initialAnalyticsUpdateCount] = useState(analyticsUpdateCount);
+  const positionJustRefreshed = analyticsUpdateCount > Math.max(initialAnalyticsUpdateCount, 1);
 
   // Window-focus refetching is off app-wide, so refresh a dashboard left open in a background tab.
   useEffect(() => {
@@ -153,6 +168,10 @@ function DashboardPage() {
   const currentPeriodId = String(currentPeriod?.id ?? '');
   const selectedPeriodId = pinnedPeriodId != null && periods.some((period) => String(period.id) === pinnedPeriodId) ? pinnedPeriodId : currentPeriodId;
   const selectPeriod = (periodId: string) => setPinnedPeriodId(periodId === currentPeriodId ? null : periodId);
+  const stepPeriod = (step: PeriodStep) => {
+    const next = adjacentPeriodId(periods, selectedPeriodId, step);
+    if (next) selectPeriod(next);
+  };
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId) ?? null,
@@ -231,10 +250,34 @@ function DashboardPage() {
 
   const analyticsValue = (cents: number | undefined) => (cents != null ? formatAmount(cents) : isAnalyticsLoading ? 'Loading…' : '—');
   const balanceMetrics: BalanceMetrics = {
-    cash: { label: 'Available cash', value: analyticsValue(analytics?.netWorth.liquidAssets), to: '/accounts' },
-    budget: { label: 'Budget left', value: isPeriodLoading ? 'Loading…' : !periodIsTracked ? 'Not tracked' : totalPlanned <= 0 ? 'No budget yet' : formatAmount(budgetRemaining), to: '/budget' },
-    netWorth: { label: 'Net worth', value: analyticsValue(analytics?.netWorth.netWorth), to: '/accounts' },
+    cash: { label: 'Available cash', value: analyticsValue(analytics?.netWorth.liquidAssets), cents: analytics?.netWorth.liquidAssets, to: '/accounts' },
+    budget: { label: 'Budget left', value: isPeriodLoading ? 'Loading…' : !periodIsTracked ? 'Not tracked' : totalPlanned <= 0 ? 'No budget yet' : formatAmount(budgetRemaining), cents: !isPeriodLoading && periodIsTracked && totalPlanned > 0 ? budgetRemaining : undefined, to: '/budget' },
+    netWorth: { label: 'Net worth', value: analyticsValue(analytics?.netWorth.netWorth), cents: analytics?.netWorth.netWorth, to: '/accounts' },
   };
+
+  const offerUndo = (ids: number[]) => addToast({
+    type: 'success',
+    title: ids.length > 1 ? 'Transfer and fee added' : 'Transaction added',
+    duration: 8000,
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        deleteTransactions(ids).then(
+          () => { refreshDashboard(); addToast({ type: 'info', title: ids.length > 1 ? 'Transfer and fee removed' : 'Transaction removed' }); },
+          (error: unknown) => addToast({ type: 'error', title: 'Could not undo', message: error instanceof Error ? error.message : undefined, duration: 8000 }),
+        );
+      },
+    },
+  });
+
+  const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);
+  const showShortcuts = useCallback(() => setIsShortcutsOpen(true), []);
+  useDashboardShortcuts({
+    enabled: !isLoading && !isTransactionOpen && !isReportOpen && recapModalPeriodId == null && !isEditingLayout && !isShortcutsOpen,
+    onStep: stepPeriod,
+    onToggleBalances: toggleBalancesHidden,
+    onShowHelp: showShortcuts,
+  });
 
   const openAgent = (prompt = '') => {
     const text = prompt.trim();
@@ -246,7 +289,7 @@ function DashboardPage() {
     netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
     spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,
-    activity: <ActivityPanel transactions={recent} categories={categories} compact={isMobile} formatAmount={formatAmount} maskAmounts={maskAmounts} />,
+    activity: <ActivityPanel transactions={recent} categories={categories} compact={isMobile} now={dashboardNow} formatAmount={formatAmount} maskAmounts={maskAmounts} />,
     payments: <PaymentsPanel rows={commitments.rows} total={commitments.total} isLoading={isCommitmentsLoading} now={dashboardNow} formatAmount={formatAmount} maskAmounts={maskAmounts} />,
   };
 
@@ -263,11 +306,26 @@ function DashboardPage() {
         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center justify-between gap-3 sm:block">
             <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Decision centre</p>
-            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of {formatAsOf(positionUpdatedAt)}</p></div>
+            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of <span key={analyticsUpdateCount} className={positionJustRefreshed ? 'dashboard-position-updated' : undefined}>{formatAsOf(positionUpdatedAt)}</span>{analyticsQuery.isFetching && !analyticsQuery.isLoading ? ' · Updating…' : ''}</p></div>
             {isMobile && viewMenu}
           </div>
           <div className="dashboard-toolbar flex items-center justify-between gap-2 sm:justify-end">
-            {periods.length > 0 && <PeriodPicker periods={periods} value={selectedPeriodId} onChange={selectPeriod} ariaLabel="Dashboard period" className="dashboard-period-picker" />}
+            {periods.length > 0 && (
+              // Phones can swipe the picker sideways to step between periods.
+              <div
+                style={{ display: 'contents' }}
+                onTouchStart={(event) => { const touch = event.touches[0]; swipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null; }}
+                onTouchEnd={(event) => {
+                  const start = swipeStartRef.current;
+                  const touch = event.changedTouches[0];
+                  swipeStartRef.current = null;
+                  const step = start && touch ? swipeStep(touch.clientX - start.x, touch.clientY - start.y) : null;
+                  if (step) stepPeriod(step);
+                }}
+              >
+                <PeriodPicker periods={periods} value={selectedPeriodId} onChange={selectPeriod} ariaLabel="Dashboard period" className="dashboard-period-picker" />
+              </div>
+            )}
             {!isMobile && viewMenu}
             <DashboardRecapControl periodId={selectedPeriod?.id} onOpen={setRecapModalPeriodId} />
             <DashboardNotifications items={attentionItems} userEmail={user?.email} maskAmounts={maskAmounts} />
@@ -286,8 +344,10 @@ function DashboardPage() {
         <DashboardSections preferences={visiblePreferences} sections={dashboardSections} editing={isEditingLayout} onChange={next => updatePreferences({ ...preferences, sectionOrder: next.sectionOrder, sectionSizes: next.sectionSizes })} onDone={() => setIsEditingLayout(false)} />
         {!isMobile && (<section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(facts?.facts.asOfMs ?? dashboardNow)} · reconciliation: {hasRecentReconciliation ? 'recent check on record' : 'no current check on record'}.</p></div></div><Link to="/accounts" className="shrink-0 text-sm font-bold text-[var(--ref-primary)] hover:underline">Review accounts <ArrowRight className="inline h-4 w-4" /></Link></div></div></section>)}
         {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
-        <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
+        <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} onSuccess={(_id, createdIds) => offerUndo(createdIds)} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         <MonthlyReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
+        <ShortcutsDialog open={isShortcutsOpen} onClose={closeShortcuts} />
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
         </div>
       </PageContainer>
     </RequireAuth>

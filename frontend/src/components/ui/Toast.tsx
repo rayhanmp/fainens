@@ -11,6 +11,8 @@ export interface Toast {
   title: string;
   message?: string;
   duration?: number;
+  /** An optional inline action, such as Undo. The toast closes after it runs. */
+  action?: { label: string; onClick: () => void };
 }
 
 // Toast Item Component
@@ -68,6 +70,15 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           <p className="text-sm font-semibold leading-5">{maskAmounts(toast.title)}</p>
           {toast.message && (
             <p className="mt-1 text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">{maskAmounts(toast.message)}</p>
+          )}
+          {toast.action && (
+            <button
+              type="button"
+              onClick={() => { toast.action?.onClick(); handleRemove(); }}
+              className="mt-2 -ml-2 rounded-lg px-2 py-1 text-sm font-bold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"
+            >
+              {toast.action.label}
+            </button>
           )}
         </div>
         <button

@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, ReceiptText } from 'lucide-react';
 import { cn, formatDate } from '../../lib/utils';
+import { relativeDay } from './navigation';
 
 export type RecentTransaction = {
   id: number;
@@ -43,15 +44,18 @@ function isTransferFee(tx: RecentTransaction): boolean {
 const sign = (kind: Kind) => (kind === 'expense' ? '-' : kind === 'income' ? '+' : '');
 const amountTone = (kind: Kind, neutral: string) => (kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : neutral);
 
-export function ActivityPanel({ transactions, categories, compact, formatAmount, maskAmounts }: {
+export function ActivityPanel({ transactions, categories, compact, now, formatAmount, maskAmounts }: {
   transactions: readonly RecentTransaction[];
   categories: readonly { id: number; name: string }[];
   /** Phone layout: fewer, denser rows and a "See all" link in the header. */
   compact: boolean;
+  /** Ticking clock, so "Today" rolls over at midnight. */
+  now: number;
   formatAmount: (cents: number) => string;
   maskAmounts: (text: string) => string;
 }) {
   const visible = transactions.filter((transaction) => !isTransferFee(transaction));
+  const dateLabel = (tx: RecentTransaction) => relativeDay(tx.date, now) ?? formatDate(tx.date);
   const categoryName = (tx: RecentTransaction) => (tx.categoryId == null ? undefined : categories.find((item) => item.id === tx.categoryId)?.name);
 
   if (compact) {
@@ -62,7 +66,7 @@ export function ActivityPanel({ transactions, categories, compact, formatAmount,
           {visible.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity in this period.</p> : visible.slice(0, 4).map((tx) => {
             const kind = classifyTx(tx);
             return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="dashboard-activity-row flex items-center justify-between gap-3 py-3">
-              <span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(tx.description)}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{categoryName(tx) ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {formatDate(tx.date)}</span></span>
+              <span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(tx.description)}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{categoryName(tx) ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {dateLabel(tx)}</span></span>
               <strong className={cn('shrink-0 text-sm tabular-nums', amountTone(kind, ''))}>{sign(kind)}{formatAmount(transactionAmount(tx))}</strong>
             </Link>;
           })}
@@ -78,7 +82,7 @@ export function ActivityPanel({ transactions, categories, compact, formatAmount,
         {visible.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visible.slice(0, 8).map((tx) => {
           const kind = classifyTx(tx);
           return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="dashboard-activity-row -mx-2 flex items-start justify-between gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">
-            <div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{categoryName(tx) ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div>
+            <div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{categoryName(tx) ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {dateLabel(tx)}</p></div>
             <p className={cn('shrink-0 font-mono text-sm font-bold', amountTone(kind, 'text-[var(--ref-on-surface)]'))}>{sign(kind)}{formatAmount(transactionAmount(tx))}</p>
           </Link>;
         })}
