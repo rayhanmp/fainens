@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   BarChart3,
@@ -38,6 +38,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../features/core/query-keys';
 import { useReviewBudgetOutlookMutation } from '../features/budgets/queries';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useNow } from '../hooks/useNow';
 import { useUiStore } from '../stores/ui-store';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { BalanceVisibilityToggle } from '../components/ui/BalanceVisibilityToggle';
@@ -45,6 +46,11 @@ import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery } from '../features/agent/queries';
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import mountainHero from '../assets/dashboard-mountain-hero.png';
+import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
+import { DashboardSections } from '../features/dashboard/DashboardSections';
+import { mergeDashboardViewChange, selectedDashboardPreset } from '../features/dashboard/view-preferences';
+import { useDashboardViewPreferences } from '../features/dashboard/use-view-preferences';
+import '../features/dashboard/dashboard.css';
 import { DashboardRecap, DashboardRecapControl, DashboardRecapModal } from '../features/recaps/DashboardRecap';
 
 export const Route = createFileRoute('/')({
@@ -56,6 +62,7 @@ export const Route = createFileRoute('/')({
 });
 
 const DAY_MS = 86_400_000;
+const STALE_DASHBOARD_MS = 5 * 60_000;
 
 type Period = Awaited<ReturnType<typeof api.periods.list>>[number];
 type Account = Awaited<ReturnType<typeof api.accounts.list>>[number];
@@ -90,9 +97,18 @@ type Attention = {
 };
 
 const attentionReadStoragePrefix = 'fainens.dashboard.notifications.read';
+const attentionReadStorageLimit = 200;
 
+// Details carry live amounts and day counts, so they stay out of the key; ids carry the period or session they describe.
 function attentionReadKey(item: Attention): string {
-  return `${item.id}|${item.title}|${item.detail}`;
+  return `${item.id}|${item.title}`;
+}
+
+// Keys saved before details were dropped had a third `|detail` segment.
+function parseAttentionReadKeys(raw: string | null): string[] {
+  const stored: unknown = JSON.parse(raw ?? '[]');
+  if (!Array.isArray(stored)) return [];
+  return stored.filter((item): item is string => typeof item === 'string').map((key) => key.split('|').slice(0, 2).join('|'));
 }
 
 function classifyTx(tx: RecentTransaction): 'expense' | 'income' | 'neutral' {
@@ -173,11 +189,20 @@ function MetricHint({ children }: { children: ReactNode }) {
 }
 
 function DashboardPage() {
+  const { preferences, updatePreferences } = useDashboardViewPreferences();
   const { balancesHidden, formatAmount, maskAmounts } = useBalanceVisibility();
   const isMobile = useMediaQuery('(max-width: 767px)');
-  const [dashboardNow] = useState(() => Date.now());
+  const isOriginalView = selectedDashboardPreset(preferences) === 'original';
+  const keepsOriginalSections = preferences.hiddenSections.length === 1 && preferences.hiddenSections[0] === 'payments';
+  const visiblePreferences = keepsOriginalSections && isMobile
+    ? { ...preferences, hiddenSections: preferences.sectionOrder.filter(id => id !== 'activity') }
+    : preferences;
+  const updateVisiblePreferences = (next: typeof preferences) => updatePreferences(mergeDashboardViewChange(preferences, visiblePreferences, next));
+  const [isEditingLayout, setIsEditingLayout] = useState(false);
+  const dashboardNow = useNow();
   const { user } = useAuth();
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const [isPeriodPinned, setIsPeriodPinned] = useState(false);
   const notificationPopoverRef = useRef<HTMLDetailsElement>(null);
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -232,23 +257,50 @@ function DashboardPage() {
   const overviewQueries = [periodsQuery, accountsQuery, categoriesQuery, tagsQuery, analyticsQuery, reconciliationQuery, loansQuery, paylaterQuery, subscriptionsQuery];
   const isLoading = overviewQueries.some((query) => query.isLoading);
   const loadError = overviewQueries.find((query) => query.error)?.error?.message ?? null;
-  const refreshDashboard = () => {
+  const refreshDashboard = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
     void queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all });
     void queryClient.invalidateQueries({ queryKey: queryKeys.periods.all });
-  };
+  }, [queryClient]);
+  const positionUpdatedAt = analyticsQuery.dataUpdatedAt || dashboardNow;
+  const positionUpdatedAtRef = useRef(positionUpdatedAt);
+  positionUpdatedAtRef.current = positionUpdatedAt;
+
+  // Window-focus refetching is off app-wide, so refresh a dashboard left open in a background tab.
+  useEffect(() => {
+    const refreshStaleDashboard = () => {
+      if (document.visibilityState === 'visible' && Date.now() - positionUpdatedAtRef.current >= STALE_DASHBOARD_MS) refreshDashboard();
+    };
+    document.addEventListener('visibilitychange', refreshStaleDashboard);
+    return () => document.removeEventListener('visibilitychange', refreshStaleDashboard);
+  }, [refreshDashboard]);
+
+  const currentPeriod = useMemo(() => findCurrentPeriod(periods, dashboardNow) ?? null, [periods, dashboardNow]);
 
   useEffect(() => {
     setSelectedPeriodId((current) => {
-      if (current && periods.some((period) => String(period.id) === current)) return current;
-      return String(findCurrentPeriod(periods)?.id ?? '');
+      const currentIsValid = current !== '' && periods.some((period) => String(period.id) === current);
+      if (currentIsValid && (isPeriodPinned || currentPeriod == null)) return current;
+      return String(currentPeriod?.id ?? '');
     });
-  }, [periods]);
+  }, [currentPeriod, isPeriodPinned, periods]);
+
+  const selectPeriod = (periodId: string) => {
+    setIsPeriodPinned(periodId !== String(currentPeriod?.id ?? ''));
+    setSelectedPeriodId(periodId);
+  };
 
   const selectedPeriod = useMemo(
     () => periods.find((period) => String(period.id) === selectedPeriodId) ?? null,
     [periods, selectedPeriodId],
   );
+
+  // Notifications always describe the current period, whichever period is being browsed.
+  const currentPeriodQueries = useDashboardPeriodQueries(currentPeriod?.id ?? null);
+  const currentFacts = (currentPeriodQueries.facts.data?.data ?? null) as Facts | null;
+  const currentBudgetRows = useMemo(() => budgetPlansFromPayload(currentPeriodQueries.budget.data as BudgetSummary | BudgetSummary[] | undefined), [currentPeriodQueries.budget.data]);
+  const currentOutlook = currentPeriodQueries.outlook.data?.periodId === currentPeriod?.id ? currentPeriodQueries.outlook.data ?? null : null;
+  const currentPeriodIsTracked = currentPeriod?.coverageStatus === 'complete' || currentPeriod?.coverageStatus === 'partial';
 
   const periodQueries = useDashboardPeriodQueries(selectedPeriod?.id ?? null);
   const facts = (periodQueries.facts.data?.data ?? null) as Facts | null;
@@ -314,18 +366,18 @@ function DashboardPage() {
     if (!analytics?.trialBalance.isBalanced) {
       next.push({ id: 'trial-balance', tone: 'danger', title: 'Ledger needs review', detail: 'The trial balance is not currently balanced.', to: '/accounts', action: 'Review accounts' });
     }
-    if (selectedPeriod && selectedPeriod.coverageStatus !== 'complete') {
-      const detail = selectedPeriod.coverageReason
-        ?? (selectedPeriod.coverageStatus === 'skipped'
+    if (currentPeriod && currentPeriod.coverageStatus !== 'complete') {
+      const detail = currentPeriod.coverageReason
+        ?? (currentPeriod.coverageStatus === 'skipped'
           ? 'Recorded activity is not zero activity for this period.'
           : 'Review coverage before relying on trends or averages.');
-      next.push({ id: 'coverage', tone: selectedPeriod.coverageStatus === 'partial' ? 'warning' : 'danger', title: coverageLabel(selectedPeriod.coverageStatus), detail, to: '/periods', action: 'Review period' });
+      next.push({ id: `coverage:${currentPeriod.id}`, tone: currentPeriod.coverageStatus === 'partial' ? 'warning' : 'danger', title: `${coverageLabel(currentPeriod.coverageStatus)} · ${currentPeriod.name}`, detail, to: '/periods', action: 'Review period' });
     }
     const latestReconciliation = reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active');
     const reconciliationAgeDays = latestReconciliation ? Math.floor((dashboardNow - latestReconciliation.asOfDate) / DAY_MS) : null;
     if (!latestReconciliation || (reconciliationAgeDays != null && reconciliationAgeDays > 30)) {
       next.push({
-        id: 'reconciliation', tone: 'warning', title: latestReconciliation ? 'Accounts need a fresh check' : 'No account reconciliation yet',
+        id: `reconciliation:${latestReconciliation?.id ?? 'none'}`, tone: 'warning', title: latestReconciliation ? 'Accounts need a fresh check' : 'No account reconciliation yet',
         detail: latestReconciliation ? `Last checked ${reconciliationAgeDays} days ago.` : 'Confirm your current balances so the position stays trustworthy.',
         to: '/accounts', action: 'Reconcile accounts',
       });
@@ -358,30 +410,29 @@ function DashboardPage() {
     } else if (upcomingSubscriptions.length > 0) {
       next.push({ id: 'subscriptions-upcoming', tone: 'info', title: `${upcomingSubscriptions.length} subscription${upcomingSubscriptions.length === 1 ? '' : 's'} due in 30 days`, detail: `${formatCurrency(subscriptionCommitmentTotal)} total, next due ${formatDate(upcomingSubscriptions[0].nextRenewalAt)}.`, to: '/subscriptions', action: 'Review subscriptions' });
     }
-    const overBudgetRows = budgetSummary.isTracked ? budgetRows.filter((row) => row.percentUsed >= 100) : [];
-    const projectedBudgetRows = budgetSummary.isTracked && overBudgetRows.length === 0
-      ? (budgetOutlook?.categories.filter((row) => row.riskStatus === 'at_risk') ?? [])
+    const overBudgetRows = currentPeriodIsTracked ? currentBudgetRows.filter((row) => row.actualAmount > row.plannedAmount) : [];
+    const projectedBudgetRows = currentPeriodIsTracked && overBudgetRows.length === 0
+      ? (currentOutlook?.categories.filter((row) => row.riskStatus === 'at_risk') ?? [])
       : [];
     if (overBudgetRows.length > 0) {
       const overrunTotal = overBudgetRows.reduce((sum, row) => sum + Math.max(0, row.actualAmount - row.plannedAmount), 0);
       const topCategories = overBudgetRows.slice(0, 2).map((row) => row.categoryName).join(' and ');
-      next.push({ id: 'budget-overrun', tone: 'danger', title: `${overBudgetRows.length} categor${overBudgetRows.length === 1 ? 'y is' : 'ies are'} over budget`, detail: `${formatCurrency(overrunTotal)} over plan, led by ${topCategories}.`, to: '/budget', action: 'Review budget' });
+      next.push({ id: `budget-overrun:${currentPeriod?.id}`, tone: 'danger', title: `${overBudgetRows.length} categor${overBudgetRows.length === 1 ? 'y is' : 'ies are'} over budget`, detail: `${formatCurrency(overrunTotal)} over plan, led by ${topCategories}.`, to: '/budget', action: 'Review budget' });
     } else if (projectedBudgetRows.length > 0) {
       const topCategories = projectedBudgetRows.slice(0, 2).map((row) => row.categoryName).join(' and ');
-      next.push({ id: 'budget-risk', tone: 'warning', title: `${projectedBudgetRows.length} categor${projectedBudgetRows.length === 1 ? 'y is' : 'ies are'} at risk`, detail: `${topCategories} may exceed the plan based on the current outlook.`, to: '/budget', action: 'Review budget' });
+      next.push({ id: `budget-risk:${currentPeriod?.id}`, tone: 'warning', title: `${projectedBudgetRows.length} categor${projectedBudgetRows.length === 1 ? 'y is' : 'ies are'} at risk`, detail: `${topCategories} may exceed the plan based on the current outlook.`, to: '/budget', action: 'Review budget' });
     }
-    const unallocated = facts?.facts.byCategory.find((row) => row.categoryId == null && row.spentCents > 0);
+    const unallocated = currentFacts?.facts.byCategory.find((row) => row.categoryId == null && row.spentCents > 0);
     if (unallocated) {
-      next.push({ id: 'unallocated', tone: 'info', title: 'Some spending is unallocated', detail: `${formatCurrency(unallocated.spentCents)} cannot yet be attributed to a category.`, to: '/transactions', action: 'Classify activity' });
+      next.push({ id: `unallocated:${currentPeriod?.id}`, tone: 'info', title: 'Some spending is unallocated', detail: `${formatCurrency(unallocated.spentCents)} cannot yet be attributed to a category.`, to: '/transactions', action: 'Classify activity' });
     }
     const priority = { danger: 0, warning: 1, info: 2 } as const;
     return next.sort((a, b) => priority[a.tone] - priority[b.tone]).slice(0, 8);
-  }, [analytics, budgetOutlook, budgetRows, budgetSummary.isTracked, dashboardNow, facts, loans, paylater, pendingTransactionCount, reconciliation, selectedPeriod, subscriptionCommitmentTotal, subscriptions, upcomingSubscriptions]);
+  }, [analytics, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, currentPeriodIsTracked, dashboardNow, loanCommitmentTotal, loans, payLaterCommitmentTotal, paylater, pendingTransactionCount, reconciliation, subscriptionCommitmentTotal, subscriptions, upcomingLoans, upcomingPayLater, upcomingSubscriptions]);
 
   useEffect(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem(attentionReadStorageKey) ?? '[]');
-      setReadAttentionIds(new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : []));
+      setReadAttentionIds(new Set(parseAttentionReadKeys(localStorage.getItem(attentionReadStorageKey))));
     } catch {
       setReadAttentionIds(new Set());
     } finally {
@@ -392,7 +443,7 @@ function DashboardPage() {
   useEffect(() => {
     if (!readAttentionStateLoaded) return;
     try {
-      localStorage.setItem(attentionReadStorageKey, JSON.stringify([...readAttentionIds]));
+      localStorage.setItem(attentionReadStorageKey, JSON.stringify([...readAttentionIds].slice(-attentionReadStorageLimit)));
     } catch {
       // Browser storage can be unavailable in private or restricted contexts.
     }
@@ -487,21 +538,105 @@ function DashboardPage() {
     setDashboardNotificationCount(unreadAttentionItems.length);
   }, [setDashboardNotificationCount, unreadAttentionItems.length]);
 
+
+  const balanceMetrics = {
+    cash: { label: 'Available cash', value: analytics ? formatAmount(analytics.netWorth.liquidAssets) : '—', context: 'Cash and bank balances available now.', to: '/accounts' as const },
+    budget: { label: 'Budget left', value: isPeriodLoading ? 'Loading…' : !periodIsTracked ? 'Not tracked' : budgetSummary.totalPlanned <= 0 ? 'No budget yet' : formatAmount(budgetRemaining), context: !periodIsTracked ? 'Review period coverage before relying on budget totals.' : budgetSummary.totalPlanned <= 0 ? 'Set a budget for ' + (selectedPeriod?.name ?? 'this period') + ' to see what remains.' : 'Remaining from your ' + (selectedPeriod?.name ?? 'current') + ' plan, not your account balance.', to: '/budget' as const },
+    netWorth: { label: 'Net worth', value: analytics ? formatAmount(analytics.netWorth.netWorth) : '—', context: 'Everything you own, minus what you owe.', to: '/accounts' as const },
+  };
+  const mainBalance = balanceMetrics[preferences.mainMetric];
+  const paymentRows = [
+    ...upcomingSubscriptions.map(item => ({ id: 'subscription-' + item.id, name: item.name, amount: item.amount, date: item.nextRenewalAt, kind: 'Subscription', to: '/subscriptions' as const })),
+    ...upcomingPayLater.map(item => ({ id: 'paylater-' + item.recognitionTxId, name: item.description, amount: item.outstandingCents, date: item.dueDateMs!, kind: 'Pay later', to: '/paylater' as const })),
+    ...upcomingLoans.map(item => ({ id: 'loan-' + item.id, name: item.contact.name, amount: item.remainingCents, date: item.dueDate!, kind: 'Loan repayment', to: '/loans' as const })),
+  ].sort((a, b) => a.date - b.date);
+  const dashboardSections = {
+    pulse: (<section aria-label="Financial pulse" className="grid grid-cols-1 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0 pb-4 md:pb-0 md:pr-5">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CircleDollarSign className="h-4 w-4" />Period cash flow <MetricHint>{periodIsTracked ? `${formatAmount(periodIncome)} income minus ${formatAmount(periodExpense)} spending.` : 'Complete period coverage to calculate cash flow.'}</MetricHint></p>
+            <p className={cn('mt-1 break-words text-xl font-bold tabular-nums', periodNet == null ? '' : periodNet >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{periodNet == null ? 'Not tracked' : `${periodNet >= 0 ? '+' : ''}${formatAmount(periodNet)}`}</p>
+          </div>
+          <div className="min-w-0 border-t border-[var(--color-border)] py-4 md:border-l md:border-t-0 md:px-5 md:py-0">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Percent className="h-4 w-4" />Savings rate <MetricHint>{savingsRate == null ? 'Needs tracked income for this period.' : 'Share of period income retained after recorded spending.'}</MetricHint></p>
+            <p className={cn('mt-1 text-xl font-bold tabular-nums', savingsRate != null && savingsRate < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface)]')}>{savingsRate == null ? '—' : `${savingsRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`}</p>
+          </div>
+          <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:pr-5 xl:border-l xl:px-5 xl:pt-0">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Flame className="h-4 w-4" />Monthly burn <MetricHint>Average operating spend over the last three months.</MetricHint></p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatAmount(analytics.burnRate.grossBurnRate) : '—'}</p>
+          </div>
+          <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:border-l md:pl-5 xl:pt-0">
+            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CalendarClock className="h-4 w-4" />Cash runway <MetricHint>Estimated months of liquid cash at the current monthly burn.</MetricHint></p>
+            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>
+          </div>
+        </section>),
+    netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
+    spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
+    budget: (<div className="dashboard-budget rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Budget outlook</p>
+                <h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Spending by category</h2>
+              </div>
+              {budgetSummary.totalPlanned > 0 && budgetSummary.isTracked ? <div className="flex flex-col items-end text-right">
+                <div className="flex items-center gap-1">
+                  <p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatAmount(budgetRemaining)} remaining</p>
+                  {budgetOutlook?.total.projectedAmount != null && <div className="group relative">
+                    <button type="button" aria-label="Show budget outlook" title="Show budget outlook" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-3.5 w-3.5" /></button>
+                    <div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Budget outlook</p><p className="mt-1 leading-relaxed">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount, formatAmount)}.</p>{dailyBudget != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatAmount(dailyBudget)} daily budget for the remaining days.</p>}<p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatConfidenceLabel(budgetOutlook.confidence)} confidence · based on {budgetOutlook.eligiblePeriodCount} completed periods.</p>{budgetOutlook.patternReview.applied && <><p className="mt-1 text-[var(--ref-on-surface-variant)]">Pattern review applied to {budgetOutlook.patternReview.categoryCount} categor{budgetOutlook.patternReview.categoryCount === 1 ? 'y' : 'ies'}.</p><p className="mt-1 text-[var(--ref-on-surface-variant)]">Flagged purchase{budgetOutlook.patternReview.categoryCount === 1 ? '' : 's'}: {budgetOutlook.categories.filter((row) => row.patternReview).map((row) => `${row.patternReview!.description} (${formatAmount(row.patternReview!.amount)}, ${row.patternReview!.classification.replace('_', ' ')})`).join(', ')}.</p></>}</div>
+                  </div>}
+                </div>
+                {budgetOutlook?.total.projectedAmount != null && <p className="mt-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount, formatAmount)}</p>}
+              </div> : <Link to="/budget" className="text-sm font-bold text-[var(--ref-primary)] hover:underline">{budgetSummary.totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</Link>}
+            </div>
+            {isPeriodLoading ? <div className="mt-6 h-56 animate-pulse rounded-2xl bg-[var(--ref-surface-container-highest)]" /> : !periodIsTracked ? <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">Budget and activity actuals are <strong>not tracked</strong> for this {selectedPeriod?.coverageStatus === 'skipped' ? 'skipped' : 'incomplete'} period. Empty totals are not a zero-activity result.</div> : planRows.length === 0 ? <div className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] p-6 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending for this period yet. Add transactions or set a budget to start planning.</div> : <div className="dashboard-budget-rows mt-6 space-y-5">{planRows.map((row) => {
+              const ratio = row.planned > 0 ? row.actual / row.planned : 0;
+              const actualOverBudget = row.planned > 0 && ratio > 1;
+              const actualNearBudget = row.planned > 0 && ratio >= 0.75;
+              const outlookRange = formatForecastRange(row.outlook?.projectedLowAmount ?? null, row.outlook?.projectedHighAmount ?? null, row.outlook?.projectedAmount ?? null, formatAmount);
+              return <div key={row.outlook?.categoryId ?? row.name}>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-[var(--ref-on-surface)]">{row.name}</p>
+                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{row.planned > 0 ? `${formatAmount(row.actual)} of ${formatAmount(row.planned)}` : `${formatAmount(row.actual)} recorded`}</p>
+                  </div>
+                  <p className={cn('text-sm font-bold', actualOverBudget ? 'text-[var(--color-danger)]' : actualNearBudget ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--ref-primary)]')}>{row.planned > 0 ? `${Math.round(ratio * 100)}%` : formatAmount(row.actual)}</p>
+                </div>
+                <div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={cn('h-full rounded-full', actualOverBudget ? 'bg-[var(--color-danger)]' : actualNearBudget ? 'bg-amber-600' : 'bg-[var(--ref-primary)]')} style={{ width: `${Math.min(100, row.planned > 0 ? ratio * 100 : 100)}%` }} /></div>
+                {outlookRange && <p className={cn('mt-1.5 text-[11px]', row.outlook?.riskStatus === 'at_risk' ? 'text-amber-800 dark:text-amber-200' : 'text-[var(--ref-on-surface-variant)]')}>Outlook: likely {outlookRange} by period end{row.outlook?.scheduledRemainingAmount ? ` · includes ${formatAmount(row.outlook.scheduledRemainingAmount)} scheduled` : ''}.</p>}
+              </div>;
+            })}</div>}
+            <Link to="/budget" className="mt-6 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Manage budget <ArrowRight className="h-4 w-4" /></Link>
+          </div>),
+    activity: isMobile ? (<div className="dashboard-activity rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4">
+            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="font-headline text-lg font-extrabold">Latest recorded</h2></div><Link to="/transactions" className="rounded-full px-3 py-2 text-xs font-bold text-[var(--ref-primary)]">See all</Link></div>
+            <div className="mt-2 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity in this period.</p> : visibleRecent.slice(0, 4).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="dashboard-activity-row flex items-center justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(tx.description)}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {formatDate(tx.date)}</span></span><strong className={cn('shrink-0 text-sm tabular-nums', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : '')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</strong></Link>; })}</div>
+          </div>) : (<div className="dashboard-activity rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div><div className="mt-5 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visibleRecent.slice(0, 8).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <div key={tx.id} className="dashboard-activity-row py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div><p className={cn('shrink-0 font-mono text-sm font-bold', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</p></div></div>; })}</div><Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link></div>),
+    payments: <section className="dashboard-payments" aria-label="Upcoming payments">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Due & upcoming</p><h2 className="mt-1 font-headline text-xl font-extrabold">Next payments</h2></div><CalendarClock className="h-5 w-5 shrink-0 text-[var(--ref-primary)]" aria-hidden /></div>
+      <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{paymentRows.length ? formatAmount(upcomingCommitmentTotal) + ' due in the next 30 days, including overdue items.' : 'No outstanding payments due in the next 30 days.'}</p>
+      <div className="mt-4 divide-y divide-[var(--color-border)]">{paymentRows.slice(0, 5).map(item => <Link key={item.id} to={item.to} className="dashboard-payment-row flex items-center justify-between gap-3"><span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(item.name)}</strong><span className={cn('mt-1 block text-xs', item.date < dashboardNow ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]')}>{item.kind} · {formatDate(item.date)}{item.date < dashboardNow ? ' · Overdue' : ''}</span></span><strong className="shrink-0 text-sm tabular-nums">{formatAmount(item.amount)}</strong></Link>)}</div>
+      {paymentRows.length > 5 && <p className="mt-3 text-xs text-[var(--color-muted)]">Showing 5 of {paymentRows.length} payments</p>}
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-[var(--ref-primary)]"><Link to="/subscriptions">Subscriptions →</Link><Link to="/paylater">Pay later →</Link><Link to="/loans">Loans →</Link></div>
+    </section>,
+  };
+
   if (isLoading) {
     return <RequireAuth><PageContainer><div className="h-8 w-56 animate-pulse rounded bg-[var(--ref-surface-container-highest)]" /><div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((key) => <div key={key} className="h-44 animate-pulse rounded-3xl bg-[var(--ref-surface-container-highest)]" />)}</div></PageContainer></RequireAuth>;
   }
 
   return (
     <RequireAuth>
-      <PageContainer className="space-y-4 sm:space-y-4">
+      <PageContainer className="dashboard-page space-y-4 sm:space-y-4"><div className="dashboard-content space-y-4">
         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Decision centre</p>
-            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of {formatAsOf(dashboardNow)}</p>
+          <div className="flex min-w-0 items-center justify-between gap-3 sm:block">
+            <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Decision centre</p>
+            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of {formatAsOf(positionUpdatedAt)}</p></div>
+            {isMobile && <DashboardViewMenu preferences={visiblePreferences} onChange={updateVisiblePreferences} preset={isOriginalView ? 'original' : undefined} onEditLayout={() => setIsEditingLayout(true)} />}
           </div>
-          <div className="flex items-center justify-between gap-2 sm:justify-end">
+          <div className="dashboard-toolbar flex items-center justify-between gap-2 sm:justify-end">
             <BalanceVisibilityToggle className="hidden h-11 w-11 md:inline-flex lg:hidden" />
-            {periods.length > 0 && <PeriodPicker periods={periods} value={selectedPeriodId} onChange={setSelectedPeriodId} ariaLabel="Dashboard period" />}
+            {periods.length > 0 && <PeriodPicker periods={periods} value={selectedPeriodId} onChange={selectPeriod} ariaLabel="Dashboard period" className="dashboard-period-picker" />}
+            {!isMobile && <DashboardViewMenu preferences={visiblePreferences} onChange={updateVisiblePreferences} preset={isOriginalView ? 'original' : undefined} onEditLayout={() => setIsEditingLayout(true)} />}
             <DashboardRecapControl periodId={selectedPeriod?.id} onOpen={setRecapModalPeriodId} />
             <details ref={notificationPopoverRef} className="group relative">
               <summary className="relative grid h-11 w-11 cursor-pointer list-none place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)] [&::-webkit-details-marker]:hidden" aria-label="Dashboard notifications">
@@ -528,7 +663,8 @@ function DashboardPage() {
                   <p className="mt-2 text-sm leading-relaxed text-white/88">{heroMessage}</p>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" onClick={() => setIsTransactionOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#10243e] shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                {/* The hero is dark in both themes; an arbitrary white avoids the global `.dark .bg-white` surface override. */}
+                <button type="button" onClick={() => setIsTransactionOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-full bg-[#ffffff] px-5 py-2.5 text-sm font-bold text-[#10243e] shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                   <span className="grid h-5 w-5 place-items-center rounded-full bg-[#132747] text-white"><Plus className="h-3.5 w-3.5" strokeWidth={3} /></span>
                   Add transaction
                 </button>
@@ -538,12 +674,11 @@ function DashboardPage() {
                 </button>
                 </div>
               </div>
-              <aside className="hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm lg:block" aria-label="Financial summary">
+              <aside className="dashboard-main-balance hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm lg:block" aria-label="Financial summary">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-white/65">At a glance</p><BalanceVisibilityToggle inverted className="h-8 w-8" /></div>
-                <Link to="/accounts" className="mt-3 block"><span className="text-xs text-white/70">Available cash</span><strong className="mt-0.5 block truncate text-xl">{analytics ? formatAmount(analytics.netWorth.liquidAssets) : '—'}</strong></Link>
+                <Link to={mainBalance.to} className="mt-3 block"><span className="text-xs text-white/70">{mainBalance.label}</span><strong className="mt-0.5 block truncate text-xl">{mainBalance.value}</strong></Link>
                 <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-xs">
-                  <Link to="/accounts"><span className="block text-white/60">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatAmount(analytics.netWorth.netWorth) : '—'}</strong></Link>
-                  <Link to="/budget"><span className="block text-white/60">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatAmount(budgetRemaining) : 'Review'}</strong></Link>
+                  {(['netWorth', 'budget', 'cash'] as const).filter(id => id !== preferences.mainMetric).map(id => <Link key={id} to={balanceMetrics[id].to}><span className="block text-white/60">{balanceMetrics[id].label}</span><strong className="mt-1 block truncate">{balanceMetrics[id].value}</strong></Link>)}
                   <div className="group relative min-w-0">
                     <button type="button" className="block w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-describedby="upcoming-commitments-tip">
                       <span className="block truncate text-white/60">Due · 30d</span>
@@ -573,95 +708,21 @@ function DashboardPage() {
 
         <section className="mt-5 space-y-4 md:hidden" aria-label="Today">
           <div className="cash-satin rounded-[1.75rem] bg-[var(--ref-primary-container)] p-5 text-[var(--ref-on-primary-container)]">
-            <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold uppercase tracking-widest opacity-75">Available today</p><BalanceVisibilityToggle className="text-inherit hover:bg-black/5" /></div>
-            <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{analytics ? formatAmount(analytics.netWorth.liquidAssets) : '—'}</p>
+            <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-bold uppercase tracking-widest opacity-75">{preferences.mainMetric === 'cash' ? 'Available today' : mainBalance.label}</p><BalanceVisibilityToggle className="text-inherit hover:bg-black/5" /></div>
+            <p className="mt-2 font-headline text-3xl font-extrabold tracking-tight">{mainBalance.value}</p>
             <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/10 pt-4 text-sm">
-              <Link to="/budget" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Budget left</span><strong className="mt-1 block truncate">{periodIsTracked ? formatAmount(budgetRemaining) : 'Review period'}</strong></Link>
-              <Link to="/accounts" className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">Net worth</span><strong className="mt-1 block truncate">{analytics ? formatAmount(analytics.netWorth.netWorth) : '—'}</strong></Link>
+              {(['budget', 'netWorth', 'cash'] as const).filter(id => id !== preferences.mainMetric).map(id => <Link key={id} to={balanceMetrics[id].to} className="rounded-2xl bg-white/15 p-3"><span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">{balanceMetrics[id].label}</span><strong className="mt-1 block truncate">{balanceMetrics[id].value}</strong></Link>)}
             </div>
           </div>
           {dailyBudget != null && <Link to="/budget" className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-3"><span><span className="block text-xs text-[var(--ref-on-surface-variant)]">Safe daily pace</span><strong className="text-sm">{formatAmount(dailyBudget)} per day</strong></span><ArrowRight className="h-4 w-4 text-[var(--ref-primary)]" /></Link>}
-          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-4">
-            <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="font-headline text-lg font-extrabold">Latest recorded</h2></div><Link to="/transactions" className="rounded-full px-3 py-2 text-xs font-bold text-[var(--ref-primary)]">See all</Link></div>
-            <div className="mt-2 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity in this period.</p> : visibleRecent.slice(0, 4).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="flex items-center justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-sm">{maskAmounts(tx.description)}</strong><span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : 'Unallocated')} · {formatDate(tx.date)}</span></span><strong className={cn('shrink-0 text-sm tabular-nums', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : '')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</strong></Link>; })}</div>
-          </div>
         </section>
 
-        {!isMobile && <div>
-        <section aria-label="Financial pulse" className="grid grid-cols-1 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-5 py-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
-          <div className="min-w-0 pb-4 md:pb-0 md:pr-5">
-            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CircleDollarSign className="h-4 w-4" />Period cash flow <MetricHint>{periodIsTracked ? `${formatAmount(periodIncome)} income minus ${formatAmount(periodExpense)} spending.` : 'Complete period coverage to calculate cash flow.'}</MetricHint></p>
-            <p className={cn('mt-1 break-words text-xl font-bold tabular-nums', periodNet == null ? '' : periodNet >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{periodNet == null ? 'Not tracked' : `${periodNet >= 0 ? '+' : ''}${formatAmount(periodNet)}`}</p>
-          </div>
-          <div className="min-w-0 border-t border-[var(--color-border)] py-4 md:border-l md:border-t-0 md:px-5 md:py-0">
-            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Percent className="h-4 w-4" />Savings rate <MetricHint>{savingsRate == null ? 'Needs tracked income for this period.' : 'Share of period income retained after recorded spending.'}</MetricHint></p>
-            <p className={cn('mt-1 text-xl font-bold tabular-nums', savingsRate != null && savingsRate < 0 ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface)]')}>{savingsRate == null ? '—' : `${savingsRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`}</p>
-          </div>
-          <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:pr-5 xl:border-l xl:px-5 xl:pt-0">
-            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><Flame className="h-4 w-4" />Monthly burn <MetricHint>Average operating spend over the last three months.</MetricHint></p>
-            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics ? formatAmount(analytics.burnRate.grossBurnRate) : '—'}</p>
-          </div>
-          <div className="min-w-0 border-t border-[var(--color-border)] pt-4 md:border-t-0 md:border-l md:pl-5 xl:pt-0">
-            <p className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]"><CalendarClock className="h-4 w-4" />Cash runway <MetricHint>Estimated months of liquid cash at the current monthly burn.</MetricHint></p>
-            <p className="mt-1 break-words text-xl font-bold tabular-nums">{analytics?.runway.isUnbounded ? 'No observed burn' : analytics?.runway.runwayMonths != null ? `${analytics.runway.runwayMonths.toLocaleString('en-US', { maximumFractionDigits: 1 })} months` : '—'}</p>
-          </div>
-        </section>
-
-        <section className="mt-6 grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
-          <NetWorthChart hideAmounts={balancesHidden} className="xl:col-span-2 xl:h-[24rem]" />
-          <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />
-        </section>
-
-        <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7">
-          <AgentOrbActions state="idle" onPrompt={openAgent} />
-        </div>
-
-        <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm xl:col-span-2">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Budget outlook</p>
-                <h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Spending by category</h2>
-              </div>
-              {budgetSummary.totalPlanned > 0 && budgetSummary.isTracked ? <div className="flex flex-col items-end text-right">
-                <div className="flex items-center gap-1">
-                  <p className="text-sm font-bold text-[var(--ref-on-surface)]">{formatAmount(budgetRemaining)} remaining</p>
-                  {budgetOutlook?.total.projectedAmount != null && <div className="group relative">
-                    <button type="button" aria-label="Show budget outlook" title="Show budget outlook" className="rounded-full p-1 text-[var(--ref-outline)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--ref-primary)]"><Info className="h-3.5 w-3.5" /></button>
-                    <div role="tooltip" className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs text-[var(--ref-on-surface)] shadow-lg group-hover:block group-focus-within:block"><p className="font-bold">Budget outlook</p><p className="mt-1 leading-relaxed">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount, formatAmount)}.</p>{dailyBudget != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatAmount(dailyBudget)} daily budget for the remaining days.</p>}<p className="mt-1 text-[var(--ref-on-surface-variant)]">{formatConfidenceLabel(budgetOutlook.confidence)} confidence · based on {budgetOutlook.eligiblePeriodCount} completed periods.</p>{budgetOutlook.patternReview.applied && <><p className="mt-1 text-[var(--ref-on-surface-variant)]">Pattern review applied to {budgetOutlook.patternReview.categoryCount} categor{budgetOutlook.patternReview.categoryCount === 1 ? 'y' : 'ies'}.</p><p className="mt-1 text-[var(--ref-on-surface-variant)]">Flagged purchase{budgetOutlook.patternReview.categoryCount === 1 ? '' : 's'}: {budgetOutlook.categories.filter((row) => row.patternReview).map((row) => `${row.patternReview!.description} (${formatAmount(row.patternReview!.amount)}, ${row.patternReview!.classification.replace('_', ' ')})`).join(', ')}.</p></>}</div>
-                  </div>}
-                </div>
-                {budgetOutlook?.total.projectedAmount != null && <p className="mt-1 text-xs font-semibold text-[var(--ref-on-surface-variant)]">Likely finish {formatForecastRange(budgetOutlook.total.projectedLowAmount, budgetOutlook.total.projectedHighAmount, budgetOutlook.total.projectedAmount, formatAmount)}</p>}
-              </div> : <Link to="/budget" className="text-sm font-bold text-[var(--ref-primary)] hover:underline">{budgetSummary.totalPlanned > 0 ? 'Review coverage' : 'Set a budget'}</Link>}
-            </div>
-            {isPeriodLoading ? <div className="mt-6 h-56 animate-pulse rounded-2xl bg-[var(--ref-surface-container-highest)]" /> : !periodIsTracked ? <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">Budget and activity actuals are <strong>not tracked</strong> for this {selectedPeriod?.coverageStatus === 'skipped' ? 'skipped' : 'incomplete'} period. Empty totals are not a zero-activity result.</div> : planRows.length === 0 ? <div className="mt-6 rounded-2xl bg-[var(--ref-surface-container-low)] p-6 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending for this period yet. Add transactions or set a budget to start planning.</div> : <div className="mt-6 space-y-5">{planRows.map((row) => {
-              const ratio = row.planned > 0 ? row.actual / row.planned : 0;
-              const actualOverBudget = row.planned > 0 && ratio >= 1;
-              const actualNearBudget = row.planned > 0 && ratio >= 0.75;
-              const outlookRange = formatForecastRange(row.outlook?.projectedLowAmount ?? null, row.outlook?.projectedHighAmount ?? null, row.outlook?.projectedAmount ?? null, formatAmount);
-              return <div key={row.outlook?.categoryId ?? row.name}>
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-[var(--ref-on-surface)]">{row.name}</p>
-                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{row.planned > 0 ? `${formatAmount(row.actual)} of ${formatAmount(row.planned)}` : `${formatAmount(row.actual)} recorded`}</p>
-                  </div>
-                  <p className={cn('text-sm font-bold', actualOverBudget ? 'text-[var(--color-danger)]' : actualNearBudget ? 'text-amber-700' : 'text-[var(--ref-primary)]')}>{row.planned > 0 ? `${Math.round(ratio * 100)}%` : formatAmount(row.actual)}</p>
-                </div>
-                <div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={cn('h-full rounded-full', actualOverBudget ? 'bg-[var(--color-danger)]' : actualNearBudget ? 'bg-amber-600' : 'bg-[var(--ref-primary)]')} style={{ width: `${Math.min(100, row.planned > 0 ? ratio * 100 : 100)}%` }} /></div>
-                {outlookRange && <p className={cn('mt-1.5 text-[11px]', row.outlook?.riskStatus === 'at_risk' ? 'text-amber-800' : 'text-[var(--ref-on-surface-variant)]')}>Outlook: likely {outlookRange} by period end{row.outlook?.scheduledRemainingAmount ? ` · includes ${formatAmount(row.outlook.scheduledRemainingAmount)} scheduled` : ''}.</p>}
-              </div>;
-            })}</div>}
-            <Link to="/budget" className="mt-6 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Manage budget <ArrowRight className="h-4 w-4" /></Link>
-          </div>
-          <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Recent activity</p><h2 className="mt-1 font-headline text-xl font-extrabold text-[var(--ref-on-surface)]">Latest recorded</h2></div><ReceiptText className="h-5 w-5 text-[var(--ref-primary)]" /></div><div className="mt-5 divide-y divide-[var(--color-border)]">{visibleRecent.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No active transactions in this period.</p> : visibleRecent.slice(0, 8).map((tx) => { const kind = classifyTx(tx); const category = tx.categoryId == null ? null : categories.find((item) => item.id === tx.categoryId); return <div key={tx.id} className="py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{category?.name ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated')} · {formatDate(tx.date)}</p></div><p className={cn('shrink-0 font-mono text-sm font-bold', kind === 'expense' ? 'text-[var(--color-danger)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{kind === 'expense' ? '-' : kind === 'income' ? '+' : ''}{formatAmount(transactionAmount(tx))}</p></div></div>; })}</div><Link to="/transactions" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--ref-primary)] hover:underline">Open transactions <ArrowRight className="h-4 w-4" /></Link></div>
-        </section>
-
-        <section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(selectedPeriodAsOf)} · reconciliation: {reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active') ? 'recent check on record' : 'no current check on record'}.</p></div></div><Link to="/accounts" className="shrink-0 text-sm font-bold text-[var(--ref-primary)] hover:underline">Review accounts <ArrowRight className="inline h-4 w-4" /></Link></div></div></section>
-
+        <DashboardSections preferences={visiblePreferences} sections={dashboardSections} editing={isEditingLayout} onChange={next => updatePreferences({ ...preferences, sectionOrder: next.sectionOrder, sectionSizes: next.sectionSizes })} onDone={() => setIsEditingLayout(false)} />
+        {!isMobile && (<section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(selectedPeriodAsOf)} · reconciliation: {reconciliation?.sessions.find((session) => session.lifecycleStatus === 'active') ? 'recent check on record' : 'no current check on record'}.</p></div></div><Link to="/accounts" className="shrink-0 text-sm font-bold text-[var(--ref-primary)] hover:underline">Review accounts <ArrowRight className="inline h-4 w-4" /></Link></div></div></section>)}
+        {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
         <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         <MonthlyReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
-        </div>}
-        {isMobile && <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />}
+        </div>
       </PageContainer>
     </RequireAuth>
   );
