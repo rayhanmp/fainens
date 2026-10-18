@@ -75,6 +75,92 @@
 .dashboard-panel[data-section='pulse'][data-size='wide'] > section > div { border: 0; padding: 12px; }
 .dashboard-panel[data-section='pulse'][data-size='wide'] > section > div:nth-child(n+3) { border-top: 1px solid var(--color-border); }
 .dashboard-panel[data-section='pulse'][data-size='wide'] > section > div:nth-child(2n) { border-left: 1px solid var(--color-border); }
+/*
+ * Budget health: liquid-glass tiles on the ordinary light card. Each category is a glass tile sized by its plan,
+ * filled from the bottom by a translucent liquid (spent); a dashed line marks the likely finish. The glass refracts
+ * a soft pastel backdrop through an SVG displacement filter (Chromium); other engines fall back to blur + saturate.
+ */
+/* The soft colour wash sits on the card itself, not in an inner box: it is what the glass tiles refract. */
+.dashboard-budget { display: flex; flex-direction: column; position: relative; background:
+  radial-gradient(60% 46% at 12% 48%, color-mix(in srgb, var(--ref-primary-container) 14%, transparent), transparent 72%),
+  radial-gradient(50% 42% at 92% 70%, color-mix(in srgb, var(--ref-primary) 10%, transparent), transparent 72%),
+  var(--ref-surface-container-lowest); }
+.dashboard-budget-notice { margin-top: 20px; padding: 16px; border-radius: 16px; background: rgba(255,255,255,.5); font-size: 13px; line-height: 1.5; color: var(--ref-on-surface-variant); }
+.dark .dashboard-budget-notice { background: rgba(255,255,255,.07); }
+.dashboard-budget-map { position: relative; flex: 1; min-height: 260px; margin: 16px -2px 0; }
+/* Liquids use the dashboard's own tokens: the brand blue for spending, the warning and danger tokens for status, all translucent. */
+.dashboard-budget-tile { position: absolute; border-radius: 16px; outline: none; --liquid-top: color-mix(in srgb, var(--ref-primary) 55%, var(--ref-primary-container)); --liquid-bottom: color-mix(in srgb, var(--ref-primary) 86%, #000); --liquid-glow: color-mix(in srgb, var(--ref-primary-container) 24%, transparent); --status: var(--ref-primary); --lx: -999px; --ly: -999px; --chop: 1; --header: 78px; --label-zone: 96px; transition: box-shadow .18s, transform .18s; }
+.dashboard-budget-tile[data-tone='warning'] { --liquid-top: var(--color-warning); --liquid-bottom: color-mix(in srgb, var(--color-warning) 78%, #000); --liquid-glow: color-mix(in srgb, var(--color-warning) 22%, transparent); --status: var(--color-warning); }
+.dashboard-budget-tile[data-tone='danger'] { --liquid-top: var(--color-danger); --liquid-bottom: color-mix(in srgb, var(--color-danger) 78%, #000); --liquid-glow: color-mix(in srgb, var(--color-danger) 22%, transparent); --status: var(--color-danger); }
+.dashboard-budget-tile:hover, .dashboard-budget-tile:focus-visible { z-index: 2; box-shadow: 0 0 0 1.5px rgba(255,255,255,.9), 0 10px 26px -14px var(--liquid-glow); }
+/* The liquid layer sits under the glass so the lens bends it; it is clipped to the tile's rounded shape. */
+.dashboard-budget-tile-liquid { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.dashboard-budget-tile-liquid > i { position: absolute; left: 0; right: 0; display: block; }
+/*
+ * The glass itself, CSS only: a nearly clear centre over the liquid, a bevelled rim (bright where light enters top-left,
+ * dim bottom-right), a thin inner band that reads as the refracting edge, and a faint warm/cool fringe on the sides.
+ */
+/* Clean glass edge: one bright rim inside, a hairline outside, nothing else. */
+.dashboard-budget-tile-body { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: rgba(255,255,255,.06); box-shadow:
+  inset 0 0 0 1px rgba(255,255,255,.75),
+  inset 0 1px 0 rgba(255,255,255,.95),
+  0 0 0 1px rgba(16,43,77,.06),
+  0 1px 2px rgba(16,43,77,.05);
+  backdrop-filter: blur(.5px) saturate(1.15); pointer-events: none; }
+/* Cursor-reactive specular: one light source shared by every tile, so the glow walks across tile edges. */
+.dashboard-budget-tile-shine { position: absolute; inset: 0; z-index: 1; background: radial-gradient(220px circle at var(--lx) var(--ly), rgba(255,255,255,.13), rgba(255,255,255,.04) 45%, transparent 72%); opacity: 0; transition: opacity .3s; }
+.dashboard-budget-map[data-lit='true'] .dashboard-budget-tile-shine { opacity: 1; }
+.dark .dashboard-budget-tile-shine { background: radial-gradient(220px circle at var(--lx) var(--ly), rgba(255,255,255,.09), rgba(255,255,255,.03) 45%, transparent 72%); }
+.dark .dashboard-budget-tile-body { background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16), inset 0 1px 0 rgba(255,255,255,.3), 0 0 0 1px rgba(0,0,0,.25); }
+/* The label strip of the glass is frosted: invisible over an empty tile, pale over liquid, so ink stays readable even on a full tile. */
+.dashboard-budget-tile-body::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: var(--header); background: linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.14) 70%, rgba(255,255,255,0) 100%); }
+.dark .dashboard-budget-tile-body::after { background: linear-gradient(180deg, rgba(15,23,42,.22) 0%, rgba(15,23,42,.14) 70%, rgba(15,23,42,0) 100%); }
+/* Edge highlights: a bright rim where light enters (top-left) and a faint one where it leaves (bottom-right). */
+.dashboard-budget-tile-body::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,.3) 0%, rgba(255,255,255,.06) 20%, transparent 36%); }
+.dark .dashboard-budget-tile-body::before { background: linear-gradient(135deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.03) 20%, transparent 36%); }
+.dashboard-budget-tile-fill { bottom: 0; background: linear-gradient(180deg, var(--liquid-top), var(--liquid-bottom)); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); transition: height .6s cubic-bezier(.2,.7,.2,1); }
+.dashboard-budget-tile-fill::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255,255,255,.22), transparent 35%, transparent 70%, rgba(255,255,255,.12)); }
+.dashboard-budget-tile-fill[data-empty='true'] { box-shadow: none; }
+.dashboard-budget-tile-fill[data-empty='true'] .dashboard-budget-tile-wave-wrap { display: none; }
+/* The liquid's surface: a wave two patterns wide that drifts sideways; --chop stretches it when the liquid is agitated. */
+.dashboard-budget-tile-wave-wrap { position: absolute; left: 0; right: 0; top: -5px; height: 6px; transform: scaleY(var(--chop)); transform-origin: 50% 100%; will-change: transform; }
+.dashboard-budget-tile-wave { position: absolute; left: 0; top: 0; width: 200%; height: 100%; color: var(--liquid-top); animation: dashboard-budget-wave 9s linear infinite; }
+@keyframes dashboard-budget-wave { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .dashboard-budget-tile-wave { animation: none; } }
+/* The likely-finish mark: a hairline of short dashes above the glass, inset from the rounded edges. */
+.dashboard-budget-tile-forecast { position: absolute; left: 6px; right: 6px; height: 0; border-top: 1px dashed color-mix(in srgb, var(--ref-on-surface) 45%, transparent); pointer-events: none; }
+.dark .dashboard-budget-tile-forecast { border-top-color: rgba(255,255,255,.5); }
+/* Labels wrap rather than vanish: the name may take two lines, the amounts as many as they need. */
+/* Labels: ink on the glass above the liquid; white inside the liquid when it is deep enough; white with a dark halo when they straddle the surface. No bands or boxes. */
+.dashboard-budget-tile-label { position: absolute; inset: 0; display: flex; align-items: flex-start; padding: 10px 11px; min-width: 0; overflow: hidden; color: var(--ref-on-surface); pointer-events: none; }
+.dashboard-budget-tile-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; max-width: 100%; }
+.dashboard-budget-tile-label b { display: block; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.25; }
+/* Names wrap at spaces or a hyphenation point, never mid-word; two lines at most. Amounts wrap at spaces only, never inside a number. */
+.dashboard-budget-tile-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-width: 0; overflow: hidden; hyphens: auto; overflow-wrap: normal; }
+.dashboard-budget-tile-label em { font-style: normal; font-size: 22px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.dashboard-budget-tile-label small { font-size: 11.5px; font-weight: 500; line-height: 1.3; overflow-wrap: normal; color: color-mix(in srgb, var(--ref-on-surface) 88%, transparent); }
+/* The copy clipped to the liquid is white, so a letter dipping into the liquid changes colour at the waterline. */
+.dashboard-budget-tile-label[data-on-liquid], .dashboard-budget-tile-label[data-on-liquid] small { color: #fff; }
+.dark .dashboard-budget-tile-label { color: #fff; }
+.dark .dashboard-budget-tile-label small { color: rgba(255,255,255,.85); }
+.dashboard-budget-tile[data-narrow='true'] .dashboard-budget-tile-label { padding: 8px 9px; }
+.dashboard-budget-tile[data-narrow='true'] .dashboard-budget-tile-label b { font-size: 11.5px; }
+.dashboard-budget-tile[data-narrow='true'] .dashboard-budget-tile-label em { font-size: 18px; }
+.dashboard-budget-tile[data-narrow='true'] .dashboard-budget-tile-label small { font-size: 10.5px; }
+.dashboard-budget-tile[data-level='name'] { --label-zone: 40px; }
+.dashboard-budget-tile[data-level='name'] .dashboard-budget-tile-label { padding: 7px 9px; }
+.dashboard-budget-tile[data-level='name'] .dashboard-budget-tile-label b { font-size: 11px; }
+.dashboard-budget-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--color-border); font-size: 11px; color: var(--ref-on-surface-variant); }
+.dashboard-budget-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dashboard-budget-legend i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; }
+.dashboard-budget-legend i[data-key='spent'] { height: 10px; border-radius: 3px; background: linear-gradient(180deg, color-mix(in srgb, var(--ref-primary) 55%, var(--ref-primary-container)), color-mix(in srgb, var(--ref-primary) 86%, #000)); }
+.dashboard-budget-legend i[data-key='forecast'] { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed color-mix(in srgb, var(--ref-on-surface) 62%, transparent); }
+.dashboard-budget-legend i[data-key='tile'] { width: 12px; height: 10px; border-radius: 3px; border: 1.5px solid color-mix(in srgb, var(--ref-on-surface) 45%, transparent); background: transparent; }
+.dashboard-budget-legend-note { margin-left: auto; color: var(--ref-outline); }
+.dashboard-budget-status { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 11px; font-weight: 500; color: var(--ref-on-surface-variant); }
+.dashboard-budget-status svg { color: var(--color-warning); }
+.dashboard-budget-status[data-tone='danger'] svg { color: var(--color-danger); }
+@media(max-width:640px) { .dashboard-budget-map { min-height: 300px; } }
 .dashboard-sections { display: grid; gap: 24px; }
 .dashboard-section-row { display: grid; grid-template-columns: minmax(0,1fr); gap: 20px; align-items: stretch; }
 .dashboard-panel { min-width: 0; }
