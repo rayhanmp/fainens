@@ -22,6 +22,11 @@ import { prepareDomainReversal, insertDomainReversalSync } from "./domain-revers
 
 const CONTROL_ACCOUNT_KEY = "reimbursements-receivable";
 const ACTIVE_CLAIM_STATUSES = ["approved", "partially_paid", "settled"] as const;
+/**
+ * Claims that still hold their source expense. A written-off claim keeps whatever was received
+ * reclassified out of expense, so its sources cannot be claimed a second time.
+ */
+const SOURCE_CLAIMING_STATUSES = [...ACTIVE_CLAIM_STATUSES, "written_off"] as const;
 
 export type ReimbursementSourceInput = {
   sourceTransactionId: number;
@@ -169,7 +174,7 @@ async function assertSourceAvailable(source: ReimbursementSourceInput, dbLike: a
   const [already] = await dbLike.select({ value: sql<number>`coalesce(sum(${reimbursementClaimSources.amount}), 0)` })
     .from(reimbursementClaimSources)
     .innerJoin(reimbursementClaims, eq(reimbursementClaimSources.claimId, reimbursementClaims.id))
-    .where(and(eq(reimbursementClaimSources.expenseLineId, source.expenseLineId), inArray(reimbursementClaims.status, [...ACTIVE_CLAIM_STATUSES])));
+    .where(and(eq(reimbursementClaimSources.expenseLineId, source.expenseLineId), inArray(reimbursementClaims.status, [...SOURCE_CLAIMING_STATUSES])));
   if (Number(already?.value ?? 0) + source.amount > line.debit - line.credit) {
     throw new ReimbursementError("Reimbursement allocation exceeds the remaining expense on its source line", 409);
   }
@@ -188,7 +193,7 @@ async function assertSourceAvailable(source: ReimbursementSourceInput, dbLike: a
     .where(and(
       eq(reimbursementClaimSources.sourceTransactionId, source.sourceTransactionId),
       eq(reimbursementClaimSources.categoryId, source.categoryId),
-      inArray(reimbursementClaims.status, [...ACTIVE_CLAIM_STATUSES]),
+      inArray(reimbursementClaims.status, [...SOURCE_CLAIMING_STATUSES]),
     ));
   if (Number(categoryAlready?.value ?? 0) + source.amount > category.amount) {
     throw new ReimbursementError("Reimbursement allocation exceeds the remaining amount in its source category", 409);

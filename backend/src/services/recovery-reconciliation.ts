@@ -119,7 +119,9 @@ function adjustmentLines(items: CalculatedRecoveryItem[], equityAccountId: numbe
   const debitTotal = lines.reduce((total, line) => total + line.debit, 0);
   const creditTotal = lines.reduce((total, line) => total + line.credit, 0);
   const difference = debitTotal - creditTotal;
-  if (difference === 0) return [];
+  // Offsetting account differences (e.g. an unrecorded move between two wallets) still need posting;
+  // only the equity plug is unnecessary when they already balance.
+  if (difference === 0) return lines;
   lines.push({
     accountId: equityAccountId,
     debit: difference < 0 ? -difference : 0,

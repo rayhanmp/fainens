@@ -24,10 +24,10 @@ import {
   wishlist,
 } from "../db/schema";
 import { validateJournalLines, type ValidatedJournalLine } from "./journal-validation";
-import { getIntrinsicTransactionProtectionReasons } from "./transaction-mutation-policy";
+import { getIntrinsicTransactionProtectionReasons, isGenericallyReversibleType } from "./transaction-mutation-policy";
 import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
 import { bumpFinancialRevisionSync } from "./financial-revision";
-import { assertJournalPeriodOpen, findPeriodForDate, inclusivePeriodEnd } from "./period-locking";
+import { assertJournalPeriodOpen, findPeriodForDate, periodContainsDate } from "./period-locking";
 
 export class TransactionMutationError extends Error {
   constructor(message: string, public readonly statusCode: number) {
@@ -57,7 +57,7 @@ function findPeriodInCandidates(
   candidates: Array<{ id: number; startDate: number; endDate: number; status: string }>,
 ): { id: number; status: string } | null {
   const containing = candidates
-    .filter((period) => dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate)))
+    .filter((period) => periodContainsDate(period, dateMs))
     .sort((a, b) => Number(b.startDate) - Number(a.startDate))[0];
   return containing ? { id: containing.id, status: containing.status } : null;
 }
@@ -73,7 +73,60 @@ function assertGenericMutationAllowed(tx: any, executor: any): void {
     .limit(1)
     .all()[0];
   if (incomingLink) reasons.push("linked transaction chain");
+  if (tx.reversalOfTxId != null) reasons.push(`reversal of transaction ${tx.reversalOfTxId}`);
+  reasons.push(...workflowLinkReasons(tx, executor));
 
+  if (reasons.length > 0) {
+    throw new TransactionMutationError(
+      `Transaction ${tx.id} is domain-owned (${reasons.join(", ")}); use the owning workflow to reverse or change it`,
+      409,
+    );
+  }
+}
+
+/**
+ * Checks for the generic reverse endpoint. Returns the posted child entries (such as a transfer's
+ * fee) that must be reversed together with the transaction; refuses anything a workflow owns.
+ */
+export function assertGenericReversalAllowed(tx: any, executor: any): { childIds: number[] } {
+  assertNotReallocated(tx.id, executor);
+  const reasons: string[] = [];
+  if (!isGenericallyReversibleType(tx.txType)) reasons.push(`type ${tx.txType}`);
+  if (tx.subscriptionId != null) reasons.push("subscription occurrence");
+  if (tx.reversalOfTxId != null) reasons.push(`reversal of transaction ${tx.reversalOfTxId}`);
+  reasons.push(...workflowLinkReasons(tx, executor));
+
+  const childIds: number[] = [];
+  const children = executor
+    .select({ id: transactions.id, txType: transactions.txType, status: transactions.status, subscriptionId: transactions.subscriptionId, reversalOfTxId: transactions.reversalOfTxId })
+    .from(transactions)
+    .where(eq(transactions.linkedTxId, tx.id))
+    .all();
+  for (const child of children) {
+    if (child.status === "reversed") continue;
+    const childReasons = [
+      ...(isGenericallyReversibleType(child.txType) && child.subscriptionId == null && child.reversalOfTxId == null ? [] : [`linked ${child.txType} transaction ${child.id}`]),
+      ...workflowLinkReasons(child, executor),
+    ];
+    if (child.status !== "posted" || childReasons.length > 0) reasons.push(...(childReasons.length ? childReasons : [`linked transaction ${child.id} is ${child.status}`]));
+    else {
+      assertNotReallocated(child.id, executor);
+      childIds.push(child.id);
+    }
+  }
+
+  if (reasons.length > 0) {
+    throw new TransactionMutationError(
+      `Transaction ${tx.id} is domain-owned (${reasons.join(", ")}); use the owning workflow to reverse or change it`,
+      409,
+    );
+  }
+  return { childIds };
+}
+
+/** Workflow records (loans, PayLater, wishlist, reimbursements) that own or reference a transaction. */
+function workflowLinkReasons(tx: { id: number }, executor: any): string[] {
+  const reasons: string[] = [];
   const loan = executor
     .select({ id: loans.id })
     .from(loans)
@@ -116,7 +169,7 @@ function assertGenericMutationAllowed(tx: any, executor: any): void {
     .from(reimbursementClaimSources)
     .innerJoin(reimbursementClaims, eq(reimbursementClaimSources.claimId, reimbursementClaims.id))
     .where(or(
-      and(eq(reimbursementClaimSources.sourceTransactionId, tx.id), inArray(reimbursementClaims.status, ["approved", "partially_paid", "settled"])),
+      and(eq(reimbursementClaimSources.sourceTransactionId, tx.id), inArray(reimbursementClaims.status, ["approved", "partially_paid", "settled", "written_off"])),
       eq(reimbursementClaimSources.recognitionTransactionId, tx.id),
     ))
     .limit(1)
@@ -141,13 +194,7 @@ function assertGenericMutationAllowed(tx: any, executor: any): void {
     .limit(1)
     .all()[0];
   if (reimbursementReceipt) reasons.push(`reimbursement receipt ${reimbursementReceipt.id}`);
-
-  if (reasons.length > 0) {
-    throw new TransactionMutationError(
-      `Transaction ${tx.id} is domain-owned (${reasons.join(", ")}); use the owning workflow to reverse or change it`,
-      409,
-    );
-  }
+  return reasons;
 }
 
 export interface UpdateTransactionInput {
@@ -634,11 +681,16 @@ export async function importTransactionsAtomically(input: {
     if (walletId == null || !walletById.has(walletId)) {
       throw new TransactionMutationError(`Row ${index + 1} has no valid import account`, 400);
     }
-    const period = row.periodId != null
-      ? periods.find((candidate) => candidate.id === row.periodId) ?? null
-      : findPeriodInCandidates(dateMs, periods);
-    if (row.periodId != null && !period) {
-      throw new TransactionMutationError(`Row ${index + 1} references an unknown period`, 400);
+    // The row's date decides its period; an explicit periodId may only confirm it, never move a
+    // backdated row out of a closed period into an open one.
+    const period = findPeriodInCandidates(dateMs, periods);
+    if (row.periodId != null) {
+      if (!periods.some((candidate) => candidate.id === row.periodId)) {
+        throw new TransactionMutationError(`Row ${index + 1} references an unknown period`, 400);
+      }
+      if (period?.id !== row.periodId) {
+        throw new TransactionMutationError(`Row ${index + 1} is dated outside the selected period`, 400);
+      }
     }
     if (period?.status === "closed") {
       throw new TransactionMutationError(`Period ${period.id} is closed; reopen it before importing transactions`, 409);
@@ -648,7 +700,7 @@ export async function importTransactionsAtomically(input: {
     if (row.categoryId != null && !category) {
       throw new TransactionMutationError(`Row ${index + 1} references an unknown category`, 400);
     }
-    if (row.type === "income" && row.categoryId != null) {
+    if (signedAmount < 0 && row.categoryId != null) {
       throw new TransactionMutationError(`Row ${index + 1} cannot assign an expense category to income`, 400);
     }
     const wallet = walletById.get(walletId)!;

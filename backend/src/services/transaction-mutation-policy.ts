@@ -5,6 +5,18 @@ const USER_MANAGED_TRANSACTION_TYPES = new Set([
   "simple_transfer",
 ]);
 
+/**
+ * Types the generic reverse endpoint may correct: entries the user made directly, including plain
+ * expense/income rows from imports and approvals. Everything else belongs to a workflow (loans,
+ * PayLater, salary, subscriptions, reimbursements, split bills, reconciliations, reversals) and
+ * must be corrected there so its subledger stays in step with the ledger.
+ */
+const GENERICALLY_REVERSIBLE_TYPES = new Set([...USER_MANAGED_TRANSACTION_TYPES, "expense", "income"]);
+
+export function isGenericallyReversibleType(txType: string): boolean {
+  return GENERICALLY_REVERSIBLE_TYPES.has(txType);
+}
+
 export function getIntrinsicTransactionProtectionReasons(tx: {
   txType: string;
   status?: string | null;
@@ -13,6 +25,8 @@ export function getIntrinsicTransactionProtectionReasons(tx: {
 }): string[] {
   const reasons: string[] = [];
   if (tx.status === "posted") reasons.push("posted journal (use reversal)");
+  // A reversed journal is history: changing or deleting it would orphan its reversal and rewrite balances.
+  if (tx.status === "reversed") reasons.push("reversed journal");
   if (!USER_MANAGED_TRANSACTION_TYPES.has(tx.txType)) reasons.push(`type ${tx.txType}`);
   if (tx.subscriptionId != null) reasons.push("subscription occurrence");
   if (tx.linkedTxId != null) reasons.push("linked transaction chain");

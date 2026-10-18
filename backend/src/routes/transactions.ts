@@ -10,12 +10,14 @@ import { db } from "../db/client";
 import { transactions, transactionLines, transactionTags, transactionCategoryAllocations, tags, accounts, categories, auditLogs, reimbursementClaimSources, reimbursementClaims, salaryPeriods } from "../db/schema";
 import {
   createJournalEntry,
+  buildSimpleJournalInput,
   createSimpleTransaction,
   insertPreparedJournalEntrySync,
   prepareJournalEntry,
 } from "../services/ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import {
+  assertGenericReversalAllowed,
   deleteTransactionsAtomically,
   importTransactionsAtomically,
   TransactionMutationError,
@@ -151,6 +153,12 @@ const simpleTransactionBodySchema = z.object({
   tagIds: z.array(z.number().int().positive()).optional(),
   walletAccountId: z.number().int().positive(),
   toWalletAccountId: z.number().int().positive().nullable().optional(),
+  /** A transfer's admin fee, saved in the same write as the transfer and linked to it. */
+  transferFee: z.object({
+    amountCents: z.number().int().positive(),
+    paidBy: z.enum(["sender", "recipient"]),
+    categoryId: z.number().int().positive().nullable().optional(),
+  }).optional(),
   linkedTxId: z.number().int().positive().nullable().optional(),
   originLat: z.number().nullable().optional(),
   originLng: z.number().nullable().optional(),
@@ -188,7 +196,7 @@ const transactionUpdateBodySchema = z.object({
   tagIds: z.array(z.number().int().positive()).optional(),
   lines: z.array(journalLineBodySchema).min(2).optional(),
 }).passthrough();
-const transactionMutationResponseSchema = z.object({ id: z.number().int(), transactionId: z.number().int().optional() }).passthrough();
+const transactionMutationResponseSchema = z.object({ id: z.number().int(), transactionId: z.number().int().optional(), feeTransactionId: z.number().int().optional() }).passthrough();
 const bulkDeleteResponseSchema = z.object({ success: z.literal(true), deletedCount: z.number().int(), message: z.string() }).passthrough();
 const importPreviewBodySchema = z.object({
   csvText: z.string().min(1).max(2_000_000), mappings: z.record(z.string(), z.string()).default({}), hasHeader: z.boolean().default(true), accountId: z.number().int().positive(), dateFormat: z.string().min(1).max(40),
@@ -1158,6 +1166,7 @@ RULES:
           tagIds?: number[];
           walletAccountId: number;
           toWalletAccountId?: number | null;
+          transferFee?: { amountCents: number; paidBy: "sender" | "recipient"; categoryId?: number | null };
           linkedTxId?: number | null;
           originLat?: number | null;
           originLng?: number | null;
@@ -1171,7 +1180,7 @@ RULES:
 
     try {
       if ("kind" in body) {
-        const { kind, amountCents, description, notes, place, date, categoryId, tagIds, walletAccountId, toWalletAccountId, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
+        const { kind, amountCents, description, notes, place, date, categoryId, tagIds, walletAccountId, toWalletAccountId, transferFee, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
         if (subscriptionId !== undefined) {
           return reply.code(409).send({
             error: "Subscription payments must confirm a concrete renewal occurrence",
@@ -1187,8 +1196,8 @@ RULES:
             reply.code(400).send({ error: "toWalletAccountId is required for transfers" });
             return;
           }
-          const txResult = await createSimpleTransaction({
-            kind: "transfer",
+          const transferInput = {
+            kind: "transfer" as const,
             amountCents,
             description,
             notes,
@@ -1200,9 +1209,40 @@ RULES:
             toWalletAccountId,
             linkedTxId,
             tagIds,
+          };
+          if (!transferFee) {
+            const txResult = await createSimpleTransaction(transferInput);
+            reply.code(201).send({ id: txResult.transactionId, ...txResult });
+            return;
+          }
+          // Transfer and fee commit together, so a failed fee can't leave a fee-less transfer behind
+          // (and a retry can't create a second transfer).
+          const preparedTransfer = await prepareJournalEntry(await buildSimpleJournalInput(transferInput), db);
+          const feeDescription = `Transfer fee: ${description || "Transfer"}`;
+          const preparedFee = await prepareJournalEntry(await buildSimpleJournalInput({
+            kind: "expense",
+            amountCents: transferFee.amountCents,
+            description: feeDescription,
+            place,
+            date: new Date(date),
+            periodId: autoPeriodId,
+            categoryId: transferFee.categoryId ?? null,
+            walletAccountId: transferFee.paidBy === "sender" ? walletAccountId : toWalletAccountId,
+          }), db);
+          const ids = db.transaction((tx) => {
+            const transferId = insertPreparedJournalEntrySync(tx, preparedTransfer);
+            preparedFee.transactionValues.linkedTxId = transferId;
+            preparedFee.transactionValues.notes = `Admin fee for transfer #${transferId}. ${transferFee.paidBy === "sender" ? "Fee paid by sender" : "Fee deducted from recipient"}`;
+            const feeId = insertPreparedJournalEntrySync(tx, preparedFee);
+            return { transferId, feeId };
           });
-
-          reply.code(201).send({ id: txResult.transactionId, ...txResult });
+          await invalidateOnTransactionMutation({
+            transactionId: ids.transferId,
+            affectedAccountIds: [...new Set([...preparedTransfer.accountIds, ...preparedFee.accountIds])],
+            affectedPeriodIds: [preparedTransfer.periodId, preparedFee.periodId].filter((id): id is number => id != null),
+            revisionBumped: true,
+          });
+          reply.code(201).send({ id: ids.transferId, transactionId: ids.transferId, feeTransactionId: ids.feeId });
           return;
         }
         const txResult = await createSimpleTransaction({
@@ -1278,90 +1318,93 @@ RULES:
       const [original] = await db.select().from(transactions)
         .where(eq(transactions.id, transactionId)).limit(1);
       if (!original) return reply.code(404).send({ error: "Transaction not found" });
-      if ([
-        "salary_income", "salary_correction", "subscription_renewal", "subscription_correction",
-        "paylater_recognition", "paylater_interest", "paylater_settlement",
-        "loan_lending", "loan_payment", "loan_writeoff", "split_bill_lent", "split_bill_borrowed",
-        "historical_recovery_adjustment",
-        "balance_adjustment",
-      ].includes(original.txType)) {
-        return reply.code(409).send({
-          error: "This domain-owned transaction must use its dedicated correction workflow",
-        });
-      }
       if (original.status !== "posted") {
         return reply.code(409).send({ error: "Only a posted transaction can be reversed" });
       }
+      // Only entries the user made directly; workflow-owned ones use their own correction flow.
+      const { childIds } = assertGenericReversalAllowed(original, db);
       const [existingReversal] = await db.select({ id: transactions.id })
         .from(transactions).where(eq(transactions.reversalOfTxId, transactionId)).limit(1);
       if (existingReversal) {
         return reply.code(409).send({ error: `Transaction already has reversal ${existingReversal.id}` });
       }
-      const originalLines = await db.select().from(transactionLines)
-        .where(eq(transactionLines.transactionId, transactionId));
-      if (originalLines.length < 2) return reply.code(409).send({ error: "Cannot reverse an incomplete journal" });
-      const originalAllocations = await db.select({
-        categoryId: transactionCategoryAllocations.categoryId,
-        amount: transactionCategoryAllocations.amount,
-      }).from(transactionCategoryAllocations)
-        .where(eq(transactionCategoryAllocations.transactionId, transactionId));
+      const targets = [original, ...(childIds.length ? await db.select().from(transactions).where(inArray(transactions.id, childIds)) : [])];
       const reversalDate = Date.now();
       const reversalPeriodId = await findPeriodIdForDate(reversalDate);
-      const prepared = await prepareJournalEntry({
-        date: reversalDate,
-        description: `Reversal: ${original.description}`,
-        reference: original.reference ? `REVERSAL:${original.reference}` : `REVERSAL:${original.id}`,
-        notes: `Reverses posted transaction #${original.id}`,
-        txType: "reversal",
-        periodId: reversalPeriodId,
-        reversalOfTxId: original.id,
-        categoryId: original.categoryId,
-        ...(originalAllocations.length > 0 ? {
-          categoryAllocations: originalAllocations.map((allocation) => ({
-            categoryId: allocation.categoryId,
-            amount: -allocation.amount,
+      const preparedEntries: Array<{ target: typeof original; prepared: Awaited<ReturnType<typeof prepareJournalEntry>> }> = [];
+      for (const target of targets) {
+        const targetLines = await db.select().from(transactionLines)
+          .where(eq(transactionLines.transactionId, target.id));
+        if (targetLines.length < 2) return reply.code(409).send({ error: `Cannot reverse incomplete journal ${target.id}` });
+        const targetAllocations = await db.select({
+          categoryId: transactionCategoryAllocations.categoryId,
+          amount: transactionCategoryAllocations.amount,
+        }).from(transactionCategoryAllocations)
+          .where(eq(transactionCategoryAllocations.transactionId, target.id));
+        preparedEntries.push({ target, prepared: await prepareJournalEntry({
+          date: reversalDate,
+          description: `Reversal: ${target.description}`,
+          reference: target.reference ? `REVERSAL:${target.reference}` : `REVERSAL:${target.id}`,
+          notes: `Reverses posted transaction #${target.id}`,
+          txType: "reversal",
+          periodId: reversalPeriodId,
+          reversalOfTxId: target.id,
+          categoryId: target.categoryId,
+          ...(targetAllocations.length > 0 ? {
+            categoryAllocations: targetAllocations.map((allocation) => ({
+              categoryId: allocation.categoryId,
+              amount: -allocation.amount,
+            })),
+          } : {}),
+          lines: targetLines.map((line) => ({
+            accountId: line.accountId,
+            debit: line.credit,
+            credit: line.debit,
+            description: `Reversal of ${line.description ?? target.description}`,
+            cashFlowClass: line.cashFlowClass as "operating" | "investing" | "financing" | "transfer" | "recovery" | null,
           })),
-        } : {}),
-        lines: originalLines.map((line) => ({
-          accountId: line.accountId,
-          debit: line.credit,
-          credit: line.debit,
-          description: `Reversal of ${line.description ?? original.description}`,
-          cashFlowClass: line.cashFlowClass as "operating" | "investing" | "financing" | "transfer" | "recovery" | null,
-        })),
-      }, db);
+        }, db) });
+      }
 
       const result = db.transaction((tx) => {
-        assertNotReallocated(transactionId, tx);
         const fresh = tx.select().from(transactions)
           .where(eq(transactions.id, transactionId)).limit(1).all()[0];
         if (!fresh || fresh.status !== "posted") throw new Error("Transaction was changed; retry reversal");
-        const [already] = tx.select({ id: transactions.id }).from(transactions)
-          .where(eq(transactions.reversalOfTxId, transactionId)).limit(1).all();
-        if (already) throw new Error(`Transaction already has reversal ${already.id}`);
-        const reversalId = insertPreparedJournalEntrySync(tx, prepared);
-        const updated = tx.update(transactions).set({ status: "reversed" })
-          .where(and(eq(transactions.id, transactionId), eq(transactions.status, "posted"))).run();
-        if (updated.changes !== 1) throw new Error("Failed to mark original transaction reversed");
-        tx.insert(auditLogs).values({
-          entityType: "transaction",
-          entityId: transactionId,
-          action: "update",
-          beforeSnapshot: Buffer.from(JSON.stringify(fresh)),
-          afterSnapshot: Buffer.from(JSON.stringify({ ...fresh, status: "reversed", reversalTransactionId: reversalId })),
-        }).run();
+        const recheck = assertGenericReversalAllowed(fresh, tx);
+        if (recheck.childIds.join(",") !== childIds.join(",")) throw new Error("Linked transactions changed; retry reversal");
+        let reversalId = 0;
+        for (const { target, prepared } of preparedEntries) {
+          const current = target.id === transactionId ? fresh : tx.select().from(transactions).where(eq(transactions.id, target.id)).limit(1).all()[0];
+          if (!current || current.status !== "posted") throw new Error(`Transaction ${target.id} was changed; retry reversal`);
+          const [already] = tx.select({ id: transactions.id }).from(transactions)
+            .where(eq(transactions.reversalOfTxId, target.id)).limit(1).all();
+          if (already) throw new Error(`Transaction ${target.id} already has reversal ${already.id}`);
+          const insertedId = insertPreparedJournalEntrySync(tx, prepared);
+          if (target.id === transactionId) reversalId = insertedId;
+          const updated = tx.update(transactions).set({ status: "reversed" })
+            .where(and(eq(transactions.id, target.id), eq(transactions.status, "posted"))).run();
+          if (updated.changes !== 1) throw new Error(`Failed to mark transaction ${target.id} reversed`);
+          tx.insert(auditLogs).values({
+            entityType: "transaction",
+            entityId: target.id,
+            action: "update",
+            beforeSnapshot: Buffer.from(JSON.stringify(current)),
+            afterSnapshot: Buffer.from(JSON.stringify({ ...current, status: "reversed", reversalTransactionId: insertedId })),
+          }).run();
+        }
         return reversalId;
       });
       await invalidateOnTransactionMutation({
         transactionId: result,
-        affectedAccountIds: prepared.accountIds,
-        affectedPeriodIds: [original.periodId, reversalPeriodId].filter((id): id is number => id != null),
+        affectedAccountIds: [...new Set(preparedEntries.flatMap(({ prepared }) => prepared.accountIds))],
+        affectedPeriodIds: [...new Set([...targets.map((target) => target.periodId), reversalPeriodId].filter((id): id is number => id != null))],
         revisionBumped: true,
       });
-      return reply.code(201).send({ id: result, reversalOfTxId: transactionId });
+      return reply.code(201).send({ id: result, reversalOfTxId: transactionId, reversedLinkedTransactionIds: childIds });
     } catch (err) {
       fastify.log.error(err);
-      return reply.code(409).send({ error: err instanceof Error ? err.message : "Failed to reverse transaction" });
+      const status = err instanceof TransactionMutationError && (err.statusCode === 400 || err.statusCode === 404) ? err.statusCode : 409;
+      return reply.code(status).send({ error: err instanceof Error ? err.message : "Failed to reverse transaction" });
     }
   });
 

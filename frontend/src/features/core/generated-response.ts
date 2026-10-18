@@ -40,7 +40,10 @@ export async function unwrapGenerated<T extends { status: number; data: unknown 
   const response = await request;
   const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
   if (!expected.includes(response.status)) {
-    throw new Error(message);
+    // A 4xx carries the server's explanation (e.g. "Payment exceeds outstanding…"); show it. Keep the
+    // generic message for 5xx so internal errors never reach the UI.
+    const serverMessage = response.status >= 400 && response.status < 500 ? (response.data as { error?: unknown } | null)?.error : undefined;
+    throw new Error(typeof serverMessage === 'string' && serverMessage.trim() ? serverMessage : message);
   }
   return response.data;
 }

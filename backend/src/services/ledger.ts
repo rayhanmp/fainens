@@ -201,6 +201,14 @@ export async function createSimpleTransaction(
   input: CreateSimpleTransactionInput,
   dbLike: any = defaultDb,
 ): Promise<{ transactionId: number; balancesByAccountId: Record<number, number> }> {
+  return createJournalEntry(await buildSimpleJournalInput(input, dbLike), dbLike);
+}
+
+/** The journal a quick entry (expense, income, transfer) posts, validated but not yet saved. */
+export async function buildSimpleJournalInput(
+  input: CreateSimpleTransactionInput,
+  dbLike: any = defaultDb,
+): Promise<CreateJournalEntryInput> {
   if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
     throw new Error("amountCents must be a positive integer (cents)");
   }
@@ -263,8 +271,7 @@ export async function createSimpleTransaction(
     );
   }
 
-  return createJournalEntry(
-    {
+  return {
       date: input.date,
       description: input.description,
       reference: input.reference ?? null,
@@ -287,9 +294,7 @@ export async function createSimpleTransaction(
       // Subscription payment
       subscriptionId: input.subscriptionId ?? null,
       tagIds: input.tagIds,
-    },
-    dbLike,
-  );
+  };
 }
 
 /** Expense for subscription/card charge: Dr Expense, Cr asset wallet OR Cr liability (e.g. credit card). */
@@ -677,50 +682,9 @@ export async function createJournalEntry(
     // calls keep the header, lines, and verification inside the same commit.
     transactionId = defaultDb.transaction((tx) => insertPreparedJournalEntrySync(tx, prepared));
   } else {
-    // A supplied executor is assumed to be an existing domain transaction or
-    // a test double; its owner controls the outer commit boundary.
-    const inserted = await dbLike
-      .insert(transactions)
-      .values(prepared.transactionValues)
-      .returning({ id: transactions.id });
-    const id = inserted[0]?.id;
-    if (!id) throw new Error("Failed to create transaction row");
-    await dbLike.insert(transactionLines).values(prepared.validatedLines.map((line) => ({
-      transactionId: id,
-      accountId: line.accountId,
-      debit: line.debit,
-      credit: line.credit,
-      description: line.description ?? null,
-      cashFlowClass: line.cashFlowClass ?? null,
-    })));
-    if (prepared.tagIds.length > 0) {
-      await dbLike.insert(transactionTags).values(prepared.tagIds.map((tagId) => ({ transactionId: id, tagId })));
-    }
-    const lineSums = await dbLike
-      .select({
-        debitTotal: sql<number>`coalesce(sum(${transactionLines.debit}), 0)`,
-        creditTotal: sql<number>`coalesce(sum(${transactionLines.credit}), 0)`,
-      })
-      .from(transactionLines)
-      .where(eq(transactionLines.transactionId, id));
-    const persistedDebit = lineSums[0]?.debitTotal ?? 0;
-    const persistedCredit = lineSums[0]?.creditTotal ?? 0;
-    if (persistedDebit !== prepared.totalDebit || persistedCredit !== prepared.totalCredit) {
-      throw new Error(
-        `Persisted journal totals differ from validated totals: debits=${persistedDebit} credits=${persistedCredit}`,
-      );
-    }
-    await dbLike.insert(auditLogs).values({
-      entityType: "transaction",
-      entityId: id,
-      action: "create",
-      afterSnapshot: Buffer.from(JSON.stringify({
-        transaction: prepared.transactionValues,
-        lines: prepared.validatedLines,
-        tagIds: prepared.tagIds,
-      })),
-    });
-    transactionId = id;
+    // A supplied executor is an existing synchronous SQLite transaction whose owner controls the
+    // commit. Use the same insert as above so it gets category allocations and the period recheck.
+    transactionId = insertPreparedJournalEntrySync(dbLike, prepared);
   }
 
   const balancesByAccountId: Record<number, number> = {};

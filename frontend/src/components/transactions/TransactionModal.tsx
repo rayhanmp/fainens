@@ -276,10 +276,14 @@ export function TransactionModal({
       : typeof rawFromAccountId === 'string' && Number.isSafeInteger(Number(rawFromAccountId))
         ? Number(rawFromAccountId)
         : undefined;
+    // Exact, unique name match only (as the approval endpoint does), so
+    // "BCA" never preselects "BCA Syariah"; otherwise the user picks.
+    const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+    const nameMatches = parsed.fromAccount?.trim()
+      ? accounts.filter(a => normalizeName(a.name) === normalizeName(parsed.fromAccount!))
+      : [];
     const fromAcc = accounts.find(a => a.id === parsedFromAccountId)
-      ?? (parsed.fromAccount?.trim()
-        ? accounts.find(a => a.name.toLowerCase().includes(parsed.fromAccount!.trim().toLowerCase()))
-        : undefined);
+      ?? (parsedFromAccountId == null && nameMatches.length === 1 ? nameMatches[0] : undefined);
     const transactionTime = (parsed as Record<string, unknown>).transactionTime;
     const time = typeof transactionTime === 'string' && /^\d{1,2}:\d{2}/.test(transactionTime)
       ? transactionTime.slice(0, 5)
@@ -1198,7 +1202,9 @@ export function TransactionModal({
         const transferDetails = calculateTransferDetails();
         
         if (transferDetails && !('error' in transferDetails) && transferDetails.fee > 0) {
-          // Create main transfer with the actual transfer amount
+          // The transfer and its fee are saved in one request, so they succeed or fail together.
+          // The fee debits the wallet that actually paid it (recipient-deducted fees reduce the destination).
+          const transferFeeCategory = categories.find((category) => category.name === TRANSFER_FEE_CATEGORY_NAME);
           mainTransaction = await createTransactionMutation.mutateAsync({
             kind: 'transfer',
             amountCents: amount,
@@ -1211,28 +1217,13 @@ export function TransactionModal({
             categoryId: null,
             walletAccountId,
             toWalletAccountId,
+            transferFee: {
+              amountCents: transferDetails.fee,
+              paidBy: transferDetails.senderPays ? 'sender' : 'recipient',
+              categoryId: transferFeeCategory?.id ?? null,
+            },
           });
-          
-          // Create separate fee transaction
-          const feeAmount = transferDetails.fee;
-          const feeDescription = `Transfer fee: ${simpleForm.description || 'Transfer'}`;
-          
-          // Fee transaction: debit expense and credit the wallet that actually
-          // paid it. Recipient-deducted OVO fees reduce the destination wallet.
-          const transferFeeCategory = categories.find((category) => category.name === TRANSFER_FEE_CATEGORY_NAME);
-          const feeTransaction = await createTransactionMutation.mutateAsync({
-            kind: 'expense',
-            amountCents: feeAmount,
-            description: feeDescription,
-            notes: `Admin fee for transfer #${mainTransaction.id}. ${transferDetails.senderPays ? 'Fee paid by sender' : 'Fee deducted from recipient'}`,
-            place: simpleForm.place || null,
-            date: dateIso,
-            periodId: periodId ?? null,
-            categoryId: transferFeeCategory?.id ?? null,
-            walletAccountId: transferDetails.senderPays ? walletAccountId : toWalletAccountId!,
-            linkedTxId: mainTransaction.id, // Link to parent transfer transaction
-          });
-          linkedTransactionIds.push(feeTransaction.id);
+          if (mainTransaction.feeTransactionId != null) linkedTransactionIds.push(mainTransaction.feeTransactionId);
         } else {
           // No fee - create normal transfer
           mainTransaction = await createTransactionMutation.mutateAsync({
@@ -3389,6 +3380,10 @@ export function TransactionModal({
                   type="button"
                   onClick={async () => {
                     if (!pendingTransaction) return;
+                    if (simpleForm.type !== 'transfer' && !simpleForm.fromAccountId) {
+                      setFormError('Choose the account this transaction used before approving.');
+                      return;
+                    }
                     setIsSubmitting(true);
                     try {
                       await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {

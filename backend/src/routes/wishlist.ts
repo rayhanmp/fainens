@@ -5,7 +5,8 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { accounts, auditLogs, storageDeletionOutbox, wishlist, transactions, transactionLines, categories, salaryPeriods } from "../db/schema";
 import { auditCreate, auditUpdate, auditDelete } from "../services/audit";
-import { getOrCreateAutoExpenseAccount } from "../services/ledger";
+import { getOrCreateAutoExpenseAccount, insertPreparedJournalEntrySync, prepareJournalEntry } from "../services/ledger";
+import { PeriodLockedError } from "../services/period-locking";
 import { findPeriodIdForDate } from "../services/transaction-mutations";
 import { invalidateOnTransactionMutation } from "../cache";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
@@ -398,32 +399,34 @@ export default async function (fastify: FastifyInstance) {
       return reply.code(400).send({ error: "accountId must reference an active asset account" });
     }
     const expenseAccount = await getOrCreateAutoExpenseAccount(db);
-    const periodId = await findPeriodIdForDate(dateMs);
+    const description = (body.description || item.name).trim();
+    // The canonical journal path validates the lines, writes category allocations and refuses a
+    // closed period (checked again inside the write below).
+    let prepared;
+    try {
+      prepared = await prepareJournalEntry({
+        date: new Date(dateMs),
+        description,
+        notes: body.notes || item.description,
+        txType: "simple_expense",
+        periodId: null,
+        categoryId: item.categoryId,
+        lines: [
+          { accountId: expenseAccount.id, debit: item.amount, credit: 0, description },
+          { accountId: wallet.id, debit: 0, credit: item.amount, description, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
+        ],
+      }, db);
+    } catch (error) {
+      return reply.code(error instanceof PeriodLockedError ? 409 : 400).send({ error: error instanceof Error ? error.message : "Could not fulfil wishlist item" });
+    }
 
     const fulfilledAt = Date.now();
     const result = db.transaction((tx) => {
       const fresh = tx.select().from(wishlist).where(eq(wishlist.id, item.id)).limit(1).all()[0];
       if (!fresh) throw new Error("Wishlist item not found");
       if (fresh.status === "fulfilled") throw new Error("Wishlist item is already fulfilled");
-      const description = (body.description || fresh.name).trim();
-      const transaction = (tx
-        .insert(transactions)
-        .values({
-          date: new Date(dateMs),
-          description,
-          notes: body.notes || fresh.description,
-          txType: "simple_expense",
-          periodId,
-          categoryId: fresh.categoryId,
-        })
-        .returning()
-        .all() as any[])[0];
-      if (!transaction) throw new Error("Failed to create wishlist transaction");
-      const lines = [
-        { transactionId: transaction.id, accountId: expenseAccount.id, debit: fresh.amount, credit: 0, description },
-        { transactionId: transaction.id, accountId: wallet.id, debit: 0, credit: fresh.amount, description, cashFlowClass: wallet.liquidityClass === "cash_equivalent" ? "operating" : null },
-      ];
-      tx.insert(transactionLines).values(lines).run();
+      if (fresh.amount !== item.amount) throw new Error("Wishlist item changed; retry");
+      const transaction = { id: insertPreparedJournalEntrySync(tx, prepared) };
       const updated = tx
         .update(wishlist)
         .set({
@@ -444,12 +447,6 @@ export default async function (fastify: FastifyInstance) {
           beforeSnapshot: Buffer.from(JSON.stringify(fresh)),
           afterSnapshot: Buffer.from(JSON.stringify(updated)),
         },
-        {
-          entityType: "transaction",
-          entityId: transaction.id,
-          action: "create",
-          afterSnapshot: Buffer.from(JSON.stringify({ wishlistId: fresh.id, transaction, lines })),
-        },
       ]).run();
       bumpFinancialRevisionSync(tx);
       return { wishlist: updated, transaction };
@@ -457,7 +454,7 @@ export default async function (fastify: FastifyInstance) {
     await invalidateOnTransactionMutation({
       transactionId: result.transaction.id,
       affectedAccountIds: [wallet.id, expenseAccount.id],
-      affectedPeriodIds: periodId == null ? undefined : [periodId],
+      affectedPeriodIds: prepared.periodId == null ? undefined : [prepared.periodId],
       revisionBumped: true,
     });
 

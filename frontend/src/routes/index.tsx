@@ -30,7 +30,7 @@ import { useNow } from '../hooks/useNow';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery } from '../features/agent/queries';
-import { useBulkDeleteTransactions, usePendingTransactionsQuery } from '../features/transactions/queries';
+import { usePendingTransactionsQuery, useReverseTransaction } from '../features/transactions/queries';
 import { useToast } from '../components/ui/useToast';
 import { ToastContainer } from '../components/ui/Toast';
 import { useUiStore } from '../stores/ui-store';
@@ -108,7 +108,7 @@ function DashboardPage() {
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const { toasts, addToast, removeToast } = useToast();
-  const { mutateAsync: deleteTransactions } = useBulkDeleteTransactions();
+  const { mutateAsync: reverseTransaction } = useReverseTransaction();
   const toggleBalancesHidden = useUiStore((state) => state.toggleBalancesHidden);
   const reviewedOutlookRevisionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
@@ -264,8 +264,10 @@ function DashboardPage() {
     action: {
       label: 'Undo',
       onClick: () => {
-        deleteTransactions(ids).then(
-          () => { refreshDashboard(); addToast({ type: 'info', title: ids.length > 1 ? 'Transfer and fee removed' : 'Transaction removed' }); },
+        // Posted entries are never deleted; undo reverses the new one (and a transfer's fee with it),
+        // which keeps the history auditable.
+        reverseTransaction(ids[0]).then(
+          () => { refreshDashboard(); addToast({ type: 'info', title: ids.length > 1 ? 'Transfer and fee reversed' : 'Transaction reversed' }); },
           (error: unknown) => addToast({ type: 'error', title: 'Could not undo', message: error instanceof Error ? error.message : undefined, duration: 8000 }),
         );
       },
