@@ -59,7 +59,7 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, budgetPace,
           <Link to={main.to} className="mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{metricValue(main)}</strong></Link>
           {/* The divider doubles as the period pacing bar when there is a tracked budget. */}
           {budgetPace ? <BudgetPaceBar pace={budgetPace} formatAmount={formatAmount} /> : <div className="mt-3 h-px bg-white/15" />}
-          <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
+          <div className={cn('grid grid-cols-3 gap-3 text-xs', budgetPace?.pacing.status === 'active' ? 'mt-4' : 'mt-3')}>
             {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to}><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong></Link>)}
             <CommitmentsSummary commitments={commitments} isLoading={isCommitmentsLoading} formatAmount={formatAmount} />
           </div>
@@ -80,44 +80,47 @@ function paceDetail({ pacing, usedRatio, dailyBudget }: BudgetPace, formatAmount
   ].filter(Boolean).join(' · ');
 }
 
-/** "Day 24 of 30 · 35% budget used" in the card header, with a small dark tooltip that spells it out. */
+/** "Day 24 of 30 · 35% budget used" in the card header, with a small dark tooltip for the rest. */
 function BudgetPaceLabel({ pace, formatAmount }: { pace: BudgetPace; formatAmount: (cents: number) => string }) {
   const { pacing, usedRatio, dailyBudget } = pace;
   const tone = usedRatio != null ? paceTone(usedRatio, pacing.elapsedRatio) : 'ok';
   const dayLabel = pacing.status === 'active' ? `Day ${pacing.dayIndex} of ${pacing.totalDays}` : pacing.status === 'ended' ? 'Period ended' : 'Not started';
   const elapsedText = pacing.status === 'active' ? `${formatPercent(pacing.elapsedRatio)} of the period has passed` : pacing.status === 'ended' ? `The period has ended (${pacing.totalDays} days)` : `The period has not started (${pacing.totalDays} days)`;
+  const paceText_ = tone === 'warning' ? 'Spending is running ahead of the calendar.' : tone === 'danger' ? 'Spending is over the plan.' : null;
   return (
     <span className="relative min-w-0">
       <Link to="/budget" aria-describedby="dashboard-pace-tip" className="dashboard-pace-label flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-white/65">
         {/* A miniature of the divider bar, so the label reads as its legend. */}
         <span className="relative h-[3px] w-5 shrink-0 rounded-full bg-white/20" aria-hidden>
-          <span className="absolute inset-y-0 left-0 rounded-full bg-white/40" style={{ width: `${pacing.elapsedRatio * 100}%` }} />
           {usedRatio != null && <span className={cn('absolute inset-y-0 left-0 rounded-full', paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }} />}
         </span>
         <span className="truncate">{dayLabel}{usedRatio != null && <> · <span className={cn('font-semibold', paceText[tone])}>{formatPercent(usedRatio)} budget used</span></>}</span>
       </Link>
       {/* The hero is dark in both themes, so the tooltip is too (arbitrary colours avoid the global surface overrides). */}
-      <span id="dashboard-pace-tip" role="tooltip" className="dashboard-pace-tip pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-40 hidden w-56 rounded-xl border border-white/15 bg-[#0a1b33]/95 px-3 py-2.5 text-left text-[11px] leading-relaxed text-white/80 shadow-xl backdrop-blur-sm">
-        {/* Each line starts with a swatch in the colour the bar uses for it. */}
-        <span className="flex items-center gap-2"><span className="h-[3px] w-5 shrink-0 rounded-full bg-white/35" aria-hidden />{elapsedText}</span>
-        {usedRatio != null && <span className="flex items-center gap-2"><span className={cn('h-[3px] w-5 shrink-0 rounded-full', paceFill[tone])} aria-hidden />{formatPercent(usedRatio)} of the budget is used{tone === 'warning' ? ', ahead of the calendar' : tone === 'danger' ? ', over budget' : ''}</span>}
-        {pacing.status === 'active' && <span className="flex items-center gap-2"><span className="flex w-5 shrink-0 justify-center" aria-hidden><span className="h-3 w-px bg-white" /></span>Today</span>}
-        {dailyBudget != null && <span className="mt-1.5 block border-t border-white/10 pt-1.5 text-white">Safe pace {formatAmount(dailyBudget)} a day</span>}
+      <span id="dashboard-pace-tip" role="tooltip" className="dashboard-pace-tip pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-40 hidden w-52 rounded-xl border border-white/15 bg-[#0a1b33]/95 px-3 py-2.5 text-left text-[11px] leading-relaxed text-white/80 shadow-xl backdrop-blur-sm">
+        <span className="block">{elapsedText}</span>
+        {paceText_ && <span className={cn('block', paceText[tone])}>{paceText_}</span>}
+        {dailyBudget != null && <span className="mt-1 block text-white">Safe pace {formatAmount(dailyBudget)} a day</span>}
       </span>
     </span>
   );
 }
 
-/** The card divider as a pacing bar: period time elapsed (faint), budget used (solid) and a tick for today. */
+/** The card divider as a pacing bar: budget used as the fill, and a tick labelled "today" where the period stands. */
 function BudgetPaceBar({ pace, formatAmount }: { pace: BudgetPace; formatAmount: (cents: number) => string }) {
   const { pacing, usedRatio } = pace;
   const tone = usedRatio != null ? paceTone(usedRatio, pacing.elapsedRatio) : 'ok';
   const detail = paceDetail(pace, formatAmount);
+  const tickAt = `${pacing.elapsedRatio * 100}%`;
+  // Keep the word inside the bar near either end.
+  const tickAlign = pacing.elapsedRatio < 0.06 ? 'translate-x-0' : pacing.elapsedRatio > 0.94 ? '-translate-x-full' : '-translate-x-1/2';
   return (
     <Link to="/budget" aria-label={detail} className="dashboard-pace-bar relative mt-3 block h-[3px] rounded-full bg-white/15">
-      <span className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${pacing.elapsedRatio * 100}%` }} />
       {usedRatio != null && <span className={cn('absolute inset-y-0 left-0 rounded-full', paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }} />}
-      {pacing.status === 'active' && <span className="absolute -inset-y-[3px] w-px -translate-x-1/2 bg-white" style={{ left: `${pacing.elapsedRatio * 100}%` }} />}
+      {pacing.status === 'active' && <>
+        <span className="absolute -inset-y-[3px] w-px -translate-x-1/2 bg-white" style={{ left: tickAt }} aria-hidden />
+        <span className={cn('absolute top-[6px] text-[9px] leading-none text-white/60', tickAlign)} style={{ left: tickAt }} aria-hidden>today</span>
+      </>}
     </Link>
   );
 }
