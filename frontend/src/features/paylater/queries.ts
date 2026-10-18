@@ -38,7 +38,7 @@ export function usePaylaterQuery(enabled = true) {
 export function useSettlePaylaterMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: SettlePaylaterPaymentBody) => unwrapGenerated(settlePaylaterPayment(input), 201, 'Failed to settle PayLater payment'),
+    mutationFn: (input: SettlePaylaterPaymentBody) => unwrapGenerated(settlePaylaterPayment(input), 200, 'Failed to settle PayLater payment'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }
@@ -52,7 +52,7 @@ export function useCalculatePaylaterScheduleMutation() {
 export function useRecognizePaylaterMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: RecognizePaylaterPurchaseBody) => unwrapGenerated(recognizePaylaterPurchase(input), 201, 'Failed to recognize PayLater purchase'),
+    mutationFn: (input: RecognizePaylaterPurchaseBody) => unwrapGenerated(recognizePaylaterPurchase(input), 200, 'Failed to recognize PayLater purchase'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
 }

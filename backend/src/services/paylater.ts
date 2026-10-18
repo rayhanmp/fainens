@@ -1,14 +1,15 @@
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, or, ne, sql, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactions, transactionLines, paylaterInstallments, paylaterSettlementAllocations, auditLogs } from "../db/schema";
 import {
   CreateJournalEntryInput,
+  JournalLineInput,
   getOrCreateAutoExpenseAccount,
   insertPreparedJournalEntrySync,
   prepareJournalEntry,
 } from "./ledger";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
-import { addMonthsClamped } from "./recurrence-calendar";
+import { addMonthsFromAnchor, DAY_MS, startOfLocalDay } from "../lib/calendar";
 import { insertDomainReversalSync, prepareDomainReversal } from "./domain-reversal";
 
 async function assertPaylaterRecognitionId(originalTxId: number | undefined | null) {
@@ -48,14 +49,129 @@ async function sumLiabilityDebitsForTx(txId: number): Promise<number> {
   return rows.filter((r) => r.type === "liability").reduce((s, r) => s + r.debit, 0);
 }
 
-function startOfDayMs(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+/** Whole calendar days (app time zone) from today to the due day: 0 on the due day, negative once overdue. */
+function daysBetweenDueAndNow(dueMs: number): number {
+  return Math.round((startOfLocalDay(dueMs) - startOfLocalDay(Date.now())) / DAY_MS);
 }
 
-function daysBetweenDueAndNow(dueMs: number): number {
-  return Math.round((startOfDayMs(dueMs) - startOfDayMs(Date.now())) / 86_400_000);
+/** An unpaid due date is overdue only from the calendar day after it. */
+function isPastDue(dueMs: number): boolean {
+  return startOfLocalDay(dueMs) < startOfLocalDay(Date.now());
+}
+
+interface ObligationInstallmentState {
+  row: typeof paylaterInstallments.$inferSelect;
+  paidCents: number;
+  openCents: number;
+  /** Unpaid interest + fee; a payment covers an installment's financing before its principal. */
+  financingOpenCents: number;
+}
+
+interface ObligationState {
+  /** Ledger balance of the obligation on its liability account (credit - debit), posted entries only. */
+  liabilityOutstandingCents: number;
+  installments: ObligationInstallmentState[];
+  /** Cash applied to the schedule: allocation rows plus legacy settlements that predate them. */
+  paymentsCents: number;
+  scheduleOpenCents: number;
+}
+
+/**
+ * Current state of one obligation. Synchronous so the same reads run inside a
+ * settlement's write transaction and in the obligations listing.
+ */
+function loadObligationStateSync(executor: any, recognitionTxId: number, liabilityAccountId: number): ObligationState {
+  // Reversed entries drop out together with their reversal, which is not linked to the obligation.
+  const liabilityRows: Array<{ credit: number; debit: number }> = executor
+    .select({ credit: transactionLines.credit, debit: transactionLines.debit })
+    .from(transactionLines)
+    .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+    .where(and(
+      eq(transactionLines.accountId, liabilityAccountId),
+      eq(transactions.status, "posted"),
+      or(eq(transactions.id, recognitionTxId), eq(transactions.linkedTxId, recognitionTxId)),
+    ))
+    .all();
+  const liabilityOutstandingCents = liabilityRows.reduce((sum, row) => sum + row.credit - row.debit, 0);
+
+  const rows: Array<typeof paylaterInstallments.$inferSelect> = executor.select().from(paylaterInstallments)
+    .where(and(
+      eq(paylaterInstallments.recognitionTxId, recognitionTxId),
+      ne(paylaterInstallments.status, "cancelled"),
+    ))
+    .orderBy(paylaterInstallments.installmentNumber)
+    .all();
+  if (rows.length === 0) {
+    return { liabilityOutstandingCents, installments: [], paymentsCents: 0, scheduleOpenCents: 0 };
+  }
+
+  // Allocation rows of posted settlements are the source of truth for what each installment received.
+  const allocationRows: Array<{ installmentId: number; settlementTxId: number; amountCents: number }> = executor
+    .select({
+      installmentId: paylaterSettlementAllocations.installmentId,
+      settlementTxId: paylaterSettlementAllocations.settlementTxId,
+      amountCents: paylaterSettlementAllocations.amountCents,
+    })
+    .from(paylaterSettlementAllocations)
+    .innerJoin(paylaterInstallments, eq(paylaterSettlementAllocations.installmentId, paylaterInstallments.id))
+    .innerJoin(transactions, eq(paylaterSettlementAllocations.settlementTxId, transactions.id))
+    .where(and(eq(paylaterInstallments.recognitionTxId, recognitionTxId), eq(transactions.status, "posted")))
+    .all();
+  const allocatedByInstallment = new Map<number, number>();
+  const allocatedSettlementIds = new Set<number>();
+  for (const allocation of allocationRows) {
+    allocatedByInstallment.set(allocation.installmentId, (allocatedByInstallment.get(allocation.installmentId) ?? 0) + allocation.amountCents);
+    allocatedSettlementIds.add(allocation.settlementTxId);
+  }
+
+  // Settlements posted before allocation rows existed carry no installment
+  // evidence; apply their cash oldest-first so the schedule still reflects it.
+  const settlementRows: Array<{ id: number; credit: number; debit: number }> = executor
+    .select({ id: transactions.id, credit: transactionLines.credit, debit: transactionLines.debit })
+    .from(transactions)
+    .innerJoin(transactionLines, eq(transactionLines.transactionId, transactions.id))
+    .where(and(
+      eq(transactions.linkedTxId, recognitionTxId),
+      eq(transactions.txType, "paylater_settlement"),
+      eq(transactions.status, "posted"),
+      eq(transactionLines.accountId, liabilityAccountId),
+    ))
+    .all();
+  const legacyPaymentsCents = settlementRows
+    .filter((row) => !allocatedSettlementIds.has(row.id))
+    .reduce((sum, row) => sum + row.debit - row.credit, 0);
+
+  let legacyRemaining = Math.max(0, legacyPaymentsCents);
+  let allocatedCents = 0;
+  const installments = rows.map((row) => {
+    const allocated = allocatedByInstallment.get(row.id) ?? 0;
+    allocatedCents += allocated;
+    const legacy = Math.min(legacyRemaining, Math.max(0, row.totalCents - allocated));
+    legacyRemaining -= legacy;
+    const paidCents = allocated + legacy;
+    return {
+      row,
+      paidCents,
+      openCents: Math.max(0, row.totalCents - paidCents),
+      financingOpenCents: Math.max(0, row.interestCents + row.feeCents - paidCents),
+    };
+  });
+  return {
+    liabilityOutstandingCents,
+    installments,
+    paymentsCents: allocatedCents + legacyPaymentsCents,
+    scheduleOpenCents: installments.reduce((sum, item) => sum + item.openCents, 0),
+  };
+}
+
+/**
+ * What can still be paid on an obligation. With a schedule that is the open
+ * schedule (which for obligations recognised without their financing cost is
+ * more than the ledger liability); nothing once the liability is cleared.
+ */
+function payableCents(state: ObligationState): number {
+  if (state.liabilityOutstandingCents <= 0) return 0;
+  return state.installments.length > 0 ? state.scheduleOpenCents : state.liabilityOutstandingCents;
 }
 
 // Paylater workflow types
@@ -151,9 +267,9 @@ export function calculateInstallmentSchedule(params: {
   const schedule: InstallmentScheduleItem[] = [];
   
   for (let i = 1; i <= months; i++) {
-    // Clamp against the original day-of-month, so a 31st-of-month plan is
-    // Feb 28/29 then Mar 31 instead of drifting permanently to the 28th.
-    const dueDateMs = addMonthsClamped(firstDueDateMs, i - 1);
+    // Always from the first due date, so a 31st-of-month plan is Feb 28/29
+    // then Mar 31 instead of drifting permanently to the 28th.
+    const dueDateMs = addMonthsFromAnchor(firstDueDateMs, i - 1);
     
     const isFirst = i === 1;
     const isLast = i === months;
@@ -203,9 +319,14 @@ function assertNonNegativeSafeInteger(value: unknown, fieldName: string): assert
 }
 
 // Recognition: Buy item on installment (recognize expense and liability)
+// The plan's interest and admin fee are fixed at purchase, so they are posted
+// with the principal: paying the full schedule then clears the liability
+// exactly, and reversing the recognition reverses the financing cost too.
 // Journal Entry:
-//   Expense (Asset/Item)    Debit  $3,000
-//   Accounts Payable - Paylater   Credit $3,000
+//   Expense (Asset/Item)          Debit  $3,000
+//   Expense - PayLater interest   Debit  $90
+//   Expense - PayLater admin fee  Debit  $10
+//   Accounts Payable - Paylater   Credit $3,100
 export async function recognizePaylaterPurchase(
   input: PaylaterRecognitionInput
 ): Promise<{ transactionId: number; installments: InstallmentScheduleItem[] }> {
@@ -246,6 +367,27 @@ export async function recognizePaylaterPurchase(
   const totalInterest = schedule.reduce((sum, item) => sum + item.interestCents, 0);
   const totalFees = schedule.reduce((sum, item) => sum + item.feeCents, 0);
 
+  const lines: JournalLineInput[] = [
+    {
+      accountId: expenseAccount.id,
+      debit: input.principalAmount,
+      credit: 0,
+      description: "Principal amount",
+    },
+  ];
+  if (totalInterest > 0) {
+    lines.push({ accountId: expenseAccount.id, debit: totalInterest, credit: 0, description: "PayLater interest" });
+  }
+  if (totalFees > 0) {
+    lines.push({ accountId: expenseAccount.id, debit: totalFees, credit: 0, description: "PayLater admin fee" });
+  }
+  lines.push({
+    accountId: input.paylaterLiabilityAccountId,
+    debit: 0,
+    credit: totalLiability,
+    description: `Paylater liability (${input.installmentMonths}x installment)`,
+  });
+
   // Create journal entry
   const journalEntry: CreateJournalEntryInput = {
     date: input.date,
@@ -254,20 +396,7 @@ export async function recognizePaylaterPurchase(
     notes: input.notes,
     txType: "paylater_recognition",
     categoryId: input.categoryId ?? null,
-    lines: [
-      {
-        accountId: expenseAccount.id,
-        debit: input.principalAmount,
-        credit: 0,
-        description: "Principal amount",
-      },
-      {
-        accountId: input.paylaterLiabilityAccountId,
-        debit: 0,
-        credit: input.principalAmount,
-        description: `Paylater principal liability (${input.installmentMonths}x installment)`,
-      },
-    ],
+    lines,
   };
 
   const prepared = await prepareJournalEntry(journalEntry, db);
@@ -408,8 +537,59 @@ export async function recordPaylaterInterest(
   return { transactionId: result };
 }
 
+interface PaylaterSettlementPlan {
+  allocations: Array<{ id: number; amount: number; fullyPaid: boolean }>;
+  /** Part of the payment posted to expense instead of reducing the liability. */
+  financingExpenseCents: number;
+}
+
+/** Validate a payment against the obligation and split it over installments and journal lines. */
+function planPaylaterSettlementSync(executor: any, input: PaylaterSettlementInput): PaylaterSettlementPlan {
+  if (input.originalTxId == null) return { allocations: [], financingExpenseCents: 0 };
+  const state = loadObligationStateSync(executor, input.originalTxId, input.paylaterLiabilityAccountId);
+  const payable = payableCents(state);
+  if (input.paymentAmount > payable) {
+    throw new Error(`Payment exceeds outstanding paylater liability (${payable})`);
+  }
+  // Legacy obligation without a schedule: the ledger balance is the whole debt.
+  if (state.installments.length === 0) return { allocations: [], financingExpenseCents: 0 };
+
+  const candidates = input.installmentIds
+    ? state.installments.filter((item) => input.installmentIds!.includes(item.row.id))
+    : state.installments.filter((item) => item.openCents > 0);
+  if (input.installmentIds && candidates.length !== input.installmentIds.length) {
+    throw new Error("One or more installments do not belong to the selected obligation");
+  }
+  const allocations: PaylaterSettlementPlan["allocations"] = [];
+  let remaining = input.paymentAmount;
+  let financingPaidCents = 0;
+  for (const installment of candidates) {
+    if (remaining <= 0) break;
+    if (installment.openCents <= 0) continue;
+    const amount = Math.min(installment.openCents, remaining);
+    allocations.push({ id: installment.row.id, amount, fullyPaid: amount >= installment.openCents });
+    financingPaidCents += Math.min(amount, installment.financingOpenCents);
+    remaining -= amount;
+  }
+  // Do not silently attach a payment to no installment.
+  if (remaining > 0) {
+    throw new Error("Payment exceeds the outstanding installment schedule");
+  }
+
+  // Obligations recognised before the financing cost was posted at purchase
+  // owe more than their ledger liability. That uncovered part of the schedule
+  // is expensed as it is paid: the paid installments' interest and fee, and
+  // never less than what keeps the liability from going below zero. For
+  // obligations recognised with their financing cost this is always zero.
+  const liability = state.liabilityOutstandingCents;
+  const unrecognisedCents = Math.max(0, state.scheduleOpenCents - liability);
+  const financingExpenseCents = Math.min(unrecognisedCents, Math.max(financingPaidCents, input.paymentAmount - liability));
+  return { allocations, financingExpenseCents };
+}
+
 // Settlement: Make a payment (reduce liability, reduce cash)
-// This is an asset-liability swap - NO expense impact
+// This is an asset-liability swap - NO expense impact, except for financing
+// cost an older recognition never posted (see planPaylaterSettlementSync).
 // Journal Entry:
 //   Accounts Payable - Paylater   Debit  $300
 //   Bank Account (Asset)          Credit $300
@@ -456,6 +636,45 @@ export async function settlePaylaterPayment(
     }
   }
 
+  let recognitionCategoryId: number | null = null;
+  if (input.originalTxId != null) {
+    const [recognition] = await db.select({ categoryId: transactions.categoryId }).from(transactions)
+      .where(eq(transactions.id, input.originalTxId)).limit(1);
+    recognitionCategoryId = recognition?.categoryId ?? null;
+  }
+
+  // Planned against the current state so the journal can be prepared (async)
+  // before the write; the write transaction plans again and refuses to post if
+  // the journal no longer matches.
+  const plan = planPaylaterSettlementSync(db, input);
+  const financingExpenseCents = plan.financingExpenseCents;
+  const liabilityDebit = input.paymentAmount - financingExpenseCents;
+  const lines: JournalLineInput[] = [];
+  if (liabilityDebit > 0) {
+    lines.push({
+      accountId: input.paylaterLiabilityAccountId,
+      debit: liabilityDebit,
+      credit: 0,
+      description: "Paylater payment - liability reduction",
+    });
+  }
+  if (financingExpenseCents > 0) {
+    const expenseAccount = await getOrCreateAutoExpenseAccount(db);
+    lines.push({
+      accountId: expenseAccount.id,
+      debit: financingExpenseCents,
+      credit: 0,
+      description: "PayLater interest and fees not recognised at purchase",
+    });
+  }
+  lines.push({
+    accountId: input.bankAccountId,
+    debit: 0,
+    credit: input.paymentAmount,
+    description: "Payment from bank",
+    cashFlowClass: bankAccount.liquidityClass === "cash_equivalent" ? "financing" as const : undefined,
+  });
+
   // Create journal entry
   const journalEntry: CreateJournalEntryInput = {
     date: input.date,
@@ -464,71 +683,20 @@ export async function settlePaylaterPayment(
     notes: input.notes,
     txType: "paylater_settlement",
     linkedTxId: input.originalTxId,
-    lines: [
-      {
-        accountId: input.paylaterLiabilityAccountId,
-        debit: input.paymentAmount,
-        credit: 0,
-        description: "Paylater payment - liability reduction",
-      },
-      {
-        accountId: input.bankAccountId,
-        debit: 0,
-        credit: input.paymentAmount,
-        description: "Payment from bank",
-        cashFlowClass: bankAccount.liquidityClass === "cash_equivalent" ? "financing" as const : undefined,
-      },
-    ],
+    // Financing expensed here belongs with the purchase, like the cost posted at recognition.
+    categoryId: financingExpenseCents > 0 ? recognitionCategoryId : null,
+    lines,
   };
 
   const prepared = await prepareJournalEntry(journalEntry, db);
   const result = db.transaction((tx) => {
-    const allocations: Array<{ id: number; amount: number; fullyPaid: boolean }> = [];
-    if (input.originalTxId != null) {
-      // A linked payment cannot reduce the selected obligation below zero.
-      // This check is inside the write transaction so two concurrent payments
-      // cannot both spend the same liability balance.
-      const liabilityRows = tx.select({
-        credit: transactionLines.credit,
-        debit: transactionLines.debit,
-      })
-        .from(transactionLines)
-        .where(and(
-          eq(transactionLines.accountId, input.paylaterLiabilityAccountId),
-          sql`${transactionLines.transactionId} = ${input.originalTxId} OR ${transactionLines.transactionId} IN (SELECT id FROM "transaction" WHERE linked_tx_id = ${input.originalTxId})`,
-        ))
-        .all();
-      const outstanding = liabilityRows.reduce((sum, row) => sum + row.credit - row.debit, 0);
-      if (input.paymentAmount > outstanding) {
-        throw new Error(`Payment exceeds outstanding paylater liability (${outstanding})`);
-      }
-
-      const installments = tx.select().from(paylaterInstallments)
-        .where(eq(paylaterInstallments.recognitionTxId, input.originalTxId))
-        .orderBy(paylaterInstallments.installmentNumber)
-        .all();
-      const candidates = input.installmentIds
-        ? installments.filter((item) => input.installmentIds!.includes(item.id))
-        : installments.filter((item) => Number(item.paidCents ?? 0) < item.totalCents);
-      if (input.installmentIds && candidates.length !== input.installmentIds.length) {
-        throw new Error("One or more installments do not belong to the selected obligation");
-      }
-      let remaining = input.paymentAmount;
-      for (const installment of candidates) {
-        if (remaining <= 0) break;
-        const paidCents = Number(installment.paidCents ?? 0);
-        const open = Math.max(0, installment.totalCents - paidCents);
-        if (open <= 0) continue;
-        const amount = Math.min(open, remaining);
-        allocations.push({ id: installment.id, amount, fullyPaid: paidCents + amount >= installment.totalCents });
-        remaining -= amount;
-      }
-      // If a schedule exists, do not silently attach a payment to no
-      // installment. Manual/legacy interest without a schedule remains valid.
-      if (installments.length > 0 && remaining > 0) {
-        throw new Error("Payment exceeds the outstanding installment schedule");
-      }
+    // Inside the write transaction so two concurrent payments cannot both
+    // spend the same balance.
+    const current = planPaylaterSettlementSync(tx, input);
+    if (current.financingExpenseCents !== financingExpenseCents) {
+      throw new Error("PayLater obligation changed; retry the payment");
     }
+    const { allocations } = current;
     const transactionId = insertPreparedJournalEntrySync(tx, prepared);
     if (allocations.length > 0) {
       tx.insert(paylaterSettlementAllocations).values(allocations.map((allocation) => ({
@@ -537,12 +705,13 @@ export async function settlePaylaterPayment(
         amountCents: allocation.amount,
       }))).run();
     }
+    // paidCents/status are kept for the reversal guards; reads derive payments from allocation rows.
     for (const allocation of allocations) {
-      const current = tx.select({ paidCents: paylaterInstallments.paidCents })
+      const installmentRow = tx.select({ paidCents: paylaterInstallments.paidCents })
         .from(paylaterInstallments)
         .where(eq(paylaterInstallments.id, allocation.id)).limit(1).all()[0];
-      if (!current) throw new Error("Installment disappeared during settlement");
-      const nextPaid = Number(current.paidCents ?? 0) + allocation.amount;
+      if (!installmentRow) throw new Error("Installment disappeared during settlement");
+      const nextPaid = Number(installmentRow.paidCents ?? 0) + allocation.amount;
       tx.update(paylaterInstallments).set({
         paidCents: nextPaid,
         status: allocation.fullyPaid ? "paid" : "pending",
@@ -561,6 +730,7 @@ export async function settlePaylaterPayment(
         bankAccountId: input.bankAccountId,
         originalTxId: input.originalTxId,
         allocations,
+        financingExpenseCents,
       })),
     }).run();
     return transactionId;
@@ -608,6 +778,7 @@ export async function reversePaylaterTransaction(input: {
       if (installments.some((installment: typeof paylaterInstallments.$inferSelect) => Number(installment.paidCents ?? 0) !== 0)) {
         throw new Error("Cannot reverse a recognition with paid installments");
       }
+      // The inverse journal also takes back the interest and admin fee posted with the principal.
       const reversalTransactionId = insertDomainReversalSync(tx, current.id, reversal.prepared, reason);
       tx.update(paylaterInstallments).set({ status: "cancelled", paidTxId: null })
         .where(eq(paylaterInstallments.recognitionTxId, current.id)).run();
@@ -800,63 +971,41 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
 
     const dateRecognizedMs = tx.date instanceof Date ? tx.date.getTime() : (tx.date as number);
     
-    // Fetch installments for this recognition
-    const installments = await db
-      .select()
-      .from(paylaterInstallments)
-      .where(eq(paylaterInstallments.recognitionTxId, tx.id))
-      .orderBy(paylaterInstallments.installmentNumber);
+    const state = loadObligationStateSync(db, tx.id, meta.liabilityAccountId);
+    const hasSchedule = state.installments.length > 0;
 
-    // Calculate totals from installments
-    let paidInstallmentsTotal = 0;
-    let pendingInstallments: typeof installments = [];
-    let nextPendingDueDate: number | null = null;
-
-    for (const inst of installments) {
-      const paidCents = Math.min(inst.totalCents, Math.max(0, Number(inst.paidCents ?? 0)));
-      if (paidCents >= inst.totalCents || inst.status === "paid") {
-        paidInstallmentsTotal += inst.status === "paid" ? inst.totalCents : paidCents;
-      } else {
-        pendingInstallments.push(inst);
-        if (nextPendingDueDate === null || inst.dueDate.getTime() < nextPendingDueDate) {
-          nextPendingDueDate = inst.dueDate.getTime();
-        }
-      }
-    }
-
-    // Also check for old-style settlements (without installments table)
     const children = await db
       .select()
       .from(transactions)
       .where(and(eq(transactions.linkedTxId, tx.id), eq(transactions.status, "posted")));
 
-    let interestPostedCents = 0;
-    let paymentsPostedCents = paidInstallmentsTotal;
+    // With a schedule, the recognition credits principal plus the financing cost
+    // posted at purchase (none for obligations recognised before that was done).
+    const principalCents = hasSchedule
+      ? state.installments.reduce((sum, item) => sum + item.row.principalCents, 0)
+      : meta.principalCents;
+    let interestPostedCents = Math.max(0, (await sumLiabilityCreditsForTx(tx.id)) - principalCents);
+    let paymentsPostedCents = state.paymentsCents;
 
     for (const ch of children) {
       if (ch.txType === "paylater_interest") {
         interestPostedCents += await sumLiabilityCreditsForTx(ch.id);
-      } else if (ch.txType === "paylater_settlement") {
-        // Only count settlements not already counted via installments
-        const settlementAmount = await sumLiabilityDebitsForTx(ch.id);
-        const alreadyCounted = installments.some(i => i.paidTxId === ch.id);
-        if (!alreadyCounted) {
-          paymentsPostedCents += settlementAmount;
-        }
+      } else if (ch.txType === "paylater_settlement" && !hasSchedule) {
+        paymentsPostedCents += await sumLiabilityDebitsForTx(ch.id);
       }
     }
 
-    // Only posted journal entries are liabilities. Future interest/fees in the
-    // schedule are forecasts and must not inflate the current balance sheet.
-    // The old implementation summed pending installment totals here, making a
-    // newly recognized principal appear to owe unearned interest immediately.
-    const rawOutstanding = meta.principalCents + interestPostedCents - paymentsPostedCents;
-    const outstandingCents = Math.max(0, rawOutstanding);
-    
+    // Payments are read from allocation rows, never from installment flags,
+    // so partial payments count exactly once. The open schedule is what is
+    // still owed; for obligations recognised before the financing cost was
+    // posted at purchase it includes that cost, which is expensed as it is paid.
+    const outstandingCents = payableCents(state);
+    const pendingInstallments = outstandingCents > 0 ? state.installments.filter((item) => item.openCents > 0) : [];
+
     totalOutstandingCents += outstandingCents;
 
     // Determine status based on next pending installment
-    const dueDateMs = nextPendingDueDate ?? (tx.dueDate
+    const dueDateMs = pendingInstallments[0]?.row.dueDate.getTime() ?? (tx.dueDate
       ? tx.dueDate instanceof Date
         ? tx.dueDate.getTime()
         : (tx.dueDate as number)
@@ -869,9 +1018,9 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
       status = "paid";
     } else if (dueDateMs != null) {
       daysUntilDue = daysBetweenDueAndNow(dueDateMs);
-      if (startOfDayMs(dueDateMs) < startOfDayMs(Date.now())) {
+      if (isPastDue(dueDateMs)) {
         status = "overdue";
-      } else if (daysUntilDue >= 0 && daysUntilDue <= 7) {
+      } else if (daysUntilDue <= 7) {
         status = "due_soon";
       } else {
         status = "current";
@@ -884,7 +1033,7 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
       dateRecognizedMs,
       liabilityAccountId: meta.liabilityAccountId,
       liabilityAccountName: meta.liabilityAccountName,
-      principalCents: meta.principalCents,
+      principalCents,
       interestPostedCents,
       paymentsPostedCents,
       outstandingCents,
@@ -899,7 +1048,7 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
       obligation.interestRatePercent = tx.interestRatePercent ?? undefined;
       obligation.adminFeeCents = tx.adminFeeCents ?? undefined;
       obligation.totalInstallments = tx.totalInstallments ?? undefined;
-      obligation.installments = installments.map(inst => ({
+      obligation.installments = state.installments.map(({ row: inst, paidCents, openCents }) => ({
         id: inst.id,
         installmentNumber: inst.installmentNumber,
         totalInstallments: inst.totalInstallments,
@@ -908,8 +1057,8 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
         interestCents: inst.interestCents,
         feeCents: inst.feeCents,
         totalCents: inst.totalCents,
-        paidCents: Number(inst.paidCents ?? 0),
-        status: inst.status as "pending" | "paid" | "overdue",
+        paidCents,
+        status: openCents <= 0 || outstandingCents <= 0 ? "paid" : isPastDue(inst.dueDate.getTime()) ? "overdue" : "pending",
         paidTxId: inst.paidTxId,
       }));
     }
@@ -917,14 +1066,14 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
     obligations.push(obligation);
 
     // Add pending installments to schedule
-    for (const inst of pendingInstallments) {
+    for (const { row: inst, openCents } of pendingInstallments) {
       scheduleItems.push({
         dateMs: inst.dueDate.getTime(),
         kind: "installment",
         recognitionTxId: tx.id,
         transactionId: inst.id,
         description: `${tx.description} - Installment ${inst.installmentNumber}/${inst.totalInstallments}`,
-        amountCents: Math.max(0, inst.totalCents - Number(inst.paidCents ?? 0)),
+        amountCents: openCents,
         liabilityAccountId: meta.liabilityAccountId,
         liabilityAccountName: meta.liabilityAccountName,
         installmentNumber: inst.installmentNumber,
@@ -932,7 +1081,7 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
     }
 
     // Backward compatibility: add old-style schedule items
-    if (pendingInstallments.length === 0 && outstandingCents > 0 && dueDateMs != null) {
+    if (!hasSchedule && outstandingCents > 0 && dueDateMs != null) {
       scheduleItems.push({
         dateMs: dueDateMs,
         kind: "recognition",
@@ -995,7 +1144,7 @@ export async function getPaylaterObligations(query: { liabilityAccountId?: numbe
     }
   }
 
-  const todayStart = startOfDayMs(Date.now());
+  const todayStart = startOfLocalDay(Date.now());
   for (const si of scheduleItems) {
     if (si.dateMs < todayStart) continue;
     const exp = exposureMap.get(si.liabilityAccountId);

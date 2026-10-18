@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import {
@@ -31,6 +31,16 @@ const paylaterObligationSchema = z.object({
   recognitionTxId: z.number().int(), description: z.string(), dateRecognizedMs: z.number(), liabilityAccountId: z.number().int(), liabilityAccountName: z.string(), principalCents: z.number().int(), interestPostedCents: z.number().int(), paymentsPostedCents: z.number().int(), outstandingCents: z.number().int(), dueDateMs: z.number().nullable(), status: z.enum(["paid", "overdue", "due_soon", "current"]), daysUntilDue: z.number().nullable(),
 }).passthrough();
 const paylaterObligationsSchema = z.object({ obligations: z.array(paylaterObligationSchema), scheduleItems: z.array(z.object({ dateMs: z.number(), kind: z.string(), recognitionTxId: z.number().int(), transactionId: z.number().int(), description: z.string(), amountCents: z.number().int(), liabilityAccountId: z.number().int(), liabilityAccountName: z.string() }).passthrough()), providerExposure: z.array(z.object({ liabilityAccountId: z.number().int(), liabilityAccountName: z.string(), totalOutstandingCents: z.number().int(), nextDueDateMs: z.number().nullable(), daysUntilNextDue: z.number().nullable() }).passthrough()), totalOutstandingCents: z.number().int() }).passthrough();
+
+/**
+ * Domain validation throws plain Errors written for the user (e.g. an over-payment), so the UI
+ * can explain them. Driver and programming errors are subclasses: logged, with a generic message.
+ */
+function sendPaylaterError(request: FastifyRequest, reply: FastifyReply, error: unknown, fallback: string) {
+  const isDomainError = error instanceof Error && error.constructor === Error && error.message.length > 0;
+  if (!isDomainError) request.log.error({ err: error }, fallback);
+  return reply.code(400).send({ error: isDomainError ? error.message : fallback });
+}
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
@@ -80,7 +90,7 @@ export default async function (fastify: FastifyInstance) {
 
       return result;
     } catch (err) {
-      reply.code(400).send({ error: "Failed to recognize paylater purchase" });
+      return sendPaylaterError(request, reply, err, "Failed to recognize paylater purchase");
     }
   });
 
@@ -113,7 +123,7 @@ export default async function (fastify: FastifyInstance) {
 
       return { installments: schedule };
     } catch (err) {
-      reply.code(400).send({ error: "Failed to calculate schedule" });
+      return sendPaylaterError(request, reply, err, "Failed to calculate schedule");
     }
   });
 
@@ -147,7 +157,7 @@ export default async function (fastify: FastifyInstance) {
 
       return result;
     } catch (err) {
-      reply.code(400).send({ error: "Failed to record interest" });
+      return sendPaylaterError(request, reply, err, "Failed to record interest");
     }
   });
 
@@ -181,7 +191,7 @@ export default async function (fastify: FastifyInstance) {
 
       return result;
     } catch (err) {
-      reply.code(400).send({ error: "Failed to settle paylater" });
+      return sendPaylaterError(request, reply, err, "Failed to settle paylater");
     }
   });
 
