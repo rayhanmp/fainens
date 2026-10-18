@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Sparkles, X } from 'lucide-react';
+import { Plus, Sparkles, X } from 'lucide-react';
+import { ComboBox, type PickerOption } from './EntryPickers';
 import { useCreateTagMutation } from '../../features/categories/queries';
 import { useTransactionTagSuggestions } from '../../features/transactions/queries';
 
@@ -11,14 +12,19 @@ export type TagRow = {
 };
 
 type TagPickerProps = {
+  id?: string;
   tags: TagRow[];
   selectedTagIds: number[];
   onChange: (tagIds: number[]) => void;
   suggestionContext?: { description: string; notes?: string; place?: string; categoryId?: number; transactionId?: number };
 };
 
-export function TagPicker({ tags, selectedTagIds, onChange, suggestionContext }: TagPickerProps) {
-  const [search, setSearch] = useState('');
+/**
+ * Tags behave like the other dropdown fields: the field opens a searchable A–Z list where several
+ * tags can be ticked, and a name that matches nothing can be added on the spot. Chosen tags sit
+ * under the field as chips for one-tap removal, and AI suggestions appear there too.
+ */
+export function TagPicker({ id, tags, selectedTagIds, onChange, suggestionContext }: TagPickerProps) {
   const [readyContext, setReadyContext] = useState<string | null>(null);
   const createTagMutation = useCreateTagMutation();
   const context = suggestionContext ? {
@@ -37,21 +43,26 @@ export function TagPicker({ tags, selectedTagIds, onChange, suggestionContext }:
   }, [requestKey, canSuggest]);
   const showSuggestions = canSuggest && readyContext === requestKey;
   const suggestionsQuery = useTransactionTagSuggestions(context, requestKey, showSuggestions);
+  // Suggestions are a nicety: when the request fails, the picker simply works without them.
   const aiTags = showSuggestions ? (suggestionsQuery.data?.tags ?? [])
     .flatMap(suggestion => {
       const tag = tags.find(tag => tag.id === suggestion.id);
       return tag && !selectedTagIds.includes(tag.id) ? [tag] : [];
     }) : [];
-  const normalizedSearch = search.trim().toLowerCase();
   const selectedTags = tags.filter((tag) => selectedTagIds.includes(tag.id));
-  const suggestedTags = [...tags]
+  // Quick-add chips: AI suggestions first, then the most-used tags, four at most.
+  const mostUsed = [...tags]
     .sort((left, right) => (right.usageCount ?? 0) - (left.usageCount ?? 0) || left.name.localeCompare(right.name))
-    .slice(0, 6);
-  const visibleTags = (normalizedSearch
-    ? tags.filter((tag) => tag.name.toLowerCase().includes(normalizedSearch))
-    : suggestedTags
-  ).filter((tag) => !selectedTagIds.includes(tag.id) && (normalizedSearch || !aiTags.some(suggestion => suggestion.id === tag.id)));
-  const tagAlreadyExists = tags.some((tag) => tag.name.trim().toLowerCase() === normalizedSearch);
+    .filter((tag) => !selectedTagIds.includes(tag.id));
+  const quickTags = [...aiTags, ...mostUsed.filter((tag) => !aiTags.some((suggested) => suggested.id === tag.id))].slice(0, 4);
+  const options: PickerOption[] = [...tags]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((tag) => ({
+      id: String(tag.id),
+      label: tag.name,
+      detail: tag.usageCount ? `${tag.usageCount} use${tag.usageCount === 1 ? '' : 's'}` : undefined,
+      leading: <span className="block h-2.5 w-2.5 rounded-full" style={{ background: tag.color }} aria-hidden />,
+    }));
 
   const toggleTag = (tagId: number) => {
     onChange(selectedTagIds.includes(tagId)
@@ -59,46 +70,24 @@ export function TagPicker({ tags, selectedTagIds, onChange, suggestionContext }:
       : [...selectedTagIds, tagId]);
   };
 
-  const createAndSelectTag = async () => {
-    const name = search.trim();
-    if (!name || tagAlreadyExists || createTagMutation.isPending) return;
+  const createAndSelectTag = async (name: string) => {
+    if (createTagMutation.isPending) return;
     const createdTag = await createTagMutation.mutateAsync({ name, color: '#64748B' });
     onChange([...selectedTagIds, createdTag.id]);
-    setSearch('');
   };
 
   return (
     <div className="space-y-2">
-      {suggestionContext && tags.length > 0 && (
-        <div className="space-y-2">
-          {showSuggestions && <div aria-live="polite" className="space-y-1.5">
-            {suggestionsQuery.isFetching && <p className="inline-flex items-center gap-1.5 text-xs text-[var(--color-muted)]"><Sparkles className="h-3.5 w-3.5" />Suggesting tags…</p>}
-            {suggestionsQuery.isError && <div className="flex flex-wrap items-center gap-2 text-xs"><p className="text-[var(--color-danger)]">{suggestionsQuery.error.message}</p><button type="button" onClick={() => void suggestionsQuery.refetch()} disabled={suggestionsQuery.isFetching} className="font-semibold text-[var(--color-accent)] disabled:opacity-50">Try again</button></div>}
-            {aiTags.length > 0 && <>
-              <p className="inline-flex items-center gap-1.5 text-xs text-[var(--color-muted)]"><Sparkles className="h-3.5 w-3.5" />Suggested for this transaction · tap to add</p>
-              <div className="flex flex-wrap gap-1.5">
-                {aiTags.map(tag => <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)} disabled={selectedTagIds.length >= 100} className="inline-flex items-center gap-1 rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 px-2.5 py-1.5 text-xs font-semibold text-[var(--color-accent)] hover:bg-[var(--color-accent)]/15 disabled:opacity-50"><Plus className="h-3 w-3" />{tag.name}</button>)}
-              </div>
-            </>}
-            {suggestionsQuery.isSuccess && !suggestionsQuery.isFetching && aiTags.length === 0 && <p className="text-xs text-[var(--color-muted)]">{suggestionsQuery.data.tags.length ? 'All suggested tags are already selected.' : 'No matching tags found.'}</p>}
-          </div>}
-        </div>
-      )}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && normalizedSearch && !tagAlreadyExists) {
-              event.preventDefault();
-              void createAndSelectTag();
-            }
-          }}
-          placeholder="Search or add a tag"
-          className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-2 pl-9 pr-3 text-sm text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/15"
-        />
-      </div>
+      <ComboBox
+        id={id}
+        value=""
+        selectedIds={selectedTagIds.map(String)}
+        options={options}
+        onChange={(tagId) => toggleTag(Number(tagId))}
+        onCreate={createAndSelectTag}
+        placeholder={tags.length ? 'Add tags' : 'Type to add your first tag'}
+        searchPlaceholder="Search or add a tag"
+      />
 
       {selectedTags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -107,47 +96,27 @@ export function TagPicker({ tags, selectedTagIds, onChange, suggestionContext }:
               key={tag.id}
               type="button"
               onClick={() => toggleTag(tag.id)}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-2.5 py-1 text-xs font-semibold text-[var(--color-accent)]"
+              aria-label={`Remove tag ${tag.name}`}
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 pl-2.5 pr-1.5 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/20"
             >
               {tag.name}
-              <X className="h-3 w-3" />
+              <X className="h-3 w-3" aria-hidden />
             </button>
           ))}
         </div>
       )}
 
-      {visibleTags.length > 0 && (
-        <div className="grid grid-cols-2 gap-1.5">
-          {visibleTags.map((tag) => (
-            <button
-              key={tag.id}
-              type="button"
-              onClick={() => toggleTag(tag.id)}
-              className="min-w-0 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container)] px-2.5 py-2 text-left text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/5"
-            >
-              <span className="block truncate">{tag.name}</span>
-            </button>
-          ))}
+      {quickTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" aria-live="polite">
+          {quickTags.map(tag => {
+            const suggested = aiTags.some((candidate) => candidate.id === tag.id);
+            return (
+              <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)} title={suggested ? 'Suggested for this transaction' : 'Often used'} className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-[var(--color-border-strong)] pl-2 pr-2.5 text-xs font-semibold text-[var(--ref-on-surface-variant)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]">
+                {suggested ? <Sparkles className="h-3 w-3 text-[var(--color-accent)]" aria-hidden /> : <Plus className="h-3 w-3" aria-hidden />}{tag.name}
+              </button>
+            );
+          })}
         </div>
-      )}
-
-      {normalizedSearch && !tagAlreadyExists && (
-        <button
-          type="button"
-          onClick={() => void createAndSelectTag()}
-          disabled={createTagMutation.isPending}
-          className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[var(--color-accent)]/50 px-3 py-2 text-left text-xs font-bold text-[var(--color-accent)] hover:bg-[var(--color-accent)]/5 disabled:opacity-60"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {createTagMutation.isPending ? 'Adding tag…' : `Add “${search.trim()}”`}
-        </button>
-      )}
-
-      {!normalizedSearch && visibleTags.length === 0 && selectedTags.length === 0 && (
-        <p className="text-xs text-[var(--color-muted)]">No tags yet. Type above to create one.</p>
-      )}
-      {normalizedSearch && visibleTags.length === 0 && tagAlreadyExists && selectedTags.length === 0 && (
-        <p className="text-xs text-[var(--color-muted)]">That tag is already selected.</p>
       )}
     </div>
   );

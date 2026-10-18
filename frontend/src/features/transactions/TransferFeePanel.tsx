@@ -1,7 +1,7 @@
+import { ArrowRight, Receipt } from 'lucide-react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
-import { Info } from 'lucide-react';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
+import { cn, formatIdNominalInput } from '../../lib/utils';
+import { Field, fieldControl } from '../../components/transactions/EntryPickers';
 
 export type TransferFeeDetails = {
   fee: number;
@@ -13,62 +13,73 @@ export type TransferFeeDetails = {
 
 type TransferFeePanelProps = {
   details: TransferFeeDetails | { error: string } | null;
+  fromName?: string;
+  toName?: string;
   manualPayerOverride: '' | 'sender' | 'recipient';
-  controlsOpen: boolean;
   transferAdminFee: string;
-  onToggleControls: () => void;
   onFeeChange: (value: string) => void;
   onPayerChange: (value: '' | 'sender' | 'recipient') => void;
 };
 
-export function TransferFeePanel({
-  details,
-  manualPayerOverride,
-  controlsOpen,
-  transferAdminFee,
-  onToggleControls,
-  onFeeChange,
-  onPayerChange,
-}: TransferFeePanelProps) {
+/**
+ * The transfer fee as one editable line: the amount, who pays it, and what that means for
+ * both accounts. Leaving the amount empty keeps the rule's default, shown as the placeholder.
+ */
+export function TransferFeePanel({ details, fromName, toName, manualPayerOverride, transferAdminFee, onFeeChange, onPayerChange }: TransferFeePanelProps) {
   const { formatAmount } = useBalanceVisibility();
-  if (!details) return null;
-  if ('error' in details) {
-    return <div className="rounded-xl border border-[var(--color-danger)]/20 bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]">{details.error}</div>;
-  }
+  const resolved = details && !('error' in details) ? details : null;
+  const error = details && 'error' in details ? details.error : null;
+  const defaultPayer: 'sender' | 'recipient' = resolved ? (resolved.senderPays ? 'sender' : 'recipient') : 'sender';
+  const payer = manualPayerOverride || defaultPayer;
+  const source = manualPayerOverride || transferAdminFee.trim() !== ''
+    ? 'Custom'
+    : resolved?.source === 'default' ? 'From settings'
+      : resolved?.source === 'provider' ? 'Provider default'
+        : 'No rule';
 
-  const ruleLabel = manualPayerOverride
-    ? 'Manual payer override'
-    : details.source === 'manual'
-      ? 'Manual override'
-      : details.source === 'default'
-        ? 'Settings default'
-        : details.source === 'provider'
-          ? 'Provider default'
-          : 'No fee rule';
-  const defaultPayer = details.senderPays ? 'sender' : 'recipient';
-  const alternatePayer = defaultPayer === 'sender' ? 'recipient' : 'sender';
-  const feeSummary = details.fee > 0
-    ? `${formatAmount(details.fee)} · ${details.senderPays ? 'Sender pays' : 'Recipient pays'}`
-    : 'No fee';
-
-  return <div className="space-y-2">
-    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">Transfer fee</label>
-    <button type="button" onClick={onToggleControls} className="flex w-full items-center justify-between gap-3 rounded-xl border-none bg-[var(--ref-surface-container-low)] px-3 py-3 text-left text-sm text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20" aria-expanded={controlsOpen}>
-      <span className="min-w-0 truncate">{feeSummary}</span>
-      <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-[var(--color-accent)]">
-        <span className="group relative inline-flex" tabIndex={0} aria-label="Show transfer fee details">
-          <Info className="h-4 w-4" />
-          <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 hidden w-72 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left text-xs font-normal leading-relaxed text-[var(--color-text-primary)] shadow-lg group-hover:block group-focus-within:block">
-            {formatAmount(details.fromAmount)} deducted from the source and {formatAmount(details.toAmount)} received. Applied rule: {ruleLabel}.
-          </span>
-        </span>
-        <span>{controlsOpen ? 'Done' : 'Adjust'}</span>
-      </span>
-    </button>
-    {controlsOpen && <div className="space-y-2 rounded-xl bg-[var(--ref-surface-container-low)] p-3">
-      <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Override the fee or who incurs it for this transfer only.</p>
-      <Input label="Fee override (IDR)" type="number" min="0" step="1" value={transferAdminFee} onChange={(event) => onFeeChange(event.target.value)} placeholder={details.fee > 0 ? String(details.fee) : '0'} className="mt-2 rounded-xl" />
-      <Select label="Fee incurred by" value={manualPayerOverride === defaultPayer ? '' : manualPayerOverride} onChange={(event) => onPayerChange(event.target.value as '' | 'sender' | 'recipient')} options={[{ value: '', label: `${defaultPayer === 'sender' ? 'Sender' : 'Recipient'} (default)` }, { value: alternatePayer, label: alternatePayer === 'sender' ? 'Sender' : 'Recipient' }]} className="mt-2 rounded-xl" />
-    </div>}
-  </div>;
+  return (
+    <Field label="Transfer fee" icon={Receipt} htmlFor="entry-fee" hint={<span className="text-xs font-normal text-[var(--ref-outline)]">{source}</span>}>
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--ref-on-surface-variant)]">Rp</span>
+          <input
+            id="entry-fee"
+            inputMode="numeric"
+            value={transferAdminFee}
+            onChange={(event) => onFeeChange(formatIdNominalInput(event.target.value))}
+            placeholder={resolved ? formatIdNominalInput(String(resolved.fee)) : '0'}
+            aria-describedby={error ? 'entry-fee-error' : undefined}
+            aria-invalid={error ? 'true' : undefined}
+            className={cn(fieldControl, 'pl-9 tabular-nums', error && 'border-[var(--color-danger)]')}
+          />
+        </div>
+        <div role="radiogroup" aria-label="Who pays the fee" title="Who pays the fee" className="inline-flex shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-0.5">
+          {(['sender', 'recipient'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={payer === option}
+              onClick={() => onPayerChange(option === defaultPayer ? '' : option)}
+              className={cn(
+                'h-8 rounded-md px-2.5 text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
+                payer === option ? 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]',
+              )}
+            >
+              {option === 'sender' ? 'Sender' : 'Recipient'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {error
+        ? <p id="entry-fee-error" role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>
+        : resolved && resolved.fee > 0 && (
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-1 text-xs text-[var(--ref-on-surface-variant)]">
+            <strong className="font-semibold text-[var(--ref-on-surface)]">{formatAmount(resolved.fromAmount)}</strong> from {fromName ?? 'source'}
+            <ArrowRight className="h-3 w-3" aria-hidden />
+            <strong className="font-semibold text-[var(--ref-on-surface)]">{formatAmount(resolved.toAmount)}</strong> to {toName ?? 'destination'}
+          </p>
+        )}
+    </Field>
+  );
 }

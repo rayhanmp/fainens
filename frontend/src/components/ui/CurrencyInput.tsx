@@ -20,6 +20,8 @@ interface CurrencyInputProps {
   tone?: 'default' | 'inverse';
   /** Marks this field as the one a surrounding modal focuses when it opens. */
   initialFocus?: boolean;
+  /** Accessible name when no visible `label` is rendered. */
+  ariaLabel?: string;
 }
 
 export function CurrencyInput({
@@ -38,6 +40,7 @@ export function CurrencyInput({
   currencySymbol = 'Rp',
   tone = 'default',
   initialFocus = false,
+  ariaLabel,
 }: CurrencyInputProps) {
   const { balancesHidden, maskAmounts } = useBalanceVisibility();
   const [isFocused, setIsFocused] = useState(false);
@@ -217,7 +220,7 @@ export function CurrencyInput({
   };
 
   return (
-    <div className={cn('space-y-4', className)}>
+    <div className={cn('group/amount space-y-4', className)}>
       {label && (
         <label
           htmlFor={id}
@@ -246,6 +249,7 @@ export function CurrencyInput({
           inputMode="numeric"
           autoComplete="off"
           data-autofocus={initialFocus || undefined}
+          aria-label={label ? undefined : ariaLabel}
           value={balancesHidden && !isFocused && rawInput ? HIDDEN_BALANCE : rawInput}
           onFocus={() => setIsFocused(true)}
           onChange={handleChange}
@@ -257,7 +261,8 @@ export function CurrencyInput({
           aria-invalid={error ? 'true' : undefined}
           aria-describedby={errorId}
           className={cn(
-            'font-headline font-extrabold w-full min-w-0 leading-none bg-transparent border-none focus:ring-0 p-0',
+            // Focus shows as the underline below turning to the accent colour, not a box around the digits.
+            'font-headline font-extrabold w-full min-w-0 leading-none bg-transparent border-none p-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none',
             tone === 'inverse'
               ? 'text-white placeholder:text-[#91a9d1]'
               : 'placeholder:text-[var(--ref-surface-container-highest)] text-[var(--color-text-primary)]',
@@ -278,7 +283,10 @@ export function CurrencyInput({
       </div>
       {hint && !hintInline && <p className={cn('-mt-2 text-xs', tone === 'inverse' ? 'text-[#d7e4ff]' : 'text-[var(--color-text-secondary)]')}>{maskAmounts(hint)}</p>}
       {showDivider && (
-        <div className={cn('h-px w-full', tone === 'inverse' ? 'bg-[#5773a6]' : 'bg-[var(--ref-surface-container-highest)]')} />
+        <div className={cn(
+          'h-px w-full transition-[background-color,box-shadow] duration-200',
+          tone === 'inverse' ? 'bg-[#5773a6] group-focus-within/amount:bg-white' : 'bg-[var(--ref-surface-container-highest)] group-focus-within/amount:bg-[var(--color-accent)] group-focus-within/amount:shadow-[0_1px_0_var(--color-accent)]',
+        )} />
       )}
       {error && (
         <p id={errorId} className="text-sm text-[var(--color-danger)]" role="alert">

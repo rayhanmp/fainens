@@ -11,7 +11,7 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { useConfirm } from '../ui/ConfirmDialog';
-import { formatCurrency, formatDate, formatTime, cn, getAccountTypeLabel, parseIdNominalToInt, parseSignedIdNominalToInt, formatFileSize } from '../../lib/utils';
+import { formatCurrency, formatDate, formatTime, cn, getAccountTypeLabel, formatIdNominalInput, parseIdNominalToInt, parseSignedIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
   Plus,
   Trash2,
@@ -21,14 +21,10 @@ import {
   Tag as TagIcon,
   Landmark,
   Wallet,
-  Banknote,
   Save,
-  Users,
   ImagePlus,
   StickyNote,
   CreditCard,
-  ArrowUpRight,
-  ArrowDownRight,
   ShoppingCart,
   X,
   CalendarClock,
@@ -36,7 +32,9 @@ import {
   Check,
   Pencil,
   RotateCcw,
-  ChevronDown,
+  FolderOpen,
+  MapPin,
+  Paperclip,
 } from 'lucide-react';
 import MapPicker, { TransportRoute, calculateDistance } from '../ui/MapPicker';
 import { AttachmentUploader, uploadPendingAttachments } from '../ui/AttachmentUploader';
@@ -67,6 +65,9 @@ import { SplitBillTransactionDetail } from './SplitBillTransactionDetail';
 import { TransferFeePanel, type TransferFeeDetails } from '../../features/transactions/TransferFeePanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast, errorMessage } from '../ui/useToast';
+import { ComboBox, DateTimeField, EntryTypeSwitch, Field, fieldControl, fieldLabel as fieldLabelClass, type PickerOption } from './EntryPickers';
+import { entryAccent } from './entry-types';
+import { categoryIcon } from '../../features/categories/category-icon';
 import {
   reverseTransactionNow,
   useApprovePendingTransactionMutation,
@@ -179,7 +180,6 @@ interface TransactionModalProps {
   initialPrefill?: TransactionPrefill;
 }
 
-const WALLET_ICONS = [Landmark, Wallet, Banknote] as const;
 const SIMPLE_DRAFT_KEY = 'transaction:new:simple';
 const JOURNAL_DRAFT_KEY = 'transaction:new:journal';
 const AI_DRAFT_KEY = 'transaction:new:ai';
@@ -455,11 +455,6 @@ export function TransactionModal({
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [transferFeeRules, setTransferFeeRules] = useState<TransferFeeRule[]>([]);
-  const [transferFeeControlsOpen, setTransferFeeControlsOpen] = useState(false);
-  const [showAllTransferFromAccounts, setShowAllTransferFromAccounts] = useState(false);
-  const [showAllTransferToAccounts, setShowAllTransferToAccounts] = useState(false);
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
-  const [quickEntryPreferences, setQuickEntryPreferences] = useState<QuickEntryPreferences>(() => loadQuickEntryPreferences());
   const routeTemplates = (routeTemplatesQuery.data?.templates ?? []) as TransportRouteTemplate[];
   const [isSavingRouteTemplate, setIsSavingRouteTemplate] = useState(false);
   const [isUpdatingRouteTemplate, setIsUpdatingRouteTemplate] = useState(false);
@@ -468,6 +463,8 @@ export function TransactionModal({
   const [routeTemplateName, setRouteTemplateName] = useState('');
   const autoTransferDescriptionRef = useRef('');
   const autoTransportDescriptionRef = useRef('');
+  /** A name the user typed, kept while they visit Transfer (which has no name field). */
+  const typedDescriptionRef = useRef('');
 
   const [categoryRecommendation, setCategoryRecommendation] = useState<{
     categoryId: number;
@@ -507,21 +504,6 @@ export function TransactionModal({
   const walletAccounts = accounts.filter(
     (a) => (a.type === 'asset' || a.type === 'liability') && !a.systemKey,
   );
-  const quickWalletAccounts = [...walletAccounts]
-    .filter((account) => account.type === 'asset')
-    .sort((a, b) => {
-      const aIndex = quickEntryPreferences.accountIds.indexOf(a.id);
-      const bIndex = quickEntryPreferences.accountIds.indexOf(b.id);
-      return (aIndex < 0 ? 999 : aIndex) - (bIndex < 0 ? 999 : bIndex);
-    });
-  const quickCategories = [...categories]
-    .sort((a, b) => {
-      const aIndex = quickEntryPreferences.categoryIds.indexOf(a.id);
-      const bIndex = quickEntryPreferences.categoryIds.indexOf(b.id);
-      return (aIndex < 0 ? 999 : aIndex) - (bIndex < 0 ? 999 : bIndex);
-    })
-    .slice(0, 6);
-  
   // Helper to check if an account is a paylater account
   const isPaylaterAccount = (accountId: string): boolean => {
     const account = accounts.find(a => a.id.toString() === accountId);
@@ -557,6 +539,51 @@ export function TransactionModal({
     const from = accounts.find((account) => account.id.toString() === fromAccountId);
     const to = accounts.find((account) => account.id.toString() === toAccountId);
     return from && to ? `Transfer ${from.name} -> ${to.name}` : '';
+  };
+
+  /** Names the form fills in by itself (as opposed to ones the user typed). */
+  const isGeneratedDescription = (description: string) => {
+    const name = description.trim();
+    return name === ''
+      || name === autoTransferDescriptionRef.current
+      || name === autoTransportDescriptionRef.current
+      || name === 'Income'
+      || categories.some((category) => name === `${category.name} expense`);
+  };
+
+  /**
+   * Switches the entry type (Expense, Income, Transfer, Settle). A name the user typed carries over,
+   * so picking the wrong tab first loses nothing; a generated name such as "Transfer A -> B" stays
+   * with its own tab instead of following into the others.
+   */
+  const switchSimpleType = (nextType: typeof simpleForm.type) => {
+    setSimpleForm((current) => {
+      if (current.type === nextType) return current;
+      // Transfer shows no name field, so it always uses its generated name; a typed name waits aside.
+      if (current.type !== 'transfer' && !isGeneratedDescription(current.description)) typedDescriptionRef.current = current.description;
+      if (current.type !== 'transfer' && isGeneratedDescription(current.description)) typedDescriptionRef.current = '';
+      const typed = typedDescriptionRef.current;
+      // Expense uses the source field and Income the destination field, both defaulting to the
+      // preferred account. A transfer to the account it came from is meaningless, so its destination
+      // starts empty; coming back, Income takes the source account rather than nothing.
+      const toAccountId = nextType === 'transfer'
+        ? (current.toAccountId === current.fromAccountId ? '' : current.toAccountId)
+        : (current.toAccountId || current.fromAccountId);
+      const generatedTransfer = nextType === 'transfer' ? defaultTransferDescription(current.fromAccountId, toAccountId) : '';
+      autoTransferDescriptionRef.current = generatedTransfer;
+      if (nextType !== 'expense') autoTransportDescriptionRef.current = '';
+      const description = nextType === 'transfer' ? generatedTransfer
+        : typed ? typed
+          : nextType === 'income' ? 'Income'
+            : '';
+      return {
+        ...current,
+        type: nextType,
+        toAccountId,
+        description,
+        paylaterRecognitionId: nextType === 'paylater' ? current.paylaterRecognitionId : '',
+      };
+    });
   };
 
   useEffect(() => {
@@ -654,9 +681,6 @@ export function TransactionModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setTransferFeeControlsOpen(false);
-    setShowAllTransferFromAccounts(false);
-    setShowAllTransferToAccounts(false);
     autoTransferDescriptionRef.current = '';
     autoTransportDescriptionRef.current = '';
     if (editingTransaction) {
@@ -718,26 +742,26 @@ export function TransactionModal({
         && accounts.some((account) => account.id === configuredBankAccountId && account.type === 'asset' && !account.systemKey)
         ? configuredBankAccountId
         : undefined;
-      const effectiveQuickEntryPreferences = defaultBankAccountId != null
-        ? { ...preferences, accountIds: [defaultBankAccountId, ...preferences.accountIds.filter((id) => id !== defaultBankAccountId)] }
-        : preferences;
-      setQuickEntryPreferences(effectiveQuickEntryPreferences);
       const preferredTransactionAccountId = initialPrefill?.accountId ?? defaultBankAccountId ?? preferences.accountIds[0];
       const preferredCategoryId = initialPrefill?.categoryId ?? preferences.categoryIds[0];
+      const type = initialPrefill?.type ?? restored.type;
+      const fromAccountId = initialPrefill?.fromAccountId != null
+        ? String(initialPrefill.fromAccountId)
+        : initialPrefill?.accountId != null || !restored.fromAccountId ? String(preferredTransactionAccountId ?? restored.fromAccountId) : restored.fromAccountId;
+      const toAccountId = initialPrefill?.toAccountId != null
+        ? String(initialPrefill.toAccountId)
+        : initialPrefill?.accountId != null || !restored.toAccountId ? String(preferredTransactionAccountId ?? restored.toAccountId) : restored.toAccountId;
       setSimpleForm({
         ...restored,
-        type: initialPrefill?.type ?? restored.type,
+        type,
         amount: initialPrefill?.amount ?? restored.amount,
         description: initialPrefill?.description ?? restored.description,
-        fromAccountId: initialPrefill?.fromAccountId != null
-          ? String(initialPrefill.fromAccountId)
-          : initialPrefill?.accountId != null || !restored.fromAccountId ? String(preferredTransactionAccountId ?? restored.fromAccountId) : restored.fromAccountId,
-        toAccountId: initialPrefill?.toAccountId != null
-          ? String(initialPrefill.toAccountId)
-          : initialPrefill?.accountId != null || !restored.toAccountId ? String(preferredTransactionAccountId ?? restored.toAccountId) : restored.toAccountId,
+        fromAccountId,
+        // Income reuses the destination field, so it gets the preferred account too; a transfer must
+        // not start with both ends on the same account.
+        toAccountId: type === 'transfer' && toAccountId === fromAccountId ? '' : toAccountId,
         categoryId: initialPrefill?.categoryId != null || !restored.categoryId ? String(preferredCategoryId ?? restored.categoryId) : restored.categoryId,
       });
-      setMobileDetailsOpen(false);
       editMetadataForm.reset();
       setInstallmentPreview(null);
       setAttachments([]);
@@ -1470,54 +1494,6 @@ export function TransactionModal({
     (editingTransaction.txType?.startsWith('simple_expense') ||
       editingTransaction.categoryId != null);
 
-  const renderWalletCard = (
-    a: WalletAccount,
-    idx: number,
-    selected: boolean,
-    onSelect: () => void,
-    compact = false,
-    disabled = false,
-    disabledHint?: string,
-  ) => {
-    const Icon = WALLET_ICONS[idx % 3];
-    return (
-      <button
-        key={a.id}
-        type="button"
-        onClick={onSelect}
-        disabled={disabled}
-        aria-disabled={disabled || undefined}
-        title={disabled ? disabledHint : undefined}
-        className={cn(
-          'flex flex-col items-start rounded-xl transition-all text-left',
-          compact ? 'min-w-0 w-full p-3 min-h-[72px]' : 'p-4 min-h-[96px]',
-          disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-          selected
-            ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)] shadow-sm'
-            : 'bg-[var(--ref-surface-container-low)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
-        )}
-      >
-        <Icon
-          className={cn(
-            compact ? 'w-5 h-5 mb-1.5' : 'w-6 h-6 mb-2',
-            selected ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]',
-          )}
-        />
-        <span className="text-xs font-bold text-[var(--color-text-primary)] line-clamp-2">
-          {a.name}
-        </span>
-        <span className="text-[10px] text-[var(--color-muted)]">
-          {getAccountTypeLabel(a.type)} · {formatAmount(a.balance)}
-        </span>
-        {disabled && disabledHint && (
-          <span className="mt-0.5 text-[10px] font-semibold text-[var(--color-muted)]">
-            {disabledHint}
-          </span>
-        )}
-      </button>
-    );
-  };
-
   if (editingTransaction) {
     // View Mode - Show transaction details read-only
     if (viewMode) {
@@ -2150,16 +2126,351 @@ export function TransactionModal({
   }
 
   const transferWalletAccounts = walletAccounts.filter((account) => !isPaylaterAccount(account.id.toString()));
-  const transferAccountChoices = (_selectedId: string, showAll: boolean) =>
-    showAll ? transferWalletAccounts : transferWalletAccounts.slice(0, 3);
+
+  // ---- Simple entry (Expense, Income, Transfer, Settle) ----------------------------------------
+  const accountOption = (account: WalletAccount): PickerOption => ({
+    id: String(account.id),
+    label: account.name,
+    detail: `${getAccountTypeLabel(account.type)} · ${formatAmount(account.balance)}`,
+    group: isPaylaterAccount(String(account.id)) ? 'PayLater & credit' : 'Cash & bank',
+  });
+  const categoryOptions: PickerOption[] = categories.map((category) => {
+    // A line icon chosen from the name, tinted with the category's colour, instead of the stored emoji.
+    const Icon = categoryIcon(category.name);
+    return {
+      id: String(category.id),
+      label: category.name,
+      leading: <Icon className="h-4 w-4" style={{ color: category.color ?? 'var(--ref-on-surface-variant)' }} aria-hidden />,
+    };
+  });
+  const openObligations = (paylaterObligationsState?.obligations ?? []).filter((obligation) => obligation.outstandingCents > 0);
+  const selectedCategoryRow = categories.find((category) => String(category.id) === simpleForm.categoryId);
+  const isTransportExpense = simpleForm.type === 'expense' && !!selectedCategoryRow && /transport/i.test(selectedCategoryRow.name);
+  const usesPaylaterAccount = simpleForm.type === 'expense' && isPaylaterAccount(simpleForm.fromAccountId);
+  const accountName = (id: string) => accounts.find((account) => String(account.id) === id)?.name;
+  const enteredAmount = parseIdNominalToInt(simpleForm.amount);
+  const transferDetails = simpleForm.type === 'transfer' ? calculateTransferDetails() : null;
+
+  const selectedObligation = openObligations.find((item) => String(item.recognitionTxId) === simpleForm.paylaterRecognitionId);
+  const obligationOptions: PickerOption[] = openObligations.map((obligation) => ({
+    id: String(obligation.recognitionTxId),
+    label: obligation.description,
+    detail: `${obligation.liabilityAccountName} · ${formatAmount(obligation.outstandingCents)} left`,
+  }));
+
+  const chooseCategory = (id: string) => {
+    const category = categories.find((item) => String(item.id) === id);
+    setCategoryRecommendation(null);
+    setSimpleForm((current) => ({
+      ...current,
+      categoryId: id,
+      description: isGeneratedDescription(current.description) && category ? `${category.name} expense` : current.description,
+    }));
+  };
+  const chooseAccount = (field: 'fromAccountId' | 'toAccountId', id: string) => {
+    setSimpleForm((current) => ({ ...current, [field]: id, ...(field === 'fromAccountId' && current.toAccountId === id ? { toAccountId: '' } : {}) }));
+  };
+  const chooseObligation = (id: string) => {
+    const obligation = openObligations.find((item) => String(item.recognitionTxId) === id);
+    setSimpleForm((current) => {
+      // Settling usually means the full remaining amount: prefill it unless the user typed their own.
+      const previous = openObligations.find((item) => String(item.recognitionTxId) === current.paylaterRecognitionId);
+      const amountWasPrefilled = !current.amount || (previous != null && parseIdNominalToInt(current.amount) === previous.outstandingCents);
+      return { ...current, paylaterRecognitionId: id, amount: amountWasPrefilled && obligation ? formatIdNominalInput(String(obligation.outstandingCents)) : current.amount };
+    });
+  };
+
+  /** Beside the Save button, once the entry is complete: a read-back of what will be saved. */
+  const entrySummary = (() => {
+    const missing: string[] = [];
+    if (!(Number.isFinite(enteredAmount) && enteredAmount > 0)) missing.push('amount');
+    if ((simpleForm.type === 'expense' || simpleForm.type === 'income') && !simpleForm.description.trim()) missing.push('name');
+    if (simpleForm.type === 'expense' && !simpleForm.categoryId) missing.push('category');
+    if (simpleForm.type === 'paylater' && !simpleForm.paylaterRecognitionId) missing.push('PayLater item');
+    if (simpleForm.type === 'income' ? !simpleForm.toAccountId : !simpleForm.fromAccountId) missing.push(simpleForm.type === 'transfer' ? 'source account' : 'account');
+    if (simpleForm.type === 'transfer' && !simpleForm.toAccountId) missing.push('destination account');
+    if (missing.length > 0) return null;
+    const strong = (text: string) => <strong className="font-semibold text-[var(--ref-on-surface)]">{text}</strong>;
+    const day = simpleForm.dateTime.slice(0, 10);
+    const when = day === toDateInputLocal(new Date()) ? 'today' : day === toDateInputLocal(new Date(Date.now() - 86_400_000)) ? 'yesterday' : formatDate(new Date(simpleForm.dateTime).getTime());
+    const amount = strong(formatAmount(enteredAmount));
+    const from = strong(accountName(simpleForm.fromAccountId) ?? '');
+    const to = strong(accountName(simpleForm.toAccountId) ?? '');
+    if (simpleForm.type === 'expense') return <>{amount} on {strong(selectedCategoryRow?.name ?? '')} from {from} · {when}</>;
+    if (simpleForm.type === 'income') return <>{amount} into {to} · {when}</>;
+    if (simpleForm.type === 'transfer') return <>{amount} from {from} to {to} · {when}</>;
+    return <>{amount} toward {strong(selectedObligation?.description ?? '')} from {from}</>;
+  })();
+
+  const amountLabel = { expense: 'Amount spent', income: 'Amount received', transfer: 'Amount to send', paylater: 'Payment amount' }[simpleForm.type];
+  const subCard = 'space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 p-4';
+  const fieldLabel = fieldLabelClass;
+  const fieldInput = fieldControl;
+  const segment = (selected: boolean) => cn(
+    'h-9 rounded-lg border px-3 text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
+    selected ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] hover:border-[var(--color-border-strong)]',
+  );
+  const optional = <span className="text-xs font-normal text-[var(--ref-outline)]">Optional</span>;
+  const transferAccountOptions = transferWalletAccounts.map(accountOption);
+  const rideServices: Record<'gojek' | 'grab' | 'others', string[]> = {
+    gojek: ['GoRide', 'GoRide Hemat', 'GoRide Comfort', 'GoCar', 'GoCar Prioritas', 'GoCar Hemat', 'GoCar XL'],
+    grab: ['Bike Standard', 'Bike Comfort', 'Car Standard', 'Car Plus (4 seat)', 'Car Plus (6 seat)', 'Car Premium', 'Car Priority'],
+    others: ['Blue Bird', 'Silver Bird', 'Maxim', 'InDriver', 'Other'],
+  };
+
+  const renderEntryForm = () => (
+    <div className="space-y-6">
+      <EntryTypeSwitch value={simpleForm.type} onChange={switchSimpleType} />
+
+      {/* The amount is the headline; the currency mark takes the entry type's colour. */}
+      <div style={{ '--color-accent': entryAccent(simpleForm.type) } as React.CSSProperties}>
+        <CurrencyInput
+          label={amountLabel}
+          value={simpleForm.amount}
+          onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
+          size="md"
+          required
+          initialFocus
+          hint={transferDetails && !('error' in transferDetails) && transferDetails.fee > 0 ? `+ ${formatAmount(transferDetails.fee)} transfer fee paid by the ${transferDetails.senderPays ? 'sender' : 'recipient'}` : undefined}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+        {simpleForm.type !== 'transfer' && (
+          <Field
+            label={simpleForm.type === 'income' ? 'Source' : simpleForm.type === 'paylater' ? 'Payment name' : 'Name'}
+            icon={Pencil}
+            htmlFor="entry-name"
+            className="sm:col-span-2"
+            hint={simpleForm.type === 'paylater' ? optional : simpleForm.type === 'expense' && (categoryRecommendation || isLoadingRecommendation) ? (
+              <span className="flex items-center gap-1.5 text-xs font-normal" aria-live="polite">
+                <Sparkles className="h-3.5 w-3.5 text-[var(--ref-primary)]" aria-hidden />
+                {categoryRecommendation
+                  ? <>Looks like <strong className="font-semibold">{categoryRecommendation.categoryName}</strong><button type="button" onClick={applyCategoryRecommendation} className="ml-1 rounded px-1.5 py-0.5 font-semibold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10">Use it</button></>
+                  : <span className="text-[var(--ref-on-surface-variant)]">Suggesting a category…</span>}
+              </span>
+            ) : undefined}
+          >
+            <input
+              id="entry-name"
+              type="text"
+              value={simpleForm.description}
+              onChange={(event) => setSimpleForm({ ...simpleForm, description: event.target.value })}
+              placeholder={simpleForm.type === 'income' ? 'e.g. Salary, Freelance invoice' : simpleForm.type === 'paylater' ? 'e.g. October installment' : 'e.g. Weekly groceries at Alfamart'}
+              required={simpleForm.type !== 'paylater'}
+              className={fieldControl}
+            />
+          </Field>
+        )}
+
+        {simpleForm.type === 'expense' && (
+          <Field label="Category" icon={FolderOpen} htmlFor="entry-category">
+            <ComboBox id="entry-category" value={simpleForm.categoryId} options={categoryOptions} onChange={chooseCategory} placeholder="Choose a category" searchPlaceholder="Search categories"
+              emptyHint={<>No categories yet. <Link to="/categories" className="font-semibold text-[var(--ref-primary)] hover:underline">Create one</Link></>} />
+          </Field>
+        )}
+
+        {simpleForm.type === 'paylater' && (
+          <Field label="Pay toward" icon={CreditCard} htmlFor="entry-obligation" className="sm:col-span-2">
+            <ComboBox id="entry-obligation" value={simpleForm.paylaterRecognitionId} options={obligationOptions} onChange={chooseObligation} placeholder="Choose a PayLater item" searchPlaceholder="Search PayLater items"
+              emptyHint={<>Nothing to settle. Record a purchase paid with a PayLater account as an <strong>Expense</strong> first.</>} />
+          </Field>
+        )}
+
+        {simpleForm.type === 'transfer' ? (
+          <div className="relative grid grid-cols-1 gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-2">
+            <Field label="From" icon={Wallet} htmlFor="entry-from">
+              <ComboBox id="entry-from" value={simpleForm.fromAccountId} options={transferAccountOptions} onChange={(id) => chooseAccount('fromAccountId', id)} placeholder="Source account" searchPlaceholder="Search accounts" />
+            </Field>
+            <Field label="To" icon={Landmark} htmlFor="entry-to">
+              <ComboBox id="entry-to" value={simpleForm.toAccountId} options={transferAccountOptions.map((option) => (option.id === simpleForm.fromAccountId ? { ...option, disabled: true, disabledReason: 'Same as source' } : option))} onChange={(id) => chooseAccount('toAccountId', id)} placeholder="Destination account" searchPlaceholder="Search accounts" />
+            </Field>
+            {/* Sits in the gap between the two fields, level with their controls. */}
+            <button
+              type="button"
+              onClick={() => setSimpleForm((current) => ({ ...current, fromAccountId: current.toAccountId, toAccountId: current.fromAccountId }))}
+              disabled={!simpleForm.fromAccountId && !simpleForm.toAccountId}
+              aria-label="Swap source and destination"
+              title="Swap"
+              className="absolute left-1/2 top-[2.55rem] hidden h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] shadow-sm transition-[transform,color] hover:rotate-180 hover:text-[var(--ref-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)] disabled:opacity-40 sm:grid"
+            >
+              <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <Field label={simpleForm.type === 'income' ? 'Deposit into' : 'Paid from'} icon={simpleForm.type === 'income' ? Landmark : Wallet} htmlFor="entry-account">
+            <ComboBox id="entry-account" value={simpleForm.type === 'income' ? simpleForm.toAccountId : simpleForm.fromAccountId} options={(simpleForm.type === 'expense' ? walletAccounts : transferWalletAccounts).map(accountOption)}
+              onChange={(id) => chooseAccount(simpleForm.type === 'income' ? 'toAccountId' : 'fromAccountId', id)} placeholder="Choose an account" searchPlaceholder="Search accounts"
+              emptyHint={<>No accounts yet. <Link to="/accounts" className="font-semibold text-[var(--ref-primary)] hover:underline">Add one</Link></>} />
+          </Field>
+        )}
+
+        <DateTimeField id="entry-when" value={simpleForm.dateTime} onChange={(dateTime) => setSimpleForm({ ...simpleForm, dateTime })} />
+
+        {simpleForm.type === 'transfer' && simpleForm.fromAccountId && simpleForm.toAccountId && (
+          <TransferFeePanel
+            details={transferDetails as TransferFeeDetails | { error: string } | null}
+            fromName={accountName(simpleForm.fromAccountId)}
+            toName={accountName(simpleForm.toAccountId)}
+            manualPayerOverride={simpleForm.transferFeePayerOverride}
+            transferAdminFee={simpleForm.transferAdminFee}
+            onFeeChange={(value) => setSimpleForm({ ...simpleForm, transferAdminFee: value })}
+            onPayerChange={(value) => setSimpleForm({ ...simpleForm, transferFeePayerOverride: value })}
+          />
+        )}
+
+        {simpleForm.type === 'expense' && (
+          <Field label="Place" icon={MapPin} htmlFor="entry-place" hint={optional}>
+            <input id="entry-place" type="text" value={simpleForm.place} onChange={(event) => setSimpleForm({ ...simpleForm, place: event.target.value })} placeholder="e.g. Starbucks, Indomaret, Online" className={fieldControl} />
+          </Field>
+        )}
+      </div>
+
+
+        {usesPaylaterAccount && (
+          <section className={subCard} aria-label="Installment plan">
+            <div className="flex items-start gap-3">
+              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-tertiary)]" aria-hidden />
+              <div><h3 className="text-sm font-bold">Installment plan</h3><p className="text-xs text-[var(--ref-on-surface-variant)]">Paid with PayLater, so this purchase is split into installments.</p></div>
+            </div>
+            <div role="radiogroup" aria-label="Installment term" className="flex flex-wrap gap-2">
+              {(['1', '3', '6', '12'] as const).map((months) => (
+                <button
+                  key={months}
+                  type="button"
+                  role="radio"
+                  aria-checked={simpleForm.paylaterInstallmentMonths === months}
+                  onClick={() => {
+                    setSimpleForm({ ...simpleForm, paylaterInstallmentMonths: months });
+                    if (simpleForm.amount && simpleForm.paylaterFirstDueDate) void calculateInstallmentPreview({ ...simpleForm, paylaterInstallmentMonths: months });
+                  }}
+                  className={segment(simpleForm.paylaterInstallmentMonths === months)}
+                >
+                  {months} {months === '1' ? 'month' : 'months'}
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block"><span className={fieldLabel}>First due date</span><input type="date" value={simpleForm.paylaterFirstDueDate} onChange={(event) => setSimpleForm({ ...simpleForm, paylaterFirstDueDate: event.target.value })} required className={fieldInput} /></label>
+              <label className="block"><span className={fieldLabel}>Interest % a year</span><input type="number" step="0.01" min="0" value={simpleForm.paylaterInterestRate} onChange={(event) => setSimpleForm({ ...simpleForm, paylaterInterestRate: event.target.value })} placeholder="0" className={fieldInput} /></label>
+              <label className="block"><span className={fieldLabel}>Admin fee</span><input inputMode="numeric" value={simpleForm.paylaterAdminFee} onChange={(event) => setSimpleForm({ ...simpleForm, paylaterAdminFee: formatIdNominalInput(event.target.value) })} placeholder="Rp0" className={fieldInput} /></label>
+            </div>
+            {installmentPreview && installmentPreview.length > 0 && (
+              <div className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-3">
+                <div className="max-h-40 space-y-1.5 overflow-y-auto text-sm">
+                  {installmentPreview.map((installment) => (
+                    <div key={installment.installmentNumber} className="flex items-center justify-between gap-3">
+                      <span className="text-[var(--ref-on-surface-variant)]">#{installment.installmentNumber} · {formatDate(new Date(installment.dueDate).getTime())}</span>
+                      <span className="font-semibold tabular-nums">{formatAmount(installment.totalCents)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center justify-between border-t border-[var(--color-border)] pt-2 text-sm">
+                  <span className="font-semibold">Total</span>
+                  <span className="font-bold tabular-nums text-[var(--ref-primary)]">{formatAmount(installmentPreview.reduce((sum, installment) => sum + installment.totalCents, 0))}</span>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {isTransportExpense && (
+          <section className={subCard} aria-label="Trip details">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-bold">Trip</h3>
+              {simpleForm.origin && simpleForm.destination && !routeTemplateEditorMode && (
+                <button type="button" onClick={() => openRouteTemplateEditor('save')} className="text-xs font-semibold text-[var(--ref-primary)] hover:underline">Save as route</button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="Saved route"
+                value={selectedRouteTemplateId?.toString() ?? ''}
+                onChange={(event) => {
+                  const selected = routeTemplates.find((template) => template.id === Number(event.target.value));
+                  setSelectedRouteTemplateId(selected?.id ?? null);
+                  if (selected) applyRouteTemplate(selected);
+                  else { setRouteTemplateName(''); setRouteTemplateEditorMode(null); }
+                }}
+                disabled={routeTemplates.length === 0}
+                className={cn(fieldInput, 'mt-0 min-w-0 flex-1 disabled:opacity-60')}
+              >
+                <option value="">{routeTemplates.length ? 'Use a saved route…' : 'No saved routes yet'}</option>
+                {routeTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+              </select>
+              {selectedRouteTemplateId && <>
+                <button type="button" onClick={() => openRouteTemplateEditor('rename')} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)]" title="Rename saved route" aria-label="Rename saved route"><Pencil className="h-4 w-4" /></button>
+                <button type="button" onClick={deleteRouteTemplate} disabled={isUpdatingRouteTemplate} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)] hover:text-[var(--color-danger)] disabled:opacity-50" title="Delete saved route" aria-label="Delete saved route"><Trash2 className="h-4 w-4" /></button>
+              </>}
+            </div>
+            {routeTemplateEditorMode && (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input autoFocus value={routeTemplateName} onChange={(event) => setRouteTemplateName(event.target.value)} placeholder="Route name" maxLength={150} className={cn(fieldInput, 'mt-0 min-w-0 flex-1')} />
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={closeRouteTemplateEditor} disabled={isSavingRouteTemplate || isUpdatingRouteTemplate} className="px-3 py-2 text-sm font-medium text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]">Cancel</button>
+                  <button type="button" onClick={routeTemplateEditorMode === 'save' ? saveCurrentRouteTemplate : renameRouteTemplate} disabled={!routeTemplateName.trim() || isSavingRouteTemplate || isUpdatingRouteTemplate} className="rounded-full bg-[var(--ref-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    {isSavingRouteTemplate || isUpdatingRouteTemplate ? 'Saving…' : routeTemplateEditorMode === 'save' ? 'Save route' : 'Rename'}
+                  </button>
+                </div>
+              </div>
+            )}
+            <TransportRoute
+              origin={simpleForm.origin}
+              destination={simpleForm.destination}
+              onEditOrigin={() => { setMapPickerMode('origin'); setMapPickerOpen(true); }}
+              onEditDestination={() => { setMapPickerMode('destination'); setMapPickerOpen(true); }}
+            />
+            <div className="space-y-2">
+              <span className={fieldLabel}>Ride</span>
+              <div role="radiogroup" aria-label="Ride provider" className="flex flex-wrap gap-2">
+                {([['gojek', 'GoJek'], ['grab', 'Grab'], ['others', 'Others']] as const).map(([provider, label]) => (
+                  <button key={provider} type="button" role="radio" aria-checked={simpleForm.rideProvider === provider} onClick={() => setSimpleForm({ ...simpleForm, rideProvider: provider, rideService: simpleForm.rideProvider === provider ? simpleForm.rideService : '' })} className={segment(simpleForm.rideProvider === provider)}>{label}</button>
+                ))}
+              </div>
+              {simpleForm.rideProvider && (
+                <select aria-label="Service type" value={simpleForm.rideService} onChange={(event) => setSimpleForm({ ...simpleForm, rideService: event.target.value })} className={fieldInput}>
+                  <option value="">Service type…</option>
+                  {rideServices[simpleForm.rideProvider].map((service) => <option key={service} value={service}>{service}</option>)}
+                </select>
+              )}
+            </div>
+            <p className="text-xs text-[var(--ref-on-surface-variant)]">Saved routes reuse the trip details; enter this trip’s fare above.</p>
+          </section>
+        )}
+
+      <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+        {simpleForm.type !== 'paylater' && (
+          <Field label="Tags" icon={TagIcon} hint={optional}>
+            <TagPicker tags={tags} suggestionContext={{ description: simpleForm.description, notes: simpleForm.notes, place: simpleForm.place, categoryId: simpleForm.type === 'expense' && simpleForm.categoryId ? Number(simpleForm.categoryId) : undefined }} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
+          </Field>
+        )}
+        {/* Stretches to the tags block beside it, so the two read as one row. */}
+        <Field label="Note" icon={StickyNote} htmlFor="entry-note" className={cn('flex flex-col', simpleForm.type === 'paylater' && 'sm:col-span-2')} hint={optional}>
+          <textarea id="entry-note" value={simpleForm.notes} onChange={(event) => setSimpleForm({ ...simpleForm, notes: event.target.value })} placeholder="Anything worth remembering" rows={3} className={cn(fieldControl, 'h-auto min-h-[6rem] flex-1 resize-none py-2')} />
+        </Field>
+        <Field label={simpleForm.type === 'expense' ? 'Receipt' : 'Attachment'} icon={Paperclip} className="sm:col-span-2" hint={optional}>
+          <AttachmentUploader
+            transactionId={editingTransaction ? (editingTransaction as EditingTransaction).id : undefined}
+            attachments={attachments}
+            pendingAttachments={pendingAttachments}
+            onAttachmentsChange={setAttachments}
+            onPendingAttachmentsChange={setPendingAttachments}
+            disabled={isSubmitting}
+          />
+        </Field>
+      </div>
+    </div>
+  );
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add transaction"
-      subtitle="Create a detailed record for your books."
+      title={pendingTransaction ? 'Review pending item' : inputMode === 'journal' ? 'Journal entry' : 'Add transaction'}
+      subtitle={inputMode === 'journal' ? 'Record balanced debit and credit lines.' : undefined}
       size="xl"
+      // A form reads best around 44rem; the journal keeps the full width for its line grid.
+      className={inputMode === 'journal' ? undefined : 'max-w-[44rem]'}
       headerExtra={
         <button
           type="button"
@@ -2184,12 +2495,16 @@ export function TransactionModal({
           </div>
         </div>
       ) : inputMode === 'simple' && !pendingTransaction ? (
-        <div className="w-full space-y-3">
-          {formError && <p className="text-sm text-[var(--color-danger)]">{maskAmounts(formError)}</p>}
-          <Button type="submit" form="simple-transaction-form" isLoading={isSubmitting} className="w-full max-w-md mx-auto py-4 rounded-full text-base shadow-lg justify-center hover:scale-[1.01] transition-transform sm:max-w-none">
-            {simpleForm.type === 'paylater' ? <CreditCard className="w-5 h-5" /> : <Save className="w-5 h-5" />}
-            {simpleForm.type === 'paylater' ? 'Record settlement' : 'Save transaction'}
-          </Button>
+        <div className="w-full space-y-2">
+          {formError && <p role="alert" className="rounded-xl bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{maskAmounts(formError)}</p>}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* A plain-language read-back of what will be saved, so mistakes show before saving. */}
+            <p className="min-w-0 text-sm leading-snug text-[var(--ref-on-surface-variant)] sm:truncate" aria-live="polite">{entrySummary}</p>
+            <Button type="submit" form="simple-transaction-form" isLoading={isSubmitting} className="shrink-0 rounded-full px-6 py-3 text-base shadow-lg sm:min-w-[12rem]">
+              {simpleForm.type === 'paylater' ? <CreditCard className="mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}
+              {{ expense: 'Save expense', income: 'Save income', transfer: 'Save transfer', paylater: 'Record payment' }[simpleForm.type]}
+            </Button>
+          </div>
         </div>
       ) : undefined}
     >
@@ -2522,847 +2837,7 @@ export function TransactionModal({
         </div>
       ) : (
         <form id="simple-transaction-form" onSubmit={handleSimpleSubmit} className="flex flex-col gap-0">
-          {!editingTransaction && !pendingTransaction && (
-            <div className="space-y-5 lg:hidden">
-              <div
-                className="ui-segmented ui-segmented--4 grid grid-cols-4 gap-1 rounded-2xl bg-[var(--ref-surface-container)] p-1"
-                data-segment-index={['expense', 'income', 'transfer', 'paylater'].indexOf(simpleForm.type)}
-              >
-                {([
-                  ['expense', 'Expense', ArrowUpRight],
-                  ['income', 'Income', ArrowDownRight],
-                  ['transfer', 'Transfer', ArrowRightLeft],
-                  ['paylater', 'Settle', CreditCard],
-                ] as const).map(([value, label, Icon]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setSimpleForm((current) => ({
-                      ...current,
-                      type: value,
-                      description: value === 'income' && !current.description ? 'Income' : current.description,
-                      paylaterRecognitionId: value === 'paylater' ? current.paylaterRecognitionId : '',
-                    }))}
-                    className={cn(
-                      'flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold',
-                      simpleForm.type === value
-                        ? 'text-[var(--color-accent)]'
-                        : 'text-[var(--color-text-secondary)]',
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {(simpleForm.type === 'expense' || simpleForm.type === 'income') && (
-                <>
-                  <CurrencyInput
-                    label="Amount"
-                    value={simpleForm.amount}
-                    onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
-                    size="lg"
-                    required
-                    initialFocus
-                  />
-
-                  {simpleForm.type === 'expense' && (
-                    <fieldset className="space-y-2">
-                      <legend className="text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">Recent categories</legend>
-                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {quickCategories.map((category) => (
-                          <button
-                            key={category.id}
-                            type="button"
-                            aria-pressed={simpleForm.categoryId === String(category.id)}
-                            onClick={() => setSimpleForm((current) => ({
-                              ...current,
-                              categoryId: String(category.id),
-                              description: current.description || `${category.name} expense`,
-                            }))}
-                            className={cn(
-                              'min-h-11 shrink-0 rounded-full border px-4 text-sm font-semibold',
-                              simpleForm.categoryId === String(category.id)
-                                ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)] text-white'
-                                : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]',
-                            )}
-                          >
-                            {category.icon ? `${category.icon} ` : ''}{category.name}
-                          </button>
-                        ))}
-                      </div>
-                      <select
-                        aria-label="All categories"
-                        value={simpleForm.categoryId}
-                        onChange={(event) => {
-                          const category = categories.find((item) => String(item.id) === event.target.value);
-                          setSimpleForm((current) => ({
-                            ...current,
-                            categoryId: event.target.value,
-                            description: current.description || (category ? `${category.name} expense` : ''),
-                          }));
-                        }}
-                        className={cn('min-h-11 w-full appearance-none', stitchSelect)}
-                        required
-                      >
-                        <option value="">Choose another category…</option>
-                        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                      </select>
-                    </fieldset>
-                  )}
-
-                  <fieldset className="space-y-2">
-                    <legend className="text-xs font-bold uppercase tracking-widest text-[var(--color-muted)]">
-                      {simpleForm.type === 'income' ? 'Receive into' : 'Pay from'}
-                    </legend>
-                    <div className="grid grid-cols-2 gap-2">
-                      {quickWalletAccounts.slice(0, 4).map((account) => {
-                        const selected = simpleForm.type === 'income'
-                          ? simpleForm.toAccountId === String(account.id)
-                          : simpleForm.fromAccountId === String(account.id);
-                        return (
-                          <button
-                            key={account.id}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => setSimpleForm((current) => ({
-                              ...current,
-                              [simpleForm.type === 'income' ? 'toAccountId' : 'fromAccountId']: String(account.id),
-                              description: current.description || (simpleForm.type === 'income' ? 'Income' : current.description),
-                            }))}
-                            className={cn(
-                              'min-h-14 min-w-0 rounded-xl border px-3 py-2 text-left',
-                              selected
-                                ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]'
-                                : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]',
-                            )}
-                          >
-                            <span className="block truncate text-sm font-bold">{account.name}</span>
-                            <span className="block truncate text-[10px] text-[var(--color-text-secondary)]">{formatAmount(account.balance)}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {quickWalletAccounts.length > 4 && (
-                      <select
-                        aria-label="All accounts"
-                        value={simpleForm.type === 'income' ? simpleForm.toAccountId : simpleForm.fromAccountId}
-                        onChange={(event) => setSimpleForm((current) => ({
-                          ...current,
-                          [simpleForm.type === 'income' ? 'toAccountId' : 'fromAccountId']: event.target.value,
-                        }))}
-                        className={cn('min-h-11 w-full appearance-none', stitchSelect)}
-                      >
-                        <option value="">Choose another account…</option>
-                        {quickWalletAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                      </select>
-                    )}
-                  </fieldset>
-
-                  <button
-                    type="button"
-                    onClick={() => setMobileDetailsOpen((open) => !open)}
-                    aria-expanded={mobileDetailsOpen}
-                    className="flex min-h-11 w-full items-center justify-between rounded-xl border border-[var(--color-border)] px-4 text-sm font-bold"
-                  >
-                    More details
-                    <span className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
-                      {simpleForm.dateTime.startsWith(toDateInputLocal(new Date())) ? 'Today' : toDateInputLocal(new Date(simpleForm.dateTime))}
-                      <ChevronDown className={cn('h-4 w-4 transition-transform', mobileDetailsOpen && 'rotate-180')} />
-                    </span>
-                  </button>
-
-                  {mobileDetailsOpen && (
-                    <div className="space-y-4 rounded-2xl bg-[var(--ref-surface-container-low)] p-4">
-                      <label className="block text-sm font-semibold">Description
-                        <input value={simpleForm.description} onChange={(event) => setSimpleForm({ ...simpleForm, description: event.target.value })} className={cn('mt-1 w-full', stitchSelect)} placeholder="What was this for?" />
-                      </label>
-                      <div className="grid grid-cols-[auto_1fr] gap-2">
-                        <button type="button" onClick={() => setSimpleForm({ ...simpleForm, dateTime: toDatetimeLocal() })} className="min-h-11 rounded-xl bg-[var(--ref-primary)]/10 px-4 text-sm font-bold text-[var(--ref-primary)]">Today</button>
-                        <input type="datetime-local" value={simpleForm.dateTime} onChange={(event) => setSimpleForm({ ...simpleForm, dateTime: event.target.value })} className={cn('min-w-0', stitchSelect)} />
-                      </div>
-                      <label className="block text-sm font-semibold">Location
-                        <input value={simpleForm.place} onChange={(event) => setSimpleForm({ ...simpleForm, place: event.target.value })} className={cn('mt-1 w-full', stitchSelect)} placeholder="Optional" />
-                      </label>
-                      <label className="block text-sm font-semibold">Notes
-                        <textarea value={simpleForm.notes} onChange={(event) => setSimpleForm({ ...simpleForm, notes: event.target.value })} className={cn('mt-1 min-h-20 w-full', stitchSelect)} placeholder="Optional" />
-                      </label>
-                      <div>
-                        <p className="mb-2 text-sm font-semibold">Tags</p>
-                        <TagPicker tags={tags} suggestionContext={{ description: simpleForm.description, notes: simpleForm.notes, place: simpleForm.place, categoryId: simpleForm.type === 'expense' && simpleForm.categoryId ? Number(simpleForm.categoryId) : undefined }} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-semibold">Receipt or attachment</p>
-                        <AttachmentUploader
-                          attachments={attachments}
-                          pendingAttachments={pendingAttachments}
-                          onAttachmentsChange={setAttachments}
-                          onPendingAttachmentsChange={setPendingAttachments}
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          <div className={cn(
-            'grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8',
-            !editingTransaction && !pendingTransaction && (simpleForm.type === 'expense' || simpleForm.type === 'income') && 'hidden lg:grid',
-          )}>
-          <div className="lg:col-span-8 space-y-6 lg:space-y-8">
-            <div
-              className="ui-segmented ui-segmented--4 hidden grid-cols-2 gap-1 rounded-2xl bg-[var(--ref-surface-container)] p-1 lg:grid lg:grid-cols-4"
-              data-segment-index={['expense', 'income', 'transfer', 'paylater'].indexOf(simpleForm.type)}
-            >
-              {(
-                [
-                  { value: 'expense' as const, label: 'Expense', icon: ArrowUpRight },
-                  { value: 'income' as const, label: 'Income', icon: ArrowDownRight },
-                  { value: 'transfer' as const, label: 'Transfer', icon: ArrowRightLeft },
-                  { value: 'paylater' as const, label: 'Settlement', icon: CreditCard },
-                ] as const
-              ).map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => {
-                    if (t.value !== 'transfer') setTransferFeeControlsOpen(false);
-                    setSimpleForm(() => {
-                      const generated = t.value === 'transfer'
-                        ? defaultTransferDescription(simpleForm.fromAccountId, simpleForm.toAccountId)
-                        : '';
-                      autoTransferDescriptionRef.current = generated;
-                      return {
-                        ...simpleForm,
-                        type: t.value,
-                        description: t.value === 'transfer' && generated ? generated : simpleForm.description,
-                        paylaterRecognitionId:
-                          t.value === 'paylater' ? simpleForm.paylaterRecognitionId : '',
-                      };
-                    });
-                  }}
-                  className={cn(
-                    'cursor-pointer w-full min-w-0 inline-flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 rounded-xl sm:rounded-full text-xs sm:text-sm transition-all',
-                    simpleForm.type === t.value
-                      ? 'text-[var(--color-accent)] font-bold'
-                      : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',
-                  )}
-                >
-                  {'icon' in t && t.icon ? <t.icon className="w-3.5 h-3.5 opacity-80" /> : null}
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <CurrencyInput
-              label={simpleForm.type === 'paylater' ? 'Payment' : 'Amount'}
-              value={simpleForm.amount}
-              onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
-              size="lg"
-              required
-              initialFocus
-              hintInline={simpleForm.type === 'transfer'}
-              hint={simpleForm.type === 'transfer' ? (() => {
-                const details = calculateTransferDetails();
-                return details && !('error' in details) && details.fee > 0
-                  ? `* ${formatAmount(details.fee)} transfer fee from ${details.senderPays ? 'sender' : 'recipient'}`
-                  : undefined;
-              })() : undefined}
-            />
-
-            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-              {simpleForm.type !== 'transfer' && <div className="md:col-span-2 space-y-2">
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                  Transaction name
-                </label>
-                <input
-                  type="text"
-                  value={simpleForm.description}
-                  onChange={(e) => setSimpleForm({ ...simpleForm, description: e.target.value })}
-                  placeholder="e.g. Weekly grocery at Alfamart"
-                  className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
-                  required
-                />
-                {categoryRecommendation && (
-                  <button
-                    type="button"
-                    onClick={applyCategoryRecommendation}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] text-sm hover:bg-[var(--color-accent)]/20 transition-colors"
-                  >
-                    <span>Recommend:</span>
-                    <span className="font-medium">{categoryRecommendation.categoryName}</span>
-                    <span className="text-xs opacity-70">(click to apply)</span>
-                  </button>
-                )}
-                {isLoadingRecommendation && !categoryRecommendation && (
-                  <p className="text-xs text-[var(--color-muted)]">Getting category recommendation...</p>
-                )}
-              </div>}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                  Date &amp; time
-                </label>
-                <input
-                  type="datetime-local"
-                  value={simpleForm.dateTime}
-                  onChange={(e) => setSimpleForm({ ...simpleForm, dateTime: e.target.value })}
-                  className={cn('w-full brutalist-input', stitchSelect)}
-                  required
-                />
-              </div>
-              {simpleForm.type === 'transfer' && <div className="md:absolute md:left-1/2 md:right-0 md:top-0 md:z-20">
-                <TransferFeePanel
-                  details={calculateTransferDetails() as TransferFeeDetails | { error: string } | null}
-                  manualPayerOverride={simpleForm.transferFeePayerOverride}
-                  controlsOpen={transferFeeControlsOpen}
-                  transferAdminFee={simpleForm.transferAdminFee}
-                  onToggleControls={() => setTransferFeeControlsOpen((open) => !open)}
-                  onFeeChange={(value) => setSimpleForm({ ...simpleForm, transferAdminFee: value })}
-                  onPayerChange={(value) => setSimpleForm({ ...simpleForm, transferFeePayerOverride: value })}
-                />
-              </div>}
-              {(simpleForm.type === 'expense' && isPaylaterAccount(simpleForm.fromAccountId)) && (
-                <>
-                  {/* Installment Term */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Installment term
-                    </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { value: '1', label: '1 month' },
-                        { value: '3', label: '3 months' },
-                        { value: '6', label: '6 months' },
-                        { value: '12', label: '12 months' },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setSimpleForm({ ...simpleForm, paylaterInstallmentMonths: option.value as '1' | '3' | '6' | '12' });
-                            // Recalculate preview if we have the data
-                            if (simpleForm.amount && simpleForm.paylaterFirstDueDate) {
-                              calculateInstallmentPreview({
-                                ...simpleForm,
-                                paylaterInstallmentMonths: option.value as '1' | '3' | '6' | '12',
-                              });
-                            }
-                          }}
-                          className={cn(
-                            'cursor-pointer py-2 rounded-lg text-sm font-medium transition-all border-2 text-center w-full',
-                            simpleForm.paylaterInstallmentMonths === option.value
-                              ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]'
-                              : 'bg-[var(--ref-surface-container-low)] border-transparent hover:border-[var(--color-accent)]/30'
-                          )}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Interest Rate */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Annual interest rate % (optional)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={simpleForm.paylaterInterestRate}
-                      onChange={(e) => setSimpleForm({ ...simpleForm, paylaterInterestRate: e.target.value })}
-                      placeholder="e.g., 12 for 12%"
-                      className={cn('w-full brutalist-input', stitchSelect)}
-                    />
-                  </div>
-
-                  {/* Admin Fee */}
-                  <CurrencyInput
-                    label="Admin fee (optional)"
-                    value={simpleForm.paylaterAdminFee}
-                    onChange={(value) => setSimpleForm({ ...simpleForm, paylaterAdminFee: value })}
-                    size="sm"
-                    showDivider={false}
-                  />
-
-                  {/* First Due Date */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      First installment due date
-                    </label>
-                    <input
-                      type="date"
-                      value={simpleForm.paylaterFirstDueDate}
-                      onChange={(e) => setSimpleForm({ ...simpleForm, paylaterFirstDueDate: e.target.value })}
-                      className={cn('w-full brutalist-input', stitchSelect)}
-                      required
-                    />
-                  </div>
-
-                  {/* Installment Preview */}
-                  {installmentPreview && installmentPreview.length > 0 && (
-                    <div className="mt-4 p-4 bg-[var(--ref-surface-container-low)] rounded-xl">
-                      <h4 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
-                        Installment Schedule
-                      </h4>
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {installmentPreview.map((inst) => (
-                          <div key={inst.installmentNumber} className="flex justify-between items-center text-sm">
-                            <span className="text-[var(--color-text-secondary)]">
-                              #{inst.installmentNumber} - {formatDate(new Date(inst.dueDate).getTime())}
-                            </span>
-                            <span className="font-medium text-[var(--color-text-primary)]">
-                              {formatAmount(inst.totalCents)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex justify-between items-center">
-                        <span className="text-sm font-semibold text-[var(--color-text-primary)]">Total</span>
-                        <span className="font-bold text-[var(--color-accent)]">
-                          {formatAmount(installmentPreview.reduce((sum, i) => sum + i.totalCents, 0))}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              {simpleForm.type === 'expense' && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                    Category
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={simpleForm.categoryId}
-                      onChange={(e) => {
-                        setSimpleForm({ ...simpleForm, categoryId: e.target.value });
-                        setCategoryRecommendation(null);
-                      }}
-                      className={cn('w-full appearance-none', stitchSelect)}
-                      required
-                    >
-                      <option value="">Select category…</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                      ▾
-                    </span>
-                  </div>
-                </div>
-              )}
-              {/* Transport Location Picker */}
-              {simpleForm.type === 'expense' && simpleForm.categoryId && (() => {
-                const selectedCategory = categories.find(c => c.id.toString() === simpleForm.categoryId);
-                const isTransport = selectedCategory && /transport/i.test(selectedCategory.name);
-                return isTransport ? (
-                  <>
-                    <div className="md:col-span-2 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <label className="block text-sm font-semibold text-[var(--color-text-primary)]">Saved route</label>
-                        {simpleForm.origin && simpleForm.destination && (
-                          <button
-                            type="button"
-                            onClick={() => openRouteTemplateEditor('save')}
-                            className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
-                          >
-                            Save as new route
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="relative min-w-0 flex-1">
-                          <select
-                            value={selectedRouteTemplateId?.toString() ?? ''}
-                            onChange={(event) => {
-                              const selected = routeTemplates.find((template) => template.id === Number(event.target.value));
-                              setSelectedRouteTemplateId(selected?.id ?? null);
-                              if (selected) applyRouteTemplate(selected);
-                              else {
-                                setRouteTemplateName('');
-                                setRouteTemplateEditorMode(null);
-                              }
-                            }}
-                            disabled={routeTemplates.length === 0}
-                            className={cn('w-full appearance-none', stitchSelect, routeTemplates.length === 0 && 'cursor-not-allowed opacity-60')}
-                          >
-                            <option value="">{routeTemplates.length ? 'Choose a saved route…' : 'No saved routes yet'}</option>
-                            {routeTemplates.map((template) => (
-                              <option key={template.id} value={template.id}>{template.name}</option>
-                            ))}
-                          </select>
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">▾</span>
-                        </div>
-                        {selectedRouteTemplateId && (
-                          <>
-                            <button type="button" onClick={() => openRouteTemplateEditor('rename')} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]" title="Rename saved route" aria-label="Rename saved route">
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button type="button" onClick={deleteRouteTemplate} disabled={isUpdatingRouteTemplate} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--ref-surface-container-low)] text-[var(--color-text-secondary)] transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50" title="Delete saved route" aria-label="Delete saved route">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                      {routeTemplateEditorMode && (
-                        <div className="flex flex-col gap-2 rounded-xl bg-[var(--ref-surface-container-low)] p-2 sm:flex-row sm:items-center">
-                          <input
-                            autoFocus
-                            type="text"
-                            value={routeTemplateName}
-                            onChange={(event) => setRouteTemplateName(event.target.value)}
-                            placeholder="Route name"
-                            maxLength={150}
-                            className={cn('min-w-0 flex-1', stitchSelect)}
-                          />
-                          <div className="flex items-center justify-end gap-2">
-                            <button type="button" onClick={closeRouteTemplateEditor} disabled={isSavingRouteTemplate || isUpdatingRouteTemplate} className="px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Cancel</button>
-                            <button
-                              type="button"
-                              onClick={routeTemplateEditorMode === 'save' ? saveCurrentRouteTemplate : renameRouteTemplate}
-                              disabled={!routeTemplateName.trim() || isSavingRouteTemplate || isUpdatingRouteTemplate}
-                              className="rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                            >
-                              {isSavingRouteTemplate || isUpdatingRouteTemplate ? 'Saving…' : routeTemplateEditorMode === 'save' ? 'Save route' : 'Rename'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      <p className="text-xs text-[var(--color-text-secondary)]">Reuse the route details and enter this trip’s fare separately.</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <TransportRoute
-                        origin={simpleForm.origin}
-                        destination={simpleForm.destination}
-                        onEditOrigin={() => {
-                          setMapPickerMode('origin');
-                          setMapPickerOpen(true);
-                        }}
-                        onEditDestination={() => {
-                          setMapPickerMode('destination');
-                          setMapPickerOpen(true);
-                        }}
-                      />
-                    </div>
-                    {/* Ride Provider */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                        Ride Provider
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={simpleForm.rideProvider}
-                          onChange={(e) => setSimpleForm({ 
-                            ...simpleForm, 
-                            rideProvider: e.target.value as 'gojek' | 'grab' | 'others',
-                            rideService: '' // Reset service when provider changes
-                          })}
-                          className={cn('w-full appearance-none', stitchSelect)}
-                        >
-                          <option value="">Select provider…</option>
-                          <option value="gojek">GoJek</option>
-                          <option value="grab">Grab</option>
-                          <option value="others">Others</option>
-                        </select>
-                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                          ▾
-                        </span>
-                      </div>
-                    </div>
-                    {/* Ride Service */}
-                    {simpleForm.rideProvider && (
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                          Service Type
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={simpleForm.rideService}
-                            onChange={(e) => setSimpleForm({ ...simpleForm, rideService: e.target.value })}
-                            className={cn('w-full appearance-none', stitchSelect)}
-                          >
-                            <option value="">Select service…</option>
-                            {simpleForm.rideProvider === 'gojek' && (
-                              <>
-                                <option value="GoRide">GoRide</option>
-                                <option value="GoRide Hemat">GoRide Hemat</option>
-                                <option value="GoRide Comfort">GoRide Comfort</option>
-                                <option value="GoCar">GoCar</option>
-                                <option value="GoCar Prioritas">GoCar Prioritas</option>
-                                <option value="GoCar Hemat">GoCar Hemat</option>
-                                <option value="GoCar XL">GoCar XL</option>
-                              </>
-                            )}
-                            {simpleForm.rideProvider === 'grab' && (
-                              <>
-                                <option value="Bike Standard">Bike Standard</option>
-                                <option value="Bike Comfort">Bike Comfort</option>
-                                <option value="Car Standard">Car Standard</option>
-                                <option value="Car Plus (4 seat)">Car Plus (4 seat)</option>
-                                <option value="Car Plus (6 seat)">Car Plus (6 seat)</option>
-                                <option value="Car Premium">Car Premium</option>
-                                <option value="Car Priority">Car Priority</option>
-                              </>
-                            )}
-                            {simpleForm.rideProvider === 'others' && (
-                              <>
-                                <option value="Blue Bird">Blue Bird</option>
-                                <option value="Silver Bird">Silver Bird</option>
-                                <option value="Maxim">Maxim</option>
-                                <option value="InDriver">InDriver</option>
-                                <option value="Other">Other</option>
-                              </>
-                            )}
-                          </select>
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                            ▾
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : null;
-              })()}
-              {simpleForm.type === 'paylater' && (
-                <div className="md:col-span-2 space-y-2">
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                    Pay toward obligation
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={simpleForm.paylaterRecognitionId}
-                      onChange={(e) =>
-                        setSimpleForm({ ...simpleForm, paylaterRecognitionId: e.target.value })
-                      }
-                      className={cn('w-full appearance-none', stitchSelect)}
-                      required
-                    >
-                      <option value="">Select installment / obligation…</option>
-                      {(paylaterObligationsState?.obligations ?? [])
-                        .filter((o) => o.outstandingCents > 0)
-                        .map((o) => (
-                          <option key={o.recognitionTxId} value={o.recognitionTxId}>
-                            #{o.recognitionTxId} · {o.description} · {o.liabilityAccountName} · remaining{' '}
-                            {formatAmount(o.outstandingCents)}
-                          </option>
-                        ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                      ▾
-                    </span>
-                  </div>
-                  {paylaterObligationsState && paylaterObligationsState.obligations.filter((o) => o.outstandingCents > 0).length === 0 && (
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      No open obligations yet. Use{' '}
-                      <strong>Add transaction</strong> → <strong>Buy later</strong> to record an
-                      installment purchase first.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {simpleForm.type === 'income' ? (
-              <div className="space-y-4">
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                  Destination account
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
-                    renderWalletCard(a, idx, simpleForm.toAccountId === a.id.toString(), () =>
-                      setSimpleForm({ ...simpleForm, toAccountId: a.id.toString() }),
-                    ),
-                  )}
-                  <Link
-                    to="/accounts"
-                    className="flex flex-col items-center justify-center p-4 min-h-[96px] bg-[var(--ref-surface-container-low)] border-2 border-dashed border-[var(--color-border-strong)]/60 rounded-xl hover:bg-[var(--ref-surface-container-highest)] transition-colors"
-                    title="Manage accounts"
-                  >
-                    <Plus className="w-7 h-7 text-[var(--color-muted)]" />
-                  </Link>
-                </div>
-              </div>
-            ) : simpleForm.type === 'expense' ? (
-              <div className="space-y-4">
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                  Source account
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {walletAccounts.map((a, idx) =>
-                    renderWalletCard(a, idx, simpleForm.fromAccountId === a.id.toString(), () =>
-                      setSimpleForm({ ...simpleForm, fromAccountId: a.id.toString() }),
-                    ),
-                  )}
-                  <Link
-                    to="/accounts"
-                    className="flex flex-col items-center justify-center p-4 min-h-[96px] bg-[var(--ref-surface-container-low)] border-2 border-dashed border-[var(--color-border-strong)]/60 rounded-xl hover:bg-[var(--ref-surface-container-highest)] transition-colors"
-                    title="Manage accounts"
-                  >
-                    <Plus className="w-7 h-7 text-[var(--color-muted)]" />
-                  </Link>
-                </div>
-                {isPaylaterAccount(simpleForm.fromAccountId) && (
-                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-4 py-3 text-sm text-[var(--color-text-secondary)]">
-                    <strong className="text-[var(--color-text-primary)]">PayLater detected:</strong> This purchase will be paid in installments. Configure options below.
-                  </div>
-                )}
-              </div>
-            ) : simpleForm.type === 'paylater' ? (
-              <div className="space-y-4">
-                <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                  Pay from (wallet)
-                </label>
-                <p className="text-xs text-[var(--color-text-secondary)] -mt-2">
-                  Reduces the paylater liability and credits your wallet—same as a settlement on the
-                  PayLater page.
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {walletAccounts.filter(a => !isPaylaterAccount(a.id.toString())).map((a, idx) =>
-                    renderWalletCard(a, idx, simpleForm.fromAccountId === a.id.toString(), () =>
-                      setSimpleForm({ ...simpleForm, fromAccountId: a.id.toString() }),
-                    ),
-                  )}
-                  <Link
-                    to="/accounts"
-                    className="flex flex-col items-center justify-center p-4 min-h-[96px] bg-[var(--ref-surface-container-low)] border-2 border-dashed border-[var(--color-border-strong)]/60 rounded-xl hover:bg-[var(--ref-surface-container-highest)] transition-colors"
-                    title="Manage accounts"
-                  >
-                    <Plus className="w-7 h-7 text-[var(--color-muted)]" />
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                    From account
-                  </label>
-                  <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3 overflow-hidden transition-[max-height] duration-300 ease-out', showAllTransferFromAccounts ? 'max-h-[1000px]' : 'max-h-[180px]')}>
-                    {transferAccountChoices(simpleForm.fromAccountId, showAllTransferFromAccounts).map((a, idx) =>
-                      renderWalletCard(a, idx, simpleForm.fromAccountId === a.id.toString(), () =>
-                        setSimpleForm({ ...simpleForm, fromAccountId: a.id.toString() }),
-                        true,
-                      ),
-                    )}
-                    {transferWalletAccounts.length > 3 && <button type="button" onClick={() => setShowAllTransferFromAccounts((show) => !show)} aria-expanded={showAllTransferFromAccounts} className="min-h-[72px] w-full rounded-xl border-2 border-dashed border-[var(--color-border)] px-3 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--ref-surface-container-low)]">{showAllTransferFromAccounts ? 'Show less' : `+${transferWalletAccounts.length - 3} more`}</button>}
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                    To account
-                  </label>
-                  <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3 overflow-hidden transition-[max-height] duration-300 ease-out', showAllTransferToAccounts ? 'max-h-[1000px]' : 'max-h-[180px]')}>
-                    {transferAccountChoices(simpleForm.toAccountId, showAllTransferToAccounts).map((a, idx) =>
-                      renderWalletCard(a, idx, simpleForm.toAccountId === a.id.toString(), () =>
-                        setSimpleForm({ ...simpleForm, toAccountId: a.id.toString() }),
-                        true,
-                        a.id.toString() === simpleForm.fromAccountId,
-                        'Same as source account',
-                      ),
-                    )}
-                    {transferWalletAccounts.length > 3 && <button type="button" onClick={() => setShowAllTransferToAccounts((show) => !show)} aria-expanded={showAllTransferToAccounts} className="min-h-[72px] w-full rounded-xl border-2 border-dashed border-[var(--color-border)] px-3 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--ref-surface-container-low)]">{showAllTransferToAccounts ? 'Show less' : `+${transferWalletAccounts.length - 3} more`}</button>}
-                  </div>
-                </div>
-
-              </>
-            )}
-          </div>
-
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-[var(--ref-surface-container-low)] rounded-xl p-5 space-y-6">
-              <h3 className="text-base font-bold text-[var(--color-text-primary)] font-headline">
-                Advanced options
-              </h3>
-
-              <div className="space-y-3 opacity-60">
-                {simpleForm.type === 'expense' && (
-                <div className="flex justify-between items-center gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Users className="w-5 h-5 text-[var(--ref-tertiary)] shrink-0" />
-                    <span className="font-semibold text-[var(--color-text-primary)]">Split bill</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled
-                    title="Coming soon"
-                    className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[var(--ref-surface-container-highest)]"
-                  >
-                    <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white shadow" />
-                  </button>
-                </div>
-                )}
-              </div>
-
-              <div className="h-px bg-[var(--color-border)]/40" />
-
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                  <StickyNote className="w-4 h-4" />
-                  Memo
-                </label>
-                <textarea
-                  className="w-full min-h-[72px] rounded-xl border-none bg-[var(--ref-surface-container-lowest)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
-                  placeholder="Write a note..."
-                  value={simpleForm.notes}
-                  onChange={(e) => setSimpleForm({ ...simpleForm, notes: e.target.value })}
-                />
-              </div>
-
-              {simpleForm.type === 'expense' && (
-                <div>
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                    Place (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={simpleForm.place}
-                    onChange={(e) => setSimpleForm({ ...simpleForm, place: e.target.value })}
-                    placeholder="e.g. Starbucks, Indomaret, Online"
-                    className="w-full bg-[var(--ref-surface-container-lowest)] border-none rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[var(--color-accent)]/20"
-                  />
-                </div>
-              )}
-
-              {simpleForm.type !== 'paylater' ? (
-                <div>
-                  <label className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 block">
-                    Tags
-                  </label>
-                  <TagPicker tags={tags} suggestionContext={{ description: simpleForm.description, notes: simpleForm.notes, place: simpleForm.place, categoryId: simpleForm.type === 'expense' && simpleForm.categoryId ? Number(simpleForm.categoryId) : undefined }} selectedTagIds={simpleForm.tagIds} onChange={(tagIds) => setSimpleForm({ ...simpleForm, tagIds })} />
-                </div>
-              ) : (
-                <p className="text-xs text-[var(--color-text-secondary)]">
-                  Tags aren&apos;t attached to paylater entries from this form (notes and reference are
-                  stored on the journal).
-                </p>
-              )}
-
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] mb-2">
-                  <ImagePlus className="w-4 h-4" />
-                  Attachments
-                </label>
-                <AttachmentUploader
-                  transactionId={editingTransaction ? (editingTransaction as EditingTransaction).id : undefined}
-                  attachments={attachments}
-                  pendingAttachments={pendingAttachments}
-                  onAttachmentsChange={setAttachments}
-                  onPendingAttachmentsChange={setPendingAttachments}
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
-          </div>
-          </div>
+          {renderEntryForm()}
 
           {pendingTransaction && (
           <div className={stickyFooter}>
