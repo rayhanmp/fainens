@@ -18,7 +18,7 @@ import {
   ShoppingCart,
   Wallet,
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatDate } from '../lib/utils';
 
 export const Route = createFileRoute('/paylater')({
   component: PaylaterPage,
@@ -409,7 +409,7 @@ function PaylaterPage() {
                             <p className="font-bold">{row.description}</p>
                             <p className="text-xs text-[var(--color-text-secondary)]">
                               ID #{row.recognitionTxId} ·{' '}
-                              {new Date(row.dateRecognizedMs).toLocaleDateString()}
+                              {formatDate(row.dateRecognizedMs)}
                             </p>
                           </td>
                           <td className="px-4 py-4">
@@ -426,7 +426,7 @@ function PaylaterPage() {
                                   row.status === 'due_soon' && 'text-[var(--color-warning)]',
                                 )}
                               >
-                                {new Date(row.dueDateMs).toLocaleDateString()}
+                                {formatDate(row.dueDateMs)}
                               </span>
                             ) : (
                               <span className="text-[var(--color-text-secondary)]">—</span>

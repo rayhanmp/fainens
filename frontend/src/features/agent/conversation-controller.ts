@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { ListAgentConversations200 } from '../../generated/client';
 import { agentCommands } from './commands';
 import { queryKeys } from '../core/query-keys';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Conversation } from './types';
 
 type ConversationUpdate = { title?: string; isPinned?: boolean; archived?: boolean };
@@ -20,6 +21,7 @@ export function useConversationController({
   onError: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const { confirm } = useConfirm();
   const conversationListRef = useRef<HTMLDivElement>(null);
   const [conversationActionId, setConversationActionId] = useState<number | null>(null);
   const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
@@ -84,7 +86,13 @@ export function useConversationController({
   }, [openConversationMenuId]);
 
   const deleteConversation = useCallback(async (conversation: Conversation, onDeletedActive?: () => void) => {
-    if (!window.confirm(`Delete “${conversation.title}”? This permanently removes the conversation and its messages.`)) return;
+    setOpenConversationMenuId(null);
+    if (!await confirm({
+      title: 'Delete conversation?',
+      message: `“${conversation.title}” and all of its messages will be permanently removed.`,
+      confirmLabel: 'Delete conversation',
+      variant: 'danger',
+    })) return;
     setConversationActionId(conversation.id);
     onError('');
     try {
@@ -97,7 +105,7 @@ export function useConversationController({
     } finally {
       setConversationActionId(null);
     }
-  }, [activeConversationId, onError, updateConversationCache]);
+  }, [activeConversationId, confirm, onError, updateConversationCache]);
 
   useEffect(() => {
     if (openConversationMenuId == null) return undefined;

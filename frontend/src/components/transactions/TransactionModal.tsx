@@ -11,7 +11,7 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { useConfirm } from '../ui/ConfirmDialog';
-import { formatCurrency, cn, getAccountTypeLabel, parseIdNominalToInt, parseSignedIdNominalToInt, formatFileSize } from '../../lib/utils';
+import { formatCurrency, formatDate, formatTime, cn, getAccountTypeLabel, parseIdNominalToInt, parseSignedIdNominalToInt, formatFileSize } from '../../lib/utils';
 import {
   Plus,
   Trash2,
@@ -65,7 +65,10 @@ import { useSimpleTransactionForm } from '../../features/transactions/modal-cont
 import { transactionDisplayAmounts } from '../../features/transactions/display-amounts';
 import { SplitBillTransactionDetail } from './SplitBillTransactionDetail';
 import { TransferFeePanel, type TransferFeeDetails } from '../../features/transactions/TransferFeePanel';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast, errorMessage } from '../ui/useToast';
 import {
+  reverseTransactionNow,
   useApprovePendingTransactionMutation,
   useCreatePendingTransactionMutation,
   useCreateTransaction,
@@ -232,6 +235,23 @@ export function TransactionModal({
   initialPrefill,
 }: TransactionModalProps) {
   const { formatAmount, maskAmounts } = useBalanceVisibility();
+  const queryClient = useQueryClient();
+  /** Posted entries are never deleted; Undo reverses the first one (a transfer's fee goes with it), keeping history auditable. */
+  const offerUndo = (title: string, ids: number[], message?: string) => toast.show({
+    type: 'success',
+    title,
+    message,
+    duration: 8000,
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        reverseTransactionNow(queryClient, ids[0]).then(
+          () => toast.info(ids.length > 1 ? 'Transfer and fee reversed' : 'Transaction reversed'),
+          (error: unknown) => toast.error('Could not undo', errorMessage(error)),
+        );
+      },
+    },
+  });
   const createTransactionMutation = useCreateTransaction();
   const updateTransactionMutation = useUpdateTransaction();
   const previewPendingMutation = usePreviewPendingTransactionMutation();
@@ -944,6 +964,7 @@ export function TransactionModal({
         tagIds: metadata.tagIds,
         categoryId: metadata.categoryId ? parseInt(metadata.categoryId, 10) : null,
       } });
+      toast.success('Changes saved', metadata.description || undefined);
       onSaved();
       onClose();
     } catch (err) {
@@ -1289,8 +1310,10 @@ export function TransactionModal({
         simpleForm.type === 'expense' ? Number(simpleForm.categoryId) : undefined,
       );
       clearStoredDraft(SIMPLE_DRAFT_KEY);
+      const createdIds = [mainTransaction.id, ...linkedTransactionIds];
+      offerUndo(createdIds.length > 1 ? 'Transfer and fee added' : 'Transaction added', createdIds, simpleForm.description || undefined);
       onSaved();
-      onSuccess?.(mainTransaction.id, [mainTransaction.id, ...linkedTransactionIds]);
+      onSuccess?.(mainTransaction.id, createdIds);
       onClose();
     } catch (err) {
       setFormError((err as Error).message);
@@ -1414,7 +1437,7 @@ export function TransactionModal({
     setIsSubmitting(true);
     try {
       const dateIso = new Date(values.dateTime).toISOString();
-      await createTransactionMutation.mutateAsync({
+      const journal = await createTransactionMutation.mutateAsync({
         date: dateIso,
         description: values.description,
         notes: values.notes || null,
@@ -1430,6 +1453,7 @@ export function TransactionModal({
         categoryAllocations: parsedAllocations,
       });
       clearStoredDraft(JOURNAL_DRAFT_KEY);
+      offerUndo('Journal entry posted', [journal.id], values.description || undefined);
       onSaved();
       onClose();
     } catch (err) {
@@ -1616,7 +1640,7 @@ export function TransactionModal({
                   </div>
                   <div>
                     <p className="font-label text-xs text-[var(--color-muted)]">Date Recorded</p>
-                    <p className="font-body text-sm font-semibold">{new Date(editingTransaction.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                    <p className="font-body text-sm font-semibold">{formatDate(editingTransaction.date)}</p>
                   </div>
                 </div>
 
@@ -1748,7 +1772,7 @@ export function TransactionModal({
                   </div>
                   <div>
                     {activeDetailField === 'description' ? <input autoFocus value={editMeta.description} onChange={(event) => setEditMeta({ ...editMeta, description: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-full rounded-lg bg-[var(--ref-surface-container-low)] px-2 py-1 font-headline text-base font-bold tracking-tight outline-none ring-[var(--ref-primary)] focus:ring-2" /> : <button type="button" onClick={() => setActiveDetailField('description')} className="group flex items-center gap-1 rounded-lg -ml-2 px-2 py-1 text-left transition-colors hover:bg-[var(--ref-surface-container-low)]"><h1 className="font-headline font-bold text-base tracking-tight text-[var(--color-on-background)]">{maskAmounts(editMeta.description || 'Untitled transaction')}</h1><Pencil className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
-                    {activeDetailField === 'date' ? <div className="mt-1 flex gap-1"><input autoFocus type="date" value={editMeta.date} onChange={(event) => setEditMeta({ ...editMeta, date: event.target.value })} className="min-w-0 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /><input type="time" value={editMeta.time} onChange={(event) => setEditMeta({ ...editMeta, time: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-20 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /></div> : <button type="button" onClick={() => setActiveDetailField('date')} className="group mt-0.5 flex items-center gap-1 rounded px-1 -ml-1 text-[var(--color-muted)] font-label text-xs uppercase tracking-widest transition-colors hover:bg-[var(--ref-surface-container-low)]">{detailDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {detailDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}<Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
+                    {activeDetailField === 'date' ? <div className="mt-1 flex gap-1"><input autoFocus type="date" value={editMeta.date} onChange={(event) => setEditMeta({ ...editMeta, date: event.target.value })} className="min-w-0 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /><input type="time" value={editMeta.time} onChange={(event) => setEditMeta({ ...editMeta, time: event.target.value })} onBlur={() => setActiveDetailField(null)} className="w-20 rounded bg-[var(--ref-surface-container-low)] px-1 py-0.5 text-xs outline-none ring-[var(--ref-primary)] focus:ring-1" /></div> : <button type="button" onClick={() => setActiveDetailField('date')} className="group mt-0.5 flex items-center gap-1 rounded px-1 -ml-1 text-[var(--color-muted)] font-label text-xs uppercase tracking-widest transition-colors hover:bg-[var(--ref-surface-container-low)]">{formatDate(detailDate.getTime())} • {formatTime(detailDate.getTime())}<Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" /></button>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 bg-[var(--color-secondary-container)]/30 text-[var(--color-on-secondary-container)] px-3 py-1.5 rounded-full">
@@ -1890,7 +1914,7 @@ export function TransactionModal({
                               }
                             }
                           } catch {
-                            alert('Failed to load attachment');
+                            toast.error('Could not open attachment', 'Check your connection and try again.');
                           }
                         }}
                       >
@@ -1946,7 +1970,7 @@ export function TransactionModal({
                                   return updated;
                                 });
                               } catch {
-                                alert('Failed to delete attachment');
+                                toast.error('Could not delete attachment', 'Please try again.');
                               }
                             }
                           }}
@@ -2540,6 +2564,7 @@ export function TransactionModal({
                     onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
                     size="lg"
                     required
+                    initialFocus
                   />
 
                   {simpleForm.type === 'expense' && (
@@ -2739,6 +2764,7 @@ export function TransactionModal({
               onChange={(value) => setSimpleForm({ ...simpleForm, amount: value })}
               size="lg"
               required
+              initialFocus
               hintInline={simpleForm.type === 'transfer'}
               hint={simpleForm.type === 'transfer' ? (() => {
                 const details = calculateTransferDetails();
@@ -2888,7 +2914,7 @@ export function TransactionModal({
                         {installmentPreview.map((inst) => (
                           <div key={inst.installmentNumber} className="flex justify-between items-center text-sm">
                             <span className="text-[var(--color-text-secondary)]">
-                              #{inst.installmentNumber} - {new Date(inst.dueDate).toLocaleDateString()}
+                              #{inst.installmentNumber} - {formatDate(new Date(inst.dueDate).getTime())}
                             </span>
                             <span className="font-medium text-[var(--color-text-primary)]">
                               {formatAmount(inst.totalCents)}

@@ -1,4 +1,4 @@
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Link, createFileRoute, useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
@@ -12,10 +12,11 @@ import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useAgentMemoriesQuery } from '../features/agent/queries';
 import { agentCommands } from '../features/agent/commands';
 import { queryKeys } from '../features/core/query-keys';
-import { cn } from '../lib/utils';
+import { cn, SETTINGS_CHANGED_EVENT } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type PdfPasswordFormat } from '../lib/reportSecurity';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import { useTheme } from '../hooks/useTheme';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useExportDataMutation, type ExportSelection } from '../features/settings/queries';
@@ -223,6 +224,8 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const { formatAmount } = useBalanceVisibility();
   const navigate = useNavigate();
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
   const exportDataMutation = useExportDataMutation();
@@ -298,7 +301,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [feeRulePayer, setFeeRulePayer] = useState<TransferFeePayer>('sender');
   const { confirm } = useConfirm();
   const visibleTabs = TABS.filter((tab) => tab.label.toLowerCase().includes(settingsSearch.trim().toLowerCase()));
-  const closeSettings = onClose ?? (() => { void navigate({ to: '/' }); });
+  // Opened as a page (deep link or the phone menu): go back to where the user came from, else home.
+  const closeSettings = onClose ?? (() => { if (canGoBack) router.history.back(); else void navigate({ to: '/' }); });
   
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     transactions: true,
@@ -466,6 +470,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     saveTimeoutRef.current = setTimeout(() => {
       try {
         localStorage.setItem('fainens-settings', JSON.stringify(settings));
+        window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch (err) {
@@ -624,7 +629,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
       setShowExportSuccess(true);
       setTimeout(() => setShowExportSuccess(false), 3000);
     } catch (err) {
-      alert('Failed to export data: ' + (err as Error).message);
+      toast.error('Could not export data', errorMessage(err));
     }
   }, [exportOptions, settings, exportDataMutation]);
 
@@ -638,9 +643,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
       console.log('Import data preview:', Object.keys(data));
       
       // TODO: Implement import logic
-      alert('Import functionality coming soon!');
+      toast.info('Import is not available yet', 'The file was read but nothing was changed.');
     } catch (err) {
-      alert('Failed to import file: ' + (err as Error).message);
+      toast.error('Could not read the backup file', errorMessage(err));
     }
     
     // Reset input

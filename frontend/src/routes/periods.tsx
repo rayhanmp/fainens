@@ -10,6 +10,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { RequireAuth } from '../lib/auth';
 import { findCurrentPeriod, formatDate, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../lib/utils';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import {
   useArchivePeriodMutation,
   useAutoCreatePeriodMutation,
@@ -167,7 +168,7 @@ function PeriodsPage() {
     try {
       await autoCreatePeriodMutation.mutateAsync();
     } catch (error) {
-      alert((error as Error).message);
+      toast.error('Could not create the next period', errorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -175,21 +176,21 @@ function PeriodsPage() {
 
   const handleClose = async (period: Period) => {
     if (!await confirm({ title: 'Close accounting period', message: `Close ${period.name}? New or backdated transactions and budget changes will be blocked until you reopen it.`, confirmLabel: 'Close period', variant: 'warning' })) return;
-    try { await closePeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'closed' }); } catch (error) { alert((error as Error).message); }
+    try { await closePeriodMutation.mutateAsync(period.id); toast.success(`${period.name} closed`); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'closed' }); } catch (error) { toast.error('Could not close period', errorMessage(error)); }
   };
 
   const handleReopen = async (period: Period) => {
     if (!await confirm({ title: 'Reopen accounting period', message: `Reopen ${period.name}? This permits historical corrections and budget changes again.`, confirmLabel: 'Reopen period', variant: 'warning' })) return;
-    try { await reopenPeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'open' }); } catch (error) { alert((error as Error).message); }
+    try { await reopenPeriodMutation.mutateAsync(period.id); toast.success(`${period.name} reopened`); if (selectedPeriod?.id === period.id) void openDetails({ ...period, status: 'open' }); } catch (error) { toast.error('Could not reopen period', errorMessage(error)); }
   };
 
   const handleArchive = async (period: Period) => {
     if (!await confirm({ title: 'Archive period', message: `${period.name} will be hidden from everyday period pickers but kept for reports and audit history. You can restore it later.`, confirmLabel: 'Archive period', variant: 'warning' })) return;
-    try { await archivePeriodMutation.mutateAsync(period.id); closeDetails(); } catch (error) { alert((error as Error).message); }
+    try { await archivePeriodMutation.mutateAsync(period.id); closeDetails(); toast.show({ type: 'success', title: `${period.name} archived`, duration: 8000, action: { label: 'Undo', onClick: () => void handleRestore(period) } }); } catch (error) { toast.error('Could not archive period', errorMessage(error)); }
   };
 
   const handleRestore = async (period: Period) => {
-    try { await restorePeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, isActive: true }); } catch (error) { alert((error as Error).message); }
+    try { await restorePeriodMutation.mutateAsync(period.id); if (selectedPeriod?.id === period.id) void openDetails({ ...period, isActive: true }); } catch (error) { toast.error('Could not restore period', errorMessage(error)); }
   };
 
   const openModal = (period?: Period) => {

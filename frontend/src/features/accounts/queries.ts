@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   createAccount,
   deleteAccount,
@@ -142,11 +142,42 @@ export function useSetAccountOpeningBalanceMutation() {
   });
 }
 
+type AccountListSnapshot = Array<[readonly unknown[], AccountLedgerRow[] | undefined]>;
+
+/**
+ * Applies an archive or restore to every cached account list before the server answers,
+ * so the tile moves immediately. Returns the previous lists for rollback.
+ */
+async function applyAccountActiveOptimistically(queryClient: QueryClient, id: number, isActive: boolean): Promise<AccountListSnapshot> {
+  const listKey = ['accounts', 'list'] as const;
+  await queryClient.cancelQueries({ queryKey: listKey });
+  const snapshot = queryClient.getQueriesData<AccountLedgerRow[]>({ queryKey: listKey });
+  for (const [key, rows] of snapshot) {
+    if (!Array.isArray(rows)) continue;
+    const filters = (key[2] ?? {}) as AccountListParams;
+    const next = filters.includeInactive
+      ? rows.map((row) => (row.id === id ? { ...row, isActive } : row))
+      : isActive ? rows : rows.filter((row) => row.id !== id);
+    queryClient.setQueryData(key, next);
+  }
+  return snapshot;
+}
+
+function accountActiveMutationOptions(queryClient: QueryClient, isActive: boolean) {
+  return {
+    onMutate: (id: number) => applyAccountActiveOptimistically(queryClient, id, isActive),
+    onError: (_error: unknown, _id: number, snapshot: AccountListSnapshot | undefined) => {
+      snapshot?.forEach(([key, rows]) => queryClient.setQueryData(key, rows));
+    },
+    onSettled: () => invalidateFinancialSummaries(queryClient),
+  };
+}
+
 export function useDeleteAccountMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => unwrapGenerated(deleteAccount(id), 204, 'Failed to archive account'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
+    ...accountActiveMutationOptions(queryClient, false),
   });
 }
 
@@ -154,6 +185,6 @@ export function useRestoreAccountMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => unwrapGenerated(restoreAccount(id), 200, 'Failed to restore account'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
+    ...accountActiveMutationOptions(queryClient, true),
   });
 }

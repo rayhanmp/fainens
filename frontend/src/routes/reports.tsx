@@ -21,6 +21,7 @@ import { findCurrentPeriod, formatCurrency, cn, inclusivePeriodEnd } from '../li
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast, errorMessage } from '../components/ui/useToast';
 import {
   Download,
   FileText,
@@ -204,7 +205,7 @@ function ReportsPage() {
       a.download = `${reportType}-${Date.now()}.csv`;
       a.click();
     } catch (err) {
-      alert('Export failed: ' + (err as Error).message);
+      toast.error('Export failed', errorMessage(err));
     }
   };
 

@@ -18,6 +18,8 @@ interface CurrencyInputProps {
   showDivider?: boolean;
   currencySymbol?: string;
   tone?: 'default' | 'inverse';
+  /** Marks this field as the one a surrounding modal focuses when it opens. */
+  initialFocus?: boolean;
 }
 
 export function CurrencyInput({
@@ -35,6 +37,7 @@ export function CurrencyInput({
   showDivider = true,
   currencySymbol = 'Rp',
   tone = 'default',
+  initialFocus = false,
 }: CurrencyInputProps) {
   const { balancesHidden, maskAmounts } = useBalanceVisibility();
   const [isFocused, setIsFocused] = useState(false);
@@ -242,6 +245,7 @@ export function CurrencyInput({
           type="text"
           inputMode="numeric"
           autoComplete="off"
+          data-autofocus={initialFocus || undefined}
           value={balancesHidden && !isFocused && rawInput ? HIDDEN_BALANCE : rawInput}
           onFocus={() => setIsFocused(true)}
           onChange={handleChange}

@@ -11,7 +11,7 @@ import {
   ReferenceLine,
   ReferenceDot,
 } from 'recharts';
-import { formatCurrency as visibleCurrency, cn, formatDecimal } from '../../lib/utils';
+import { formatCurrency as visibleCurrency, cn, formatDate, formatDayMonth, formatDecimal } from '../../lib/utils';
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useNetWorthTrendQuery, type NetWorthRange } from '../../features/analytics/queries';
@@ -73,8 +73,8 @@ function chartIndex(state: unknown): number | null {
   return Number.isInteger(index) && index >= 0 ? index : null;
 }
 
-const shortDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-const longDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+const shortDate = formatDayMonth;
+const longDate = formatDate;
 
 type Row = GetNetWorthTrend200['series'][number];
 

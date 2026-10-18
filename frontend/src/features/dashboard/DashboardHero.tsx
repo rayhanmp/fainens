@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, BarChart3, Plus } from 'lucide-react';
 import { BalanceVisibilityToggle } from '../../components/ui/BalanceVisibilityToggle';
-import { cn, formatDate } from '../../lib/utils';
+import { cn, formatDayMonth } from '../../lib/utils';
 import { microLabel } from './panel-styles';
 import mountainHero from '../../assets/dashboard-mountain-hero.png';
 import type { UpcomingCommitments } from './commitments';
@@ -88,7 +88,7 @@ const tipAlign = (ratio: number) => (ratio < 0.25 ? 'left-0' : ratio > 0.6 ? 'ri
 function safePaceTip(pace: BudgetPace | null, formatAmount: (cents: number) => string, align: string) {
   if (!pace || pace.dailyBudget == null) return null;
   const remaining = pace.daysRemaining != null && pace.daysRemaining > 0 ? ` for the remaining ${pace.daysRemaining} day${pace.daysRemaining === 1 ? '' : 's'}` : '';
-  return <span role="tooltip" className={cn(paceTip, align, 'group-hover/budget:block')}>Safe pace <span className="text-white">{formatAmount(pace.dailyBudget)}</span> a day{remaining}</span>;
+  return <span role="tooltip" className={cn(paceTip, align, 'group-hover/budget:block group-focus-visible/budget:block')}>Safe pace <span className="text-white">{formatAmount(pace.dailyBudget)}</span> a day{remaining}</span>;
 }
 
 /** "Day 24 of 30 · 35% budget used" in the card header. */
@@ -119,12 +119,13 @@ function BudgetPaceBar({ pace }: { pace: BudgetPace }) {
   const paceNote = tone === 'warning' ? ' · ahead of the calendar' : tone === 'danger' ? ' · over the plan' : '';
   const layer = 'absolute inset-y-0 left-0 rounded-full transition-shadow before:absolute before:-inset-y-2 before:inset-x-0 before:content-[""] hover:z-10 hover:shadow-[0_0_0_2px_rgba(255,255,255,0.55)]';
   return (
-    <Link to="/budget" aria-label={paceDetail(pace)} className="dashboard-pace-bar relative mt-3 block h-[3px] rounded-full bg-white/15">
+    <Link to="/budget" aria-label={paceDetail(pace)} className="dashboard-pace-bar group/bar relative mt-3 block h-[3px] rounded-full bg-white/15 focus-visible:outline-offset-4">
       <span className={cn('group/elapsed', layer, 'bg-white/35')} style={{ width: `${pacing.elapsedRatio * 100}%` }}>
-        <span role="tooltip" className={cn(paceTip, tipAlign(pacing.elapsedRatio), 'group-hover/elapsed:block')}>{elapsedText}</span>
+        {/* Keyboard focus on the bar shows the most useful layer: budget used, or elapsed time when there is no budget. */}
+        <span role="tooltip" className={cn(paceTip, tipAlign(pacing.elapsedRatio), 'group-hover/elapsed:block', usedRatio == null && 'group-focus-visible/bar:block')}>{elapsedText}</span>
       </span>
       {usedRatio != null && <span className={cn('group/used', layer, paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }}>
-        <span role="tooltip" className={cn(paceTip, tipAlign(Math.min(1, usedRatio)), 'group-hover/used:block')}>
+        <span role="tooltip" className={cn(paceTip, tipAlign(Math.min(1, usedRatio)), 'group-hover/used:block group-focus-visible/bar:block')}>
           <span className={cn('block', paceText[tone])}>{formatPercent(usedRatio)} of the budget used{paceNote}</span>
         </span>
       </span>}
@@ -146,7 +147,7 @@ function CommitmentsSummary({ commitments, isLoading, formatAmount }: { commitme
           {subscriptions.length > 0 && <>
             <p className="flex justify-between gap-3"><span>Subscriptions · {subscriptions.length}</span><span className="text-white">{formatAmount(commitments.subscriptionTotal)}</span></p>
             <div className="space-y-0.5 pb-1">
-              {subscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3 text-white/60"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-white/40">· {formatDate(subscription.nextRenewalAt)}</span></span><span className="shrink-0">{formatAmount(subscription.amount)}</span></p>)}
+              {subscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3 text-white/60"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-white/40">· {formatDayMonth(subscription.nextRenewalAt)}</span></span><span className="shrink-0">{formatAmount(subscription.amount)}</span></p>)}
             </div>
           </>}
           {payLater.length > 0 && <p className="flex justify-between gap-3"><span>PayLater · {payLater.length}</span><span className="text-white">{formatAmount(commitments.payLaterTotal)}</span></p>}

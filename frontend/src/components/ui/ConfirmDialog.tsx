@@ -72,6 +72,8 @@ function ConfirmDialog({
             variant="secondary"
             onClick={onClose}
             disabled={isLoading}
+            // Destructive questions start on the safe answer; others on the action.
+            data-autofocus={variant === 'danger' || undefined}
             className="sm:min-w-[100px]"
           >
             {cancelLabel}
@@ -81,6 +83,7 @@ function ConfirmDialog({
             variant={buttonVariant}
             onClick={onConfirm}
             isLoading={isLoading}
+            data-autofocus={variant !== 'danger' || undefined}
             className="sm:min-w-[100px]"
           >
             {confirmLabel}

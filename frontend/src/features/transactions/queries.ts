@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import {
   approvePendingTransaction,
@@ -121,6 +121,16 @@ export function useCreateTransaction() {
 export function useReverseTransaction() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (id: number) => unwrapGenerated(reverseTransaction(id), 201, 'Failed to reverse transaction'), onSuccess: () => invalidateFinancialSummaries(queryClient) });
+}
+
+/**
+ * Reverses a transaction without a mounted mutation hook, for Undo actions that
+ * outlive the component that offered them (a toast after its modal closed).
+ */
+export async function reverseTransactionNow(queryClient: QueryClient, id: number) {
+  const result = await unwrapGenerated(reverseTransaction(id), 201, 'Failed to reverse transaction');
+  await invalidateFinancialSummaries(queryClient);
+  return result;
 }
 
 export function useUpdateTransaction() {

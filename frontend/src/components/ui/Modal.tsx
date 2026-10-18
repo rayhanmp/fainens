@@ -24,6 +24,25 @@ interface ModalProps {
   hideHeader?: boolean;
   /** Footer content rendered at the bottom of the modal */
   footer?: React.ReactNode;
+  /**
+   * Element to focus when the modal opens. Without it the modal focuses the first
+   * `[data-autofocus]` element, then the first field, then the first control that is not the close button.
+   */
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+}
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Layouts often render a phone and a desktop variant and hide one with CSS. */
+const isRendered = (element: HTMLElement) => element.getClientRects().length > 0;
+const firstRendered = (root: HTMLElement, selector: string) =>
+  Array.from(root.querySelectorAll<HTMLElement>(selector)).find(isRendered) ?? null;
+
+function initialFocusTarget(root: HTMLElement): HTMLElement | null {
+  return firstRendered(root, '[data-autofocus]')
+    ?? firstRendered(root, 'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="date"]):not([type="time"]), textarea:not([disabled])')
+    ?? firstRendered(root, `${FOCUSABLE.split(', ').map((selector) => `${selector}:not([data-modal-close])`).join(', ')}`)
+    ?? firstRendered(root, FOCUSABLE);
 }
 
 export function Modal({
@@ -40,6 +59,7 @@ export function Modal({
   showCloseLabel = true,
   hideHeader = false,
   footer,
+  initialFocusRef,
 }: ModalProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -112,9 +132,7 @@ export function Modal({
 
       // Focus trap: Tab navigation
       if (e.key === 'Tab' && modalRef.current) {
-        const focusableElements = modalRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
+        const focusableElements = modalRef.current.querySelectorAll(FOCUSABLE);
         const firstElement = focusableElements[0] as HTMLElement;
         const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
 
@@ -132,15 +150,15 @@ export function Modal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, shouldRender, onClose]);
 
-  // Focus first focusable element when modal opens
+  // Focus the most useful control when the modal opens, not the close button.
   useEffect(() => {
     if (isVisible && modalRef.current) {
-      const focusableElement = modalRef.current.querySelector(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      ) as HTMLElement;
-      focusableElement?.focus();
+      // A nested component may already have taken focus (e.g. its own autoFocus).
+      if (modalRef.current.contains(document.activeElement)) return;
+      const target = initialFocusRef?.current ?? initialFocusTarget(modalRef.current);
+      target?.focus({ preventScroll: true });
     }
-  }, [isVisible]);
+  }, [isVisible, initialFocusRef]);
 
   // Restore focus when modal closes
   useEffect(() => {
@@ -257,6 +275,7 @@ export function Modal({
               <button
                 type="button"
                 onClick={onClose}
+                data-modal-close
                 className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]/30"
                 aria-label="Close dialog"
               >
@@ -270,7 +289,8 @@ export function Modal({
               <button
                 type="button"
                 onClick={onClose}
-                className="cursor-pointer p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
+                data-modal-close
+                className="cursor-pointer rounded-lg p-1 hover:bg-[var(--color-accent)]/20 transition-colors"
                 aria-label="Close dialog"
               >
                 <X className="w-5 h-5" aria-hidden="true" />

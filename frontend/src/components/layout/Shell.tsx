@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { AreaNavigation } from './AreaNavigation';
 import { MobileBottomNav } from './MobileBottomNav';
 import { ConnectivityStatus } from './ConnectivityStatus';
+import { RouteProgress } from './RouteProgress';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useUiStore } from '../../stores/ui-store';
 import { GlobalTransactionComposer } from '../transactions/GlobalTransactionComposer';
@@ -19,7 +20,7 @@ interface ShellProps {
 function PendingTransactionNotifier() {
   const pendingQuery = usePendingTransactionsQuery();
   const previousIds = useRef<Set<number> | null>(null);
-  const { info, ToastContainer } = useToast();
+  const { info } = useToast();
 
   useEffect(() => {
     if (!pendingQuery.data) return;
@@ -37,7 +38,7 @@ function PendingTransactionNotifier() {
     previousIds.current = currentIds;
   }, [info, pendingQuery.data]);
 
-  return <ToastContainer />;
+  return null;
 }
 
 export function Shell({ children }: ShellProps) {
@@ -55,6 +56,7 @@ export function Shell({ children }: ShellProps) {
   return (
     <ConfirmProvider>
     <div className="flex min-h-screen min-h-[100dvh] items-start">
+      <RouteProgress />
       <ConnectivityStatus />
       <PendingTransactionNotifier />
       <Sidebar />

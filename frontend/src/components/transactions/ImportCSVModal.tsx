@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useImportTransactions, usePreviewTransactionImportMutation } from '../../features/transactions/queries';
 import { Upload, FileText, AlertCircle, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { toast, errorMessage } from '../ui/useToast';
 
 interface ImportCSVModalProps {
   isOpen: boolean;
@@ -167,7 +168,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
       setPeriodMappings(perMappings);
       setStep('preview');
     } catch (error) {
-      alert((error as Error).message);
+      toast.error('Could not read the CSV', errorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -230,7 +231,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
     const validRows = editedRows.filter(row => row.isValid && row.accountId);
     
     if (validRows.length === 0) {
-      alert('No valid transactions to import');
+      toast.warning('Nothing to import', 'Fix the highlighted rows or map an account first.');
       return;
     }
 
@@ -257,7 +258,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
       setStep('result');
       onSuccess();
     } catch (error) {
-      alert((error as Error).message);
+      toast.error('Import failed', errorMessage(error));
     } finally {
       setIsLoading(false);
     }

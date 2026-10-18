@@ -60,12 +60,69 @@ export function formatDecimal(value: number, maximumFractionDigits = 1, minimumF
   return value.toLocaleString('id-ID', { minimumFractionDigits, maximumFractionDigits });
 }
 
+/** Date display preference from Settings → General ("How dates are displayed throughout Fainens"). */
+export type DateFormatPreference = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD' | 'DD MMM YYYY';
+/** Fired by Settings after it saves, so date helpers pick up a changed preference without a reload. */
+export const SETTINGS_CHANGED_EVENT = 'fainens:settings-changed';
+const DATE_FORMATS: readonly DateFormatPreference[] = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD', 'DD MMM YYYY'];
+let cachedDateFormat: DateFormatPreference | null = null;
+
+export function dateFormatPreference(): DateFormatPreference {
+  if (cachedDateFormat) return cachedDateFormat;
+  let stored: unknown;
+  try {
+    stored = (JSON.parse(localStorage.getItem('fainens-settings') ?? '{}') as { dateFormat?: unknown }).dateFormat;
+  } catch {
+    stored = undefined;
+  }
+  cachedDateFormat = DATE_FORMATS.includes(stored as DateFormatPreference) ? stored as DateFormatPreference : 'DD/MM/YYYY';
+  return cachedDateFormat;
+}
+
+if (typeof window !== 'undefined') {
+  const forget = () => { cachedDateFormat = null; };
+  window.addEventListener('storage', forget);
+  window.addEventListener(SETTINGS_CHANGED_EVENT, forget);
+}
+
+const pad = (value: number) => String(value).padStart(2, '0');
+const monthName = (date: Date) => date.toLocaleDateString('en-US', { month: 'short' });
+const weekdayName = (date: Date) => date.toLocaleDateString('en-US', { weekday: 'short' });
+/** Formats that put the month first also put it first in shorter, written-out dates. */
+const monthFirst = () => dateFormatPreference() === 'MM/DD/YYYY';
+
+/** A calendar date in the user's chosen format, e.g. "18/10/2026" or "18 Oct 2026". */
 export function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  const date = new Date(timestamp);
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  switch (dateFormatPreference()) {
+    case 'MM/DD/YYYY': return `${pad(month)}/${pad(day)}/${year}`;
+    case 'YYYY-MM-DD': return `${year}-${pad(month)}-${pad(day)}`;
+    case 'DD MMM YYYY': return `${day} ${monthName(date)} ${year}`;
+    default: return `${pad(day)}/${pad(month)}/${year}`;
+  }
+}
+
+/** Day and month only, for compact labels and chart axes: "18 Oct" (or "Oct 18" for month-first users). */
+export function formatDayMonth(timestamp: number): string {
+  const date = new Date(timestamp);
+  return monthFirst() ? `${monthName(date)} ${date.getDate()}` : `${date.getDate()} ${monthName(date)}`;
+}
+
+/** A written-out date with weekday, for list section headers: "Tue, 13 Oct 2026". */
+export function formatWeekdayDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  return monthFirst()
+    ? `${weekdayName(date)}, ${monthName(date)} ${date.getDate()}, ${date.getFullYear()}`
+    : `${weekdayName(date)}, ${date.getDate()} ${monthName(date)} ${date.getFullYear()}`;
+}
+
+/** 24-hour clock time, "17:04". */
+export function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export type PeriodDateRange = { startDate: number; endDate: number };
@@ -95,16 +152,10 @@ export function findCurrentPeriod<T extends PeriodDateRange>(periods: readonly T
     .sort((a, b) => b.startDate - a.startDate)[0];
 }
 
-/** Audit / log views — date + time */
-export function formatDateTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+/** Date and time in the user's date format, e.g. "18/10/2026, 17:04". Audit views pass `withSeconds`. */
+export function formatDateTime(timestamp: number, { withSeconds = false }: { withSeconds?: boolean } = {}): string {
+  const seconds = withSeconds ? `:${pad(new Date(timestamp).getSeconds())}` : '';
+  return `${formatDate(timestamp)}, ${formatTime(timestamp)}${seconds}`;
 }
 
 /** A local calendar date suitable for a native `<input type="date">`. */

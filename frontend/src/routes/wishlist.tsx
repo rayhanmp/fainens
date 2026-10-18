@@ -18,10 +18,11 @@ import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
-import { cn } from '../lib/utils';
+import { cn, formatDate } from '../lib/utils';
 import { CreateWishlistModal } from '../components/wishlist/CreateWishlistModal';
 import { FulfillWishlistModal } from '../components/wishlist/FulfillWishlistModal';
 import { LinkTransactionModal } from '../components/wishlist/LinkTransactionModal';
+import { toast, errorMessage } from '../components/ui/useToast';
 
 export const Route = createFileRoute('/wishlist')({
   component: WishlistPage,
@@ -97,7 +98,7 @@ export default function WishlistPage() {
       setActiveMenuId(null);
     } catch (err) {
       console.error('Failed to delete wishlist item:', err);
-      alert('Failed to delete item');
+      toast.error('Could not delete item', errorMessage(err));
     }
   }
 
@@ -344,7 +345,7 @@ export default function WishlistPage() {
                     </div>
                     {item.period && (
                       <span className="text-[10px] text-[var(--color-muted)]">
-                        {new Date(item.period.startDate).toLocaleDateString()} - {new Date(item.period.endDate).toLocaleDateString()}
+                        {formatDate(new Date(item.period.startDate).getTime())} – {formatDate(new Date(item.period.endDate).getTime())}
                       </span>
                     )}
                   </div>
@@ -403,7 +404,7 @@ export default function WishlistPage() {
                         {item.name}
                       </div>
                       <div className="text-[10px] text-[var(--color-text-secondary)] uppercase tracking-tight">
-                        Fulfilled {item.fulfilledAt ? new Date(item.fulfilledAt).toLocaleDateString() : 'Unknown'}
+                        Fulfilled {item.fulfilledAt ? formatDate(new Date(item.fulfilledAt).getTime()) : 'Unknown'}
                       </div>
                     </div>
                     <div className="text-sm font-bold text-[var(--color-success)]">

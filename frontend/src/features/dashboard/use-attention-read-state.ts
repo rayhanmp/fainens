@@ -9,6 +9,8 @@ export type AttentionReadState = {
   isRead: (item: Attention) => boolean;
   markRead: (item: Attention) => void;
   markAllRead: () => void;
+  /** Reverses a mark-read, for Undo. */
+  markUnread: (items: readonly Attention[]) => void;
 };
 
 /**
@@ -47,6 +49,11 @@ export function useAttentionReadState(items: readonly Attention[], userEmail: st
     markAllRead: () => setReadKeys((current) => {
       const next = new Set(current);
       items.forEach((item) => next.add(attentionReadKey(item)));
+      return next;
+    }),
+    markUnread: (restored: readonly Attention[]) => setReadKeys((current) => {
+      const next = new Set(current);
+      restored.forEach((item) => next.delete(attentionReadKey(item)));
       return next;
     }),
   };

@@ -1,7 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useCallback } from 'react';
 import { Button } from '../ui/Button';
-import { cn } from '../../lib/utils';
+import { cn, formatDayMonth, formatTime } from '../../lib/utils';
 import { Sparkles, RefreshCw, ChevronDown } from 'lucide-react';
 import { useGenerateInsightMutation, useLatestInsightQuery } from '../../features/insights/queries';
 
@@ -88,7 +88,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
           <h3 className="font-semibold text-sm text-[var(--ref-on-surface)]">AI Insight</h3>
           {displayedInsight && !isCollapsed && (
             <span className="text-xs text-[var(--ref-on-surface-variant)]">
-              {displayedGeneratedAt?.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {displayedGeneratedAt && `${formatDayMonth(displayedGeneratedAt.getTime())}, ${formatTime(displayedGeneratedAt.getTime())}`}
               {displayedSourceRevision != null ? ` · ledger rev ${displayedSourceRevision}` : ''}
             </span>
           )}

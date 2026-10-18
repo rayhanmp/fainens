@@ -21,7 +21,7 @@ import { Modal } from '../components/ui/Modal';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { PageContainer } from '../components/ui/PageContainer';
-import { cn, parseIdNominalToInt } from '../lib/utils';
+import { cn, formatDate, parseIdNominalToInt } from '../lib/utils';
 
 export const Route = createFileRoute('/subscriptions')({
   component: SubscriptionsPage,
@@ -113,7 +113,7 @@ function statusBadge(status: SubStatus) {
 }
 
 function formatShortDate(ms: number) {
-  return new Date(ms).toLocaleDateString('en-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatDate(ms);
 }
 
 function formatBillingCycle(cycle: string) {

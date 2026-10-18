@@ -19,6 +19,7 @@ import {
 import { cn } from '../lib/utils';
 import { PRESET_COLORS } from '../lib/constants';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import {
   Plus,
   Sparkles,
@@ -182,8 +183,9 @@ function CategoriesPage() {
     if (!confirmed) return;
     try {
       await deleteCategoryMutation.mutateAsync(id);
+      toast.show({ type: 'success', title: 'Category archived', duration: 8000, action: { label: 'Undo', onClick: () => void handleRestoreCategory(id) } });
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not archive category', errorMessage(err));
     }
   };
 
@@ -191,7 +193,7 @@ function CategoriesPage() {
     try {
       await restoreCategoryMutation.mutateAsync(id);
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not restore category', errorMessage(err));
     }
   };
 
@@ -627,8 +629,9 @@ function CategoriesPage() {
                     try {
                       await deleteTagMutation.mutateAsync(editingTag.id);
                       closeTagModal();
+                      toast.success('Tag deleted');
                     } catch (err) {
-                      alert((err as Error).message);
+                      toast.error('Could not delete tag', errorMessage(err));
                     }
                   }}
                 >

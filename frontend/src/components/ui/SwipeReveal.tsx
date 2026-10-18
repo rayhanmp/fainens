@@ -54,13 +54,14 @@ export function SwipeReveal({ children, actions, className, open, onOpenChange, 
   const translate = dragOffset ?? (open ? -REVEAL_WIDTH : 0);
 
   return (
-    <article className={cn('relative overflow-hidden', className)} aria-label={label}>
+    // Swiping is phone-only, so wider screens let anchored menus overflow the row.
+    <article className={cn('relative overflow-hidden md:overflow-visible', className)} aria-label={label}>
       <div className="absolute inset-y-0 right-0 flex w-44 items-stretch justify-end bg-[var(--ref-surface-container-high)] md:hidden">
         {actions}
       </div>
       <div
         className={cn('relative bg-[var(--ref-surface-container-lowest)] touch-pan-y', dragOffset == null && 'transition-transform duration-200 ease-out')}
-        style={{ transform: `translateX(${translate}px)` }}
+        style={translate !== 0 ? { transform: `translateX(${translate}px)` } : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={finishGesture}

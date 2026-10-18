@@ -24,7 +24,7 @@ export function Button({
   return (
     <button
       className={cn(
-        'brutalist-button',
+        'brutalist-button relative',
         variant === 'secondary' && 'brutalist-button--secondary',
         variant === 'danger' && 'brutalist-button--danger',
         /* Default text colors for tailwind-merge: `className` can override (e.g. text-white on blue). */
@@ -32,16 +32,23 @@ export function Button({
         variant === 'secondary' && 'text-[var(--color-text-primary)]',
         variant === 'danger' && 'text-white',
         sizeClasses[size],
-        (disabled || isLoading) && 'opacity-50 cursor-not-allowed',
-        className
+        disabled && !isLoading && 'opacity-50 cursor-not-allowed',
+        className,
+        // The label stays in place but invisible (icons use currentColor too), so the width never jumps.
+        isLoading && 'cursor-wait text-transparent!',
       )}
       disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       {...props}
     >
-      {isLoading ? (
-        <span className="animate-pulse">Loading...</span>
-      ) : (
-        children
+      {children}
+      {isLoading && (
+        <span className={cn('absolute inset-0 grid place-items-center', variant === 'secondary' ? 'text-[var(--color-text-primary)]' : 'text-white')} aria-hidden="true">
+          <svg className="button-spinner h-4 w-4" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        </span>
       )}
     </button>
   );

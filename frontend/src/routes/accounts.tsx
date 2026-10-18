@@ -3,10 +3,11 @@ import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import './accounts.css';
-import { cn } from '../lib/utils';
+import { cn, formatTime } from '../lib/utils';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { BalanceVisibilityToggle } from '../components/ui/BalanceVisibilityToggle';
 import { useQueryClient } from '@tanstack/react-query';
@@ -268,8 +269,10 @@ function AccountsPage() {
     try {
       await deleteAccountMutation.mutateAsync(id);
       await loadAccounts();
+      const name = accounts.find((account) => account.id === id)?.name;
+      toast.show({ type: 'success', title: 'Account archived', message: name, duration: 8000, action: { label: 'Undo', onClick: () => void handleRestore(id) } });
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not archive account', errorMessage(err));
     }
   };
 
@@ -278,7 +281,7 @@ function AccountsPage() {
       await restoreAccountMutation.mutateAsync(id);
       await loadAccounts();
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not restore account', errorMessage(err));
     }
   };
 
@@ -358,7 +361,7 @@ function AccountsPage() {
             <div>
               <strong>Couldn’t refresh account data</strong>
               <p>{lastLoadedAt
-                ? 'Showing the last available snapshot, updated at ' + new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' }) + '.'
+                ? 'Showing the last available snapshot, updated at ' + formatTime(lastLoadedAt) + '.'
                 : 'Your balances are unavailable. Try again when the connection is restored.'}</p>
             </div>
             <Button type="button" variant="secondary" size="sm" onClick={() => void loadAccounts()} disabled={isRefreshing}>Try again</Button>
@@ -514,7 +517,7 @@ function AccountsPage() {
 
         <footer className="accounts-footer">
           <span><Scale className="h-3.5 w-3.5" aria-hidden />Balances reflect your recorded transactions.</span>
-          <span>{lastLoadedAt ? 'Updated ' + new Date(lastLoadedAt).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' }) : 'Reconcile with your statements to keep them accurate.'}</span>
+          <span>{lastLoadedAt ? 'Updated ' + formatTime(lastLoadedAt) : 'Reconcile with your statements to keep them accurate.'}</span>
         </footer>
         <AccountModal isOpen={isModalOpen} onClose={closeModal} onSaved={loadAccounts} editingAccount={editingAccount} />
         <ReconciliationModal isOpen={isReconciliationOpen} onClose={() => setIsReconciliationOpen(false)} accounts={allAccounts.length > 0 ? allAccounts : accounts} onSuccess={loadAccounts} />

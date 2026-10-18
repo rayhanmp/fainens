@@ -4,6 +4,8 @@ import { X, Link, Search, Calendar } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useLinkWishlistMutation } from '../../features/wishlist/queries';
 import { useTransactionList } from '../../features/transactions/queries';
+import { toast, errorMessage } from '../ui/useToast';
+import { formatDate } from '../../lib/utils';
 
 interface LinkTransactionModalProps {
   isOpen: boolean;
@@ -48,7 +50,7 @@ export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkT
       onClose();
     } catch (err) {
       console.error('Failed to link transaction:', err);
-      alert('Failed to link transaction');
+      toast.error('Could not link transaction', errorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -127,7 +129,7 @@ export function LinkTransactionModal({ isOpen, onClose, onSuccess, item }: LinkT
                       </div>
                       <div className="text-sm text-[var(--color-text-secondary)] flex items-center gap-2 mt-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(t.date).toLocaleDateString()}
+                        {formatDate(new Date(t.date).getTime())}
                         <span className="text-[var(--color-muted)]">|</span>
                         {t.accountName}
                       </div>

@@ -334,7 +334,7 @@ function AuditLogPage() {
                         className="transition-colors hover:bg-[var(--ref-surface-container-low)]/70"
                       >
                         <td className="whitespace-nowrap px-4 py-3 font-mono text-[11px] text-[var(--ref-on-surface-variant)] sm:px-6 sm:py-4 sm:text-xs">
-                          {formatDateTime(entry.createdAt)}
+                          {formatDateTime(entry.createdAt, { withSeconds: true })}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4">
                           <span
@@ -410,7 +410,7 @@ function AuditLogPage() {
           isOpen={!!selectedEntry}
           onClose={() => setSelectedEntry(null)}
           title="Audit entry"
-          subtitle={selectedEntry ? `${formatDateTime(selectedEntry.createdAt)} · Entry #${selectedEntry.id}` : undefined}
+          subtitle={selectedEntry ? `${formatDateTime(selectedEntry.createdAt, { withSeconds: true })} · Entry #${selectedEntry.id}` : undefined}
           size="xl"
         >
           {selectedEntry && (

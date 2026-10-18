@@ -5,7 +5,7 @@ import { CheckCircle2, Plus, Search, Wallet } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
-import { cn, formatCurrency } from '../../lib/utils';
+import { cn, formatCurrency, formatDate } from '../../lib/utils';
 import { useAccountsQuery } from '../../features/accounts/queries';
 import { useContactsQuery } from '../../features/loans/queries';
 import { queryKeys } from '../../features/core/query-keys';
@@ -17,7 +17,7 @@ const field = 'mt-1.5 block w-full rounded-xl border border-[var(--color-border)
 const label = 'block text-sm font-semibold';
 const hint = 'mt-1.5 text-xs font-normal leading-relaxed text-[var(--ref-on-surface-variant)]';
 const positiveInteger = (value: string) => Number.isSafeInteger(Number(value)) && Number(value) > 0;
-const dateLabel = (value: number) => new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const dateLabel = formatDate;
 function useDialogScrollLock() {
   useEffect(() => {
     const previous = document.body.style.overflow;

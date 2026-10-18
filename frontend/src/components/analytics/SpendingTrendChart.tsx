@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { SlidersHorizontal } from 'lucide-react';
-import { cn, formatCurrency as visibleCurrency, formatDecimal } from '../../lib/utils';
+import { cn, formatCurrency as visibleCurrency, formatDayMonth, formatDecimal } from '../../lib/utils';
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { useSpendingTrendQuery } from '../../features/analytics/queries';
 import type { GetSpendingTrend200 } from '../../generated/client';
@@ -28,9 +28,7 @@ function compactAxisIdr(value: number): string {
   return String(Math.round(value));
 }
 
-function shortDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+const shortDate = formatDayMonth;
 
 function coverageText(point: Point): string {
   if (point.coverageStatus === 'complete') return 'Complete coverage';

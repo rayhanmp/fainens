@@ -70,6 +70,7 @@ import {
   type TransactionProposalStatus,
 } from '../features/agent/proposal-utils';
 import { SplitBillLoanProposalCard } from '../components/agent/SplitBillLoanProposalCard';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 
 export const Route = createFileRoute('/agent')({
   validateSearch: (search: Record<string, unknown>): { prompt?: string; conversationId?: number } => ({
@@ -920,6 +921,7 @@ function AgentPage() {
   const navigate = useNavigate({ from: '/agent' });
   const search = useSearch({ from: '/agent' }) as { prompt?: string; conversationId?: number };
   const queryClient = useQueryClient();
+  const { confirm } = useConfirm();
   const conversationsQuery = useAgentConversationsQuery(true);
   const memoriesQuery = useAgentMemoriesQuery();
   const profileQuery = useAgentProfileQuery();
@@ -1290,7 +1292,12 @@ function AgentPage() {
   const editMemory = (memory: AgentMemory) => openMemoryForm(memory);
 
   const deleteMemory = async (memory: AgentMemory) => {
-    if (!window.confirm('Delete “' + memory.label + '” from Fainens memory?')) return;
+    if (!await confirm({
+      title: 'Delete memory?',
+      message: `Fainens will forget “${memory.label}”. You can add it again later.`,
+      confirmLabel: 'Delete memory',
+      variant: 'danger',
+    })) return;
     setMemoryError(null);
     try {
       await agentCommands.memories.delete(memory.id);
@@ -2062,7 +2069,7 @@ function AgentPage() {
                     <p className="startup-empty-subtitle mt-1 text-sm text-[var(--color-text-secondary)]">{startupSelection.subtitle}</p>
                     <div className="mx-auto mt-4 grid w-full max-w-2xl gap-2 sm:flex sm:flex-wrap sm:justify-center">
                       {startupSelection.prompts.map((suggestion, index) => (
-                        <button key={suggestion} type="button" onClick={() => void submitQuestion(suggestion)} style={{ animationDelay: String(index * 70) + 'ms' }} className="startup-prompt min-h-11 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-left text-sm font-medium text-[var(--color-text-secondary)] hover:border-[var(--ref-primary)] hover:text-[var(--ref-primary)] sm:min-h-0 sm:rounded-full sm:px-3 sm:py-2 sm:text-center sm:text-xs">
+                        <button key={suggestion} type="button" onClick={() => void submitQuestion(suggestion)} style={{ animationDelay: String(index * 70) + 'ms' }} className="startup-prompt min-h-11 rounded-2xl border border-[var(--color-border-strong)] bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-left text-sm font-medium text-[var(--ref-on-surface)] transition-colors hover:border-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)] sm:min-h-0 sm:rounded-full sm:px-3 sm:py-2 sm:text-center sm:text-xs">
                           {suggestion}
                         </button>
                       ))}

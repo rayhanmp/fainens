@@ -5,11 +5,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
 import { queryKeys } from '../features/core/query-keys';
-import { cn } from '../lib/utils';
+import { cn, formatDate, formatDayMonth } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { SalaryProfileModal } from '../components/salary/SalaryProfileModal';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import {
   Download,
   Plus,
@@ -111,6 +113,7 @@ function SalaryIncomePage() {
   const salaryQuery = useSalarySettingsQuery();
   const catchUpPreviewQuery = useSalaryCatchUpPreviewQuery();
   const salaryCatchUpMutation = useSalaryCatchUpMutation();
+  const { confirm } = useConfirm();
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -258,16 +261,21 @@ function SalaryIncomePage() {
                               if (!preview) throw new Error('Could not load salary catch-up preview');
                               const due = preview.occurrences.filter((occurrence) => occurrence.status === 'due');
                               if (due.length === 0) {
-                                alert(preview.message || 'No unprocessed salary months are due.');
+                                toast.info('Salary is up to date', preview.message || 'No unprocessed salary months are due.');
                                 return;
                               }
                               const firstMonth = new Date(due[0].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                               const lastMonth = new Date(due[due.length - 1].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                              if (!window.confirm(`Post ${due.length} due salary month${due.length === 1 ? '' : 's'} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`)) return;
+                              const monthCount = `${due.length} salary month${due.length === 1 ? '' : 's'}`;
+                              if (!await confirm({
+                                title: 'Post due salary?',
+                                message: `Post ${monthCount} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`,
+                                confirmLabel: `Post ${monthCount}`,
+                              })) return;
                               await salaryCatchUpMutation.mutateAsync({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
-                              alert(`Posted ${due.length} salary month${due.length === 1 ? '' : 's'}.`);
+                              toast.success(`Posted ${monthCount}`);
                             } catch (e) {
-                              alert(e instanceof Error ? e.message : 'Failed to post salary');
+                              toast.error('Could not post salary', errorMessage(e));
                             }
                           }}
                         >
@@ -416,11 +424,7 @@ function SalaryIncomePage() {
               </h3>
               <p className="mt-2 text-sm text-[var(--ref-primary-fixed)]">
                 Assumed disbursement:{' '}
-                {payday.date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}{' '}
+                {formatDate(payday.date.getTime())}{' '}
                 (day {payrollDay} of each month)
               </p>
             </div>
@@ -476,10 +480,7 @@ function SalaryIncomePage() {
                           <h4 className="font-bold text-[var(--color-text-primary)]">{tx.description}</h4>
                           <p className="text-xs text-[var(--color-text-secondary)]">
                             Income ·{' '}
-                            {new Date(tx.date).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
+                            {formatDayMonth(new Date(tx.date).getTime())}
                           </p>
                         </div>
                       </div>

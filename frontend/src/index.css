@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* `dark:` follows the app's theme (the `.dark` class set by useTheme, which also covers Auto),
+   not the OS setting, so a light app on a dark OS never gets dark-mode colours. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Design tokens + Stitch reference (design-reference/stitch-localized-dashboard/localized-dashboard.html) */
 :root {
   --color-background: #faf8ff;
@@ -1065,8 +1069,9 @@ button[data-variant="danger"]:focus-visible,
   animation-delay: 80ms;
 }
 
+/* No base opacity: 0 here. `both` already hides the chip before its delayed start, and a paused
+   animation (background tab, power saving) must still leave the chips readable. */
 .startup-prompt {
-  opacity: 0;
   animation: fainensStartupRise 360ms ease-out both;
 }
 
@@ -1512,4 +1517,28 @@ button[data-variant="danger"]:focus-visible,
   .finance-mobile-menu[open] .finance-mobile-inner { animation: none; }
   .ui-popover, [role="menu"], [role="listbox"], [role="tooltip"], .finance-profile[open] .finance-profile-popover { animation: none; }
   .ui-segmented::before, .ui-segmented > button, .finance-glass-dock a, .finance-glass-dock button { transition: none; }
+}
+
+/* Button loading spinner; slower rather than frozen when motion is reduced, so progress still reads. */
+.button-spinner { animation: button-spin 700ms linear infinite; }
+@keyframes button-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .button-spinner { animation-duration: 1.6s; } }
+
+/* Route loading bar: eases toward 85% while waiting, completes and fades when the page is ready. */
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 120;
+  height: 2px;
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--ref-primary), var(--ref-tertiary));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--ref-primary) 60%, transparent);
+  pointer-events: none;
+}
+.route-progress[data-phase="loading"] { animation: route-progress-grow 2.4s cubic-bezier(.1, .7, .2, 1) forwards; }
+.route-progress[data-phase="done"] { transform: scaleX(1); opacity: 0; transition: transform 160ms ease-out, opacity 220ms ease 120ms; }
+@keyframes route-progress-grow { from { transform: scaleX(0.05); } to { transform: scaleX(0.85); } }
+@media (prefers-reduced-motion: reduce) {
+  .route-progress[data-phase="loading"] { animation: none; transform: scaleX(0.6); }
+  .route-progress[data-phase="done"] { transition: opacity 200ms ease; }
 }

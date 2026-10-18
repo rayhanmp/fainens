@@ -1,32 +1,54 @@
-import { useCallback, useState } from 'react';
-import { ToastContainer } from './Toast';
+import { create } from 'zustand';
 import type { Toast } from './Toast';
 
-export function useToast() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+/** At most this many toasts stay on screen; older ones are dropped first. */
+const MAX_TOASTS = 4;
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+type ToastStore = {
+  toasts: Toast[];
+  add: (toast: Omit<Toast, 'id'>) => string;
+  remove: (id: string) => void;
+};
+
+/** The single toast stack, rendered by `Toaster` in Toast.tsx. */
+export const useToastStore = create<ToastStore>((set) => ({
+  toasts: [],
+  add: (toast) => {
     const id = Math.random().toString(36).slice(2, 11);
-    setToasts((previous) => [...previous, { ...toast, id }]);
+    set((state) => {
+      // A repeat of the toast already on top replaces it instead of stacking.
+      const top = state.toasts.at(-1);
+      const rest = top && top.title === toast.title && top.message === toast.message ? state.toasts.slice(0, -1) : state.toasts;
+      return { toasts: [...rest, { ...toast, id }].slice(-MAX_TOASTS) };
+    });
     return id;
-  }, []);
+  },
+  remove: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
+}));
 
-  const removeToast = useCallback((id: string) => {
-    setToasts((previous) => previous.filter((toast) => toast.id !== id));
-  }, []);
+const addToast = (toast: Omit<Toast, 'id'>) => useToastStore.getState().add(toast);
+const removeToast = (id: string) => useToastStore.getState().remove(id);
 
-  const success = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'success', title, message, duration }), [addToast]);
-  const error = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'error', title, message, duration: duration || 8000 }), [addToast]);
-  const warning = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'warning', title, message, duration }), [addToast]);
-  const info = useCallback((title: string, message?: string, duration?: number) =>
-    addToast({ type: 'info', title, message, duration }), [addToast]);
+/**
+ * App-wide toasts. Usable outside React (mutation callbacks, controllers);
+ * components can call `useToast()` for the same API.
+ */
+export const toast = {
+  show: addToast,
+  dismiss: removeToast,
+  success: (title: string, message?: string, duration?: number) => addToast({ type: 'success', title, message, duration }),
+  error: (title: string, message?: string, duration?: number) => addToast({ type: 'error', title, message, duration: duration || 8000 }),
+  warning: (title: string, message?: string, duration?: number) => addToast({ type: 'warning', title, message, duration }),
+  info: (title: string, message?: string, duration?: number) => addToast({ type: 'info', title, message, duration }),
+};
 
-  const BoundToastContainer = useCallback(() => (
-    <ToastContainer toasts={toasts} onRemove={removeToast} />
-  ), [toasts, removeToast]);
+/** Message text for a caught value, so error toasts never show "[object Object]". */
+export function errorMessage(error: unknown, fallback = 'Please try again.'): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  return fallback;
+}
 
-  return { toasts, addToast, removeToast, success, error, warning, info, ToastContainer: BoundToastContainer };
+export function useToast() {
+  return { addToast, removeToast, ...toast };
 }

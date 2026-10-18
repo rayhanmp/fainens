@@ -2,6 +2,7 @@ import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useState, useCallback } from 'react';
 import { CheckCircle, AlertTriangle, Info, X, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useToastStore } from './useToast';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -92,6 +93,13 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
       </div>
     </div>
   );
+}
+
+/** The single app-wide toast stack, mounted once at the app root. */
+export function Toaster() {
+  const toasts = useToastStore((state) => state.toasts);
+  const remove = useToastStore((state) => state.remove);
+  return <ToastContainer toasts={toasts} onRemove={remove} />;
 }
 
 // Toast Container Component

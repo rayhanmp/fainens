@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useToast } from './components/ui/useToast';
+import { toast } from './components/ui/useToast';
+import { Toaster } from './components/ui/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RouterProvider } from '@tanstack/react-router';
 import type { Router } from '@tanstack/react-router';
@@ -23,18 +24,16 @@ interface AppProps {
 }
 
 export function App({ router }: AppProps) {
-  const { ToastContainer, error } = useToast();
-
   // Global error handler for API calls
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error('Global error:', event.error);
-      error('An unexpected error occurred', event.error?.message);
+      toast.error('An unexpected error occurred', event.error?.message);
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled promise rejection:', event.reason);
-      error('An unexpected error occurred', event.reason?.message || 'Unknown error');
+      toast.error('An unexpected error occurred', event.reason?.message || 'Unknown error');
     };
 
     window.addEventListener('error', handleError);
@@ -51,7 +50,7 @@ export function App({ router }: AppProps) {
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
           <RouterProvider router={router} />
-          <ToastContainer />
+          <Toaster />
         </ErrorBoundary>
       </QueryClientProvider>
     </ThemeProvider>

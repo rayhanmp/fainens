@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { useConfirm } from '../ui/ConfirmDialog';
-import { formatCurrency, parseSignedIdNominalToInt, cn, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../../lib/utils';
+import { formatCurrency, formatDate, parseSignedIdNominalToInt, cn, snapshotTimestampForLocalDate, toLocalDateInputValue } from '../../lib/utils';
 import { AlertCircle, ArrowDownRight, ArrowUpRight, Building2, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, CreditCard, History, Search, ShieldCheck, Wallet } from 'lucide-react';
 import { useAccountsLedgerQuery, useReconciliationHistoryQuery } from '../../features/accounts/queries';
 import {
@@ -582,7 +582,7 @@ export function ReconciliationModal({ isOpen, onClose, accounts, onSuccess }: Re
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <button type="button" aria-expanded={expandedSessionId === session.id} onClick={() => setExpandedSessionId((current) => current === session.id ? null : session.id)} className="min-w-0 flex-1 text-left">
                         <span className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold capitalize text-[var(--ref-on-surface)]">{label}</span><span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', session.lifecycleStatus === 'voided' ? 'bg-[var(--ref-error)]/10 text-[var(--ref-error)]' : adjusted.length ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/25 dark:text-emerald-100')}>{session.lifecycleStatus === 'voided' ? 'Voided' : adjusted.length ? `${adjusted.length} adjusted` : 'Matched'}</span></span>
-                        <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">{new Date(session.asOfDate).toLocaleDateString('en-ID')} · {session.items.length} account{session.items.length === 1 ? '' : 's'}{adjusted.length ? ` · ${formatAmount(adjusted.reduce((sum, item) => sum + Math.abs(item.difference), 0))} total difference` : ''}</span>
+                        <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">{formatDate(new Date(session.asOfDate).getTime())} · {session.items.length} account{session.items.length === 1 ? '' : 's'}{adjusted.length ? ` · ${formatAmount(adjusted.reduce((sum, item) => sum + Math.abs(item.difference), 0))} total difference` : ''}</span>
                       </button>
                       {session.lifecycleStatus === 'active' && (session.kind ?? 'control') === 'control' && (
                         <button type="button" onClick={() => { setPendingVoidSessionId((current) => current === session.id ? null : session.id); setVoidReason(''); }} className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--ref-error)] hover:bg-[var(--ref-error)]/5">{pendingVoidSessionId === session.id ? 'Cancel void' : 'Void check'}</button>

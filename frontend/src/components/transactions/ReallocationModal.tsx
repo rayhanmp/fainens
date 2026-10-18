@@ -1,6 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
+import { formatDate } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { useLinkReallocation, useTransactionList } from '../../features/transactions/queries';
 import { reallocationPreview, type ReallocationTransaction } from '../../features/transactions/reallocation';
@@ -11,7 +12,7 @@ function EntrySummary({ entry }: { entry: ReallocationTransaction }) {
   const amount = Math.abs(entry.expenseCents || entry.incomeCents || 0);
   return <div className="min-w-0">
     <p className="break-words font-semibold">{entry.description}</p>
-    <p className="text-xs text-[var(--ref-on-surface-variant)]">{new Date(entry.date).toLocaleDateString('en-ID', { day: 'numeric', month: 'short', year: 'numeric' })} · {wallet?.accountName ?? 'Account'}</p>
+    <p className="text-xs text-[var(--ref-on-surface-variant)]">{formatDate(new Date(entry.date).getTime())} · {wallet?.accountName ?? 'Account'}</p>
     <p className="mt-1 font-bold tabular-nums">{entry.reallocationEligibleRole === 'incoming' ? '+' : '−'}{formatAmount(amount)}</p>
   </div>;
 }

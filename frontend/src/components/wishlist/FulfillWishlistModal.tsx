@@ -4,6 +4,7 @@ import { X, CheckCircle2, Calendar, CreditCard, FileText } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAssetAccountsQuery } from '../../features/accounts/queries';
 import { useFulfillWishlistMutation } from '../../features/wishlist/queries';
+import { toast, errorMessage } from '../ui/useToast';
 
 interface FulfillWishlistModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ export function FulfillWishlistModal({ isOpen, onClose, onSuccess, item }: Fulfi
       onClose();
     } catch (err) {
       console.error('Failed to fulfill wishlist item:', err);
-      alert('Failed to create transaction');
+      toast.error('Could not record the purchase', errorMessage(err));
     } finally {
       setIsSubmitting(false);
     }

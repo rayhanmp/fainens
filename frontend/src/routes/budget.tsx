@@ -9,9 +9,10 @@ import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { findCurrentPeriod, formatCurrency, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
+import { findCurrentPeriod, formatCurrency, formatDate, formatDayMonth, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
 import { api } from '../lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -150,13 +151,7 @@ type FilterOption = 'all' | 'over' | 'near' | 'under' | 'notStarted';
 type SortDirection = 'asc' | 'desc';
 
 function formatPeriodRange(p: Period) {
-  const a = new Date(p.startDate);
-  const b = new Date(p.endDate);
-  return `${a.toLocaleDateString('en-ID', { day: 'numeric', month: 'short' })} – ${b.toLocaleDateString('en-ID', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })}`;
+  return `${formatDayMonth(p.startDate)} – ${formatDate(p.endDate)}`;
 }
 
 const budgetToolLinkClass = 'inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--ref-surface-container-low)] px-4 py-2.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 hover:bg-[var(--ref-primary)]/10 hover:text-[var(--ref-primary)] hover:shadow-sm active:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)] focus-visible:outline-offset-2';
@@ -427,7 +422,7 @@ function BudgetPage() {
         ? `Preset applied. ${result.applied} category allocations are now in the plan.`
         : `Preset merged. Added ${result.applied} new categor${result.applied === 1 ? 'y' : 'ies'}; kept ${result.skipped} existing.`);
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not apply preset', errorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -435,7 +430,7 @@ function BudgetPage() {
 
   const deleteBudget = async (budgetId: number) => {
     const confirmed = await confirm({
-      title: 'Delete Budget Line',
+      title: 'Delete budget line',
       message: 'Are you sure you want to delete this budget line?',
       confirmLabel: 'Delete',
       variant: 'danger',
@@ -443,8 +438,9 @@ function BudgetPage() {
     if (!confirmed) return;
     try {
       await deleteBudgetMutation.mutateAsync(budgetId);
+      toast.success('Budget line deleted');
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not delete budget line', errorMessage(err));
     }
   };
 
@@ -483,16 +479,17 @@ function BudgetPage() {
 
   const deleteTemplate = async (templateId: number) => {
     const confirmed = await confirm({
-      title: 'Delete Template',
-      message: 'Are you sure you want to delete this template?',
+      title: 'Delete preset',
+      message: 'Are you sure you want to delete this preset?',
       confirmLabel: 'Delete',
       variant: 'danger',
     });
     if (!confirmed) return;
     try {
       await deleteTemplateMutation.mutateAsync(templateId);
+      toast.success('Preset deleted');
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not delete preset', errorMessage(err));
     }
   };
 
@@ -699,7 +696,7 @@ function BudgetPage() {
       const result = await copyBudgetPeriodPlanMutation.mutateAsync({ periodId: selectedPeriod.id, sourcePeriodId });
       setBudgetActionMessage(`Copied ${result.copied} categories from ${periods.find((period) => period.id === sourcePeriodId)?.name ?? 'the previous period'}; kept ${result.skipped} existing.`);
     } catch (error) {
-      alert((error as Error).message);
+      toast.error('Could not copy the previous plan', errorMessage(error));
     } finally {
       setIsSubmitting(false);
     }

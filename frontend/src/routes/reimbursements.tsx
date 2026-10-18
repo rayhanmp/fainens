@@ -7,12 +7,11 @@ import { Button } from '../components/ui/Button';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { useConfirm } from '../components/ui/ConfirmDialog';
-import { ToastContainer } from '../components/ui/Toast';
 import { useToast } from '../components/ui/useToast';
 import { ClaimComposer, PaymentDialog } from '../components/reimbursements/ClaimDialogs';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { queryKeys, invalidateFinancialSummaries } from '../features/core/query-keys';
 
 export const Route = createFileRoute('/reimbursements')({
@@ -42,7 +41,7 @@ const statusColors: Record<string, string> = {
   rejected: 'bg-red-500/10 text-[var(--ref-error)]',
 };
 function displayDate(value: number | string) {
-  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatDate(new Date(value).getTime());
 }
 function overdue(claim: Claim) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -162,6 +161,5 @@ function ReimbursementsPage() {
     <p className="flex items-start gap-2 text-xs leading-relaxed text-[var(--ref-outline)]"><HandCoins className="h-4 w-4 shrink-0" />Approved claims track money owed to you. Payments reduce that balance and appear in your selected cash account.</p>
     {composerOpen && <ClaimComposer initial={useSource ? search : {}} onClose={() => { setComposerOpen(false); setUseSource(false); }} onSaved={async () => { setComposerOpen(false); setUseSource(false); setView('draft'); setSearchText(''); toast.success('Draft saved', 'Your claim is ready to submit or approve.'); await refresh(); }} />}
     {payment && <PaymentDialog claims={claims} initialClaimId={payment.claimId} onClose={() => setPayment(null)} onSaved={async () => { setPayment(null); toast.success('Payment recorded', 'Your reimbursement balance has been updated.'); await refresh(); }} />}
-    <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
   </PageContainer></RequireAuth>;
 }

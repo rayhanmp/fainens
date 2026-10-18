@@ -4,10 +4,12 @@ import { personalActivityKind, reallocationCashAmount } from "../features/transa
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, ArrowUpDown, Loader2, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { SwipeReveal } from '../components/ui/SwipeReveal';
+import { MenuSelect } from '../components/ui/MenuSelect';
+import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
 import { TransactionActivityChart, type ActivityDay } from '../components/transactions/TransactionActivityChart';
@@ -16,10 +18,11 @@ import { TransactionModal, type EditingTransaction, type TransactionPrefill, typ
 import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
 import { PendingTransactionsModal } from '../components/transactions/PendingTransactionsModal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import type { ListTransactionsParams } from '../generated/client';
-import { cn, formatIdNominalInput } from '../lib/utils';
+import { cn, formatDateTime, formatIdNominalInput, formatTime, formatWeekdayDate } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList, type PendingTransactionListItem } from '../features/transactions/queries';
@@ -32,6 +35,25 @@ import { transactionActivityAmount, compactLoanActivityLabel, splitBillActivityR
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'largest', label: 'Largest amount' },
+] as const;
+
+/** Placeholder rows shaped like the real list, so the page does not jump when activity arrives. */
+function TransactionRowsSkeleton({ compact }: { compact: boolean }) {
+  const widths = ['w-2/5', 'w-1/2', 'w-1/3', 'w-3/5', 'w-2/5', 'w-1/2'];
+  return <div role="status" aria-label="Loading activity" className="divide-y divide-[var(--ref-outline-variant)]/20">
+    <div className="h-8 animate-pulse bg-[var(--ref-surface-container-low)]" />
+    {widths.map((width, index) => <div key={index} className={cn('flex items-center gap-3 px-4 sm:px-6', compact ? 'py-2.5' : 'py-4')}>
+      <div className="h-10 w-10 shrink-0 animate-pulse rounded-2xl bg-[var(--ref-surface-container-low)]" />
+      <div className="min-w-0 flex-1 space-y-2"><div className={cn('h-3.5 animate-pulse rounded-full bg-[var(--ref-surface-container-low)]', width)} /><div className="h-2.5 w-1/4 animate-pulse rounded-full bg-[var(--ref-surface-container-low)]" /></div>
+      <div className="hidden h-3 w-20 animate-pulse rounded-full bg-[var(--ref-surface-container-low)] sm:block" />
+      <div className="h-3.5 w-24 animate-pulse rounded-full bg-[var(--ref-surface-container-low)]" />
+    </div>)}
+  </div>;
+}
 
 export const Route = createFileRoute('/transactions')({
   validateSearch: (search: Record<string, unknown>): { periodId?: string; accountId?: string; categoryId?: string; transactionId?: string; tagId?: string; action?: string } => ({
@@ -68,14 +90,10 @@ interface TransactionSummary {
 type TransactionRow = Awaited<ReturnType<typeof api.transactions.list>>['data'][number] & { loanActivity?: LoanActivity | null; displayPart?: SplitBillDisplayPart };
 type ActivityKind = 'expense' | 'income' | 'transfer' | 'loan' | 'other';
 
-function formatDateTime(timestamp: number) {
-  return new Date(timestamp).toLocaleString('en-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
 function formatGmailSyncTime(value: number | string | null | undefined) {
   if (value == null) return 'Never';
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleString('en-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown';
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? formatDateTime(time) : 'Unknown';
 }
 function formatDateInputEnd(value: string) { return value ? value + 'T23:59:59.999+07:00' : undefined; }
 function getKind(transaction: TransactionRow): ActivityKind {
@@ -137,7 +155,9 @@ function TransactionsPage() {
   const [filterQuery, setFilterQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [reallocationTransaction, setReallocationTransaction] = useState<TransactionRow | null>(null);
-  const [rowActionsId, setRowActionsId] = useState<number | null>(null);
+  // Keyed by row, not transaction: a split bill shows one transaction as two rows.
+  const [rowActionsKey, setRowActionsKey] = useState<string | null>(null);
+  const rowActionsId = rowActionsKey ? Number(rowActionsKey.split(':')[0]) : null;
   const [swipedRowId, setSwipedRowId] = useState<string | null>(null);
   const [mobileInsightsOpen, setMobileInsightsOpen] = useState(false);
   useEffect(() => {
@@ -165,7 +185,6 @@ function TransactionsPage() {
   const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
   const [gmailSyncing, setGmailSyncing] = useState(false);
   const [gmailDisconnecting, setGmailDisconnecting] = useState(false);
-  const [gmailMessage, setGmailMessage] = useState('');
 
   const queryClient = useQueryClient();
   const transactionFilters = useMemo<ListTransactionsParams>(() => ({
@@ -230,24 +249,104 @@ function TransactionsPage() {
       fromAccountId: source?.accountId,
       toAccountId: destination?.accountId,
     });
-    setRowActionsId(null);
+    setRowActionsKey(null);
   };
 
   useKeyboardShortcuts({ isModalOpen: isModalOpen || isImportModalOpen || isPendingModalOpen, searchInputRef, onNewTransaction: () => openModal() });
 
   useEffect(() => () => setActivePanel(null), [setActivePanel]);
 
+  const toolsRef = useRef<HTMLDivElement>(null);
+  // The tools menu closes on an outside press or Escape, like every other popover.
+  useEffect(() => {
+    if (!isToolsOpen) return undefined;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !toolsRef.current?.contains(event.target)) setActivePanel(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setActivePanel(null);
+      toolsRef.current?.querySelector('button')?.focus();
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isToolsOpen, setActivePanel]);
+  const clearSearch = () => { setFilterQuery(''); setDebouncedQuery(''); };
+  // Typing ahead of the debounce, or waiting on the server for a new search, both read as "searching".
+  const isSearching = filterQuery.trim() !== debouncedQuery.trim() || (debouncedQuery.trim() !== '' && transactionQuery.isFetching);
+  const openReimbursements = () => navigate({ to: '/reimbursements', search: { sourceTransactionId: undefined, expenseLineId: undefined, categoryId: undefined, amount: undefined } });
+  const gmailLabel = gmailStatusQuery.data?.connected ? 'Gmail sync' : 'Connect Gmail';
+
+  // The desktop row menu closes on an outside press or Escape, returning focus to its trigger.
+  useEffect(() => {
+    if (!rowActionsKey || isMobile) return undefined;
+    const anchor = () => document.querySelector<HTMLElement>(`[data-row-actions="${CSS.escape(rowActionsKey)}"]`);
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !anchor()?.contains(event.target)) setRowActionsKey(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      anchor()?.querySelector('button')?.focus();
+      setRowActionsKey(null);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [rowActionsKey, isMobile]);
+
+  /** One action list for the phone sheet and the desktop menu. */
+  const renderRowActions = (transaction: TransactionRow, surface: 'sheet' | 'menu') => {
+    const kind = getKind(transaction);
+    const reimbursementLine = transaction.lines.find((line) => line.accountType === 'expense' && line.debit > line.credit);
+    const reimbursable = transaction.status === 'posted' && kind === 'expense' && reimbursementLine != null && remainingReimbursableExpense(transaction) > 0;
+    const correction = transaction.reallocation != null || transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment' || transaction.txType === 'balance_adjustment';
+    const item = cn('flex w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold disabled:opacity-40', surface === 'sheet' ? 'min-h-12' : 'min-h-10');
+    const icon = surface === 'sheet' ? 'h-5 w-5' : 'h-4 w-4';
+    const role = surface === 'menu' ? 'menuitem' : undefined;
+    // Let the menu close before opening the next layer, so focus restoration does not fight it.
+    const then = (action: () => void) => { setRowActionsKey(null); window.setTimeout(action, 0); };
+    return <div className="space-y-0.5">
+      <button type="button" role={role} onClick={() => then(() => openModal(transaction, 'view'))} className={cn(item, 'hover:bg-[var(--ref-surface-container-low)]')}><Receipt className={cn(icon, 'text-[var(--ref-primary)]')} />View details</button>
+      {transaction.reallocationEligibleRole && !transaction.reallocation && <button type="button" role={role} onClick={() => then(() => setReallocationTransaction(transaction))} className={cn(item, 'text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10')}><ArrowRightLeft className={icon} />Link as reallocation</button>}
+      {kind !== 'loan' && <button type="button" role={role} onClick={() => then(() => repeatTransaction(transaction))} className={cn(item, 'hover:bg-[var(--ref-surface-container-low)]')}><CopyPlus className={cn(icon, 'text-[var(--ref-primary)]')} />Repeat transaction</button>}
+      {reimbursable && <button type="button" role={role} onClick={() => { setRowActionsKey(null); navigate({ to: '/reimbursements', search: { sourceTransactionId: String(transaction.id), expenseLineId: String(reimbursementLine.id), categoryId: transaction.categoryAllocations.length === 1 ? String(transaction.categoryAllocations[0]!.categoryId) : undefined, amount: String(remainingReimbursableExpense(transaction)) } }); }} className={cn(item, 'text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10')}><HandCoins className={icon} />Mark reimbursable</button>}
+      {surface === 'menu' && <div className="my-1 h-px bg-[var(--color-border)]" role="separator" />}
+      {transaction.status === 'draft'
+        ? <button type="button" role={role} onClick={() => then(() => void handleDeleteDraft(transaction))} className={cn(item, 'text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10')}><Trash2 className={icon} />Delete draft</button>
+        : <button type="button" role={role} disabled={correction} onClick={() => then(() => void handleCorrect(transaction))} className={cn(item, 'text-amber-700 hover:bg-amber-500/10 dark:text-amber-300')}><RotateCcw className={icon} />{transaction.reallocation ? 'Unlink before correcting' : correction ? 'Correction cannot be reversed' : 'Correct transaction'}</button>}
+    </div>;
+  };
+
   const loadData = () => invalidateFinancialSummaries(queryClient);
   const handleGmailSync = async () => {
     setGmailSyncing(true);
-    setGmailMessage('');
     try {
       const result = await api.gmail.sync(30);
       await pendingQuery.refetch();
       await gmailStatusQuery.refetch();
-      setGmailMessage(`${result.imported} BNI email diimpor, ${result.skipped} dilewati karena sudah pernah diproses.`);
+      const skipped = result.skipped > 0 ? ` ${result.skipped} already processed ${result.skipped === 1 ? 'email was' : 'emails were'} skipped.` : '';
+      if (result.imported > 0) {
+        setIsGmailModalOpen(false);
+        toast.show({
+          type: 'success',
+          title: `${result.imported} BNI ${result.imported === 1 ? 'email' : 'emails'} imported`,
+          message: `Ready for review before posting.${skipped}`,
+          duration: 8000,
+          action: { label: 'Review now', onClick: () => setIsPendingModalOpen(true) },
+        });
+      } else {
+        toast.info('No new BNI emails', skipped.trim() || 'Everything from the last 30 days is already in Fainens.');
+      }
     } catch (error) {
-      setGmailMessage(error instanceof Error ? error.message : 'Gagal membaca email Gmail.');
+      toast.error('Gmail sync failed', errorMessage(error, 'Could not read Gmail.'));
     } finally {
       setGmailSyncing(false);
     }
@@ -260,13 +359,13 @@ function TransactionsPage() {
       variant: 'danger',
     })) return;
     setGmailDisconnecting(true);
-    setGmailMessage('');
     try {
       await api.gmail.disconnect();
       await gmailStatusQuery.refetch();
-      setGmailMessage('Gmail disconnected. Existing transactions were kept.');
+      setIsGmailModalOpen(false);
+      toast.success('Gmail disconnected', 'Existing transactions were kept.');
     } catch (error) {
-      setGmailMessage(error instanceof Error ? error.message : 'Failed to disconnect Gmail.');
+      toast.error('Could not disconnect Gmail', errorMessage(error));
     } finally {
       setGmailDisconnecting(false);
     }
@@ -319,11 +418,21 @@ function TransactionsPage() {
   const closeModal = () => { setIsModalOpen(false); setEditingTransaction(null); setEditingPendingTx(null); setModalPrefill(undefined); };
   const handleCorrect = async (transaction: TransactionRow) => {
     if (!await confirm({ title: 'Correct transaction', message: 'This keeps the original for audit history and posts an equal opposite correction. You can then add the replacement transaction.', confirmLabel: 'Correct transaction', variant: 'warning' })) return;
-    try { await reverseTransactionMutation.mutateAsync(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
+    try {
+      await reverseTransactionMutation.mutateAsync(transaction.id);
+      await loadData();
+      toast.show({
+        type: 'success',
+        title: 'Correction posted',
+        message: 'Add the replacement transaction now?',
+        duration: 8000,
+        action: { label: 'Add replacement', onClick: () => repeatTransaction(transaction) },
+      });
+    } catch (error) { toast.error('Could not correct transaction', errorMessage(error)); }
   };
   const handleDeleteDraft = async (transaction: TransactionRow) => {
     if (!await confirm({ title: 'Delete draft', message: 'This draft has not affected reports or balances. Delete it?', confirmLabel: 'Delete draft', variant: 'danger' })) return;
-    try { await deleteTransactionMutation.mutateAsync(transaction.id); await loadData(); } catch (error) { alert((error as Error).message); }
+    try { await deleteTransactionMutation.mutateAsync(transaction.id); await loadData(); toast.success('Draft deleted'); } catch (error) { toast.error('Could not delete draft', errorMessage(error)); }
   };
   const clearFilters = () => {
     setFilterQuery(''); setDebouncedQuery(''); setKindFilter(''); setCategoryFilter(''); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); setSort('newest'); setIncludeAdjustments(false);
@@ -341,14 +450,17 @@ function TransactionsPage() {
   </>;
 
   return <RequireAuth><PageContainer variant="compact">
-    <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-      <PageHeader subtext="Recorded activity" title="Transactions" description={transactionQuery.isError ? 'Activity is currently unavailable.' : isLoading ? 'Loading activity…' : total.toLocaleString() + ' activit' + (total === 1 ? 'y' : 'ies') + ' in ' + periodLabel + '.'} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" className="rounded-full" onClick={() => navigate({ to: '/reimbursements', search: { sourceTransactionId: undefined, expenseLineId: undefined, categoryId: undefined, amount: undefined } })}><HandCoins className="mr-2 h-4 w-4" />Reimbursements</Button>
-        <Button variant="secondary" className="rounded-full" onClick={() => { setGmailMessage(''); setIsGmailModalOpen(true); }} disabled={gmailStatusQuery.isLoading}><Mail className="mr-2 h-4 w-4" />{gmailStatusQuery.data?.connected ? 'Gmail sync' : 'Connect Gmail'}</Button>
-        {pendingCount > 0 && <Button variant="secondary" className="rounded-full" onClick={() => setIsPendingModalOpen(true)}><Clock className="mr-2 h-4 w-4" />Review pending ({pendingCount})</Button>}
-        <div className="relative"><Button variant="secondary" className="rounded-full px-3" onClick={() => setActivePanel(isToolsOpen ? null : 'transactions-tools')}><MoreHorizontal className="h-4 w-4" /><span className="ml-2">More tools</span></Button>
-          {isToolsOpen && <div className="ui-popover absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">
+    {/* Phones get the title and one overflow button; the dock already has Add. */}
+    <div className="flex items-start justify-between gap-4 md:flex-col md:items-stretch lg:flex-row lg:items-end">
+      <PageHeader className="min-w-0" subtext="Recorded activity" title="Transactions" description={transactionQuery.isError ? 'Activity is currently unavailable.' : isLoading ? 'Loading activity…' : total.toLocaleString() + ' activit' + (total === 1 ? 'y' : 'ies') + ' in ' + periodLabel + '.'} />
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <Button variant="secondary" className="hidden rounded-full md:inline-flex" onClick={openReimbursements}><HandCoins className="mr-2 h-4 w-4" />Reimbursements</Button>
+        <Button variant="secondary" className="hidden rounded-full md:inline-flex" onClick={() => setIsGmailModalOpen(true)} disabled={gmailStatusQuery.isLoading}><Mail className="mr-2 h-4 w-4" />{gmailLabel}</Button>
+        {pendingCount > 0 && <Button variant="secondary" className="hidden rounded-full md:inline-flex" onClick={() => setIsPendingModalOpen(true)}><Clock className="mr-2 h-4 w-4" />Review pending ({pendingCount})</Button>}
+        <div ref={toolsRef} className="relative"><Button variant="secondary" className="relative h-11 w-11 rounded-full p-0 md:h-auto md:w-auto md:px-3 md:py-2" aria-label="More tools" aria-haspopup="menu" aria-expanded={isToolsOpen} onClick={() => setActivePanel(isToolsOpen ? null : 'transactions-tools')}><MoreHorizontal className="mx-auto h-4 w-4" /><span className="ml-2 hidden md:inline">More tools</span>{pendingCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-[var(--ref-surface-container-lowest)] md:hidden" aria-hidden />}</Button>
+          {isToolsOpen && <div role="menu" className="ui-popover absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">
+            <button type="button" onClick={() => { setActivePanel(null); openReimbursements(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] md:hidden"><HandCoins className="h-4 w-4" />Reimbursements</button>
+            <button type="button" onClick={() => { setActivePanel(null); setIsGmailModalOpen(true); }} disabled={gmailStatusQuery.isLoading} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40 md:hidden"><Mail className="h-4 w-4" />{gmailLabel}</button>
             <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setActivePanel(null); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
             <button type="button" onClick={() => { setIsImportModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><FileUp className="h-4 w-4" />Import CSV</button>
             <button type="button" onClick={() => { setActivePanel(null); navigate({ to: '/agent', search: { prompt: 'Help me split a bill. I will attach the receipt and tell you who shared it.' } }); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
@@ -356,11 +468,10 @@ function TransactionsPage() {
             <button type="button" onClick={() => setCompactTables(!compactTables)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><span>Compact rows</span><span className="text-xs text-[var(--ref-on-surface-variant)]">{compactTables ? 'On' : 'Off'}</span></button>
           </div>}
         </div>
-        <Button className="rounded-full" onClick={() => openModal()}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
+        <Button className="hidden rounded-full md:inline-flex" onClick={() => openModal()}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
       </div>
     </div>
 
-    {gmailMessage && <div className="mt-4 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm text-[var(--ref-on-surface-variant)]">{gmailMessage}</div>}
 
     <Modal
       isOpen={isGmailModalOpen}
@@ -383,7 +494,6 @@ function TransactionsPage() {
             </div>
           </div>
           <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">Sync reads only transaction-success emails from <span className="font-semibold">wondr@bni.co.id</span>. It creates pending items for review; it does not post transactions automatically.</p>
-          {gmailMessage && <div role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-3 text-sm">{gmailMessage}</div>}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="button" onClick={() => void handleGmailSync()} isLoading={gmailSyncing} disabled={gmailDisconnecting} className="flex-1 rounded-full">
               <Mail className="mr-2 h-4 w-4" />Sync now
@@ -410,8 +520,15 @@ function TransactionsPage() {
 
     {selectedPeriod && selectedPeriod.coverageStatus !== 'complete' && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><CircleAlert className="mt-0.5 h-5 w-5 shrink-0" /><div><strong>Read this activity carefully.</strong> {coverageMessage(selectedPeriod)} <Link to="/periods" className="ml-1 font-bold underline">Review period</Link></div></div>}
     <section className="mt-4 rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-sm sm:mt-6 sm:p-5">
-      <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center lg:gap-3"><div className="relative col-span-2 min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ref-outline)]" /><input ref={searchInputRef} type="search" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} aria-label="Search transactions" placeholder="Search activity" className="w-full rounded-full bg-[var(--ref-surface-container-low)] py-2.5 pl-10 pr-4 text-sm outline-none ring-[var(--ref-primary)] focus:ring-2" /></div>
-        <select aria-label="Period" value={search.periodId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, periodId: event.target.value || undefined }) })} className="rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 text-sm font-semibold"><option value="all">All periods</option>{periods.map((period) => <option key={period.id} value={String(period.id)}>{period.name}</option>)}</select>
+      <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center lg:gap-3"><div className="relative col-span-2 min-w-0 flex-1">
+          {isSearching
+            ? <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[var(--ref-primary)]" aria-hidden />
+            : <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ref-outline)]" aria-hidden />}
+          <input ref={searchInputRef} type="search" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape' && filterQuery) { event.preventDefault(); event.stopPropagation(); clearSearch(); } }} aria-label="Search transactions" aria-busy={isSearching || undefined} placeholder="Search activity" className="w-full rounded-full bg-[var(--ref-surface-container-low)] py-2.5 pl-10 pr-10 text-sm outline-none ring-[var(--ref-primary)] focus:ring-2 [&::-webkit-search-cancel-button]:appearance-none" />
+          {filterQuery && <button type="button" onClick={() => { clearSearch(); searchInputRef.current?.focus(); }} aria-label="Clear search" className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]"><X className="h-4 w-4" /></button>}
+          <span className="sr-only" role="status">{!isSearching && debouncedQuery.trim() ? `${total.toLocaleString()} matching ${total === 1 ? 'activity' : 'activities'}` : ''}</span>
+        </div>
+        <PeriodPicker periods={periods} value={search.periodId ?? 'all'} onChange={(value) => navigate({ search: (previous) => ({ ...previous, periodId: value }) })} allOption={{ value: 'all', label: 'All periods' }} ariaLabel="Period" />
         <Button variant="secondary" className="rounded-full" aria-expanded={isFiltersOpen} aria-controls="transaction-filters" onClick={() => setActivePanel(isFiltersOpen ? null : 'transactions-filters')}><SlidersHorizontal className="mr-2 h-4 w-4" />Filters{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}</Button>
       </div>
       {isFiltersOpen && <div id="transaction-filters" className="mt-4 hidden gap-3 border-t border-[var(--ref-outline-variant)]/20 pt-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
@@ -463,10 +580,10 @@ function TransactionsPage() {
     <section className="mt-4 rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
         <div className="ui-segmented ui-segmented--5 ui-segmented--accent grid w-full max-w-xl grid-cols-5 gap-1 rounded-full bg-[var(--ref-surface-container-low)] p-1" data-segment-index={['', 'expense', 'income', 'transfer', 'loan'].indexOf(kindFilter)} aria-label="Activity type">{([['', 'All'], ['expense', 'Spending'], ['income', 'Income'], ['transfer', 'Transfers'], ['loan', 'Loans']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={kindFilter === value} onClick={() => setKindFilter(value)} className={cn('relative z-[1] min-w-0 rounded-full px-1 py-2 text-xs font-semibold whitespace-nowrap sm:px-3 sm:text-sm', kindFilter === value ? 'text-white' : 'text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]')}>{label}</button>)}</div>
-        <div className="flex items-center gap-3"><span role="status" className="text-xs text-[var(--ref-on-surface-variant)]">{transactionQuery.isFetching && !isLoading ? 'Updating…' : ''}</span><select aria-label="Sort transactions" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="rounded-lg bg-[var(--ref-surface-container-low)] px-2 py-2 text-xs"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="largest">Largest amount</option></select></div>
+        <div className="flex items-center gap-3"><span role="status" className="text-xs text-[var(--ref-on-surface-variant)]">{transactionQuery.isFetching && !isLoading ? 'Updating…' : ''}</span><MenuSelect ariaLabel="Sort transactions" value={sort} onChange={setSort} align="right" icon={<ArrowUpDown className="h-3.5 w-3.5 text-[var(--ref-on-surface-variant)]" aria-hidden />} options={SORT_OPTIONS} /></div>
       </div>
       {transactionQuery.isError ? <div role="alert" className="p-10 text-center"><CircleAlert className="mx-auto mb-3 h-8 w-8 text-[var(--ref-error)]" /><p className="font-bold">Could not load transactions</p><p className="mb-4 mt-1 text-sm text-[var(--ref-on-surface-variant)]">Please try again.</p><Button variant="secondary" onClick={() => void transactionQuery.refetch()}>Retry</Button></div> :
-      isLoading ? <div className="p-12 text-center text-sm text-[var(--ref-on-surface-variant)]">Loading activity…</div> : total === 0 ? <div className="p-12 text-center"><Wallet className="mx-auto mb-3 h-10 w-10 text-[var(--ref-outline)]" /><p className="font-headline font-bold">No activity in this view</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">{hasFilters ? 'Try removing filters to see more activity.' : 'Add your first transaction for this period.'}</p><Button variant="secondary" className="mt-4" onClick={hasFilters ? clearFilters : () => openModal()}>{hasFilters ? 'Clear filters' : 'Add transaction'}</Button></div> : <div className="divide-y divide-[var(--ref-outline-variant)]/20">
+      isLoading ? <TransactionRowsSkeleton compact={compactTables} /> : total === 0 ? <div className="p-12 text-center"><Wallet className="mx-auto mb-3 h-10 w-10 text-[var(--ref-outline)]" /><p className="font-headline font-bold">No activity in this view</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">{hasFilters ? 'Try removing filters to see more activity.' : 'Add your first transaction for this period.'}</p><Button variant="secondary" className="mt-4" onClick={hasFilters ? clearFilters : () => openModal()}>{hasFilters ? 'Clear filters' : 'Add transaction'}</Button></div> : <div className="divide-y divide-[var(--ref-outline-variant)]/20">
         {transactionRows.map((transaction, index) => {
           const kind = getKind(transaction); const amount = displayAmount(transaction); const category = transaction.displayPart === 'loan' ? 'Loan' : categoryLabel(transaction, categories);
           const loanLabel = kind === 'loan' ? compactLoanActivityLabel(transaction).replace(/^Split bill/, 'Loans') : null;
@@ -480,9 +597,10 @@ function TransactionsPage() {
           const transferDestination = transaction.lines.find((line) => line.debit > 0 && line.accountType === 'asset');
           const accountName = walletLine?.accountName ?? accounts.find((account) => account.id === walletLine?.accountId)?.name;
           const correction = transaction.status === 'reversed' || transaction.txType === 'reversal' || transaction.txType === 'domain_reversal' || transaction.txType === 'historical_recovery_adjustment' || transaction.txType === 'balance_adjustment';
-          const dateLabel = new Date(transaction.date).toLocaleDateString('en-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+          const dateLabel = formatWeekdayDate(transaction.date);
           const showDate = sort !== 'largest' && (index === 0 || new Date(transactionRows[index - 1]!.date).toDateString() !== new Date(transaction.date).toDateString());
           return <Fragment key={rowKey}>{showDate && <h2 className="bg-[var(--ref-surface-container-low)] px-5 py-2 text-xs font-semibold text-[var(--ref-on-surface-variant)]">{dateLabel}</h2>}<SwipeReveal
+            className={rowActionsKey === rowKey && !isMobile ? 'z-20' : undefined}
             label={maskAmounts(transaction.description)}
             open={swipedRowId === rowKey}
             onOpenChange={(open) => setSwipedRowId(open ? rowKey : null)}
@@ -495,15 +613,18 @@ function TransactionsPage() {
             </>}
           ><div className={cn('group grid grid-cols-[2.5rem_minmax(0,1fr)_2rem] cursor-pointer items-center gap-x-3 gap-y-1 px-4 sm:flex transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', compactTables ? 'py-2.5' : 'py-4', correction && 'bg-[var(--ref-surface-container-low)]/60')}>
             <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
-            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); openModal(transaction, 'view'); }} className="truncate text-left font-headline font-bold text-[var(--ref-on-surface)] focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">{maskAmounts(transaction.description)}</button>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{sort === 'largest' ? formatDateTime(transaction.date) : new Date(transaction.date).toLocaleTimeString('en-ID', { hour: '2-digit', minute: '2-digit' })} · {kind === 'transfer' && transferSource && transferDestination ? `${transferSource.accountName ?? accounts.find((account) => account.id === transferSource.accountId)?.name ?? 'Source'} → ${transferDestination.accountName ?? accounts.find((account) => account.id === transferDestination.accountId)?.name ?? 'Destination'}` : accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)] sm:hidden">{category ?? (kind === 'transfer' ? 'Transfer' : kind === 'income' ? 'Income' : 'Unallocated')}</p>{isTransferFee(transaction) && <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Linked transfer fee</p>}</div>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); openModal(transaction, 'view'); }} className="truncate text-left font-headline font-bold text-[var(--ref-on-surface)] focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">{maskAmounts(transaction.description)}</button>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{sort === 'largest' ? formatDateTime(transaction.date) : formatTime(transaction.date)} · {kind === 'transfer' && transferSource && transferDestination ? `${transferSource.accountName ?? accounts.find((account) => account.id === transferSource.accountId)?.name ?? 'Source'} → ${transferDestination.accountName ?? accounts.find((account) => account.id === transferDestination.accountId)?.name ?? 'Destination'}` : accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)] sm:hidden">{category ?? (kind === 'transfer' ? 'Transfer' : kind === 'income' ? 'Income' : 'Unallocated')}</p>{isTransferFee(transaction) && <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Linked transfer fee</p>}</div>
             <div className="hidden w-32 shrink-0 text-right sm:block"><p className="truncate text-xs font-semibold text-[var(--ref-on-surface-variant)]" title={category ?? undefined}>{category ?? (kind === 'income' ? 'Income' : kind === 'transfer' ? 'Transfer' : kind === 'loan' ? 'Loan' : 'Unallocated')}</p>{transaction.categoryAllocations.length > 1 && <p className="mt-0.5 text-[10px] text-[var(--ref-outline)]">Split allocation</p>}</div>
             <div className="col-start-2 row-start-2 text-left sm:ml-auto sm:min-w-32 sm:shrink-0 sm:text-right">
               <p className={cn('font-headline text-sm font-extrabold tabular-nums', isCashIn ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{amount < 0 ? '−' : isCashIn ? '+' : ''}{formatAmount(Math.abs(amount))}</p>
               {transaction.reallocation && <p className="mt-1 text-[10px] font-semibold text-[var(--ref-primary)]">Reallocation</p>}
               {loanLabel && <p className="mt-1 text-[10px] text-[var(--ref-on-surface-variant)]">{maskAmounts(loanLabel)}</p>}
             </div>
-            <div className="relative col-start-3 row-start-1 shrink-0" onClick={(event) => event.stopPropagation()}>
-              <button type="button" aria-label={`Actions for ${maskAmounts(transaction.description)}`} aria-expanded={rowActionsId === transaction.id} onClick={() => setRowActionsId(transaction.id)} className="grid h-11 w-11 place-items-center rounded-xl hover:bg-[var(--ref-surface-container-low)]"><MoreHorizontal className="h-5 w-5" /></button>
+            <div className="relative col-start-3 row-start-1 shrink-0" data-row-actions={rowKey} onClick={(event) => event.stopPropagation()}>
+              <button type="button" aria-label={`Actions for ${maskAmounts(transaction.description)}`} aria-haspopup="menu" aria-expanded={rowActionsKey === rowKey} onClick={() => setRowActionsKey(rowActionsKey === rowKey ? null : rowKey)} className={cn('grid h-11 w-11 place-items-center rounded-xl hover:bg-[var(--ref-surface-container-low)]', rowActionsKey === rowKey && 'bg-[var(--ref-surface-container-low)]')}><MoreHorizontal className="h-5 w-5" /></button>
+              {!isMobile && rowActionsKey === rowKey && <div role="menu" aria-label="Transaction actions" className={cn('ui-popover absolute right-0 z-30 w-64 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-xl', index >= transactionRows.length - 2 && index > 2 ? 'bottom-full mb-1' : 'top-full mt-1')}>
+                {renderRowActions(transaction, 'menu')}
+              </div>}
             </div>
           </div></SwipeReveal>
           </Fragment>;
@@ -516,23 +637,9 @@ function TransactionsPage() {
         </footer>
       </>}
     </section>
-    {actionTransaction && (() => {
-      const kind = getKind(actionTransaction);
-      const reimbursementLine = actionTransaction.lines.find((line) => line.accountType === 'expense' && line.debit > line.credit);
-      const reimbursable = actionTransaction.status === 'posted' && kind === 'expense' && reimbursementLine != null && remainingReimbursableExpense(actionTransaction) > 0;
-      const correction = actionTransaction.reallocation != null || actionTransaction.status === 'reversed' || actionTransaction.txType === 'reversal' || actionTransaction.txType === 'domain_reversal' || actionTransaction.txType === 'historical_recovery_adjustment' || actionTransaction.txType === 'balance_adjustment';
-      return <Modal isOpen onClose={() => setRowActionsId(null)} title="Transaction actions" subtitle={actionTransaction.description} contentClassName="p-3">
-        <div className="space-y-1">
-          <button type="button" onClick={() => { setRowActionsId(null); window.setTimeout(() => openModal(actionTransaction, 'view'), 0); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-5 w-5 text-[var(--ref-primary)]" />View details</button>
-          {actionTransaction.reallocationEligibleRole && !actionTransaction.reallocation && <button type="button" onClick={() => { setRowActionsId(null); setReallocationTransaction(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10"><ArrowRightLeft className="h-5 w-5" />Link as reallocation</button>}
-          {kind !== 'loan' && <button type="button" onClick={() => { setRowActionsId(null); window.setTimeout(() => repeatTransaction(actionTransaction), 0); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-[var(--ref-surface-container-low)]"><CopyPlus className="h-5 w-5 text-[var(--ref-primary)]" />Repeat transaction</button>}
-          {reimbursable && <button type="button" onClick={() => { setRowActionsId(null); navigate({ to: '/reimbursements', search: { sourceTransactionId: String(actionTransaction.id), expenseLineId: String(reimbursementLine.id), categoryId: actionTransaction.categoryAllocations.length === 1 ? String(actionTransaction.categoryAllocations[0]!.categoryId) : undefined, amount: String(remainingReimbursableExpense(actionTransaction)) } }); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10"><HandCoins className="h-5 w-5" />Mark reimbursable</button>}
-          {actionTransaction.status === 'draft'
-            ? <button type="button" onClick={() => { setRowActionsId(null); void handleDeleteDraft(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10"><Trash2 className="h-5 w-5" />Delete draft</button>
-            : <button type="button" disabled={correction} onClick={() => { setRowActionsId(null); void handleCorrect(actionTransaction); }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-amber-700 hover:bg-amber-500/10 disabled:opacity-40"><RotateCcw className="h-5 w-5" />{actionTransaction.reallocation ? 'Unlink before correcting' : correction ? 'Correction cannot be reversed' : 'Correct transaction'}</button>}
-        </div>
-      </Modal>;
-    })()}
+    {actionTransaction && isMobile && <Modal isOpen onClose={() => setRowActionsKey(null)} title="Transaction actions" subtitle={actionTransaction.description} contentClassName="p-3">
+      {renderRowActions(actionTransaction, 'sheet')}
+    </Modal>}
     {reallocationTransaction && <ReallocationModal transaction={reallocationTransaction} onClose={() => setReallocationTransaction(null)} onSaved={() => void loadData()} />}
     <TransactionModal isOpen={isModalOpen} onClose={closeModal} onSaved={loadData} onSuccess={() => { void loadData(); setEditingPendingTx(null); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={editingTransaction} periodId={search.periodId && search.periodId !== 'all' ? Number(search.periodId) : null} initialMode={modalInitialMode} pendingTransaction={editingPendingTx} initialPrefill={modalPrefill} />
     <ImportCSVModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onSuccess={loadData} />

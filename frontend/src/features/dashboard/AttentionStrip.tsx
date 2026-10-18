@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils';
 import { attentionStripItems, type Attention } from './attention';
 import { microLabel } from './panel-styles';
 import type { AttentionReadState } from './use-attention-read-state';
+import { markReadWithUndo } from './attention-undo';
 
 const toneDot = { danger: 'bg-rose-500', warning: 'bg-amber-500', info: 'bg-sky-500' } as const;
 const toneRing = { danger: 'ring-rose-500/30', warning: 'ring-amber-500/30', info: 'ring-sky-500/30' } as const;
@@ -25,7 +26,7 @@ export function AttentionStrip({ items, readState, maskAmounts }: {
             <span className={cn('h-2 w-2 shrink-0 rounded-full ring-[3px]', toneDot[item.tone], toneRing[item.tone])} aria-hidden />
             <span className="min-w-0 truncate font-bold text-[var(--ref-on-surface)]">{item.title}</span>
             <Link to={item.to} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap font-bold text-[var(--ref-primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ref-primary)]">{item.action} <ArrowRight className="h-3 w-3" aria-hidden /></Link>
-            <button type="button" onClick={() => readState.markRead(item)} aria-label={`Mark "${item.title}" read`} title="Mark read" className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"><X className="h-3.5 w-3.5" /></button>
+            <button type="button" onClick={() => markReadWithUndo(readState, [item])} aria-label={`Mark "${item.title}" read`} title="Mark read" className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"><X className="h-3.5 w-3.5" /></button>
           </li>
         ))}
       </ul>

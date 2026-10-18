@@ -14,12 +14,13 @@ import {
   useRestoreContactMutation,
 } from '../features/loans/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
-import { cn } from '../lib/utils';
+import { cn, formatDate } from '../lib/utils';
 import { NewLoanModal } from '../components/loans/NewLoanModal';
 import { RecordPaymentModal } from '../components/loans/RecordPaymentModal';
 import { ContactProfileModal } from '../components/loans/ContactProfileModal';
 import { NewContactModal } from '../components/loans/NewContactModal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast, errorMessage } from '../components/ui/useToast';
 import {
   Plus,
   ArrowUpRight,
@@ -160,8 +161,9 @@ function LoansPage() {
     try {
       await deleteLoanMutation.mutateAsync(loan.id);
       void loadData();
+      toast.success('Loan deleted');
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Could not delete loan', errorMessage(err));
     }
   };
 
@@ -194,8 +196,9 @@ function LoansPage() {
         await restoreContactMutation.mutateAsync(contact.id);
       }
       await loadData();
+      toast.success(isArchiving ? `${contact.name} archived` : `${contact.name} restored`);
     } catch (err) {
-      alert((err as Error).message);
+      toast.error(isArchiving ? 'Could not archive contact' : 'Could not restore contact', errorMessage(err));
     }
   };
 
@@ -275,7 +278,7 @@ function LoansPage() {
               {filteredLoans.map(loan => <article className="loans-row" key={loan.id}>
                 <div className="loans-person"><span className={cn('loans-avatar', loan.direction === 'lent' ? 'loans-positive' : 'loans-debt')}>{loan.direction === 'lent' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}</span><div className="loans-person-copy"><button className="loans-name" onClick={() => openContact(loan.contactId)}>{loan.contact.name}</button><p className="loans-caption loans-description" title={loan.description ?? undefined}>{loan.description || (loan.direction === 'lent' ? 'Money lent' : 'Money borrowed')}</p><span className="loans-direction">{loan.direction === 'lent' ? 'Owes you' : 'You owe'}</span></div></div>
                 <div className="loans-amount"><strong>{formatAmount(loan.remainingCents)}</strong><span className="loans-caption">of {formatAmount(loan.amountCents)}</span></div>
-                <div className="loans-due"><span className="loans-mobile-label">Due </span>{loan.dueDate ? new Date(loan.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No due date'}</div>
+                <div className="loans-due"><span className="loans-mobile-label">Due </span>{loan.dueDate ? formatDate(new Date(loan.dueDate).getTime()) : 'No due date'}</div>
                 <div className="loans-status"><span className={cn('loans-badge', loan.status === 'active' && loan.isOverdue ? 'is-overdue' : loan.status === 'repaid' ? 'is-repaid' : loan.status === 'active' ? 'is-active' : '')}>{loan.status === 'active' && loan.isOverdue ? 'Overdue' : loan.status === 'written_off' ? 'Written off' : loan.status.charAt(0).toUpperCase() + loan.status.slice(1)}</span></div>
                 <div className="loans-row-actions">{loan.status === 'active' && loan.remainingCents > 0 ? <Button variant="secondary" size="sm" onClick={() => openPaymentModal(loan)}>Record payment</Button> : <button className="loans-details" onClick={() => openContact(loan.contactId)}>Details <ChevronRight size={15} /></button>}<button className="loans-icon-button" aria-label={'Delete loan for ' + loan.contact.name} title="Delete loan" disabled={deleteLoanMutation.isPending} onClick={() => void handleDeleteLoan(loan)}><Trash2 size={15} /></button></div>
               </article>)}

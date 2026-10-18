@@ -1,5 +1,4 @@
 import { useEffect, useCallback } from 'react';
-import { useNavigate } from '@tanstack/react-router';
 
 interface KeyboardShortcutsOptions {
   onNewTransaction?: () => void;
@@ -10,12 +9,13 @@ interface KeyboardShortcutsOptions {
 export function useKeyboardShortcuts({
   onNewTransaction,
   searchInputRef,
-  isModalOpen = false,
+  isModalOpen: isModalOpenProp = false,
 }: KeyboardShortcutsOptions) {
-  const navigate = useNavigate();
-
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // A page-level instance of this hook handles the key first; the shell's instance then stands down.
+      if (e.defaultPrevented) return;
+      const isModalOpen = isModalOpenProp || document.querySelector('[aria-modal="true"]') != null;
       // Don't trigger shortcuts when typing in input fields (except for Escape)
       const target = e.target as HTMLElement;
       const isInputField =
@@ -24,11 +24,13 @@ export function useKeyboardShortcuts({
         target.tagName === 'SELECT' ||
         target.isContentEditable;
 
-      // Handle Ctrl+Enter for form submission (when in modal)
-      if (isModalOpen && e.ctrlKey && e.key === 'Enter') {
-        // Find the submit button and click it
-        const submitButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
-        if (submitButton && !submitButton.disabled) {
+      // Ctrl/Cmd+Enter submits the top-most open dialog, never a form behind it.
+      if (isModalOpen && (e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const dialogs = document.querySelectorAll<HTMLElement>('[aria-modal="true"]');
+        const dialog = dialogs[dialogs.length - 1];
+        const submitButton = Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button[type="submit"]') ?? [])
+          .find((button) => !button.disabled && button.getClientRects().length > 0);
+        if (submitButton) {
           e.preventDefault();
           submitButton.click();
         }
@@ -72,7 +74,7 @@ export function useKeyboardShortcuts({
           break;
       }
     },
-    [onNewTransaction, searchInputRef, isModalOpen, navigate]
+    [onNewTransaction, searchInputRef, isModalOpenProp]
   );
 
   useEffect(() => {

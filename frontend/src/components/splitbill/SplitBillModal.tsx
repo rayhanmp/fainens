@@ -1,6 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../../lib/auth';
+import { formatDate as formatDisplayDate } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -404,8 +405,8 @@ export function SplitBillModal({ isOpen, onClose, accounts }: SplitBillModalProp
 
   const formatDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const time = new Date(dateStr).getTime();
+      return Number.isFinite(time) ? formatDisplayDate(time) : 'Today';
     } catch {
       return 'Today';
     }

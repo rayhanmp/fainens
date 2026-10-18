@@ -7,7 +7,7 @@ import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { RequireAuth, useAuth } from '../lib/auth';
 import type { api, AgentFinancialFacts, BudgetPlan, BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
-import { findCurrentPeriod, formatCurrency, formatDate } from '../lib/utils';
+import { findCurrentPeriod, formatCurrency, formatDateTime, formatDayMonth, formatTime } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 // The report modal pulls in the PDF engine; load it only when the report is opened.
@@ -30,9 +30,7 @@ import { useNow } from '../hooks/useNow';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery } from '../features/agent/queries';
-import { usePendingTransactionsQuery, useReverseTransaction } from '../features/transactions/queries';
-import { useToast } from '../components/ui/useToast';
-import { ToastContainer } from '../components/ui/Toast';
+import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
@@ -78,11 +76,9 @@ type Loan = Awaited<ReturnType<typeof api.loans.list>>[number];
 type PayLaterObligations = Awaited<ReturnType<typeof api.paylater.obligations>>;
 type SubscriptionData = Awaited<ReturnType<typeof api.subscriptions.list>>;
 
-function formatAsOf(timestamp: number): string {
-  // Same month-first style as formatDate, so every date on the dashboard reads alike.
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-  });
+/** "Today, 17:04" for the live position; otherwise the full date and time in the user's format. */
+function formatAsOf(timestamp: number, now: number): string {
+  return new Date(timestamp).toDateString() === new Date(now).toDateString() ? `Today, ${formatTime(timestamp)}` : formatDateTime(timestamp);
 }
 
 function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[] | undefined): BudgetPlan[] {
@@ -109,8 +105,6 @@ function DashboardPage() {
   const [recapModalPeriodId, setRecapModalPeriodId] = useState<number | null>(null);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
-  const { toasts, addToast, removeToast } = useToast();
-  const { mutateAsync: reverseTransaction } = useReverseTransaction();
   const toggleBalancesHidden = useUiStore((state) => state.toggleBalancesHidden);
   const reviewedOutlookRevisionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
@@ -234,7 +228,7 @@ function DashboardPage() {
     payLaterObligations: paylater?.obligations ?? [],
     subscriptionRenewals: subscriptions?.renewalPreview.occurrences ?? [],
     commitments,
-  }, { amount: formatCurrency, date: formatDate }), [analytics, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
+  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
   // One read state for the bell and the inline strip, so marking an item read clears it from both.
   const attentionReadState = useAttentionReadState(attentionItems, user?.email);
 
@@ -263,23 +257,6 @@ function DashboardPage() {
     budget: { label: 'Budget left', value: isPeriodLoading ? 'Loading…' : !periodIsTracked ? 'Not tracked' : totalPlanned <= 0 ? 'No budget yet' : formatAmount(budgetRemaining), cents: !isPeriodLoading && periodIsTracked && totalPlanned > 0 ? budgetRemaining : undefined, to: '/budget' },
     netWorth: { label: 'Net worth', value: analyticsValue(analytics?.netWorth.netWorth), cents: analytics?.netWorth.netWorth, to: '/accounts' },
   };
-
-  const offerUndo = (ids: number[]) => addToast({
-    type: 'success',
-    title: ids.length > 1 ? 'Transfer and fee added' : 'Transaction added',
-    duration: 8000,
-    action: {
-      label: 'Undo',
-      onClick: () => {
-        // Posted entries are never deleted; undo reverses the new one (and a transfer's fee with it),
-        // which keeps the history auditable.
-        reverseTransaction(ids[0]).then(
-          () => { refreshDashboard(); addToast({ type: 'info', title: ids.length > 1 ? 'Transfer and fee reversed' : 'Transaction reversed' }); },
-          (error: unknown) => addToast({ type: 'error', title: 'Could not undo', message: error instanceof Error ? error.message : undefined, duration: 8000 }),
-        );
-      },
-    },
-  });
 
   const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);
   const showShortcuts = useCallback(() => setIsShortcutsOpen(true), []);
@@ -316,7 +293,7 @@ function DashboardPage() {
         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center justify-between gap-3 sm:block">
             <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Decision centre</p>
-            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of <span key={analyticsUpdateCount} className={positionJustRefreshed ? 'dashboard-position-updated' : undefined}>{formatAsOf(positionUpdatedAt)}</span>{analyticsQuery.isFetching && !analyticsQuery.isLoading ? ' · Updating…' : ''}</p></div>
+            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Position as of <span key={analyticsUpdateCount} className={positionJustRefreshed ? 'dashboard-position-updated' : undefined}>{formatAsOf(positionUpdatedAt, dashboardNow)}</span>{analyticsQuery.isFetching && !analyticsQuery.isLoading ? ' · Updating…' : ''}</p></div>
             {isMobile && viewMenu}
           </div>
           <div className="dashboard-toolbar flex items-center justify-between gap-2 sm:justify-end">
@@ -355,10 +332,9 @@ function DashboardPage() {
 
         <DashboardSections preferences={visiblePreferences} sections={dashboardSections} editing={isEditingLayout} onChange={next => updatePreferences({ ...preferences, sectionOrder: next.sectionOrder, sectionSizes: next.sectionSizes })} onDone={() => setIsEditingLayout(false)} />
         {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
-        <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} onSuccess={(_id, createdIds) => offerUndo(createdIds)} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
+        <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         {isReportOpen && <Suspense fallback={null}><MonthlyReportModal isOpen onClose={() => setIsReportOpen(false)} /></Suspense>}
         <ShortcutsDialog open={isShortcutsOpen} onClose={closeShortcuts} />
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
         </div>
       </PageContainer>
     </RequireAuth>
