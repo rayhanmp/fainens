@@ -98,9 +98,11 @@ function BudgetPaceLabel({ pace, formatAmount }: { pace: BudgetPace; formatAmoun
       </Link>
       {/* The hero is dark in both themes, so the tooltip is too (arbitrary colours avoid the global surface overrides). */}
       <span id="dashboard-pace-tip" role="tooltip" className="dashboard-pace-tip pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-40 hidden w-56 rounded-xl border border-white/15 bg-[#0a1b33]/95 px-3 py-2.5 text-left text-[11px] leading-relaxed text-white/80 shadow-xl backdrop-blur-sm">
-        <span className="block">{elapsedText}</span>
-        {usedRatio != null && <span className="block">{formatPercent(usedRatio)} of the budget is used{tone === 'warning' ? ', ahead of the calendar' : tone === 'danger' ? ', over budget' : ''}</span>}
-        {dailyBudget != null && <span className="mt-1 block text-white">Safe pace {formatAmount(dailyBudget)} a day</span>}
+        {/* Each line starts with a swatch in the colour the bar uses for it. */}
+        <span className="flex items-center gap-2"><span className="h-[3px] w-5 shrink-0 rounded-full bg-white/35" aria-hidden />{elapsedText}</span>
+        {usedRatio != null && <span className="flex items-center gap-2"><span className={cn('h-[3px] w-5 shrink-0 rounded-full', paceFill[tone])} aria-hidden />{formatPercent(usedRatio)} of the budget is used{tone === 'warning' ? ', ahead of the calendar' : tone === 'danger' ? ', over budget' : ''}</span>}
+        {pacing.status === 'active' && <span className="flex items-center gap-2"><span className="flex w-5 shrink-0 justify-center" aria-hidden><span className="h-3 w-px bg-white" /></span>Today</span>}
+        {dailyBudget != null && <span className="mt-1.5 block border-t border-white/10 pt-1.5 text-white">Safe pace {formatAmount(dailyBudget)} a day</span>}
       </span>
     </span>
   );
