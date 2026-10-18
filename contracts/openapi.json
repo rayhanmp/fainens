@@ -14657,11 +14657,21 @@
                 "30d",
                 "3m",
                 "6m",
-                "1y"
+                "1y",
+                "period"
               ]
             },
             "in": "query",
             "name": "range",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "in": "query",
+            "name": "periodId",
             "required": false
           }
         ],
@@ -14680,7 +14690,8 @@
                         "30d",
                         "3m",
                         "6m",
-                        "1y"
+                        "1y",
+                        "period"
                       ]
                     },
                     "bucketCount": {
@@ -14718,6 +14729,32 @@
                         ],
                         "additionalProperties": {}
                       }
+                    },
+                    "period": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "startDate": {
+                          "type": "number"
+                        },
+                        "endDate": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "startDate",
+                        "endDate"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -14731,6 +14768,25 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
             "description": "Default Response",
             "content": {
               "application/json": {

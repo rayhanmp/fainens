@@ -286,18 +286,41 @@ export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<Ne
   };
 }
 
-/** Net worth trend window — all ranges end at “now” (today). */
-export type NetWorthRange = "7d" | "30d" | "3m" | "6m" | "1y";
+/** Net worth trend window — the rolling ranges end at “now” (today); "period" spans one salary period. */
+export type NetWorthRange = "7d" | "30d" | "3m" | "6m" | "1y" | "period";
+
+/** Weekly points per long range: 13, 26 and 52 weeks, the last one being today. */
+const WEEKLY_POINTS: Record<"3m" | "6m" | "1y", number> = { "3m": 13, "6m": 26, "1y": 52 };
+/** A salary period gets at most this many points; longer spans step over days. */
+const MAX_PERIOD_POINTS = 120;
+
+const dayLabel = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+/** One point per day (or every few days for long spans) from the period's first day to its last day or now, whichever is earlier. */
+export function buildPeriodNetWorthBuckets(period: { startDate: number; endDate: number }, now: number = Date.now()): Array<{ label: string; asOfMs: number }> {
+  const firstDay = startOfLocalDay(inclusivePeriodStart(period.startDate));
+  const lastInstant = Math.min(now, inclusivePeriodEnd(period.endDate));
+  if (lastInstant < firstDay) return [];
+  const dayCount = Math.floor((startOfLocalDay(lastInstant) - firstDay) / DAY_MS) + 1;
+  const step = Math.max(1, Math.ceil(dayCount / MAX_PERIOD_POINTS));
+  const out: Array<{ label: string; asOfMs: number }> = [];
+  for (let dayIndex = 0; dayIndex < dayCount - 1; dayIndex += step) {
+    const day = new Date(firstDay);
+    day.setDate(day.getDate() + dayIndex);
+    out.push({ label: dayLabel(day.getTime()), asOfMs: endOfLocalDay(day.getTime()) });
+  }
+  out.push({ label: dayLabel(lastInstant), asOfMs: lastInstant });
+  return out;
+}
 
 /**
  * Build as-of timestamps (oldest → newest, last point ≈ now).
  * - 7d / 30d: one point per calendar day
- * - 6m: month-end for last 6 months including current month
- * - 1y: month-end for last 12 months including current month
+ * - 3m / 6m / 1y: one point per week (end of day), ending today
+ * - period: see {@link buildPeriodNetWorthBuckets}; this builder has no period, so it returns nothing
  */
-export function buildNetWorthTrendBuckets(range: NetWorthRange): Array<{ label: string; asOfMs: number }> {
-  const now = Date.now();
-
+export function buildNetWorthTrendBuckets(range: NetWorthRange, now: number = Date.now()): Array<{ label: string; asOfMs: number }> {
+  if (range === "period") return [];
   if (range === "7d" || range === "30d") {
     const dayCount = range === "7d" ? 7 : 30;
     const out: Array<{ label: string; asOfMs: number }> = [];
@@ -313,37 +336,27 @@ export function buildNetWorthTrendBuckets(range: NetWorthRange): Array<{ label: 
     return out;
   }
 
-  if (range === "3m" || range === "6m") {
-    const monthCount = range === "3m" ? 3 : 6;
-    const out: Array<{ label: string; asOfMs: number }> = [];
-    for (let i = 0; i < monthCount; i++) {
-      const monthsAgo = monthCount - 1 - i;
-      const d = new Date();
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-      d.setMonth(d.getMonth() - monthsAgo);
-      const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
-      const asOfMs = Math.min(now, eom);
-      const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-      out.push({ label, asOfMs });
-    }
-    return out;
-  }
-
-  // 1y — 12 month-ends rolling back from current month
+  const weekCount = WEEKLY_POINTS[range];
   const out: Array<{ label: string; asOfMs: number }> = [];
-  for (let i = 0; i < 12; i++) {
-    const monthsAgo = 11 - i;
-    const d = new Date();
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    d.setMonth(d.getMonth() - monthsAgo);
-    const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
-    const asOfMs = Math.min(now, eom);
-    const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  for (let i = 0; i < weekCount; i++) {
+    const weeksAgo = weekCount - 1 - i;
+    const day = new Date(startOfLocalDay(now));
+    day.setDate(day.getDate() - weeksAgo * 7);
+    const asOfMs = Math.min(now, endOfLocalDay(day.getTime()));
+    const label = day.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     out.push({ label, asOfMs });
   }
   return out;
+}
+
+/**
+ * Drop the points before the ledger had any activity, so a range that reaches back past the
+ * first transaction does not flatten the chart against a run of zeros. Keeps at least two points.
+ */
+export function trimLeadingEmptyNetWorth<T extends { totalAssets: number; totalLiabilities: number }>(series: T[]): T[] {
+  const firstActive = series.findIndex((point) => point.totalAssets !== 0 || point.totalLiabilities !== 0);
+  if (firstActive <= 0) return series;
+  return series.slice(Math.min(firstActive, Math.max(0, series.length - 2)));
 }
 
 export interface NetWorthTrendPoint {
@@ -354,18 +367,36 @@ export interface NetWorthTrendPoint {
   totalLiabilities: number;
 }
 
-export async function getNetWorthTrend(range: NetWorthRange): Promise<{
+export type NetWorthTrendResult = {
   range: NetWorthRange;
   bucketCount: number;
   series: NetWorthTrendPoint[];
-}> {
-  const buckets = buildNetWorthTrendBuckets(range);
-  const series = (await netWorthAtEach(buckets.map((bucket) => bucket.asOfMs))).map((point, index) => ({
+  /** Set for the "period" range: the salary period the series spans. */
+  period?: { id: number; name: string; startDate: number; endDate: number };
+};
+
+/** Null only when `range` is "period" and no such period exists. */
+export async function getNetWorthTrend(range: NetWorthRange, periodId?: number): Promise<NetWorthTrendResult | null> {
+  let period: NetWorthTrendResult["period"];
+  let buckets: Array<{ label: string; asOfMs: number }>;
+  if (range === "period") {
+    const [row] = periodId == null ? [] : await db
+      .select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+      .from(salaryPeriods)
+      .where(eq(salaryPeriods.id, periodId))
+      .limit(1);
+    if (!row) return null;
+    period = { id: row.id, name: row.name, startDate: Number(row.startDate), endDate: Number(row.endDate) };
+    buckets = buildPeriodNetWorthBuckets(period);
+  } else {
+    buckets = buildNetWorthTrendBuckets(range);
+  }
+  const series = trimLeadingEmptyNetWorth((await netWorthAtEach(buckets.map((bucket) => bucket.asOfMs))).map((point, index) => ({
     label: buckets[index].label,
     asOfMs: buckets[index].asOfMs,
     ...point,
-  }));
-  return { range, bucketCount: buckets.length, series };
+  })));
+  return { range, bucketCount: buckets.length, series, ...(period ? { period } : {}) };
 }
 
 /**

@@ -6654,6 +6654,10 @@ export type GetNetWorth200 = {
 
 export type GetNetWorthTrendParams = {
 range?: GetNetWorthTrendRange;
+/**
+ * @pattern ^\d+$
+ */
+periodId?: string;
 };
 
 export type GetNetWorthTrendRange = typeof GetNetWorthTrendRange[keyof typeof GetNetWorthTrendRange];
@@ -6666,6 +6670,7 @@ export const GetNetWorthTrendRange = {
   '3m': '3m',
   '6m': '6m',
   '1y': '1y',
+  period: 'period',
 } as const;
 
 export type GetNetWorthTrend200Range = typeof GetNetWorthTrend200Range[keyof typeof GetNetWorthTrend200Range];
@@ -6678,6 +6683,7 @@ export const GetNetWorthTrend200Range = {
   '3m': '3m',
   '6m': '6m',
   '1y': '1y',
+  period: 'period',
 } as const;
 
 export type GetNetWorthTrend200SeriesItem = {
@@ -6689,6 +6695,17 @@ export type GetNetWorthTrend200SeriesItem = {
   [key: string]: unknown;
 };
 
+export type GetNetWorthTrend200Period = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  startDate: number;
+  endDate: number;
+};
+
 export type GetNetWorthTrend200 = {
   range: GetNetWorthTrend200Range;
   /**
@@ -6697,10 +6714,16 @@ export type GetNetWorthTrend200 = {
    */
   bucketCount: number;
   series: GetNetWorthTrend200SeriesItem[];
+  period?: GetNetWorthTrend200Period;
   [key: string]: unknown;
 };
 
 export type GetNetWorthTrend400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetNetWorthTrend404 = {
   error: string;
   [key: string]: unknown;
 };
@@ -20949,11 +20972,16 @@ export type getNetWorthTrendResponse400 = {
   data: GetNetWorthTrend400
   status: 400
 }
+
+export type getNetWorthTrendResponse404 = {
+  data: GetNetWorthTrend404
+  status: 404
+}
     
 export type getNetWorthTrendResponseSuccess = (getNetWorthTrendResponse200) & {
   headers: Headers;
 };
-export type getNetWorthTrendResponseError = (getNetWorthTrendResponse400) & {
+export type getNetWorthTrendResponseError = (getNetWorthTrendResponse400 | getNetWorthTrendResponse404) & {
   headers: Headers;
 };
 

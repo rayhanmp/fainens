@@ -21,7 +21,11 @@ const netWorthSchema = z.object({ totalAssets: z.number(), totalLiabilities: z.n
 const burnRateSchema = z.object({ grossBurnRate: z.number(), period: z.string() }).passthrough();
 const runwaySchema = z.object({ runwayMonths: z.number().nullable(), isUnbounded: z.boolean(), liquidAssets: z.number() }).passthrough();
 const trialBalanceSchema = z.object({ totalDebits: z.number(), totalCredits: z.number(), isBalanced: z.boolean() }).passthrough();
-const rangeQuerySchema = z.object({ range: z.enum(["7d", "30d", "3m", "6m", "1y"]).optional() });
+const rangeQuerySchema = z.object({
+  range: z.enum(["7d", "30d", "3m", "6m", "1y", "period"]).optional(),
+  /** Required with range=period: the salary period the series should span. */
+  periodId: z.string().regex(/^\d+$/).optional(),
+});
 const spendingTrendQuerySchema = z.object({ periodId: z.string().regex(/^\d+$/).optional() });
 const analyticsIdParamsSchema = z.object({ accountId: z.coerce.number().int().positive() });
 const periodSummaryParamsSchema = z.object({ periodId: z.coerce.number().int().positive() });
@@ -73,9 +77,10 @@ const netWorthTrendPointSchema = z.object({
   totalLiabilities: z.number(),
 }).passthrough();
 const netWorthTrendSchema = z.object({
-  range: z.enum(["7d", "30d", "3m", "6m", "1y"]),
+  range: z.enum(["7d", "30d", "3m", "6m", "1y", "period"]),
   bucketCount: z.number().int(),
   series: z.array(netWorthTrendPointSchema),
+  period: z.object({ id: z.number().int(), name: z.string(), startDate: z.number(), endDate: z.number() }).optional(),
 }).passthrough();
 const dashboardAnalyticsSchema = z.object({
   netWorth: netWorthSchema,
@@ -98,16 +103,26 @@ export default async function (fastify: FastifyInstance) {
 
   /** Historical net worth (rolling from today). Query: range=7d|30d|3m|6m|1y */
   fastify.get("/api/analytics/net-worth-trend", {
-    schema: { operationId: "getNetWorthTrend", tags: ["analytics"], querystring: rangeQuerySchema, response: { 200: netWorthTrendSchema, 400: analyticsErrorSchema } },
+    schema: { operationId: "getNetWorthTrend", tags: ["analytics"], querystring: rangeQuerySchema, response: { 200: netWorthTrendSchema, 400: analyticsErrorSchema, 404: analyticsErrorSchema } },
   }, async (request, reply) => {
-    const q = request.query as { range?: string };
+    const q = request.query as { range?: string; periodId?: string };
     const r = (q.range ?? "30d").toLowerCase();
-    const valid: NetWorthRange[] = ["7d", "30d", "3m", "6m", "1y"];
+    const valid: NetWorthRange[] = ["7d", "30d", "3m", "6m", "1y", "period"];
     if (!valid.includes(r as NetWorthRange)) {
-      reply.code(400).send({ error: "Invalid range (use 7d, 30d, 3m, 6m, 1y)" });
+      reply.code(400).send({ error: "Invalid range (use 7d, 30d, 3m, 6m, 1y, period)" });
       return;
     }
-    return getNetWorthTrend(r as NetWorthRange);
+    const periodId = q.periodId == null ? undefined : Number(q.periodId);
+    if (r === "period" && (periodId == null || !Number.isSafeInteger(periodId) || periodId <= 0)) {
+      reply.code(400).send({ error: "periodId is required with range=period" });
+      return;
+    }
+    const trend = await getNetWorthTrend(r as NetWorthRange, periodId);
+    if (!trend) {
+      reply.code(404).send({ error: "Period not found" });
+      return;
+    }
+    return trend;
   });
 
   /** Daily posted expense activity for the rolling window or one salary period. */

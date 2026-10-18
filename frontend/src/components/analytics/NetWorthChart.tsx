@@ -1,5 +1,5 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -15,6 +15,8 @@ import { formatCurrency as visibleCurrency, cn, formatDecimal } from '../../lib/
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useNetWorthTrendQuery, type NetWorthRange } from '../../features/analytics/queries';
+import { monthTicks, paydayMarkers } from '../../features/analytics/net-worth-trend';
+import { usePeriodsQuery } from '../../features/periods/queries';
 import type { GetNetWorthTrend200 } from '../../generated/client';
 
 const RANGE_OPTIONS: Array<{
@@ -23,12 +25,37 @@ const RANGE_OPTIONS: Array<{
   /** Screen reader / title */
   description: string;
 }> = [
+  { range: 'period', label: 'Period', description: 'The selected salary period, one point per day' },
   { range: '7d', label: '7D', description: 'Last 7 days, one point per day' },
   { range: '30d', label: '30D', description: 'Last 30 days, one point per day' },
-  { range: '3m', label: '3M', description: 'Last 3 months, month-end snapshots' },
-  { range: '6m', label: '6M', description: 'Last 6 months, month-end snapshots' },
-  { range: '1y', label: '1Y', description: 'Last 12 months, month-end snapshots' },
+  { range: '3m', label: '3M', description: 'Last 3 months, one point per week' },
+  { range: '6m', label: '6M', description: 'Last 6 months, one point per week' },
+  { range: '1y', label: '1Y', description: 'Last 12 months, one point per week' },
 ];
+
+const DEFAULT_RANGE: NetWorthRange = '30d';
+const RANGE_STORAGE_KEY = 'fainens.dashboard.net-worth-range';
+/** Above this many points the per-point dots become noise, so only the line and hover dot remain. */
+const MAX_DOTTED_POINTS = 31;
+
+const isRange = (value: unknown): value is NetWorthRange => RANGE_OPTIONS.some((option) => option.range === value);
+
+function readStoredRange(): NetWorthRange {
+  try {
+    const stored = localStorage.getItem(RANGE_STORAGE_KEY);
+    return isRange(stored) ? stored : DEFAULT_RANGE;
+  } catch {
+    return DEFAULT_RANGE;
+  }
+}
+
+function storeRange(range: NetWorthRange) {
+  try {
+    localStorage.setItem(RANGE_STORAGE_KEY, range);
+  } catch {
+    // Browser storage can be unavailable in private or restricted contexts.
+  }
+}
 
 function compactAxisIdr(v: number): string {
   const abs = Math.abs(v);
@@ -46,21 +73,41 @@ function chartIndex(state: unknown): number | null {
   return Number.isInteger(index) && index >= 0 ? index : null;
 }
 
+const shortDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const longDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
 type Row = GetNetWorthTrend200['series'][number];
 
-export function NetWorthChart({ className = '', hideAmounts }: { className?: string; hideAmounts?: boolean } = {}) {
+export function NetWorthChart({ className = '', hideAmounts, periodId = null }: { className?: string; hideAmounts?: boolean; periodId?: number | null } = {}) {
   const { balancesHidden } = useBalanceVisibility();
   const amountsHidden = hideAmounts ?? balancesHidden;
   const formatCurrency = (value: number) => amountsHidden ? HIDDEN_BALANCE : visibleCurrency(value);
   const gradientId = useId().replace(/:/g, '');
-  const [range, setRange] = useState<NetWorthRange>('30d');
+  const [storedRange, setRange] = useState<NetWorthRange>(readStoredRange);
+  // The period range follows the dashboard's period picker; without a period it falls back to the default.
+  const range: NetWorthRange = storedRange === 'period' && periodId == null ? DEFAULT_RANGE : storedRange;
   const [compareStartIndex, setCompareStartIndex] = useState<number | null>(null);
   const [compareEndIndex, setCompareEndIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const netWorthQuery = useNetWorthTrendQuery(range);
-  const rows: Row[] = netWorthQuery.data?.series ?? [];
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const netWorthQuery = useNetWorthTrendQuery(range, periodId);
+  const periodsQuery = usePeriodsQuery();
+  const series = netWorthQuery.data?.series;
+  const rows: Row[] = useMemo(() => series ?? [], [series]);
   const isLoading = netWorthQuery.isPending && netWorthQuery.data == null;
   const loadError = netWorthQuery.error instanceof Error ? netWorthQuery.error.message : null;
+
+  const selectRange = (next: NetWorthRange) => {
+    setRange(next);
+    storeRange(next);
+    clearComparison();
+    setHoverIndex(null);
+  };
+
+  // Paydays are only named in the tooltip; drawing them on the chart was too noisy.
+  const paydays = useMemo(() => paydayMarkers(rows, periodsQuery.data ?? []), [rows, periodsQuery.data]);
+  const ticks = useMemo(() => (rows.length > MAX_DOTTED_POINTS ? monthTicks(rows) : null), [rows]);
+  const tickText = useMemo(() => new Map(ticks?.map((tick) => [tick.label, tick.text])), [ticks]);
 
   // A zero-based axis hides the useful movement when the balance is large and
   // the period's changes are comparatively small. Keep a little breathing
@@ -82,7 +129,10 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
   );
   const yAxisWidth = Math.max(36, Math.min(56, Math.ceil(yAxisLabelLength * 6.5 + 5)));
 
-  const currentNetWorth = rows.length > 0 ? rows[rows.length - 1].netWorth : 0;
+  // Hovering a point moves the headline to it; otherwise the headline is the latest point.
+  const focusRow = hoverIndex != null ? rows[hoverIndex] ?? null : null;
+  const headlineRow = focusRow ?? rows[rows.length - 1] ?? null;
+  const currentNetWorth = headlineRow?.netWorth ?? 0;
   const previousNetWorth = rows.length > 0 ? rows[0].netWorth : currentNetWorth;
 
   const netWorthChange = currentNetWorth - previousNetWorth;
@@ -101,8 +151,11 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
     return 'text-[var(--color-muted)]';
   };
 
+  const periodName = netWorthQuery.data?.period?.name;
   const compareLabel = rows.length >= 2
-    ? `since ${new Date(rows[0].asOfMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+    ? focusRow
+      ? `${shortDate(rows[0].asOfMs)} → ${longDate(focusRow.asOfMs)}`
+      : range === 'period' && periodName ? `since ${periodName} began` : `since ${longDate(rows[0].asOfMs)}`
     : '';
 
   const comparison = compareStartIndex != null && compareEndIndex != null && compareStartIndex !== compareEndIndex
@@ -119,6 +172,26 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
     setCompareStartIndex(null);
     setCompareEndIndex(null);
     setIsDragging(false);
+  };
+
+  const beginComparison = (state: unknown) => {
+    const index = chartIndex(state);
+    if (index == null) return;
+    setCompareStartIndex(index);
+    setCompareEndIndex(index);
+    setIsDragging(true);
+  };
+
+  const trackPointer = (state: unknown) => {
+    const index = chartIndex(state);
+    if (index == null) return;
+    setHoverIndex(index);
+    if (isDragging) setCompareEndIndex(index);
+  };
+
+  const leaveChart = () => {
+    clearComparison();
+    setHoverIndex(null);
   };
 
   const xAxisMinTickGap = 40;
@@ -161,13 +234,11 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
               type="button"
               aria-pressed={range === o.range}
               aria-label={o.description}
-              title={o.description}
-              onClick={() => {
-                setRange(o.range);
-                clearComparison();
-              }}
+              title={o.range === 'period' && periodId == null ? 'Pick a salary period first' : o.description}
+              disabled={o.range === 'period' && periodId == null}
+              onClick={() => selectRange(o.range)}
               className={cn(
-              'cursor-pointer touch-manipulation rounded-lg px-3 py-1.5 text-center text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)] focus-visible:ring-offset-2',
+              'cursor-pointer touch-manipulation rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 sm:px-3',
                 range === o.range
                   ? 'bg-[var(--ref-primary)] text-white shadow-sm'
                   : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--ref-on-surface)]',
@@ -181,7 +252,7 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
 
       <div className="mb-3 mt-2">
         <div className="min-w-0">
-          <p className="font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)] sm:text-2xl lg:text-3xl">
+          <p className="font-headline text-xl font-extrabold tracking-tight text-[var(--ref-on-surface)] sm:text-2xl lg:text-3xl" aria-live="polite">
             {formatCurrency(currentNetWorth)}
           </p>
           <div
@@ -222,22 +293,14 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
             <AreaChart
               data={rows}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-              className="touch-pan-x"
-              onMouseMove={(state) => {
-                const index = chartIndex(state);
-                if (isDragging && index != null) setCompareEndIndex(index);
-              }}
-              onMouseLeave={() => {
-                clearComparison();
-              }}
-              onMouseDown={(state) => {
-                const index = chartIndex(state);
-                if (index == null) return;
-                setCompareStartIndex(index);
-                setCompareEndIndex(index);
-                setIsDragging(true);
-              }}
+              className="touch-pan-y"
+              onMouseMove={trackPointer}
+              onMouseLeave={leaveChart}
+              onMouseDown={beginComparison}
               onMouseUp={clearComparison}
+              onTouchStart={beginComparison}
+              onTouchMove={trackPointer}
+              onTouchEnd={leaveChart}
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -252,8 +315,10 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                 axisLine={false}
                 tickLine={false}
                 tickMargin={10}
-                interval="preserveStartEnd"
-                minTickGap={xAxisMinTickGap}
+                interval={ticks ? 0 : 'preserveStartEnd'}
+                ticks={ticks?.map((tick) => tick.label)}
+                tickFormatter={(label: string) => tickText.get(label) ?? label}
+                minTickGap={ticks ? 0 : xAxisMinTickGap}
                 height={28}
               />
               <YAxis
@@ -280,10 +345,12 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                   const comparisonPercent = dragStart && comparisonDelta != null && dragStart.netWorth !== 0
                     ? (comparisonDelta / Math.abs(dragStart.netWorth)) * 100
                     : null;
+                  const payday = paydays.find((marker) => marker.label === p.label);
                   return (
                     <div className="w-max max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 text-left shadow-xl">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ref-outline)]">
-                        {new Date(p.asOfMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) || label}
+                        {longDate(p.asOfMs) || label}
+                        {payday && <span className="ml-1.5 normal-case tracking-normal text-[var(--ref-secondary)]">· Payday · {payday.name}</span>}
                       </p>
                       <p className="font-headline text-base font-bold text-[var(--ref-on-surface)] sm:text-lg">
                         {formatCurrency(p.netWorth)}
@@ -301,9 +368,9 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                             {comparisonDelta > 0 ? '↑' : comparisonDelta < 0 ? '↓' : '→'}
                           </span>
                           <span className="min-w-0 text-right font-normal text-[var(--ref-on-surface-variant)]">
-                            {new Date(dragStart.asOfMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            {shortDate(dragStart.asOfMs)}
                             {' - '}
-                            {new Date(p.asOfMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            {shortDate(p.asOfMs)}
                           </span>
                         </div>
                       )}
@@ -330,7 +397,7 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
                 dataKey="netWorth"
                 stroke="var(--ref-primary)"
                 strokeWidth={2.5}
-                dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--ref-primary)' }}
+                dot={rows.length > MAX_DOTTED_POINTS ? false : { r: 2.5, strokeWidth: 0, fill: 'var(--ref-primary)' }}
                 activeDot={{ r: 5, stroke: 'var(--color-surface)', strokeWidth: 3, fill: 'var(--ref-primary)' }}
                 fill={`url(#${gradientId})`}
                 isAnimationActive={typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: no-preference)').matches}
@@ -341,7 +408,7 @@ export function NetWorthChart({ className = '', hideAmounts }: { className?: str
       ) : (
         !isLoading && (
           <div className="flex min-h-[220px] items-center justify-center px-2 text-center text-sm text-[var(--ref-on-surface-variant)]">
-            No trend data. Add wallet transactions to build history.
+            {range === 'period' ? 'No ledger activity in this period yet.' : 'No trend data. Add wallet transactions to build history.'}
           </div>
         )
       )}

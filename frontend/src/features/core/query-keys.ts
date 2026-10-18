@@ -44,7 +44,7 @@ export const queryKeys = {
   },
   analytics: {
     all: ["analytics"] as const,
-    netWorthTrend: (range: string) => ["analytics", "net-worth-trend", range] as const,
+    netWorthTrend: (range: string, periodId: number | null = null) => ["analytics", "net-worth-trend", range, periodId] as const,
     spendingTrend: (scope: "30d" | "period", periodId: number | null) => ["analytics", "spending-trend", scope, periodId] as const,
     periodSummaries: ["analytics", "period-summaries"] as const,
   },

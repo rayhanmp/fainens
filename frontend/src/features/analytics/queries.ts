@@ -11,18 +11,25 @@ import {
 import { queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
 
-export type NetWorthRange = '7d' | '30d' | '3m' | '6m' | '1y';
+export type NetWorthRange = '7d' | '30d' | '3m' | '6m' | '1y' | 'period';
 export type SpendingScope = '30d' | 'period';
 
 /**
  * Analytics are server facts, so the chart components only own display state
  * (range, view mode, and menus). The query key keeps each selectable range
  * independently cacheable and lets financial mutations invalidate all charts.
+ * The "period" range spans one salary period and needs its id.
  */
-export function useNetWorthTrendQuery(range: NetWorthRange) {
+export function useNetWorthTrendQuery(range: NetWorthRange, periodId: number | null = null) {
+  const scopedPeriodId = range === 'period' ? periodId : null;
   return useQuery<GetNetWorthTrend200>({
-    queryKey: queryKeys.analytics.netWorthTrend(range),
-    queryFn: ({ signal }) => unwrapGenerated(getNetWorthTrend({ range }, { signal }), 200, 'Failed to load net worth trend'),
+    queryKey: queryKeys.analytics.netWorthTrend(range, scopedPeriodId),
+    enabled: range !== 'period' || periodId != null,
+    queryFn: ({ signal }) => unwrapGenerated(
+      getNetWorthTrend(scopedPeriodId != null ? { range, periodId: String(scopedPeriodId) } : { range }, { signal }),
+      200,
+      'Failed to load net worth trend',
+    ),
     placeholderData: (previous) => previous,
   });
 }

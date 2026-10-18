@@ -13,7 +13,7 @@ vi.mock("../db/client", () => ({ db: new Proxy({}, {
   },
 }) }));
 
-import { calculateNetWorthAsOf, netWorthAtEach } from "./analytics";
+import { buildNetWorthTrendBuckets, buildPeriodNetWorthBuckets, calculateNetWorthAsOf, getNetWorthTrend, netWorthAtEach, trimLeadingEmptyNetWorth } from "./analytics";
 
 function createAllTables(sqlite: InstanceType<typeof Database>) {
   const dialect = new SQLiteSyncDialect();
@@ -64,5 +64,55 @@ describe("net worth trend", () => {
       expect(fast[index]).toEqual({ netWorth: slow.netWorth, totalAssets: slow.totalAssets, totalLiabilities: slow.totalLiabilities });
     }
     expect(fast[0]).toEqual({ totalAssets: 50_850_000, totalLiabilities: 50_000, netWorth: 50_800_000 });
+  });
+
+  it("samples the long ranges weekly, ending now", () => {
+    const now = new Date(2026, 9, 18, 15, 30).getTime();
+    for (const [range, weeks] of [["3m", 13], ["6m", 26], ["1y", 52]] as const) {
+      const buckets = buildNetWorthTrendBuckets(range, now);
+      expect(buckets).toHaveLength(weeks);
+      expect(buckets[buckets.length - 1].asOfMs).toBe(now);
+      expect(buckets[0].label).toBe(new Date(now - (weeks - 1) * 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+      for (let i = 1; i < buckets.length - 1; i++) {
+        expect(buckets[i].asOfMs - buckets[i - 1].asOfMs).toBe(7 * 24 * 60 * 60 * 1000);
+      }
+    }
+    expect(buildNetWorthTrendBuckets("30d", now)).toHaveLength(30);
+  });
+
+  it("spans a salary period day by day, stopping at now for the live period", () => {
+    const start = new Date(2026, 8, 25).getTime();
+    const end = new Date(2026, 9, 24).getTime();
+    const live = buildPeriodNetWorthBuckets({ startDate: start, endDate: end }, new Date(2026, 9, 18, 15).getTime());
+    expect(live).toHaveLength(24);
+    expect(live[0].label).toBe("Sep 25");
+    expect(live[live.length - 1].asOfMs).toBe(new Date(2026, 9, 18, 15).getTime());
+    const closed = buildPeriodNetWorthBuckets({ startDate: start, endDate: end }, new Date(2027, 0, 1).getTime());
+    expect(closed).toHaveLength(30);
+    expect(closed[closed.length - 1].asOfMs).toBe(new Date(2026, 9, 24, 23, 59, 59, 999).getTime());
+    expect(buildPeriodNetWorthBuckets({ startDate: start, endDate: end }, new Date(2026, 8, 1).getTime())).toEqual([]);
+    const long = buildPeriodNetWorthBuckets({ startDate: new Date(2025, 0, 1).getTime(), endDate: new Date(2025, 11, 31).getTime() }, new Date(2027, 0, 1).getTime());
+    expect(long.length).toBeLessThanOrEqual(121);
+    expect(long[long.length - 1].label).toBe("Dec 31");
+  });
+
+  it("loads the period range from the period table", async () => {
+    state.db.insert(schema.salaryPeriods).values({ id: 7, name: "September", startDate: day(1), endDate: day(10), status: "open" }).run();
+    const trend = await getNetWorthTrend("period", 7);
+    expect(trend?.period).toMatchObject({ id: 7, name: "September" });
+    expect(trend?.series.length).toBeGreaterThan(1);
+    expect(trend?.series[trend.series.length - 1].netWorth).toBe(50_800_000);
+    expect(await getNetWorthTrend("period", 99)).toBeNull();
+  });
+
+  it("drops the empty points before the first activity but keeps at least two", () => {
+    const empty = { totalAssets: 0, totalLiabilities: 0 };
+    const active = { totalAssets: 10, totalLiabilities: 0 };
+    expect(trimLeadingEmptyNetWorth([empty, empty, active, active]).length).toBe(2);
+    expect(trimLeadingEmptyNetWorth([active, empty, active]).length).toBe(3);
+    expect(trimLeadingEmptyNetWorth([empty, empty, empty, active]).length).toBe(2);
+    expect(trimLeadingEmptyNetWorth([empty, empty]).length).toBe(2);
+    // Assets that equal liabilities are activity, not an empty ledger.
+    expect(trimLeadingEmptyNetWorth([{ totalAssets: 5, totalLiabilities: 5 }, active]).length).toBe(2);
   });
 });
