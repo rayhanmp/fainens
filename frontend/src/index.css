@@ -31,6 +31,8 @@
   --ref-surface-container-low: #f2f3fe;
   --ref-surface-container-lowest: #ffffff;
   --ref-surface-container: #ededf8;
+  /* Hover/pressed surfaces across the app use this step; it was referenced but never defined. */
+  --ref-surface-container-high: #e7e8f3;
   --ref-surface-container-highest: #e1e2ec;
   --ref-secondary: #006b5e;
   --ref-secondary-container: #9cefde;
@@ -86,6 +88,7 @@
   --ref-surface-container-low: #1e293b;
   --ref-surface-container-lowest: #0f172a;
   --ref-surface-container: #334155;
+  --ref-surface-container-high: #3c4a5e;
   --ref-surface-container-highest: #475569;
   --ref-secondary: #10b981;
   --ref-secondary-container: #064e3b;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dashboardPreset, dashboardSectionIds, dashboardSectionRows, dashboardSectionSize, dashboardSectionWidth, dashboardViewStorageKey, mergeDashboardViewChange, moveDashboardSection, parseDashboardViewPreferences, resetDashboardLayout, resizeDashboardSection, selectedDashboardPreset, usesOriginalDashboardSections } from './view-preferences.ts';
+import { applyDashboardPreset, dashboardPreset, dashboardSectionIds, dashboardSectionRows, dashboardSectionSize, dashboardSectionWidth, dashboardViewStorageKey, mergeDashboardViewChange, moveDashboardSection, parseDashboardViewPreferences, resetDashboardLayout, resizeDashboardSection, selectedDashboardPreset, usesOriginalDashboardSections } from './view-preferences.ts';
 
 test('missing or corrupt preferences restore the original dashboard', () => {
   for (const raw of [null, '', '{bad', 'null', '42', '[]']) {
@@ -15,8 +15,17 @@ test('partial preferences keep the user order and add missing sections safely', 
   }));
   assert.deepEqual(parsed, {
     mainMetric: 'cash', sectionOrder: ['activity', 'payments', 'budget', 'netWorth', 'spending', 'pulse'],
-    hiddenSections: ['pulse'], sectionSizes: {},
+    hiddenSections: ['pulse'], sectionSizes: {}, pulseMetrics: ['cashFlow', 'savingsRate', 'burn', 'runway'],
   });
+});
+
+test('saved pulse metrics survive storage and presets, and bad entries fall back to defaults', () => {
+  const custom = { ...dashboardPreset('original'), pulseMetrics: ['netWorth', 'daysLeft', 'income', 'debt'] };
+  assert.deepEqual(parseDashboardViewPreferences(JSON.stringify(custom)).pulseMetrics, ['netWorth', 'daysLeft', 'income', 'debt']);
+  assert.deepEqual(applyDashboardPreset(custom, 'overview').pulseMetrics, custom.pulseMetrics);
+  assert.equal(selectedDashboardPreset(custom), 'original');
+  assert.deepEqual(parseDashboardViewPreferences(JSON.stringify({ pulseMetrics: ['runway', 'runway', 'bogus', 7] })).pulseMetrics, ['runway', 'cashFlow']);
+  assert.deepEqual(parseDashboardViewPreferences(JSON.stringify({ pulseMetrics: 'cashFlow' })).pulseMetrics, ['cashFlow', 'savingsRate', 'burn', 'runway']);
 });
 
 test('legacy compact preferences are discarded while preserving the saved layout', () => {

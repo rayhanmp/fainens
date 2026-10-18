@@ -58,11 +58,9 @@
 .dashboard-resize-preview[data-edge='left'] { right: 0; }
 .dashboard-resize-preview span { position: absolute; top: 10px; right: 10px; padding: 5px 9px; border-radius: var(--radius-sm); background: var(--ref-primary); color: var(--ref-on-primary); font-size: 12px; font-weight: 600; }
 .dashboard-drag-handle:focus-visible,.dashboard-resize-handle:focus-visible,.dashboard-layout-editor button:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: 2px; }
-.dashboard-panel[data-section='pulse'][data-size='small'] > section { grid-template-columns: minmax(0,1fr); }
-.dashboard-panel[data-section='pulse'][data-size='small'] > section > div { border-left: 0; border-top: 1px solid var(--color-border); padding: 12px 0; }
-.dashboard-panel[data-section='pulse'][data-size='small'] > section > div:first-child { border-top: 0; padding-top: 0; }
-.dashboard-panel[data-section='pulse'][data-size='small'] > section > div:last-child { padding-bottom: 0; }
-.dashboard-panel[data-section='pulse'][data-size='wide'] > section { grid-template-columns: repeat(2,minmax(0,1fr)); }
+/* The pulse strip picks its own column count from its width (a container query), so panel sizes need no overrides here. */
+/* Each panel paints as its own layer, so a later panel would cover an earlier one's open menu; lift the panel that has one open. */
+.dashboard-panel:has([aria-expanded='true']) { position: relative; z-index: 30; }
 .dashboard-panel[data-section='pulse'][data-size='wide'] > section > div { border: 0; padding: 12px; }
 .dashboard-panel[data-section='pulse'][data-size='wide'] > section > div:nth-child(n+3) { border-top: 1px solid var(--color-border); }
 .dashboard-panel[data-section='pulse'][data-size='wide'] > section > div:nth-child(2n) { border-left: 1px solid var(--color-border); }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Activity, BarChart3, CalendarClock, Check, ChevronDown, List, PencilLine, PieChart, Plus, RotateCcw, SlidersHorizontal, TrendingUp, X } from 'lucide-react';
-import { dashboardPreset, dashboardSectionLabels, selectedDashboardPreset, type DashboardMetric, type DashboardPreset, type DashboardViewPreferences } from './view-preferences';
+import { applyDashboardPreset, dashboardPreset, dashboardSectionLabels, selectedDashboardPreset, type DashboardMetric, type DashboardPreset, type DashboardViewPreferences } from './view-preferences';
 
 const panelIcons = { budget: PieChart, payments: CalendarClock, activity: List, netWorth: TrendingUp, spending: BarChart3, pulse: Activity };
 
@@ -33,7 +33,7 @@ export function DashboardViewMenu({ preferences, onChange, preset, onEditLayout 
       <header><h2>Customize dashboard</h2><button type="button" onClick={close} aria-label="Close dashboard view options"><X size={16} aria-hidden /></button></header>
       <div className="dashboard-view-fields">
       <label className="dashboard-view-field">Preset
-        <select value={preset ?? selectedDashboardPreset(preferences)} onChange={event => onChange(dashboardPreset(event.target.value as DashboardPreset))}>
+        <select value={preset ?? selectedDashboardPreset(preferences)} onChange={event => onChange(applyDashboardPreset(preferences, event.target.value as DashboardPreset))}>
           <option value="original">Original dashboard</option><option value="everyday">Everyday</option><option value="overview">Money overview</option><option value="minimal">Minimal</option><option value="custom" disabled>Custom</option>
         </select>
       </label>

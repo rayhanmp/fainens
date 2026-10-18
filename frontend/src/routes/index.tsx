@@ -1,11 +1,11 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { RequireAuth, useAuth } from '../lib/auth';
-import type { api, AgentFinancialFacts, BudgetPlan, BudgetSummary } from '../lib/api';
+import { api, type AgentFinancialFacts, type BudgetPlan, type BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { findCurrentPeriod, formatCurrency, formatDateTime, formatDayMonth, formatTime } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
@@ -29,7 +29,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useNow } from '../hooks/useNow';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useNetWorthTrendQuery } from '../features/analytics/queries';
-import { useAgentProfileQuery } from '../features/agent/queries';
+import { useAgentProfileQuery, useFinancialFactsQuery } from '../features/agent/queries';
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
@@ -39,6 +39,7 @@ import { AttentionStrip } from '../features/dashboard/AttentionStrip';
 import { useAttentionReadState } from '../features/dashboard/use-attention-read-state';
 import { DashboardHero, DashboardTodayCard, type BalanceMetrics, type BudgetPace } from '../features/dashboard/DashboardHero';
 import { PulsePanel } from '../features/dashboard/PulsePanel';
+import { monthlySubscriptionCost, spentThroughDay, type PulseInputs, type PulseMetricId } from '../features/dashboard/pulse-metrics';
 import { BudgetPanel } from '../features/dashboard/BudgetPanel';
 import { ActivityPanel } from '../features/dashboard/ActivityPanel';
 import { PaymentsPanel } from '../features/dashboard/PaymentsPanel';
@@ -258,6 +259,45 @@ function DashboardPage() {
     netWorth: { label: 'Net worth', value: analyticsValue(analytics?.netWorth.netWorth), cents: analytics?.netWorth.netWorth, to: '/accounts' },
   };
 
+  const topCategory = categorySpending.reduce<(typeof categorySpending)[number] | null>((top, row) => (row.spentCents > 0 && (!top || row.spentCents > top.spentCents) ? row : top), null);
+  // Data only some pulse metrics need is fetched while one of those metrics is on the strip.
+  const showsPulse = (id: PulseMetricId) => !preferences.hiddenSections.includes('pulse') && preferences.pulseMetrics.includes(id);
+  const previousPeriodId = adjacentPeriodId(periods, selectedPeriodId, 'older');
+  const previousPeriod = periods.find((period) => String(period.id) === previousPeriodId) ?? null;
+  const previousFactsQuery = useFinancialFactsQuery({ periodId: previousPeriod?.id }, showsPulse('spendVsLast') && previousPeriod != null);
+  const reimbursementsQuery = useQuery({ queryKey: queryKeys.reimbursements.list(), queryFn: () => api.reimbursements.list(), enabled: showsPulse('reimbursementsDue') });
+  const previousFacts = previousFactsQuery.data?.data.facts;
+  const previousPeriodInput: PulseInputs['previousPeriod'] = !previousPeriod ? 'none' : !previousFacts || !pacing ? null
+    : pacing.status === 'ended'
+      ? { name: previousPeriod.name, spentToDateCents: previousFacts.totalSpentCents, dayIndex: pacing.totalDays }
+      : { name: previousPeriod.name, spentToDateCents: spentThroughDay(previousFacts.rows, previousPeriod.startDate, pacing.dayIndex), dayIndex: pacing.dayIndex };
+  const lentLoans = loans.filter((loan) => loan.direction === 'lent' && loan.status === 'active' && loan.remainingCents > 0);
+  const openClaims = (reimbursementsQuery.data ?? []).filter((claim) => claim.outstandingAmount > 0);
+  const netWorthFirst = netWorthSeries[0]?.netWorth;
+  const netWorthLast = netWorthSeries.at(-1)?.netWorth;
+  const pulseInputs: PulseInputs = {
+    isTracked: periodIsTracked,
+    incomeCents: facts?.facts.totalIncomeCents ?? 0,
+    spentCents: facts?.facts.totalSpentCents ?? 0,
+    transactionCount: facts?.facts.rows.length ?? 0,
+    topCategory: topCategory ? { name: topCategory.categoryId == null ? 'Unallocated' : topCategory.category, spentCents: topCategory.spentCents } : null,
+    burnRate: analytics?.burnRate.grossBurnRate ?? null,
+    runway: analytics?.runway ?? null,
+    netWorth: analytics?.netWorth.netWorth ?? null,
+    liabilities: analytics?.netWorth.totalLiabilities ?? null,
+    upcoming: isCommitmentsLoading ? null : { total: commitments.total, count: commitments.count },
+    budget: periodIsTracked ? { planned: totalPlanned, actual: totalActual, dailyBudget, daysRemaining: budgetOutlook?.daysRemaining ?? null } : null,
+    pacing,
+    isAnalyticsLoading,
+    isPeriodLoading,
+    previousPeriod: previousPeriodInput,
+    netWorthChange: netWorthFirst != null && netWorthLast != null ? { amount: netWorthLast - netWorthFirst, percent: percentChange(netWorthFirst, netWorthLast) } : null,
+    owedToYou: loansQuery.data ? { total: lentLoans.reduce((sum, loan) => sum + loan.remainingCents, 0), count: lentLoans.length } : null,
+    reimbursements: reimbursementsQuery.data ? { total: openClaims.reduce((sum, claim) => sum + claim.outstandingAmount, 0), count: openClaims.length } : null,
+    subscriptions: subscriptions ? monthlySubscriptionCost(subscriptions.subscriptions) : null,
+    pendingCount: pendingTransactionsQuery.data ? pendingTransactionCount : null,
+  };
+
   const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);
   const showShortcuts = useCallback(() => setIsShortcutsOpen(true), []);
   useDashboardShortcuts({
@@ -273,7 +313,7 @@ function DashboardPage() {
   };
 
   const dashboardSections: Record<DashboardSection, ReactNode> = {
-    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} />,
+    pulse: <PulsePanel metrics={preferences.pulseMetrics} onChangeMetrics={(pulseMetrics) => updatePreferences({ ...preferences, pulseMetrics })} inputs={pulseInputs} formatAmount={formatAmount} />,
     netWorth: <NetWorthChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,

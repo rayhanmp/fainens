@@ -1,3 +1,5 @@
+import { defaultPulseMetrics, normalizePulseMetrics, type PulseMetricId } from './pulse-metrics.ts';
+
 export const dashboardSectionIds = ['budget', 'payments', 'activity', 'netWorth', 'spending', 'pulse'] as const;
 export type DashboardSection = typeof dashboardSectionIds[number];
 export type DashboardMetric = 'cash' | 'budget' | 'netWorth';
@@ -8,6 +10,8 @@ export type DashboardViewPreferences = {
   sectionOrder: DashboardSection[];
   hiddenSections: DashboardSection[];
   sectionSizes: Partial<Record<DashboardSection, DashboardSectionSize>>;
+  /** The four metrics in the Financial pulse strip, in display order. Not part of any preset. */
+  pulseMetrics: PulseMetricId[];
 };
 
 export const dashboardSectionLabels: Record<DashboardSection, string> = {
@@ -16,18 +20,24 @@ export const dashboardSectionLabels: Record<DashboardSection, string> = {
 };
 
 export function dashboardPreset(preset: DashboardPreset): DashboardViewPreferences {
+  const pulseMetrics = [...defaultPulseMetrics];
   if (preset === 'original') return {
-    mainMetric: 'cash', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'activity', 'payments'], hiddenSections: ['payments'], sectionSizes: {},
+    mainMetric: 'cash', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'activity', 'payments'], hiddenSections: ['payments'], sectionSizes: {}, pulseMetrics,
   };
   if (preset === 'overview') return {
-    mainMetric: 'netWorth', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'payments', 'activity'], hiddenSections: [], sectionSizes: {},
+    mainMetric: 'netWorth', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'payments', 'activity'], hiddenSections: [], sectionSizes: {}, pulseMetrics,
   };
   if (preset === 'minimal') return {
-    mainMetric: 'cash', sectionOrder: ['activity', 'budget', 'payments', 'netWorth', 'spending', 'pulse'], hiddenSections: ['budget', 'payments', 'netWorth', 'spending', 'pulse'], sectionSizes: {},
+    mainMetric: 'cash', sectionOrder: ['activity', 'budget', 'payments', 'netWorth', 'spending', 'pulse'], hiddenSections: ['budget', 'payments', 'netWorth', 'spending', 'pulse'], sectionSizes: {}, pulseMetrics,
   };
   return {
-    mainMetric: 'budget', sectionOrder: [...dashboardSectionIds], hiddenSections: ['netWorth', 'spending', 'pulse'], sectionSizes: {},
+    mainMetric: 'budget', sectionOrder: [...dashboardSectionIds], hiddenSections: ['netWorth', 'spending', 'pulse'], sectionSizes: {}, pulseMetrics,
   };
+}
+
+/** Applies a preset's panels without discarding the user's chosen pulse metrics. */
+export function applyDashboardPreset(current: DashboardViewPreferences, preset: DashboardPreset): DashboardViewPreferences {
+  return { ...dashboardPreset(preset), pulseMetrics: current.pulseMetrics };
 }
 
 export function dashboardViewStorageKey(email: string) {
@@ -42,7 +52,7 @@ export function parseDashboardViewPreferences(raw: string | null): DashboardView
   try {
     const saved: unknown = JSON.parse(raw);
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return defaults;
-    const { mainMetric, sectionOrder, hiddenSections, sectionSizes } = saved as Record<string, unknown>;
+    const { mainMetric, sectionOrder, hiddenSections, sectionSizes, pulseMetrics } = saved as Record<string, unknown>;
     const order = Array.isArray(sectionOrder) ? [...new Set(sectionOrder.filter(isSection))] : defaults.sectionOrder;
     const hidden = Array.isArray(hiddenSections) ? [...new Set(hiddenSections.filter(isSection))] : defaults.hiddenSections;
     const sizes: DashboardViewPreferences['sectionSizes'] = {};
@@ -57,6 +67,7 @@ export function parseDashboardViewPreferences(raw: string | null): DashboardView
       sectionOrder: [...order, ...dashboardSectionIds.filter(id => !order.includes(id))],
       hiddenSections: hidden.length === dashboardSectionIds.length ? hidden.filter(id => id !== 'activity') : hidden,
       sectionSizes: sizes,
+      pulseMetrics: normalizePulseMetrics(pulseMetrics),
     };
   } catch {
     return defaults;
