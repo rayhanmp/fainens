@@ -86,8 +86,13 @@ function BudgetPaceLabel({ pace, formatAmount }: { pace: BudgetPace; formatAmoun
   const tone = usedRatio != null ? paceTone(usedRatio, pacing.elapsedRatio) : 'ok';
   const dayLabel = pacing.status === 'active' ? `Day ${pacing.dayIndex} of ${pacing.totalDays}` : pacing.status === 'ended' ? 'Period ended' : 'Not started';
   return (
-    <Link to="/budget" title={paceDetail(pace, formatAmount)} className="truncate text-[11px] leading-none text-white/65 hover:text-white/90">
-      {dayLabel}{usedRatio != null && <> · <span className={cn('font-semibold', paceText[tone])}>{formatPercent(usedRatio)} used</span></>}
+    <Link to="/budget" title={paceDetail(pace, formatAmount)} className="dashboard-pace-label flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-white/65">
+      {/* A miniature of the divider bar, so the label reads as its legend. */}
+      <span className="relative h-[3px] w-5 shrink-0 rounded-full bg-white/20" aria-hidden>
+        <span className="absolute inset-y-0 left-0 rounded-full bg-white/40" style={{ width: `${pacing.elapsedRatio * 100}%` }} />
+        {usedRatio != null && <span className={cn('absolute inset-y-0 left-0 rounded-full', paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }} />}
+      </span>
+      <span className="truncate">{dayLabel}{usedRatio != null && <> · <span className={cn('font-semibold', paceText[tone])}>{formatPercent(usedRatio)} budget used</span></>}</span>
     </Link>
   );
 }
@@ -98,7 +103,7 @@ function BudgetPaceBar({ pace, formatAmount }: { pace: BudgetPace; formatAmount:
   const tone = usedRatio != null ? paceTone(usedRatio, pacing.elapsedRatio) : 'ok';
   const detail = paceDetail(pace, formatAmount);
   return (
-    <Link to="/budget" title={detail} aria-label={detail} className="relative mt-3 block h-[3px] rounded-full bg-white/15">
+    <Link to="/budget" title={detail} aria-label={detail} className="dashboard-pace-bar relative mt-3 block h-[3px] rounded-full bg-white/15">
       <span className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${pacing.elapsedRatio * 100}%` }} />
       {usedRatio != null && <span className={cn('absolute inset-y-0 left-0 rounded-full', paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }} />}
       {pacing.status === 'active' && <span className="absolute -inset-y-[3px] w-px -translate-x-1/2 bg-white" style={{ left: `${pacing.elapsedRatio * 100}%` }} />}
