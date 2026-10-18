@@ -1,6 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ShieldCheck } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -36,7 +35,6 @@ import { useToast } from '../components/ui/useToast';
 import { ToastContainer } from '../components/ui/Toast';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
-import { PanelLink } from '../features/dashboard/PanelParts';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
 import { DashboardNotifications } from '../features/dashboard/DashboardNotifications';
 import { AttentionStrip } from '../features/dashboard/AttentionStrip';
@@ -299,7 +297,7 @@ function DashboardPage() {
 
   const dashboardSections: Record<DashboardSection, ReactNode> = {
     pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} />,
-    netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
+    netWorth: <NetWorthChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,
     activity: <ActivityPanel transactions={recent} categories={categories} compact={isMobile} now={dashboardNow} formatAmount={formatAmount} maskAmounts={maskAmounts} />,
@@ -311,7 +309,6 @@ function DashboardPage() {
   }
 
   const viewMenu = <DashboardViewMenu preferences={visiblePreferences} onChange={updateVisiblePreferences} preset={isOriginalView ? 'original' : undefined} onEditLayout={() => setIsEditingLayout(true)} />;
-  const hasRecentReconciliation = reconciliation?.sessions.some((session) => session.lifecycleStatus === 'active');
 
   return (
     <RequireAuth>
@@ -357,7 +354,6 @@ function DashboardPage() {
         <DashboardTodayCard mainMetric={preferences.mainMetric} metrics={balanceMetrics} dailyBudget={dailyBudget} formatAmount={formatAmount} />
 
         <DashboardSections preferences={visiblePreferences} sections={dashboardSections} editing={isEditingLayout} onChange={next => updatePreferences({ ...preferences, sectionOrder: next.sectionOrder, sectionSizes: next.sectionSizes })} onDone={() => setIsEditingLayout(false)} />
-        {!isMobile && (<section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(facts?.facts.asOfMs ?? dashboardNow)} · reconciliation: {hasRecentReconciliation ? 'recent check on record' : 'no current check on record'}.</p></div></div><PanelLink to="/accounts" className="shrink-0">Review accounts</PanelLink></div></div></section>)}
         {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
         <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} onSuccess={(_id, createdIds) => offerUndo(createdIds)} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         {isReportOpen && <Suspense fallback={null}><MonthlyReportModal isOpen onClose={() => setIsReportOpen(false)} /></Suspense>}
