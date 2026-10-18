@@ -7336,12 +7336,20 @@ export type GetPaylaterObligations200 = {
 };
 
 export type ListAuditLogsParams = {
-entityType?: ListAuditLogsEntityType;
+/**
+ * @minLength 1
+ * @maxLength 60
+ */
+entityType?: string;
 /**
  * @pattern ^\d+$
  */
 entityId?: string;
-action?: ListAuditLogsAction;
+/**
+ * @minLength 1
+ * @maxLength 60
+ */
+action?: string;
 /**
  * @maxLength 120
  */
@@ -7364,62 +7372,6 @@ startDate?: string;
 endDate?: string;
 };
 
-export type ListAuditLogsEntityType = typeof ListAuditLogsEntityType[keyof typeof ListAuditLogsEntityType];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const ListAuditLogsEntityType = {
-  account: 'account',
-  transaction: 'transaction',
-  transaction_line: 'transaction_line',
-  category: 'category',
-  tag: 'tag',
-  salary_period: 'salary_period',
-  budget_plan: 'budget_plan',
-  attachment: 'attachment',
-  subscription: 'subscription',
-  wishlist: 'wishlist',
-  reconciliation_session: 'reconciliation_session',
-} as const;
-
-export type ListAuditLogsAction = typeof ListAuditLogsAction[keyof typeof ListAuditLogsAction];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const ListAuditLogsAction = {
-  create: 'create',
-  update: 'update',
-  delete: 'delete',
-} as const;
-
-export type ListAuditLogs200EntriesItemEntityType = typeof ListAuditLogs200EntriesItemEntityType[keyof typeof ListAuditLogs200EntriesItemEntityType];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const ListAuditLogs200EntriesItemEntityType = {
-  account: 'account',
-  transaction: 'transaction',
-  transaction_line: 'transaction_line',
-  category: 'category',
-  tag: 'tag',
-  salary_period: 'salary_period',
-  budget_plan: 'budget_plan',
-  attachment: 'attachment',
-  subscription: 'subscription',
-  wishlist: 'wishlist',
-  reconciliation_session: 'reconciliation_session',
-} as const;
-
-export type ListAuditLogs200EntriesItemAction = typeof ListAuditLogs200EntriesItemAction[keyof typeof ListAuditLogs200EntriesItemAction];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const ListAuditLogs200EntriesItemAction = {
-  create: 'create',
-  update: 'update',
-  delete: 'delete',
-} as const;
-
 /**
  * @nullable
  */
@@ -7436,13 +7388,21 @@ export type ListAuditLogs200EntriesItem = {
    * @maximum 9007199254740991
    */
   id: number;
-  entityType: ListAuditLogs200EntriesItemEntityType;
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  entityType: string;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
   entityId: number;
-  action: ListAuditLogs200EntriesItemAction;
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  action: string;
   /** @nullable */
   beforeSnapshot: ListAuditLogs200EntriesItemBeforeSnapshot;
   /** @nullable */
@@ -7471,52 +7431,6 @@ export type ListAuditLogs200 = {
   [key: string]: unknown;
 };
 
-export type GetEntityAuditHistory200EntityType = typeof GetEntityAuditHistory200EntityType[keyof typeof GetEntityAuditHistory200EntityType];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const GetEntityAuditHistory200EntityType = {
-  account: 'account',
-  transaction: 'transaction',
-  transaction_line: 'transaction_line',
-  category: 'category',
-  tag: 'tag',
-  salary_period: 'salary_period',
-  budget_plan: 'budget_plan',
-  attachment: 'attachment',
-  subscription: 'subscription',
-  wishlist: 'wishlist',
-  reconciliation_session: 'reconciliation_session',
-} as const;
-
-export type GetEntityAuditHistory200HistoryItemEntityType = typeof GetEntityAuditHistory200HistoryItemEntityType[keyof typeof GetEntityAuditHistory200HistoryItemEntityType];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const GetEntityAuditHistory200HistoryItemEntityType = {
-  account: 'account',
-  transaction: 'transaction',
-  transaction_line: 'transaction_line',
-  category: 'category',
-  tag: 'tag',
-  salary_period: 'salary_period',
-  budget_plan: 'budget_plan',
-  attachment: 'attachment',
-  subscription: 'subscription',
-  wishlist: 'wishlist',
-  reconciliation_session: 'reconciliation_session',
-} as const;
-
-export type GetEntityAuditHistory200HistoryItemAction = typeof GetEntityAuditHistory200HistoryItemAction[keyof typeof GetEntityAuditHistory200HistoryItemAction];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const GetEntityAuditHistory200HistoryItemAction = {
-  create: 'create',
-  update: 'update',
-  delete: 'delete',
-} as const;
-
 /**
  * @nullable
  */
@@ -7533,13 +7447,21 @@ export type GetEntityAuditHistory200HistoryItem = {
    * @maximum 9007199254740991
    */
   id: number;
-  entityType: GetEntityAuditHistory200HistoryItemEntityType;
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  entityType: string;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
   entityId: number;
-  action: GetEntityAuditHistory200HistoryItemAction;
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  action: string;
   /** @nullable */
   beforeSnapshot: GetEntityAuditHistory200HistoryItemBeforeSnapshot;
   /** @nullable */
@@ -7549,7 +7471,11 @@ export type GetEntityAuditHistory200HistoryItem = {
 };
 
 export type GetEntityAuditHistory200 = {
-  entityType: GetEntityAuditHistory200EntityType;
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  entityType: string;
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -21755,7 +21681,7 @@ export type getEntityAuditHistoryResponseError = (getEntityAuditHistoryResponse4
 
 export type getEntityAuditHistoryResponse = (getEntityAuditHistoryResponseSuccess | getEntityAuditHistoryResponseError)
 
-export const getGetEntityAuditHistoryUrl = (entityType: 'account' | 'transaction' | 'transaction_line' | 'category' | 'tag' | 'salary_period' | 'budget_plan' | 'attachment' | 'subscription' | 'wishlist' | 'reconciliation_session',
+export const getGetEntityAuditHistoryUrl = (entityType: string,
     entityId: number,) => {
 
 
@@ -21764,7 +21690,7 @@ export const getGetEntityAuditHistoryUrl = (entityType: 'account' | 'transaction
   return `/api/audit-log/${entityType}/${entityId}`
 }
 
-export const getEntityAuditHistory = async (entityType: 'account' | 'transaction' | 'transaction_line' | 'category' | 'tag' | 'salary_period' | 'budget_plan' | 'attachment' | 'subscription' | 'wishlist' | 'reconciliation_session',
+export const getEntityAuditHistory = async (entityType: string,
     entityId: number, options?: RequestInit): Promise<getEntityAuditHistoryResponse> => {
   
   return generatedFetch<getEntityAuditHistoryResponse>(getGetEntityAuditHistoryUrl(entityType,entityId),

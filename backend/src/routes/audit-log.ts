@@ -9,8 +9,10 @@ import {
 } from "../services/audit";
 
 const auditLogErrorSchema = z.object({ error: z.string() }).passthrough();
-const auditEntityTypeSchema = z.enum(["account", "transaction", "transaction_line", "category", "tag", "salary_period", "budget_plan", "attachment", "subscription", "wishlist", "reconciliation_session"]);
-const auditActionSchema = z.enum(["create", "update", "delete"]);
+// Every workflow writes its own entity types and actions (loan, reimbursement_claim, close, set_coverage,
+// approve, ...). A fixed list made the whole log fail response validation as soon as one appeared.
+const auditEntityTypeSchema = z.string().trim().min(1).max(60);
+const auditActionSchema = z.string().trim().min(1).max(60);
 const auditLogEntrySchema = z.object({ id: z.number().int(), entityType: auditEntityTypeSchema, entityId: z.number().int(), action: auditActionSchema, beforeSnapshot: z.record(z.string(), z.unknown()).nullable(), afterSnapshot: z.record(z.string(), z.unknown()).nullable(), createdAt: z.number() }).passthrough();
 const auditLogQuerySchema = z.object({ entityType: auditEntityTypeSchema.optional(), entityId: z.string().regex(/^\d+$/).optional(), action: auditActionSchema.optional(), search: z.string().max(120).optional(), page: z.string().regex(/^\d+$/).optional(), pageSize: z.string().regex(/^\d+$/).optional(), startDate: z.string().regex(/^\d+$/).optional(), endDate: z.string().regex(/^\d+$/).optional() });
 const auditEntityParamsSchema = z.object({ entityType: auditEntityTypeSchema, entityId: z.coerce.number().int().positive() });

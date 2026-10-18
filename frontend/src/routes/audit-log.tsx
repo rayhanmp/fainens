@@ -41,7 +41,7 @@ interface AuditEntry {
   id: number;
   entityType: string;
   entityId: number;
-  action: 'create' | 'update' | 'delete';
+  action: string;
   beforeSnapshot: Record<string, unknown> | null;
   afterSnapshot: Record<string, unknown> | null;
   createdAt: number;
@@ -57,6 +57,16 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'salary_period', label: 'Salary period' },
   { value: 'budget_plan', label: 'Budget plan' },
   { value: 'attachment', label: 'Attachment' },
+  { value: 'subscription', label: 'Subscription' },
+  { value: 'wishlist', label: 'Wishlist' },
+  { value: 'reconciliation_session', label: 'Reconciliation' },
+  { value: 'loan', label: 'Loan' },
+  { value: 'loan_payment', label: 'Loan payment' },
+  { value: 'reimbursement_claim', label: 'Reimbursement claim' },
+  { value: 'reimbursement_receipt', label: 'Reimbursement receipt' },
+  { value: 'contact', label: 'Contact' },
+  { value: 'splitbill_session', label: 'Split bill' },
+  { value: 'transaction_reallocation', label: 'Reallocation' },
 ];
 
 const ACTION_OPTIONS = [
@@ -87,7 +97,9 @@ function entrySummary(entry: AuditEntry): string {
     return t ? `Removed · ${t}` : 'Removed';
   }
   if (entry.action === 'update') return 'Record updated';
-  return '—';
+  // Workflow actions such as close, set_coverage or approve.
+  const label = entry.action.replace(/_/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function AuditLogPage() {
@@ -117,10 +129,7 @@ function AuditLogPage() {
     ...(filters.action ? { action: filters.action } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
   });
-  const entries = (auditQuery.data?.entries ?? []).map((entry) => ({
-    ...entry,
-    action: entry.action as AuditEntry['action'],
-  }));
+  const entries: AuditEntry[] = auditQuery.data?.entries ?? [];
   const total = auditQuery.data?.total ?? 0;
   const isLoading = auditQuery.isPending && !auditQuery.data;
   const loadAuditLog = () => auditQuery.refetch();

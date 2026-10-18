@@ -16362,19 +16362,8 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "account",
-                "transaction",
-                "transaction_line",
-                "category",
-                "tag",
-                "salary_period",
-                "budget_plan",
-                "attachment",
-                "subscription",
-                "wishlist",
-                "reconciliation_session"
-              ]
+              "minLength": 1,
+              "maxLength": 60
             },
             "in": "query",
             "name": "entityType",
@@ -16392,11 +16381,8 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "create",
-                "update",
-                "delete"
-              ]
+              "minLength": 1,
+              "maxLength": 60
             },
             "in": "query",
             "name": "action",
@@ -16468,19 +16454,8 @@
                           },
                           "entityType": {
                             "type": "string",
-                            "enum": [
-                              "account",
-                              "transaction",
-                              "transaction_line",
-                              "category",
-                              "tag",
-                              "salary_period",
-                              "budget_plan",
-                              "attachment",
-                              "subscription",
-                              "wishlist",
-                              "reconciliation_session"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 60
                           },
                           "entityId": {
                             "type": "integer",
@@ -16489,11 +16464,8 @@
                           },
                           "action": {
                             "type": "string",
-                            "enum": [
-                              "create",
-                              "update",
-                              "delete"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 60
                           },
                           "beforeSnapshot": {
                             "nullable": true,
@@ -16561,19 +16533,8 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "account",
-                "transaction",
-                "transaction_line",
-                "category",
-                "tag",
-                "salary_period",
-                "budget_plan",
-                "attachment",
-                "subscription",
-                "wishlist",
-                "reconciliation_session"
-              ]
+              "minLength": 1,
+              "maxLength": 60
             },
             "in": "path",
             "name": "entityType",
@@ -16600,19 +16561,8 @@
                   "properties": {
                     "entityType": {
                       "type": "string",
-                      "enum": [
-                        "account",
-                        "transaction",
-                        "transaction_line",
-                        "category",
-                        "tag",
-                        "salary_period",
-                        "budget_plan",
-                        "attachment",
-                        "subscription",
-                        "wishlist",
-                        "reconciliation_session"
-                      ]
+                      "minLength": 1,
+                      "maxLength": 60
                     },
                     "entityId": {
                       "type": "integer",
@@ -16631,19 +16581,8 @@
                           },
                           "entityType": {
                             "type": "string",
-                            "enum": [
-                              "account",
-                              "transaction",
-                              "transaction_line",
-                              "category",
-                              "tag",
-                              "salary_period",
-                              "budget_plan",
-                              "attachment",
-                              "subscription",
-                              "wishlist",
-                              "reconciliation_session"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 60
                           },
                           "entityId": {
                             "type": "integer",
@@ -16652,11 +16591,8 @@
                           },
                           "action": {
                             "type": "string",
-                            "enum": [
-                              "create",
-                              "update",
-                              "delete"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 60
                           },
                           "beforeSnapshot": {
                             "nullable": true,
