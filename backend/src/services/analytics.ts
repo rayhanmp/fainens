@@ -1,5 +1,5 @@
 import { personalExpenseLine, personalIncomeLine } from "./reallocation-effects";
-import { eq, sql, and, notInArray } from "drizzle-orm";
+import { asc, eq, sql, and, inArray, notInArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactionLines, transactions, salaryPeriods, budgetPlans } from "../db/schema";
 import {
@@ -360,18 +360,53 @@ export async function getNetWorthTrend(range: NetWorthRange): Promise<{
   series: NetWorthTrendPoint[];
 }> {
   const buckets = buildNetWorthTrendBuckets(range);
-  const series: NetWorthTrendPoint[] = [];
-  for (const b of buckets) {
-    const nw = await calculateNetWorthAsOf(b.asOfMs);
-    series.push({
-      label: b.label,
-      asOfMs: b.asOfMs,
-      netWorth: nw.netWorth,
-      totalAssets: nw.totalAssets,
-      totalLiabilities: nw.totalLiabilities,
-    });
-  }
+  const series = (await netWorthAtEach(buckets.map((bucket) => bucket.asOfMs))).map((point, index) => ({
+    label: buckets[index].label,
+    asOfMs: buckets[index].asOfMs,
+    ...point,
+  }));
   return { range, bucketCount: buckets.length, series };
+}
+
+/**
+ * Net worth at several instants from one read of the ledger: the same lines and sign rules as
+ * calculateNetWorthAsOf (non-draft, reversals restated), summed in date order and sampled at each
+ * instant. Asking per point instead runs two queries per account per point.
+ */
+export async function netWorthAtEach(asOfMs: number[]): Promise<Array<{ netWorth: number; totalAssets: number; totalLiabilities: number }>> {
+  if (asOfMs.length === 0) return [];
+  const lines = await db
+    .select({
+      date: sql<number>`${transactions.date}`,
+      type: accounts.type,
+      debit: transactionLines.debit,
+      credit: transactionLines.credit,
+    })
+    .from(transactionLines)
+    .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
+    .innerJoin(accounts, eq(transactionLines.accountId, accounts.id))
+    .where(and(
+      inArray(accounts.type, ["asset", "liability"]),
+      sql`${transactions.date} <= ${Math.max(...asOfMs)}`,
+      sql`${transactions.status} <> 'draft'`,
+      sql`${transactions.status} <> 'reversed' AND NOT (${transactions.txType} IN ('reversal', 'domain_reversal') AND ${transactions.reversalOfTxId} IS NOT NULL)`,
+    ))
+    .orderBy(asc(transactions.date));
+
+  const order = asOfMs.map((instant, index) => ({ instant, index })).sort((a, b) => a.instant - b.instant);
+  const out: Array<{ netWorth: number; totalAssets: number; totalLiabilities: number }> = new Array(asOfMs.length);
+  let totalAssets = 0;
+  let totalLiabilities = 0;
+  let next = 0;
+  for (const { instant, index } of order) {
+    for (; next < lines.length && Number(lines[next].date) <= instant; next++) {
+      const line = lines[next];
+      if (line.type === "asset") totalAssets += line.debit - line.credit;
+      else totalLiabilities += line.credit - line.debit;
+    }
+    out[index] = { totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+  }
+  return out;
 }
 
 /** A month of burn is 30 days, matching the 90-day window behind "Last 3 months". */

@@ -541,6 +541,19 @@ export function ensureSubscriptionBillingDay(): void {
 }
 
 /**
+ * Every balance, report and ledger guard looks up lines by account or transaction, and links between
+ * transactions. Without these indexes each lookup scans the whole table.
+ */
+export function ensureLedgerIndexes(): void {
+  db.$client.exec(`
+    CREATE INDEX IF NOT EXISTS idx_transaction_line_account_id ON transaction_line(account_id);
+    CREATE INDEX IF NOT EXISTS idx_transaction_line_transaction_id ON transaction_line(transaction_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_linked_tx_id ON "transaction"(linked_tx_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_reversal_of_tx_id ON "transaction"(reversal_of_tx_id);
+  `);
+}
+
+/**
  * Salary periods saved by a server running in UTC stored UTC midnights. The app now runs in WIB,
  * so store the same calendar dates as local midnights, which every period query compares against.
  */
@@ -708,6 +721,7 @@ export async function bootstrapDb() {
   ensureForecastReviewTable();
   ensureTransportRouteTemplateTable();
   ensureSubscriptionBillingDay();
+  ensureLedgerIndexes();
   normalizeLegacyPeriodBoundaries();
   backfillFinalDayPeriodAssignments();
   assertRequiredSchema();
