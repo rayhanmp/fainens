@@ -247,7 +247,7 @@ function DashboardPage() {
   const dailyBudget = budgetOutlook && budgetOutlook.daysRemaining > 0 ? Math.max(0, Math.round(budgetRemaining / budgetOutlook.daysRemaining)) : null;
   const pacing = useMemo(() => (selectedPeriod ? periodPacing(selectedPeriod, dashboardNow) : null), [selectedPeriod, dashboardNow]);
   const budgetPaceRatio = budgetOutlook && periodIsTracked ? budgetUsedRatio(totalActual, totalPlanned) : null;
-  const budgetPace: BudgetPace | null = pacing && periodIsTracked && dashboardPacingShown(preferences) ? { pacing, usedRatio: budgetPaceRatio, dailyBudget } : null;
+  const budgetPace: BudgetPace | null = pacing && periodIsTracked && dashboardPacingShown(preferences) ? { pacing, usedRatio: budgetPaceRatio, dailyBudget, daysRemaining: budgetOutlook?.daysRemaining ?? null } : null;
   const netWorthSeries = netWorthTrendQuery.data?.series ?? [];
   const selectedPeriodEnded = selectedPeriod != null && selectedPeriod.id !== currentPeriod?.id && selectedPeriod.startDate < dashboardNow;
   const copy = heroCopy({

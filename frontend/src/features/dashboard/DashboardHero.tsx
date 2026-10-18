@@ -14,7 +14,7 @@ import type { DashboardMetric } from './view-preferences';
 export type BalanceMetric = { label: string; value: string; cents?: number; to: '/accounts' | '/budget' };
 
 /** Where the selected period stands, drawn under the Budget left metric. */
-export type BudgetPace = { pacing: PeriodPacing; usedRatio: number | null; dailyBudget: number | null };
+export type BudgetPace = { pacing: PeriodPacing; usedRatio: number | null; dailyBudget: number | null; daysRemaining: number | null };
 
 const metricValue = (metric: BalanceMetric) => (metric.cents != null ? <PeekableAmount cents={metric.cents} /> : metric.value);
 export type BalanceMetrics = Record<DashboardMetric, BalanceMetric>;
@@ -56,11 +56,11 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, budgetPace,
         </div>
         <aside className="dashboard-main-balance hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm md:block" aria-label="Financial summary">
           <div className="flex items-center justify-between gap-3"><p className={`${microLabel} text-white/65`}>At a glance</p><div className="flex min-w-0 items-center gap-2">{budgetPace && <BudgetPaceLabel pace={budgetPace} />}<BalanceVisibilityToggle inverted className="h-8 w-8" /></div></div>
-          <Link to={main.to} className="mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{metricValue(main)}</strong></Link>
+          <Link to={main.to} className="group/budget relative mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{metricValue(main)}</strong>{mainMetric === 'budget' && safePaceTip(budgetPace, formatAmount, 'left-0')}</Link>
           {/* The divider doubles as the period pacing bar when there is a tracked budget. */}
-          {budgetPace ? <BudgetPaceBar pace={budgetPace} formatAmount={formatAmount} /> : <div className="mt-3 h-px bg-white/15" />}
+          {budgetPace ? <BudgetPaceBar pace={budgetPace} /> : <div className="mt-3 h-px bg-white/15" />}
           <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
-            {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to}><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong></Link>)}
+            {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to} className="group/budget relative"><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong>{id === 'budget' && safePaceTip(budgetPace, formatAmount, 'left-0')}</Link>)}
             <CommitmentsSummary commitments={commitments} isLoading={isCommitmentsLoading} formatAmount={formatAmount} />
           </div>
         </aside>
@@ -72,17 +72,24 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, budgetPace,
 const paceFill = { ok: 'bg-white', warning: 'bg-amber-400', danger: 'bg-rose-400' } as const;
 const paceText = { ok: 'text-white/85', warning: 'text-amber-300', danger: 'text-rose-300' } as const;
 
-function paceDetail({ pacing, usedRatio, dailyBudget }: BudgetPace, formatAmount: (cents: number) => string): string {
+function paceDetail({ pacing, usedRatio }: BudgetPace): string {
   return [
     `${formatPercent(pacing.elapsedRatio)} of the period elapsed`,
     usedRatio != null ? `${formatPercent(usedRatio)} of the budget used` : null,
-    dailyBudget != null ? `Safe daily pace ${formatAmount(dailyBudget)} per day` : null,
   ].filter(Boolean).join(' · ');
 }
+
 
 const paceTip = 'pointer-events-none absolute top-[calc(100%+0.5rem)] z-40 hidden whitespace-nowrap rounded-xl border border-white/15 bg-[#0a1b33]/95 px-3 py-2 text-left text-[11px] leading-relaxed text-white/80 shadow-xl backdrop-blur-sm';
 /** Keeps a tooltip anchored at a layer's end from leaving the card. */
 const tipAlign = (ratio: number) => (ratio < 0.25 ? 'left-0' : ratio > 0.6 ? 'right-0' : 'left-full -translate-x-1/2');
+
+/** "Safe pace Rp… a day for the remaining N days", shown while hovering the Budget left metric. */
+function safePaceTip(pace: BudgetPace | null, formatAmount: (cents: number) => string, align: string) {
+  if (!pace || pace.dailyBudget == null) return null;
+  const remaining = pace.daysRemaining != null && pace.daysRemaining > 0 ? ` for the remaining ${pace.daysRemaining} day${pace.daysRemaining === 1 ? '' : 's'}` : '';
+  return <span role="tooltip" className={cn(paceTip, align, 'group-hover/budget:block')}>Safe pace <span className="text-white">{formatAmount(pace.dailyBudget)}</span> a day{remaining}</span>;
+}
 
 /** "Day 24 of 30 · 35% budget used" in the card header. */
 function BudgetPaceLabel({ pace }: { pace: BudgetPace }) {
@@ -105,21 +112,20 @@ function BudgetPaceLabel({ pace }: { pace: BudgetPace }) {
  * The card divider as a pacing bar: period time elapsed (faint) under budget used (solid).
  * Each layer explains itself on hover, with a taller invisible hit area since the bar is only 3px.
  */
-function BudgetPaceBar({ pace, formatAmount }: { pace: BudgetPace; formatAmount: (cents: number) => string }) {
-  const { pacing, usedRatio, dailyBudget } = pace;
+function BudgetPaceBar({ pace }: { pace: BudgetPace }) {
+  const { pacing, usedRatio } = pace;
   const tone = usedRatio != null ? paceTone(usedRatio, pacing.elapsedRatio) : 'ok';
   const elapsedText = pacing.status === 'active' ? `${formatPercent(pacing.elapsedRatio)} of the period has passed · day ${pacing.dayIndex} of ${pacing.totalDays}` : pacing.status === 'ended' ? `The period has ended · ${pacing.totalDays} days` : `The period has not started · ${pacing.totalDays} days`;
   const paceNote = tone === 'warning' ? ' · ahead of the calendar' : tone === 'danger' ? ' · over the plan' : '';
-  const layer = 'absolute inset-y-0 left-0 rounded-full before:absolute before:-inset-y-2 before:inset-x-0 before:content-[""]';
+  const layer = 'absolute inset-y-0 left-0 rounded-full transition-shadow before:absolute before:-inset-y-2 before:inset-x-0 before:content-[""] hover:z-10 hover:shadow-[0_0_0_2px_rgba(255,255,255,0.55)]';
   return (
-    <Link to="/budget" aria-label={paceDetail(pace, formatAmount)} className="dashboard-pace-bar relative mt-3 block h-[3px] rounded-full bg-white/15">
+    <Link to="/budget" aria-label={paceDetail(pace)} className="dashboard-pace-bar relative mt-3 block h-[3px] rounded-full bg-white/15">
       <span className={cn('group/elapsed', layer, 'bg-white/35')} style={{ width: `${pacing.elapsedRatio * 100}%` }}>
         <span role="tooltip" className={cn(paceTip, tipAlign(pacing.elapsedRatio), 'group-hover/elapsed:block')}>{elapsedText}</span>
       </span>
       {usedRatio != null && <span className={cn('group/used', layer, paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }}>
         <span role="tooltip" className={cn(paceTip, tipAlign(Math.min(1, usedRatio)), 'group-hover/used:block')}>
           <span className={cn('block', paceText[tone])}>{formatPercent(usedRatio)} of the budget used{paceNote}</span>
-          {dailyBudget != null && <span className="block text-white">Safe pace {formatAmount(dailyBudget)} a day</span>}
         </span>
       </span>}
     </Link>
