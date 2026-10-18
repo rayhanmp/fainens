@@ -32,7 +32,6 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, budgetPace,
   onViewReport: () => void;
 }) {
   const main = metrics[mainMetric];
-  const paceFor = (id: DashboardMetric) => (id === 'budget' && budgetPace ? <BudgetPaceBar pace={budgetPace} formatAmount={formatAmount} /> : null);
   return (
     <section className="relative rounded-3xl bg-[#102b4d] text-white" aria-labelledby="dashboard-hero-title">
       <img src={mountainHero} alt="" className="absolute inset-0 h-full w-full rounded-3xl object-cover object-center" />
@@ -57,11 +56,12 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, budgetPace,
         </div>
         <aside className="dashboard-main-balance hidden rounded-2xl border border-white/20 bg-[#091d35]/55 p-4 backdrop-blur-sm md:block" aria-label="Financial summary">
           <div className="flex items-center justify-between"><p className={`${microLabel} text-white/65`}>At a glance</p><BalanceVisibilityToggle inverted className="h-8 w-8" /></div>
-          <Link to={main.to} className="mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{metricValue(main)}</strong>{paceFor(mainMetric)}</Link>
+          <Link to={main.to} className="mt-3 block"><span className="text-xs text-white/70">{main.label}</span><strong className="mt-0.5 block truncate text-xl">{metricValue(main)}</strong></Link>
           <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/15 pt-3 text-xs">
-            {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to} className="min-w-0"><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong>{paceFor(id)}</Link>)}
+            {(['netWorth', 'budget', 'cash'] as const).filter((id) => id !== mainMetric).map((id) => <Link key={id} to={metrics[id].to}><span className="block text-white/60">{metrics[id].label}</span><strong className="mt-1 block truncate">{metricValue(metrics[id])}</strong></Link>)}
             <CommitmentsSummary commitments={commitments} isLoading={isCommitmentsLoading} formatAmount={formatAmount} />
           </div>
+          {budgetPace && <BudgetPaceBar pace={budgetPace} formatAmount={formatAmount} />}
         </aside>
       </div>
     </section>
@@ -69,27 +69,31 @@ export function DashboardHero({ greeting, copy, mainMetric, metrics, budgetPace,
 }
 
 const paceFill = { ok: 'bg-white', warning: 'bg-amber-400', danger: 'bg-rose-400' } as const;
-const paceText = { ok: 'text-white/80', warning: 'text-amber-300', danger: 'text-rose-300' } as const;
+const paceText = { ok: 'text-white/85', warning: 'text-amber-300', danger: 'text-rose-300' } as const;
 
-/** Time elapsed (faint) and budget used (solid) on one hairline bar, with a tick for today. */
+/** Period time elapsed (faint) and budget used (solid) on one hairline bar across the summary, with a tick for today. */
 function BudgetPaceBar({ pace, formatAmount }: { pace: BudgetPace; formatAmount: (cents: number) => string }) {
   const { pacing, usedRatio, dailyBudget } = pace;
   const tone = usedRatio != null ? paceTone(usedRatio, pacing.elapsedRatio) : 'ok';
-  const dayLabel = pacing.status === 'active' ? `Day ${pacing.dayIndex} of ${pacing.totalDays}` : pacing.status === 'ended' ? 'Period ended' : 'Not started';
+  const elapsed = formatPercent(pacing.elapsedRatio);
+  const dayLabel = pacing.status === 'active' ? `Day ${pacing.dayIndex} of ${pacing.totalDays} · ${elapsed} elapsed` : pacing.status === 'ended' ? `Period ended · ${pacing.totalDays} days` : `Not started · ${pacing.totalDays} days`;
   const detail = [
-    `${formatPercent(pacing.elapsedRatio)} of the period elapsed`,
+    `${elapsed} of the period elapsed`,
     usedRatio != null ? `${formatPercent(usedRatio)} of the budget used` : null,
     dailyBudget != null ? `Safe daily pace ${formatAmount(dailyBudget)} per day` : null,
   ].filter(Boolean).join(' · ');
   return (
-    <span className="mt-1.5 block" title={detail}>
-      <span className="relative block h-1 rounded-full bg-white/15" role="img" aria-label={detail}>
+    <Link to="/budget" className="mt-3 block" title={detail}>
+      <span className="flex items-baseline justify-between gap-3 text-[11px] leading-none text-white/65">
+        <span className="truncate">{dayLabel}</span>
+        {usedRatio != null && <span className={cn('shrink-0 font-semibold', paceText[tone])}>{formatPercent(usedRatio)} of budget used</span>}
+      </span>
+      <span className="relative mt-1.5 block h-1 rounded-full bg-white/15" role="img" aria-label={detail}>
         <span className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${pacing.elapsedRatio * 100}%` }} />
         {usedRatio != null && <span className={cn('absolute inset-y-0 left-0 rounded-full', paceFill[tone])} style={{ width: `${Math.min(1, usedRatio) * 100}%` }} />}
         {pacing.status === 'active' && <span className="absolute -inset-y-0.5 w-px -translate-x-1/2 bg-white" style={{ left: `${pacing.elapsedRatio * 100}%` }} />}
       </span>
-      <span className="mt-1 block truncate text-[10px] leading-none text-white/60">{dayLabel}{usedRatio != null && <> · <span className={paceText[tone]}>{formatPercent(usedRatio)} used</span></>}</span>
-    </span>
+    </Link>
   );
 }
 
