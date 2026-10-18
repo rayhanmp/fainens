@@ -8,20 +8,7 @@ export type DashboardViewPreferences = {
   sectionOrder: DashboardSection[];
   hiddenSections: DashboardSection[];
   sectionSizes: Partial<Record<DashboardSection, DashboardSectionSize>>;
-  /** The period pacing row in Financial pulse; absent means shown, so presets and older saves keep it. */
-  showPacing?: boolean;
 };
-
-export function dashboardPacingShown(preferences: Pick<DashboardViewPreferences, 'showPacing'>): boolean {
-  return preferences.showPacing !== false;
-}
-
-export function toggleDashboardPacing(preferences: DashboardViewPreferences): DashboardViewPreferences {
-  const next = { ...preferences };
-  if (dashboardPacingShown(preferences)) next.showPacing = false;
-  else delete next.showPacing;
-  return next;
-}
 
 export const dashboardSectionLabels: Record<DashboardSection, string> = {
   budget: 'Budget health', payments: 'Upcoming payments', activity: 'Recent activity',
@@ -55,7 +42,7 @@ export function parseDashboardViewPreferences(raw: string | null): DashboardView
   try {
     const saved: unknown = JSON.parse(raw);
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return defaults;
-    const { mainMetric, sectionOrder, hiddenSections, sectionSizes, showPacing } = saved as Record<string, unknown>;
+    const { mainMetric, sectionOrder, hiddenSections, sectionSizes } = saved as Record<string, unknown>;
     const order = Array.isArray(sectionOrder) ? [...new Set(sectionOrder.filter(isSection))] : defaults.sectionOrder;
     const hidden = Array.isArray(hiddenSections) ? [...new Set(hiddenSections.filter(isSection))] : defaults.hiddenSections;
     const sizes: DashboardViewPreferences['sectionSizes'] = {};
@@ -70,7 +57,6 @@ export function parseDashboardViewPreferences(raw: string | null): DashboardView
       sectionOrder: [...order, ...dashboardSectionIds.filter(id => !order.includes(id))],
       hiddenSections: hidden.length === dashboardSectionIds.length ? hidden.filter(id => id !== 'activity') : hidden,
       sectionSizes: sizes,
-      ...(showPacing === false ? { showPacing: false } : {}),
     };
   } catch {
     return defaults;

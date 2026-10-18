@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Activity, BarChart3, CalendarClock, Check, ChevronDown, Gauge, List, PencilLine, PieChart, Plus, RotateCcw, SlidersHorizontal, TrendingUp, X } from 'lucide-react';
-import { dashboardPacingShown, dashboardPreset, dashboardSectionLabels, selectedDashboardPreset, toggleDashboardPacing, type DashboardMetric, type DashboardPreset, type DashboardViewPreferences } from './view-preferences';
+import { Activity, BarChart3, CalendarClock, Check, ChevronDown, List, PencilLine, PieChart, Plus, RotateCcw, SlidersHorizontal, TrendingUp, X } from 'lucide-react';
+import { dashboardPreset, dashboardSectionLabels, selectedDashboardPreset, type DashboardMetric, type DashboardPreset, type DashboardViewPreferences } from './view-preferences';
 
 const panelIcons = { budget: PieChart, payments: CalendarClock, activity: List, netWorth: TrendingUp, spending: BarChart3, pulse: Activity };
 
@@ -33,7 +33,7 @@ export function DashboardViewMenu({ preferences, onChange, preset, onEditLayout 
       <header><h2>Customize dashboard</h2><button type="button" onClick={close} aria-label="Close dashboard view options"><X size={16} aria-hidden /></button></header>
       <div className="dashboard-view-fields">
       <label className="dashboard-view-field">Preset
-        <select value={preset ?? selectedDashboardPreset(preferences)} onChange={event => onChange({ ...dashboardPreset(event.target.value as DashboardPreset), ...(dashboardPacingShown(preferences) ? {} : { showPacing: false }) })}>
+        <select value={preset ?? selectedDashboardPreset(preferences)} onChange={event => onChange(dashboardPreset(event.target.value as DashboardPreset))}>
           <option value="original">Original dashboard</option><option value="everyday">Everyday</option><option value="overview">Money overview</option><option value="minimal">Minimal</option><option value="custom" disabled>Custom</option>
         </select>
       </label>
@@ -52,10 +52,6 @@ export function DashboardViewMenu({ preferences, onChange, preset, onEditLayout 
           <Icon size={16} aria-hidden /><span>{dashboardSectionLabels[id]}</span><Status size={13} className="dashboard-panel-option-status" aria-hidden />
         </button>;
       })}</div>
-      <div className="dashboard-view-switch" title="Day count and budget pace on the summary card divider (desktop only)">
-        <span><Gauge size={15} aria-hidden /><strong id="dashboard-pacing-label">Budget pacing</strong></span>
-        <button type="button" role="switch" aria-checked={dashboardPacingShown(preferences)} aria-labelledby="dashboard-pacing-label" onClick={() => onChange(toggleDashboardPacing(preferences))}><span /></button>
-      </div>
       <footer><button type="button" className="dashboard-edit-action" onClick={() => { close(); onEditLayout(); }}><PencilLine size={14} aria-hidden />Edit layout</button><button type="button" className="dashboard-reset-action" title="Restore the original dashboard" onClick={() => onChange(dashboardPreset('original'))}><RotateCcw size={14} aria-hidden />Reset view</button><button type="button" className="dashboard-view-done" onClick={close}>Done</button></footer>
     </div>
   </details>;

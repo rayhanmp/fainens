@@ -48,7 +48,7 @@ import { buildAttentionItems, isTrackedCoverage } from '../features/dashboard/at
 import { budgetUsedRatio, periodPacing } from '../features/dashboard/pacing';
 import { upcomingCommitments } from '../features/dashboard/commitments';
 import { fallbackName, heroCopy, percentChange, timeOfDayGreeting } from '../features/dashboard/hero-copy';
-import { dashboardPacingShown, mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections, type DashboardSection } from '../features/dashboard/view-preferences';
+import { mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections, type DashboardSection } from '../features/dashboard/view-preferences';
 import { useDashboardViewPreferences } from '../features/dashboard/use-view-preferences';
 import { adjacentPeriodId, swipeStep, type PeriodStep } from '../features/dashboard/navigation';
 import { useDashboardShortcuts } from '../features/dashboard/use-dashboard-shortcuts';
@@ -245,7 +245,7 @@ function DashboardPage() {
   const dailyBudget = budgetOutlook && budgetOutlook.daysRemaining > 0 ? Math.max(0, Math.round(budgetRemaining / budgetOutlook.daysRemaining)) : null;
   const pacing = useMemo(() => (selectedPeriod ? periodPacing(selectedPeriod, dashboardNow) : null), [selectedPeriod, dashboardNow]);
   const budgetPaceRatio = budgetOutlook && periodIsTracked ? budgetUsedRatio(totalActual, totalPlanned) : null;
-  const budgetPace: BudgetPace | null = pacing && periodIsTracked && dashboardPacingShown(preferences) ? { pacing, usedRatio: budgetPaceRatio, dailyBudget, daysRemaining: budgetOutlook?.daysRemaining ?? null } : null;
+  const budgetPace: BudgetPace | null = pacing && periodIsTracked ? { pacing, usedRatio: budgetPaceRatio, dailyBudget, daysRemaining: budgetOutlook?.daysRemaining ?? null } : null;
   const netWorthSeries = netWorthTrendQuery.data?.series ?? [];
   const selectedPeriodEnded = selectedPeriod != null && selectedPeriod.id !== currentPeriod?.id && selectedPeriod.startDate < dashboardNow;
   const copy = heroCopy({
