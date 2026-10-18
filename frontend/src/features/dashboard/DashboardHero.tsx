@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { ArrowRight, BarChart3, Plus } from 'lucide-react';
 import { BalanceVisibilityToggle } from '../../components/ui/BalanceVisibilityToggle';
 import { cn, formatDate } from '../../lib/utils';
-import { microLabel, tooltipSurface } from './panel-styles';
+import { microLabel } from './panel-styles';
 import mountainHero from '../../assets/dashboard-mountain-hero.png';
 import type { UpcomingCommitments } from './commitments';
 import type { HeroCopy } from './hero-copy';
@@ -140,17 +140,17 @@ function CommitmentsSummary({ commitments, isLoading, formatAmount }: { commitme
         <span className="block truncate text-white/60">Due · 30d</span>
         <strong className="mt-1 block truncate">{isLoading ? 'Loading…' : commitments.count > 0 ? <PeekableAmount cents={commitments.total} /> : 'None'}</strong>
       </button>
-      <div id="upcoming-commitments-tip" role="tooltip" className={cn(tooltipSurface, 'bottom-[calc(100%+0.75rem)] right-0 max-h-60 overflow-y-auto')}>
-        <p className="font-bold text-[var(--ref-on-surface)]">Upcoming commitments</p>
-        {commitments.count === 0 ? <p className="mt-1 text-[11px] leading-relaxed text-[var(--ref-on-surface-variant)]">No subscriptions, PayLater, or borrowed loans due in the next 30 days.</p> : <div className="mt-2 space-y-1.5 text-[11px] text-[var(--ref-on-surface-variant)]">
+      {/* Same dark, compact surface as the pacing and Budget left tooltips; sits above the cell since it is at the card's bottom edge. */}
+      <div id="upcoming-commitments-tip" role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] right-0 z-40 hidden max-h-60 w-60 overflow-y-auto rounded-xl border border-white/15 bg-[#0a1b33]/95 px-3 py-2 text-left text-[11px] leading-relaxed text-white/80 shadow-xl backdrop-blur-sm group-hover:block group-focus-within:block">
+        {commitments.count === 0 ? <p>No subscriptions, PayLater or borrowed loans due in the next 30 days.</p> : <div className="space-y-1">
           {subscriptions.length > 0 && <>
-            <p className="flex justify-between gap-3"><span>Subscriptions · {subscriptions.length}</span><strong className="text-[var(--ref-on-surface)]">{formatAmount(commitments.subscriptionTotal)}</strong></p>
-            <div className="mt-2 space-y-1 border-t border-[var(--color-border)] pt-2">
-              {subscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate text-[var(--ref-on-surface-variant)]">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-[var(--ref-outline)]">· {formatDate(subscription.nextRenewalAt)}</span></span><strong className="shrink-0 text-[var(--ref-on-surface)]">{formatAmount(subscription.amount)}</strong></p>)}
+            <p className="flex justify-between gap-3"><span>Subscriptions · {subscriptions.length}</span><span className="text-white">{formatAmount(commitments.subscriptionTotal)}</span></p>
+            <div className="space-y-0.5 pb-1">
+              {subscriptions.map((subscription) => <p key={subscription.id} className="flex items-center justify-between gap-3 text-white/60"><span className="flex min-w-0 items-center gap-1"><span className="min-w-0 truncate">{subscription.name}</span><span className="shrink-0 whitespace-nowrap text-white/40">· {formatDate(subscription.nextRenewalAt)}</span></span><span className="shrink-0">{formatAmount(subscription.amount)}</span></p>)}
             </div>
           </>}
-          {payLater.length > 0 && <p className="flex justify-between gap-3"><span>PayLater · {payLater.length}</span><strong className="text-[var(--ref-on-surface)]">{formatAmount(commitments.payLaterTotal)}</strong></p>}
-          {loans.length > 0 && <p className="flex justify-between gap-3"><span>Borrowed loans · {loans.length}</span><strong className="text-[var(--ref-on-surface)]">{formatAmount(commitments.loanTotal)}</strong></p>}
+          {payLater.length > 0 && <p className="flex justify-between gap-3"><span>PayLater · {payLater.length}</span><span className="text-white">{formatAmount(commitments.payLaterTotal)}</span></p>}
+          {loans.length > 0 && <p className="flex justify-between gap-3"><span>Borrowed loans · {loans.length}</span><span className="text-white">{formatAmount(commitments.loanTotal)}</span></p>}
         </div>}
       </div>
     </div>
