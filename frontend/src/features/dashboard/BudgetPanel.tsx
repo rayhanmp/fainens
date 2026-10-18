@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type { BudgetOutlook, BudgetPlan } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -6,6 +6,7 @@ import { PanelLink } from './PanelParts';
 import { panelCard, panelSubtitle, panelTitle, tooltipSurface } from './panel-styles';
 import { planRowsFor, riskCounts, type PlanRow } from './budget-rows';
 import { squarify } from './budget-treemap';
+import { fitTileLabel, tileValues } from './budget-tile-fit';
 
 const TILE_GAP = 4;
 const clampRatio = (value: number) => Math.max(0, Math.min(1, value));
@@ -35,21 +36,11 @@ function useElementSize() {
   return [ref, size] as const;
 }
 
-type LabelLevel = 'full' | 'name' | 'none';
-/** Height of the label block per level, so lines and the fill edge can tell when they would cross it. */
-const LABEL_ZONE: Record<LabelLevel, number> = { full: 84, name: 34, none: 0 };
-
-/** Labels wrap instead of hiding; only a sliver too short for a line of text shows nothing. */
-function labelLevel(width: number, height: number): LabelLevel {
-  if (width >= 56 && height >= 60) return 'full';
-  if (width >= 40 && height >= 28) return 'name';
-  return 'none';
+/** Only a sliver too small for a line of text shows no label; anything bigger is fitted by measurement. */
+function hasRoomForLabel(width: number, height: number): boolean {
+  return width >= 40 && height >= 28;
 }
 
-/** Height of the frosted strip at the top of the glass that keeps the label readable when liquid rises behind it. */
-function headerHeight(level: LabelLevel, width: number): number {
-  return level === 'none' ? 0 : level === 'name' ? LABEL_ZONE.name : width < 120 ? 94 : 78;
-}
 
 /** Keep the forecast dashes clear of the liquid's surface, where the wave would swallow them. */
 function forecastOffset(forecast: number, used: number, height: number): number {
@@ -166,26 +157,23 @@ function Tile({ row, tile, mapWidth, note, formatAmount }: {
   const forecastText = formatForecastRange(row.projectedLow, row.projectedHigh, row.projected, formatAmount);
   const width = Math.max(0, tile.width - TILE_GAP);
   const height = Math.max(0, tile.height - TILE_GAP);
-  const level = labelLevel(width, height);
+  const showLabel = hasRoomForLabel(width, height);
   const Icon = row.tone === 'danger' ? CircleAlert : TriangleAlert;
   const status = row.tone === 'danger' ? 'over plan' : row.tone === 'warning' ? 'at risk' : null;
   const summary = `${row.name}${status ? ` (${status})` : ''}: ${hasPlan
     ? `${formatAmount(row.actual)} of ${formatAmount(row.planned)}${forecastText ? `, likely ${forecastText} by period end` : ''}`
     : `${formatAmount(row.actual)} recorded, no plan set`}`;
-  const header = headerHeight(level, width);
   const headline = hasPlan ? percentOf(row.actual, row.planned) : formatAmount(row.actual);
   const amountText = hasPlan ? `${formatAmount(row.actual)} of ${formatAmount(row.planned)}` : null;
-  const style: CSSProperties = { left: tile.x + TILE_GAP / 2, top: tile.y + TILE_GAP / 2, width, height, '--header': `${header}px` } as CSSProperties;
-  const labelContent = (
-    <span className="dashboard-budget-tile-text">
-      <b><span className="dashboard-budget-tile-name" lang="en">{row.name}</span></b>
-      {level === 'full' && <em>{headline}</em>}
-      {level === 'full' && amountText && <small>{amountText}</small>}
-    </span>
-  );
+  const style: CSSProperties = { left: tile.x + TILE_GAP / 2, top: tile.y + TILE_GAP / 2, width, height };
+  const tileRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (tileRef.current && textRef.current) fitTileLabel(tileRef.current, textRef.current, height, used);
+  }, [amountText, headline, height, row.name, used, width]);
   const tooltipFromRight = tile.x + 240 > mapWidth;
   return (
-    <div className="dashboard-budget-tile group" role="listitem" data-tone={row.tone} data-level={level} data-narrow={width < 120} style={style} tabIndex={0} aria-label={summary}>
+    <div ref={tileRef} className="dashboard-budget-tile group" role="listitem" data-tone={row.tone} data-narrow={width < 120} style={style} tabIndex={0} aria-label={summary}>
       {/* The liquid sits behind the glass and can fill the whole tile. */}
       <span className="dashboard-budget-tile-liquid" aria-hidden>
         <i className="dashboard-budget-tile-fill" data-empty={used <= 0} style={{ height: `${used * 100}%` }}><Wave /></i>
@@ -195,11 +183,12 @@ function Tile({ row, tile, mapWidth, note, formatAmount }: {
       </span>
       {/* The likely-finish mark is drawn on top of the glass so it stays crisp. */}
       {forecast != null && forecast > used && forecast < 1 && <i className="dashboard-budget-tile-forecast" aria-hidden style={{ bottom: `${forecastOffset(forecast, used, height) * 100}%` }} />}
-      {/* The label is drawn twice and clipped at the waterline: ink above the liquid, white inside it. */}
-      {level !== 'none' && <>
-        <span className="dashboard-budget-tile-label" aria-hidden style={{ clipPath: `inset(0 0 ${used * 100}% 0)` }}>{labelContent}</span>
-        <span className="dashboard-budget-tile-label" data-on-liquid aria-hidden style={{ clipPath: `inset(${(1 - used) * 100}% 0 0 0)` }}>{labelContent}</span>
-      </>}
+      {/* Lines are fitted and coloured after layout by fitTileLabel. */}
+      {showLabel && <span className="dashboard-budget-tile-label" aria-hidden><span ref={textRef} className="dashboard-budget-tile-text">
+        <b><span className="dashboard-budget-tile-name" lang="en">{row.name}</span></b>
+        <em>{headline}</em>
+        {amountText && <small>{amountText}</small>}
+      </span></span>}
       {/* Hover adds only what the tile does not already show: the budget note, or else the likely finish. */}
       {(note || forecastText || row.scheduledRemaining > 0 || status) && <div className={cn(tooltipSurface, 'top-full mt-1 w-56', tooltipFromRight ? 'right-0' : 'left-0')} role="tooltip">
         <p className="flex items-center gap-1.5 font-bold">{row.name}{status && <span className="dashboard-budget-status" data-tone={row.tone}><Icon size={12} strokeWidth={2.25} aria-hidden />{status === 'over plan' ? 'Over plan' : 'At risk'}</span>}</p>
@@ -255,7 +244,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
   };
   const onPointerLeave = (event: PointerEvent<HTMLDivElement>) => leave(event.currentTarget);
   const tiles = useMemo(
-    () => squarify(planRows.map((row) => ({ key: row.key, value: row.planned > 0 ? row.planned : row.actual })), mapSize.width, mapSize.height),
+    () => squarify(tileValues(planRows.map((row) => ({ key: row.key, value: row.planned > 0 ? row.planned : row.actual }))), mapSize.width, mapSize.height),
     [mapSize.height, mapSize.width, planRows],
   );
   const rowsByKey = useMemo(() => new Map(planRows.map((row) => [row.key, row])), [planRows]);
@@ -282,7 +271,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
           : planRows.length === 0
             ? <div className="dashboard-budget-notice">No categorized spending yet. Add transactions or set a budget to start planning.</div>
             : <>
-              <div ref={mapRef} className="dashboard-budget-map mt-4" role="list" aria-label="Budget by category, tile size is the plan" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
+              <div ref={mapRef} className="dashboard-budget-map mt-4" role="list" aria-label="Budget by category, tile size follows the plan" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
                 {tiles.map((tile) => {
                   const row = rowsByKey.get(tile.key);
                   return row ? <Tile key={tile.key} row={row} tile={tile} mapWidth={mapSize.width} note={notesByKey.get(tile.key) ?? null} formatAmount={formatAmount} /> : null;
@@ -291,7 +280,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
               <div className="dashboard-budget-legend">
                 <span aria-hidden><i data-key="spent" />Spent of plan</span>
                 {currentOutlook?.total.projectedAmount != null && <span aria-hidden><i data-key="forecast" />Likely finish</span>}
-                <span aria-hidden><i data-key="tile" />Tile size is the plan</span>
+                <span aria-hidden><i data-key="tile" />Tile size follows the plan</span>
                 {dailyBudget != null && daysLeft != null && daysLeft > 0 && <span className="dashboard-budget-legend-note">Safe pace {formatAmount(dailyBudget)} a day · {daysLeft} day{daysLeft === 1 ? '' : 's'} left</span>}
               </div>
             </>}
