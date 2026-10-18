@@ -16,6 +16,7 @@ import {
 import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
 import { getPeriodCoverage } from "../services/period-coverage";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 // Query parameter schemas
 const periodQuerySchema = z.object({
@@ -51,6 +52,7 @@ const incomeStatementSchema = z.object({
   totalRevenue: z.number(),
   totalExpenses: z.number(),
   netIncome: z.number(),
+  reportingBasis: z.enum(["ledger", "personal"]).optional(),
   periodName: z.string().optional(),
   startDate: z.number().optional(),
   endDate: z.number().optional(),
@@ -92,6 +94,7 @@ const spendingBreakdownSchema = z.object({ category: z.string(), accountId: z.nu
 const spendingReportSchema = z.object({ breakdown: z.array(spendingBreakdownSchema), total: z.number(), generatedAt: z.number().int().nonnegative(), isTemporary: z.boolean(), coverage: reportCoverageSchema }).passthrough();
 const monthlyReportSchema = z.object({
   revision: z.number().int(),
+  reportingBasis: z.literal("personal"),
   period: z.object({ id: z.number().int(), name: z.string(), startDate: z.number(), endDate: z.number() }).passthrough(),
   incomeStatement: incomeStatementSchema,
   balanceSheet: balanceSheetSchema,
@@ -116,10 +119,8 @@ const reportTypeParamsSchema = z.object({ reportType: z.enum(["income-statement"
 const trendQuerySchema = z.object({ periodCount: z.coerce.number().int().min(1).max(24).optional() });
 const reportExportQuerySchema = periodQuerySchema.extend({ asOfDate: z.coerce.number().int().nonnegative().optional() });
 
-const DAY_MS = 86_400_000;
-function inclusiveEnd(timestamp: number): number {
-  return timestamp % DAY_MS === 0 ? timestamp + DAY_MS - 1 : timestamp;
-}
+/** A period's endDate is the start of its last local day; reports run through the end of that day. */
+const inclusiveEnd = inclusivePeriodEnd;
 
 function reportError(fastify: FastifyInstance, reply: any, err: unknown, fallback: string) {
   if (err instanceof z.ZodError) {
@@ -201,18 +202,18 @@ export default async function (fastify: FastifyInstance) {
         query.startDate,
         query.endDate
       );
-      let coverageStart = query.startDate ?? 0;
-      let coverageEnd = query.endDate ?? Date.now();
+      let coverageStart = query.startDate == null ? 0 : inclusivePeriodStart(query.startDate);
+      let coverageEnd = query.endDate == null ? Date.now() : inclusiveEnd(query.endDate);
       if (query.periodId != null) {
         const [period] = await db.select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
           .from(salaryPeriods).where(eq(salaryPeriods.id, query.periodId)).limit(1);
         if (period) {
-          coverageStart = period.startDate;
+          coverageStart = inclusivePeriodStart(period.startDate);
           coverageEnd = inclusiveEnd(period.endDate);
         }
       }
       const coverage = await getPeriodCoverage(coverageStart, coverageEnd);
-      const reportStatus = getReportStatus(inclusiveEnd(coverageEnd));
+      const reportStatus = getReportStatus(coverageEnd);
       return {
         breakdown,
         total: breakdown.reduce((sum, b) => sum + b.amount, 0),
@@ -239,14 +240,19 @@ export default async function (fastify: FastifyInstance) {
       const [period] = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
         .from(salaryPeriods).where(eq(salaryPeriods.id, periodId)).limit(1);
       if (!period) return reply.code(404).send({ error: "Period not found" });
+      const periodStartMs = inclusivePeriodStart(period.startDate);
+      const periodEndMs = inclusiveEnd(period.endDate);
+      // Income and expense figures share the dashboard's personal basis
+      // (linked reallocations applied), so the income statement, income by
+      // source, expenses by category and transactions all agree.
       const [facts, incomeStatement, balanceSheet, cashFlow, budgets, revision, coverage] = await Promise.all([
-        getFinancialFacts({ startMs: period.startDate, endMs: inclusiveEnd(period.endDate), asOfMs: inclusiveEnd(period.endDate), periodId }),
-        generateIncomeStatement(periodId),
-        generateBalanceSheet(inclusiveEnd(period.endDate)),
+        getFinancialFacts({ startMs: periodStartMs, endMs: periodEndMs, asOfMs: periodEndMs, periodId }),
+        generateIncomeStatement(periodId, undefined, undefined, { reportingBasis: "personal" }),
+        generateBalanceSheet(periodEndMs),
         generateCashFlowStatement(periodId),
-        getBudgetFacts(periodId),
+        getBudgetFacts(periodId, generatedAt),
         getFinancialRevision(),
-        getPeriodCoverage(period.startDate, inclusiveEnd(period.endDate)),
+        getPeriodCoverage(periodStartMs, periodEndMs),
       ]);
       const transactionRows = facts.rows
         .map((row) => {
@@ -270,6 +276,7 @@ export default async function (fastify: FastifyInstance) {
       const totalOutgoing = cashFlowAmounts.reduce((sum, amount) => sum + (amount < 0 ? Math.abs(amount) : 0), 0);
       const reportBody = {
         revision,
+        reportingBasis: "personal" as const,
         period,
         incomeStatement,
         balanceSheet,
@@ -289,13 +296,13 @@ export default async function (fastify: FastifyInstance) {
         })),
         transactions: transactionRows,
         coverage,
-        provenance: { source: "canonical-financial-facts", asOfMs: inclusiveEnd(period.endDate), includesDrafts: false },
+        provenance: { source: "canonical-financial-facts", asOfMs: periodEndMs, includesDrafts: false },
       };
       const reportHash = createHash("sha256").update(JSON.stringify(reportBody)).digest("hex");
       return {
         ...reportBody,
         reportHash,
-        ...getReportStatus(inclusiveEnd(period.endDate), generatedAt),
+        ...getReportStatus(periodEndMs, generatedAt),
       };
     } catch (err) {
       return reportError(fastify, reply, err, "Failed to generate monthly report");

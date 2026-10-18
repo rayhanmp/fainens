@@ -3,8 +3,7 @@ import { sql } from "drizzle-orm";
 import { personalExpenseLine, personalIncomeLine, personalExpenseAdjustment } from "./reallocation-effects";
 import { db } from "../db/client";
 import { assignedPeriodMembership } from "./period-locking";
-
-const DAY_MS = 86_400_000;
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 export interface FinancialFactRow {
   id: number;
@@ -148,7 +147,23 @@ export async function getFinancialFacts(input: {
   };
 }
 
-export async function getBudgetFacts(periodId: number): Promise<Array<{
+/**
+ * The window budget actuals are measured over: the whole period, counting
+ * activity recorded up to `now` (future-dated entries count once their date
+ * arrives). The budget list and the budget outlook both use it, so the same
+ * period always shows the same actual spending.
+ */
+export function budgetActualsWindow(period: { startDate: number; endDate: number }, now: number = Date.now()): {
+  startMs: number;
+  endMs: number;
+  asOfMs: number;
+} {
+  const startMs = inclusivePeriodStart(Number(period.startDate));
+  const endMs = inclusivePeriodEnd(Number(period.endDate));
+  return { startMs, endMs, asOfMs: Math.min(now, endMs) };
+}
+
+export async function getBudgetFacts(periodId: number, now: number = Date.now()): Promise<Array<{
   categoryId: number;
   category: string;
   plannedCents: number;
@@ -164,7 +179,7 @@ export async function getBudgetFacts(periodId: number): Promise<Array<{
   `) as unknown as Array<Record<string, unknown>>;
   if (plans.length === 0) return [];
   const facts = await getFinancialFacts({
-    startMs: Number(plans[0].start_ms), endMs: Number(plans[0].end_ms) + DAY_MS - 1, periodId,
+    ...budgetActualsWindow({ startDate: Number(plans[0].start_ms), endDate: Number(plans[0].end_ms) }, now), periodId,
   });
   const spentByCategory = new Map(facts.byCategory.map((row) => [row.categoryId, row.spentCents]));
   return plans.map((plan) => ({

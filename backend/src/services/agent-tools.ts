@@ -1750,7 +1750,7 @@ export async function forecastCashPositionTool(input: unknown) {
   const liquidAccounts = await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true), eq(accounts.liquidityClass, "cash_equivalent")));
   const liquidBalanceCents = (await Promise.all(liquidAccounts.map((account) => computeAccountBalanceAsOf(account.id, Date.now())))).reduce((sum, balance) => sum + balance, 0);
   const burn = await calculateBurnRate();
-  return { horizonMonths, currentCashCents: liquidBalanceCents, monthlyBurnCents: burn.grossBurnRate, projectedCashCents: liquidBalanceCents - burn.grossBurnRate * horizonMonths, assumptions: ["Uses active asset account balances as cash; use the runway/account-health tools for liquidity-class detail.", "Assumes recorded average operating burn continues; skipped/unknown periods are not treated as zero activity."], writesPerformed: false };
+  return { horizonMonths, currentCashCents: liquidBalanceCents, monthlyBurnCents: burn.grossBurnRate, projectedCashCents: liquidBalanceCents - burn.grossBurnRate * horizonMonths, assumptions: ["Uses active asset account balances as cash; use the runway/account-health tools for liquidity-class detail.", `Assumes the average monthly spending of the last 90 days continues (${burn.period}), divided by the months of tracked history with a one-month minimum; periods marked skipped are left out.`], writesPerformed: false };
 }
 
 export async function getAccountHealthTool(input: unknown) {

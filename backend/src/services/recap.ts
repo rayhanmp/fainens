@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { salaryPeriods } from "../db/schema";
 import { getFinancialFacts, type FinancialFacts } from "./financial-facts";
 import { inclusivePeriodEnd } from "./period-locking";
+import { localDayKey, startOfLocalDay } from "../lib/calendar";
 
 export class RecapPeriodError extends Error {
   constructor(message: string, public readonly status: 400 | 404) { super(message); }
@@ -15,7 +16,8 @@ async function recapPeriods() {
 export function summarizeRecap(facts: FinancialFacts) {
   const expenses = facts.rows.filter(row => row.expenseCents > 0);
   const activity = facts.rows.filter(row => row.expenseCents !== 0 || row.incomeCents !== 0);
-  const days = new Set(expenses.map(row => new Date(row.date).toISOString().slice(0, 10)));
+  // Spending days are local (app time zone) calendar days, not UTC days.
+  const days = new Set(expenses.map(row => localDayKey(row.date)));
   const largest = [...expenses].sort((a, b) => b.expenseCents - a.expenseCents || a.id - b.id)[0];
   const amounts = expenses.map(row => row.expenseCents).sort((a, b) => a - b);
   const purchaseTotal = amounts.reduce((sum, amount) => sum + amount, 0);
@@ -38,7 +40,7 @@ export function summarizeRecap(facts: FinancialFacts) {
   const daily = new Map<number, { amount: number; purchaseCount: number }>();
   for (const row of facts.rows) {
     if (!row.expenseCents) continue;
-    const date = Math.floor(row.date / 86_400_000) * 86_400_000;
+    const date = startOfLocalDay(row.date);
     const day = daily.get(date) ?? { amount: 0, purchaseCount: 0 };
     day.amount += row.expenseCents;
     if (row.expenseCents > 0) day.purchaseCount += 1;

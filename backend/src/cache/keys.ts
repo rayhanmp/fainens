@@ -24,8 +24,9 @@ export const PREFIXES = {
 // Analytics sub-keys
 export const ANALYTICS_KEYS = {
   NET_WORTH: "net_worth",
-  BURN_RATE: "burn_rate",
-  RUNWAY: "runway",
+  // v2: burn rate divides by tracked months and excludes reversals; don't serve values cached before that.
+  BURN_RATE: "burn_rate_v2",
+  RUNWAY: "runway_v2",
   LIFESTYLE_CREEP: "lifestyle_creep",
   TRIAL_BALANCE: "trial_balance",
   OPPORTUNITY_COST: "opportunity_cost",

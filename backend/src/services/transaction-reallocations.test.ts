@@ -179,7 +179,11 @@ describe("transaction reallocations", () => {
     expect(await precomputePeriodSummary(1)).toMatchObject({ income: 0, expenses: 0 });
     expect(await precomputePeriodSummary(2)).toMatchObject({ income: 0, expenses: 100000 });
     expect((await getSpendingTrend(30, 2)).totalSpent).toBe(100000);
-    expect((await calculateBurnRate(3)).grossBurnRate).toBe(Math.round(100000 / 3));
+    // Burn divides by the months of tracked history (here about 1.2), not always by 3.
+    const burn = await calculateBurnRate(3);
+    // divisorMonths is reported rounded to two decimals, so allow a few hundred rupiah of slack.
+    expect(burn.divisorMonths).toBeLessThan(3);
+    expect(Math.abs(burn.grossBurnRate - 100000 / burn.divisorMonths)).toBeLessThan(500);
   });
 
   it("requires authentication and validates the link request", async () => {

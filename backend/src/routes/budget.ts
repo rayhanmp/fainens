@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 const DAY_MS = 86_400_000;
 import { auditLogs, budgetPlans, budgetTemplates, budgetTemplateItems, categories, forecastPurchaseReviews, salaryPeriods } from "../db/schema";
@@ -187,13 +188,13 @@ export default async function (fastify: FastifyInstance) {
         .limit(1);
 
       const coverage = period
-        ? await getPeriodCoverage(period.startDate, period.endDate + DAY_MS - 1)
+        ? await getPeriodCoverage(inclusivePeriodStart(period.startDate), inclusivePeriodEnd(period.endDate))
         : { complete: [], partial: [], skipped: [], unknown: [], isComparable: false, warnings: ["Period not found"] };
       const budgetFacts = period ? await getBudgetFacts(pid) : [];
-      const periodEndMs = period ? period.endDate + DAY_MS - 1 : null;
+      const periodEndMs = period ? inclusivePeriodEnd(period.endDate) : null;
       const financialFacts = period
         ? await getFinancialFacts({
-            startMs: period.startDate,
+            startMs: inclusivePeriodStart(period.startDate),
             endMs: periodEndMs!,
             asOfMs: Math.min(Date.now(), periodEndMs!),
             periodId: pid,

@@ -11,6 +11,7 @@ import {
 import { queryKeys } from '../core/query-keys';
 import { listCategories } from '../../generated/client';
 import { unwrapGenerated } from '../core/generated-response';
+import { inclusivePeriodEnd } from '../../lib/utils';
 
 export function useIncomeStatementQuery(periodId?: number) {
   return useQuery({
@@ -97,7 +98,7 @@ export function useReportSummaryQuery(input: {
       const [income, balance] = await Promise.all([
         unwrapGenerated(getIncomeStatement({ periodId: periodId! }, { signal }), 200, 'Failed to load income statement'),
         unwrapGenerated(getBalanceSheet({
-          asOfDate: periodEndDate == null ? undefined : (periodEndDate % 86_400_000 === 0 ? periodEndDate + 86_400_000 - 1 : periodEndDate),
+          asOfDate: periodEndDate == null ? undefined : inclusivePeriodEnd(periodEndDate),
         }, { signal }), 200, 'Failed to load balance sheet'),
       ]);
       let previous: Pick<ReportSummary, 'previousPeriodRevenue' | 'previousPeriodExpenses'> = {};

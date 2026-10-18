@@ -2,8 +2,10 @@ import { eq, and, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactions, transactionLines, salaryPeriods } from "../db/schema";
 import { computeAccountBalanceRolledUp, computeTrialBalanceTotals } from "./ledger";
-import { assignedPeriodMembership, inclusivePeriodEnd } from "./period-locking";
+import { assignedPeriodMembership } from "./period-locking";
 import { getFinancialFacts } from "./financial-facts";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
+import { personalExpenseLine, personalIncomeLine } from "./reallocation-effects";
 import { getPeriodCoverage, type PeriodCoverage } from "./period-coverage";
 
 // Report types
@@ -15,12 +17,20 @@ export interface IncomeStatementItem {
   level: number;
 }
 
+/**
+ * "ledger" is the formal statement straight from account balances. "personal" applies linked
+ * transaction reallocations (a refunded or reimbursed expense nets against its pair), which is the
+ * basis the dashboard, budgets and spending reports use.
+ */
+export type ReportingBasis = "ledger" | "personal";
+
 export interface IncomeStatement {
   revenue: IncomeStatementItem[];
   expenses: IncomeStatementItem[];
   totalRevenue: number;
   totalExpenses: number;
   netIncome: number;
+  reportingBasis?: ReportingBasis;
   periodName?: string;
   startDate?: number;
   endDate?: number;
@@ -90,8 +100,6 @@ export interface SpendingBreakdown {
   percentage: number;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /** Reports for an open range are explicitly marked temporary in every format. */
 export function getReportStatus(periodEnd: number, generatedAt = Date.now()): { generatedAt: number; isTemporary: boolean } {
   return { generatedAt, isTemporary: generatedAt < periodEnd };
@@ -105,7 +113,7 @@ const reportableTransaction = () => sql`
   AND ${transactions.txType} NOT IN ('reversal', 'domain_reversal')
 `;
 
-/** Salary-period end dates are commonly stored as midnight from an HTML date input. */
+/** A salary-period end date is stored as the start of its last day; reports run through the end of that day. */
 const inclusiveEndOfSelectedDay = inclusivePeriodEnd;
 
 /** Shared scope for the UI's “All Periods” selector: posted history through now. */
@@ -131,8 +139,10 @@ async function allPostedReportRange(): Promise<{ start: number; end: number }> {
 export async function generateIncomeStatement(
   periodId?: number,
   startDate?: number,
-  endDate?: number
+  endDate?: number,
+  options: { reportingBasis?: ReportingBasis } = {},
 ): Promise<IncomeStatement> {
+  const reportingBasis: ReportingBasis = options.reportingBasis ?? "ledger";
   let periodStart: number;
   let periodEnd: number;
   let periodName = "All Periods";
@@ -149,14 +159,14 @@ export async function generateIncomeStatement(
       .limit(1);
 
     if (!period) throw new Error(`Period not found: ${periodId}`);
-    periodStart = period.startDate;
+    periodStart = inclusivePeriodStart(period.startDate);
     periodEnd = inclusiveEndOfSelectedDay(period.endDate);
     periodName = period.name;
   } else if (startDate !== undefined && endDate !== undefined) {
     if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
       throw new Error("Invalid report date range");
     }
-    periodStart = startDate;
+    periodStart = inclusivePeriodStart(startDate);
     periodEnd = inclusiveEndOfSelectedDay(endDate);
     periodName = `${new Date(startDate).toLocaleDateString()} - ${new Date(
       endDate
@@ -179,12 +189,21 @@ export async function generateIncomeStatement(
     .where(eq(accounts.type, "expense"))
     .orderBy(accounts.name);
 
+  const lineTransactionId = sql`${transactionLines.transactionId}`;
+  const lineDebit = sql`${transactionLines.debit}`;
+  const lineCredit = sql`${transactionLines.credit}`;
+  const revenueEffect = reportingBasis === "personal"
+    ? personalIncomeLine(lineTransactionId, lineDebit, lineCredit)
+    : sql<number>`${transactionLines.credit} - ${transactionLines.debit}`;
+  const expenseEffect = reportingBasis === "personal"
+    ? personalExpenseLine(lineTransactionId, lineDebit, lineCredit)
+    : sql<number>`${transactionLines.debit} - ${transactionLines.credit}`;
+
   // Get transaction lines for revenue in period
   const revenueLines = revenueAccounts.length === 0 ? [] : await db
     .select({
       accountId: transactionLines.accountId,
-      credit: sql<number>`sum(${transactionLines.credit})`,
-      debit: sql<number>`sum(${transactionLines.debit})`,
+      amount: sql<number>`coalesce(sum(${revenueEffect}), 0)`,
     })
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
@@ -206,8 +225,7 @@ export async function generateIncomeStatement(
   const expenseLines = expenseAccounts.length === 0 ? [] : await db
     .select({
       accountId: transactionLines.accountId,
-      debit: sql<number>`sum(${transactionLines.debit})`,
-      credit: sql<number>`sum(${transactionLines.credit})`,
+      amount: sql<number>`coalesce(sum(${expenseEffect}), 0)`,
     })
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
@@ -230,10 +248,7 @@ export async function generateIncomeStatement(
   let totalRevenue = 0;
 
   for (const account of revenueAccounts) {
-    const lines = revenueLines.filter((l) => l.accountId === account.id);
-    const credit = lines[0]?.credit || 0;
-    const debit = lines[0]?.debit || 0;
-    const amount = credit - debit;
+    const amount = Number(revenueLines.find((l) => l.accountId === account.id)?.amount ?? 0);
 
     revenueItems.push({
       name: account.name,
@@ -249,10 +264,7 @@ export async function generateIncomeStatement(
   let totalExpenses = 0;
 
   for (const account of expenseAccounts) {
-    const lines = expenseLines.filter((l) => l.accountId === account.id);
-    const debit = lines[0]?.debit || 0;
-    const credit = lines[0]?.credit || 0;
-    const amount = debit - credit;
+    const amount = Number(expenseLines.find((l) => l.accountId === account.id)?.amount ?? 0);
 
     expenseItems.push({
       name: account.name,
@@ -271,6 +283,7 @@ export async function generateIncomeStatement(
     totalRevenue,
     totalExpenses,
     netIncome: totalRevenue - totalExpenses,
+    reportingBasis,
     periodName,
     startDate: periodStart,
     endDate: periodEnd,
@@ -407,14 +420,14 @@ export async function generateCashFlowStatement(
       .limit(1);
 
     if (!period) throw new Error(`Period not found: ${periodId}`);
-    periodStart = period.startDate;
+    periodStart = inclusivePeriodStart(period.startDate);
     periodEnd = inclusiveEndOfSelectedDay(period.endDate);
     periodName = period.name;
   } else if (startDate !== undefined && endDate !== undefined) {
     if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
       throw new Error("Invalid report date range");
     }
-    periodStart = startDate;
+    periodStart = inclusivePeriodStart(startDate);
     periodEnd = inclusiveEndOfSelectedDay(endDate);
     periodName = `${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`;
   } else {
@@ -472,7 +485,10 @@ export async function generateCashFlowStatement(
     );
   const beginningCash = (beginningLines?.debit || 0) - (beginningLines?.credit || 0);
 
-  // Get all cash transactions in period
+  // Get all cash transactions in the date range. Beginning cash is every cash
+  // movement before the range, so flows must cover exactly the range too (not
+  // only journals assigned to the period); otherwise ending cash drifts from the
+  // ledger balance and consecutive statements do not chain.
   const cashTxs = await db
     .select({
       description: transactions.description,
@@ -513,7 +529,6 @@ export async function generateCashFlowStatement(
         sql`${transactions.date} >= ${periodStart}`,
         sql`${transactions.date} <= ${periodEnd}`,
         reportableTransaction(),
-        periodMembership(periodId),
         sql`${transactionLines.accountId} IN (${sql.join(
           cashAccountIds.map(String),
           sql`, `
@@ -634,13 +649,13 @@ export async function generateSpendingBreakdown(
       .limit(1);
 
     if (!period) throw new Error(`Period not found: ${periodId}`);
-    periodStart = period.startDate;
+    periodStart = inclusivePeriodStart(period.startDate);
     periodEnd = inclusiveEndOfSelectedDay(period.endDate);
   } else if (startDate !== undefined && endDate !== undefined) {
     if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
       throw new Error("Invalid report date range");
     }
-    periodStart = startDate;
+    periodStart = inclusivePeriodStart(startDate);
     periodEnd = inclusiveEndOfSelectedDay(endDate);
   } else {
     const range = await allPostedReportRange();

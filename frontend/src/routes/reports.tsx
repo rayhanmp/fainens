@@ -17,7 +17,7 @@ import {
   useTrendsQuery,
   useExportReportMutation,
 } from '../features/reports/queries';
-import { findCurrentPeriod, formatCurrency, cn } from '../lib/utils';
+import { findCurrentPeriod, formatCurrency, cn, inclusivePeriodEnd } from '../lib/utils';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -61,10 +61,6 @@ export const Route = createFileRoute('/reports')({
 } as any);
 
 type ReportTab = 'income' | 'balance' | 'cashflow' | 'spending' | 'trends';
-
-function inclusivePeriodEnd(timestamp: number): number {
-  return timestamp % 86_400_000 === 0 ? timestamp + 86_400_000 - 1 : timestamp;
-}
 
 function TemporaryReportBadge({ isTemporary }: { isTemporary?: boolean }) {
   if (!isTemporary) return null;

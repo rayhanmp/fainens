@@ -6,6 +6,7 @@ import { generateDashboardInsight, generateBudgetInsight, generateBudgetDraftIns
 import { getRedisClient } from "../cache/redis";
 import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 const CACHE_TTL_SECONDS = 24 * 60 * 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -73,6 +74,25 @@ function getDaysLeftInWeek(periodStartMs: number, today: Date, periodEndMs: numb
     }
   }
   return 0;
+}
+
+/** The active salary period containing `nowMs`, counting each period through the end of its last day. */
+async function findActivePeriodAt(nowMs: number): Promise<any | undefined> {
+  const candidates = await db.all(sql`
+    SELECT * FROM salary_period
+    WHERE is_active = 1 AND start_date <= ${nowMs + DAY_MS} AND end_date >= ${nowMs - 2 * DAY_MS}
+    ORDER BY start_date DESC
+  `) as any[];
+  return candidates.find((period) =>
+    inclusivePeriodStart(Number(period.start_date)) <= nowMs && inclusivePeriodEnd(Number(period.end_date)) >= nowMs);
+}
+
+/** Budget status compares spending in budgeted categories with their plan; unbudgeted spending has no plan to use up. */
+export function budgetedSpendingPercent(budgets: Array<{ planned: number; spent: number }>): number | null {
+  const totalPlanned = budgets.reduce((sum, b) => sum + b.planned, 0);
+  if (totalPlanned <= 0) return null;
+  const budgetedSpent = budgets.reduce((sum, b) => sum + b.spent, 0);
+  return (budgetedSpent / totalPlanned) * 100;
 }
 
 function getPreviousWeeks(currentWeek: number): number[] {
@@ -204,13 +224,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
         const periodResult = await db.all(sql`SELECT * FROM salary_period WHERE id = ${periodId} LIMIT 1`);
         currentPeriod = periodResult[0] as any;
       } else {
-        const nowMs = Date.now();
-        const currentPeriodResult = await db.all(sql`
-          SELECT * FROM salary_period
-          WHERE is_active = 1 AND start_date <= ${nowMs} AND end_date + ${DAY_MS - 1} >= ${nowMs}
-          ORDER BY start_date DESC LIMIT 1
-        `);
-        currentPeriod = currentPeriodResult[0] as any;
+        currentPeriod = await findActivePeriodAt(Date.now());
       }
 
       if (!currentPeriod) {
@@ -219,8 +233,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       }
 
       const today = new Date();
-      const periodStartMs = currentPeriod.start_date;
-      const periodEndMs = currentPeriod.end_date;
+      // Periods run through the end of their last day.
+      const periodStartMs = inclusivePeriodStart(Number(currentPeriod.start_date));
+      const periodEndMs = inclusivePeriodEnd(Number(currentPeriod.end_date));
       const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)) + 1);
       const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)) + 1));
       const daysRemaining = Math.max(0, daysTotal - daysElapsed);
@@ -264,8 +279,8 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const budgetWarnings: string[] = [];
       const positiveNotes: string[] = [];
 
-      if (totalPlanned > 0) {
-        const percentUsed = (totalSpent / totalPlanned) * 100;
+      const percentUsed = budgetedSpendingPercent(budgets);
+      if (totalPlanned > 0 && percentUsed != null) {
         const expectedPercent = (daysElapsed / daysTotal) * 100;
         
         if (percentUsed > expectedPercent + 10) {
@@ -404,12 +419,8 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       if (periodId) {
         periodResult = await db.all(sql`SELECT * FROM salary_period WHERE id = ${periodId} LIMIT 1`);
       } else {
-        const nowMs = Date.now();
-        periodResult = await db.all(sql`
-          SELECT * FROM salary_period
-          WHERE is_active = 1 AND start_date <= ${nowMs} AND end_date + ${DAY_MS - 1} >= ${nowMs}
-          ORDER BY start_date DESC LIMIT 1
-        `);
+        const activePeriod = await findActivePeriodAt(Date.now());
+        periodResult = activePeriod ? [activePeriod] : [];
       }
 
       const period = periodResult[0] as any;
@@ -420,17 +431,20 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       }
 
       const today = new Date();
-      const daysTotal = Math.max(1, Math.floor((period.end_date - period.start_date) / (1000 * 60 * 60 * 24)) + 1);
-      const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - period.start_date) / (1000 * 60 * 60 * 24)) + 1));
+      // Periods run through the end of their last day.
+      const periodStartMs = inclusivePeriodStart(Number(period.start_date));
+      const periodEndMs = inclusivePeriodEnd(Number(period.end_date));
+      const daysTotal = Math.max(1, Math.floor((periodEndMs - periodStartMs) / (1000 * 60 * 60 * 24)) + 1);
+      const daysElapsed = Math.min(daysTotal, Math.max(0, Math.floor((today.getTime() - periodStartMs) / (1000 * 60 * 60 * 24)) + 1));
       const daysRemaining = Math.max(0, daysTotal - daysElapsed);
-      const currentWeek = getCurrentWeek(period.start_date, today, period.end_date);
-      const daysLeftInWeek = getDaysLeftInWeek(period.start_date, today, period.end_date);
+      const currentWeek = getCurrentWeek(periodStartMs, today, periodEndMs);
+      const daysLeftInWeek = getDaysLeftInWeek(periodStartMs, today, periodEndMs);
       const weekDistribution = getWeekDistribution(daysTotal);
 
       const periodFacts = await getFinancialFacts({
-        startMs: period.start_date,
-        endMs: period.end_date,
-        asOfMs: Math.min(Date.now(), period.end_date),
+        startMs: periodStartMs,
+        endMs: periodEndMs,
+        asOfMs: Math.min(Date.now(), periodEndMs),
         periodId: period.id,
       });
       const txList = periodFacts.rows
@@ -452,7 +466,9 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       }));
 
       const totalPlanned = budgets.reduce((sum, b) => sum + b.planned, 0);
-      const savingsRate = totalPlanned > 0 ? ((totalPlanned - totalSpent) / totalPlanned) * 100 : 0;
+      const totalPercent = budgetedSpendingPercent(budgets);
+      // Share of the plan still unspent, measured on budgeted categories only.
+      const savingsRate = totalPercent == null ? 0 : 100 - totalPercent;
       const dailyBurnRate = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
       const expectedEndSpend = dailyBurnRate * daysTotal;
 
@@ -475,8 +491,7 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
         }
       }
 
-      if (totalPlanned > 0) {
-        const totalPercent = (totalSpent / totalPlanned) * 100;
+      if (totalPercent != null) {
         if (totalPercent > expectedPercent + 15) {
           budgetStatus = 'over_budget';
         } else if (totalPercent < expectedPercent - 15) {
@@ -494,10 +509,11 @@ export default async function insightsRoutes(fastify: FastifyInstance) {
       const lastMonthPeriod = lastMonthPeriodResult[0] as any;
       let lastMonthTotal = 0;
       if (lastMonthPeriod) {
+        const lastMonthEndMs = inclusivePeriodEnd(Number(lastMonthPeriod.end_date));
         const lastMonthFacts = await getFinancialFacts({
-          startMs: lastMonthPeriod.start_date,
-          endMs: lastMonthPeriod.end_date,
-          asOfMs: Math.min(Date.now(), lastMonthPeriod.end_date),
+          startMs: inclusivePeriodStart(Number(lastMonthPeriod.start_date)),
+          endMs: lastMonthEndMs,
+          asOfMs: Math.min(Date.now(), lastMonthEndMs),
           periodId: lastMonthPeriod.id,
         });
         lastMonthTotal = lastMonthFacts.totalSpentCents;

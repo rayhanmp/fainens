@@ -1,16 +1,15 @@
-import { personalExpenseLine, personalIncomeLine } from "../services/reallocation-effects";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { accounts, transactionLines, transactions, salaryPeriods } from "../db/schema";
+import { accounts, salaryPeriods } from "../db/schema";
 import { computeAccountBalance, computeAccountBalanceRolledUp, computeTrialBalanceTotals } from "../services/ledger";
 import { cacheSet, CacheKeys } from "./redis";
 import { CACHE_TTL, Keys } from "./keys";
 import { ANALYTICS_KEYS } from "./keys";
 import { getFinancialRevision } from "../services/financial-revision";
-import { assignedPeriodMembership } from "../services/period-locking";
-
-const DAY_MS = 86_400_000;
+import { getFinancialFacts } from "../services/financial-facts";
+import { calculateBurnRate } from "../services/analytics";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 // Types for cached data
 export interface AccountBalanceCache {
@@ -43,6 +42,8 @@ export interface NetWorthCache {
 export interface BurnRateCache {
   grossBurnRate: number; // cents per month (avg)
   period: string; // description of period analyzed
+  trackedMonths: number; // months of tracked history inside the window
+  divisorMonths: number; // months the window total was divided by
   computedAt: number;
   revision: number;
 }
@@ -123,65 +124,15 @@ export async function precomputePeriodSummary(periodId: number): Promise<PeriodS
     throw new Error(`Period not found: ${periodId}`);
   }
 
-  // Get all transactions in this period (using sql template for date comparisons)
-  const periodTransactions = await db
-    .select({ id: transactions.id })
-    .from(transactions)
-    .where(
-      and(
-        sql`${transactions.date} >= ${period.startDate}`,
-        sql`${transactions.date} <= ${period.endDate + DAY_MS - 1}`,
-        sql`${transactions.status} <> 'draft'`,
-        assignedPeriodMembership(periodId, transactions.periodId),
-      ),
-    );
-
-  const transactionIds = periodTransactions.map((t) => t.id);
-
-  // Calculate income (revenue accounts)
-  const revenueAccounts = await db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(eq(accounts.type, "revenue"));
-  const revenueAccountIds = revenueAccounts.map((a) => a.id);
-
-  const incomeResult = transactionIds.length === 0 || revenueAccountIds.length === 0
-    ? [{ total: 0 }]
-    : await db
-      .select({
-        total: sql<number>`coalesce(sum(${personalIncomeLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
-      })
-      .from(transactionLines)
-      .where(
-        and(
-          sql`${transactionLines.transactionId} IN (${sql.join(transactionIds.map(String), sql`, `)})`,
-          sql`${transactionLines.accountId} IN (${sql.join(revenueAccountIds.map(String), sql`, `)})`,
-        ),
-      );
-
-  // Calculate expenses (expense accounts)
-  const expenseAccountsResult = await db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(eq(accounts.type, "expense"));
-  const expenseAccountIds = expenseAccountsResult.map((a) => a.id);
-
-  const expensesResult = transactionIds.length === 0 || expenseAccountIds.length === 0
-    ? [{ total: 0 }]
-    : await db
-      .select({
-        total: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
-      })
-      .from(transactionLines)
-      .where(
-        and(
-          sql`${transactionLines.transactionId} IN (${sql.join(transactionIds.map(String), sql`, `)})`,
-          sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
-        ),
-      );
-
-  const income = incomeResult[0]?.total ?? 0;
-  const expenses = expensesResult[0]?.total ?? 0;
+  // Same read model as the dashboard facts: drafts, reversed originals and
+  // reversal journals are excluded, and amounts use the personal basis.
+  const facts = await getFinancialFacts({
+    startMs: inclusivePeriodStart(Number(period.startDate)),
+    endMs: inclusivePeriodEnd(Number(period.endDate)),
+    periodId,
+  });
+  const income = facts.totalIncomeCents;
+  const expenses = facts.totalSpentCents;
   const net = income - expenses;
   const savingsRate = income > 0 ? (net / income) * 100 : 0;
 
@@ -243,44 +194,14 @@ export async function precomputeNetWorth(): Promise<NetWorthCache> {
   return cacheIfRevisionUnchanged(Keys.analytics(ANALYTICS_KEYS.NET_WORTH), data, CACHE_TTL.ANALYTICS, startedRevision);
 }
 
-// Precompute burn rate (average monthly operational expenses)
+// Precompute burn rate (average monthly operational expenses). Shares the
+// agent's calculation so the dashboard and the agent never disagree.
 export async function precomputeBurnRate(months: number = 3): Promise<BurnRateCache> {
   const startedRevision = await getFinancialRevision();
-  // Get expense accounts
-  const expenseAccountsResult = await db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(eq(accounts.type, "expense"));
-  const expenseAccountIds = expenseAccountsResult.map((a) => a.id);
-
-  // Get transactions from last N months excluding internal transfers
-  const cutoffDate = Date.now() - months * 30 * 24 * 60 * 60 * 1000;
-
-  const burnResult = expenseAccountIds.length === 0
-    ? [{ total: 0 }]
-    : await db
-      .select({
-        total: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
-      })
-      .from(transactionLines)
-      .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
-      .where(
-        and(
-          sql`${transactions.date} >= ${cutoffDate}`,
-          sql`${transactions.date} <= ${Date.now()}`,
-          sql`${transactions.status} <> 'draft'`,
-          sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
-          // Exclude non-operational txTypes (transfers, settlements, etc.)
-          sql`${transactions.txType} NOT IN ('paylater_settlement')`,
-        ),
-      );
-
-  const totalExpenses = burnResult[0]?.total ?? 0;
-  const grossBurnRate = Math.round(totalExpenses / months);
+  const burn = await calculateBurnRate(months);
 
   const data: BurnRateCache = {
-    grossBurnRate,
-    period: `Last ${months} months`,
+    ...burn,
     computedAt: Date.now(),
     revision: startedRevision,
   };

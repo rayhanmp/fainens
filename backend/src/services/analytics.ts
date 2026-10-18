@@ -1,5 +1,5 @@
 import { personalExpenseLine, personalIncomeLine } from "./reallocation-effects";
-import { eq, sql, and, ne, notInArray } from "drizzle-orm";
+import { eq, sql, and, notInArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { accounts, transactionLines, transactions, salaryPeriods, budgetPlans } from "../db/schema";
 import {
@@ -7,8 +7,7 @@ import {
   computeAccountBalanceAsOf,
   computeAccountBalanceRolledUp,
 } from "./ledger";
-
-const DAY_MS = 86_400_000;
+import { DAY_MS, endOfLocalDay, inclusivePeriodEnd, inclusivePeriodStart, localDayKey, startOfLocalDay } from "../lib/calendar";
 
 // Types for analytics results
 export interface NetWorthResult {
@@ -22,6 +21,10 @@ export interface NetWorthResult {
 export interface BurnRateResult {
   grossBurnRate: number; // cents per month
   period: string;
+  /** Months of tracked history inside the window (after skipped periods). */
+  trackedMonths: number;
+  /** Months the window total was divided by: tracked history, at least MIN_BURN_RATE_MONTHS. */
+  divisorMonths: number;
 }
 
 export interface RunwayResult {
@@ -58,8 +61,30 @@ export interface SpendingTrendPoint {
   coverageStatus: "complete" | "partial" | "skipped" | "unknown";
 }
 
+function toMs(value: Date | number): number {
+  return value instanceof Date ? value.getTime() : Number(value);
+}
+
+/** Real activity only: drafts, reversed originals and their reversal journals are excluded, as in financial facts. */
+const reportableActivity = () => and(
+  notInArray(transactions.status, ["draft", "reversed"]),
+  notInArray(transactions.txType, ["reversal", "domain_reversal"]),
+);
+
+/** Start of each local calendar day from the day containing `startMs` through the day containing `endMs`. */
+function localDaysBetween(startMs: number, endMs: number, maxDays: number): number[] {
+  const days: number[] = [];
+  const cursor = new Date(startOfLocalDay(startMs));
+  while (cursor.getTime() <= endMs && days.length < maxDays) {
+    days.push(cursor.getTime());
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days.length ? days : [startOfLocalDay(startMs)];
+}
+
 /** Daily posted expense activity for a rolling window. Values are canonical
- * expense-account effects, not inferred from transaction types or balances. */
+ * expense-account effects (refunds and reimbursements net against spending,
+ * as in financial facts), bucketed by local calendar day. */
 export async function getSpendingTrend(dayCount: number = 30, periodId?: number): Promise<{
   range: "30d" | "period";
   periodId: number | null;
@@ -85,22 +110,20 @@ export async function getSpendingTrend(dayCount: number = 30, periodId?: number)
     if (!period) throw new Error("Salary period not found");
     selectedPeriod = period;
   }
-  const firstDay = new Date();
   let firstStartMs: number;
   let finalEndMs: number;
   if (selectedPeriod) {
-    firstStartMs = selectedPeriod.startDate instanceof Date ? selectedPeriod.startDate.getTime() : Number(selectedPeriod.startDate);
-    const periodEndMs = (selectedPeriod.endDate instanceof Date ? selectedPeriod.endDate.getTime() : Number(selectedPeriod.endDate)) + DAY_MS - 1;
+    firstStartMs = inclusivePeriodStart(toMs(selectedPeriod.startDate));
+    const periodEndMs = inclusivePeriodEnd(toMs(selectedPeriod.endDate));
     finalEndMs = Math.max(firstStartMs, Math.min(now, periodEndMs));
   } else {
-    firstDay.setHours(0, 0, 0, 0);
+    const firstDay = new Date(startOfLocalDay(now));
     firstDay.setDate(firstDay.getDate() - (count - 1));
     firstStartMs = firstDay.getTime();
     finalEndMs = now;
   }
-  const bucketCount = selectedPeriod
-    ? Math.max(1, Math.min(370, Math.floor((finalEndMs - firstStartMs) / DAY_MS) + 1))
-    : count;
+  const dayStarts = localDaysBetween(firstStartMs, finalEndMs, selectedPeriod ? 370 : count);
+  const indexByDay = new Map(dayStarts.map((dayStart, index) => [localDayKey(dayStart), index]));
 
   const expenseAccounts = await db
     .select({ id: accounts.id })
@@ -108,56 +131,69 @@ export async function getSpendingTrend(dayCount: number = 30, periodId?: number)
     .where(eq(accounts.type, "expense"));
   const expenseAccountIds = expenseAccounts.map((account) => account.id);
 
+  // One net amount per transaction, so a refund or reimbursement credit offsets
+  // the spending it returns instead of being dropped.
   const rows = expenseAccountIds.length === 0
     ? []
     : await db
       .select({
         date: transactions.date,
         transactionId: transactions.id,
-        amount: sql<number>`max(0, ${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)})`,
+        amount: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
       })
       .from(transactionLines)
       .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
       .where(and(
         sql`${transactions.date} >= ${firstStartMs}`,
         sql`${transactions.date} <= ${finalEndMs}`,
-        ne(transactions.status, "draft"),
-        ne(transactions.status, "reversed"),
-        notInArray(transactions.txType, ["paylater_settlement", "simple_transfer", "reversal", "domain_reversal"]),
+        reportableActivity(),
+        notInArray(transactions.txType, ["paylater_settlement", "simple_transfer"]),
         sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
-      ));
+      ))
+      .groupBy(transactions.id, transactions.date);
 
   const periods = await db
     .select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate, coverageStatus: salaryPeriods.coverageStatus })
     .from(salaryPeriods)
       .where(selectedPeriod
         ? eq(salaryPeriods.id, selectedPeriod.id)
-        : sql`${salaryPeriods.endDate} >= ${firstStartMs} AND ${salaryPeriods.startDate} <= ${finalEndMs}`);
-  const transactionIdsByPoint = Array.from({ length: bucketCount }, () => new Set<number>());
-  const points: SpendingTrendPoint[] = Array.from({ length: bucketCount }, (_, index) => {
-    const startMs = firstStartMs + index * DAY_MS;
-    const endMs = Math.min(now, startMs + DAY_MS - 1);
-    const period = selectedPeriod ?? periods.find((candidate) => Number(candidate.startDate) <= startMs && Number(candidate.endDate) + DAY_MS - 1 >= startMs);
+        : sql`${salaryPeriods.endDate} >= ${firstStartMs - DAY_MS} AND ${salaryPeriods.startDate} <= ${finalEndMs + DAY_MS}`);
+  const netByPoint = dayStarts.map(() => 0);
+  const transactionIdsByPoint = dayStarts.map(() => new Set<number>());
+  for (const row of rows) {
+    const amount = Number(row.amount) || 0;
+    if (amount === 0) continue;
+    const index = indexByDay.get(localDayKey(toMs(row.date)));
+    if (index == null) continue;
+    netByPoint[index] += amount;
+    transactionIdsByPoint[index].add(Number(row.transactionId));
+  }
+  const points: SpendingTrendPoint[] = dayStarts.map((startMs, index) => {
+    const endMs = Math.min(now, endOfLocalDay(startMs));
+    const period = selectedPeriod ?? periods.find((candidate) =>
+      inclusivePeriodStart(toMs(candidate.startDate)) <= startMs && inclusivePeriodEnd(toMs(candidate.endDate)) >= startMs);
     return {
       label: new Date(startMs).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       startMs,
       endMs,
-      spent: 0,
-      transactionCount: 0,
+      // A day where credits exceed spending shows no spending, never negative spending.
+      spent: Math.max(0, netByPoint[index]),
+      transactionCount: transactionIdsByPoint[index].size,
       coverageStatus: (period?.coverageStatus as SpendingTrendPoint["coverageStatus"] | undefined) ?? "unknown",
     };
   });
-  for (const row of rows) {
-    const timestamp = row.date instanceof Date ? row.date.getTime() : Number(row.date);
-    const index = Math.floor((timestamp - firstStartMs) / DAY_MS);
-    const point = points[index];
-    if (!point) continue;
-    point.spent += Math.max(0, Number(row.amount) || 0);
-    transactionIdsByPoint[index]?.add(Number(row.transactionId));
-    point.transactionCount = transactionIdsByPoint[index]?.size ?? point.transactionCount;
-  }
-  const totalSpent = points.reduce((sum, point) => sum + point.spent, 0);
-  const comparablePoints = points.filter((point) => point.coverageStatus === "complete" || point.coverageStatus === "partial");
+  // The total keeps cross-day netting (a refund on a later day still offsets
+  // the purchase), so it matches financial facts for the same window.
+  const totalSpent = Math.max(0, netByPoint.reduce((sum, amount) => sum + amount, 0));
+  // Skipped/unknown coverage is not zero activity, so the average uses only
+  // complete/partial days in both the numerator and the denominator. When no
+  // day has known coverage (new periods start as "unknown"), every non-skipped
+  // day is used instead so the average still describes the recorded activity.
+  const knownIndexes = points.flatMap((point, index) => point.coverageStatus === "complete" || point.coverageStatus === "partial" ? [index] : []);
+  const averageIndexes = knownIndexes.length > 0
+    ? knownIndexes
+    : points.flatMap((point, index) => point.coverageStatus === "skipped" ? [] : [index]);
+  const averageNet = averageIndexes.reduce((sum, index) => sum + netByPoint[index], 0);
   return {
     range: selectedPeriod ? "period" : "30d",
     periodId: selectedPeriod?.id ?? null,
@@ -166,9 +202,7 @@ export async function getSpendingTrend(dayCount: number = 30, periodId?: number)
     endMs: finalEndMs,
     bucketCount: points.length,
     totalSpent,
-    // Skipped/unknown coverage is not zero activity. Exclude those buckets
-    // from the denominator so the average cannot be diluted by an absence gap.
-    averageDailySpend: Math.round(totalSpent / Math.max(1, comparablePoints.length)),
+    averageDailySpend: averageIndexes.length === 0 ? 0 : Math.round(Math.max(0, averageNet) / averageIndexes.length),
     hasIncompleteCoverage: points.some((point) => point.coverageStatus !== "complete"),
     series: points,
   };
@@ -255,10 +289,6 @@ export async function calculateNetWorthAsOf(asOfInclusiveMs: number): Promise<Ne
 /** Net worth trend window — all ranges end at “now” (today). */
 export type NetWorthRange = "7d" | "30d" | "3m" | "6m" | "1y";
 
-function endOfCalendarDayMs(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
-}
-
 /**
  * Build as-of timestamps (oldest → newest, last point ≈ now).
  * - 7d / 30d: one point per calendar day
@@ -273,10 +303,9 @@ export function buildNetWorthTrendBuckets(range: NetWorthRange): Array<{ label: 
     const out: Array<{ label: string; asOfMs: number }> = [];
     for (let i = 0; i < dayCount; i++) {
       const daysAgo = dayCount - 1 - i;
-      const day = new Date();
-      day.setHours(0, 0, 0, 0);
+      const day = new Date(startOfLocalDay(now));
       day.setDate(day.getDate() - daysAgo);
-      const eod = endOfCalendarDayMs(day);
+      const eod = endOfLocalDay(day.getTime());
       const asOfMs = Math.min(now, eod);
       const label = day.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       out.push({ label, asOfMs });
@@ -345,45 +374,88 @@ export async function getNetWorthTrend(range: NetWorthRange): Promise<{
   return { range, bucketCount: buckets.length, series };
 }
 
-// Calculate gross burn rate (average monthly operational expenses)
-export async function calculateBurnRate(months: number = 3): Promise<BurnRateResult> {
-  // Get expense accounts
-  const expenseAccounts = await db
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(eq(accounts.type, "expense"));
-  const expenseAccountIds = expenseAccounts.map((a) => a.id);
+/** A month of burn is 30 days, matching the 90-day window behind "Last 3 months". */
+const BURN_MONTH_MS = 30 * DAY_MS;
+/** Tracked history shorter than this still divides by it, so a few days of spending is not extrapolated into a huge monthly rate. */
+export const MIN_BURN_RATE_MONTHS = 1;
 
-  if (expenseAccountIds.length === 0) {
-    return { grossBurnRate: 0, period: `Last ${months} months` };
+/**
+ * Gross burn rate (average monthly expenses), shared by the dashboard cache and the agent.
+ *
+ * The window is the last `months` × 30 days, but the total is divided by the months of tracked
+ * history inside it: from the first recorded transaction (or the window start, if later) to now,
+ * minus any salary period explicitly marked as skipped (whose spending is also left out). Short
+ * history is divided by at least {@link MIN_BURN_RATE_MONTHS}. Drafts, reversed originals and
+ * reversal journals are excluded, and refunds net against spending, as in financial facts.
+ */
+export async function calculateBurnRate(months: number = 3, now: number = Date.now()): Promise<BurnRateResult> {
+  const windowMonths = Math.max(1, months);
+  const windowStartMs = now - windowMonths * BURN_MONTH_MS;
+  const windowLabel = `Last ${windowMonths * 30} days`;
+  const empty = (description: string): BurnRateResult => ({
+    grossBurnRate: 0,
+    period: `${windowLabel} (${description})`,
+    trackedMonths: 0,
+    divisorMonths: 0,
+  });
+
+  const [first] = await db
+    .select({ date: sql<number | null>`min(${transactions.date})` })
+    .from(transactions)
+    .where(and(reportableActivity(), sql`${transactions.date} <= ${now}`));
+  if (first?.date == null) return empty("no tracked history");
+  const trackedStartMs = Math.max(windowStartMs, startOfLocalDay(Number(first.date)));
+
+  const skippedPeriods = await db
+    .select({ startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+    .from(salaryPeriods)
+    .where(eq(salaryPeriods.coverageStatus, "skipped"));
+  const skippedRanges = skippedPeriods
+    .map((period) => ({
+      startMs: Math.max(trackedStartMs, inclusivePeriodStart(Number(period.startDate))),
+      endMs: Math.min(now, inclusivePeriodEnd(Number(period.endDate))),
+    }))
+    .filter((range) => range.endMs >= range.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+  let skippedMs = 0;
+  let coveredUntil = trackedStartMs - 1;
+  for (const range of skippedRanges) {
+    const startMs = Math.max(range.startMs, coveredUntil + 1);
+    if (range.endMs >= startMs) skippedMs += range.endMs - startMs + 1;
+    coveredUntil = Math.max(coveredUntil, range.endMs);
   }
+  const trackedMonths = Math.max(0, now - trackedStartMs + 1 - skippedMs) / BURN_MONTH_MS;
+  const divisorMonths = Math.min(windowMonths, Math.max(MIN_BURN_RATE_MONTHS, trackedMonths));
 
-  // Get transactions from last N months excluding internal transfers
-  const cutoffDate = Date.now() - months * 30 * 24 * 60 * 60 * 1000;
-
-  const burnResult = await db
+  const rows = await db
     .select({
-      total: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
+      date: transactions.date,
+      amount: sql<number>`coalesce(sum(${personalExpenseLine(sql`${transactionLines.transactionId}`, sql`${transactionLines.debit}`, sql`${transactionLines.credit}`)}), 0)`,
     })
     .from(transactionLines)
     .innerJoin(transactions, eq(transactionLines.transactionId, transactions.id))
-    .where(
-      and(
-        sql`${transactions.date} >= ${cutoffDate}`,
-        sql`${transactions.date} <= ${Date.now()}`,
-        sql`${transactions.status} <> 'draft'`,
-        sql`${transactionLines.accountId} IN (${sql.join(expenseAccountIds.map(String), sql`, `)})`,
-        // Exclude non-operational txTypes (transfers, settlements, etc.)
-        sql`${transactions.txType} NOT IN ('paylater_settlement', 'simple_transfer')`,
-      ),
-    );
+    .innerJoin(accounts, eq(transactionLines.accountId, accounts.id))
+    .where(and(
+      sql`${transactions.date} >= ${trackedStartMs}`,
+      sql`${transactions.date} <= ${now}`,
+      eq(accounts.type, "expense"),
+      reportableActivity(),
+      // Settlements and wallet transfers are not operating spending.
+      notInArray(transactions.txType, ["paylater_settlement", "simple_transfer"]),
+    ))
+    .groupBy(transactions.id, transactions.date);
+  const totalExpenses = rows
+    .filter((row) => !skippedRanges.some((range) => Number(row.date) >= range.startMs && Number(row.date) <= range.endMs))
+    .reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
-  const totalExpenses = burnResult[0]?.total ?? 0;
-  const grossBurnRate = Math.round(totalExpenses / months);
-
+  const roundedTracked = Math.round(trackedMonths * 10) / 10;
   return {
-    grossBurnRate,
-    period: `Last ${months} months`,
+    grossBurnRate: Math.round(totalExpenses / divisorMonths),
+    period: trackedMonths >= windowMonths
+      ? windowLabel
+      : `${windowLabel} (${roundedTracked} ${roundedTracked === 1 ? "month" : "months"} of tracked history${trackedMonths < MIN_BURN_RATE_MONTHS ? `, averaged over ${MIN_BURN_RATE_MONTHS} month` : ""})`,
+    trackedMonths: roundedTracked,
+    divisorMonths: Math.round(divisorMonths * 100) / 100,
   };
 }
 

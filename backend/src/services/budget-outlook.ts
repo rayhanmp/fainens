@@ -2,8 +2,9 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { budgetPlans, categories, forecastPurchaseReviews, salaryPeriods, subscriptions, transactions } from "../db/schema";
-import { getFinancialFacts } from "./financial-facts";
-import { addOneMonth, addOneYear } from "./recurrence-calendar";
+import { budgetActualsWindow, getFinancialFacts } from "./financial-facts";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
+import { nextOccurrence } from "./subscription-renewals";
 import { robustHistoricalStats } from "./budget-outlook-math";
 import { getFinancialRevision } from "./financial-revision";
 
@@ -59,8 +60,13 @@ function toMs(value: Date | number): number {
   return value instanceof Date ? value.getTime() : Number(value);
 }
 
-function inclusiveEnd(endMs: number): number {
-  return endMs + DAY_MS - 1;
+/** Over budget means spending above the plan; spending exactly on plan (including Rp0 of a Rp0 plan) is within it. */
+export function budgetRiskStatus(actualAmount: number, plannedAmount: number, projectedAmount: number | null, periodComplete: boolean): RiskStatus {
+  if (actualAmount > plannedAmount) return "over_budget";
+  // A finished period's actual is final, so there is nothing left to forecast.
+  if (periodComplete) return "within_budget";
+  if (projectedAmount == null) return "unknown";
+  return projectedAmount > plannedAmount ? "at_risk" : "within_budget";
 }
 
 function roundAmount(value: number): number {
@@ -74,10 +80,6 @@ function confidenceFor(sampleCount: number, forecastAvailable: boolean): Confide
   return "low";
 }
 
-function nextSubscriptionOccurrence(dueAt: number, billingCycle: string): number {
-  return billingCycle === "annual" ? addOneYear(dueAt) : addOneMonth(dueAt);
-}
-
 async function scheduledSpendingByCategory(afterMs: number, endMs: number): Promise<Map<number, number>> {
   const activeSubscriptions = await db
     .select({
@@ -85,6 +87,7 @@ async function scheduledSpendingByCategory(afterMs: number, endMs: number): Prom
       amount: subscriptions.amount,
       nextRenewalAt: subscriptions.nextRenewalAt,
       billingCycle: subscriptions.billingCycle,
+      billingDay: subscriptions.billingDay,
     })
     .from(subscriptions)
     .where(eq(subscriptions.status, "active"));
@@ -95,10 +98,11 @@ async function scheduledSpendingByCategory(afterMs: number, endMs: number): Prom
     let dueAt = toMs(subscription.nextRenewalAt);
     // Overdue renewals are intentionally not projected. They need review as
     // overdue obligations rather than being silently treated as future spend.
-    while (dueAt <= afterMs) dueAt = nextSubscriptionOccurrence(dueAt, subscription.billingCycle);
+    // Same schedule as the renewal job, so projections land on the real billing day.
+    while (dueAt <= afterMs) dueAt = nextOccurrence(dueAt, subscription.billingCycle, subscription.billingDay);
     while (dueAt <= endMs) {
       scheduled.set(subscription.categoryId, (scheduled.get(subscription.categoryId) ?? 0) + subscription.amount);
-      dueAt = nextSubscriptionOccurrence(dueAt, subscription.billingCycle);
+      dueAt = nextOccurrence(dueAt, subscription.billingCycle, subscription.billingDay);
     }
   }
   return scheduled;
@@ -128,17 +132,15 @@ export async function getBudgetOutlook(periodId: number, now = Date.now()): Prom
     .innerJoin(categories, eq(categories.id, budgetPlans.categoryId))
     .where(eq(budgetPlans.periodId, periodId));
 
-  const startMs = toMs(period.startDate);
-  const endMs = toMs(period.endDate);
-  const endInclusiveMs = inclusiveEnd(endMs);
-  const totalDays = Math.max(1, Math.round((endMs - startMs) / DAY_MS) + 1);
+  // Same window as getBudgetFacts, so /api/budgets and the outlook agree.
+  const { startMs, endMs: endInclusiveMs, asOfMs } = budgetActualsWindow({ startDate: toMs(period.startDate), endDate: toMs(period.endDate) }, now);
+  const totalDays = Math.max(1, Math.round((endInclusiveMs + 1 - startMs) / DAY_MS));
   const daysElapsed = now < startMs
     ? 0
     : now > endInclusiveMs
       ? totalDays
       : Math.min(totalDays, Math.floor((now - startMs) / DAY_MS) + 1);
   const daysRemaining = Math.max(0, totalDays - daysElapsed);
-  const asOfMs = Math.min(now, endInclusiveMs);
 
   const currentFacts = await getFinancialFacts({
     startMs,
@@ -178,15 +180,15 @@ export async function getBudgetOutlook(periodId: number, now = Date.now()): Prom
     .where(eq(salaryPeriods.coverageStatus, "complete"))
     .orderBy(desc(salaryPeriods.endDate));
   const eligiblePeriods = priorPeriods
-    .filter((candidate) => candidate.id !== periodId && toMs(candidate.endDate) < startMs)
+    .filter((candidate) => candidate.id !== periodId && inclusivePeriodEnd(toMs(candidate.endDate)) < startMs)
     .slice(0, MAX_HISTORY_PERIODS);
   const forecastAvailable = daysRemaining > 0 && eligiblePeriods.length >= MIN_COMPLETED_PERIODS;
 
   const historyByCategory = new Map<number, number[]>();
   for (const plan of plans) historyByCategory.set(plan.categoryId, []);
   for (const historicPeriod of eligiblePeriods) {
-    const historicStartMs = toMs(historicPeriod.startDate);
-    const historicEndInclusiveMs = inclusiveEnd(toMs(historicPeriod.endDate));
+    const historicStartMs = inclusivePeriodStart(toMs(historicPeriod.startDate));
+    const historicEndInclusiveMs = inclusivePeriodEnd(toMs(historicPeriod.endDate));
     const alignedRemainingStartMs = Math.min(historicEndInclusiveMs + 1, historicStartMs + daysElapsed * DAY_MS);
     const historicFacts = alignedRemainingStartMs > historicEndInclusiveMs
       ? { byCategory: [] as Array<{ categoryId: number | null; spentCents: number }> }
@@ -229,13 +231,7 @@ export async function getBudgetOutlook(periodId: number, now = Date.now()): Prom
     const projectedAmount = historicalRemainingAmount == null ? null : actualAmount + scheduledRemainingAmount + historicalRemainingAmount;
     const projectedLowAmount = historicalLow == null ? null : actualAmount + scheduledRemainingAmount + historicalLow;
     const projectedHighAmount = historicalHigh == null ? null : actualAmount + scheduledRemainingAmount + historicalHigh;
-    const riskStatus: RiskStatus = actualAmount >= plan.plannedAmount
-      ? "over_budget"
-      : projectedAmount == null
-        ? "unknown"
-        : projectedAmount > plan.plannedAmount
-          ? "at_risk"
-          : "within_budget";
+    const riskStatus = budgetRiskStatus(actualAmount, plan.plannedAmount, projectedAmount, daysRemaining === 0);
     return {
       categoryId: plan.categoryId,
       categoryName: plan.categoryName,
@@ -268,13 +264,7 @@ export async function getBudgetOutlook(periodId: number, now = Date.now()): Prom
   const totalProjectedHigh = forecastAvailable
     ? categoryRows.reduce((sum, row) => sum + (row.projectedHighAmount ?? row.actualAmount), 0)
     : null;
-  const totalRisk: RiskStatus = totalActual >= totalPlanned
-    ? "over_budget"
-    : totalProjected == null
-      ? "unknown"
-      : totalProjected > totalPlanned
-        ? "at_risk"
-        : "within_budget";
+  const totalRisk = budgetRiskStatus(totalActual, totalPlanned, totalProjected, daysRemaining === 0);
 
   return {
     periodId,
