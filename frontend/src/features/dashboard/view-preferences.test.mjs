@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dashboardPreset, dashboardSectionIds, dashboardSectionRows, dashboardSectionSize, dashboardSectionWidth, dashboardViewStorageKey, mergeDashboardViewChange, moveDashboardSection, parseDashboardViewPreferences, resetDashboardLayout, resizeDashboardSection, selectedDashboardPreset, usesOriginalDashboardSections } from './view-preferences.ts';
+import { dashboardPacingShown, dashboardPreset, dashboardSectionIds, dashboardSectionRows, dashboardSectionSize, dashboardSectionWidth, dashboardViewStorageKey, mergeDashboardViewChange, moveDashboardSection, parseDashboardViewPreferences, resetDashboardLayout, resizeDashboardSection, selectedDashboardPreset, toggleDashboardPacing, usesOriginalDashboardSections } from './view-preferences.ts';
 
 test('missing or corrupt preferences restore the original dashboard', () => {
   for (const raw of [null, '', '{bad', 'null', '42', '[]']) {
@@ -145,4 +145,15 @@ test('only the original panel arrangement counts as original sections', () => {
   assert.deepEqual(reordered.hiddenSections, ['payments']);
   assert.equal(usesOriginalDashboardSections(reordered), false);
   assert.equal(usesOriginalDashboardSections(dashboardPreset('overview')), false);
+});
+
+test('the pacing bar is shown unless hidden, and hiding it survives storage without touching presets', () => {
+  const original = dashboardPreset('original');
+  assert.equal(dashboardPacingShown(original), true);
+  const hidden = toggleDashboardPacing(original);
+  assert.equal(dashboardPacingShown(hidden), false);
+  assert.equal(selectedDashboardPreset(hidden), 'original');
+  assert.deepEqual(parseDashboardViewPreferences(JSON.stringify(hidden)), hidden);
+  assert.deepEqual(toggleDashboardPacing(hidden), original);
+  assert.equal('showPacing' in parseDashboardViewPreferences(JSON.stringify({ ...original, showPacing: 'no' })), false);
 });

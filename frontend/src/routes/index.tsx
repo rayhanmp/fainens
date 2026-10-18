@@ -50,7 +50,7 @@ import { buildAttentionItems, isTrackedCoverage } from '../features/dashboard/at
 import { budgetUsedRatio, periodPacing } from '../features/dashboard/pacing';
 import { upcomingCommitments } from '../features/dashboard/commitments';
 import { fallbackName, heroCopy, percentChange, timeOfDayGreeting } from '../features/dashboard/hero-copy';
-import { mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections, type DashboardSection } from '../features/dashboard/view-preferences';
+import { dashboardPacingShown, mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections, type DashboardSection } from '../features/dashboard/view-preferences';
 import { useDashboardViewPreferences } from '../features/dashboard/use-view-preferences';
 import { adjacentPeriodId, swipeStep, type PeriodStep } from '../features/dashboard/navigation';
 import { useDashboardShortcuts } from '../features/dashboard/use-dashboard-shortcuts';
@@ -297,7 +297,7 @@ function DashboardPage() {
   };
 
   const dashboardSections: Record<DashboardSection, ReactNode> = {
-    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} pacing={pacing} budgetUsedRatio={budgetPaceRatio} dailyBudget={dailyBudget} />,
+    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} pacing={dashboardPacingShown(preferences) ? pacing : null} budgetUsedRatio={budgetPaceRatio} dailyBudget={dailyBudget} />,
     netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
     spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,
