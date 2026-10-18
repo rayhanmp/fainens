@@ -10,7 +10,7 @@ import {
   transactionLines,
   transactions,
 } from "../db/schema";
-import { estimatePayroll, getTERCategory } from "./indonesia-payroll";
+import { effectiveJpWageCap, estimatePayroll, getTERCategory } from "./indonesia-payroll";
 import { getOrCreateAutoIncomeAccount, insertPreparedJournalEntrySync, prepareJournalEntry } from "./ledger";
 import { monthlyOccurrenceDate } from "./recurrence-calendar";
 import { findPeriodIdForDate } from "./transaction-mutations";
@@ -46,7 +46,7 @@ async function salaryContext(now = new Date(), requestedOccurrenceDate?: number)
     jkkRiskGrade: settings.jkkRiskGrade / 10000,
     jkmRate: settings.jkmRate / 10000,
     bpjsKesehatanActive: settings.bpjsKesehatanActive,
-    jpWageCap: settings.jpWageCap,
+    jpWageCap: effectiveJpWageCap(settings.jpWageCap, new Date(occurrenceDate)),
     bpjsKesWageCap: settings.bpjsKesWageCap,
     jhtWageCap: settings.jhtWageCap,
   };

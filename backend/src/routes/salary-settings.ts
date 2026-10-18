@@ -11,6 +11,8 @@ import {
   type PayrollBreakdown,
   getTERCategory,
   type PayrollSettings,
+  effectiveJpWageCap,
+  jpWageCapFor,
 } from "../services/indonesia-payroll";
 import { attachSalaryOccurrenceToMatchingPeriod, correctSalaryOccurrence, postSalaryIfPayrollDay, previewSalaryPosting, previewSalaryCatchUp, skipSalaryOccurrence } from "../services/salary-posting";
 
@@ -53,7 +55,7 @@ async function getOrCreateRow() {
     jkkRiskGrade: 24, // 0.24% as basis points
     jkmRate: 30, // 0.3% as basis points
     bpjsKesehatanActive: true,
-    jpWageCap: 10_042_300,
+    jpWageCap: jpWageCapFor(new Date()),
     bpjsKesWageCap: 12_000_000,
     jhtWageCap: 12_000_000,
   });
@@ -68,7 +70,7 @@ function buildPayrollSettings(row: typeof salarySettings.$inferSelect): PayrollS
     jkkRiskGrade: row.jkkRiskGrade / 10000, // Convert basis points to decimal
     jkmRate: row.jkmRate / 10000, // Convert basis points to decimal
     bpjsKesehatanActive: row.bpjsKesehatanActive,
-    jpWageCap: row.jpWageCap,
+    jpWageCap: effectiveJpWageCap(row.jpWageCap, new Date()),
     bpjsKesWageCap: row.bpjsKesWageCap,
     jhtWageCap: row.jhtWageCap,
   };
