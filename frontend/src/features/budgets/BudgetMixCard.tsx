@@ -100,7 +100,7 @@ export function BudgetMixCard({ slices, income, formatAmount }: BudgetMixCardPro
         </svg>
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
           {/* Lifted by half the caption's height so the pair reads as centred, not just the number. */}
-          <p className="relative -translate-y-2 text-base font-bold tabular-nums leading-none text-[var(--ref-on-surface)]">
+          <p className="relative -translate-y-1 text-base font-bold tabular-nums leading-none text-[var(--ref-on-surface)]">
             {centre.title}
             <span className="absolute left-1/2 top-full mt-1.5 block max-w-28 -translate-x-1/2 truncate text-[11px] font-normal leading-none text-[var(--ref-on-surface-variant)]">{centre.caption}</span>
           </p>
