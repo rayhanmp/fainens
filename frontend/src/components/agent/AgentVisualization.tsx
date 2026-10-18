@@ -1,7 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
-import { BarChart3, CalendarDays, CircleDollarSign, Gauge, PieChart, TrendingUp, Wallet } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { ArrowUpRight, BarChart3, CalendarDays, CircleDollarSign, Gauge, MessageCircleQuestion, PieChart, TrendingUp, Wallet } from 'lucide-react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatCurrency } from '../../lib/utils';
 import { SplitBillCard, parseSplitBillVisualization, type SplitBillAccount, type SplitBillVisualization } from './SplitBillCard';
@@ -521,15 +521,65 @@ function toneClass(tone: VisualizationTone): string {
 }
 
 function VizHeader({ title, icon }: { title: string; icon: ReactNode }) {
-  return <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]"><span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]">{icon}</span><span>{title}</span></div>;
+  return <div className="agent-viz-title">{icon}<span>{title}</span></div>;
+}
+
+/** Where a chart's numbers came from and what the user can do next, as sent by the backend chart library. */
+type VisualizationMeta = {
+  provenance?: { evidenceId: string; tool: string; revision: number };
+  actions?: { open?: { href: string; label: string }; followUps?: string[] };
+};
+type VisualizationChrome = { meta: VisualizationMeta; onAsk?: (prompt: string) => void; askDisabled?: boolean };
+const VisualizationChromeContext = createContext<VisualizationChrome>({ meta: {} });
+
+function readMeta(value: unknown): VisualizationMeta {
+  if (!isRecord(value)) return {};
+  const meta: VisualizationMeta = {};
+  const provenance = value.provenance;
+  if (isRecord(provenance) && typeof provenance.tool === 'string' && typeof provenance.evidenceId === 'string') {
+    meta.provenance = { evidenceId: provenance.evidenceId, tool: provenance.tool, revision: readNumber(provenance.revision) ?? 0 };
+  }
+  const actions = value.actions;
+  if (isRecord(actions)) {
+    const open = isRecord(actions.open) && typeof actions.open.href === 'string' && actions.open.href.startsWith('/') && typeof actions.open.label === 'string'
+      ? { href: actions.open.href, label: actions.open.label.slice(0, 40) }
+      : undefined;
+    const followUps = Array.isArray(actions.followUps)
+      ? actions.followUps.filter((prompt): prompt is string => typeof prompt === 'string' && prompt.trim().length > 1).slice(0, 2).map((prompt) => prompt.trim().slice(0, 140))
+      : [];
+    if (open || followUps.length) meta.actions = { ...(open ? { open } : {}), ...(followUps.length ? { followUps } : {}) };
+  }
+  return meta;
+}
+
+/** "get_budget_facts" reads as "Budget facts". */
+function sourceLabel(tool: string): string {
+  const words = tool.replace(/^(get|find|summarize|compare|list)_/, '').replace(/_/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Ledger';
+}
+
+/** The shared footer: the evidence a chart was bound to, a link to the matching page, and follow-up questions. */
+function VizFooter() {
+  const { meta, onAsk, askDisabled } = useContext(VisualizationChromeContext);
+  const { provenance, actions } = meta;
+  const followUps = onAsk ? actions?.followUps ?? [] : [];
+  if (!provenance && !actions?.open && followUps.length === 0) return null;
+  return <div className="agent-viz-footer">
+    {provenance && <span className="agent-viz-source" title={`Evidence ${provenance.evidenceId}`}>From {sourceLabel(provenance.tool).toLowerCase()}{provenance.revision ? ` · revision ${provenance.revision}` : ''}</span>}
+    {actions?.open && <a className="agent-viz-open" href={actions.open.href}>{actions.open.label}<ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></a>}
+    {followUps.length > 0 && <div className="agent-viz-followups">
+      {followUps.map((prompt) => <button key={prompt} type="button" className="agent-viz-followup" disabled={askDisabled} onClick={() => onAsk?.(prompt)}><MessageCircleQuestion className="h-3.5 w-3.5" aria-hidden /><span className="truncate">{prompt}</span></button>)}
+    </div>}
+  </div>;
 }
 
 function MetricCard({ visualization }: { visualization: MetricVisualization }) {
   const { formatValue } = useVisualizationFormatters();
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<Gauge className="h-4 w-4" />} />
-    <p className={`mt-3 text-2xl font-bold tracking-tight ${toneClass(visualization.tone)}`}>{formatValue(visualization.value, visualization.unit)}</p>
+    <p className={`agent-viz-hero ${toneClass(visualization.tone)}`}>{formatValue(visualization.value, visualization.unit)}</p>
     {visualization.subtitle && <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{visualization.subtitle}</p>}
+    <VizFooter />
   </article>;
 }
 
@@ -538,12 +588,13 @@ function RankedBarCard({ visualization }: { visualization: RankedBarVisualizatio
   const max = Math.max(...visualization.items.map((item) => Math.abs(item.value)), 1);
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<BarChart3 className="h-4 w-4" />} />
-    <div className="mt-4 space-y-3" role="list">
-      {visualization.items.map((item, index) => <div key={`${item.label}-${index}`} role="listitem">
-        <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate text-[var(--color-text-secondary)]">{item.label}</span><span className="shrink-0 font-semibold text-[var(--color-text-primary)]">{formatValue(item.value, visualization.unit)}</span></div>
-        <div className="h-2 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${Math.max(3, Math.min(100, Math.abs(item.value) / max * 100))}%` }} /></div>
+    <div className="mt-3.5 space-y-2.5" role="list">
+      {visualization.items.map((item, index) => <div key={`${item.label}-${index}`} role="listitem" aria-label={`${item.label}: ${formatValue(item.value, visualization.unit)}`}>
+        <div className="mb-1 flex items-baseline justify-between gap-3"><span className="agent-viz-row-label">{item.label}</span><span className="agent-viz-row-value">{formatValue(item.value, visualization.unit)}</span></div>
+        <div className="agent-viz-track" data-tone={item.value < 0 ? 'negative' : undefined}><i style={{ width: `${Math.max(2, Math.min(100, Math.abs(item.value) / max * 100))}%` }} /></div>
       </div>)}
     </div>
+    <VizFooter />
   </article>;
 }
 
@@ -552,18 +603,24 @@ function ComparisonCard({ visualization }: { visualization: ComparisonVisualizat
   const max = Math.max(...visualization.items.flatMap((item) => [Math.abs(item.current), Math.abs(item.previous)]), 1);
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<TrendingUp className="h-4 w-4" />} />
-    <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-[var(--color-text-secondary)]"><span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[var(--ref-primary)]" />{visualization.currentLabel}</span><span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[var(--ref-secondary)]" />{visualization.previousLabel}</span></div>
-    <div className="mt-4 space-y-3" role="list">
-      {visualization.items.map((item, index) => <div key={`${item.label}-${index}`} role="listitem">
-        <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate text-[var(--color-text-secondary)]">{item.label}</span><span className="shrink-0 font-semibold text-[var(--color-text-primary)]">{formatValue(item.current, visualization.unit)}</span></div>
-        <div className="grid gap-1"><div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${Math.max(3, Math.min(100, Math.abs(item.current) / max * 100))}%` }} /></div><div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className="h-full rounded-full bg-[var(--ref-secondary)]" style={{ width: `${Math.max(3, Math.min(100, Math.abs(item.previous) / max * 100))}%` }} /></div></div>
-      </div>)}
+    {/* Emphasis: the current period in the accent, the previous one in grey for context. */}
+    <div className="mt-2.5 flex flex-wrap gap-3 text-[11px] text-[var(--color-text-secondary)]"><span className="inline-flex items-center gap-1.5"><i className="h-1.5 w-3 rounded-full bg-[var(--ref-primary)]" />{visualization.currentLabel}</span><span className="inline-flex items-center gap-1.5"><i className="h-1.5 w-3 rounded-full bg-[var(--color-muted)]" />{visualization.previousLabel}</span></div>
+    <div className="mt-3 space-y-3" role="list">
+      {visualization.items.map((item, index) => {
+        const change = item.current - item.previous;
+        return <div key={`${item.label}-${index}`} role="listitem" aria-label={`${item.label}: ${formatValue(item.current, visualization.unit)} versus ${formatValue(item.previous, visualization.unit)}`}>
+          <div className="mb-1 flex items-baseline justify-between gap-3"><span className="agent-viz-row-label">{item.label}</span><span className="agent-viz-row-value">{formatValue(item.current, visualization.unit)}<span className="ml-1.5 font-normal text-[var(--color-text-secondary)]">{change >= 0 ? '+' : '−'}{formatValue(Math.abs(change), visualization.unit)}</span></span></div>
+          <div className="grid gap-1"><div className="agent-viz-track"><i style={{ width: `${Math.max(2, Math.min(100, Math.abs(item.current) / max * 100))}%` }} /></div><div className="agent-viz-track" data-muted=""><i style={{ width: `${Math.max(2, Math.min(100, Math.abs(item.previous) / max * 100))}%` }} /></div></div>
+        </div>;
+      })}
     </div>
+    <VizFooter />
   </article>;
 }
 
 const VIZ_COLORS = ['var(--ref-primary)', 'var(--ref-secondary)', 'var(--ref-tertiary)', 'var(--color-warning)', 'var(--color-danger)', 'var(--ref-primary-container)', 'var(--ref-on-secondary-container)', 'var(--color-muted)'];
-const COMPOSITION_COLORS = ['var(--ref-primary)', 'var(--color-warning)', 'var(--ref-secondary)', 'var(--color-danger)', 'var(--ref-tertiary)', 'var(--ref-primary-container)', 'var(--ref-on-secondary-container)', 'var(--color-muted)'];
+// Part-to-whole on sorted rows reads as an ordered ramp of one hue; status colours stay reserved for status.
+const COMPOSITION_COLORS = [100, 82, 66, 52, 40, 30, 22, 15].map((strength) => `color-mix(in srgb, var(--ref-primary) ${strength}%, var(--ref-surface-container-lowest))`);
 
 function donutSegmentPath(startFraction: number, endFraction: number): string {
   const center = 60;
@@ -626,7 +683,7 @@ function DonutCard({ visualization }: { visualization: DonutVisualization }) {
           <span>{highlightedSegment ? <><strong>{highlightedSegment.percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%</strong><small>{highlightedSegment.item.label}</small></> : 'Total'}</span>
         </div>
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{highlightedSegment ? 'Selected category' : 'Total spent'}</p>
+          <p className="text-[11px] font-medium text-[var(--color-text-secondary)]">{highlightedSegment ? 'Selected' : 'Total'}</p>
           <p className="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums tracking-tight text-[var(--color-text-primary)]">{formatValue(highlightedSegment?.item.value ?? total, visualization.unit)}</p>
           <p className="mt-0.5 max-w-36 truncate text-[11px] text-[var(--color-text-secondary)]">{highlightedSegment ? `${highlightedSegment.item.label} · ${highlightedSegment.percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%` : `Across ${items.length} categories`}</p>
         </div>
@@ -637,15 +694,15 @@ function DonutCard({ visualization }: { visualization: DonutVisualization }) {
           const color = COMPOSITION_COLORS[index % COMPOSITION_COLORS.length];
           const isHighlighted = highlightedSegmentIndex == null || highlightedSegmentIndex === index;
           return <div key={`${item.label}-${index}`} role="listitem" aria-label={`${item.label}: ${formatValue(item.value, visualization.unit)}, ${percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`} className={`transition-opacity ${isHighlighted ? 'opacity-100' : 'opacity-45'}`}>
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="flex min-w-0 items-center gap-2 font-medium text-[var(--color-text-primary)]"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} /> <span className="truncate">{item.label}</span></span>
-              <span className="shrink-0 text-right tabular-nums"><strong className="font-semibold text-[var(--color-text-primary)]">{formatValue(item.value, visualization.unit)}</strong><span className="ml-1.5 text-[var(--color-text-secondary)]">{percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%</span></span>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="flex min-w-0 items-center gap-2"><i className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: color }} /><span className="agent-viz-row-label !text-[var(--color-text-primary)]">{item.label}</span></span>
+              <span className="agent-viz-row-value">{formatValue(item.value, visualization.unit)}<span className="ml-1.5 font-normal text-[var(--color-text-secondary)]">{percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%</span></span>
             </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]" role="presentation"><div className="h-full rounded-full" style={{ width: `${Math.max(2, percentage)}%`, backgroundColor: color }} /></div>
           </div>;
         })}
       </div>
     </div>
+    <VizFooter />
   </article>;
 }
 
@@ -656,9 +713,10 @@ function BudgetProgressCard({ visualization }: { visualization: BudgetProgressVi
   const tone = visualization.status === 'negative' || visualization.actual > visualization.planned ? 'negative' : visualization.status === 'positive' ? 'positive' : 'neutral';
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<Wallet className="h-4 w-4" />} />
-    <div className="mt-3 flex items-baseline justify-between gap-3"><p className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">{formatValue(visualization.actual, visualization.unit)}</p><p className="text-xs text-[var(--color-text-secondary)]">of {formatValue(visualization.planned, visualization.unit)}</p></div>
-    <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]"><div className={`h-full rounded-full ${tone === 'negative' ? 'bg-[var(--color-danger)]' : tone === 'positive' ? 'bg-[var(--color-success)]' : 'bg-[var(--ref-primary)]'}`} style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
-    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]"><span>{Math.round(percent)}% used</span><span className={toneClass(tone)}>{remaining >= 0 ? `${formatValue(remaining, visualization.unit)} left` : `${formatValue(Math.abs(remaining), visualization.unit)} over`}</span></div>
+    <div className="mt-2.5 flex items-baseline justify-between gap-3"><p className="agent-viz-hero !mt-0">{formatValue(visualization.actual, visualization.unit)}</p><p className="text-xs text-[var(--color-text-secondary)]">of {formatValue(visualization.planned, visualization.unit)}</p></div>
+    <div className="agent-viz-track mt-3 !h-2" data-tone={tone === 'negative' ? 'negative' : undefined}><i style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
+    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]"><span>{Math.round(percent)}% used</span><span className={tone === 'negative' ? 'font-semibold text-[var(--color-danger)]' : 'font-semibold text-[var(--color-text-primary)]'}>{remaining >= 0 ? `${formatValue(remaining, visualization.unit)} left` : `${formatValue(Math.abs(remaining), visualization.unit)} over`}</span></div>
+    <VizFooter />
   </article>;
 }
 
@@ -667,11 +725,17 @@ function CashFlowCard({ visualization }: { visualization: CashFlowVisualization 
   return <article className="agent-viz-card" aria-label={visualization.title}>
     <VizHeader title={visualization.title} icon={<CircleDollarSign className="h-4 w-4" />} />
     {visualization.periodLabel && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{visualization.periodLabel}</p>}
-    <div className="mt-4 grid grid-cols-3 divide-x divide-[var(--color-border)]">
-      <div className="pr-3"><p className="text-[11px] text-[var(--color-text-secondary)]">Income</p><p className="mt-1 text-sm font-semibold text-[var(--color-success)]">{formatValue(visualization.income, visualization.unit)}</p></div>
-      <div className="px-3"><p className="text-[11px] text-[var(--color-text-secondary)]">Spending</p><p className="mt-1 text-sm font-semibold text-[var(--color-danger)]">{formatValue(visualization.spending, visualization.unit)}</p></div>
-      <div className="pl-3"><p className="text-[11px] text-[var(--color-text-secondary)]">Net</p><p className={`mt-1 text-sm font-semibold ${toneClass(visualization.net >= 0 ? 'positive' : 'negative')}`}>{formatValue(visualization.net, visualization.unit)}</p></div>
+    {/* Income and spending are plain amounts; only the net carries a direction colour. */}
+    <div className="mt-3.5 grid grid-cols-3 divide-x divide-[var(--color-border)]">
+      <div className="pr-3"><p className="text-[11px] text-[var(--color-text-secondary)]">Income</p><p className="mt-1 text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">{formatValue(visualization.income, visualization.unit)}</p></div>
+      <div className="px-3"><p className="text-[11px] text-[var(--color-text-secondary)]">Spending</p><p className="mt-1 text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">{formatValue(visualization.spending, visualization.unit)}</p></div>
+      <div className="pl-3"><p className="text-[11px] text-[var(--color-text-secondary)]">Net</p><p className={`mt-1 text-sm font-semibold tabular-nums ${toneClass(visualization.net >= 0 ? 'positive' : 'negative')}`}>{visualization.net >= 0 ? '+' : '−'}{formatValue(Math.abs(visualization.net), visualization.unit)}</p></div>
     </div>
+    {(visualization.income > 0 || visualization.spending > 0) && <div className="mt-3 grid gap-1">
+      <div className="agent-viz-track"><i style={{ width: `${Math.min(100, visualization.income / Math.max(visualization.income, visualization.spending, 1) * 100)}%` }} /></div>
+      <div className="agent-viz-track" data-muted=""><i style={{ width: `${Math.min(100, visualization.spending / Math.max(visualization.income, visualization.spending, 1) * 100)}%` }} /></div>
+    </div>}
+    <VizFooter />
   </article>;
 }
 
@@ -909,10 +973,20 @@ function SparklineCard({ visualization }: { visualization: SparklineVisualizatio
     <VizHeader title={visualization.title} icon={<CircleDollarSign className="h-4 w-4" />} />
     <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1"><div><p className="text-[11px] text-[var(--color-text-secondary)]">Latest</p><p className="mt-0.5 text-xl font-bold tabular-nums text-[var(--color-text-primary)]">{latest ? formatValue(latest.value, visualization.unit) : '—'}</p></div><div className={`text-right text-xs font-semibold tabular-nums ${changeTone}`}>{change >= 0 ? '+' : ''}{formatValue(change, visualization.unit)}{changePercent == null ? '' : ` (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%)`}<span className="ml-1 font-normal text-[var(--color-text-secondary)]">since {first?.label}</span></div></div>
     <TrendLineChart title={visualization.title} unit={visualization.unit} points={visualization.points} />
+    <VizFooter />
   </article>;
 }
 
-export function AgentVisualizationBlock({ source, accounts = [], currentUserName = '' }: { source: string; accounts?: SplitBillAccount[]; currentUserName?: string }) {
+export function AgentVisualizationBlock({ source, accounts = [], currentUserName = '', onAsk, askDisabled }: { source: string; accounts?: SplitBillAccount[]; currentUserName?: string; onAsk?: (prompt: string) => void; askDisabled?: boolean }) {
+  const chrome = useMemo<VisualizationChrome>(() => {
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(source); } catch { /* the card parser reports invalid sources */ }
+    return { meta: readMeta(parsed), onAsk, askDisabled };
+  }, [askDisabled, onAsk, source]);
+  return <VisualizationChromeContext.Provider value={chrome}><VisualizationCard source={source} accounts={accounts} currentUserName={currentUserName} /></VisualizationChromeContext.Provider>;
+}
+
+function VisualizationCard({ source, accounts, currentUserName }: { source: string; accounts: SplitBillAccount[]; currentUserName: string }) {
   const visualization = parseVisualization(source);
   if (!visualization) return null;
   if (visualization.type === 'split_bill') return <SplitBillCard visualization={visualization} accounts={accounts} currentUserName={currentUserName} />;

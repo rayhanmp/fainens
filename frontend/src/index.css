@@ -401,14 +401,37 @@ h6 {
   margin: 1rem 0;
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-background);
-  padding: 0.9rem 1rem;
-  box-shadow: var(--shadow-sm);
+  border-radius: 16px;
+  background: var(--ref-surface-container-lowest);
+  padding: 1rem 1.1rem 0.95rem;
 }
 
 .agent-viz-card:first-child { margin-top: 0.35rem; }
 .agent-viz-card:last-child { margin-bottom: 0.35rem; }
+
+/* Card chrome shared by every chart: a quiet title row, then a footer with where the numbers came from and what to do next. */
+.agent-viz-title { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.agent-viz-title svg { flex-shrink: 0; color: var(--color-text-secondary); }
+.agent-viz-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-viz-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.agent-viz-source { margin-right: auto; font-size: 11px; color: var(--color-text-secondary); }
+.agent-viz-open { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--ref-primary); }
+.agent-viz-open:hover { text-decoration: underline; }
+.agent-viz-followups { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.agent-viz-followup { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 5px 10px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--ref-surface-container-low); font-size: 12px; font-weight: 500; color: var(--color-text-primary); text-align: left; transition: border-color .15s, background .15s; }
+.agent-viz-followup svg { flex-shrink: 0; color: var(--ref-primary); }
+.agent-viz-followup:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ref-primary) 45%, var(--color-border)); background: color-mix(in srgb, var(--ref-primary) 6%, var(--ref-surface-container-low)); }
+.agent-viz-followup:disabled { opacity: .55; cursor: not-allowed; }
+.agent-viz-followup:focus-visible, .agent-viz-open:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: 2px; }
+/* Thin tracks with a rounded data end, per the chart rules: the data is the loud part. */
+.agent-viz-track { height: 6px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--ref-primary) 10%, var(--ref-surface-container-lowest)); }
+.agent-viz-track > i { display: block; height: 100%; border-radius: 999px; background: var(--ref-primary); }
+.agent-viz-track[data-muted] > i { background: var(--color-muted); }
+.agent-viz-track[data-tone='negative'] { background: color-mix(in srgb, var(--color-danger) 12%, var(--ref-surface-container-lowest)); }
+.agent-viz-track[data-tone='negative'] > i { background: var(--color-danger); }
+.agent-viz-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--color-text-secondary); }
+.agent-viz-row-value { flex-shrink: 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.agent-viz-hero { margin-top: 10px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; color: var(--color-text-primary); }
 
 .agent-viz-donut {
   display: grid;

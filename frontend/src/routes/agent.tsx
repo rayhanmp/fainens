@@ -1759,6 +1759,12 @@ function AgentPage() {
     }
   };
 
+  /** A follow-up question tapped on a chart card is sent like a typed message. */
+  const askFollowUp = (prompt: string) => {
+    if (isSending) return;
+    void submitQuestion(prompt);
+  };
+
   const submitClarification = (clarification: AgentClarification, choice: AgentClarificationChoice, customValue?: string) => {
     const choiceText = customValue ? `${choice.label}: ${customValue}` : choice.label;
     void submitQuestion(`For "${clarification.question}", I choose "${choiceText}".`, undefined, { hideUserMessage: true });
@@ -2089,7 +2095,7 @@ function AgentPage() {
                         </div>
                       )}
                       {message.role === 'assistant'
-                        ? <AgentMessage accounts={accounts} presentations={message.response?.presentations} currentUserName={nickname}>{message.text || '…'}</AgentMessage>
+                        ? <AgentMessage accounts={accounts} presentations={message.response?.presentations} currentUserName={nickname} onAsk={askFollowUp} askDisabled={isSending}>{message.text || '…'}</AgentMessage>
                         : editingUserMessageId === message.id
                           ? <div className="space-y-2"><textarea ref={editingUserMessageTextareaRef} value={editingUserMessageText} onChange={(event) => setEditingUserMessageText(event.target.value)} className="brutalist-input max-h-40 min-h-12 w-full resize-none overflow-y-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)]" maxLength={2000} autoFocus /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" onClick={() => { setEditingUserMessageId(null); setEditingUserMessageText(''); }} disabled={isSending}>Cancel</Button><Button size="sm" onClick={() => void saveEditedLastUserMessage(message)} disabled={isSending}>Send</Button></div></div>
                           : <p className="whitespace-pre-wrap break-words leading-6">{message.text}</p>}
