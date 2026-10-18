@@ -13,12 +13,15 @@ export default defineConfig(({ mode }) => {
     // Share the root env with the local Fastify process. Only VITE_ keys reach the browser.
     envDir: '..',
     plugins: [
-      tailwindcss(),
-      react(),
+      // Must run before the React plugin so it can split each route's component into its own chunk.
       TanStackRouterVite({
         routesDirectory: './src/routes',
         generatedRouteTree: './src/routeTree.gen.ts',
+        // Each page's code (and heavy libraries like PDF export or math rendering) loads with that page.
+        autoCodeSplitting: true,
       }),
+      tailwindcss(),
+      react(),
     ],
     server: {
       port: devPort,

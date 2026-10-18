@@ -7,7 +7,7 @@ import { ImageGallery } from '../components/gallery/ImageGallery';
 
 export const Route = createFileRoute('/gallery')({
   component: GalleryPage,
-} as any);
+});
 
 function GalleryPage() {
   return (

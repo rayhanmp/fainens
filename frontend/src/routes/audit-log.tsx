@@ -23,7 +23,7 @@ import {
 
 export const Route = createFileRoute('/audit-log')({
   component: AuditLogPage,
-} as any);
+});
 
 /** Placeholder until session API exists */
 const DUMMY_LAST_SESSION = {

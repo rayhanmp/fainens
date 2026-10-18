@@ -25,7 +25,7 @@ import { LinkTransactionModal } from '../components/wishlist/LinkTransactionModa
 
 export const Route = createFileRoute('/wishlist')({
   component: WishlistPage,
-} as any);
+});
 
 interface WishlistItem {
   id: number;
@@ -382,7 +382,7 @@ export default function WishlistPage() {
                   <div
                     key={item.id}
                     className="bg-[var(--ref-surface-container-lowest)] p-4 rounded-xl flex items-center gap-4 border-l-4 border-[var(--color-success)] shadow-sm cursor-pointer hover:bg-[var(--ref-surface-container-high)] transition-colors"
-                    onClick={() => item.fulfilledTransactionId && navigate({ to: '/transactions', search: { highlight: item.fulfilledTransactionId } })}
+                    onClick={() => item.fulfilledTransactionId && navigate({ to: '/transactions', search: { transactionId: String(item.fulfilledTransactionId) } })}
                   >
                     {item.imageUrl ? (
                       <img 

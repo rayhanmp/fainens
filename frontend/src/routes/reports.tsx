@@ -53,12 +53,12 @@ import {
 } from 'recharts';
 
 export const Route = createFileRoute('/reports')({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { periodId?: string; tab?: ReportTab } => ({
     periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
     tab: search.tab === 'balance' || search.tab === 'cashflow' || search.tab === 'spending' || search.tab === 'trends' ? search.tab : 'income',
   }),
   component: ReportsPage,
-} as any);
+});
 
 type ReportTab = 'income' | 'balance' | 'cashflow' | 'spending' | 'trends';
 

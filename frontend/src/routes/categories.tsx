@@ -30,7 +30,7 @@ import {
 
 export const Route = createFileRoute('/categories')({
   component: CategoriesPage,
-} as any);
+});
 
 interface Category {
   id: number;

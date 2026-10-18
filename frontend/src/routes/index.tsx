@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AgentOrbActions } from '../components/ui/AgentOrbActions';
@@ -11,7 +11,8 @@ import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { findCurrentPeriod, formatCurrency, formatDate } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
 import { TransactionModal } from '../components/transactions/TransactionModal';
-import { MonthlyReportModal } from '../components/pdf/MonthlyReportModal';
+// The report modal pulls in the PDF engine; load it only when the report is opened.
+const MonthlyReportModal = lazy(() => import('../components/pdf/MonthlyReportModal').then((module) => ({ default: module.MonthlyReportModal })));
 import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { usePeriodsQuery } from '../features/periods/queries';
@@ -285,7 +286,7 @@ function DashboardPage() {
 
   const openAgent = (prompt = '') => {
     const text = prompt.trim();
-    void navigate({ to: '/agent', search: text ? { prompt: text } : {} } as any);
+    void navigate({ to: '/agent', search: text ? { prompt: text } : {} });
   };
 
   const dashboardSections: Record<DashboardSection, ReactNode> = {
@@ -349,7 +350,7 @@ function DashboardPage() {
         {!isMobile && (<section className="mt-6"><div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-primary)]" /><div><h2 className="font-headline text-lg font-extrabold text-[var(--ref-on-surface)]">Data confidence</h2><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">Position: current posted ledger balances · activity through {formatAsOf(facts?.facts.asOfMs ?? dashboardNow)} · reconciliation: {hasRecentReconciliation ? 'recent check on record' : 'no current check on record'}.</p></div></div><PanelLink to="/accounts" className="shrink-0">Review accounts</PanelLink></div></div></section>)}
         {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
         <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} onSuccess={(_id, createdIds) => offerUndo(createdIds)} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
-        <MonthlyReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
+        {isReportOpen && <Suspense fallback={null}><MonthlyReportModal isOpen onClose={() => setIsReportOpen(false)} /></Suspense>}
         <ShortcutsDialog open={isShortcutsOpen} onClose={closeShortcuts} />
         <ToastContainer toasts={toasts} onRemove={removeToast} />
         </div>

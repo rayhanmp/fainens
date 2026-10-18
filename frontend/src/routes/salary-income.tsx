@@ -32,7 +32,7 @@ import {
 
 export const Route = createFileRoute('/salary-income')({
   component: SalaryIncomePage,
-} as any);
+});
 
 interface TxRow {
   id: number;

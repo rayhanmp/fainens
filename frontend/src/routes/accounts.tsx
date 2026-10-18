@@ -45,7 +45,7 @@ import {
 export const Route = createFileRoute('/accounts')({
   component: AccountsPage,
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any);
+});
 
 type AccountRow = {
   id: number;

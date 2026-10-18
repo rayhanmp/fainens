@@ -14,7 +14,7 @@ export const Route = createFileRoute('/login')({
       if (isRedirect(e)) throw e;
     }
   },
-} as any);
+});
 
 function LoginPage() {
   const { login } = useAuth();

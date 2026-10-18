@@ -8,6 +8,12 @@ import { usePeriodsQuery } from '../../features/periods/queries';
 import { findCurrentPeriod } from '../../lib/utils';
 
 export function GlobalTransactionComposer() {
+  // Mounted on every page; only fetch accounts, categories, tags and periods once it is opened.
+  const isOpen = useUiStore((state) => state.transactionComposer.isOpen);
+  return isOpen ? <OpenTransactionComposer /> : null;
+}
+
+function OpenTransactionComposer() {
   const queryClient = useQueryClient();
   const { transactionComposer, closeTransactionComposer } = useUiStore();
   const accountsQuery = useAccountsQuery();

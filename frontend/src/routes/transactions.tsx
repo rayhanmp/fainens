@@ -34,7 +34,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export const Route = createFileRoute('/transactions')({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { periodId?: string; accountId?: string; categoryId?: string; transactionId?: string; tagId?: string; action?: string } => ({
     periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
     accountId: typeof search.accountId === 'string' ? search.accountId : undefined,
     categoryId: typeof search.categoryId === 'string' ? search.categoryId : undefined,
@@ -52,7 +52,7 @@ export const Route = createFileRoute('/transactions')({
   },
   component: TransactionsPage,
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any);
+});
 
 interface Category { id: number; name: string; icon?: string | null; color?: string | null; }
 interface Period { id: number; name: string; startDate: number; endDate: number; coverageStatus: 'complete' | 'partial' | 'skipped' | 'unknown'; coverageReason: string | null; }

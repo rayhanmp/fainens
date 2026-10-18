@@ -43,7 +43,7 @@ import {
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
-} as any);
+});
 
 interface AppSettings {
   dateFormat: string;

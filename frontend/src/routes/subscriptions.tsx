@@ -25,7 +25,7 @@ import { cn, parseIdNominalToInt } from '../lib/utils';
 
 export const Route = createFileRoute('/subscriptions')({
   component: SubscriptionsPage,
-} as any);
+});
 
 type SubStatus = 'active' | 'expiring' | 'paused';
 

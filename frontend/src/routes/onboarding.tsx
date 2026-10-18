@@ -75,7 +75,7 @@ function isOnboardingPreview(search?: { preview?: unknown }) {
 
 export const Route = createFileRoute('/onboarding')({
   component: OnboardingPage,
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { preview?: boolean } => ({
     preview: search.preview === '1' || search.preview === true || search.preview === 1,
   }),
   beforeLoad: async ({ search }: { search: { preview?: unknown } }) => {
@@ -91,7 +91,7 @@ export const Route = createFileRoute('/onboarding')({
       throw redirect({ to: '/' });
     }
   },
-} as any);
+});
 
 function OnboardingPage() {
   const search = useSearch({ from: '/onboarding' }) as { preview?: boolean };

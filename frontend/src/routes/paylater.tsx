@@ -22,7 +22,7 @@ import { cn } from '../lib/utils';
 
 export const Route = createFileRoute('/paylater')({
   component: PaylaterPage,
-} as any);
+});
 
 type ObligationRow = Awaited<ReturnType<typeof api.paylater.obligations>>['obligations'][number];
 type ScheduleItem = Omit<Awaited<ReturnType<typeof api.paylater.obligations>>['scheduleItems'][number], 'kind'> & { kind: 'recognition' | 'interest' };

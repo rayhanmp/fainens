@@ -38,7 +38,7 @@ import {
 
 export const Route = createFileRoute('/loans')({
   component: LoansPage,
-} as any);
+});
 
 type Loan = {
   id: number;

@@ -6,7 +6,7 @@ import { RequireAuth } from '../lib/auth';
 
 export const Route = createFileRoute('/help')({
   component: HelpPage,
-} as any);
+});
 
 const coreConcepts = [
   {

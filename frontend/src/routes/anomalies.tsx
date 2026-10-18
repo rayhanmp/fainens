@@ -11,11 +11,11 @@ import { useMoneyAnomaliesQuery, useReviewMoneyAnomalyMutation, useScanMoneyAnom
 import { formatDate } from '../lib/utils';
 
 export const Route = createFileRoute('/anomalies')({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { status?: 'open' | 'resolved' | 'dismissed' } => ({
     status: search.status === 'resolved' || search.status === 'dismissed' ? search.status : 'open',
   }),
   component: MoneyAnomaliesPage,
-} as any);
+});
 
 type Review = Awaited<ReturnType<typeof api.anomalies.money>>['reviews'][number];
 

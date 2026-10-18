@@ -35,7 +35,7 @@ import {
 
 export const Route = createFileRoute('/savings-simulator')({
   component: SavingsSimulatorPage,
-} as any);
+});
 
 type Tab = 'projection' | 'scenarios' | 'goals' | 'retirement';
 

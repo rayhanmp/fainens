@@ -72,7 +72,7 @@ import {
 import { SplitBillLoanProposalCard } from '../components/agent/SplitBillLoanProposalCard';
 
 export const Route = createFileRoute('/agent')({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; conversationId?: number } => ({
     prompt: typeof search.prompt === 'string' ? search.prompt : undefined,
     conversationId: (() => {
       const value = search.conversationId;
@@ -81,7 +81,7 @@ export const Route = createFileRoute('/agent')({
     })(),
   }),
   component: AgentPage,
-} as any);
+});
 
 type AccountOption = {
   id: number;

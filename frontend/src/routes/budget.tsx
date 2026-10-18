@@ -65,7 +65,7 @@ import { getSubscriptionDueByCategory } from '../features/budgets/subscription-b
 
 export const Route = createFileRoute('/budget')({
   component: BudgetPage,
-} as any);
+});
 
 interface BudgetRow {
   id: number;

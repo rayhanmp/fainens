@@ -28,7 +28,7 @@ import {
 
 // TanStack routes are module-level exports rather than React components.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const Route = createFileRoute('/periods')({ component: PeriodsPage } as any);
+export const Route = createFileRoute('/periods')({ component: PeriodsPage });
 
 interface Period {
   id: number;
