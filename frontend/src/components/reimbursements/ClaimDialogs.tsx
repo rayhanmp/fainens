@@ -6,6 +6,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
+import { lockPageScroll } from '../../lib/scroll-lock';
 import { useAccountsQuery } from '../../features/accounts/queries';
 import { useContactsQuery } from '../../features/loans/queries';
 import { queryKeys } from '../../features/core/query-keys';
@@ -19,11 +20,7 @@ const hint = 'mt-1.5 text-xs font-normal leading-relaxed text-[var(--ref-on-surf
 const positiveInteger = (value: string) => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 const dateLabel = formatDate;
 function useDialogScrollLock() {
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previous; };
-  }, []);
+  useEffect(() => lockPageScroll(), []);
 }
 function ErrorMessage({ error }: { error: Error | null }) {
   return error ? <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-[var(--ref-error)]">{error.message}</p> : null;

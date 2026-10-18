@@ -531,7 +531,7 @@ function TransactionsPage() {
         <PeriodPicker periods={periods} value={search.periodId ?? 'all'} onChange={(value) => navigate({ search: (previous) => ({ ...previous, periodId: value }) })} allOption={{ value: 'all', label: 'All periods' }} ariaLabel="Period" />
         <Button variant="secondary" className="rounded-full" aria-expanded={isFiltersOpen} aria-controls="transaction-filters" onClick={() => setActivePanel(isFiltersOpen ? null : 'transactions-filters')}><SlidersHorizontal className="mr-2 h-4 w-4" />Filters{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}</Button>
       </div>
-      {isFiltersOpen && <div id="transaction-filters" className="mt-4 hidden gap-3 border-t border-[var(--ref-outline-variant)]/20 pt-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
+      {isFiltersOpen && <div id="transaction-filters" className="mt-4 hidden gap-3 border-t border-[var(--ref-outline-variant)]/20 pt-4 md:grid md:grid-cols-2 xl:grid-cols-4">
         <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Account<select value={search.accountId ?? ''} onChange={(event) => navigate({ search: (previous) => ({ ...previous, accountId: event.target.value || undefined }) })} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="">All accounts</option>{accounts.map((account) => <option key={account.id} value={String(account.id)}>{account.name}</option>)}</select></label>
         <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">Category<select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={String(category.id)}>{category.name}</option>)}</select></label>
         <label className="text-xs font-bold text-[var(--ref-on-surface-variant)]">From<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="mt-1.5 block w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm" /></label>
@@ -544,11 +544,11 @@ function TransactionsPage() {
       {invalidRange && <p role="alert" className="mt-3 text-sm text-[var(--ref-error)]">The start of each range must be before or smaller than its end.</p>}
     </section>
     <Modal
-      isOpen={isFiltersOpen}
+      // Phones only. Mounting it hidden on desktop would still lock page scrolling.
+      isOpen={isFiltersOpen && isMobile}
       onClose={() => setActivePanel(null)}
       title="Filter transactions"
       subtitle="Results update as you choose filters."
-      overlayClassName="sm:hidden"
       contentClassName="grid gap-4"
       footer={<div className="flex gap-3"><Button type="button" variant="secondary" className="min-h-11 flex-1" onClick={clearFilters}>Reset</Button><Button type="button" className="min-h-11 flex-1" onClick={() => setActivePanel(null)} disabled={Boolean(invalidRange)}>Show results</Button></div>}
     >

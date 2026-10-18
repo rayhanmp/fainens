@@ -1530,6 +1530,13 @@ button[data-variant="danger"]:focus-visible,
   border-color: #ffffff26;
   box-shadow: inset 0 1px 0 #ffffff1a, 0 24px 80px #00000066;
 }
+
+/* Overlays scroll with a thin, quiet thumb instead of the platform's chunky arrowed scrollbar. */
+:where(.finance-modal-panel, .agent-orb-dialog, .finance-mobile-menu, .ui-popover, [role="listbox"], [role="menu"]),
+:where(.finance-modal-panel, .agent-orb-dialog, .finance-mobile-menu, .ui-popover, [role="listbox"], [role="menu"]) * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-text-secondary) 38%, transparent) transparent;
+}
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .finance-glass-dock {
     background: color-mix(in srgb, var(--color-surface) 82%, transparent);

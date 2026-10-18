@@ -331,7 +331,7 @@ function DashboardPage() {
         <DashboardTodayCard mainMetric={preferences.mainMetric} metrics={balanceMetrics} dailyBudget={dailyBudget} formatAmount={formatAmount} />
 
         <DashboardSections preferences={visiblePreferences} sections={dashboardSections} editing={isEditingLayout} onChange={next => updatePreferences({ ...preferences, sectionOrder: next.sectionOrder, sectionSizes: next.sectionSizes })} onDone={() => setIsEditingLayout(false)} />
-        {!isMobile && <div className="fixed bottom-5 right-5 z-30 sm:bottom-7 sm:right-7"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
+        {!isMobile && <div className="fixed bottom-5 right-[calc(1.25rem+var(--scroll-lock-gap,0px))] z-30 sm:bottom-7 sm:right-[calc(1.75rem+var(--scroll-lock-gap,0px))]"><AgentOrbActions state="idle" onPrompt={openAgent} /></div>}
         <TransactionModal isOpen={isTransactionOpen} onClose={() => setIsTransactionOpen(false)} onSaved={() => { setIsTransactionOpen(false); refreshDashboard(); }} accounts={accounts} categories={categories} tags={tags} editingTransaction={null} periodId={selectedPeriod?.id ?? null} />
         {isReportOpen && <Suspense fallback={null}><MonthlyReportModal isOpen onClose={() => setIsReportOpen(false)} /></Suspense>}
         <ShortcutsDialog open={isShortcutsOpen} onClose={closeShortcuts} />

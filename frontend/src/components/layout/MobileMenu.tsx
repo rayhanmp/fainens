@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { lockPageScroll } from '../../lib/scroll-lock';
 import { ProfileMenu } from './Sidebar';
 import { navigationActive } from './navigation';
 import { useUiStore } from '../../stores/ui-store';
@@ -61,9 +62,7 @@ export function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () =
       return;
     }
     dialog.current?.showModal();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
+    return lockPageScroll();
   }, [isOpen]);
 
   return (

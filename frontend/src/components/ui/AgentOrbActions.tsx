@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpRight, CalendarClock, ChartNoAxesCombined, ImagePlus, Plus, ShoppingBag, Wallet, X } from 'lucide-react';
 import { AgentOrb, type AgentOrbState } from './AgentOrb';
+import { lockPageScroll } from '../../lib/scroll-lock';
 
 const shortcuts = [
   { title: 'Understand my spending', detail: 'Find the biggest expenses and patterns', icon: ChartNoAxesCombined, prompt: 'What were my top expenses recently, and what spending patterns stand out?' },
@@ -26,9 +27,7 @@ export function AgentOrbActions({ state = 'idle', status, className, onPrompt, o
 
   useEffect(() => {
     if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
+    return lockPageScroll();
   }, [open]);
 
   const choose = (action: () => void) => {

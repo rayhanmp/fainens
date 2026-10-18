@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { lockPageScroll } from '../../lib/scroll-lock';
 import { useEffect, useId, useState, useRef } from 'react';
 
 const MODAL_STACK_KEY = '__fainensModalStack';
@@ -169,9 +170,7 @@ export function Modal({
 
   useEffect(() => {
     if (!isOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
+    return lockPageScroll();
   }, [isOpen]);
 
   useEffect(() => {
