@@ -1,5 +1,6 @@
 import { callOpenRouter } from "./openrouter";
 import { getAgentProviderConfig } from "./agent-provider-config";
+import { parseIdrInteger } from "./money";
 
 export interface ParsedTransaction {
   /** Transaction type: expense, income, transfer */
@@ -16,6 +17,8 @@ export interface ParsedTransaction {
   place?: string;
   /** Optional: notes */
   notes?: string;
+  /** Optional: source account name, when the message names one */
+  fromAccount?: string;
   /** Optional: for transfers - destination account name */
   toAccount?: string;
   /** Confidence score 0-1 */
@@ -54,6 +57,7 @@ Return JSON in this exact format:
   "date": "YYYY-MM-DD or null",
   "place": "location or null",
   "notes": "additional notes or null",
+  "fromAccount": "source account name if the message names one, or null",
   "toAccount": "for transfers only, or null",
   "confidence": 0.0-1.0
 }
@@ -61,11 +65,58 @@ Return JSON in this exact format:
 Rules:
 - Parse the amount as IDR (Indonesian Rupiah)
 - If no date provided, use null (will default to today)
-- For transfers, use type "transfer" and specify toAccount
+- For transfers, use type "transfer" and specify fromAccount and toAccount when named
 - Set confidence to 0.0-1.0 based on how clear the message is
 - If unable to parse, return type: "unknown" with amount: 0 and confidence: 0
 
 Respond ONLY with valid JSON, no explanation.`;
+
+function unparsedTransaction(message: string): ParsedTransaction {
+  return {
+    type: "expense",
+    amount: 0,
+    description: message,
+    category: "Others",
+    confidence: 0,
+  };
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+/**
+ * Validate the model's JSON. A transfer stays a transfer (approval then needs
+ * explicit accounts) instead of being booked as an expense, and an "unknown"
+ * type or a missing/invalid amount is reported as a failed parse
+ * (confidence 0) rather than a plausible-looking pending expense.
+ */
+export function normalizeParsedTransaction(value: unknown, message: string): ParsedTransaction {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return unparsedTransaction(message);
+  const parsed = value as Record<string, unknown>;
+  const type = parsed.type === "expense" || parsed.type === "income" || parsed.type === "transfer" ? parsed.type : null;
+  const rawAmount = typeof parsed.amount === "number"
+    ? parsed.amount
+    : typeof parsed.amount === "string" ? parseIdrInteger(parsed.amount) : null;
+  const amount = rawAmount != null && Number.isFinite(rawAmount) ? Math.floor(rawAmount) : 0;
+  if (!type || !Number.isSafeInteger(amount) || amount <= 0) return unparsedTransaction(message);
+
+  const confidence = typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
+    ? Math.min(1, Math.max(0, parsed.confidence))
+    : 0.5;
+  return {
+    type,
+    amount,
+    description: optionalText(parsed.description) ?? message.slice(0, 100),
+    category: optionalText(parsed.category) ?? "Others",
+    date: optionalText(parsed.date),
+    place: optionalText(parsed.place),
+    notes: optionalText(parsed.notes),
+    fromAccount: optionalText(parsed.fromAccount),
+    toAccount: optionalText(parsed.toAccount),
+    confidence,
+  };
+}
 
 export async function parseNaturalLanguageTransaction(message: string): Promise<ParsedTransaction> {
   const providerConfig = await getAgentProviderConfig();
@@ -85,36 +136,9 @@ export async function parseNaturalLanguageTransaction(message: string): Promise<
     if (!jsonMatch) {
       throw new Error("No JSON found in response");
     }
-
-    const parsed = JSON.parse(jsonMatch[0]) as ParsedTransaction;
-    
-    // Validate type
-    const validTypes = ["expense", "income", "transfer"];
-    if (!parsed.type || !validTypes.includes(parsed.type)) {
-      parsed.type = "expense";
-    }
-
-    // Ensure required fields have defaults
-    const finalType = parsed.type === "expense" ? "expense" : parsed.type === "income" ? "income" : "expense";
-    return {
-      type: finalType,
-      amount: Math.max(0, Math.floor(parsed.amount || 0)),
-      description: parsed.description || message.slice(0, 100),
-      category: parsed.category || "Others",
-      date: parsed.date || undefined,
-      place: parsed.place || undefined,
-      notes: parsed.notes || undefined,
-      toAccount: parsed.toAccount || undefined,
-      confidence: Math.min(1, Math.max(0, parsed.confidence || 0.5)),
-    };
+    return normalizeParsedTransaction(JSON.parse(jsonMatch[0]), message);
   } catch (parseError) {
     console.error("Failed to parse LLM response:", result, parseError);
-    return {
-      type: "expense",
-      amount: 0,
-      description: message,
-      category: "Others",
-      confidence: 0,
-    };
+    return unparsedTransaction(message);
   }
 }

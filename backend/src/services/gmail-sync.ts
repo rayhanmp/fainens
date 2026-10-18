@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { accounts, gmailConnections, pendingTransactions } from "../db/schema";
@@ -18,7 +18,7 @@ export type GmailSyncResult = {
   lastSyncedAt: Date;
 };
 
-function resolveFundingAccount(
+export function resolveFundingAccount(
   sourceLabel: string | null,
   rows: Array<{ id: number; name: string; accountNumber: string | null }>,
 ): { id: number; name: string } | null {
@@ -34,7 +34,54 @@ function resolveFundingAccount(
     return { row, score };
   }).sort((left, right) => right.score - left.score);
   const match = scored[0];
-  return match && match.score > 0 ? { id: match.row.id, name: match.row.name } : null;
+  // A tie means the label does not identify one wallet; leave the account
+  // unresolved so approval asks the user to pick it.
+  if (!match || match.score <= 0 || scored[1]?.score === match.score) return null;
+  return { id: match.row.id, name: match.row.name };
+}
+
+type GmailPendingInsert = {
+  messageId: string;
+  reference: string | null;
+  rawMessage: string;
+  parsedData: string;
+};
+
+/**
+ * Insert one imported email unless it is already queued. The duplicate check
+ * and the insert run in one IMMEDIATE SQLite transaction: the write lock is
+ * taken before the check, so the background worker and a manual sync in
+ * another process cannot both pass the check for the same email. Besides the
+ * Gmail message ID, the bank's reference ID is matched so a re-sent or
+ * forwarded notification for the same payment is not queued twice.
+ */
+export function insertGmailPendingTransactionOnce(input: GmailPendingInsert): number | null {
+  const reference = input.reference?.trim() || null;
+  return db.transaction((tx) => {
+    const duplicate = tx.select({ id: pendingTransactions.id })
+      .from(pendingTransactions)
+      .where(and(
+        eq(pendingTransactions.source, GMAIL_BNI_SOURCE),
+        reference
+          ? or(
+              eq(pendingTransactions.userMessageId, input.messageId),
+              sql`(CASE WHEN json_valid(${pendingTransactions.parsedData}) THEN json_extract(${pendingTransactions.parsedData}, '$.reference') END) = ${reference}`,
+            )
+          : eq(pendingTransactions.userMessageId, input.messageId),
+      ))
+      .limit(1)
+      .all()[0];
+    if (duplicate) return null;
+    const created = tx.insert(pendingTransactions).values({
+      rawMessage: input.rawMessage,
+      parsedData: input.parsedData,
+      status: "pending",
+      parseAttempts: 1,
+      userMessageId: input.messageId,
+      source: GMAIL_BNI_SOURCE,
+    }).returning({ id: pendingTransactions.id }).all()[0];
+    return created?.id ?? null;
+  }, { behavior: "immediate" });
 }
 
 async function syncGmailConnectionOnce(ownerEmail: string, days: number): Promise<GmailSyncResult | null> {
@@ -52,15 +99,6 @@ async function syncGmailConnectionOnce(ownerEmail: string, days: number): Promis
   const pendingIds: number[] = [];
 
   for (const email of emails) {
-    const [duplicate] = await db.select({ id: pendingTransactions.id })
-      .from(pendingTransactions)
-      .where(and(eq(pendingTransactions.source, GMAIL_BNI_SOURCE), eq(pendingTransactions.userMessageId, email.messageId)))
-      .limit(1);
-    if (duplicate) {
-      skipped += 1;
-      continue;
-    }
-
     const originalAccountLabel = email.parsed.fromAccount;
     const fundingAccount = resolveFundingAccount(originalAccountLabel, walletRows);
     const parsed = {
@@ -69,18 +107,18 @@ async function syncGmailConnectionOnce(ownerEmail: string, days: number): Promis
       fromAccountId: fundingAccount?.id ?? null,
       sourceAccountLabel: originalAccountLabel,
     };
-    const [created] = await db.insert(pendingTransactions).values({
+    const createdId = insertGmailPendingTransactionOnce({
+      messageId: email.messageId,
+      reference: email.parsed.reference,
       rawMessage: email.rawMessage,
       parsedData: JSON.stringify(parsed),
-      status: "pending",
-      parseAttempts: 1,
-      userMessageId: email.messageId,
-      source: GMAIL_BNI_SOURCE,
-    }).returning({ id: pendingTransactions.id });
-    if (created) {
-      imported += 1;
-      pendingIds.push(created.id);
+    });
+    if (createdId == null) {
+      skipped += 1;
+      continue;
     }
+    imported += 1;
+    pendingIds.push(createdId);
   }
 
   const lastSyncedAt = new Date();

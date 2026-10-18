@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { load } from "cheerio";
 import { env } from "../lib/env";
+import { parseIdrInteger } from "./money";
 
 export const GMAIL_BNI_SOURCE = "gmail:bni";
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -138,12 +139,20 @@ function fieldValues($: ReturnType<typeof load>): Map<string, string> {
   return fields;
 }
 
-function parseRupiah(value: string | null): number | null {
+/**
+ * Read the notification's amount ("Rp654.500", "Rp654.500,00", "IDR 654,500.00")
+ * as integer rupiah. Separators are interpreted by the canonical IDR parser
+ * rather than stripped, so a decimal part can never inflate the amount 100x.
+ * A non-zero fraction (e.g. "Rp10.000,50") cannot be represented in the
+ * integer-rupiah ledger and, as in parseIdrInteger, is rejected: the email is
+ * skipped instead of importing a silently rounded amount.
+ */
+export function parseRupiah(value: string | null): number | null {
   if (!value) return null;
-  const digits = value.replace(/[^0-9]/g, "");
-  if (!digits) return null;
-  const amount = Number(digits);
-  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+  const token = value.match(/[0-9](?:[0-9.,]*[0-9])?/)?.[0];
+  if (!token) return null;
+  const amount = parseIdrInteger(token);
+  return amount != null && Number.isSafeInteger(amount) && amount > 0 ? amount : null;
 }
 
 function parseLocalDate(value: string | null): string | null {

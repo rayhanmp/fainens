@@ -78,14 +78,19 @@ function hasExplicitOffset(value: string): boolean {
 }
 
 /** Normalize a local date or local date-time to a timezone-aware ISO value. */
-export function normalizeAgentDateString(value: unknown, timeZone = DEFAULT_AGENT_TIMEZONE): unknown {
+export function normalizeAgentDateString(value: unknown, timeZone = DEFAULT_AGENT_TIMEZONE, now = Date.now()): unknown {
   if (typeof value !== "string") return value;
   const trimmed = value.trim();
   if (hasExplicitOffset(trimmed)) return trimmed;
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     if (!isValidLocalDateTime(`${trimmed}T00:00:00`)) return value;
+    const zone = safeTimeZone(timeZone);
     const local = `${trimmed}T12:00:00`;
-    return `${local}${offsetForLocalDateTime(local, safeTimeZone(timeZone))}`;
+    const noon = `${local}${offsetForLocalDateTime(local, zone)}`;
+    // Something logged for "today" has already happened. Before midday, noon would be in the future
+    // and a balance check made this morning would miss it, so use the current time instead.
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return trimmed === today && now < Date.parse(noon) ? new Date(now).toISOString() : noon;
   }
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(trimmed)) {
     if (!isValidLocalDateTime(trimmed)) return value;

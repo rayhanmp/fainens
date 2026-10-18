@@ -1,13 +1,20 @@
 import { FastifyInstance } from "fastify";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client";
-import { auditLogs, pendingTransactions, transactions, transactionLines, categories, accounts } from "../db/schema";
+import { auditLogs, pendingTransactions, categories, accounts } from "../db/schema";
 import { parseNaturalLanguageTransaction } from "../services/transaction-parser";
-import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "../services/ledger";
-import { findPeriodIdForDate } from "../services/transaction-mutations";
+import {
+  getOrCreateAutoExpenseAccount,
+  getOrCreateAutoIncomeAccount,
+  insertPreparedJournalEntrySync,
+  prepareJournalEntry,
+  type JournalLineInput,
+  type PreparedJournalEntry,
+} from "../services/ledger";
+import { PeriodLockedError } from "../services/period-locking";
+import { DEFAULT_AGENT_TIMEZONE, normalizeAgentDateString } from "../services/agent-normalization";
 import { invalidateOnTransactionMutation } from "../cache";
-import { bumpFinancialRevisionSync } from "../services/financial-revision";
 
 const MAX_PARSE_ATTEMPTS = 3;
 const pendingErrorSchema = z.object({ error: z.string() }).passthrough();
@@ -55,6 +62,60 @@ function parseStoredPendingData(value: string): unknown {
       notes: "Pending data could not be read. Edit this item before approving it.",
     };
   }
+}
+
+/** Raised inside the approval transaction when another request won the race. */
+class PendingAlreadyProcessedError extends Error {
+  constructor() {
+    super("Pending transaction already processed");
+  }
+}
+
+/** Machine-readable code on the 422 sent when the user must pick the wallet. */
+export const SOURCE_ACCOUNT_REQUIRED = "source_account_required";
+
+function normalizeAccountName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Resolve the wallet a pending item was paid from (expense) or received into
+ * (income). An importer's or the user's explicit account ID wins; otherwise
+ * the name must match exactly one active wallet (case/whitespace-insensitive,
+ * never a substring, so "BCA" does not pick "BCA Syariah"). With neither, the
+ * only wallet is used when exactly one exists. Anything else is refused so the
+ * user picks the account instead of the first wallet being charged.
+ */
+export function resolvePendingSourceWallet<T extends { id: number; name: string }>(
+  parsed: { fromAccountId?: unknown; fromAccount?: unknown },
+  wallets: T[],
+): { wallet: T } | { error: string } {
+  const pickAccount = "Edit this pending transaction and choose the account it used before approving.";
+  const rawId = parsed.fromAccountId;
+  if (rawId != null && rawId !== "") {
+    const requestedId = Number(rawId);
+    const wallet = Number.isSafeInteger(requestedId) && requestedId > 0
+      ? wallets.find((candidate) => candidate.id === requestedId)
+      : undefined;
+    return wallet ? { wallet } : { error: `The account selected for this pending transaction is not an active wallet. ${pickAccount}` };
+  }
+  const requestedName = typeof parsed.fromAccount === "string" ? normalizeAccountName(parsed.fromAccount) : "";
+  if (requestedName) {
+    const matches = wallets.filter((candidate) => normalizeAccountName(candidate.name) === requestedName);
+    if (matches.length === 1) return { wallet: matches[0] };
+    const label = String(parsed.fromAccount).trim();
+    return {
+      error: matches.length === 0
+        ? `No active wallet is named "${label}". ${pickAccount}`
+        : `More than one active wallet is named "${label}". ${pickAccount}`,
+    };
+  }
+  if (wallets.length === 1) return { wallet: wallets[0] };
+  return {
+    error: wallets.length === 0
+      ? "No active wallet account found. Create one before approving this pending transaction."
+      : `This pending transaction does not say which account it used. ${pickAccount}`,
+  };
 }
 
 export default async function pendingRoutes(fastify: FastifyInstance) {
@@ -189,7 +250,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     }
 
     if (pending.status !== "pending") {
-      return reply.code(400).send({ error: "Pending transaction already processed" });
+      return reply.code(409).send({ error: "Pending transaction already processed" });
     }
 
     const parsed = parseStoredPendingData(pending.parsedData) as {
@@ -197,26 +258,20 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       amount: number;
       description: string;
       category: string;
-      date?: string;
-      place?: string;
-      notes?: string;
-      toAccount?: string;
-      fromAccount?: string;
-      fromAccountId?: number | null;
-      reference?: string | null;
+      date?: string | null;
+      place?: string | null;
+      notes?: string | null;
+      memo?: string | null;
+      toAccount?: string | null;
+      fromAccount?: string | null;
+      fromAccountId?: unknown;
+      reference?: unknown;
     };
 
     const parsedValidation = pendingParsedTransactionSchema.safeParse(parsed);
     if (!parsedValidation.success) {
       return reply.code(400).send({ error: "Pending transaction data is incomplete; edit it before approving" });
     }
-
-    // Find category by name
-    const [category] = await db
-      .select()
-      .from(categories)
-      .where(eq(categories.name, parsed.category))
-      .limit(1);
 
     if (!Number.isSafeInteger(parsed.amount) || parsed.amount <= 0) {
       return reply.code(400).send({ error: "Parsed amount must be a positive integer rupiah value" });
@@ -229,90 +284,117 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
         error: "Transfer approval requires explicit source and destination account IDs",
       });
     }
+    const kind: "expense" | "income" = parsed.type === "income" ? "income" : "expense";
+    const amount = parsed.amount;
+    const description = parsed.description.trim();
 
-    // Prefer the account resolved by an importer (or by the user's edit),
-    // then fall back to a name match and finally the first active wallet for
-    // backwards compatibility with WhatsApp/web pending transactions.
-    const walletAccounts = await db
-      .select()
+    // Prefer the account resolved by an importer (or by the user's edit), then
+    // an exact unique name. Never guess: an unresolved wallet is the user's call.
+    const walletAccounts: Array<{ id: number; name: string; liquidityClass: string | null }> = await db
+      .select({ id: accounts.id, name: accounts.name, liquidityClass: accounts.liquidityClass })
       .from(accounts)
-      .where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true)))
-      ;
-    const requestedAccountId = Number(parsed.fromAccountId);
-    const requestedName = parsed.fromAccount?.trim().toLowerCase();
-    const account = walletAccounts.find((candidate) => Number.isSafeInteger(requestedAccountId) && candidate.id === requestedAccountId)
-      ?? (requestedName ? walletAccounts.find((candidate) => candidate.name.toLowerCase().includes(requestedName) || requestedName.includes(candidate.name.toLowerCase())) : undefined)
-      ?? walletAccounts[0];
+      .where(and(eq(accounts.type, "asset"), eq(accounts.isActive, true)));
+    const resolvedWallet = resolvePendingSourceWallet(parsed, walletAccounts);
+    if ("error" in resolvedWallet) {
+      return reply.code(422).send({ error: resolvedWallet.error, code: SOURCE_ACCOUNT_REQUIRED });
+    }
+    const account = resolvedWallet.wallet;
 
-    if (!account) {
-      return reply.code(400).send({ error: "No wallet account found" });
+    // A bare YYYY-MM-DD is a local calendar day; anchor it like the agent path.
+    let txDate = Date.now();
+    if (typeof parsed.date === "string" && parsed.date.trim()) {
+      const normalizedDate = normalizeAgentDateString(parsed.date, DEFAULT_AGENT_TIMEZONE);
+      txDate = typeof normalizedDate === "string" ? Date.parse(normalizedDate) : NaN;
+      if (!Number.isSafeInteger(txDate) || txDate < 0) {
+        return reply.code(400).send({ error: "Parsed transaction date is invalid" });
+      }
     }
 
-    const txDate = parsed.date ? new Date(parsed.date).getTime() : Date.now();
-    if (!Number.isFinite(txDate)) {
-      return reply.code(400).send({ error: "Parsed transaction date is invalid" });
+    let categoryId: number | null = null;
+    let categoryExpenseAccountId: number | null = null;
+    const categoryName = parsed.category?.trim();
+    if (categoryName) {
+      const [category] = await db
+        .select({ id: categories.id, reportingAccountId: categories.reportingAccountId })
+        .from(categories)
+        .where(and(eq(sql`lower(${categories.name})`, categoryName.toLowerCase()), eq(categories.isActive, true)))
+        .limit(1);
+      categoryId = category?.id ?? null;
+      if (kind === "expense" && category?.reportingAccountId != null) {
+        const [reportingAccount] = await db
+          .select({ id: accounts.id, type: accounts.type, isActive: accounts.isActive })
+          .from(accounts)
+          .where(eq(accounts.id, category.reportingAccountId))
+          .limit(1);
+        if (!reportingAccount || !reportingAccount.isActive || reportingAccount.type !== "expense") {
+          return reply.code(422).send({ error: "Category reporting account must be an active expense account" });
+        }
+        categoryExpenseAccountId = reportingAccount.id;
+      }
     }
-    const periodId = await findPeriodIdForDate(txDate);
 
-    // Determine transaction kind based on type
-    let kind: "expense" | "income" = "expense";
-    if (parsed.type === "income") kind = "income";
+    const walletCashFlowClass = account.liquidityClass === "cash_equivalent" ? "operating" as const : null;
+    const lines: JournalLineInput[] = kind === "expense"
+      ? [
+          { accountId: categoryExpenseAccountId ?? (await getOrCreateAutoExpenseAccount(db)).id, debit: amount, credit: 0, description },
+          { accountId: account.id, debit: 0, credit: amount, description, cashFlowClass: walletCashFlowClass },
+        ]
+      : [
+          { accountId: account.id, debit: amount, credit: 0, description, cashFlowClass: walletCashFlowClass },
+          { accountId: (await getOrCreateAutoIncomeAccount(db)).id, debit: 0, credit: amount, description },
+        ];
 
-    const counterparty = kind === "expense"
-      ? await getOrCreateAutoExpenseAccount(db)
-      : await getOrCreateAutoIncomeAccount(db);
+    // The canonical ledger path validates balance, active accounts, the
+    // closed-period lock and category allocations before anything is written.
+    let prepared: PreparedJournalEntry;
+    try {
+      prepared = await prepareJournalEntry({
+        date: txDate,
+        description,
+        reference: typeof parsed.reference === "string" && parsed.reference.trim() ? parsed.reference.trim() : null,
+        notes: parsed.notes || parsed.memo || null,
+        place: parsed.place || null,
+        txType: `simple_${kind}`,
+        categoryId,
+        categoryAllocations: kind === "expense" && categoryId != null ? [{ categoryId, amount }] : undefined,
+        lines,
+      }, db);
+    } catch (error) {
+      if (error instanceof PeriodLockedError) return reply.code(409).send({ error: error.message });
+      return reply.code(422).send({ error: error instanceof Error ? error.message : "Pending transaction failed ledger validation" });
+    }
+
     let transactionId: number;
     try {
       transactionId = db.transaction((tx) => {
-      const fresh = tx
-        .select({ status: pendingTransactions.status })
-        .from(pendingTransactions)
-        .where(eq(pendingTransactions.id, pendingId))
-        .limit(1)
-        .all()[0];
-      if (!fresh) throw new Error("Pending transaction not found");
-      if (fresh.status !== "pending") throw new Error("Pending transaction already processed");
+        // Re-check inside the write transaction so a double click (or a
+        // concurrent agent approval) cannot post the same item twice.
+        const fresh = tx
+          .select({ status: pendingTransactions.status })
+          .from(pendingTransactions)
+          .where(eq(pendingTransactions.id, pendingId))
+          .limit(1)
+          .all()[0];
+        if (!fresh || fresh.status !== "pending") throw new PendingAlreadyProcessedError();
 
-      const inserted = tx
-        .insert(transactions)
-        .values({
-          date: new Date(txDate),
-          description: parsed.description.trim(),
-          reference: parsed.reference || null,
-          notes: parsed.notes || null,
-          place: parsed.place || null,
-          txType: `simple_${kind}`,
-          periodId,
-          categoryId: category?.id ?? null,
-        })
-        .returning({ id: transactions.id })
-        .all()[0];
-      if (!inserted) throw new Error("Failed to create approved transaction");
-      const lines = kind === "expense"
-        ? [
-            { transactionId: inserted.id, accountId: counterparty.id, debit: parsed.amount, credit: 0 },
-            { transactionId: inserted.id, accountId: account.id, debit: 0, credit: parsed.amount, cashFlowClass: account.liquidityClass === "cash_equivalent" ? "operating" : null },
-          ]
-        : [
-            { transactionId: inserted.id, accountId: account.id, debit: parsed.amount, credit: 0, cashFlowClass: account.liquidityClass === "cash_equivalent" ? "operating" : null },
-            { transactionId: inserted.id, accountId: counterparty.id, debit: 0, credit: parsed.amount },
-          ];
-      tx.insert(transactionLines).values(lines).run();
-      tx.update(pendingTransactions)
-        .set({ status: "approved", updatedAt: new Date() })
-        .where(eq(pendingTransactions.id, pendingId))
-        .run();
-      tx.insert(auditLogs).values({
-        entityType: "transaction",
-        entityId: inserted.id,
-        action: "create",
-        afterSnapshot: Buffer.from(JSON.stringify({ source: "pending_approval", pendingId, lines })),
-      }).run();
-      bumpFinancialRevisionSync(tx);
-        return inserted.id;
-      });
+        const insertedId = insertPreparedJournalEntrySync(tx, prepared);
+        const approved = tx.update(pendingTransactions)
+          .set({ status: "approved", updatedAt: new Date() })
+          .where(and(eq(pendingTransactions.id, pendingId), eq(pendingTransactions.status, "pending")))
+          .returning({ id: pendingTransactions.id })
+          .all()[0];
+        if (!approved) throw new PendingAlreadyProcessedError();
+        tx.insert(auditLogs).values({
+          entityType: "pending_transaction",
+          entityId: pendingId,
+          action: "approve",
+          afterSnapshot: Buffer.from(JSON.stringify({ source: "pending_approval", status: "approved", transactionId: insertedId })),
+        }).run();
+        return insertedId;
+      }, { behavior: "immediate" });
     } catch (error) {
-      if (error instanceof Error && error.message === "Pending transaction already processed") {
+      if (error instanceof PendingAlreadyProcessedError || error instanceof PeriodLockedError
+        || (error instanceof Error && error.message === "Journal period changed while posting; retry")) {
         return reply.code(409).send({ error: error.message });
       }
       fastify.log.error(error);
@@ -320,27 +402,28 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     }
     await invalidateOnTransactionMutation({
       transactionId,
-      affectedAccountIds: [account.id, counterparty.id],
-      affectedPeriodIds: periodId == null ? undefined : [periodId],
+      affectedAccountIds: prepared.accountIds,
+      affectedPeriodIds: prepared.periodId == null ? undefined : [prepared.periodId],
       revisionBumped: true,
     });
 
     return {
       success: true,
       transactionId,
-      message: `Transaction created: ${formatCurrency(parsed.amount)} ${parsed.description}`,
+      message: `Transaction created: ${formatCurrency(amount)} ${description}`,
     };
   });
 
-  // Reject pending transaction
+  // Reject pending transaction. Approved items already have a ledger posting,
+  // so rejecting them would hide a real transaction behind a "rejected" label.
   fastify.post("/api/pending-transactions/:id/reject", {
-    schema: { operationId: "rejectPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingSuccessResponseSchema, 404: pendingErrorSchema } },
+    schema: { operationId: "rejectPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingSuccessResponseSchema, 404: pendingErrorSchema, 409: pendingErrorSchema } },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const pendingId = parseInt(id);
+    const pendingId = parseInt(id, 10);
 
     const [pending] = await db
-      .select()
+      .select({ id: pendingTransactions.id, status: pendingTransactions.status })
       .from(pendingTransactions)
       .where(eq(pendingTransactions.id, pendingId))
       .limit(1);
@@ -348,13 +431,23 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     if (!pending) {
       return reply.code(404).send({ error: "Pending transaction not found" });
     }
+    if (pending.status === "rejected") return { success: true as const };
+    if (pending.status === "approved") {
+      return reply.code(409).send({ error: "Pending transaction is already approved; reverse the posted transaction instead" });
+    }
 
-    await db
+    // Conditional update: an approval that lands between the read and this
+    // write must win, not be relabelled as rejected.
+    const [rejected] = await db
       .update(pendingTransactions)
       .set({ status: "rejected", updatedAt: new Date() })
-      .where(eq(pendingTransactions.id, pendingId));
+      .where(and(eq(pendingTransactions.id, pendingId), inArray(pendingTransactions.status, ["pending", "failed"])))
+      .returning({ id: pendingTransactions.id });
+    if (!rejected) {
+      return reply.code(409).send({ error: "Pending transaction already processed" });
+    }
 
-    return { success: true };
+    return { success: true as const };
   });
 
   // Get single pending transaction
@@ -410,12 +503,13 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     return { success: true as const };
   });
 
-  // Retry parsing a failed pending transaction
+  // Retry parsing a failed (or still pending) item. Approved and rejected
+  // rows are final: re-opening them would allow a second ledger posting.
   fastify.post("/api/pending-transactions/:id/retry", {
-    schema: { operationId: "retryPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingRetryResponseSchema, 404: pendingErrorSchema } },
+    schema: { operationId: "retryPendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, response: { 200: pendingRetryResponseSchema, 404: pendingErrorSchema, 409: pendingErrorSchema } },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const pendingId = parseInt(id);
+    const pendingId = parseInt(id, 10);
 
     const [pending] = await db
       .select()
@@ -426,13 +520,30 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     if (!pending) {
       return reply.code(404).send({ error: "Pending transaction not found" });
     }
+    if (pending.status !== "pending" && pending.status !== "failed") {
+      return reply.code(409).send({ error: `Pending transaction is already ${pending.status}; it cannot be re-parsed` });
+    }
+    // Structured importers (e.g. the wondr/BNI Gmail parser) already captured
+    // the exact account and bank reference; an LLM re-parse would discard them.
+    if (pending.source.startsWith("gmail:")) {
+      return reply.code(409).send({ error: "Imported bank notifications are not re-parsed; edit the pending transaction instead" });
+    }
 
-    // Try parsing again
-    const parsed = await parseNaturalLanguageTransaction(pending.rawMessage);
+    const previous = parseStoredPendingData(pending.parsedData) as Record<string, unknown>;
+    const reparsed = await parseNaturalLanguageTransaction(pending.rawMessage);
     const newAttempts = pending.parseAttempts + 1;
+    // The LLM call is slow; only write if nobody approved/rejected meanwhile.
+    const stillRetryable = and(eq(pendingTransactions.id, pendingId), inArray(pendingTransactions.status, ["pending", "failed"]));
 
-    if (parsed.confidence > 0) {
-      await db
+    if (reparsed.confidence > 0) {
+      // Keep account/reference choices the user (or an importer) already made.
+      const preserved = Object.fromEntries(
+        ["fromAccountId", "fromAccount", "toAccount", "reference"]
+          .filter((key) => previous[key] != null && previous[key] !== "")
+          .map((key) => [key, previous[key]]),
+      );
+      const parsed = { ...reparsed, ...preserved };
+      const [updated] = await db
         .update(pendingTransactions)
         .set({
           parsedData: JSON.stringify(parsed),
@@ -441,19 +552,23 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
           lastError: null,
           updatedAt: new Date(),
         })
-        .where(eq(pendingTransactions.id, pendingId));
+        .where(stillRetryable)
+        .returning({ id: pendingTransactions.id });
+      if (!updated) return reply.code(409).send({ error: "Pending transaction already processed" });
 
       return { success: true, parsed };
     } else {
-      await db
+      const [updated] = await db
         .update(pendingTransactions)
         .set({
           parseAttempts: newAttempts,
           lastError: "Retry failed",
-          status: newAttempts >= MAX_PARSE_ATTEMPTS ? "failed" : "pending",
+          status: newAttempts >= MAX_PARSE_ATTEMPTS ? "failed" : pending.status,
           updatedAt: new Date(),
         })
-        .where(eq(pendingTransactions.id, pendingId));
+        .where(stillRetryable)
+        .returning({ id: pendingTransactions.id });
+      if (!updated) return reply.code(409).send({ error: "Pending transaction already processed" });
 
       return { success: false, error: "Still unable to parse" };
     }

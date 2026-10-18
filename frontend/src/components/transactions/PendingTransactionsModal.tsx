@@ -1,20 +1,53 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Check, X, Edit2, Loader2 } from 'lucide-react';
 import {
-  useApprovePendingTransactionMutation,
   type PendingTransactionListItem,
   usePendingTransactionsQuery,
-  useRejectPendingTransactionMutation,
+  useUpdatePendingTransactionMutation,
 } from '../../features/transactions/queries';
+import { useAssetAccountsQuery } from '../../features/accounts/queries';
+import { invalidateFinancialSummaries, queryKeys } from '../../features/core/query-keys';
+import { approvePendingTransaction, rejectPendingTransaction } from '../../generated/client';
 
 interface PendingTransactionsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit: (pendingTx: PendingTransactionListItem) => void;
   onRefresh: () => void;
+}
+
+type WalletOption = { id: number; name: string };
+
+const normalizeAccountName = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * Mirrors the server's approval rule: an explicit account ID, else exactly one
+ * wallet with the same name, else the only wallet when the item names none.
+ * Returns null when the user has to pick the account.
+ */
+function resolveWalletId(parsed: PendingTransactionListItem['parsedData'], wallets: WalletOption[]): number | null {
+  const rawId = (parsed as Record<string, unknown>).fromAccountId;
+  if (rawId != null && rawId !== '') {
+    const id = Number(rawId);
+    return wallets.some((wallet) => wallet.id === id) ? id : null;
+  }
+  const name = parsed.fromAccount ? normalizeAccountName(parsed.fromAccount) : '';
+  if (name) {
+    const matches = wallets.filter((wallet) => normalizeAccountName(wallet.name) === name);
+    return matches.length === 1 ? matches[0].id : null;
+  }
+  return wallets.length === 1 ? wallets[0].id : null;
+}
+
+function serverError(data: unknown, fallback: string): string {
+  if (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string') {
+    return (data as { error: string }).error;
+  }
+  return fallback;
 }
 
 export function PendingTransactionsModal({
@@ -24,23 +57,64 @@ export function PendingTransactionsModal({
   onRefresh,
 }: PendingTransactionsModalProps) {
   const { formatAmount } = useBalanceVisibility();
+  const queryClient = useQueryClient();
   const pendingQuery = usePendingTransactionsQuery();
-  const approveMutation = useApprovePendingTransactionMutation();
-  const rejectMutation = useRejectPendingTransactionMutation();
+  const accountsQuery = useAssetAccountsQuery(isOpen);
+  const updateMutation = useUpdatePendingTransactionMutation();
   const pendingTxs = pendingQuery.data ?? [];
+  const wallets: WalletOption[] = (accountsQuery.data ?? [])
+    .filter((account) => account.type === 'asset' && !account.systemKey && account.isActive !== false)
+    .map((account) => ({ id: account.id, name: account.name }));
   const isLoading = pendingQuery.isPending && !pendingQuery.data;
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [actionError, setActionError] = useState('');
+  const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
 
-  const handleApprove = async (id: number) => {
-    setActionLoading(id);
+  const setItemError = (id: number, message: string | null) => {
+    setItemErrors((previous) => {
+      const next = { ...previous };
+      if (message) next[id] = message;
+      else delete next[id];
+      return next;
+    });
+  };
+
+  const handleChooseAccount = async (tx: PendingTransactionListItem, accountId: string) => {
+    const wallet = wallets.find((candidate) => candidate.id.toString() === accountId);
+    if (!wallet) return;
+    setActionLoading(tx.id);
     setActionError('');
     try {
-      await approveMutation.mutateAsync(id);
+      // The edit endpoint stores the explicit account; approval then uses it.
+      await updateMutation.mutateAsync({
+        id: tx.id,
+        parsed: { ...tx.parsedData, fromAccount: wallet.name, fromAccountId: wallet.id },
+      });
+      setItemError(tx.id, null);
+      onRefresh();
+    } catch (err) {
+      setItemError(tx.id, err instanceof Error ? err.message : 'Failed to save the account');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleApprove = async (tx: PendingTransactionListItem) => {
+    if (tx.parsedData.type !== 'transfer' && wallets.length > 0 && resolveWalletId(tx.parsedData, wallets) == null) {
+      setItemError(tx.id, 'Choose the account this transaction used before approving.');
+      return;
+    }
+    setActionLoading(tx.id);
+    setActionError('');
+    try {
+      const response = await approvePendingTransaction(tx.id);
+      if (response.status !== 200) throw new Error(serverError(response.data, 'Failed to approve transaction'));
+      setItemError(tx.id, null);
+      await invalidateFinancialSummaries(queryClient);
       onRefresh();
     } catch (err) {
       console.error('Failed to approve:', err);
-      setActionError(err instanceof Error ? err.message : 'Failed to approve transaction');
+      setItemError(tx.id, err instanceof Error ? err.message : 'Failed to approve transaction');
     } finally {
       setActionLoading(null);
     }
@@ -50,7 +124,9 @@ export function PendingTransactionsModal({
     setActionLoading(id);
     setActionError('');
     try {
-      await rejectMutation.mutateAsync(id);
+      const response = await rejectPendingTransaction(id);
+      if (response.status !== 200) throw new Error(serverError(response.data, 'Failed to reject transaction'));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending });
       onRefresh();
     } catch (err) {
       console.error('Failed to reject:', err);
@@ -86,7 +162,11 @@ export function PendingTransactionsModal({
         </div>
       ) : (
         <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-          {pendingTxs.map((tx) => (
+          {pendingTxs.map((tx) => {
+            const resolvedWalletId = resolveWalletId(tx.parsedData, wallets);
+            const needsAccount = tx.parsedData.type !== 'transfer' && wallets.length > 0 && resolvedWalletId == null;
+            const itemError = itemErrors[tx.id];
+            return (
             <div
               key={tx.id}
               className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-4 space-y-3"
@@ -116,9 +196,27 @@ export function PendingTransactionsModal({
                   <span className="text-[var(--color-muted)]">Category</span>
                   <span className="font-medium">{tx.parsedData.category}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--color-muted)]">Account</span>
-                  <span className="font-medium">{tx.parsedData.fromAccount || '-'}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor={`pending-account-${tx.id}`} className="text-[var(--color-muted)]">Account</label>
+                  {tx.parsedData.type === 'transfer' || wallets.length === 0 ? (
+                    <span className="font-medium">{tx.parsedData.fromAccount || '-'}</span>
+                  ) : (
+                    <select
+                      id={`pending-account-${tx.id}`}
+                      value={resolvedWalletId?.toString() ?? ''}
+                      onChange={(event) => void handleChooseAccount(tx, event.target.value)}
+                      disabled={actionLoading === tx.id}
+                      aria-invalid={needsAccount || undefined}
+                      className={`min-w-0 max-w-[60%] truncate rounded-lg border bg-[var(--color-surface)] px-2 py-1 text-right text-sm font-medium ${needsAccount ? 'border-red-500/60 text-red-600' : 'border-[var(--color-border)]'}`}
+                    >
+                      {resolvedWalletId == null && (
+                        <option value="">{tx.parsedData.fromAccount ? `Choose (${tx.parsedData.fromAccount})` : 'Choose account'}</option>
+                      )}
+                      {wallets.map((wallet) => (
+                        <option key={wallet.id} value={wallet.id}>{wallet.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 {tx.parsedData.place && (
                   <div className="flex justify-between col-span-2">
@@ -127,6 +225,10 @@ export function PendingTransactionsModal({
                   </div>
                 )}
               </div>
+
+              {itemError && (
+                <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600">{itemError}</p>
+              )}
 
               <div className="flex gap-2 pt-2 border-t border-[var(--color-border)]">
                 <Button
@@ -154,7 +256,7 @@ export function PendingTransactionsModal({
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleApprove(tx.id)}
+                  onClick={() => handleApprove(tx)}
                   disabled={actionLoading === tx.id}
                   isLoading={actionLoading === tx.id}
                   className="flex-1 rounded-full"
@@ -164,7 +266,8 @@ export function PendingTransactionsModal({
                 </Button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
