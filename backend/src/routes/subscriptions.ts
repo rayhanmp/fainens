@@ -213,6 +213,7 @@ export default async function (fastify: FastifyInstance) {
         amount: Math.round(body.amount),
         billingCycle,
         nextRenewalAt: new Date(body.nextRenewalAt),
+        billingDay: new Date(body.nextRenewalAt).getDate(),
         status,
         iconKey,
         sortOrder: body.sortOrder ?? 0,
@@ -299,6 +300,8 @@ export default async function (fastify: FastifyInstance) {
         return;
       }
       patch.nextRenewalAt = new Date(body.nextRenewalAt);
+      // A user-chosen date resets the day the subscription bills on.
+      patch.billingDay = new Date(body.nextRenewalAt).getDate();
     }
     if (body.status !== undefined) patch.status = body.status;
     if (body.iconKey !== undefined) patch.iconKey = body.iconKey;

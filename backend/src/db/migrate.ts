@@ -4,6 +4,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import { db } from "./client";
 import { seedDb } from "./seed";
+import { DAY_MS, inclusivePeriodEnd, periodBoundaryDay } from "../lib/calendar";
 
 const backendRoot = path.resolve(__dirname, "..", "..");
 
@@ -509,6 +510,75 @@ function ensureTransportRouteTemplateTable(): void {
   }
 }
 
+/**
+ * Subscriptions record the day of month they bill on. A renewal always lands on that day, or on the
+ * month's last day when the month is shorter; rows that break this take the day of their next renewal.
+ * Older rows start from their next renewal too, unless it is a month-end clamp of an earlier renewal
+ * day (e.g. the 31st that became the 28th after February).
+ */
+export function ensureSubscriptionBillingDay(): void {
+  if (!columnExists("subscription", "billing_day")) {
+    db.$client.exec("ALTER TABLE subscription ADD COLUMN billing_day integer");
+  }
+  const rows = db.$client.prepare(`
+    SELECT s.id, s.next_renewal_at AS nextRenewalAt, s.billing_day AS billingDay,
+      (SELECT MIN(o.occurrence_date) FROM recurring_occurrence o WHERE o.job_type = 'subscription' AND o.schedule_id = s.id) AS firstOccurrence
+    FROM subscription s
+  `).all() as Array<{ id: number; nextRenewalAt: number; billingDay: number | null; firstOccurrence: number | null }>;
+  const update = db.$client.prepare("UPDATE subscription SET billing_day = ? WHERE id = ?");
+  for (const row of rows) {
+    const next = new Date(Number(row.nextRenewalAt));
+    const nextDay = next.getDate();
+    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    let day = row.billingDay;
+    if (day == null) {
+      const firstDay = row.firstOccurrence == null ? null : new Date(Number(row.firstOccurrence)).getDate();
+      day = firstDay != null && nextDay === lastDay && firstDay > nextDay ? firstDay : nextDay;
+    }
+    if (Math.min(day, lastDay) !== nextDay) day = nextDay;
+    if (day !== row.billingDay) update.run(day, row.id);
+  }
+}
+
+/**
+ * Salary periods saved by a server running in UTC stored UTC midnights. The app now runs in WIB,
+ * so store the same calendar dates as local midnights, which every period query compares against.
+ */
+export function normalizeLegacyPeriodBoundaries(): void {
+  if (new Date().getTimezoneOffset() === 0) return;
+  const rows = db.$client.prepare(
+    `SELECT id, start_date AS startDate, end_date AS endDate FROM salary_period WHERE start_date % ${DAY_MS} = 0 OR end_date % ${DAY_MS} = 0`,
+  ).all() as Array<{ id: number; startDate: number; endDate: number }>;
+  if (rows.length === 0) return;
+  const update = db.$client.prepare("UPDATE salary_period SET start_date = ?, end_date = ? WHERE id = ?");
+  db.$client.transaction(() => {
+    for (const row of rows) update.run(periodBoundaryDay(Number(row.startDate)), periodBoundaryDay(Number(row.endDate)), row.id);
+  })();
+}
+
+/**
+ * Period membership used to stop at the first instant of a period's last day, so transactions later
+ * that day were saved without a period. Assign them to the period that contains them, and leave an
+ * audit entry for each.
+ */
+export function backfillFinalDayPeriodAssignments(): void {
+  const periods = db.$client.prepare("SELECT id, end_date AS endDate FROM salary_period").all() as Array<{ id: number; endDate: number }>;
+  const select = db.$client.prepare(`SELECT id FROM "transaction" WHERE period_id IS NULL AND date > ? AND date <= ?`);
+  const update = db.$client.prepare(`UPDATE "transaction" SET period_id = ? WHERE id = ? AND period_id IS NULL`);
+  const audit = db.$client.prepare("INSERT INTO audit_log (entity_type, entity_id, action, before_snapshot, after_snapshot) VALUES ('transaction', ?, 'update', ?, ?)");
+  db.$client.transaction(() => {
+    for (const period of periods) {
+      const end = Number(period.endDate);
+      const lastInstant = inclusivePeriodEnd(end);
+      if (lastInstant <= end) continue;
+      for (const row of select.all(end, lastInstant) as Array<{ id: number }>) {
+        update.run(period.id, row.id);
+        audit.run(row.id, Buffer.from(JSON.stringify({ periodId: null })), Buffer.from(JSON.stringify({ periodId: period.id, reason: "final-day period assignment repair" })));
+      }
+    }
+  })();
+}
+
 function assertRequiredSchema(): void {
   const requirements: Record<string, string[]> = {
     recap_period_story: ["owner_email", "period_id", "payload_json", "generated_at"],
@@ -637,6 +707,9 @@ export async function bootstrapDb() {
   ensureUserProfileTable();
   ensureForecastReviewTable();
   ensureTransportRouteTemplateTable();
+  ensureSubscriptionBillingDay();
+  normalizeLegacyPeriodBoundaries();
+  backfillFinalDayPeriodAssignments();
   assertRequiredSchema();
   repairActiveReturnPeriodCoverage();
   await seedDb(db);

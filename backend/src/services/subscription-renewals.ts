@@ -10,9 +10,9 @@ import {
   transactionLines,
   transactions,
 } from "../db/schema";
-import { getOrCreateAutoExpenseAccount, insertPreparedJournalEntrySync, prepareJournalEntry } from "./ledger";
+import { getOrCreateAutoExpenseAccount, insertPreparedJournalEntrySync, prepareJournalEntry, type PreparedJournalEntry } from "./ledger";
 import { findPeriodIdForDate } from "./transaction-mutations";
-import { addOneMonth, addOneYear } from "./recurrence-calendar";
+import { addMonthsOnDay } from "../lib/calendar";
 import { bumpFinancialRevisionSync } from "./financial-revision";
 import { insertDomainReversalSync, prepareDomainReversal } from "./domain-reversal";
 
@@ -24,8 +24,9 @@ function ts(value: Date | number): number {
   return value instanceof Date ? value.getTime() : Number(value);
 }
 
-function nextOccurrence(dueAt: number, billingCycle: string): number {
-  return billingCycle === "annual" ? addOneYear(dueAt) : addOneMonth(dueAt);
+/** The renewal after `dueAt`, back on the subscription's billing day after any shorter month. */
+export function nextOccurrence(dueAt: number, billingCycle: string, billingDay?: number | null): number {
+  return addMonthsOnDay(dueAt, billingCycle === "annual" ? 12 : 1, billingDay ?? new Date(dueAt).getDate());
 }
 
 export interface SubscriptionOccurrencePreview {
@@ -55,7 +56,7 @@ export async function previewDueSubscriptionRenewals(now = Date.now()): Promise<
         linkedAccountId: subscription.linkedAccountId,
         billingCycle: subscription.billingCycle,
       });
-      dueAt = nextOccurrence(dueAt, subscription.billingCycle);
+      dueAt = nextOccurrence(dueAt, subscription.billingCycle, subscription.billingDay);
     }
     if (dueAt <= now) truncated = true;
   }
@@ -110,14 +111,28 @@ export async function applySubscriptionOccurrences(input: {
   }
 
   const expenseAccount = input.mode === "post" ? await getOrCreateAutoExpenseAccount(db) : null;
-  const periodByIdentity = new Map<string, number | null>();
+  // Prepared through the canonical journal path: validates lines, writes category allocations and
+  // refuses closed periods (rechecked inside the write below).
+  const preparedByIdentity = new Map<string, PreparedJournalEntry>();
   if (input.mode === "post") {
-    await Promise.all(input.occurrences.map(async (occurrence) => {
-      periodByIdentity.set(
-        `${occurrence.subscriptionId}:${occurrence.dueAt}`,
-        await findPeriodIdForDate(occurrence.dueAt),
-      );
-    }));
+    for (const occurrence of input.occurrences) {
+      const subscription = subscriptionRows.find((row) => row.id === occurrence.subscriptionId)!;
+      const paymentAccount = accountRows.find((account) => account.id === subscription.linkedAccountId)!;
+      preparedByIdentity.set(`${occurrence.subscriptionId}:${occurrence.dueAt}`, await prepareJournalEntry({
+        date: occurrence.dueAt,
+        description: `Subscription: ${subscription.name}`,
+        notes: `Confirmed renewal · subscription #${subscription.id} · ${subscription.billingCycle}`,
+        reference: `subscription:${subscription.id}:${occurrence.dueAt}`,
+        txType: "subscription_renewal",
+        periodId: null,
+        categoryId: subscription.categoryId,
+        subscriptionId: subscription.id,
+        lines: [
+          { accountId: expenseAccount!.id, debit: subscription.amount, credit: 0 },
+          { accountId: paymentAccount.id, debit: 0, credit: subscription.amount, cashFlowClass: paymentAccount.liquidityClass === "cash_equivalent" ? "operating" : undefined },
+        ],
+      }, db));
+    }
   }
 
   let result: { posted: number; skipped: number; transactionIds: number[]; periodIds: number[] };
@@ -148,37 +163,18 @@ export async function applySubscriptionOccurrences(input: {
           if (!claimed) throw new Error("Failed to claim recurring occurrence");
 
           if (input.mode === "post") {
-            const paymentAccount = accountRows.find((account) => account.id === subscription.linkedAccountId)!;
-            const periodId = periodByIdentity.get(`${subscriptionId}:${occurrence.dueAt}`) ?? null;
-            const transaction = tx.insert(transactions).values({
-              date: new Date(occurrence.dueAt),
-              description: `Subscription: ${subscription.name}`,
-              notes: `Confirmed renewal · subscription #${subscription.id} · ${subscription.billingCycle}`,
-              reference: `subscription:${subscription.id}:${occurrence.dueAt}`,
-              txType: "subscription_renewal",
-              periodId,
-              categoryId: subscription.categoryId,
-              subscriptionId: subscription.id,
-            }).returning({ id: transactions.id }).all()[0];
-            if (!transaction) throw new Error("Failed to post subscription renewal");
-            const lines = [
-              { transactionId: transaction.id, accountId: expenseAccount!.id, debit: subscription.amount, credit: 0 },
-              { transactionId: transaction.id, accountId: paymentAccount.id, debit: 0, credit: subscription.amount, cashFlowClass: paymentAccount.liquidityClass === "cash_equivalent" ? "operating" : null },
-            ];
-            tx.insert(transactionLines).values(lines).run();
+            const prepared = preparedByIdentity.get(`${subscriptionId}:${occurrence.dueAt}`)!;
+            if (subscription.amount !== subscriptionRows.find((row) => row.id === subscriptionId)!.amount) {
+              throw new Error(`Subscription ${subscriptionId} changed; retry`);
+            }
+            const transactionId = insertPreparedJournalEntrySync(tx, prepared);
             tx.update(recurringOccurrences)
-              .set({ status: "posted", transactionId: transaction.id, updatedAt: new Date() })
+              .set({ status: "posted", transactionId, updatedAt: new Date() })
               .where(eq(recurringOccurrences.id, claimed.id)).run();
-            tx.insert(auditLogs).values({
-              entityType: "transaction",
-              entityId: transaction.id,
-              action: "create",
-              afterSnapshot: Buffer.from(JSON.stringify({ occurrenceId: claimed.id, transaction, lines })),
-            }).run();
-            transactionIds.push(transaction.id);
-            if (periodId != null) periodIds.push(periodId);
+            transactionIds.push(transactionId);
+            if (prepared.periodId != null) periodIds.push(prepared.periodId);
           }
-          expectedDueAt = nextOccurrence(expectedDueAt, subscription.billingCycle);
+          expectedDueAt = nextOccurrence(expectedDueAt, subscription.billingCycle, subscription.billingDay);
         }
         tx.update(subscriptions)
           .set({ nextRenewalAt: new Date(expectedDueAt), updatedAt: new Date() })

@@ -560,6 +560,8 @@ export const subscriptions = sqliteTable("subscription", {
   /** Billing cycle: monthly | annual */
   billingCycle: text("billing_cycle").notNull().default("monthly"),
   nextRenewalAt: integer("next_renewal_at", { mode: "timestamp_ms" }).notNull(),
+  /** Day of month the subscription bills on; renewals return to it after shorter months. */
+  billingDay: integer("billing_day"),
   status: text("status").notNull().default("active"), // active | paused
   /** UI icon key: car | film | music | signal | sparkles | default */
   iconKey: text("icon_key").notNull().default("default"),

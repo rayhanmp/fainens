@@ -20,4 +20,10 @@ describe("loan API overdue flags", () => {
   it("does not treat the epoch timestamp as a missing date", () => {
     expect(getLoanOverdueStatus("active", new Date(0), 86_400_000)).toEqual({ isOverdue: true, daysOverdue: 1 });
   });
+  it("stays current through the whole due date in WIB, including dates saved as UTC midnight", () => {
+    const dueUtcMidnight = new Date(Date.UTC(2026, 8, 12));
+    const lateOnDueDay = new Date(2026, 8, 12, 23, 30).getTime();
+    expect(getLoanOverdueStatus("active", dueUtcMidnight, lateOnDueDay)).toEqual({ isOverdue: false, daysOverdue: 0 });
+    expect(getLoanOverdueStatus("active", dueUtcMidnight, new Date(2026, 8, 13, 0, 5).getTime())).toEqual({ isOverdue: true, daysOverdue: 1 });
+  });
 });

@@ -1,3 +1,4 @@
+import "./lib/app-timezone";
 import { buildApp } from "./app";
 import { bootstrapDb } from "./db/migrate";
 import { closeRedisConnection, getRedisClient } from "./cache/redis";

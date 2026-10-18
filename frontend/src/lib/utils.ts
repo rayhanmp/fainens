@@ -71,10 +71,27 @@ export function formatDate(timestamp: number): string {
 export type PeriodDateRange = { startDate: number; endDate: number };
 
 /** Return the active period whose calendar range contains the supplied date. */
+/**
+ * Last instant of a salary period. Period ends are stored as the start of the final calendar day
+ * (local midnight, or UTC midnight for periods saved by an older UTC server), meaning "through the
+ * end of that day"; any other value is an exact instant.
+ */
+export function inclusivePeriodEnd(endMs: number): number {
+  const local = new Date(endMs);
+  if (local.getHours() === 0 && local.getMinutes() === 0 && local.getSeconds() === 0 && local.getMilliseconds() === 0) {
+    local.setHours(23, 59, 59, 999);
+    return local.getTime();
+  }
+  if (endMs % 86_400_000 === 0) {
+    const utc = new Date(endMs);
+    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 23, 59, 59, 999).getTime();
+  }
+  return endMs;
+}
+
 export function findCurrentPeriod<T extends PeriodDateRange>(periods: readonly T[], now = Date.now()): T | undefined {
-  const dayMs = 86_400_000;
   return periods
-    .filter((period) => period.startDate <= now && now <= (period.endDate % dayMs === 0 ? period.endDate + dayMs - 1 : period.endDate))
+    .filter((period) => period.startDate <= now && now <= inclusivePeriodEnd(period.endDate))
     .sort((a, b) => b.startDate - a.startDate)[0];
 }
 

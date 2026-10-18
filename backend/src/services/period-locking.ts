@@ -2,6 +2,7 @@ import { eq, lte } from "drizzle-orm";
 
 import { db as defaultDb } from "../db/client";
 import { salaryPeriods } from "../db/schema";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -18,12 +19,10 @@ export class PeriodLockedError extends Error {
   }
 }
 
-export function inclusivePeriodEnd(endMs: number): number {
-  return endMs % DAY_MS === 0 ? endMs + DAY_MS - 1 : endMs;
-}
+export { inclusivePeriodEnd, inclusivePeriodStart };
 
 export function periodContainsDate(period: Pick<PeriodState, "startDate" | "endDate">, dateMs: number): boolean {
-  return dateMs >= Number(period.startDate) && dateMs <= inclusivePeriodEnd(Number(period.endDate));
+  return dateMs >= inclusivePeriodStart(Number(period.startDate)) && dateMs <= inclusivePeriodEnd(Number(period.endDate));
 }
 
 /**

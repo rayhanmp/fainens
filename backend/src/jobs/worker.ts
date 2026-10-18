@@ -1,3 +1,4 @@
+import "../lib/app-timezone";
 import { Worker, type Job } from "bullmq";
 
 import { db } from "../db/client";
