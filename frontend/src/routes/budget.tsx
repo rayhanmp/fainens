@@ -50,18 +50,12 @@ import {
   Tag,
   Pencil,
 } from 'lucide-react';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts';
 import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { AIInsightCard } from '../components/insights/AIInsightCard';
 import { useDashboardSubscriptionsQuery } from '../features/dashboard/queries';
 import { getSubscriptionDueByCategory } from '../features/budgets/subscription-budget';
 import { BudgetCategoryRow } from '../features/budgets/BudgetCategoryRow';
+import { BudgetMixCard } from '../features/budgets/BudgetMixCard';
 import { budgetGroupTitles, budgetLineStatus, compareByUrgency, type BudgetLineGroup } from '../features/budgets/budget-line';
 import { periodPacing } from '../features/dashboard/pacing';
 
@@ -911,37 +905,12 @@ function BudgetPage() {
     return count;
   }, [filterBy, searchQuery]);
 
-  const mixRows = useMemo(() => {
-    if (totalBudgeted <= 0) return [];
-    const sorted = [...budgetRows]
-      .sort((a, b) => b.plannedAmount - a.plannedAmount)
-    const visible = sorted.slice(0, 5)
-      .map((row) => {
-        const cat = categories.find(c => c.id === row.categoryId);
-        return {
-          ...row,
-          share: Math.round((row.plannedAmount / totalBudgeted) * 100),
-          color: cat?.color || 'var(--ref-primary)',
-        };
-      });
-    const omitted = sorted.slice(5).reduce((sum, row) => sum + row.plannedAmount, 0);
-    if (omitted > 0) {
-      visible.push({
-        id: -1,
-        periodId: Number(selectedPeriodId) || -1,
-        categoryId: -1,
-        categoryName: 'Other',
-        plannedAmount: omitted,
-        actualAmount: 0,
-        percentUsed: 0,
-        variance: 0,
-        note: null,
-        share: Math.round((omitted / totalBudgeted) * 100),
-        color: '#a0a4b0',
-      });
-    }
-    return visible;
-  }, [budgetRows, totalBudgeted, categories, selectedPeriodId]);
+  const mixSlices = useMemo(() => budgetRows.map((row) => ({
+    id: row.id,
+    name: row.categoryName,
+    plannedAmount: row.plannedAmount,
+    color: categories.find((c) => c.id === row.categoryId)?.color || 'var(--ref-primary)',
+  })), [budgetRows, categories]);
 
   useEffect(() => {
     if (!isBudgetReviewStep) return;
@@ -1432,57 +1401,7 @@ function BudgetPage() {
                 <p className="mb-6 text-xs text-[var(--ref-on-surface-variant)]">
                   Share of total planned budget by category.
                 </p>
-                {mixRows.length === 0 ? (
-                  <p className="text-sm text-[var(--ref-on-surface-variant)] py-8 text-center">
-                    No budget categories yet.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="h-56 w-full relative">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={mixRows}
-                            dataKey="share"
-                            nameKey="categoryName"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={48}
-                            outerRadius={80}
-                            paddingAngle={2}
-                            isAnimationActive={false}
-                          >
-                            {mixRows.map((entry) => (
-                              <Cell key={`cell-${entry.id}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value) => `${value}%`}
-                            contentStyle={{
-                              fontFamily: 'var(--font-mono)',
-                              borderRadius: 8,
-                              border: '1px solid var(--ref-surface-container-highest)',
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    {/* Legend */}
-                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
-                      {mixRows.map((entry) => (
-                        <div key={entry.id} className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: entry.color }}
-                          />
-                          <span className="text-xs text-[var(--ref-on-surface-variant)]">
-                            {entry.categoryName} ({entry.share}%)
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <BudgetMixCard slices={mixSlices} income={isPeriodTracked ? periodIncome : 0} formatAmount={formatAmount} />
               </div>
 
               {/* AI Insights */}
