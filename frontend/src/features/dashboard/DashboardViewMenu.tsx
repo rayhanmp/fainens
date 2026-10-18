@@ -52,14 +52,10 @@ export function DashboardViewMenu({ preferences, onChange, preset, onEditLayout 
           <Icon size={16} aria-hidden /><span>{dashboardSectionLabels[id]}</span><Status size={13} className="dashboard-panel-option-status" aria-hidden />
         </button>;
       })}</div>
-      {!preferences.hiddenSections.includes('pulse') && <>
-        <p className="dashboard-view-caption">Financial pulse <span>desktop only</span></p>
-        <div className="dashboard-panel-options">
-          <button type="button" className="dashboard-panel-option" aria-pressed={dashboardPacingShown(preferences)} onClick={() => onChange(toggleDashboardPacing(preferences))}>
-            <Gauge size={16} aria-hidden /><span>Period pacing bar</span>{dashboardPacingShown(preferences) ? <Check size={13} className="dashboard-panel-option-status" aria-hidden /> : <Plus size={13} className="dashboard-panel-option-status" aria-hidden />}
-          </button>
-        </div>
-      </>}
+      {!preferences.hiddenSections.includes('pulse') && <div className="dashboard-view-switch">
+        <span><Gauge size={16} aria-hidden /><span><strong id="dashboard-pacing-label">Period pacing bar</strong><small>Day count, time elapsed and budget pace under Financial pulse. Desktop only.</small></span></span>
+        <button type="button" role="switch" aria-checked={dashboardPacingShown(preferences)} aria-labelledby="dashboard-pacing-label" onClick={() => onChange(toggleDashboardPacing(preferences))}><span /></button>
+      </div>}
       <footer><button type="button" className="dashboard-edit-action" onClick={() => { close(); onEditLayout(); }}><PencilLine size={14} aria-hidden />Edit layout</button><button type="button" className="dashboard-reset-action" title="Restore the original dashboard" onClick={() => onChange(dashboardPreset('original'))}><RotateCcw size={14} aria-hidden />Reset view</button><button type="button" className="dashboard-view-done" onClick={close}>Done</button></footer>
     </div>
   </details>;

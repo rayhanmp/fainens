@@ -22,6 +22,17 @@
 .dashboard-view-popover .dashboard-panel-option[aria-pressed='true'] { border-color: color-mix(in srgb,var(--ref-primary) 25%,var(--color-border)); background: color-mix(in srgb,var(--ref-primary) 6%,var(--ref-surface-container-lowest)); color: var(--ref-primary); }
 .dashboard-view-popover .dashboard-panel-option:hover { border-color: var(--ref-primary); background: color-mix(in srgb,var(--ref-primary) 9%,var(--ref-surface-container-lowest)); }
 .dashboard-view-popover .dashboard-panel-option:disabled { opacity: 1; cursor: default; }
+.dashboard-view-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--ref-surface-container-lowest); }
+.dashboard-view-switch > span { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--ref-on-surface-variant); }
+.dashboard-view-switch > span svg { flex-shrink: 0; }
+.dashboard-view-switch > span > span { display: block; min-width: 0; }
+.dashboard-view-switch strong { display: block; font-size: 12px; font-weight: 600; color: var(--ref-on-surface); }
+.dashboard-view-switch small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.4; color: var(--color-muted); }
+.dashboard-view-popover .dashboard-view-switch button { position: relative; flex-shrink: 0; width: 38px; min-width: 38px; height: 22px; min-height: 22px; padding: 0; border: 1px solid var(--color-border); border-radius: 100px; background: var(--ref-surface-container-highest); transition: background .15s, border-color .15s; }
+.dashboard-view-popover .dashboard-view-switch button:hover { background: var(--ref-surface-container-highest); border-color: var(--ref-outline); }
+.dashboard-view-switch button span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 100px; background: var(--ref-surface-container-lowest); box-shadow: 0 1px 2px #0000004d; transition: transform .15s; }
+.dashboard-view-popover .dashboard-view-switch button[aria-checked='true'] { background: var(--ref-primary); border-color: var(--ref-primary); }
+.dashboard-view-switch button[aria-checked='true'] span { transform: translateX(16px); background: #ffffff; }
 .dashboard-view-popover footer { flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); font-size: 12px; }
 .dashboard-view-popover footer button { white-space: nowrap; }
 .dashboard-view-popover footer .dashboard-edit-action { gap: 6px; padding: 6px 10px; border: 1px solid color-mix(in srgb,var(--ref-primary) 25%,var(--color-border)); background: color-mix(in srgb,var(--ref-primary) 4%,var(--ref-surface-container-lowest)); color: var(--ref-primary); font-weight: 600; transition: background .15s,border-color .15s; }
