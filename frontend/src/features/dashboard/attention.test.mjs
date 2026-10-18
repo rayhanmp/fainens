@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DAY_MS, upcomingCommitments } from './commitments.ts';
-import { attentionReadKey, buildAttentionItems, parseAttentionReadKeys, serializeAttentionReadKeys, ATTENTION_READ_STORAGE_LIMIT } from './attention.ts';
+import { attentionReadKey, attentionStripItems, buildAttentionItems, parseAttentionReadKeys, serializeAttentionReadKeys, ATTENTION_READ_STORAGE_LIMIT, ATTENTION_STRIP_LIMIT } from './attention.ts';
 
 const NOW = Date.UTC(2026, 9, 17, 12);
 const format = { amount: (cents) => `Rp${cents}`, date: (ms) => new Date(ms).toISOString().slice(0, 10) };
@@ -107,6 +107,23 @@ test('items sort by severity and are capped at eight', () => {
   }), format);
   assert.deepEqual(ids(items), ['trial-balance', 'subscriptions-overdue', 'pending-transactions', 'unallocated:20']);
   assert.equal(items[2].title, '1 pending transaction');
+});
+
+test('the inline strip shows the top unread danger and warning items, never info', () => {
+  const items = buildAttentionItems(input({
+    pendingTransactionCount: 1,
+    ledgerBalanced: false,
+    unallocatedSpentCents: 40,
+    reconciliationSessions: [],
+    subscriptionRenewals: [{ dueAt: NOW - DAY_MS, amount: 10 }],
+  }), format);
+  assert.deepEqual(ids(items), ['trial-balance', 'subscriptions-overdue', 'pending-transactions', 'reconciliation:none', 'unallocated:20']);
+  assert.equal(ATTENTION_STRIP_LIMIT, 3);
+  assert.deepEqual(ids(attentionStripItems(items)), ['trial-balance', 'subscriptions-overdue', 'pending-transactions']);
+  // Read items drop out and the next warning takes their place; info items still never appear.
+  assert.deepEqual(ids(attentionStripItems(items, (item) => item.id === 'subscriptions-overdue')), ['trial-balance', 'pending-transactions', 'reconciliation:none']);
+  assert.deepEqual(attentionStripItems(items, () => true), []);
+  assert.deepEqual(attentionStripItems(items, undefined, 1).map((item) => item.tone), ['danger']);
 });
 
 test('read keys ignore live details and migrate keys saved with them', () => {

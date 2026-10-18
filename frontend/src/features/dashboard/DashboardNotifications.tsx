@@ -1,57 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Bell, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useUiStore } from '../../stores/ui-store';
 import { popoverSurface } from './panel-styles';
-import { attentionReadKey, parseAttentionReadKeys, serializeAttentionReadKeys, type Attention } from './attention';
+import type { Attention } from './attention';
+import type { AttentionReadState } from './use-attention-read-state';
 
-const readStoragePrefix = 'fainens.dashboard.notifications.read';
-
-function useAttentionReadState(items: readonly Attention[], userEmail: string | undefined) {
-  const storageKey = `${readStoragePrefix}:${userEmail ?? 'default'}`;
-  const [readKeys, setReadKeys] = useState<Set<string>>(() => new Set());
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    try {
-      setReadKeys(new Set(parseAttentionReadKeys(localStorage.getItem(storageKey))));
-    } catch {
-      setReadKeys(new Set());
-    } finally {
-      setLoaded(true);
-    }
-  }, [storageKey]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      localStorage.setItem(storageKey, serializeAttentionReadKeys(readKeys));
-    } catch {
-      // Browser storage can be unavailable in private or restricted contexts.
-    }
-  }, [loaded, readKeys, storageKey]);
-
-  const unread = useMemo(() => items.filter((item) => !readKeys.has(attentionReadKey(item))), [items, readKeys]);
-  return {
-    unread,
-    isRead: (item: Attention) => readKeys.has(attentionReadKey(item)),
-    markRead: (item: Attention) => setReadKeys((current) => new Set(current).add(attentionReadKey(item))),
-    markAllRead: () => setReadKeys((current) => {
-      const next = new Set(current);
-      items.forEach((item) => next.add(attentionReadKey(item)));
-      return next;
-    }),
-  };
-}
-
-export function DashboardNotifications({ items, userEmail, maskAmounts }: {
+export function DashboardNotifications({ items, readState, maskAmounts }: {
   items: readonly Attention[];
-  userEmail: string | undefined;
+  /** Shared with the attention strip, so reading an item in one place clears it in the other. */
+  readState: AttentionReadState;
   maskAmounts: (text: string) => string;
 }) {
   const popoverRef = useRef<HTMLDetailsElement>(null);
-  const { unread, isRead, markRead, markAllRead } = useAttentionReadState(items, userEmail);
+  const { unread, isRead, markRead, markAllRead } = readState;
   const setDashboardNotificationCount = useUiStore((state) => state.setDashboardNotificationCount);
 
   const close = () => {

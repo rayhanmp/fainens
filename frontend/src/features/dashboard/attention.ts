@@ -32,6 +32,8 @@ export type AttentionInput = {
 export type AttentionFormat = { amount: (cents: number) => string; date: (ms: number) => string };
 
 export const ATTENTION_LIMIT = 8;
+/** How many danger and warning items the inline strip under the hero shows. */
+export const ATTENTION_STRIP_LIMIT = 3;
 export const ATTENTION_READ_STORAGE_LIMIT = 200;
 const RECONCILIATION_STALE_DAYS = 30;
 const DUE_SOON_DAYS = 7;
@@ -137,6 +139,11 @@ export function buildAttentionItems(input: AttentionInput, format: AttentionForm
 
   const priority = { danger: 0, warning: 1, info: 2 } as const;
   return next.sort((a, b) => priority[a.tone] - priority[b.tone]).slice(0, ATTENTION_LIMIT);
+}
+
+/** The unread danger and warning items for the inline strip, keeping {@link buildAttentionItems}' severity order; info items stay in the bell. */
+export function attentionStripItems(items: readonly Attention[], isRead: (item: Attention) => boolean = () => false, limit = ATTENTION_STRIP_LIMIT): Attention[] {
+  return items.filter((item) => item.tone !== 'info' && !isRead(item)).slice(0, limit);
 }
 
 // Details carry live amounts and day counts, so they stay out of the key; ids carry the period or session they describe.

@@ -39,12 +39,15 @@ import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
 import { PanelLink } from '../features/dashboard/PanelParts';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
 import { DashboardNotifications } from '../features/dashboard/DashboardNotifications';
+import { AttentionStrip } from '../features/dashboard/AttentionStrip';
+import { useAttentionReadState } from '../features/dashboard/use-attention-read-state';
 import { DashboardHero, DashboardTodayCard, type BalanceMetrics } from '../features/dashboard/DashboardHero';
 import { PulsePanel } from '../features/dashboard/PulsePanel';
 import { BudgetPanel } from '../features/dashboard/BudgetPanel';
 import { ActivityPanel } from '../features/dashboard/ActivityPanel';
 import { PaymentsPanel } from '../features/dashboard/PaymentsPanel';
 import { buildAttentionItems, isTrackedCoverage } from '../features/dashboard/attention';
+import { budgetUsedRatio, periodPacing } from '../features/dashboard/pacing';
 import { upcomingCommitments } from '../features/dashboard/commitments';
 import { fallbackName, heroCopy, percentChange, timeOfDayGreeting } from '../features/dashboard/hero-copy';
 import { mergeDashboardViewChange, selectedDashboardPreset, usesOriginalDashboardSections, type DashboardSection } from '../features/dashboard/view-preferences';
@@ -234,12 +237,16 @@ function DashboardPage() {
     subscriptionRenewals: subscriptions?.renewalPreview.occurrences ?? [],
     commitments,
   }, { amount: formatCurrency, date: formatDate }), [analytics, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
+  // One read state for the bell and the inline strip, so marking an item read clears it from both.
+  const attentionReadState = useAttentionReadState(attentionItems, user?.email);
 
   const periodIsTracked = isTrackedCoverage(selectedPeriod?.coverageStatus);
   const totalPlanned = budgetRows.reduce((sum, row) => sum + row.plannedAmount, 0);
   const totalActual = budgetRows.reduce((sum, row) => sum + row.actualAmount, 0);
   const budgetRemaining = budgetOutlook?.total.remainingAmount ?? (periodIsTracked ? totalPlanned - totalActual : 0);
   const dailyBudget = budgetOutlook && budgetOutlook.daysRemaining > 0 ? Math.max(0, Math.round(budgetRemaining / budgetOutlook.daysRemaining)) : null;
+  const pacing = useMemo(() => (selectedPeriod ? periodPacing(selectedPeriod, dashboardNow) : null), [selectedPeriod, dashboardNow]);
+  const budgetPaceRatio = budgetOutlook && periodIsTracked ? budgetUsedRatio(totalActual, totalPlanned) : null;
   const netWorthSeries = netWorthTrendQuery.data?.series ?? [];
   const selectedPeriodEnded = selectedPeriod != null && selectedPeriod.id !== currentPeriod?.id && selectedPeriod.startDate < dashboardNow;
   const copy = heroCopy({
@@ -290,7 +297,7 @@ function DashboardPage() {
   };
 
   const dashboardSections: Record<DashboardSection, ReactNode> = {
-    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} />,
+    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} pacing={pacing} budgetUsedRatio={budgetPaceRatio} dailyBudget={dailyBudget} />,
     netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
     spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,
@@ -333,11 +340,13 @@ function DashboardPage() {
             )}
             {!isMobile && viewMenu}
             <DashboardRecapControl periodId={selectedPeriod?.id} onOpen={setRecapModalPeriodId} />
-            <DashboardNotifications items={attentionItems} userEmail={user?.email} maskAmounts={maskAmounts} />
+            <DashboardNotifications items={attentionItems} readState={attentionReadState} maskAmounts={maskAmounts} />
           </div>
         </div>
 
         <DashboardHero greeting={greeting} copy={copy} mainMetric={preferences.mainMetric} metrics={balanceMetrics} commitments={commitments} isCommitmentsLoading={isCommitmentsLoading} formatAmount={formatAmount} onAddTransaction={() => setIsTransactionOpen(true)} onViewReport={() => setIsReportOpen(true)} />
+
+        <AttentionStrip items={attentionItems} readState={attentionReadState} maskAmounts={maskAmounts} />
 
         <DashboardRecap key={selectedPeriod?.id} periodId={selectedPeriod?.id} now={dashboardNow} onOpen={setRecapModalPeriodId} />
         {recapModalPeriodId != null && <DashboardRecapModal periodId={recapModalPeriodId} onClose={() => setRecapModalPeriodId(null)} />}
