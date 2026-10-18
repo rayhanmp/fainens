@@ -90,7 +90,6 @@
 .dashboard-pace-label, .dashboard-pace-bar { transition: color .15s, box-shadow .15s; }
 .dashboard-main-balance:has(.dashboard-pace-label:hover) .dashboard-pace-label, .dashboard-main-balance:has(.dashboard-pace-bar:hover) .dashboard-pace-label { color: #ffffff; }
 .dashboard-main-balance:has(.dashboard-pace-label:hover) .dashboard-pace-bar, .dashboard-main-balance:has(.dashboard-pace-bar:hover) .dashboard-pace-bar { box-shadow: 0 0 0 2px rgb(255 255 255 / .18); }
-.dashboard-main-balance:has(.dashboard-pace-label:hover) .dashboard-pace-tip, .dashboard-main-balance:has(.dashboard-pace-bar:hover) .dashboard-pace-tip, .dashboard-main-balance:has(.dashboard-pace-label:focus-visible) .dashboard-pace-tip, .dashboard-main-balance:has(.dashboard-pace-bar:focus-visible) .dashboard-pace-tip { display: block; }
 .dashboard-peek { cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; border-radius: 4px; transition: background .15s; }
 .dashboard-peek:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
 .dashboard-peek[data-peeking='true'] { background: color-mix(in srgb, currentColor 14%, transparent); }
