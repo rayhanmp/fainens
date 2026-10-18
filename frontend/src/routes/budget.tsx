@@ -11,7 +11,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { findCurrentPeriod, formatCurrency, formatDate, formatDayMonth, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
 import { api } from '../lib/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -39,8 +39,6 @@ import {
   ChevronRight,
   Save,
   Copy,
-  TrendingUp,
-  TrendingDown,
   MoreVertical,
   Search,
   ArrowUp,
@@ -63,6 +61,9 @@ import { CardSkeleton, StatCardSkeleton } from '../components/ui/Skeleton';
 import { AIInsightCard } from '../components/insights/AIInsightCard';
 import { useDashboardSubscriptionsQuery } from '../features/dashboard/queries';
 import { getSubscriptionDueByCategory } from '../features/budgets/subscription-budget';
+import { BudgetCategoryRow } from '../features/budgets/BudgetCategoryRow';
+import { budgetGroupTitles, budgetLineStatus, compareByUrgency, type BudgetLineGroup } from '../features/budgets/budget-line';
+import { periodPacing } from '../features/dashboard/pacing';
 
 export const Route = createFileRoute('/budget')({
   component: BudgetPage,
@@ -146,7 +147,7 @@ interface Template {
   }>;
 }
 
-type SortOption = 'name' | 'percentUsed' | 'amountSpent' | 'variance';
+type SortOption = 'urgency' | 'name' | 'percentUsed' | 'amountSpent' | 'variance';
 type FilterOption = 'all' | 'over' | 'near' | 'under' | 'notStarted';
 type SortDirection = 'asc' | 'desc';
 
@@ -175,11 +176,10 @@ function BudgetPage() {
   const [editingBudget, setEditingBudget] = useState<BudgetRow | null>(null);
   const [movingBudget, setMovingBudget] = useState<BudgetRow | null>(null);
   const [movePeriodId, setMovePeriodId] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('amountSpent');
+  const [sortBy, setSortBy] = useState<SortOption>('urgency');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [menuRowId, setMenuRowId] = useState<number | null>(null);
   const [animatedSpendingProgress, setAnimatedSpendingProgress] = useState(0);
 
   const [budgetForm, setBudgetForm] = useState({
@@ -264,6 +264,7 @@ function BudgetPage() {
   };
 
   const selectedPeriod = periods.find((p) => p.id.toString() === selectedPeriodId);
+  const comparePeriod = periods.find((p) => p.id.toString() === comparePeriodId);
   const selectedPeriodIndex = periods.findIndex((period) => period.id === selectedPeriod?.id);
   const previousBudgetPeriod = selectedPeriodIndex >= 0 ? periods[selectedPeriodIndex + 1] : undefined;
   const reviewComparisonPeriod = periods.find((period) => period.id.toString() === reviewComparePeriodId);
@@ -822,6 +823,16 @@ function BudgetPage() {
     return comparisonData.find((c) => c.categoryId === row.categoryId);
   };
 
+  // Where today falls in the period, so each row can mark the expected spend; null when untracked.
+  const pacing = useMemo(
+    () => (selectedPeriod && isPeriodTracked ? periodPacing(selectedPeriod, Date.now()) : null),
+    [selectedPeriod, isPeriodTracked],
+  );
+  const rowStatuses = useMemo(
+    () => new Map(budgetRows.map((row) => [row.id, budgetLineStatus(row, pacing)])),
+    [budgetRows, pacing],
+  );
+
   const filteredAndSortedRows = useMemo(() => {
     let rows = [...budgetRows];
 
@@ -849,6 +860,9 @@ function BudgetPage() {
 
     // Sort
     switch (sortBy) {
+      case 'urgency':
+        rows.sort((a, b) => compareByUrgency(rowStatuses.get(a.id)!, rowStatuses.get(b.id)!));
+        break;
       case 'name':
         rows.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
         break;
@@ -869,7 +883,17 @@ function BudgetPage() {
     }
 
     return rows;
-  }, [budgetRows, sortBy, sortDirection, filterBy, searchQuery]);
+  }, [budgetRows, rowStatuses, sortBy, sortDirection, filterBy, searchQuery]);
+
+  const savePlannedAmount = async (row: BudgetRow, plannedAmount: number) => {
+    try {
+      await updateBudgetMutation.mutateAsync({ id: row.id, data: { plannedAmount, note: row.note } });
+      toast.success(`${row.categoryName} plan set to ${formatCurrency(plannedAmount)}`);
+    } catch (err) {
+      toast.error('Could not update the plan', errorMessage(err));
+      throw err;
+    }
+  };
 
   // Quick stats
   const stats = useMemo(() => {
@@ -1198,6 +1222,7 @@ function BudgetPage() {
                     onChange={(e) => setSortBy(e.target.value as SortOption)}
                     className="h-12 w-full cursor-pointer rounded-2xl border border-[var(--color-border)] bg-transparent px-4 pb-1 pt-4 text-sm font-semibold text-[var(--color-text-primary)] focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/15"
                   >
+                    <option value="urgency">Urgency</option>
                     <option value="name">Name</option>
                     <option value="percentUsed">% Used</option>
                     <option value="amountSpent">Amount Spent</option>
@@ -1322,144 +1347,47 @@ function BudgetPage() {
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <h2 className="font-headline text-xl font-bold text-[var(--ref-on-surface)]">Category budgets</h2>
-                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Open a category to review its transactions.</p>
+                    <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">
+                      {pacing?.status === 'active'
+                        ? `Day ${pacing.dayIndex} of ${pacing.totalDays}, ${pacing.totalDays - pacing.dayIndex + 1} day${pacing.totalDays - pacing.dayIndex === 0 ? '' : 's'} left. Open a category to review its transactions.`
+                        : 'Open a category to review its transactions.'}
+                    </p>
                   </div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-                    {filteredAndSortedRows.length} of {budgetRows.length} categories
+                    {filteredAndSortedRows.length === budgetRows.length ? `${budgetRows.length} categories` : `${filteredAndSortedRows.length} of ${budgetRows.length} categories`}
                   </span>
                 </div>
-                <ul className="space-y-2">
-                  {filteredAndSortedRows.map((row) => {
-                    const pct = row.plannedAmount > 0 ? (row.actualAmount / row.plannedAmount) * 100 : 0;
+                <ul className="-mx-2 space-y-1 sm:-mx-3">
+                  {filteredAndSortedRows.map((row, index) => {
+                    const status = rowStatuses.get(row.id)!;
                     const comparison = getComparisonForRow(row);
-                    const cat = categories.find((c) => c.id === row.categoryId);
-                    const categoryColor = cat?.color || 'var(--ref-primary)';
+                    const previousGroup: BudgetLineGroup | null = index > 0 ? rowStatuses.get(filteredAndSortedRows[index - 1].id)!.group : null;
+                    const startsGroup = sortBy === 'urgency' && isPeriodTracked && status.group !== previousGroup;
                     return (
-                      <li key={row.id} className="group">
-                        <div className="rounded-2xl border border-transparent p-4 transition-colors hover:border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)]">
-                          <div className="flex items-center gap-3">
-                            <Link
-                              to="/transactions"
-                              search={{ periodId: selectedPeriodId, categoryId: String(row.categoryId) }}
-                              className="min-w-0 flex-1"
-                            >
-                              <div className="mb-1 flex items-center gap-2">
-                                <p className="truncate text-sm font-bold text-[var(--color-text-primary)] transition-colors hover:text-[var(--color-accent)]">
-                                  {row.categoryName}
-                                </p>
-                                {isPeriodTracked && pct > 100 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--ref-error)]/10 text-[var(--ref-error)]">
-                                    Over
-                                  </span>
-                                )}
-                                {isPeriodTracked && pct >= 75 && pct <= 100 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600">
-                                    Near
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[var(--color-text-secondary)]">
-                                <span>{isPeriodTracked ? `${formatAmount(row.actualAmount)} of ${formatAmount(row.plannedAmount)}` : 'Actuals not tracked'}</span>
-                                {comparison && (
-                                  <span className="flex items-center gap-1">
-                                    vs
-                                    <span className={cn(
-                                      comparison.actualDiff > 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-secondary)]'
-                                    )}>
-                                      {comparison.actualDiff > 0 ? '+' : ''}{formatAmount(Math.abs(comparison.actualDiff))}
-                                    </span>
-                                    {comparison.actualDiff > 0 ? (
-                                      <TrendingUp className="h-3 w-3 text-[var(--ref-error)]" />
-                                    ) : (
-                                      <TrendingDown className="h-3 w-3 text-[var(--ref-secondary)]" />
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                              {row.note && <p className="mt-1.5 truncate text-xs italic text-[var(--ref-on-surface-variant)]">{row.note}</p>}
-                            </Link>
-                            <div className="flex items-center gap-3 sm:gap-4">
-                              {isPeriodTracked && (
-                                <div className="hidden min-w-[104px] text-right sm:block">
-                                  <p className={cn('text-sm font-bold tabular-nums', row.variance < 0 ? 'text-[var(--ref-error)]' : 'text-[var(--ref-on-surface)]')}>
-                                    {formatAmount(row.variance)}
-                                  </p>
-                                  <p className="text-[10px] text-[var(--ref-on-surface-variant)]">remaining</p>
-                                </div>
-                              )}
-                              <span
-                                className={cn(
-                                  'text-sm font-bold text-right min-w-[40px]',
-                                  isPeriodTracked && pct > 100 ? 'text-[var(--ref-error)]' : 'text-[var(--color-text-primary)]',
-                                )}
-                              >
-                                {isPeriodTracked ? `${Math.min(pct, 999).toFixed(0)}%` : '—'}
-                              </span>
-                              {!isPeriodClosed && <div className="relative">
-                                <button
-                                  type="button"
-                                  onClick={() => setMenuRowId(menuRowId === row.id ? null : row.id)}
-                                  className="grid h-11 w-11 place-items-center rounded-xl text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)] cursor-pointer"
-                                  aria-label="More actions"
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </button>
-                                {menuRowId === row.id && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="fixed inset-0 z-10 cursor-default"
-                                      aria-label="Close menu"
-                                      onClick={() => setMenuRowId(null)}
-                                    />
-                                    <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
-                                      <button
-                                        type="button"
-                                        className="flex min-h-11 w-full items-center px-3 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
-                                        onClick={() => {
-                                          setMenuRowId(null);
-                                          openEditModal(row);
-                                        }}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
-                                        onClick={() => {
-                                          setMenuRowId(null);
-                                          openMoveModal(row);
-                                        }}
-                                      >
-                                        Move to period
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="flex min-h-11 w-full items-center px-3 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
-                                        onClick={() => {
-                                          setMenuRowId(null);
-                                          deleteBudget(row.id);
-                                        }}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>}
-                            </div>
-                          </div>
-                          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]">
-                            <div
-                              className="h-full rounded-full transition-all duration-300"
-                              style={{
-                                width: `${Math.min(pct, 100)}%`,
-                                backgroundColor: pct > 100 ? 'var(--ref-error)' : pct > 85 ? 'var(--color-warning)' : categoryColor,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </li>
+                      <Fragment key={row.id}>
+                        {startsGroup && (
+                          <li aria-hidden className={cn('flex items-center gap-3 px-2 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)] sm:px-3', index > 0 ? 'pt-4 pb-1' : 'pb-1')}>
+                            {budgetGroupTitles[status.group]}
+                            <span className="h-px flex-1 bg-[var(--color-border)]" />
+                          </li>
+                        )}
+                        <BudgetCategoryRow
+                          row={row}
+                          categoryColor={categories.find((c) => c.id === row.categoryId)?.color ?? null}
+                          status={status}
+                          tracked={isPeriodTracked}
+                          comparison={comparison && comparePeriod ? { actualDiff: comparison.actualDiff, label: comparePeriod.name } : undefined}
+                          showLabel={sortBy !== 'urgency'}
+                          periodId={selectedPeriodId}
+                          formatAmount={formatAmount}
+                          actions={isPeriodClosed ? null : {
+                            savePlanned: (_line, plannedAmount) => savePlannedAmount(row, plannedAmount),
+                            edit: () => openEditModal(row),
+                            move: () => openMoveModal(row),
+                            remove: () => void deleteBudget(row.id),
+                          }}
+                        />
+                      </Fragment>
                     );
                   })}
                 </ul>
