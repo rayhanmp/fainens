@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpRight, CalendarClock, ChartNoAxesCombined, ImagePlus, ShoppingBag, Wallet, X } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, ChartNoAxesCombined, ImagePlus, Plus, ShoppingBag, Wallet, X } from 'lucide-react';
 import { AgentOrb, type AgentOrbState } from './AgentOrb';
 
 const shortcuts = [
@@ -57,8 +57,7 @@ export function AgentOrbActions({ state = 'idle', status, className, onPrompt, o
         event.currentTarget.style.removeProperty('--orb-tilt-y');
       }}
     >
-      <AgentOrb state={open && state === 'idle' ? 'ready' : state} className={className} />
-      <span aria-hidden="true" className="agent-orb-trigger-spark">+</span>
+      <AgentOrb state={open && state === 'idle' ? 'ready' : state} className={className} badge={<Plus strokeWidth={3} />} />
     </button>
     {createPortal(
       <dialog ref={dialogRef} id={dialogId} aria-labelledby={titleId} className="agent-orb-dialog" onClose={() => setOpen(false)} onClick={(event) => {
