@@ -572,6 +572,30 @@ export const CreateTransactionBodyAnyOfKind = {
   transfer: 'transfer',
 } as const;
 
+export type CreateTransactionBodyAnyOfTransferFeePaidBy = typeof CreateTransactionBodyAnyOfTransferFeePaidBy[keyof typeof CreateTransactionBodyAnyOfTransferFeePaidBy];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateTransactionBodyAnyOfTransferFeePaidBy = {
+  sender: 'sender',
+  recipient: 'recipient',
+} as const;
+
+export type CreateTransactionBodyAnyOfTransferFee = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amountCents: number;
+  paidBy: CreateTransactionBodyAnyOfTransferFeePaidBy;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+};
+
 export type CreateTransactionBodyAnyOf = {
   kind: CreateTransactionBodyAnyOfKind;
   /**
@@ -611,6 +635,7 @@ export type CreateTransactionBodyAnyOf = {
    * @nullable
    */
   toWalletAccountId?: number | null;
+  transferFee?: CreateTransactionBodyAnyOfTransferFee;
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -642,15 +667,15 @@ export type CreateTransactionBodyAnyOf = {
   [key: string]: unknown;
 };
 
-export type CreateTransactionBodyAnyOfThreeTxType = typeof CreateTransactionBodyAnyOfThreeTxType[keyof typeof CreateTransactionBodyAnyOfThreeTxType];
+export type CreateTransactionBodyAnyOfFiveTxType = typeof CreateTransactionBodyAnyOfFiveTxType[keyof typeof CreateTransactionBodyAnyOfFiveTxType];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const CreateTransactionBodyAnyOfThreeTxType = {
+export const CreateTransactionBodyAnyOfFiveTxType = {
   manual: 'manual',
 } as const;
 
-export type CreateTransactionBodyAnyOfThreeCategoryAllocationsItem = {
+export type CreateTransactionBodyAnyOfFiveCategoryAllocationsItem = {
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -667,11 +692,11 @@ export type CreateTransactionBodyAnyOfThreeCategoryAllocationsItem = {
 /**
  * @nullable
  */
-export type CreateTransactionBodyAnyOfThreeLinesItemCashFlowClass = typeof CreateTransactionBodyAnyOfThreeLinesItemCashFlowClass[keyof typeof CreateTransactionBodyAnyOfThreeLinesItemCashFlowClass] | null;
+export type CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass = typeof CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass[keyof typeof CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass] | null;
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const CreateTransactionBodyAnyOfThreeLinesItemCashFlowClass = {
+export const CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass = {
   operating: 'operating',
   investing: 'investing',
   financing: 'financing',
@@ -679,7 +704,7 @@ export const CreateTransactionBodyAnyOfThreeLinesItemCashFlowClass = {
   recovery: 'recovery',
 } as const;
 
-export type CreateTransactionBodyAnyOfThreeLinesItem = {
+export type CreateTransactionBodyAnyOfFiveLinesItem = {
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -697,11 +722,11 @@ export type CreateTransactionBodyAnyOfThreeLinesItem = {
   credit: number;
   description?: string;
   /** @nullable */
-  cashFlowClass?: CreateTransactionBodyAnyOfThreeLinesItemCashFlowClass;
+  cashFlowClass?: CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass;
   [key: string]: unknown;
 };
 
-export type CreateTransactionBodyAnyOfThree = {
+export type CreateTransactionBodyAnyOfFive = {
   /** @minLength 1 */
   date: string;
   /** @minLength 1 */
@@ -712,7 +737,7 @@ export type CreateTransactionBodyAnyOfThree = {
   notes?: string | null;
   /** @nullable */
   place?: string | null;
-  txType?: CreateTransactionBodyAnyOfThreeTxType;
+  txType?: CreateTransactionBodyAnyOfFiveTxType;
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -732,13 +757,13 @@ export type CreateTransactionBodyAnyOfThree = {
    * @nullable
    */
   categoryId?: number | null;
-  categoryAllocations?: CreateTransactionBodyAnyOfThreeCategoryAllocationsItem[];
+  categoryAllocations?: CreateTransactionBodyAnyOfFiveCategoryAllocationsItem[];
   /** @minItems 2 */
-  lines: CreateTransactionBodyAnyOfThreeLinesItem[];
+  lines: CreateTransactionBodyAnyOfFiveLinesItem[];
   [key: string]: unknown;
 };
 
-export type CreateTransactionBody = CreateTransactionBodyAnyOf | CreateTransactionBodyAnyOfThree;
+export type CreateTransactionBody = CreateTransactionBodyAnyOf | CreateTransactionBodyAnyOfFive;
 
 export type CreateTransaction201 = {
   /**
@@ -751,6 +776,11 @@ export type CreateTransaction201 = {
    * @maximum 9007199254740991
    */
   transactionId?: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  feeTransactionId?: number;
   [key: string]: unknown;
 };
 
@@ -1884,6 +1914,11 @@ export type ConfirmTransactionImport201TransactionsItem = {
    * @maximum 9007199254740991
    */
   transactionId?: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  feeTransactionId?: number;
   [key: string]: unknown;
 };
 
@@ -7573,6 +7608,15 @@ export type GetIncomeStatement200ExpensesItem = {
   [key: string]: unknown;
 };
 
+export type GetIncomeStatement200ReportingBasis = typeof GetIncomeStatement200ReportingBasis[keyof typeof GetIncomeStatement200ReportingBasis];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetIncomeStatement200ReportingBasis = {
+  ledger: 'ledger',
+  personal: 'personal',
+} as const;
+
 export type GetIncomeStatement200Coverage = {
   complete: number[];
   partial: number[];
@@ -7589,6 +7633,7 @@ export type GetIncomeStatement200 = {
   totalRevenue: number;
   totalExpenses: number;
   netIncome: number;
+  reportingBasis?: GetIncomeStatement200ReportingBasis;
   periodName?: string;
   startDate?: number;
   endDate?: number;
@@ -7910,6 +7955,14 @@ export type GetMonthlyReportParams = {
 periodId: number;
 };
 
+export type GetMonthlyReport200ReportingBasis = typeof GetMonthlyReport200ReportingBasis[keyof typeof GetMonthlyReport200ReportingBasis];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetMonthlyReport200ReportingBasis = {
+  personal: 'personal',
+} as const;
+
 export type GetMonthlyReport200Period = {
   /**
    * @minimum -9007199254740991
@@ -7948,6 +8001,15 @@ export type GetMonthlyReport200IncomeStatementExpensesItem = {
   [key: string]: unknown;
 };
 
+export type GetMonthlyReport200IncomeStatementReportingBasis = typeof GetMonthlyReport200IncomeStatementReportingBasis[keyof typeof GetMonthlyReport200IncomeStatementReportingBasis];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetMonthlyReport200IncomeStatementReportingBasis = {
+  ledger: 'ledger',
+  personal: 'personal',
+} as const;
+
 export type GetMonthlyReport200IncomeStatementCoverage = {
   complete: number[];
   partial: number[];
@@ -7964,6 +8026,7 @@ export type GetMonthlyReport200IncomeStatement = {
   totalRevenue: number;
   totalExpenses: number;
   netIncome: number;
+  reportingBasis?: GetMonthlyReport200IncomeStatementReportingBasis;
   periodName?: string;
   startDate?: number;
   endDate?: number;
@@ -8100,6 +8163,7 @@ export type GetMonthlyReport200 = {
    * @maximum 9007199254740991
    */
   revision: number;
+  reportingBasis: GetMonthlyReport200ReportingBasis;
   period: GetMonthlyReport200Period;
   incomeStatement: GetMonthlyReport200IncomeStatement;
   balanceSheet: GetMonthlyReport200BalanceSheet;
@@ -13879,6 +13943,11 @@ export type RejectPendingTransaction404 = {
   [key: string]: unknown;
 };
 
+export type RejectPendingTransaction409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type GetPendingTransaction200Status = typeof GetPendingTransaction200Status[keyof typeof GetPendingTransaction200Status];
 
 
@@ -14021,6 +14090,11 @@ export type RetryPendingTransaction200 = {
 };
 
 export type RetryPendingTransaction404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RetryPendingTransaction409 = {
   error: string;
   [key: string]: unknown;
 };
@@ -25603,11 +25677,16 @@ export type rejectPendingTransactionResponse404 = {
   data: RejectPendingTransaction404
   status: 404
 }
+
+export type rejectPendingTransactionResponse409 = {
+  data: RejectPendingTransaction409
+  status: 409
+}
     
 export type rejectPendingTransactionResponseSuccess = (rejectPendingTransactionResponse200) & {
   headers: Headers;
 };
-export type rejectPendingTransactionResponseError = (rejectPendingTransactionResponse404) & {
+export type rejectPendingTransactionResponseError = (rejectPendingTransactionResponse404 | rejectPendingTransactionResponse409) & {
   headers: Headers;
 };
 
@@ -25735,11 +25814,16 @@ export type retryPendingTransactionResponse404 = {
   data: RetryPendingTransaction404
   status: 404
 }
+
+export type retryPendingTransactionResponse409 = {
+  data: RetryPendingTransaction409
+  status: 409
+}
     
 export type retryPendingTransactionResponseSuccess = (retryPendingTransactionResponse200) & {
   headers: Headers;
 };
-export type retryPendingTransactionResponseError = (retryPendingTransactionResponse404) & {
+export type retryPendingTransactionResponseError = (retryPendingTransactionResponse404 | retryPendingTransactionResponse409) & {
   headers: Headers;
 };
 

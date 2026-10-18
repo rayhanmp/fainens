@@ -71,7 +71,8 @@ describe("model-driven tool registry", () => {
     expect(period).not.toHaveProperty("startMs");
     expect(period).not.toHaveProperty("endMs");
     expect(period).not.toHaveProperty("periodName");
-    expect(period.startDate).toBeTypeOf("string");
+    // The scope schema takes inclusive epoch milliseconds.
+    expect(period.startDate).toBe(Date.parse("2026-09-01T00:00:00+07:00"));
     validateModelToolInput(agentModelToolMap.get("get_period_summary")!, period);
 
     const categories = normalizeOptimisticReadInput("get_categories", { selection: { mode: "all" } });

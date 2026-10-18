@@ -1394,6 +1394,33 @@
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
+                      "transferFee": {
+                        "type": "object",
+                        "properties": {
+                          "amountCents": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "paidBy": {
+                            "type": "string",
+                            "enum": [
+                              "sender",
+                              "recipient"
+                            ]
+                          },
+                          "categoryId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "amountCents",
+                          "paidBy"
+                        ]
+                      },
                       "linkedTxId": {
                         "nullable": true,
                         "type": "integer",
@@ -1593,6 +1620,11 @@
                       "maximum": 9007199254740991
                     },
                     "transactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "feeTransactionId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
@@ -3958,6 +3990,11 @@
                             "maximum": 9007199254740991
                           },
                           "transactionId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "feeTransactionId": {
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
@@ -16797,6 +16834,13 @@
                     "netIncome": {
                       "type": "number"
                     },
+                    "reportingBasis": {
+                      "type": "string",
+                      "enum": [
+                        "ledger",
+                        "personal"
+                      ]
+                    },
                     "periodName": {
                       "type": "string"
                     },
@@ -17693,6 +17737,12 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "reportingBasis": {
+                      "type": "string",
+                      "enum": [
+                        "personal"
+                      ]
+                    },
                     "period": {
                       "type": "object",
                       "properties": {
@@ -17792,6 +17842,13 @@
                         },
                         "netIncome": {
                           "type": "number"
+                        },
+                        "reportingBasis": {
+                          "type": "string",
+                          "enum": [
+                            "ledger",
+                            "personal"
+                          ]
                         },
                         "periodName": {
                           "type": "string"
@@ -18221,6 +18278,7 @@
                   },
                   "required": [
                     "revision",
+                    "reportingBasis",
                     "period",
                     "incomeStatement",
                     "balanceSheet",
@@ -31413,6 +31471,25 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -31763,6 +31840,25 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {
