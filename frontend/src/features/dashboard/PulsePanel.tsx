@@ -56,19 +56,19 @@ function PacingRow({ pacing, budgetUsedRatio, dailyBudget }: { pacing: PeriodPac
   const barLabel = `${elapsed} of the period elapsed${budgetUsedRatio != null ? `, ${formatPercent(budgetUsedRatio)} of the budget used` : ''}`;
   // The pulse card sizes style every direct `div`; a footer keeps this row out of that grid.
   return (
-    <footer aria-label="Period pacing" className="col-span-full mt-4 hidden border-t border-[var(--color-border)] pt-4 md:block">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
+    <footer aria-label="Period pacing" className="col-span-full mt-3 hidden border-t border-[var(--color-border)] pt-2.5 md:block">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-[11px] leading-tight text-[var(--ref-on-surface-variant)]">
         <p><strong className="font-bold text-[var(--ref-on-surface)]">{dayLabel}</strong>{pacing.status === 'active' && <> · <span className="font-semibold text-[var(--ref-primary)]">{elapsed}</span> of the period elapsed</>}</p>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           {budgetUsedRatio != null && tone && <p className={cn('font-bold tabular-nums', paceText[tone])}>{formatPercent(budgetUsedRatio)} of budget used</p>}
           {dailyBudget != null && <p>Safe daily pace: <strong className="font-bold text-[var(--ref-on-surface)]"><PeekableAmount cents={dailyBudget} /></strong> per day</p>}
         </div>
       </div>
-      <div className="relative mt-2.5 h-2.5 overflow-visible rounded-full bg-[var(--ref-surface-container-highest)]" role="img" aria-label={barLabel}>
+      <div className="relative mt-1.5 h-1.5 overflow-visible rounded-full bg-[var(--ref-surface-container-highest)]" role="img" aria-label={barLabel}>
         {/* Time elapsed is the pale layer; budget used is the solid layer; the tick is today. */}
         <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${pacing.elapsedRatio * 100}%`, background: 'color-mix(in srgb, var(--ref-primary) 28%, var(--ref-surface-container-highest))' }} />
         {budgetUsedRatio != null && tone && <div className={cn('absolute inset-y-0 left-0 rounded-full', paceFill[tone])} style={{ width: `${Math.min(1, budgetUsedRatio) * 100}%` }} />}
-        {pacing.status === 'active' && <div className="absolute -inset-y-1.5 w-0.5 -translate-x-1/2 rounded-full bg-[var(--ref-on-surface)]" style={{ left: `${pacing.elapsedRatio * 100}%` }} title="Today" />}
+        {pacing.status === 'active' && <div className="absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-[var(--ref-on-surface)]" style={{ left: `${pacing.elapsedRatio * 100}%` }} title="Today" />}
       </div>
     </footer>
   );
