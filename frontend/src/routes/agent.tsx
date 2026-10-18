@@ -36,8 +36,8 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { AgentMessage } from '../components/agent/AgentMessage';
 import { GalleryImagePicker } from '../components/gallery/GalleryImagePicker';
 import { RequireAuth } from '../lib/auth';
-import { api } from '../lib/api';
-import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory } from '../lib/api';
+import { AgentRunCancelledError, api } from '../lib/api';
+import type { AgentBudgetActionProposal, AgentClarification, AgentClarificationChoice, AgentMemory, AgentStreamEvent } from '../lib/api';
 import { cn, findCurrentPeriod, formatDate, formatDateTime } from '../lib/utils';
 import { useDraftStore } from '../stores/draft-store';
 import { useAgentSessionStore } from '../features/agent/session-store';
@@ -1008,7 +1008,10 @@ function AgentPage() {
   const mobileConversationListRef = useRef<HTMLDivElement>(null);
   const editingUserMessageTextareaRef = useRef<HTMLTextAreaElement>(null);
   const messageActionHoldTimerRef = useRef<number | null>(null);
+  // Aborting this only stops listening to the stream; the server keeps writing and saving the answer.
   const agentRequestRef = useRef<AbortController | null>(null);
+  /** The conversation whose answer is streaming in, so Stop can cancel it on the server. */
+  const runningConversationIdRef = useRef<number | null>(null);
   const conversationLoadMoreTimerRef = useRef<number | null>(null);
   const hydratedConversationIdRef = useRef<number | null>(null);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
@@ -1188,6 +1191,7 @@ function AgentPage() {
   useEffect(() => () => {
     if (messageActionHoldTimerRef.current != null) window.clearTimeout(messageActionHoldTimerRef.current);
     if (conversationLoadMoreTimerRef.current != null) window.clearTimeout(conversationLoadMoreTimerRef.current);
+    // Detach only: the answer keeps being written on the server and this page rejoins it when reopened.
     agentRequestRef.current?.abort();
     setSessionStreamStatus('idle');
   }, [setSessionStreamStatus]);
@@ -1383,6 +1387,20 @@ function AgentPage() {
     setPendingImages([]);
     setImageError(null);
   }, [activeConversationId, conversationQuery.data, conversationQuery.isFetching]);
+
+  // An answer that kept being written while this page was closed: rejoin it once the saved turns are on screen.
+  const rejoinedRunRef = useRef<string | null>(null);
+  const activeRunStartedAt = conversationQuery.data?.conversation.id === activeConversationId ? conversationQuery.data?.activeRun?.startedAt ?? null : null;
+  useEffect(() => {
+    if (activeConversationId == null || activeRunStartedAt == null || conversationQuery.isFetching) return;
+    if (hydratedConversationIdRef.current !== activeConversationId || agentRequestRef.current) return;
+    const key = `${activeConversationId}:${activeRunStartedAt}`;
+    if (rejoinedRunRef.current === key) return;
+    rejoinedRunRef.current = key;
+    void reattachToRun(activeConversationId);
+    // reattachToRun is recreated each render; the key guard keeps this to one rejoin per run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, activeRunStartedAt, conversationQuery.isFetching]);
 
   useEffect(() => {
     if (selectedPeriodId || periods.length === 0) return;
@@ -1626,39 +1644,14 @@ function AgentPage() {
         text: '',
         createdAt: Date.now(),
       }]);
+      runningConversationIdRef.current = conversationId;
       const response = await api.agent.streamQuery({
         question: questionForAgent,
         ...(selectedPeriodId ? { periodId: Number(selectedPeriodId) } : {}),
         conversationId,
         ...(replacement ? { replaceMessageId: replacement.serverId } : {}),
         ...(attachedImages.length > 0 ? { images: attachedImages.map((image) => ({ filename: image.filename, mimeType: image.mimeType, data: image.dataUrl })) } : {}),
-      }, (event) => {
-        if (event.type === 'delta') {
-          setStreamActivity('Writing…');
-          setActiveActivity('Writing answer');
-          setMessages((current) => current.map((message) =>
-            message.id === assistantId && message.role === 'assistant'
-              ? { ...message, text: message.text + event.text }
-              : message,
-          ));
-        }
-        if (event.type === 'progress') {
-          const activity = event.detail ? `${event.label} · ${event.detail}` : event.label;
-          setStreamActivity(activity + (event.status === 'completed' ? '' : '…'));
-          setActiveActivity(event.label, event.status, event.detail);
-        }
-        if (event.type === 'complete') {
-          setActiveActivity('Answer ready', 'completed');
-          const fallback = event.response.llmAvailable
-            ? 'I could not produce a written answer from the available evidence.'
-            : 'The LLM is not configured yet, but the structured ledger context was retrieved below.';
-          setMessages((current) => current.map((message) =>
-            message.id === assistantId && message.role === 'assistant'
-              ? { ...message, text: message.text || (event.response.answer ?? event.response.message ?? fallback), response: event.response }
-              : message,
-          ));
-        }
-      }, requestController.signal);
+      }, streamEventHandler(conversationId, assistantId), requestController.signal);
       // Keep the complete receipt even if the final SSE event was processed
       // immediately before React applied its state update.
       setMessages((current) => current.map((message) =>
@@ -1675,7 +1668,7 @@ function AgentPage() {
       // Preserve the newly created session after a failed first provider
       // request so retrying continues the same conversation and does not
       // create an orphaned second chat.
-      const wasCancelled = requestController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError');
+      const wasCancelled = requestController.signal.aborted || caught instanceof AgentRunCancelledError || (caught instanceof DOMException && caught.name === 'AbortError');
       if (wasCancelled) {
         setMessages((current) => current.filter((message) => message.id !== streamedAssistantId || message.role !== 'assistant' || message.text.trim().length > 0));
         if (isRequestVisible()) setNotice('Response stopped.');
@@ -1687,10 +1680,82 @@ function AgentPage() {
       // The detail cache may still contain the pre-stream turn for five minutes.
       // Invalidate even on cancellation, since the server can have saved messages.
       if (requestConversationId != null) void queryClient.invalidateQueries({ queryKey: queryKeys.agent.conversation(requestConversationId) });
-      if (agentRequestRef.current === requestController) agentRequestRef.current = null;
+      if (agentRequestRef.current === requestController) {
+        agentRequestRef.current = null;
+        runningConversationIdRef.current = null;
+      }
       setIsSending(false);
       setStreamActivity(null);
       setActivityTimeline([]);
+    }
+  };
+
+  /** Applies one stream event to the assistant message being written; shared by a new question and a reattached run. */
+  const streamEventHandler = (conversationId: number, assistantId: string) => (event: AgentStreamEvent) => {
+    const update = (change: (message: Extract<ChatMessage, { role: 'assistant' }>) => ChatMessage) => setMessagesForConversation(conversationId, (current) => current.map((message) =>
+      message.id === assistantId && message.role === 'assistant' ? change(message) : message,
+    ));
+    if (event.type === 'delta') {
+      setStreamActivity('Writing…');
+      setActiveActivity('Writing answer');
+      update((message) => ({ ...message, text: message.text + event.text }));
+    }
+    if (event.type === 'progress') {
+      const activity = event.detail ? `${event.label} · ${event.detail}` : event.label;
+      setStreamActivity(activity + (event.status === 'completed' ? '' : '…'));
+      setActiveActivity(event.label, event.status, event.detail);
+    }
+    if (event.type === 'complete') {
+      setActiveActivity('Answer ready', 'completed');
+      const fallback = event.response.llmAvailable
+        ? 'I could not produce a written answer from the available evidence.'
+        : 'The LLM is not configured yet, but the structured ledger context was retrieved below.';
+      update((message) => ({ ...message, text: message.text || (event.response.answer ?? event.response.message ?? fallback), response: event.response }));
+    }
+  };
+
+  /**
+   * Rejoin an answer that kept being written while this page was closed: shows a placeholder, replays the text so
+   * far, follows the rest live, then reloads the saved conversation.
+   */
+  const reattachToRun = async (conversationId: number) => {
+    if (agentRequestRef.current) return;
+    const requestController = new AbortController();
+    agentRequestRef.current = requestController;
+    runningConversationIdRef.current = conversationId;
+    const assistantId = `assistant-resumed-${Date.now()}`;
+    setMessagesForConversation(conversationId, (current) => [...current, { id: assistantId, role: 'assistant', text: '', createdAt: Date.now() }]);
+    setIsSending(true);
+    setIsActivityExpanded(false);
+    setStreamActivity('Picking up where it left off…');
+    setActivityTimeline([{ id: 'resume-' + Date.now(), label: 'Resuming answer', status: 'active' }]);
+    try {
+      await api.agent.reattachRun(conversationId, streamEventHandler(conversationId, assistantId), requestController.signal);
+    } catch (caught) {
+      const detached = requestController.signal.aborted || (caught instanceof DOMException && caught.name === 'AbortError');
+      if (caught instanceof AgentRunCancelledError) {
+        if (useAgentSessionStore.getState().activeConversationId === conversationId) setNotice('Response stopped.');
+      } else if (!detached) {
+        // The run ended before we could rejoin it; the saved conversation below has whatever it produced.
+        setMessagesForConversation(conversationId, (current) => current.filter((message) => message.id !== assistantId));
+      }
+    } finally {
+      if (agentRequestRef.current === requestController) {
+        agentRequestRef.current = null;
+        runningConversationIdRef.current = null;
+      }
+      setIsSending(false);
+      setStreamActivity(null);
+      setActivityTimeline([]);
+      // Replace the live copy with the saved turn so it has server IDs for edit and regenerate.
+      setConversationMessages((current) => {
+        const rest = { ...current };
+        delete rest[String(conversationId)];
+        return rest;
+      });
+      hydratedConversationIdRef.current = null;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agent.conversation(conversationId) });
+      void refreshConversations().catch(() => undefined);
     }
   };
 
@@ -1699,9 +1764,20 @@ function AgentPage() {
     void submitQuestion(`For "${clarification.question}", I choose "${choiceText}".`, undefined, { hideUserMessage: true });
   };
 
+  /** Stop the answer on the server; the stream then ends with a cancelled event. Leaving the page no longer stops it. */
   const stopAgentQuery = () => {
-    if (agentRequestRef.current) setSessionStreamStatus('cancelling');
-    agentRequestRef.current?.abort();
+    const controller = agentRequestRef.current;
+    if (!controller) return;
+    setSessionStreamStatus('cancelling');
+    const conversationId = runningConversationIdRef.current;
+    if (conversationId == null) {
+      controller.abort();
+      return;
+    }
+    void api.agent.stopRun(conversationId).catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : 'Could not stop the answer.');
+      controller.abort();
+    });
   };
 
   const setActiveActivity = (label: string, status: 'started' | 'completed' = 'started', detail?: string) => {
@@ -1802,6 +1878,11 @@ function AgentPage() {
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
   const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id ?? null;
   const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id ?? null;
+  // A saved question with no answer after it and nothing writing one: the run died (server restart, provider failure).
+  const lastMessage = messages.at(-1);
+  const interruptedQuestion = lastMessage?.role === 'user' && lastMessage.serverId != null && !isSending && activeRunStartedAt == null && !conversationQuery.isFetching
+    ? lastMessage
+    : null;
   const messageCharacterCount = messages.reduce((total, message) => total + message.text.length, 0);
   const shouldFloatComposer = isSending || messages.length > 4 || messageCharacterCount > 1_200;
   const orbState = isSending || isLoadingConversation ? 'thinking' : error ? 'error' : draft.trim() ? 'ready' : 'idle';
@@ -2095,6 +2176,14 @@ function AgentPage() {
                         </ol>}
                       </>;
                     })()}
+                  </div>
+                )}
+                {interruptedQuestion && (
+                  <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-4 py-3">
+                    <p className="text-sm text-[var(--color-text-secondary)]">Answer interrupted before it was saved.</p>
+                    <button type="button" onClick={() => void submitQuestion(interruptedQuestion.text, { localId: interruptedQuestion.id, serverId: interruptedQuestion.serverId! })} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--ref-primary)] transition-colors hover:bg-[var(--ref-surface-container)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">
+                      <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Retry
+                    </button>
                   </div>
                 )}
                 {error && <p role="alert" className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}

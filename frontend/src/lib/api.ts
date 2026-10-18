@@ -268,7 +268,16 @@ export type AgentStreamEvent =
   | { type: 'heartbeat' }
   | { type: 'tool'; name: string }
   | { type: 'complete'; response: AgentQueryResponse }
-  | { type: 'error'; error: string };
+  | { type: 'error'; error: string }
+  | { type: 'cancelled' };
+
+/** The answer was stopped on request; whatever text had streamed so far stays on screen. */
+export class AgentRunCancelledError extends Error {
+  constructor() {
+    super('Response stopped.');
+    this.name = 'AgentRunCancelledError';
+  }
+}
 
 export type AgentMemory = {
   id: number;
@@ -389,6 +398,36 @@ async function streamAgentQuery(
     body: JSON.stringify(data),
     signal,
   });
+  return readAgentStream(response, onEvent);
+}
+
+/**
+ * Rejoin a conversation's answer that is still being written (for example after leaving the page): replays what was
+ * missed, then follows it live. Aborting the signal only stops listening; the answer keeps being written and saved.
+ */
+async function reattachAgentRun(
+  conversationId: number,
+  onEvent: (event: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<AgentQueryResponse> {
+  const response = await fetch(`${API_BASE}/agent/conversations/${conversationId}/stream`, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream' },
+    credentials: 'include',
+    signal,
+  });
+  return readAgentStream(response, onEvent);
+}
+
+/** Stop a conversation's answer on the server. Closing the page does not stop it; this does. */
+async function stopAgentRun(conversationId: number): Promise<void> {
+  const headers = new Headers({ 'x-csrf-token': await ensureCsrfToken() });
+  const response = await fetch(`${API_BASE}/agent/conversations/${conversationId}/stop`, { method: 'POST', headers, credentials: 'include' });
+  // 404 means it already finished, which is fine for a stop request.
+  if (!response.ok && response.status !== 404) throw new Error(`Could not stop the answer (HTTP ${response.status})`);
+}
+
+async function readAgentStream(response: Response, onEvent: (event: AgentStreamEvent) => void): Promise<AgentQueryResponse> {
   if (!response.ok || !response.body) {
     const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
     throw new Error(error.message || error.error || `HTTP ${response.status}`);
@@ -406,6 +445,7 @@ async function streamAgentQuery(
       onEvent(parsed);
       if (parsed.type === 'complete') completed = parsed.response;
       if (parsed.type === 'error') throw new Error(parsed.error);
+      if (parsed.type === 'cancelled') throw new AgentRunCancelledError();
     } catch (error) {
       if (error instanceof Error) throw error;
       throw new Error('Could not read agent stream');
@@ -2335,6 +2375,8 @@ export const api = {
         method: 'POST', body: JSON.stringify(data),
       }),
     streamQuery: streamAgentQuery,
+    reattachRun: reattachAgentRun,
+    stopRun: stopAgentRun,
     planBudget: (data: { periodId?: number; targetSavingsRate?: number }) =>
       fetchApi<{ revision: number; targetSavingsRate: number; incomeCents: number; targetSpendCents: number; recommendations: Array<{ categoryId: number | null; category: string; suggestedAmountCents: number; basis: string }>; requiresConfirmation: boolean; writesPerformed: boolean }>('/agent/plan-budget', {
         method: 'POST', body: JSON.stringify(data),

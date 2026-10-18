@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import { z } from "zod";
 import { createReadStream } from "fs";
@@ -47,6 +47,7 @@ import {
   type ModelEvidence,
 } from "../services/agent-evidence";
 import { getFinancialRevision } from "../services/financial-revision";
+import { activeRun, AgentRunConflictError, cancelRun, startRun, subscribe as subscribeToRun, type AgentRunEvent } from "../services/agent-runs";
 import { getAgentProviderConfig } from "../services/agent-provider-config";
 import { createBackgroundTask } from "../services/background-tasks";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
@@ -94,7 +95,8 @@ const agentUsageSchema = z.object({ promptTokens: z.number().int().nonnegative()
 const agentConversationSchema = z.object({ id: z.number().int(), title: z.string(), titleSource: z.enum(["auto", "manual"]), createdAt: z.number(), updatedAt: z.number(), isPinned: z.boolean(), archivedAt: z.number().nullable(), usage: agentUsageSchema.optional() }).passthrough();
 const agentMessageSchema = z.object({ id: z.number().int(), role: z.enum(["user", "assistant"]), content: z.string(), response: z.unknown().optional(), usage: agentUsageSchema.optional(), attachments: z.array(agentMessageAttachmentSchema).optional(), createdAt: z.number() }).passthrough();
 const agentConversationListSchema = z.object({ conversations: z.array(agentConversationSchema), includeArchived: z.boolean(), dailyUsage: agentUsageSchema.nullable() }).passthrough();
-const agentConversationDetailSchema = z.object({ conversation: agentConversationSchema, messages: z.array(agentMessageSchema) }).passthrough();
+const agentActiveRunSchema = z.object({ startedAt: z.number() }).nullable();
+const agentConversationDetailSchema = z.object({ conversation: agentConversationSchema, messages: z.array(agentMessageSchema), activeRun: agentActiveRunSchema.optional() }).passthrough();
 const agentActionIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 const agentActionKindSchema = z.enum(["budget_plan_upsert", "transaction_journal_create", "split_bill_loans_create"]);
 const agentActionViewSchema = z.object({
@@ -2252,6 +2254,57 @@ async function executeAgentQuery(
   return { ...result, conversationId: conversation?.id ?? null, userMessageId };
 }
 
+let detachedRunCounter = 0;
+/** Runs for questions without a saved conversation use negative keys so they never collide with conversation IDs. */
+function nextDetachedRunKey(): number {
+  detachedRunCounter += 1;
+  return -detachedRunCounter;
+}
+
+/**
+ * Pipe a run's events into a server-sent event response. Closing the connection only detaches this listener; the run
+ * keeps going. Returns false, without touching the reply, when there is no run to follow.
+ */
+function streamRunToReply(reply: FastifyReply, runKey: number, firstEvent?: AgentRunEvent): boolean {
+  const pending: AgentRunEvent[] = [];
+  let ready = false;
+  let finished = false;
+  let unsubscribe: (() => void) | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+  const end = () => {
+    if (finished) return;
+    finished = true;
+    if (heartbeat) clearInterval(heartbeat);
+    unsubscribe?.();
+    if (!reply.raw.writableEnded) reply.raw.end();
+  };
+  const send = (event: AgentRunEvent) => {
+    if (!ready) { pending.push(event); return; }
+    if (finished || reply.raw.destroyed || reply.raw.writableEnded) return;
+    reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    if (event.type === "complete" || event.type === "error" || event.type === "cancelled") end();
+  };
+  // Subscribing replays the buffer synchronously, so hold those events until the headers are out.
+  unsubscribe = subscribeToRun(runKey, send);
+  if (!unsubscribe) return false;
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  reply.raw.flushHeaders();
+  ready = true;
+  if (firstEvent) send(firstEvent);
+  for (const event of pending.splice(0)) send(event);
+  if (finished) return true;
+  // Heartbeats keep browser and proxy idle timers from treating a slow first token as a dead stream.
+  heartbeat = setInterval(() => send({ type: "heartbeat" }), 15_000);
+  reply.raw.once("close", end);
+  return true;
+}
+
 export default async function agentRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
@@ -2507,9 +2560,11 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       for (const message of messages) {
         if (message.role === "assistant") addStoredUsage(conversationUsageAccumulator, message);
       }
+      const run = activeRun(conversationId);
       return {
         conversation: conversationSummary(conversation, finishAgentUsage(conversationUsageAccumulator)),
         messages: messages.map((message) => conversationMessage(message, attachmentsByMessage.get(message.id))),
+        activeRun: run ? { startedAt: run.startedAt } : null,
       };
     } catch (error) {
       return reply.code(401).send({ error: error instanceof Error ? error.message : "Could not load conversation" });
@@ -2781,7 +2836,7 @@ export default async function agentRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/api/agent/query/stream", {
-    schema: { operationId: "streamAgentQuery", tags: ["agent"], body: agentQueryBodySchema, response: { 400: agentErrorSchema, 500: agentErrorSchema } },
+    schema: { operationId: "streamAgentQuery", tags: ["agent"], body: agentQueryBodySchema, response: { 400: agentErrorSchema, 404: agentErrorSchema, 409: agentErrorSchema, 500: agentErrorSchema } },
   }, async (request, reply) => {
     const body = request.body as AgentQueryBody;
     if (typeof body?.question !== "string" || body.question.trim().length < 2 || body.question.length > 2000) {
@@ -2794,32 +2849,16 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: "Invalid image attachment" });
     }
 
-    reply.hijack();
-    const providerAbortController = new AbortController();
-    let responseFinished = false;
-    const abortIfClientDisconnects = () => {
-      if (!responseFinished) providerAbortController.abort();
-    };
-    reply.raw.once("close", abortIfClientDisconnects);
-    request.raw.once("aborted", abortIfClientDisconnects);
-    reply.raw.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    });
-    const send = (event: unknown) => {
-      if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
-    // A new conversation can spend a few seconds in scope resolution or the
-    // provider's first request. Send an immediate progress event and periodic
-    // heartbeats so browser/proxy idle timers do not mistake a healthy first
-    // turn for a dead stream.
-    reply.raw.flushHeaders();
-    send({ type: "progress", phase: "understand", label: "Reading your request", status: "started" });
-    const heartbeat = setInterval(() => send({ type: "heartbeat" }), 15_000);
+    // The answer is generated by a run that outlives this connection: leaving the page only detaches the listener,
+    // and only POST /conversations/:id/stop cancels it. Requests without a saved conversation get a private run key.
+    const conversationId = body.conversationId == null ? null : Number(body.conversationId);
+    if (conversationId != null) {
+      if (!Number.isSafeInteger(conversationId) || conversationId <= 0) return reply.code(400).send({ error: "Invalid conversation ID" });
+      if (!await ownedConversation(conversationId, currentOwnerEmail(request))) return reply.code(404).send({ error: "Conversation not found" });
+    }
+    const runKey = conversationId ?? nextDetachedRunKey();
     try {
-      const result = await executeAgentQuery(
+      startRun(runKey, (emit, signal) => executeAgentQuery(
         request,
         body,
         (question, scopeInput, history, images, memories, nickname, executionContext) => answerWithToolsStreaming(
@@ -2829,23 +2868,41 @@ export default async function agentRoutes(fastify: FastifyInstance) {
           images,
           memories,
           nickname,
-          (text) => send({ type: "delta", text }),
-          (progress) => send({ type: "progress", ...progress }),
+          (text) => emit({ type: "delta", text }),
+          (progress) => emit({ type: "progress", ...progress }),
           executionContext,
-          providerAbortController.signal,
+          signal,
         ),
-      );
-      send({ type: "complete", response: result });
+      ).catch((error) => {
+        if (!signal.aborted) fastify.log.error(error);
+        throw error;
+      }));
     } catch (error) {
-      fastify.log.error(error);
-      send({ type: "error", error: error instanceof Error ? error.message : "Failed to answer agent query" });
-    } finally {
-      clearInterval(heartbeat);
-      responseFinished = true;
-      reply.raw.off("close", abortIfClientDisconnects);
-      request.raw.off("aborted", abortIfClientDisconnects);
-      if (!reply.raw.writableEnded) reply.raw.end();
+      if (error instanceof AgentRunConflictError) return reply.code(409).send({ error: error.message });
+      throw error;
     }
+    // A new conversation can spend a few seconds in scope resolution or the provider's first request, so the
+    // connection gets an immediate progress event before the run's own events.
+    streamRunToReply(reply, runKey, { type: "progress", phase: "understand", label: "Reading your request", status: "started" });
+  });
+
+  /** Rejoin a conversation's running (or just-finished) answer: replays what was missed, then follows it live. */
+  fastify.get("/api/agent/conversations/:id/stream", {
+    schema: { operationId: "streamAgentConversationRun", tags: ["agent"], params: agentActionIdParamsSchema, response: { 404: agentErrorSchema } },
+  }, async (request, reply) => {
+    const conversationId = Number((request.params as { id?: string }).id);
+    if (!await ownedConversation(conversationId, currentOwnerEmail(request))) return reply.code(404).send({ error: "Conversation not found" });
+    if (!streamRunToReply(reply, conversationId)) return reply.code(404).send({ error: "No answer is being written for this conversation" });
+  });
+
+  /** Stop a conversation's running answer. Closing the page does not stop it; this does. */
+  fastify.post("/api/agent/conversations/:id/stop", {
+    schema: { operationId: "stopAgentConversationRun", tags: ["agent"], params: agentActionIdParamsSchema, response: { 204: z.null(), 404: agentErrorSchema } },
+  }, async (request, reply) => {
+    const conversationId = Number((request.params as { id?: string }).id);
+    if (!await ownedConversation(conversationId, currentOwnerEmail(request))) return reply.code(404).send({ error: "Conversation not found" });
+    if (!cancelRun(conversationId)) return reply.code(404).send({ error: "No answer is being written for this conversation" });
+    return reply.code(204).send(null);
   });
 
   fastify.post("/api/agent/plan-budget", {

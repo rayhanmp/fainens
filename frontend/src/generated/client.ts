@@ -15110,9 +15110,18 @@ export type GetAgentConversation200MessagesItem = {
   [key: string]: unknown;
 };
 
+/**
+ * @nullable
+ */
+export type GetAgentConversation200ActiveRun = {
+  startedAt: number;
+} | null;
+
 export type GetAgentConversation200 = {
   conversation: GetAgentConversation200Conversation;
   messages: GetAgentConversation200MessagesItem[];
+  /** @nullable */
+  activeRun?: GetAgentConversation200ActiveRun;
   [key: string]: unknown;
 };
 
@@ -15773,7 +15782,37 @@ export type StreamAgentQuery400 = {
   [key: string]: unknown;
 };
 
+export type StreamAgentQuery404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type StreamAgentQuery409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type StreamAgentQuery500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type StreamAgentConversationRun404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type StopAgentConversationRun204 = typeof StopAgentConversationRun204[keyof typeof StopAgentConversationRun204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const StopAgentConversationRun204 = {
+} as const;
+
+export type StopAgentConversationRun404 = {
   error: string;
   [key: string]: unknown;
 };
@@ -27138,13 +27177,23 @@ export type streamAgentQueryResponse400 = {
   status: 400
 }
 
+export type streamAgentQueryResponse404 = {
+  data: StreamAgentQuery404
+  status: 404
+}
+
+export type streamAgentQueryResponse409 = {
+  data: StreamAgentQuery409
+  status: 409
+}
+
 export type streamAgentQueryResponse500 = {
   data: StreamAgentQuery500
   status: 500
 }
     
 ;
-export type streamAgentQueryResponseError = (streamAgentQueryResponse400 | streamAgentQueryResponse500) & {
+export type streamAgentQueryResponseError = (streamAgentQueryResponse400 | streamAgentQueryResponse404 | streamAgentQueryResponse409 | streamAgentQueryResponse500) & {
   headers: Headers;
 };
 
@@ -27167,6 +27216,79 @@ export const streamAgentQuery = async (streamAgentQueryBody: StreamAgentQueryBod
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       streamAgentQueryBody,)
+  }
+);}
+
+
+
+export type streamAgentConversationRunResponse404 = {
+  data: StreamAgentConversationRun404
+  status: 404
+}
+    
+;
+export type streamAgentConversationRunResponseError = (streamAgentConversationRunResponse404) & {
+  headers: Headers;
+};
+
+export type streamAgentConversationRunResponse = (streamAgentConversationRunResponseError)
+
+export const getStreamAgentConversationRunUrl = (id: number,) => {
+
+
+  
+
+  return `/api/agent/conversations/${id}/stream`
+}
+
+export const streamAgentConversationRun = async (id: number, options?: RequestInit): Promise<streamAgentConversationRunResponse> => {
+  
+  return generatedFetch<streamAgentConversationRunResponse>(getStreamAgentConversationRunUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type stopAgentConversationRunResponse204 = {
+  data: StopAgentConversationRun204
+  status: 204
+}
+
+export type stopAgentConversationRunResponse404 = {
+  data: StopAgentConversationRun404
+  status: 404
+}
+    
+export type stopAgentConversationRunResponseSuccess = (stopAgentConversationRunResponse204) & {
+  headers: Headers;
+};
+export type stopAgentConversationRunResponseError = (stopAgentConversationRunResponse404) & {
+  headers: Headers;
+};
+
+export type stopAgentConversationRunResponse = (stopAgentConversationRunResponseSuccess | stopAgentConversationRunResponseError)
+
+export const getStopAgentConversationRunUrl = (id: number,) => {
+
+
+  
+
+  return `/api/agent/conversations/${id}/stop`
+}
+
+export const stopAgentConversationRun = async (id: number, options?: RequestInit): Promise<stopAgentConversationRunResponse> => {
+  
+  return generatedFetch<stopAgentConversationRunResponse>(getStopAgentConversationRunUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
   }
 );}
 
