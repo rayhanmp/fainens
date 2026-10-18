@@ -41,7 +41,7 @@ import { DashboardSections } from '../features/dashboard/DashboardSections';
 import { DashboardNotifications } from '../features/dashboard/DashboardNotifications';
 import { AttentionStrip } from '../features/dashboard/AttentionStrip';
 import { useAttentionReadState } from '../features/dashboard/use-attention-read-state';
-import { DashboardHero, DashboardTodayCard, type BalanceMetrics } from '../features/dashboard/DashboardHero';
+import { DashboardHero, DashboardTodayCard, type BalanceMetrics, type BudgetPace } from '../features/dashboard/DashboardHero';
 import { PulsePanel } from '../features/dashboard/PulsePanel';
 import { BudgetPanel } from '../features/dashboard/BudgetPanel';
 import { ActivityPanel } from '../features/dashboard/ActivityPanel';
@@ -247,6 +247,7 @@ function DashboardPage() {
   const dailyBudget = budgetOutlook && budgetOutlook.daysRemaining > 0 ? Math.max(0, Math.round(budgetRemaining / budgetOutlook.daysRemaining)) : null;
   const pacing = useMemo(() => (selectedPeriod ? periodPacing(selectedPeriod, dashboardNow) : null), [selectedPeriod, dashboardNow]);
   const budgetPaceRatio = budgetOutlook && periodIsTracked ? budgetUsedRatio(totalActual, totalPlanned) : null;
+  const budgetPace: BudgetPace | null = pacing && periodIsTracked && dashboardPacingShown(preferences) ? { pacing, usedRatio: budgetPaceRatio, dailyBudget } : null;
   const netWorthSeries = netWorthTrendQuery.data?.series ?? [];
   const selectedPeriodEnded = selectedPeriod != null && selectedPeriod.id !== currentPeriod?.id && selectedPeriod.startDate < dashboardNow;
   const copy = heroCopy({
@@ -297,7 +298,7 @@ function DashboardPage() {
   };
 
   const dashboardSections: Record<DashboardSection, ReactNode> = {
-    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} pacing={dashboardPacingShown(preferences) ? pacing : null} budgetUsedRatio={budgetPaceRatio} dailyBudget={dailyBudget} />,
+    pulse: <PulsePanel income={facts?.facts.totalIncomeCents ?? 0} expense={facts?.facts.totalSpentCents ?? 0} isTracked={periodIsTracked} burnRate={analytics?.burnRate.grossBurnRate ?? null} runway={analytics?.runway ?? null} isAnalyticsLoading={isAnalyticsLoading} formatAmount={formatAmount} />,
     netWorth: <NetWorthChart hideAmounts={balancesHidden} className="xl:h-[24rem]" />,
     spending: <SpendingTrendChart hideAmounts={balancesHidden} periodId={selectedPeriod?.id ?? null} className="xl:h-[24rem]" />,
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,
@@ -344,7 +345,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        <DashboardHero greeting={greeting} copy={copy} mainMetric={preferences.mainMetric} metrics={balanceMetrics} commitments={commitments} isCommitmentsLoading={isCommitmentsLoading} formatAmount={formatAmount} onAddTransaction={() => setIsTransactionOpen(true)} onViewReport={() => setIsReportOpen(true)} />
+        <DashboardHero greeting={greeting} copy={copy} mainMetric={preferences.mainMetric} metrics={balanceMetrics} budgetPace={budgetPace} commitments={commitments} isCommitmentsLoading={isCommitmentsLoading} formatAmount={formatAmount} onAddTransaction={() => setIsTransactionOpen(true)} onViewReport={() => setIsReportOpen(true)} />
 
         <AttentionStrip items={attentionItems} readState={attentionReadState} maskAmounts={maskAmounts} />
 

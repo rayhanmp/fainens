@@ -52,10 +52,10 @@ export function DashboardViewMenu({ preferences, onChange, preset, onEditLayout 
           <Icon size={16} aria-hidden /><span>{dashboardSectionLabels[id]}</span><Status size={13} className="dashboard-panel-option-status" aria-hidden />
         </button>;
       })}</div>
-      {!preferences.hiddenSections.includes('pulse') && <div className="dashboard-view-switch" title="Day count, time elapsed and budget pace under Financial pulse (desktop only)">
-        <span><Gauge size={15} aria-hidden /><strong id="dashboard-pacing-label">Period pacing bar</strong></span>
+      <div className="dashboard-view-switch" title="Day count and budget pace under Budget left in the summary (desktop only)">
+        <span><Gauge size={15} aria-hidden /><strong id="dashboard-pacing-label">Budget pacing</strong></span>
         <button type="button" role="switch" aria-checked={dashboardPacingShown(preferences)} aria-labelledby="dashboard-pacing-label" onClick={() => onChange(toggleDashboardPacing(preferences))}><span /></button>
-      </div>}
+      </div>
       <footer><button type="button" className="dashboard-edit-action" onClick={() => { close(); onEditLayout(); }}><PencilLine size={14} aria-hidden />Edit layout</button><button type="button" className="dashboard-reset-action" title="Restore the original dashboard" onClick={() => onChange(dashboardPreset('original'))}><RotateCcw size={14} aria-hidden />Reset view</button><button type="button" className="dashboard-view-done" onClick={close}>Done</button></footer>
     </div>
   </details>;
