@@ -17,6 +17,7 @@ import { accounts, categories } from "../db/schema";
 import { db } from "../db/client";
 import { getOrCreateAutoExpenseAccount, getOrCreateAutoIncomeAccount } from "./ledger";
 import { parseAgentPresentation, type AgentPresentation } from "./agent-presentations";
+import { buildChartPresentation, chartToolJsonSchema, chartTools } from "./agent-chart-library";
 import type { ModelEvidence } from "./agent-evidence";
 import { prepareAgentAction } from "./agent-actions";
 import { getFinancialRevision } from "./financial-revision";
@@ -577,11 +578,11 @@ function presentationSchema(type: string, properties: JsonSchema, required: stri
   };
 }
 
-function presentationTool(name: string, summary: string, schema: JsonSchema, parser: (input: unknown) => AgentPresentation): AgentModelTool {
+function presentationTool(name: string, summary: string, schema: JsonSchema, parser: (input: unknown, context?: AgentToolExecutionContext) => AgentPresentation): AgentModelTool {
   return {
     name, kind: "presentation", summary, description: summary,
     inputSchema: schema,
-    execute: async (input) => parser(input),
+    execute: async (input, context) => parser(input, context),
     projectResult: (result, input, evidenceId, revision) => projectResultForPresentation(name, result, evidenceId, revision),
   };
 }
@@ -792,23 +793,14 @@ const modelTools: AgentModelTool[] = [
 ];
 
 const presentationTools: AgentModelTool[] = [
-  presentationTool("show_metric", "Show one important metric after evidence is available.", presentationSchema("metric", metricProperties, ["title", "value", "unit"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "metric" })),
-  presentationTool("show_breakdown", "Show a category or item breakdown as a donut or ranked bars.", presentationSchema("breakdown", { title: metricProperties.title, unit: metricProperties.unit, style: { type: "string", enum: ["donut", "ranked_bar"] }, items: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string", minLength: 1, maxLength: 120 }, value: { type: "number" } } } } }, ["title", "unit", "items"]), (input) => {
-    const value = asRecord(input);
-    return parseAgentPresentation("show_chart", { ...value, type: value.style === "donut" ? "donut" : "ranked_bar" });
-  }),
-  presentationTool("show_comparison", "Show current and previous values for a comparison.", presentationSchema("comparison", { title: metricProperties.title, unit: metricProperties.unit, currentLabel: { type: "string", maxLength: 120 }, previousLabel: { type: "string", maxLength: 120 }, items: { type: "array", minItems: 1, maxItems: 8, items: { type: "object", additionalProperties: false, required: ["label", "current", "previous"], properties: { label: { type: "string", maxLength: 120 }, current: { type: "number" }, previous: { type: "number" } } } } }, ["title", "unit", "currentLabel", "previousLabel", "items"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "comparison" })),
-  presentationTool("show_trend", "Show a trend over time.", presentationSchema("trend", { title: metricProperties.title, unit: metricProperties.unit, points: { type: "array", minItems: 2, maxItems: 24, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string", maxLength: 120 }, value: { type: "number" } } } } }, ["title", "unit", "points"]), (input) => parseAgentPresentation("show_chart", { ...asRecord(input), type: "sparkline" })),
-  presentationTool("show_budget_progress", "Show planned versus actual budget progress.", presentationSchema("budget_progress", { title: metricProperties.title, unit: metricProperties.unit, planned: { type: "number", minimum: 0 }, actual: { type: "number", minimum: 0 }, remaining: { type: "number" }, status: { type: "string", enum: ["positive", "negative", "neutral"] } }, ["title", "unit", "planned", "actual"]), (input) => {
-    const value = asRecord(input);
-    const planned = Number(value.planned);
-    const actual = Number(value.actual);
-    return parseAgentPresentation("show_chart", { ...value, type: "budget_progress", remaining: planned - actual });
-  }),
-  presentationTool("show_cash_flow", "Show income, spending, and net cash flow (net is calculated by the backend).", presentationSchema("cash_flow", { title: metricProperties.title, unit: metricProperties.unit, income: { type: "number" }, spending: { type: "number" }, periodLabel: { type: "string", maxLength: 120 } }, ["title", "unit", "income", "spending"]), (input) => {
-    const value = asRecord(input);
-    return parseAgentPresentation("show_chart", { ...value, type: "cash_flow", net: Number(value.income) - Number(value.spending) });
-  }),
+  // Chart tools come from the chart library: one zod schema per tool drives both the provider schema and validation,
+  // and charts can bind to retained evidence through `source`.
+  ...chartTools.map((chart) => presentationTool(
+    chart.name,
+    chart.summary,
+    chartToolJsonSchema(chart) as JsonSchema,
+    (input, context) => buildChartPresentation(chart.name, input, context?.evidence),
+  )),
   presentationTool("show_projection", "Show an editable projection scenario.", presentationSchema("projection", { unit: metricProperties.unit, startingValue: { type: "number" }, monthlyContribution: { type: "number" }, monthlyGrowthRate: { type: "number", minimum: -100, maximum: 100 }, horizonMonths: { type: "integer", minimum: 3, maximum: 120 }, target: { type: "number" }, subtitle: { type: "string", maxLength: 240 } }, ["title", "startingValue", "monthlyContribution", "monthlyGrowthRate", "horizonMonths"]), (input) => parseAgentPresentation("show_scenario", { ...asRecord(input), type: "projection" })),
   presentationTool("show_scenario_comparison", "Show an editable comparison of what-if scenarios.", presentationSchema("scenario_compare", { scenarios: { type: "array", minItems: 2, maxItems: 4, items: { type: "object", additionalProperties: false, required: ["label", "metrics"], properties: { label: { type: "string", maxLength: 120 }, description: { type: "string", maxLength: 240 }, metrics: { type: "array", minItems: 1, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["label", "value", "unit"], properties: { label: { type: "string" }, value: { type: "number" }, unit: { type: "string", enum: ["IDR", "number", "percent", "months"] } } } } } } } }, ["title", "scenarios"]), (input) => parseAgentPresentation("show_scenario", { ...asRecord(input), type: "scenario_compare" })),
   presentationTool("show_allocation", "Show an editable allocation of a total.", presentationSchema("allocation_editor", { unit: metricProperties.unit, total: { type: "number", minimum: 0 }, rows: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string" }, value: { type: "number", minimum: 0 }, locked: { type: "boolean" } } } } }, ["title", "total", "rows"]), (input) => parseAgentPresentation("show_scenario", { ...asRecord(input), type: "allocation_editor" })),

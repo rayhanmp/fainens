@@ -20,7 +20,9 @@ import {
   resolveAgentScope,
   type AgentToolExecutionContext,
 } from "../services/agent-tools";
-import { callOpenRouterAgent, streamOpenRouterAgent, type AgentChatContentPart, type AgentChatMessage, type AgentChatResponse, type AgentChatTool } from "../services/agent-llm";
+import { parseToolArgumentsLeniently } from "../services/agent-tool-arguments";
+import { chartToolNames } from "../services/agent-chart-library";
+import { streamOpenRouterAgent, type AgentChatContentPart, type AgentChatMessage, type AgentChatResponse, type AgentChatTool } from "../services/agent-llm";
 import { buildAgentPromptMessages, type AgentPromptProfile } from "../services/agent-prompt";
 import { parseAgentContextPreferences } from "../services/agent-context";
 import { type AgentPresentation } from "../services/agent-presentations";
@@ -901,17 +903,6 @@ async function composeContext(scopeInput: ReturnType<typeof parseAgentScopeInput
   };
 }
 
-function parseToolArguments(raw: string | undefined): unknown {
-  if (!raw || raw.trim() === "") return {};
-  try {
-    const parsed = JSON.parse(raw);
-    if (!isRecord(parsed)) throw new Error("tool arguments must be a JSON object");
-    return parsed;
-  } catch {
-    throw new Error("The model returned invalid JSON tool arguments");
-  }
-}
-
 function parseLoadToolSchemaArguments(value: unknown): string[] {
   if (!isRecord(value) || !Array.isArray(value.names) || value.names.length < 1 || value.names.length > 12) {
     throw new Error("names must contain 1-12 tool names");
@@ -1450,309 +1441,28 @@ async function answerWithTools(
   nickname: AgentPromptProfile | null = null,
   executionContext?: AgentToolExecutionContext,
 ) {
-  const providerConfig = await getAgentProviderConfig();
-  if (!providerConfig.apiKey) {
-    const context = await composeContext(scopeInput);
-    return {
-      answer: null,
-      llmAvailable: false,
-      context,
-      toolCalls: [],
-      toolResults: [],
-      clarifications: [],
-      presentations: [],
-      usage: undefined,
-      message: "LLM is not configured; use the structured read-only context to answer locally.",
-    };
-  }
+  // One tool loop serves both endpoints; the non-streaming one simply ignores text and progress events.
+  return answerWithToolsStreaming(question, scopeInput, history, images, memories, nickname, () => undefined, () => undefined, executionContext);
+}
 
-  const promptNowMs = Date.now();
-  const [scope, availableAccountNames] = await Promise.all([resolveAgentScope(scopeInput), activeAccountNamesForAgent()]);
-  const catalog = JSON.stringify(agentToolCatalog);
-  let messages = buildAgentPromptMessages({
-    nowMs: promptNowMs, memories, profile: nickname, catalog, availableAccountNames, history,
-    userContent: agentUserContent(`Question: ${question}\nRequested scope (the tools may refine this): ${JSON.stringify(scope)}`, images),
-  });
-  const toolCalls: Array<{ id: string; name: string; input: unknown }> = [];
-  const toolResults: Array<{ id: string; name: string; result: unknown }> = [];
-  const pendingActions: unknown[] = [];
-  const clarifications: AgentClarification[] = [];
-  const presentations: AgentPresentation[] = [];
-  let leasedToolNames = new Set<string>();
-  const evidenceState = new Map<string, ModelEvidence>();
-  const evidenceById = new Map<string, ModelEvidence>();
-  const activeInsights: string[] = [];
-  let lastContent = "";
-  let callsUsed = 0;
-  let completedWithAnswer = false;
-  let emptyCompletionRetries = 0;
-  const usageAccumulator = newAgentUsageAccumulator();
-
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    if (callsUsed >= MAX_TOOL_CALLS_PER_QUERY) break;
-    const response = await callOpenRouterAgent({
-      apiKey: providerConfig.apiKey,
-      messages,
-      tools: providerToolsForLease(leasedToolNames),
-      model: providerConfig.model,
-      baseUrl: providerConfig.baseUrl,
-    });
-    addProviderUsage(usageAccumulator, response.usage);
-    const assistantMessage = response.message;
-    const requestedCalls = assistantMessage.tool_calls ?? [];
-    if (requestedCalls.length === 0) {
-      const content = typeof assistantMessage.content === "string" ? assistantMessage.content.trim() : "";
-      if (content) {
-        lastContent = content;
-        completedWithAnswer = true;
-        break;
-      }
-      if (emptyCompletionRetries < 1) {
-        emptyCompletionRetries += 1;
-        messages.push({ role: "user", content: "Your last response was blank. Continue from the available tool results and return either a useful answer or the next required tool call; do not return an empty message." });
-        continue;
-      }
-      break;
-    }
-    messages.push(assistantMessage);
-    // Schema leases last for this request so dependent turns do not repeat
-    // discovery after an intermediate lookup.
-    let nextLeasedToolNames = new Set<string>(leasedToolNames);
-    let clarificationRequested = false;
-    for (const requested of requestedCalls) {
-      const input = parseToolArguments(requested.function.arguments);
-      const callCost = requestedToolCost(requested.function.name, input);
-      if (callsUsed + callCost > MAX_TOOL_CALLS_PER_QUERY) throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
-      let effectiveToolName = requested.function.name;
-      let effectiveInput = input;
-      const recordedCall = { id: requested.id, name: effectiveToolName, input: effectiveInput };
-      if (requested.function.name !== invokeReadTools.function.name) toolCalls.push(recordedCall);
-      let result: unknown;
-      if (requested.function.name === clarificationTool.function.name) {
-        try {
-          const clarification = parseClarificationArguments(input);
-          clarifications.push(clarification);
-          clarificationRequested = true;
-          result = { status: "clarification_requested", clarificationId: clarification.id };
-        } catch (error) {
-          result = typedToolError(error, "Invalid clarification", "validation_failed");
-        }
-      } else if (requested.function.name === loadToolSchemasTool.function.name) {
-        try {
-          const names = parseLoadToolSchemaArguments(input);
-          for (const name of names) nextLeasedToolNames.add(name);
-          result = { loaded: names };
-        } catch (error) {
-          result = typedToolError(error, "Invalid tool schema request", "validation_failed");
-        }
-      } else if (requested.function.name === invokeReadTool.function.name) {
-        try {
-          const invocation = parseOptimisticReadInvocation(input, true);
-          effectiveToolName = invocation.name;
-          effectiveInput = normalizeOptimisticReadInput(effectiveToolName, invocation.arguments, nickname?.timezone);
-          recordedCall.name = effectiveToolName;
-          recordedCall.input = effectiveInput;
-          if (modelPresentationToolNames.has(effectiveToolName)) {
-            if (!nextLeasedToolNames.has(effectiveToolName)) throw new Error("Load this presentation schema before calling it");
-            if (presentations.length >= MAX_PRESENTATIONS_PER_RESPONSE) throw new Error(`At most ${MAX_PRESENTATIONS_PER_RESPONSE} presentation cards are allowed`);
-            const modelTool = agentModelToolMap.get(effectiveToolName);
-            if (!modelTool || modelTool.kind !== "presentation") throw new Error("Unknown presentation tool");
-            const presentation = await modelTool.execute(effectiveInput) as AgentPresentation;
-            presentations.push(presentation);
-            result = { status: "presented", presentationIndex: presentations.length - 1, type: presentation.type,
-              ...(presentation.type === "split_bill" ? { title: presentation.title, calculation: presentation.calculation } : {}) };
-          } else {
-            const dispatched = await dispatchCanonicalRead(effectiveToolName, effectiveInput as Record<string, unknown>, executionContext);
-            effectiveInput = dispatched.input;
-            recordedCall.input = effectiveInput;
-            result = dispatched.result;
-          }
-        } catch (error) {
-          if (error instanceof ModelToolInputValidationError && effectiveToolName !== invokeReadTool.function.name) {
-            nextLeasedToolNames.add(effectiveToolName);
-            result = { ...typedToolError(error, "Invalid read arguments", "validation_failed", effectiveInput), loadedSchema: effectiveToolName };
-          } else {
-            result = typedToolError(error, "Invalid read invocation", "validation_failed");
-          }
-        }
-      } else if (requested.function.name === invokeReadTools.function.name) {
-        try {
-          const batch = await dispatchCanonicalReadBatch(input, executionContext);
-          const childResults: Array<Record<string, unknown>> = [];
-          const batchEvidence: Array<{ key: string; evidence: ModelEvidence }> = [];
-          for (const child of batch.children) {
-            toolCalls.push({ id: `${requested.id}:${child.key}`, name: child.name, input: child.input });
-            if (child.error) {
-              toolResults.push({ id: `${requested.id}:${child.key}`, name: child.name, result: child.error });
-              if (asRecord(child.error).error && child.error.error.code === "validation_failed") nextLeasedToolNames.add(child.name);
-              childResults.push({ key: child.key, name: child.name, status: "error", error: child.error.error });
-              continue;
-            }
-            toolResults.push({ id: `${requested.id}:${child.key}`, name: child.name, result: child.result });
-            if (isFailedToolResult(child.result)) {
-              childResults.push({ key: child.key, name: child.name, status: "error", error: asRecord(child.result).error ?? { code: "tool_error", message: "Read failed" } });
-              continue;
-            }
-            if (!batch.stable || !child.modelTool) continue;
-            const evidenceId = randomUUID();
-            const evidence = projectModelToolResult(child.modelTool, child.result, child.input, evidenceId, batch.revisionAfter);
-            batchEvidence.push({ key: normalizeEvidenceKey(child.name, child.input, batch.revisionAfter), evidence });
-            childResults.push({ key: child.key, name: child.name, status: "ok", evidence });
-          }
-          const retentionError = batch.stable ? retainEvidenceBatch(evidenceState, evidenceById, batchEvidence) : null;
-          result = batch.stable && !retentionError
-            ? { status: "batch_complete", revision: batch.revisionAfter, results: childResults }
-            : retentionError
-              ? { status: "error", error: retentionError }
-            : { status: "error", error: { code: "stale_revision", message: "Financial data changed while this batch was executing; none of its evidence was retained." }, revisionBefore: batch.revisionBefore, revisionAfter: batch.revisionAfter };
-        } catch (error) {
-          result = typedToolError(error, "Invalid read batch", "validation_failed");
-        }
-      } else if (requested.function.name === updateContextTool.function.name) {
-        try {
-          const update = parseUpdateContextArguments(input);
-          const unknownIds = update.releaseEvidenceIds.filter((id) => !evidenceById.has(id));
-          const retained = update.retainInsights.flatMap((insight) => insight.evidenceIds);
-          const unknownRetainedIds = retained.filter((id) => !evidenceById.has(id));
-          if (unknownIds.length > 0 || unknownRetainedIds.length > 0) throw new Error("Every evidence ID must come from the current run");
-          releaseEvidence(evidenceState, update.releaseEvidenceIds);
-          for (const insight of update.retainInsights) activeInsights.push(insight.claim);
-          await persistConversationInsights(executionContext?.conversationId, await getFinancialRevision(), update.retainInsights);
-          result = { status: "context_updated", releasedEvidenceIds: update.releaseEvidenceIds, retainedInsights: update.retainInsights.length };
-        } catch (error) {
-          result = typedToolError(error, "Invalid context update", "validation_failed");
-        }
-      } else if (modelPresentationToolNames.has(requested.function.name)) {
-        try {
-          if (!nextLeasedToolNames.has(requested.function.name)) throw new Error("Load this presentation schema before calling it");
-          if (presentations.length >= MAX_PRESENTATIONS_PER_RESPONSE) throw new Error(`At most ${MAX_PRESENTATIONS_PER_RESPONSE} presentation cards are allowed`);
-          const modelTool = agentModelToolMap.get(requested.function.name);
-          if (!modelTool) throw new Error("Unknown presentation tool");
-          const presentation = await modelTool.execute(input) as AgentPresentation;
-          presentations.push(presentation);
-          result = {
-            status: "presented",
-            presentationIndex: presentations.length - 1,
-            type: presentation.type,
-            ...(presentation.type === "split_bill" ? { title: presentation.title, calculation: presentation.calculation } : {}),
-          };
-        } catch (error) {
-          const failure = typedToolError(error, "Invalid presentation", "validation_failed");
-          if (nextLeasedToolNames.has(requested.function.name)) nextLeasedToolNames.add(requested.function.name);
-          result = failure;
-        }
-      } else if (!agentModelToolMap.has(requested.function.name)) {
-        result = typedToolError(new Error("Unknown or unavailable agent tool"), "Unknown agent tool", "unavailable_tool");
-      } else {
-        try {
-          const modelTool = agentModelToolMap.get(effectiveToolName);
-          if (!modelTool) throw new Error("Unknown or unavailable agent tool");
-          if (modelTool.kind === "read") {
-            effectiveInput = normalizeOptimisticReadInput(effectiveToolName, input as Record<string, unknown>, nickname?.timezone);
-            recordedCall.input = effectiveInput;
-            validateModelToolInput(modelTool, effectiveInput);
-            result = await modelTool.execute(effectiveInput, executionContext);
-          } else {
-            if (!nextLeasedToolNames.has(effectiveToolName)) throw new Error("Load this capability schema before calling it");
-            effectiveInput = normalizeLeasedToolInput(effectiveToolName, input as Record<string, unknown>, nickname?.timezone);
-            recordedCall.input = effectiveInput;
-            validateModelToolInput(modelTool, effectiveInput);
-            result = await modelTool.execute(effectiveInput, executionContext);
-          }
-        } catch (error) {
-          if (error instanceof ModelToolInputValidationError && agentReadToolNames.has(effectiveToolName)) {
-            nextLeasedToolNames.add(effectiveToolName);
-            result = { ...typedToolError(error, "Invalid read arguments", "validation_failed", effectiveInput), loadedSchema: effectiveToolName };
-          } else {
-            const failure = typedToolError(error, "Tool execution failed");
-            if (nextLeasedToolNames.has(effectiveToolName) && failure.error.code === "validation_failed") nextLeasedToolNames.add(effectiveToolName);
-            result = failure;
-          }
-        }
-      }
-      const isActionTool = agentActionToolNames.has(effectiveToolName);
-      const modelResult = isActionTool ? redactApprovalTokens(result) : result;
-      if (isActionTool) collectPendingActions(result, pendingActions);
-      if (requested.function.name !== invokeReadTools.function.name) toolResults.push({ id: requested.id, name: effectiveToolName, result: modelResult });
-      const modelTool = agentModelToolMap.get(effectiveToolName);
-      const evidenceId = randomUUID();
-      if (requested.function.name === invokeReadTools.function.name) {
-        messages.push({ role: "tool", tool_call_id: requested.id, content: safeToolResult(modelResult) });
-      } else if (modelTool?.kind === "presentation" && !isFailedToolResult(modelResult)) {
-        const revision = await getFinancialRevision();
-        messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(projectModelToolResult(modelTool, modelResult, effectiveInput, evidenceId, revision)) });
-      } else if (modelTool && !isFailedToolResult(modelResult)) {
-        const revision = isRecord(result) && typeof result.revision === "number" ? result.revision : await getFinancialRevision();
-        const evidence = projectModelToolResult(modelTool, modelResult, effectiveInput, evidenceId, revision);
-        const candidateState = new Map(evidenceState);
-        candidateState.set(normalizeEvidenceKey(effectiveToolName, effectiveInput, revision), evidence);
-        if (JSON.stringify(evidence).length > MAX_SINGLE_MODEL_EVIDENCE_CHARS) {
-          messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify({ status: "error", error: { code: "scope_too_large", message: "The requested selection is too large for the model context. Request a narrower filter, an explicit top count, an aggregation, or the next page." } }) });
-        } else {
-          trimEvidenceState(candidateState);
-          if (evidenceStateSize(candidateState) >= AGENT_EVIDENCE_HARD_CHARS) {
-            messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify({ status: "error", error: { code: "context_budget_exceeded", message: "This result is too large to retain with current evidence. Release evidence or request a narrower selection." } }) });
-          } else {
-            evidenceState.clear();
-            for (const [key, value] of candidateState) evidenceState.set(key, value);
-            evidenceById.set(evidenceId, evidence);
-            messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(evidence) });
-          }
-        }
-      } else {
-        messages.push({
-          role: "tool",
-          tool_call_id: requested.id,
-          content: safeToolResult(modelResult),
-        });
-      }
-      callsUsed += callCost;
-      if (clarificationRequested) break;
-    }
-    leasedToolNames = nextLeasedToolNames;
-    messages = compactToolTranscript(messages, evidenceState, activeInsights);
-    if (clarificationRequested) break;
-  }
-
-  // If the model spent the final allowed round retrieving data, give it one
-  // synthesis turn with tools disabled so the response cannot end as an
-  // unexplained empty tool-call transcript.
-  if (clarifications.length === 0 && (!completedWithAnswer || !lastContent.trim())) {
-    const finalResponse = await callOpenRouterAgent({
-      apiKey: providerConfig.apiKey,
-      messages: [
-        ...messages,
-        {
-          role: "user",
-          content: "Synthesize a useful, direct answer from the tool results already provided. Do not request another tool and do not return an empty message.",
-        },
-      ],
-      tools: [],
-      model: providerConfig.model,
-      baseUrl: providerConfig.baseUrl,
-    });
-    addProviderUsage(usageAccumulator, finalResponse.usage);
-    if (typeof finalResponse.message.content === "string" && finalResponse.message.content.trim()) {
-      lastContent = finalResponse.message.content.trim();
-    }
-  }
-
-  const usage = finishAgentUsage(usageAccumulator);
-  const answer = normalizeCurrencyScale(lastContent || (clarifications.length > 0 ? "I need one detail before I continue." : "I could not complete the analysis from the available ledger tools."), evidenceState);
+/** Without a configured provider the agent returns the structured read-only context for a local answer. */
+async function unconfiguredAgentAnswer(scopeInput: ReturnType<typeof parseAgentScopeInput>) {
+  const context = await composeContext(scopeInput);
   return {
-    answer,
-    llmAvailable: true,
-    context: null,
-    scope,
-    toolCalls,
-    toolResults,
-    pendingActions,
-    clarifications,
-    presentations,
-    revision: await getFinancialRevision(),
-    ...(usage ? { usage } : {}),
+    answer: null,
+    llmAvailable: false,
+    context,
+    toolCalls: [] as Array<{ id: string; name: string; input: unknown }>,
+    toolResults: [] as Array<{ id: string; name: string; result: unknown }>,
+    clarifications: [] as AgentClarification[],
+    presentations: [] as AgentPresentation[],
+    usage: undefined,
+    message: "LLM is not configured; use the structured read-only context to answer locally.",
   };
 }
+
+/** Sent for each tool call past the per-answer budget, so the model stops calling tools and answers. */
+const TOOL_BUDGET_EXHAUSTED_RESULT = JSON.stringify({ status: "error", error: { code: "tool_budget_exhausted", message: `The tool budget for this answer (${MAX_TOOL_CALLS_PER_QUERY} calls) is used up. Answer now from the evidence already gathered and say what could not be checked.` } });
 
 type AgentProgressEvent = {
   phase: "understand" | "retrieve" | "compare" | "calculate" | "prepare";
@@ -1825,9 +1535,8 @@ async function answerWithToolsStreaming(
 ) {
   const providerConfig = await getAgentProviderConfig();
   if (!providerConfig.apiKey) {
-    const result = await answerWithTools(question, scopeInput, history, images, memories, nickname, executionContext);
-    const text = result.answer ?? result.message ?? "I could not complete the analysis from the available ledger tools.";
-    onTextDelta(text);
+    const result = await unconfiguredAgentAnswer(scopeInput);
+    onTextDelta(result.message);
     return result;
   }
 
@@ -1843,9 +1552,26 @@ async function answerWithToolsStreaming(
   const pendingActions: unknown[] = [];
   const clarifications: AgentClarification[] = [];
   const presentations: AgentPresentation[] = [];
-  let leasedToolNames = new Set<string>();
+  // Chart tools are leased from the start so a chart never costs a schema-loading round trip first.
+  let leasedToolNames = new Set<string>(chartToolNames);
   const evidenceState = new Map<string, ModelEvidence>();
   const evidenceById = new Map<string, ModelEvidence>();
+  // Chart tools read retained evidence through this lookup instead of having the model retype numbers.
+  const presentationContext: AgentToolExecutionContext = { ...(executionContext ?? { ownerEmail: "" }), evidence: (id) => evidenceById.get(id) };
+  const presentCard = async (toolName: string, toolInput: unknown) => {
+    if (presentations.length >= MAX_PRESENTATIONS_PER_RESPONSE) throw new Error(`At most ${MAX_PRESENTATIONS_PER_RESPONSE} presentation cards are allowed`);
+    const modelTool = agentModelToolMap.get(toolName);
+    if (!modelTool || modelTool.kind !== "presentation") throw new Error("Unknown presentation tool");
+    const presentation = await modelTool.execute(toolInput, presentationContext) as AgentPresentation;
+    presentations.push(presentation);
+    return {
+      status: "presented",
+      presentationIndex: presentations.length - 1,
+      type: presentation.type,
+      ...(presentation.provenance ? { boundTo: presentation.provenance.evidenceId } : {}),
+      ...(presentation.type === "split_bill" ? { title: presentation.title, calculation: presentation.calculation } : {}),
+    };
+  };
   const activeInsights: string[] = [];
   let lastContent = "";
   let callsUsed = 0;
@@ -1885,10 +1611,30 @@ async function answerWithToolsStreaming(
     // discovery after an intermediate lookup.
     let nextLeasedToolNames = new Set<string>(leasedToolNames);
     let clarificationRequested = false;
+    let budgetExhausted = false;
     for (const requested of requestedCalls) {
-      const input = parseToolArguments(requested.function.arguments);
+      // Every tool call in the assistant message needs a tool reply, so bad arguments and the call budget become
+      // tool results the model can react to, never a thrown error that loses the whole answer.
+      if (budgetExhausted) {
+        messages.push({ role: "tool", tool_call_id: requested.id, content: TOOL_BUDGET_EXHAUSTED_RESULT });
+        continue;
+      }
+      const parsedArguments = parseToolArgumentsLeniently(requested.function.arguments);
+      if (!parsedArguments.ok) {
+        const failure = { status: "error", error: { code: "invalid_arguments", message: parsedArguments.message } };
+        toolCalls.push({ id: requested.id, name: requested.function.name, input: { raw: (requested.function.arguments ?? "").slice(0, 2_000) } });
+        toolResults.push({ id: requested.id, name: requested.function.name, result: failure });
+        messages.push({ role: "tool", tool_call_id: requested.id, content: JSON.stringify(failure) });
+        callsUsed += 1;
+        continue;
+      }
+      const input = parsedArguments.value;
       const callCost = requestedToolCost(requested.function.name, input);
-      if (callsUsed + callCost > MAX_TOOL_CALLS_PER_QUERY) throw new Error(`Agent tool-call limit exceeded (maximum ${MAX_TOOL_CALLS_PER_QUERY})`);
+      if (callsUsed + callCost > MAX_TOOL_CALLS_PER_QUERY) {
+        budgetExhausted = true;
+        messages.push({ role: "tool", tool_call_id: requested.id, content: TOOL_BUDGET_EXHAUSTED_RESULT });
+        continue;
+      }
       let effectiveToolName = requested.function.name;
       let effectiveInput = input;
       const recordedCall = { id: requested.id, name: effectiveToolName, input: effectiveInput };
@@ -1915,14 +1661,21 @@ async function answerWithToolsStreaming(
         }
       } else if (requested.function.name === invokeReadTool.function.name) {
         try {
-          const invocation = parseOptimisticReadInvocation(input);
+          // Models sometimes route a chart through invoke_read_tool; accept it rather than failing the card.
+          const invocation = parseOptimisticReadInvocation(input, true);
           effectiveToolName = invocation.name;
-          effectiveInput = normalizeOptimisticReadInput(effectiveToolName, invocation.arguments, nickname?.timezone);
-          const dispatched = await dispatchCanonicalRead(effectiveToolName, effectiveInput as Record<string, unknown>, executionContext);
-          effectiveInput = dispatched.input;
           recordedCall.name = effectiveToolName;
-          recordedCall.input = effectiveInput;
-          result = dispatched.result;
+          if (modelPresentationToolNames.has(effectiveToolName)) {
+            effectiveInput = invocation.arguments;
+            recordedCall.input = effectiveInput;
+            result = await presentCard(effectiveToolName, effectiveInput);
+          } else {
+            effectiveInput = normalizeOptimisticReadInput(effectiveToolName, invocation.arguments, nickname?.timezone);
+            const dispatched = await dispatchCanonicalRead(effectiveToolName, effectiveInput as Record<string, unknown>, executionContext);
+            effectiveInput = dispatched.input;
+            recordedCall.input = effectiveInput;
+            result = dispatched.result;
+          }
         } catch (error) {
           if (error instanceof ModelToolInputValidationError && effectiveToolName !== invokeReadTool.function.name) {
             nextLeasedToolNames.add(effectiveToolName);
@@ -1979,22 +1732,11 @@ async function answerWithToolsStreaming(
         }
       } else if (modelPresentationToolNames.has(requested.function.name)) {
         try {
-          if (!nextLeasedToolNames.has(requested.function.name)) throw new Error("Load this presentation schema before calling it");
-          if (presentations.length >= MAX_PRESENTATIONS_PER_RESPONSE) throw new Error(`At most ${MAX_PRESENTATIONS_PER_RESPONSE} presentation cards are allowed`);
-          const modelTool = agentModelToolMap.get(requested.function.name);
-          if (!modelTool) throw new Error("Unknown presentation tool");
-          const presentation = await modelTool.execute(input) as AgentPresentation;
-          presentations.push(presentation);
-          result = {
-            status: "presented",
-            presentationIndex: presentations.length - 1,
-            type: presentation.type,
-            ...(presentation.type === "split_bill" ? { title: presentation.title, calculation: presentation.calculation } : {}),
-          };
+          // The tool's own schema validates the call, so a direct call needs no prior schema lease.
+          result = await presentCard(requested.function.name, input);
         } catch (error) {
-          const failure = typedToolError(error, "Invalid presentation", "validation_failed");
-          if (nextLeasedToolNames.has(requested.function.name)) nextLeasedToolNames.add(requested.function.name);
-          result = failure;
+          nextLeasedToolNames.add(requested.function.name);
+          result = typedToolError(error, "Invalid presentation", "validation_failed");
         }
       } else if (!agentModelToolMap.has(requested.function.name)) {
         result = typedToolError(new Error("Unknown or unavailable agent tool"), "Unknown agent tool", "unavailable_tool");
@@ -2064,9 +1806,10 @@ async function answerWithToolsStreaming(
     }
     leasedToolNames = nextLeasedToolNames;
     messages = compactToolTranscript(messages, evidenceState, activeInsights);
-    if (clarificationRequested) break;
+    if (clarificationRequested || budgetExhausted) break;
   }
 
+  // Also reached when the call budget runs out: answer from the evidence gathered so far rather than failing.
   if (clarifications.length === 0 && (!completedWithAnswer || !lastContent.trim())) {
     const finalResponse = await streamOpenRouterAgent({
       apiKey: providerConfig.apiKey,

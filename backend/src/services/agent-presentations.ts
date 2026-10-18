@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import type { AgentChatTool } from "./agent-llm";
 
 const unitSchema = z.enum(["IDR", "number", "percent", "months"]);
 const toneSchema = z.enum(["positive", "negative", "neutral"]);
@@ -169,93 +168,18 @@ const splitBillSchema = z.object({
   };
 });
 
-export type AgentPresentation =
+/** Where a chart's numbers came from: the evidence entry it was bound to. */
+export type PresentationProvenance = { evidenceId: string; tool: string; revision: number };
+/** What a card lets the user do next: open the matching app page, or ask a follow-up question. */
+export type PresentationActions = { open?: { href: string; label: string }; followUps?: string[] };
+type PresentationMeta = { provenance?: PresentationProvenance; actions?: PresentationActions };
+
+export type AgentPresentation = (
   | z.infer<typeof chartSchema>
   | z.infer<typeof scenarioSchema>
   | z.infer<typeof worksheetSchema>
-  | z.infer<typeof splitBillSchema>;
-
-const units = ["IDR", "number", "percent", "months"];
-const itemSchema = { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string", minLength: 1, maxLength: 120 }, value: { type: "number" } } };
-const commonProperties = { type: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 120 }, unit: { type: "string", enum: units } };
-
-export const presentationTools: AgentChatTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "show_chart",
-      description: "Render one validated chart from retrieved facts or transparent calculations. Prefer it proactively for distributions, rankings, comparisons, trends, budgets, or cash flow with several related values; skip it for one simple fact. Do not repeat its detailed values in prose.",
-      parameters: {
-        type: "object", additionalProperties: false, required: ["type", "title", "unit"],
-        properties: {
-          ...commonProperties,
-          type: { type: "string", enum: ["metric", "ranked_bar", "comparison", "sparkline", "donut", "budget_progress", "cash_flow", "activity_heatmap"] },
-          value: { type: "number" }, subtitle: { type: "string", maxLength: 240 }, tone: { type: "string", enum: ["positive", "negative", "neutral"] },
-          items: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label"], properties: { label: { type: "string", minLength: 1, maxLength: 120 }, value: { type: "number" }, current: { type: "number" }, previous: { type: "number" } } } },
-          points: { type: "array", minItems: 2, maxItems: 24, items: itemSchema }, cells: { type: "array", minItems: 1, maxItems: 62, items: itemSchema },
-          currentLabel: { type: "string", maxLength: 120 }, previousLabel: { type: "string", maxLength: 120 }, planned: { type: "number" }, actual: { type: "number" }, remaining: { type: "number" }, status: { type: "string", enum: ["positive", "negative", "neutral"] }, income: { type: "number" }, spending: { type: "number" }, net: { type: "number" }, periodLabel: { type: "string", maxLength: 120 },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "show_scenario",
-      description: "Render one editable what-if, calculation, comparison, allocation, series explorer, or goal tracker. It is a local scenario and never changes the ledger.",
-      parameters: {
-        type: "object", additionalProperties: false, required: ["type", "title"],
-        properties: {
-          ...commonProperties,
-          type: { type: "string", enum: ["projection", "runway_scenario", "calculation", "scenario_compare", "allocation_editor", "time_series_explorer", "goal_tracker"] },
-          subtitle: { type: "string", maxLength: 240 }, startingValue: { type: "number" }, monthlyContribution: { type: "number" }, monthlyGrowthRate: { type: "number", minimum: -100, maximum: 100 }, horizonMonths: { type: "integer", minimum: 3, maximum: 120 }, target: { type: "number" },
-          cash: { type: "number", minimum: 0 }, monthlyBurn: { type: "number", minimum: 0 }, monthlyIncome: { type: "number", minimum: 0 },
-          operation: { type: "string", enum: calculationOperation.options },
-          left: { type: "object", additionalProperties: false, required: ["label", "value", "unit"], properties: { label: { type: "string" }, value: { type: "number" }, unit: { type: "string", enum: units } } },
-          right: { type: "object", additionalProperties: false, required: ["label", "value", "unit"], properties: { label: { type: "string" }, value: { type: "number" }, unit: { type: "string", enum: units } } },
-          resultLabel: { type: "string" }, resultUnit: { type: "string", enum: units }, total: { type: "number", minimum: 0 }, current: { type: "number", minimum: 0 }, deadlineMonths: { type: "integer", minimum: 1, maximum: 600 },
-          rows: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string" }, value: { type: "number", minimum: 0 }, locked: { type: "boolean" } } } },
-          scenarios: { type: "array", minItems: 2, maxItems: 4, items: { type: "object", additionalProperties: false, required: ["label", "metrics"], properties: { label: { type: "string" }, description: { type: "string" }, metrics: { type: "array", minItems: 1, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["label", "value", "unit"], properties: { label: { type: "string" }, value: { type: "number" }, unit: { type: "string", enum: units } } } } } } },
-          series: { type: "array", minItems: 1, maxItems: 4, items: { type: "object", additionalProperties: false, required: ["label", "points"], properties: { label: { type: "string" }, points: { type: "array", minItems: 2, maxItems: 90, items: itemSchema } } } },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "show_worksheet",
-      description: "Render a compact editable worksheet with 1-3 input columns, optional formulas that reference input columns, and up to 12 rows. Local edits never change ledger facts.",
-      parameters: {
-        type: "object", additionalProperties: false, required: ["type", "title", "inputColumns", "formulaColumns", "rows"],
-        properties: {
-          type: { type: "string", enum: ["worksheet"] }, title: { type: "string", minLength: 1, maxLength: 120 },
-          inputColumns: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["key", "label", "unit"], properties: { key: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,30}$" }, label: { type: "string", minLength: 1, maxLength: 120 }, unit: { type: "string", enum: units } } } },
-          formulaColumns: { type: "array", maxItems: 3, items: { type: "object", additionalProperties: false, required: ["key", "label", "unit", "operation", "left", "right"], properties: { key: { type: "string" }, label: { type: "string" }, unit: { type: "string", enum: units }, operation: { type: "string", enum: calculationOperation.options }, left: { type: "string" }, right: { type: "string" } } } },
-          rows: { type: "array", minItems: 1, maxItems: 12, items: { type: "object", additionalProperties: false, required: ["label", "values"], properties: { label: { type: "string", minLength: 1, maxLength: 120 }, values: { type: "object", additionalProperties: { type: "number" } } } } },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "show_split_bill",
-      description: "Render an editable split calculation from supplied items or a receipt. Never creates transactions, loans, or debt. amount is the full line total; leave unread assignments empty. Default tax, service, and discount to proportional and tip to payer when known. Use participant ID 'me' with the preferred user name.",
-      parameters: {
-        type: "object", additionalProperties: false, required: ["type", "title", "participants", "items", "charges"],
-        properties: {
-          type: { type: "string", enum: ["split_bill"] }, title: { type: "string", minLength: 1, maxLength: 120 }, merchant: { type: "string", maxLength: 160 }, date: { type: "string", maxLength: 40 }, payerId: { type: "string", maxLength: 60 }, note: { type: "string", maxLength: 500 },
-          participants: { type: "array", minItems: 1, maxItems: 30, items: { type: "object", additionalProperties: false, required: ["id", "name"], properties: { id: { type: "string", minLength: 1, maxLength: 60 }, name: { type: "string", minLength: 1, maxLength: 120 } } } },
-          items: { type: "array", minItems: 1, maxItems: 100, items: { type: "object", additionalProperties: false, required: ["id", "name", "quantity", "amount", "participantIds"], properties: { id: { type: "string", minLength: 1, maxLength: 60 }, name: { type: "string", minLength: 1, maxLength: 120 }, quantity: { type: "integer", minimum: 1 }, amount: { type: "integer", minimum: 0 }, participantIds: { type: "array", maxItems: 30, items: { type: "string" } } } } },
-          charges: { type: "object", additionalProperties: false, required: ["tax", "service", "discount", "tip"], properties: { tax: { type: "integer", minimum: 0 }, service: { type: "integer", minimum: 0 }, discount: { type: "integer", minimum: 0 }, tip: { type: "integer", minimum: 0 }, taxRule: { type: "string", enum: splitRule.options }, serviceRule: { type: "string", enum: splitRule.options }, discountRule: { type: "string", enum: splitRule.options }, tipRule: { type: "string", enum: splitRule.options } } },
-        },
-      },
-    },
-  },
-];
-
-export const presentationToolNames = new Set(presentationTools.map((tool) => tool.function.name));
+  | z.infer<typeof splitBillSchema>
+) & PresentationMeta;
 
 export function parseAgentPresentation(name: string, input: unknown): AgentPresentation {
   if (name === "show_chart") return chartSchema.parse(input);

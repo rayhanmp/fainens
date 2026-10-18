@@ -89,6 +89,8 @@ export interface AgentToolExecutionContext {
   ownerEmail: string;
   conversationId?: number | null;
   timeZone?: string;
+  /** Evidence retained in the current run, so chart tools can bind to it instead of retyping numbers. */
+  evidence?: (evidenceId: string) => import("./agent-evidence").ModelEvidence | undefined;
 }
 
 interface CurrencyRatePayload {
