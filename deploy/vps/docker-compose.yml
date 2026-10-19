@@ -25,6 +25,9 @@ services:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
       - JOB_RUNNER_MODE=queue
+      # The VPS has no IPv6, and a connect from the containers takes ~1s, longer than Node's
+      # 250ms IPv4/IPv6 race, so outbound fetches (Gmail, R2, models) time out without this.
+      - NODE_OPTIONS=--no-network-family-autoselection
     env_file:
       - .env
     depends_on:
@@ -47,6 +50,7 @@ services:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
       - JOB_RUNNER_MODE=queue
+      - NODE_OPTIONS=--no-network-family-autoselection
     env_file:
       - .env
     depends_on:
