@@ -214,6 +214,11 @@ minAmount?: string;
 maxAmount?: string;
 sort?: ListTransactionsSort;
 includeReversals?: ListTransactionsIncludeReversals;
+status?: ListTransactionsStatus;
+/**
+ * @pattern ^\d+$
+ */
+batchId?: string;
 /**
  * @pattern ^\d+$
  */
@@ -253,6 +258,15 @@ export type ListTransactionsIncludeReversals = typeof ListTransactionsIncludeRev
 export const ListTransactionsIncludeReversals = {
   true: 'true',
   false: 'false',
+} as const;
+
+export type ListTransactionsStatus = typeof ListTransactionsStatus[keyof typeof ListTransactionsStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListTransactionsStatus = {
+  draft: 'draft',
+  posted: 'posted',
 } as const;
 
 export type ListTransactions200DataItemDate = string | number;
@@ -454,6 +468,12 @@ export type ListTransactions200DataItem = {
    * @maximum 9007199254740991
    * @nullable
    */
+  batchId?: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
   periodId?: number | null;
   /**
    * @minimum -9007199254740991
@@ -596,6 +616,14 @@ export type CreateTransactionBodyAnyOfTransferFee = {
   categoryId?: number | null;
 };
 
+export type CreateTransactionBodyAnyOfStatus = typeof CreateTransactionBodyAnyOfStatus[keyof typeof CreateTransactionBodyAnyOfStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateTransactionBodyAnyOfStatus = {
+  draft: 'draft',
+} as const;
+
 export type CreateTransactionBodyAnyOf = {
   kind: CreateTransactionBodyAnyOfKind;
   /**
@@ -664,18 +692,25 @@ export type CreateTransactionBodyAnyOf = {
    * @exclusiveMinimum
    */
   subscriptionId?: number;
+  status?: CreateTransactionBodyAnyOfStatus;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  batchId?: number | null;
   [key: string]: unknown;
 };
 
-export type CreateTransactionBodyAnyOfFiveTxType = typeof CreateTransactionBodyAnyOfFiveTxType[keyof typeof CreateTransactionBodyAnyOfFiveTxType];
+export type CreateTransactionBodyAnyOfSixTxType = typeof CreateTransactionBodyAnyOfSixTxType[keyof typeof CreateTransactionBodyAnyOfSixTxType];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const CreateTransactionBodyAnyOfFiveTxType = {
+export const CreateTransactionBodyAnyOfSixTxType = {
   manual: 'manual',
 } as const;
 
-export type CreateTransactionBodyAnyOfFiveCategoryAllocationsItem = {
+export type CreateTransactionBodyAnyOfSixCategoryAllocationsItem = {
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -692,11 +727,11 @@ export type CreateTransactionBodyAnyOfFiveCategoryAllocationsItem = {
 /**
  * @nullable
  */
-export type CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass = typeof CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass[keyof typeof CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass] | null;
+export type CreateTransactionBodyAnyOfSixLinesItemCashFlowClass = typeof CreateTransactionBodyAnyOfSixLinesItemCashFlowClass[keyof typeof CreateTransactionBodyAnyOfSixLinesItemCashFlowClass] | null;
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass = {
+export const CreateTransactionBodyAnyOfSixLinesItemCashFlowClass = {
   operating: 'operating',
   investing: 'investing',
   financing: 'financing',
@@ -704,7 +739,7 @@ export const CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass = {
   recovery: 'recovery',
 } as const;
 
-export type CreateTransactionBodyAnyOfFiveLinesItem = {
+export type CreateTransactionBodyAnyOfSixLinesItem = {
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -722,11 +757,19 @@ export type CreateTransactionBodyAnyOfFiveLinesItem = {
   credit: number;
   description?: string;
   /** @nullable */
-  cashFlowClass?: CreateTransactionBodyAnyOfFiveLinesItemCashFlowClass;
+  cashFlowClass?: CreateTransactionBodyAnyOfSixLinesItemCashFlowClass;
   [key: string]: unknown;
 };
 
-export type CreateTransactionBodyAnyOfFive = {
+export type CreateTransactionBodyAnyOfSixStatus = typeof CreateTransactionBodyAnyOfSixStatus[keyof typeof CreateTransactionBodyAnyOfSixStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateTransactionBodyAnyOfSixStatus = {
+  draft: 'draft',
+} as const;
+
+export type CreateTransactionBodyAnyOfSix = {
   /** @minLength 1 */
   date: string;
   /** @minLength 1 */
@@ -737,7 +780,7 @@ export type CreateTransactionBodyAnyOfFive = {
   notes?: string | null;
   /** @nullable */
   place?: string | null;
-  txType?: CreateTransactionBodyAnyOfFiveTxType;
+  txType?: CreateTransactionBodyAnyOfSixTxType;
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
@@ -757,13 +800,20 @@ export type CreateTransactionBodyAnyOfFive = {
    * @nullable
    */
   categoryId?: number | null;
-  categoryAllocations?: CreateTransactionBodyAnyOfFiveCategoryAllocationsItem[];
+  categoryAllocations?: CreateTransactionBodyAnyOfSixCategoryAllocationsItem[];
   /** @minItems 2 */
-  lines: CreateTransactionBodyAnyOfFiveLinesItem[];
+  lines: CreateTransactionBodyAnyOfSixLinesItem[];
+  status?: CreateTransactionBodyAnyOfSixStatus;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  batchId?: number | null;
   [key: string]: unknown;
 };
 
-export type CreateTransactionBody = CreateTransactionBodyAnyOf | CreateTransactionBodyAnyOfFive;
+export type CreateTransactionBody = CreateTransactionBodyAnyOf | CreateTransactionBodyAnyOfSix;
 
 export type CreateTransaction201 = {
   /**
@@ -1073,6 +1123,12 @@ export type GetTransaction200 = {
   place?: string | null;
   txType?: string;
   status?: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  batchId?: number | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -1406,6 +1462,12 @@ export type UpdateTransaction200 = {
   place?: string | null;
   txType?: string;
   status?: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  batchId?: number | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -1870,6 +1932,8 @@ export type ConfirmTransactionImportBodyAnyOfThreeRowsItem = {
   notes?: string | null;
   /** @nullable */
   reference?: string | null;
+  /** @maxItems 100 */
+  tagIds?: number[];
   [key: string]: unknown;
 };
 
@@ -1888,6 +1952,13 @@ export type ConfirmTransactionImportBodyAnyOfThree = {
   categoryMappings?: ConfirmTransactionImportBodyAnyOfThreeCategoryMappings;
   accountMappings?: ConfirmTransactionImportBodyAnyOfThreeAccountMappings;
   periodMappings?: ConfirmTransactionImportBodyAnyOfThreePeriodMappings;
+  asDraft?: boolean;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  batchId?: number | null;
   [key: string]: unknown;
 };
 
@@ -14048,6 +14119,271 @@ export type RetryPendingTransaction409 = {
   [key: string]: unknown;
 };
 
+export type ListTransactionBatches200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  source: string;
+  status: string;
+  /** @nullable */
+  note: string | null;
+  createdAt: number;
+  /** @nullable */
+  postedAt: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  draftCount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  postedCount: number;
+  [key: string]: unknown;
+};
+
+export type CreateTransactionBatchBody = {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  source?: string;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  note?: string | null;
+  [key: string]: unknown;
+};
+
+export type CreateTransactionBatch201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  source: string;
+  status: string;
+  /** @nullable */
+  note: string | null;
+  createdAt: number;
+  /** @nullable */
+  postedAt: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  draftCount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  postedCount: number;
+  [key: string]: unknown;
+};
+
+export type CreateTransactionBatch400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CreateTransactionBatch404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CreateTransactionBatch409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type CreateTransactionBatch500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatch200AccountImpactItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  accountId: number;
+  accountName: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  deltaCents: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  draftCount: number;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatch200PeriodsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  periodId: number | null;
+  /** @nullable */
+  periodName: string | null;
+  /** @nullable */
+  status: string | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  draftCount: number;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type GetTransactionBatch200DateRange = {
+  from: number;
+  to: number;
+} | null;
+
+export type GetTransactionBatch200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  source: string;
+  status: string;
+  /** @nullable */
+  note: string | null;
+  createdAt: number;
+  /** @nullable */
+  postedAt: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  draftCount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  postedCount: number;
+  accountImpact: GetTransactionBatch200AccountImpactItem[];
+  periods: GetTransactionBatch200PeriodsItem[];
+  /** @nullable */
+  dateRange: GetTransactionBatch200DateRange;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatch400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatch404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatch409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatch500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DiscardTransactionBatch200 = {
+  success: boolean;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  deletedCount: number;
+  [key: string]: unknown;
+};
+
+export type DiscardTransactionBatch400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DiscardTransactionBatch404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DiscardTransactionBatch409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DiscardTransactionBatch500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatchBody = {
+  /** @maxItems 1000 */
+  transactionIds?: number[];
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatch200FailedItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatch200 = {
+  posted: number[];
+  failed: PostTransactionBatch200FailedItem[];
+  reopenedPeriodIds: number[];
+  batchStatus: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatch400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatch404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatch409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatch500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ScanSplitBillReceiptBody = {
   /** @minLength 1 */
   imageData: string;
@@ -25838,6 +26174,262 @@ export const retryPendingTransaction = async (id: number, options?: RequestInit)
     method: 'POST'
     
     
+  }
+);}
+
+
+
+export type listTransactionBatchesResponse200 = {
+  data: ListTransactionBatches200Item[]
+  status: 200
+}
+    
+export type listTransactionBatchesResponseSuccess = (listTransactionBatchesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listTransactionBatchesResponse = (listTransactionBatchesResponseSuccess)
+
+export const getListTransactionBatchesUrl = () => {
+
+
+  
+
+  return `/api/transaction-batches`
+}
+
+export const listTransactionBatches = async ( options?: RequestInit): Promise<listTransactionBatchesResponse> => {
+  
+  return generatedFetch<listTransactionBatchesResponse>(getListTransactionBatchesUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type createTransactionBatchResponse201 = {
+  data: CreateTransactionBatch201
+  status: 201
+}
+
+export type createTransactionBatchResponse400 = {
+  data: CreateTransactionBatch400
+  status: 400
+}
+
+export type createTransactionBatchResponse404 = {
+  data: CreateTransactionBatch404
+  status: 404
+}
+
+export type createTransactionBatchResponse409 = {
+  data: CreateTransactionBatch409
+  status: 409
+}
+
+export type createTransactionBatchResponse500 = {
+  data: CreateTransactionBatch500
+  status: 500
+}
+    
+export type createTransactionBatchResponseSuccess = (createTransactionBatchResponse201) & {
+  headers: Headers;
+};
+export type createTransactionBatchResponseError = (createTransactionBatchResponse400 | createTransactionBatchResponse404 | createTransactionBatchResponse409 | createTransactionBatchResponse500) & {
+  headers: Headers;
+};
+
+export type createTransactionBatchResponse = (createTransactionBatchResponseSuccess | createTransactionBatchResponseError)
+
+export const getCreateTransactionBatchUrl = () => {
+
+
+  
+
+  return `/api/transaction-batches`
+}
+
+export const createTransactionBatch = async (createTransactionBatchBody: CreateTransactionBatchBody, options?: RequestInit): Promise<createTransactionBatchResponse> => {
+  
+  return generatedFetch<createTransactionBatchResponse>(getCreateTransactionBatchUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createTransactionBatchBody,)
+  }
+);}
+
+
+
+export type getTransactionBatchResponse200 = {
+  data: GetTransactionBatch200
+  status: 200
+}
+
+export type getTransactionBatchResponse400 = {
+  data: GetTransactionBatch400
+  status: 400
+}
+
+export type getTransactionBatchResponse404 = {
+  data: GetTransactionBatch404
+  status: 404
+}
+
+export type getTransactionBatchResponse409 = {
+  data: GetTransactionBatch409
+  status: 409
+}
+
+export type getTransactionBatchResponse500 = {
+  data: GetTransactionBatch500
+  status: 500
+}
+    
+export type getTransactionBatchResponseSuccess = (getTransactionBatchResponse200) & {
+  headers: Headers;
+};
+export type getTransactionBatchResponseError = (getTransactionBatchResponse400 | getTransactionBatchResponse404 | getTransactionBatchResponse409 | getTransactionBatchResponse500) & {
+  headers: Headers;
+};
+
+export type getTransactionBatchResponse = (getTransactionBatchResponseSuccess | getTransactionBatchResponseError)
+
+export const getGetTransactionBatchUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transaction-batches/${id}`
+}
+
+export const getTransactionBatch = async (id: number, options?: RequestInit): Promise<getTransactionBatchResponse> => {
+  
+  return generatedFetch<getTransactionBatchResponse>(getGetTransactionBatchUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type discardTransactionBatchResponse200 = {
+  data: DiscardTransactionBatch200
+  status: 200
+}
+
+export type discardTransactionBatchResponse400 = {
+  data: DiscardTransactionBatch400
+  status: 400
+}
+
+export type discardTransactionBatchResponse404 = {
+  data: DiscardTransactionBatch404
+  status: 404
+}
+
+export type discardTransactionBatchResponse409 = {
+  data: DiscardTransactionBatch409
+  status: 409
+}
+
+export type discardTransactionBatchResponse500 = {
+  data: DiscardTransactionBatch500
+  status: 500
+}
+    
+export type discardTransactionBatchResponseSuccess = (discardTransactionBatchResponse200) & {
+  headers: Headers;
+};
+export type discardTransactionBatchResponseError = (discardTransactionBatchResponse400 | discardTransactionBatchResponse404 | discardTransactionBatchResponse409 | discardTransactionBatchResponse500) & {
+  headers: Headers;
+};
+
+export type discardTransactionBatchResponse = (discardTransactionBatchResponseSuccess | discardTransactionBatchResponseError)
+
+export const getDiscardTransactionBatchUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transaction-batches/${id}`
+}
+
+export const discardTransactionBatch = async (id: number, options?: RequestInit): Promise<discardTransactionBatchResponse> => {
+  
+  return generatedFetch<discardTransactionBatchResponse>(getDiscardTransactionBatchUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type postTransactionBatchResponse200 = {
+  data: PostTransactionBatch200
+  status: 200
+}
+
+export type postTransactionBatchResponse400 = {
+  data: PostTransactionBatch400
+  status: 400
+}
+
+export type postTransactionBatchResponse404 = {
+  data: PostTransactionBatch404
+  status: 404
+}
+
+export type postTransactionBatchResponse409 = {
+  data: PostTransactionBatch409
+  status: 409
+}
+
+export type postTransactionBatchResponse500 = {
+  data: PostTransactionBatch500
+  status: 500
+}
+    
+export type postTransactionBatchResponseSuccess = (postTransactionBatchResponse200) & {
+  headers: Headers;
+};
+export type postTransactionBatchResponseError = (postTransactionBatchResponse400 | postTransactionBatchResponse404 | postTransactionBatchResponse409 | postTransactionBatchResponse500) & {
+  headers: Headers;
+};
+
+export type postTransactionBatchResponse = (postTransactionBatchResponseSuccess | postTransactionBatchResponseError)
+
+export const getPostTransactionBatchUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transaction-batches/${id}/post`
+}
+
+export const postTransactionBatch = async (id: number,
+    postTransactionBatchBody: PostTransactionBatchBody, options?: RequestInit): Promise<postTransactionBatchResponse> => {
+  
+  return generatedFetch<postTransactionBatchResponse>(getPostTransactionBatchUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      postTransactionBatchBody,)
   }
 );}
 

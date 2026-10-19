@@ -287,9 +287,13 @@ export async function updateTransactionAtomically(
     || categoryChanges
     || input.categoryAllocations !== undefined
     || input.lines !== undefined;
+  // A draft is outside the ledger, so it may move between periods, closed ones included; posting
+  // applies the lock. A posted journal may only move into an open period.
   const periodId = input.date === undefined || !dateChangesPeriod
     ? current.periodId
-    : await assertJournalPeriodOpen(effectiveDate, null);
+    : current.status === "draft"
+      ? targetPeriodId
+      : await assertJournalPeriodOpen(effectiveDate, null);
   const validatedLines = input.lines === undefined ? undefined : validateJournalLines(input.lines).lines;
   const effectiveLines = validatedLines ?? currentLines;
   const lineAccountIds = [...new Set(effectiveLines.map((line) => line.accountId))];
@@ -605,6 +609,8 @@ export interface ImportTransactionRow {
   categoryId?: number | null;
   notes?: string | null;
   reference?: string | null;
+  /** Tags for this row, on top of the import-wide tags. */
+  tagIds?: number[];
 }
 
 export async function importTransactionsAtomically(input: {
@@ -612,9 +618,19 @@ export async function importTransactionsAtomically(input: {
   accountId?: number;
   defaultDescription?: string;
   tagIds?: number[];
+  /** Drafts stay outside the ledger, so they may land in closed periods; posting re-checks. */
+  status?: "posted" | "draft";
+  batchId?: number | null;
 }): Promise<Array<{ id: number; transactionId: number }>> {
   if (!Array.isArray(input.rows) || input.rows.length === 0 || input.rows.length > 1000) {
     throw new TransactionMutationError("Import must contain between 1 and 1000 rows", 400);
+  }
+  const isDraft = input.status === "draft";
+  if (input.batchId != null && (!Number.isInteger(input.batchId) || input.batchId <= 0)) {
+    throw new TransactionMutationError("batchId must be a positive integer", 400);
+  }
+  if (input.batchId != null && !isDraft) {
+    throw new TransactionMutationError("Only drafts can be imported into a batch", 400);
   }
   const fallbackAccountId = input.accountId;
   if (fallbackAccountId != null && (!Number.isInteger(fallbackAccountId) || fallbackAccountId <= 0)) {
@@ -635,12 +651,13 @@ export async function importTransactionsAtomically(input: {
   }
 
   const tagIds = [...new Set(input.tagIds ?? [])];
-  if (tagIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+  const allTagIds = [...new Set([...tagIds, ...input.rows.flatMap((row) => row.tagIds ?? [])])];
+  if (allTagIds.some((id) => !Number.isInteger(id) || id <= 0)) {
     throw new TransactionMutationError("tagIds must contain positive integers", 400);
   }
-  if (tagIds.length > 0) {
-    const validTags = await db.select({ id: tags.id }).from(tags).where(inArray(tags.id, tagIds));
-    if (validTags.length !== tagIds.length) {
+  if (allTagIds.length > 0) {
+    const validTags = await db.select({ id: tags.id }).from(tags).where(inArray(tags.id, allTagIds));
+    if (validTags.length !== allTagIds.length) {
       throw new TransactionMutationError("One or more tags do not exist", 400);
     }
   }
@@ -692,7 +709,7 @@ export async function importTransactionsAtomically(input: {
         throw new TransactionMutationError(`Row ${index + 1} is dated outside the selected period`, 400);
       }
     }
-    if (period?.status === "closed") {
+    if (period?.status === "closed" && !isDraft) {
       throw new TransactionMutationError(`Period ${period.id} is closed; reopen it before importing transactions`, 409);
     }
     const signedAmount = row.type === "income" ? -Math.abs(row.amount) : row.type === "expense" ? Math.abs(row.amount) : row.amount;
@@ -715,6 +732,7 @@ export async function importTransactionsAtomically(input: {
       category,
       reportingAccountId: category?.reportingAccountId != null ? reportingAccountById.get(category.reportingAccountId)?.id ?? null : null,
       periodId: period?.id ?? null,
+      tagIds: [...new Set([...tagIds, ...(row.tagIds ?? [])])],
     };
   });
 
@@ -735,6 +753,8 @@ export async function importTransactionsAtomically(input: {
         notes: row.notes,
         reference: row.reference,
         txType: `simple_${row.kind}`,
+        status: isDraft ? "draft" : "posted",
+        batchId: isDraft ? input.batchId ?? null : null,
         periodId: row.periodId,
         categoryId: row.category?.id ?? null,
       })
@@ -755,9 +775,9 @@ export async function importTransactionsAtomically(input: {
     if (row.category) {
       tx.insert(transactionCategoryAllocations).values({ transactionId: inserted.id, categoryId: row.category.id, amount: row.amount }).run();
     }
-    if (tagIds.length > 0) {
+    if (row.tagIds.length > 0) {
       tx.insert(transactionTags)
-        .values(tagIds.map((tagId) => ({ transactionId: inserted.id, tagId })))
+        .values(row.tagIds.map((tagId) => ({ transactionId: inserted.id, tagId })))
         .run();
     }
     tx.insert(auditLogs).values({
@@ -767,8 +787,8 @@ export async function importTransactionsAtomically(input: {
       afterSnapshot: auditSnapshot({
         transaction: { id: inserted.id, ...row },
         lines,
-        tagIds,
-        source: "csv_import",
+        tagIds: row.tagIds,
+        source: isDraft ? "draft_import" : "csv_import",
       }),
     }).run();
     return { id: inserted.id, transactionId: inserted.id };

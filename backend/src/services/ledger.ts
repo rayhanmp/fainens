@@ -8,6 +8,7 @@ import { bumpFinancialRevisionSync } from "./financial-revision";
 import {
   assertJournalPeriodOpen,
   assertPreparedJournalPeriodOpenSync,
+  findPeriodForDate,
 } from "./period-locking";
 
 export type JournalLineInput = {
@@ -48,6 +49,13 @@ export type CreateJournalEntryInput = {
   /** Optional subscription this transaction pays for (advances subscription renewal) */
   subscriptionId?: number | null;
   tagIds?: number[];
+  /**
+   * A draft is saved with its lines but stays out of every balance, report and period check until
+   * it is posted, so it may be dated inside a closed period and edited freely.
+   */
+  status?: "posted" | "draft";
+  /** The batch a draft belongs to, for reviewing and posting drafts as a unit. */
+  batchId?: number | null;
 };
 
 /**
@@ -189,6 +197,9 @@ export type CreateSimpleTransactionInput = {
   /** Optional subscription this transaction pays for (advances subscription renewal) */
   subscriptionId?: number | null;
   tagIds?: number[];
+  /** Save as a draft outside the ledger, optionally inside a batch. */
+  status?: "posted" | "draft";
+  batchId?: number | null;
 };
 
 /**
@@ -294,6 +305,8 @@ export async function buildSimpleJournalInput(
       // Subscription payment
       subscriptionId: input.subscriptionId ?? null,
       tagIds: input.tagIds,
+      status: input.status,
+      batchId: input.batchId ?? null,
   };
 }
 
@@ -562,7 +575,17 @@ export async function prepareJournalEntry(
   if (dueMs != null && !Number.isFinite(dueMs)) {
     throw new Error("Invalid due date");
   }
-  const periodId = await assertJournalPeriodOpen(dateMs, input.periodId, dbLike);
+  const isDraft = input.status === "draft";
+  if (input.batchId != null && (!Number.isInteger(input.batchId) || input.batchId <= 0)) {
+    throw new Error("batchId must be a positive integer");
+  }
+  if (input.batchId != null && !isDraft) {
+    throw new Error("Only a draft can belong to a batch");
+  }
+  // A draft touches no balance, so a closed period does not lock it; posting re-checks the period.
+  const periodId = isDraft
+    ? (await findPeriodForDate(dateMs, dbLike))?.id ?? null
+    : await assertJournalPeriodOpen(dateMs, input.periodId, dbLike);
 
   return {
     dateMs,
@@ -581,7 +604,8 @@ export async function prepareJournalEntry(
       notes: input.notes ?? null,
       place: input.place ?? null,
       txType: input.txType ?? "manual",
-      status: "posted",
+      status: isDraft ? "draft" : "posted",
+      batchId: isDraft ? input.batchId ?? null : null,
       periodId,
       linkedTxId: input.linkedTxId ?? null,
       reversalOfTxId: input.reversalOfTxId ?? null,
@@ -610,7 +634,8 @@ export function insertPreparedJournalEntrySync(tx: any, prepared: PreparedJourna
       .where(sql`${transactionReallocations.incomingTransactionId} = ${reversalOf} OR ${transactionReallocations.outgoingTransactionId} = ${reversalOf}`).limit(1).all()[0];
     if (linked) throw new Error("Unlink the reallocation before correcting this transaction");
   }
-  assertPreparedJournalPeriodOpenSync(tx, prepared);
+  // Drafts stay outside the ledger until posted, which is when the period lock applies.
+  if (prepared.transactionValues.status !== "draft") assertPreparedJournalPeriodOpenSync(tx, prepared);
   const inserted = tx
     .insert(transactions)
     .values(prepared.transactionValues)

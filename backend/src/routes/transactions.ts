@@ -69,6 +69,7 @@ const transactionRecordSchema = z.object({
   place: z.string().nullable().optional(),
   txType: z.string().optional(),
   status: z.string().optional(),
+  batchId: z.number().int().nullable().optional(),
   periodId: z.number().int().nullable().optional(),
   linkedTxId: z.number().int().nullable().optional(),
   reversalOfTxId: z.number().int().nullable().optional(),
@@ -130,6 +131,9 @@ const transactionListQuerySchema = z.object({
   maxAmount: z.string().optional(),
   sort: z.enum(["newest", "oldest", "largest"]).optional(),
   includeReversals: z.enum(["true", "false"]).optional(),
+  /** "draft" lists unposted drafts only; "posted" leaves them out; omitted lists both. */
+  status: z.enum(["draft", "posted"]).optional(),
+  batchId: z.string().regex(/^\d+$/).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   offset: z.string().regex(/^\d+$/).optional(),
 });
@@ -168,6 +172,9 @@ const simpleTransactionBodySchema = z.object({
   destName: z.string().nullable().optional(),
   distanceKm: z.number().nonnegative().nullable().optional(),
   subscriptionId: z.number().int().positive().optional(),
+  /** Save outside the ledger, to be posted later (optionally as part of a batch). */
+  status: z.enum(["draft"]).optional(),
+  batchId: z.number().int().positive().nullable().optional(),
 }).passthrough();
 const journalTransactionBodySchema = z.object({
   date: z.string().min(1),
@@ -182,6 +189,8 @@ const journalTransactionBodySchema = z.object({
   categoryId: z.number().int().positive().nullable().optional(),
   categoryAllocations: z.array(z.object({ categoryId: z.number().int().positive(), amount: z.number().int() }).passthrough()).optional(),
   lines: z.array(journalLineBodySchema).min(2),
+  status: z.enum(["draft"]).optional(),
+  batchId: z.number().int().positive().nullable().optional(),
 }).passthrough();
 const transactionCreateBodySchema = z.union([simpleTransactionBodySchema, journalTransactionBodySchema]);
 const transactionUpdateBodySchema = z.object({
@@ -223,8 +232,11 @@ const importConfirmBodySchema = z.object({
   rows: z.array(z.object({ date: z.string().min(1), amountCents: z.number().int(), description: z.string() }).passthrough()).min(1).max(1000), accountId: z.number().int().positive(), defaultDescription: z.string().trim().min(1).max(500), tagIds: z.array(z.number().int().positive()).max(100).optional(),
 }).passthrough();
 const legacyImportConfirmBodySchema = z.object({
-  rows: z.array(z.object({ date: z.string().min(1), description: z.string(), amount: z.number().int(), type: z.enum(["expense", "income"]), accountId: z.number().int().positive(), periodId: z.number().int().positive().nullable().optional(), categoryId: z.number().int().positive().nullable().optional(), notes: z.string().nullable().optional(), reference: z.string().nullable().optional() }).passthrough()).min(1).max(1000),
+  rows: z.array(z.object({ date: z.string().min(1), description: z.string(), amount: z.number().int(), type: z.enum(["expense", "income"]), accountId: z.number().int().positive(), periodId: z.number().int().positive().nullable().optional(), categoryId: z.number().int().positive().nullable().optional(), notes: z.string().nullable().optional(), reference: z.string().nullable().optional(), tagIds: z.array(z.number().int().positive()).max(100).optional() }).passthrough()).min(1).max(1000),
   categoryMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(), accountMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(), periodMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(),
+  /** Save every row as a draft (optionally in a batch) instead of posting it. */
+  asDraft: z.boolean().optional(),
+  batchId: z.number().int().positive().nullable().optional(),
 }).passthrough();
 const importConfirmBodyUnionSchema = z.union([importConfirmBodySchema, legacyImportConfirmBodySchema]);
 const importConfirmResponseSchema = z.object({ imported: z.number().int().nonnegative(), skipped: z.number().int().nonnegative().default(0), errors: z.array(z.object({ row: z.number().int().positive(), message: z.string() }).passthrough()).default([]), transactions: z.array(transactionMutationResponseSchema) }).passthrough();
@@ -250,6 +262,7 @@ const transactionColumns = {
   place: transactions.place,
   txType: transactions.txType,
   status: transactions.status,
+  batchId: transactions.batchId,
   periodId: transactions.periodId,
   linkedTxId: transactions.linkedTxId,
   reversalOfTxId: transactions.reversalOfTxId,
@@ -833,6 +846,8 @@ RULES:
       maxAmount,
       sort = "newest",
       includeReversals: includeReversalsParam,
+      status: statusParam,
+      batchId: batchIdParam,
       limit: limitParam = String(DEFAULT_LIMIT),
       offset: offsetParam = "0",
     } = request.query as {
@@ -849,6 +864,8 @@ RULES:
       maxAmount?: string;
       sort?: "newest" | "oldest" | "largest";
       includeReversals?: string;
+      status?: "draft" | "posted";
+      batchId?: string;
       limit?: string;
       offset?: string;
     };
@@ -893,6 +910,13 @@ RULES:
         notInArray(transactions.txType, ["reversal", "domain_reversal", "historical_recovery_adjustment", "balance_adjustment"]),
         ne(transactions.status, "reversed"),
       );
+    }
+    if (statusParam === "draft") baseConditions.push(eq(transactions.status, "draft"));
+    if (statusParam === "posted") baseConditions.push(ne(transactions.status, "draft"));
+    if (batchIdParam !== undefined) {
+      const parsedBatchId = parseIdParam(batchIdParam);
+      if (parsedBatchId === null) validationErrors.push("batchId must be a positive integer");
+      else baseConditions.push(eq(transactions.batchId, parsedBatchId));
     }
 
     if (validationErrors.length > 0) {
@@ -1181,6 +1205,7 @@ RULES:
     try {
       if ("kind" in body) {
         const { kind, amountCents, description, notes, place, date, categoryId, tagIds, walletAccountId, toWalletAccountId, transferFee, linkedTxId, originLat, originLng, originName, destLat, destLng, destName, distanceKm, subscriptionId } = body;
+        const { status, batchId } = body as { status?: "draft"; batchId?: number | null };
         if (subscriptionId !== undefined) {
           return reply.code(409).send({
             error: "Subscription payments must confirm a concrete renewal occurrence",
@@ -1209,6 +1234,8 @@ RULES:
             toWalletAccountId,
             linkedTxId,
             tagIds,
+            status,
+            batchId,
           };
           if (!transferFee) {
             const txResult = await createSimpleTransaction(transferInput);
@@ -1228,6 +1255,8 @@ RULES:
             periodId: autoPeriodId,
             categoryId: transferFee.categoryId ?? null,
             walletAccountId: transferFee.paidBy === "sender" ? walletAccountId : toWalletAccountId,
+            status,
+            batchId,
           }), db);
           const ids = db.transaction((tx) => {
             const transferId = insertPreparedJournalEntrySync(tx, preparedTransfer);
@@ -1264,6 +1293,8 @@ RULES:
           destName,
           distanceKm,
           tagIds,
+          status,
+          batchId,
         });
 
         reply.code(201).send({ id: txResult.transactionId, ...txResult });
@@ -1271,6 +1302,7 @@ RULES:
       }
 
       const { date, description, reference, notes, place, txType, linkedTxId, tagIds, categoryId, categoryAllocations, lines } = body;
+      const { status, batchId } = body as { status?: "draft"; batchId?: number | null };
       if (txType != null && txType !== "manual") {
         return reply.code(400).send({ error: "Manual journal creation cannot choose a system transaction type" });
       }
@@ -1292,6 +1324,8 @@ RULES:
         categoryAllocations,
         tagIds,
         lines,
+        status,
+        batchId,
       });
       reply.code(201).send({ id: txResult.transactionId, ...txResult });
     } catch (err) {
@@ -1583,12 +1617,14 @@ RULES:
     schema: { operationId: "confirmTransactionImport", tags: ["transactions"], body: importConfirmBodyUnionSchema, response: { 201: importConfirmResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema } },
   }, async (request, reply) => {
     const body = request.body as {
-      rows: Array<{ date: string; amountCents?: number; amount?: number; description: string; type?: "expense" | "income"; accountId?: number; periodId?: number | null; categoryId?: number | null; notes?: string | null; reference?: string | null }>;
+      rows: Array<{ date: string; amountCents?: number; amount?: number; description: string; type?: "expense" | "income"; accountId?: number; periodId?: number | null; categoryId?: number | null; notes?: string | null; reference?: string | null; tagIds?: number[] }>;
       accountId?: number;
       defaultDescription?: string;
       tagIds?: number[];
+      asDraft?: boolean;
+      batchId?: number | null;
     };
-    const { rows, accountId, defaultDescription = "Imported transaction", tagIds } = body;
+    const { rows, accountId, defaultDescription = "Imported transaction", tagIds, asDraft, batchId } = body;
     const hasLegacyRows = rows.some((row) => row.amount != null || row.type != null || row.accountId != null || row.categoryId != null || row.periodId != null);
     const importRows = rows.map((row) => ({
       date: row.date,
@@ -1600,6 +1636,7 @@ RULES:
       ...(row.categoryId !== undefined ? { categoryId: row.categoryId } : {}),
       ...(row.notes !== undefined ? { notes: row.notes } : {}),
       ...(row.reference !== undefined ? { reference: row.reference } : {}),
+      ...(row.tagIds !== undefined ? { tagIds: row.tagIds } : {}),
     }));
 
     try {
@@ -1608,6 +1645,8 @@ RULES:
         accountId,
         defaultDescription,
         tagIds,
+        status: asDraft ? "draft" : "posted",
+        batchId: asDraft ? batchId ?? null : null,
       });
       return reply.code(201).send({ imported: results.length, skipped: 0, errors: [], transactions: results, legacyRows: hasLegacyRows });
     } catch (err) {

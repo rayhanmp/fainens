@@ -56,8 +56,27 @@ export const accounts: any = sqliteTable("account", {
   liquidityClass: text("liquidity_class").notNull().default("non_cash"), // cash_equivalent | receivable | investment | non_cash
 });
 
+/**
+ * A set of draft journals prepared together, such as a statement backfill. Drafts carry the batch
+ * so they can be reviewed, posted or discarded as one unit.
+ */
+export const transactionBatches = sqliteTable("transaction_batch", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  /** Where the drafts came from: "backfill", "import", ... */
+  source: text("source").notNull().default("backfill"),
+  status: text("status").notNull().default("open"), // open | posted | discarded
+  note: text("note"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  postedAt: integer("posted_at", { mode: "timestamp_ms" }),
+});
+
 export const transactions: any = sqliteTable("transaction", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  /** The batch a draft was prepared in; cleared when the batch is discarded. */
+  batchId: integer("batch_id").references(() => transactionBatches.id, { onDelete: "set null" }),
   date: integer("date", { mode: "timestamp_ms" }).notNull(),
   /** Optional due date for paylater recognition/interest installments (ms since epoch). */
   dueDate: integer("due_date", { mode: "timestamp_ms" }),

@@ -37,6 +37,7 @@ import loanRoutes from "./routes/loans";
 import contactRoutes from "./routes/contacts";
 import insightsRoutes from "./routes/insights";
 import pendingTransactionsRoutes from "./routes/pending-transactions";
+import transactionBatchRoutes from "./routes/transaction-batches";
 import splitbillRoutes from "./routes/splitbill";
 import agentRoutes from "./routes/agent";
 import moneyAnomalyRoutes from "./routes/money-anomalies";
@@ -137,6 +138,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(profileRoutes);
   app.register(insightsRoutes);
   app.register(pendingTransactionsRoutes);
+  app.register(transactionBatchRoutes);
   app.register(splitbillRoutes);
   app.register(agentRoutes);
   app.register(moneyAnomalyRoutes);

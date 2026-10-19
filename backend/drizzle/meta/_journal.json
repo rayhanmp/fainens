@@ -330,6 +330,13 @@
       "when": 1788094000000,
       "tag": "0046_recap_period_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788095000000,
+      "tag": "0047_transaction_batch",
+      "breakpoints": true
     }
   ]
 }

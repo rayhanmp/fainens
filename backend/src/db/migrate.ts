@@ -208,6 +208,25 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
         "ALTER TABLE \"transaction\" ADD COLUMN subscription_id integer REFERENCES subscription(id)",
       );
     }
+    if (!tableExists("transaction_batch")) {
+      db.$client.exec(`
+        CREATE TABLE IF NOT EXISTS transaction_batch (
+          id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          name text NOT NULL,
+          source text DEFAULT 'backfill' NOT NULL,
+          status text DEFAULT 'open' NOT NULL,
+          note text,
+          created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+          posted_at integer
+        )
+      `);
+    }
+    if (tableExists("transaction") && !columnExists("transaction", "batch_id")) {
+      db.$client.exec(
+        "ALTER TABLE \"transaction\" ADD COLUMN batch_id integer REFERENCES transaction_batch(id) ON DELETE SET NULL",
+      );
+      db.$client.exec("CREATE INDEX IF NOT EXISTS transaction_batch_id_idx ON \"transaction\" (batch_id)");
+    }
     if (tableExists("transaction") && !columnExists("transaction", "status")) {
       db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN status text DEFAULT 'posted' NOT NULL");
     }
