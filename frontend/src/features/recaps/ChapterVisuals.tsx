@@ -1,26 +1,35 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Download, Repeat2 } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Coffee, Compass, Crown, Download, Gem, Leaf, PartyPopper, Repeat2, Shapes, type LucideIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
+import { ScratchCover } from './Interactive';
 import { CategoryIcon } from '../categories/CategoryIcon';
 import { useCategoriesQuery } from '../categories/queries';
 import { AnimatedValue, RollingValue } from './AnimatedValue';
 import { Burst } from './Burst';
 import { seeded, type SectionVariants } from './motion';
-import { formatRecapDay, recapWeekday, WEEKDAYS, type RecapDayCell, type RecapStory } from './stories';
+import { formatRecapDay, recapWeekday, WEEKDAYS, type PersonaKey, type RecapDayCell, type RecapStory } from './stories';
 
 type Of<Id extends RecapStory['id']> = Extract<RecapStory, { id: Id }>;
 type Shared = { variants: SectionVariants; run: number };
+export type QuizScore = { correct: number; total: number };
+const personaIcons: Record<PersonaKey, LucideIcon> = {
+  weekend: PartyPopper, bigTicket: Gem, steady: Coffee, monk: Leaf, loyal: Repeat2, devotee: Crown, explorer: Compass, allRounder: Shapes,
+};
 const seq = (n: number) => ({ '--seq': n }) as CSSProperties;
 const Money = ({ value }: { value: number }) => <AnimatedValue value={value} money />;
 // Category colours are tuned for the app's surfaces; on the story's tinted paper a muted step of the ink
 // keeps unnamed or uncoloured slices legible.
 const fallbackTones = [1, .72, .52, .38, .26];
 
-export function ChapterVisual({ story, periodId, onShare, variants, run }: { story: RecapStory; periodId: number; onShare: () => void } & Shared) {
+export function ChapterVisual({ story, periodId, onShare, variants, run, score }: { story: RecapStory; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
   const shared = { variants, run };
   switch (story.id) {
     case 'intro': return <CoverVisual story={story} {...shared} />;
-    case 'overview': return <FlowVisual story={story} />;
+    case 'overview': return <FlowVisual story={story} run={run} />;
+    case 'months': return <MonthsVisual story={story} />;
+    case 'mixtape': return <MixtapeVisual story={story} />;
+    case 'persona': return <PersonaVisual story={story} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;
@@ -29,7 +38,7 @@ export function ChapterVisual({ story, periodId, onShare, variants, run }: { sto
     case 'receipts': return <ReceiptVisual story={story} {...shared} />;
     case 'habits': return <HabitsVisual story={story} />;
     case 'comparison': return <ComparisonVisual story={story} {...shared} />;
-    case 'closing': return <ClosingVisual story={story} periodId={periodId} onShare={onShare} {...shared} />;
+    case 'closing': return <ClosingVisual story={story} periodId={periodId} onShare={onShare} score={score} {...shared} />;
   }
 }
 
@@ -49,8 +58,14 @@ function CoverVisual({ story, variants, run }: { story: Of<'intro'> } & Shared) 
   </>;
 }
 
-function FlowVisual({ story }: { story: Of<'overview'> }) {
+function FlowVisual({ story, run }: { story: Of<'overview'>; run: number }) {
+  const { balancesHidden } = useBalanceVisibility();
   const max = Math.max(story.income, story.expenses, 1);
+  const net = <div className="recap-flow-net recap-seq" style={seq(5)}>
+    <span>{story.net >= 0 ? 'Left over' : 'Short by'}</span>
+    <strong><RollingValue value={Math.abs(story.net)} /></strong>
+    {story.keptShare !== null && <em>{story.keptShare}% of income</em>}
+  </div>;
   const rows = [
     { key: 'in', label: 'Came in', value: story.income },
     { key: 'out', label: 'Went out', value: Math.max(0, story.expenses) },
@@ -61,12 +76,62 @@ function FlowVisual({ story }: { story: Of<'overview'> }) {
       <div className="recap-flow-head"><span>{row.label}</span><strong><RollingValue value={row.value} /></strong></div>
       <div className="recap-flow-track" aria-hidden="true"><i style={{ '--fill': row.value / max, ...seq(3 + i) } as CSSProperties} /></div>
     </div>)}
-    {story.lead === 'left' && <div className="recap-flow-net recap-seq" style={seq(5)}>
-      <span>{story.net >= 0 ? 'Left over' : 'Short by'}</span>
-      <strong><RollingValue value={Math.abs(story.net)} /></strong>
-      {story.keptShare !== null && <em>{story.keptShare}% of income</em>}
-    </div>}
+    {/* Hidden balances stay hidden: there is nothing to scratch for. */}
+    {story.lead === 'left' && (balancesHidden || story.net < 0 ? net : <ScratchCover seed={run}>{net}</ScratchCover>)}
   </div>;
+}
+
+function MonthsVisual({ story }: { story: Of<'months'> }) {
+  const max = Math.max(1, ...story.months.map(month => month.amount));
+  return <div className="recap-weekdays">
+    <div className="recap-big-stat recap-seq" style={seq(3)}><span className="recap-stat-word">{story.months[story.busiest].label}</span><span>the biggest month of the year</span></div>
+    <div className="recap-week-bars recap-month-bars recap-seq" style={seq(4)} role="img" aria-label={`Spending by month, highest in ${story.months[story.busiest].label}`}>
+      {story.months.map((month, i) => <div key={month.label} className={i === story.busiest ? 'is-top' : undefined}>
+        <i style={{ '--fill': month.amount / max, '--i': i } as CSSProperties} />
+        <span>{month.label.slice(0, 3)}</span>
+      </div>)}
+    </div>
+    <p className="recap-fact recap-seq" style={seq(6)}>{story.months[story.busiest].label}: <Money value={story.months[story.busiest].amount} /></p>
+  </div>;
+}
+
+function MixtapeVisual({ story }: { story: Of<'mixtape'> }) {
+  return <div className="recap-mixtape">
+    <div className="recap-cassette" aria-hidden="true">
+      <div className="recap-cassette-label"><span>{story.tapeName}</span><small>Side A · 30:00</small></div>
+      <div className="recap-cassette-window"><i className="recap-reel" /><i className="recap-reel" /><b /></div>
+    </div>
+    <ol className="recap-tracklist">
+      {story.tracks.map((track, i) => <li key={track.title} className="recap-seq" style={seq(4 + i * .5)}>
+        <span className="recap-track-no">A{i + 1}</span>
+        <span className="recap-track-name"><span>{track.title}</span><small>{track.artist}</small></span>
+        <span className="recap-track-length">{track.length}</span>
+      </li>)}
+    </ol>
+  </div>;
+}
+
+function PersonaVisual({ story }: { story: Of<'persona'> }) {
+  const { persona } = story;
+  const Icon = personaIcons[persona.key];
+  return <div className="recap-persona">
+    <PersonaBadge personaKey={persona.key} Icon={Icon} />
+    <p className="recap-persona-name recap-seq" style={seq(6)}>{persona.name}</p>
+    <p className="recap-persona-tagline recap-seq" style={seq(6.6)}>{persona.tagline}{persona.dash ? ` With a dash of ${persona.dash}.` : ''}</p>
+    <ul className="recap-chips recap-persona-evidence">{persona.evidence.map((item, i) => <li key={item} style={{ '--c': i } as CSSProperties}>{item}</li>)}</ul>
+  </div>;
+}
+
+/** A spinning medallion: the persona's icon, ringed by the recap's own lettering. */
+function PersonaBadge({ personaKey, Icon, small = false }: { personaKey: string; Icon: LucideIcon; small?: boolean }) {
+  return <span className={`recap-persona-badge${small ? ' is-small' : ''}`} aria-hidden="true">
+    <svg viewBox="0 0 100 100" className="recap-persona-ring">
+      <defs><path id={`ring-${personaKey}${small ? '-s' : ''}`} d="M50,50 m-38,0 a38,38 0 1,1 76,0 a38,38 0 1,1 -76,0" /></defs>
+      {/* One pass of lettering stretched to the ring's circumference (2π × 38), so it meets itself cleanly. */}
+      <text><textPath href={`#ring-${personaKey}${small ? '-s' : ''}`} textLength="236" lengthAdjust="spacing">MONEY PERSONALITY ✳ FAINENS ✳ </textPath></text>
+    </svg>
+    <span className="recap-persona-core"><Icon /></span>
+  </span>;
 }
 
 function BudgetVisual({ story, periodId }: { story: Of<'budget'>; periodId: number }) {
@@ -267,8 +332,10 @@ function ComparisonVisual({ story, variants }: { story: Of<'comparison'> } & Sha
   </div>;
 }
 
-function ClosingVisual({ story, periodId, onShare, variants, run }: { story: Of<'closing'>; periodId: number; onShare: () => void } & Shared) {
+function ClosingVisual({ story, periodId, onShare, variants, run, score }: { story: Of<'closing'>; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
   const random = seeded(run + 41);
+  const stars = score.total ? Math.round(score.correct / score.total * 3) : 0;
+  const verdict = !score.total ? null : score.correct === score.total ? 'You know your money.' : score.correct === 0 ? 'The receipts had secrets.' : 'Pretty sharp.';
   return <div className={`recap-closing recap-closing-${variants.closing}`}>
     <Burst seed={run} kind={variants.burst} count={variants.burst === 'coins' ? 30 : 52} origin={random() < .5 ? 'center' : 'cannons'} delay={900} />
     <dl className="recap-wrap-card">
@@ -278,6 +345,10 @@ function ClosingVisual({ story, periodId, onShare, variants, run }: { story: Of<
         {tile.note && <small>{tile.note}</small>}
       </div>)}
     </dl>
+    <div className="recap-closing-extras recap-seq" style={seq(6)}>
+      <span className="recap-closing-persona"><PersonaBadge personaKey={story.persona.key} Icon={personaIcons[story.persona.key]} small /><span><small>Your persona</small>{story.persona.name}</span></span>
+      {score.total > 0 && <span className="recap-closing-score"><small>Quiz {score.correct}/{score.total}</small><span aria-label={`${stars} of 3 stars`}>{'★'.repeat(stars)}{'☆'.repeat(3 - stars)}</span>{verdict && <em>{verdict}</em>}</span>}
+    </div>
     <div className="recap-closing-actions recap-seq" style={seq(7)}>
       <button type="button" className="recap-solid-button" onClick={onShare}><Download size={15} /> Share card</button>
       <Link to="/budget" search={{ periodId: String(periodId) }} className="recap-ghost-button">Review budget</Link>

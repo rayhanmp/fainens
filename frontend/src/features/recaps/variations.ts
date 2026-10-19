@@ -10,6 +10,7 @@ export type CopyFacts = {
   receipt: { label: string; amount: number; count: number } | null; largestShare: number | null; topShare: number | null;
   purchaseCount: number; median: number | null; average: number | null; perDay: number;
   repeat: { label: string; occurrences: number } | null; change: number | null; changeMode: 'average' | 'total';
+  busiestMonth: string | null;
 };
 type Copy = { eyebrow: string; title: string; body: string };
 
@@ -110,6 +111,20 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
       { eyebrow: 'Then and now', title: f.change === 0 ? 'Right where it was.' : `${Math.abs(f.change)}% ${f.change > 0 ? 'higher' : 'lower'} than before.`, body: f.changeMode === 'average' ? 'Average purchase size, against your previous periods.' : 'Total expenses, against the previous period.' },
       { eyebrow: 'Plot twist', title: f.changeMode === 'average' ? `The average receipt got ${f.change > 0 ? 'bigger' : 'smaller'}.` : `The expense total went ${f.change > 0 ? 'up' : 'down'}.`, body: `By ${Math.abs(f.change)}%.` },
     ] : [];
+    case 'months': return [
+      { eyebrow: 'Month by month', title: f.busiestMonth ? `${f.busiestMonth} was the big one.` : 'The year, month by month.', body: 'Spending in each month of the year.' },
+      { eyebrow: 'The year’s rhythm', title: 'Twelve months, one beat.', body: f.busiestMonth ? `${f.busiestMonth} spent the most.` : 'Each bar is a month of spending.' },
+    ];
+    case 'mixtape': return [
+      { eyebrow: 'Side A', title: 'Your period, as a mixtape.', body: 'Each category gets airtime by its share of spending.' },
+      { eyebrow: 'Now playing', title: f.top ? `Now playing: ${f.top.label}.` : 'Now playing: your receipts.', body: 'Thirty minutes, timed by where the money went.' },
+      { eyebrow: 'The B-sides', title: 'Press play on your receipts.', body: 'Track lengths follow each category’s share of spending.' },
+    ];
+    case 'persona': return [
+      { eyebrow: 'Your money personality', title: 'Meet your money personality.', body: 'Read from when and how you spent. Nothing more.' },
+      { eyebrow: 'The verdict is in', title: 'Who were you this period?', body: 'A personality built from your patterns, not your choices.' },
+      { eyebrow: 'Drumroll, please', title: 'This period, you were…', body: 'Based on the rhythm of your receipts.' },
+    ];
     case 'closing': return [
       { eyebrow: 'The period, in one card', title: 'Same you. Fresh chapter.', body: 'What gets a little more room next period?' },
       { eyebrow: 'That’s a wrap', title: `That’s a wrap on ${f.period}.`, body: 'Share the card, or take one more look at the budget.' },

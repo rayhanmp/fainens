@@ -1,11 +1,14 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Link } from '@tanstack/react-router';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Pause, Play, RefreshCw, Rewind, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Pause, Play, RefreshCw, Rewind, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
 import { useRecapArchive, useRecapStory, useRegenerateRecap, type SavedRecapStory } from './queries';
 import { buildStories, periodDateRange, themeColors, type RecapStory } from './stories';
 import { ShareRecap } from './ShareRecap';
-import { ChapterVisual } from './ChapterVisuals';
+import { ChapterVisual, type QuizScore } from './ChapterVisuals';
+import { Burst } from './Burst';
+import { QuizGate, QuizVerdict } from './Interactive';
+import { play, playTicks, setSoundEnabled, soundEnabled } from './sfx';
 import { enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
 
@@ -47,7 +50,10 @@ function EmptyRecapEdition({ periodId, controls }: { periodId: number; controls:
 }
 
 type Nav = { index: number; visit: number; direction: 'next' | 'prev'; transition: Transition; origin: { x: number; y: number } };
-type Leaving = { story: RecapStory; visit: number; direction: Nav['direction']; transition: Transition };
+type Leaving = { story: RecapStory; visit: number; direction: Nav['direction']; transition: Transition; gate: boolean };
+type Answer = { choice: string | null; correct: boolean };
+/** A chapter's content element is kept by key while it leaves, so it exits without re-animating. */
+const contentKey = (visit: number, gate: boolean) => `c${visit}${gate ? 'q' : ''}`;
 
 function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls: ReactNode }) {
   const { maskAmounts } = useBalanceVisibility();
@@ -69,10 +75,17 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
   const [pageHidden, setPageHidden] = useState(() => document.hidden);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const regenerate = useRegenerateRecap(recap.period.id);
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [sound, setSound] = useState(soundEnabled);
+  const [party, setParty] = useState(0);
   const index = Math.min(nav.index, stories.length - 1);
   const story = stories[index];
   const last = index === stories.length - 1;
   const chapterCount = stories.length;
+  const gateOf = (item: RecapStory) => Boolean(item.quiz && !answers[item.id]);
+  const quizOpen = gateOf(story);
+  const graded = Object.values(answers).filter(answer => answer.choice !== null);
+  const score = { correct: graded.filter(answer => answer.correct).length, total: graded.length };
 
   useEffect(() => {
     if (!leaving) return;
@@ -89,16 +102,37 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
     const next = Math.max(0, Math.min(stories.length - 1, target));
     if (next === index && !options.transition) return;
     const transition = reducedMotion ? 'slide' : options.transition ?? nextTransition(run, nav.visit + 1, nav.transition);
-    if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: nav.direction, transition });
+    if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: nav.direction, transition, gate: quizOpen });
     setNav({ index: next, visit: nav.visit + 1, direction: next >= index ? 'next' : 'prev', transition, origin: options.origin ?? { x: next >= index ? 82 : 18, y: 92 } });
+    play('whoosh');
+    if (!gateOf(stories[next])) arrivalSounds(stories[next], enterDelay(transition), variants);
   };
   // A replay rewinds to the cover with fresh dice, so the second viewing differs from the first.
   const replay = () => {
     const fresh = newRun();
-    if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: 'prev', transition: 'rewind' });
+    if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: 'prev', transition: 'rewind', gate: quizOpen });
     setRun(fresh);
+    setAnswers({});
     setNav({ index: 0, visit: nav.visit + 1, direction: 'prev', transition: 'rewind', origin: { x: 50, y: 50 } });
+    play('whoosh');
   };
+  // Answering (or skipping) zooms the question away and plays the chapter's reveal in its place.
+  const answer = (choice: string | null, correct: boolean) => {
+    if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: 'next', transition: 'zoom', gate: true });
+    setAnswers(current => ({ ...current, [story.id]: { choice, correct } }));
+    setNav(current => ({ ...current, transition: 'zoom' }));
+    arrivalSounds(story, enterDelay('zoom'), variants);
+  };
+  const startParty = () => {
+    if (reducedMotion) return;
+    setParty(Date.now());
+    play('fanfare');
+  };
+  useEffect(() => {
+    if (!party) return;
+    const timer = setTimeout(() => setParty(0), 4_500);
+    return () => clearTimeout(timer);
+  }, [party]);
   // Autoplay moves on with whatever `go` is current when its timer fires.
   const advance = useRef(() => {});
   useEffect(() => { advance.current = () => go(index + 1); });
@@ -106,13 +140,66 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
     const bounds = slideRef.current?.getBoundingClientRect();
     return bounds ? { x: (event.clientX - bounds.left) / bounds.width * 100, y: (event.clientY - bounds.top) / bounds.height * 100 } : undefined;
   };
+  const replayRef = useRef(replay);
+  useEffect(() => { replayRef.current = replay; });
+
+  // Tilt: the backdrop, the giant month and the big figures drift with the pointer or the phone.
+  // Shake the phone to re-roll the recap.
+  useEffect(() => {
+    const element = slideRef.current;
+    if (!element || reducedMotion) return;
+    let frame = 0;
+    const tilt = (x: number, y: number) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => { element.style.setProperty('--px', x.toFixed(3)); element.style.setProperty('--py', y.toFixed(3)); });
+    };
+    const onPointer = (event: globalThis.PointerEvent) => {
+      if (event.pointerType !== 'mouse') return;
+      const bounds = element.getBoundingClientRect();
+      tilt((event.clientX - bounds.left) / bounds.width * 2 - 1, (event.clientY - bounds.top) / bounds.height * 2 - 1);
+    };
+    const onLeave = () => tilt(0, 0);
+    const onOrientation = (event: DeviceOrientationEvent) => {
+      if (event.gamma == null || event.beta == null) return;
+      tilt(Math.max(-1, Math.min(1, event.gamma / 35)), Math.max(-1, Math.min(1, (event.beta - 45) / 35)));
+    };
+    let shakes: number[] = [];
+    const onMotion = (event: DeviceMotionEvent) => {
+      const a = event.accelerationIncludingGravity;
+      if (!a || a.x == null || a.y == null || a.z == null) return;
+      if (Math.hypot(a.x, a.y, a.z) < 28) return;
+      const now = performance.now();
+      shakes = [...shakes.filter(at => now - at < 900), now];
+      if (shakes.length >= 3) { shakes = []; replayRef.current(); }
+    };
+    element.addEventListener('pointermove', onPointer);
+    element.addEventListener('pointerleave', onLeave);
+    window.addEventListener('deviceorientation', onOrientation);
+    window.addEventListener('devicemotion', onMotion);
+    return () => {
+      cancelAnimationFrame(frame);
+      element.removeEventListener('pointermove', onPointer);
+      element.removeEventListener('pointerleave', onLeave);
+      window.removeEventListener('deviceorientation', onOrientation);
+      window.removeEventListener('devicemotion', onMotion);
+    };
+  }, [reducedMotion]);
+  // The cover's own sounds, once, when the recap first opens.
+  const greeted = useRef(false);
+  useEffect(() => {
+    if (greeted.current) return;
+    greeted.current = true;
+    arrivalSounds(stories[0], opening ? 1050 : 120, variants);
+  });
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const visitId = nav.visit;
     if (autoplayClock.current.chapter !== `${nav.visit}`) {
       autoplayClock.current = { chapter: `${nav.visit}`, remaining: CHAPTER_MS };
     }
-    if (last || paused || shareOpen || infoOpen || regenerate.isPending) return;
+    // An open quiz waits for its answer.
+    if (last || paused || shareOpen || infoOpen || regenerate.isPending || quizOpen) return;
     const clock = autoplayClock.current;
     let cancelled = false;
     let introFinished = false;
@@ -151,13 +238,13 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
       stopTimer();
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [nav.visit, chapterCount, last, paused, shareOpen, infoOpen, regenerate.isPending]);
+  }, [nav.visit, chapterCount, last, paused, shareOpen, infoOpen, regenerate.isPending, quizOpen]);
 
   const overlay = OVERLAY_TRANSITIONS.has(nav.transition) && nav.visit > 0 && !reducedMotion;
   const paper = themeColors[story.theme].paper;
   const entering = nav.visit === 0 ? (opening ? 1050 : 120) : enterDelay(nav.transition);
   return <section className="recap-viewer" aria-label={`${recap.period.name} recap`}>
-    <div ref={slideRef} className={`recap-story recap-theme-${story.theme} recap-chapter-${story.id}${opening ? ' is-opening' : ''}`} tabIndex={0} aria-label="Period story. Use left and right arrow keys to navigate, space to pause."
+    <div ref={slideRef} className={`recap-story recap-theme-${story.theme} recap-chapter-${story.id}${opening ? ' is-opening' : ''}${party ? ' is-party' : ''}`} tabIndex={0} aria-label="Period story. Arrow keys move between chapters, space pauses, R re-rolls."
       style={{ '--ox': `${nav.origin.x}%`, '--oy': `${nav.origin.y}%` } as CSSProperties}
       onKeyDown={event => {
         if (event.target !== event.currentTarget) return;
@@ -166,20 +253,21 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
         if (event.key === 'Home') { event.preventDefault(); go(0); }
         if (event.key === 'End') { event.preventDefault(); go(stories.length - 1); }
         if (event.key === ' ') { event.preventDefault(); setPaused(value => !value); }
+        if ((event.key === 'r' || event.key === 'R') && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); replay(); }
       }}
       onClick={event => {
-        if ((event.target as HTMLElement).closest('button, a, select, label, summary, details')) return;
+        if ((event.target as HTMLElement).closest('button, a, select, label, summary, details, .recap-scratch, .recap-quiz')) return;
         const bounds = event.currentTarget.getBoundingClientRect();
         go(index + (event.clientX - bounds.left < bounds.width * .35 ? -1 : 1), { origin: originOf(event) });
       }}
-      onTouchStart={event => { touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
+      onTouchStart={event => { touchStart.current = (event.target as HTMLElement).closest('.recap-scratch, .recap-quiz') ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
       onTouchCancel={() => { touchStart.current = null; }}
       onTouchEnd={event => {
         const start = touchStart.current; touchStart.current = null; if (!start) return;
         const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y;
         if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) go(index + (dx < 0 ? 1 : -1));
       }}>
-      <div className="recap-overlay-actions">{controls}<button className="recap-icon-pill" disabled={regenerate.isPending} onClick={() => regenerate.mutate()} aria-label="New take" title="Rewrite the story and refresh its figures"><RefreshCw size={15} className={regenerate.isPending ? 'recap-spin' : ''} /></button><button className="recap-icon-pill" onClick={() => setShareOpen(true)} aria-label="Share recap"><Download size={15} /></button></div>
+      <div className="recap-overlay-actions">{controls}<button className="recap-icon-pill" disabled={regenerate.isPending} onClick={() => regenerate.mutate()} aria-label="New take" title="Rewrite the story and refresh its figures"><RefreshCw size={15} className={regenerate.isPending ? 'recap-spin' : ''} /></button><button className="recap-icon-pill" onClick={() => setShareOpen(true)} aria-label="Share recap"><Download size={15} /></button><button className="recap-icon-pill" aria-pressed={sound} onClick={() => { const next = !sound; setSoundEnabled(next); setSound(next); play('pop'); }} aria-label={sound ? 'Turn sound and haptics off' : 'Turn sound and haptics on'} title="Sound and haptics">{sound ? <Volume2 size={15} /> : <VolumeX size={15} />}</button></div>
       {regenerate.isError && <p className="recap-inline-error" role="alert">{regenerate.error.message}</p>}
       <div className="recap-progress" aria-label="Story chapters">{stories.map((item, i) => {
         const active = i === index && !last;
@@ -190,7 +278,11 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
           className={[seen && 'is-seen', active && 'is-active', running && 'is-running'].filter(Boolean).join(' ')}
           onClick={event => go(i, { origin: originOf(event) })}>{active && <span className="recap-progress-fill" style={{ animationDuration: `${CHAPTER_MS}ms` }} aria-hidden="true" />}</button>;
       })}</div>
-      <div className="recap-story-brand"><span>fainens<span className="recap-brand-dot" aria-hidden="true">✳</span></span><span>{recap.isPartial ? 'Your period so far' : 'The period edit'}</span></div>
+      {/* Long-press the ✳ for party mode. */}
+      <div className="recap-story-brand"><span>fainens<span className="recap-brand-dot" aria-hidden="true"
+        onPointerDown={() => { clearTimeout(pressTimer.current); pressTimer.current = setTimeout(startParty, 650); }}
+        onPointerUp={() => clearTimeout(pressTimer.current)} onPointerLeave={() => clearTimeout(pressTimer.current)}>✳</span></span><span>{recap.isPartial ? 'Your period so far' : 'The period edit'}</span></div>
+      {party > 0 && <div key={party} className="recap-party" aria-hidden="true" style={{ '--enter': '0ms' } as CSSProperties}><Burst seed={party} kind="stars" count={60} origin="center" /><Burst seed={party + 1} kind="confetti" count={50} origin="cannons" delay={300} /></div>}
       <ChapterBackdrop key={`${nav.visit}-backdrop`} chapter={story.id} seed={edition.seed + run} />
       {/* The next chapter's colour washes over the card, between the leaving and arriving content. */}
       {overlay && <div key={`wipe-${nav.visit}`} className={`recap-wipe recap-wipe-${nav.transition} recap-dir-${nav.direction}`} style={{ '--wipe': paper } as CSSProperties} aria-hidden="true">
@@ -198,17 +290,19 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
         {nav.transition === 'rewind' && <Rewind className="recap-rewind-icon" />}
       </div>}
       <div className="recap-stage">
-        {leaving && leaving.visit !== nav.visit && <ChapterContent key={`c${leaving.visit}`} story={leaving.story} className={`recap-leaving recap-out-${leaving.transition} recap-dir-${nav.direction}`}
-          periodId={recap.period.id} variants={variants} run={run} onShare={() => setShareOpen(true)} />}
-        <ChapterContent key={`c${nav.visit}`} story={story} live className={`recap-arriving recap-in-${nav.visit === 0 ? 'first' : nav.transition} recap-dir-${nav.direction} recap-intro-${variants.intro}`}
-          style={{ '--enter': `${entering}ms` } as CSSProperties} periodId={recap.period.id} variants={variants} run={run} onShare={() => setShareOpen(true)} />
+        {leaving && contentKey(leaving.visit, leaving.gate) !== contentKey(nav.visit, quizOpen) && <ChapterContent key={contentKey(leaving.visit, leaving.gate)} story={leaving.story} gate={leaving.gate}
+          className={`recap-leaving recap-out-${leaving.transition} recap-dir-${nav.direction}`} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={() => setShareOpen(true)} />}
+        <ChapterContent key={contentKey(nav.visit, quizOpen)} story={story} live gate={quizOpen} answer={answers[story.id]}
+          onAnswer={answer} className={`recap-arriving recap-in-${nav.visit === 0 ? 'first' : nav.transition} recap-dir-${nav.direction} recap-intro-${variants.intro}`}
+          style={{ '--enter': `${entering}ms` } as CSSProperties} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={() => setShareOpen(true)} />
       </div>
       {opening && <OpeningTitles variant={opening} name={recap.period.name} paper={paper} />}
       <div className="recap-bottom-actions">
         <button className="recap-icon-pill" onClick={event => go(index - 1, { origin: originOf(event) })} disabled={index === 0} aria-label="Previous chapter"><ArrowLeft size={16} /></button>
         <span>{String(index + 1).padStart(2, '0')} / {String(stories.length).padStart(2, '0')}</span>
         {!last && <button className="recap-icon-pill" onClick={() => setPaused(value => !value)} aria-label={paused ? 'Resume autoplay' : 'Pause autoplay'} aria-pressed={paused} title={paused ? 'Resume autoplay' : 'Moves on by itself after each chapter arrives'}>{paused ? <Play size={14} /> : <Pause size={14} />}</button>}
-        <details className="recap-info" onToggle={event => setInfoOpen(event.currentTarget.open)}><summary aria-label="About this edition"><Info size={14} /></summary><div><p>{periodDateRange(recap.period)}</p><p>{edition.source === 'ai' ? 'Written with AI' : 'The Fainens edit'} · Saved {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(edition.savedAt))}</p><p>Every replay shuffles the story a little. New take rewrites it and refreshes its figures.</p>{!recap.coverageComplete && <p>Coverage is incomplete or unconfirmed.</p>}<p>Left over is income minus expenses as recorded, not savings or a change in cash.</p></div></details>
+        <Link to="/agent" search={{ prompt: story.ask }} className="recap-icon-pill recap-ask" aria-label="Ask Fainens Agent about this" title="Ask Fainens Agent about this"><Sparkles size={14} /></Link>
+        <details className="recap-info" onToggle={event => setInfoOpen(event.currentTarget.open)}><summary aria-label="About this edition"><Info size={14} /></summary><div><p>{periodDateRange(recap.period)}</p><p>{edition.source === 'ai' ? 'Written with AI' : 'The Fainens edit'} · Saved {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(edition.savedAt))}</p><p>Every replay shuffles the story. Press R or shake your phone to re-roll, and long-press the ✳ for a surprise. New take rewrites the story and refreshes its figures.</p>{!recap.coverageComplete && <p>Coverage is incomplete or unconfirmed.</p>}<p>Left over is income minus expenses as recorded, not savings or a change in cash.</p></div></details>
         <button className="recap-icon-pill" onClick={event => last ? replay() : go(index + 1, { origin: originOf(event) })} aria-label={last ? 'Replay recap' : 'Next chapter'}>{last ? <RefreshCw size={16} /> : <ArrowRight size={16} />}</button>
       </div>
     </div>
@@ -216,23 +310,41 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
   </section>;
 }
 
-function ChapterContent({ story, className, style, live = false, periodId, variants, run, onShare }: {
-  story: RecapStory; className: string; style?: CSSProperties; live?: boolean; periodId: number; variants: SectionVariants; run: number; onShare: () => void;
+function ChapterContent({ story, className, style, live = false, gate = false, answer, onAnswer, periodId, variants, run, score, onShare }: {
+  story: RecapStory; className: string; style?: CSSProperties; live?: boolean; gate?: boolean; answer?: Answer; onAnswer?: (choice: string | null, correct: boolean) => void;
+  periodId: number; variants: SectionVariants; run: number; score: QuizScore; onShare: () => void;
 }) {
+  if (gate && story.quiz) {
+    return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
+      <QuizGate quiz={story.quiz} eyebrow={story.eyebrow} onAnswer={(choice, correct) => onAnswer?.(choice, correct)} onSkip={() => onAnswer?.(null, false)} />
+    </div>;
+  }
   // Each word knows how many letters came before it, so the typewriter take types at a steady pace.
   const lines = story.title.split('\n').map((line, lineIndex, all) => {
     const before = all.slice(0, lineIndex).join(' ').length + (lineIndex ? 1 : 0);
     return line.split(' ').map((word, i, words) => ({ word, letter: before + words.slice(0, i).join(' ').length + (i ? 1 : 0) }));
   });
   return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
+    {answer?.choice != null && story.quiz && <QuizVerdict correct={answer.correct} answer={story.quiz.answer} />}
     <p className="recap-story-eyebrow">{story.eyebrow}</p>
     <h2 className={story.title.length > 40 ? 'recap-title-long' : undefined} aria-label={story.title}>
       {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map(({ word, letter }, i) =>
         <Fragment key={i}><span className="recap-word-mask"><span style={{ '--word': Math.min(14, lineIndex * 5 + i), '--letter': letter } as CSSProperties}>{word}</span></span>{' '}</Fragment>)}</span>)}
     </h2>
-    <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} /></div>
+    <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} score={score} /></div>
     <p className="recap-story-body">{story.body}</p>
   </div>;
+}
+
+/** Sounds timed to a chapter's choreography: slot-machine ticks, stamps landing, the finale. */
+function arrivalSounds(story: RecapStory, enter: number, variants: SectionVariants) {
+  if (story.id === 'intro') { play('pop', enter + 650); if (variants.intro === 'stamp') play('thunk', enter + 950); if (variants.intro === 'typewriter') playTicks(18, 1300, enter); }
+  if (story.id === 'overview') playTicks(16, 1500, enter + 380);
+  if (story.id === 'habits' && story.repeat) play('thunk', enter + 1000);
+  if (story.id === 'calendar' && story.peak) play('pop', enter + 1500);
+  if (story.id === 'receipts' && variants.receipts === 'print') playTicks(8, 1300, enter + 250);
+  if (story.id === 'persona') { play('thunk', enter + 650); play('chime', enter + 1000); }
+  if (story.id === 'closing') { playTicks(12, 1400, enter + 380); play('fanfare', enter + 900); }
 }
 
 /** The title sequence before the cover: the brand, the period, then the card opens on the story. */
