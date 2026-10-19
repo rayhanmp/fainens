@@ -12,7 +12,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
 import { TransactionModal, type EditingTransaction } from '../components/transactions/TransactionModal';
-import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
+import { StatementImportModal } from '../features/backfill/StatementImportModal';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { useDeleteTransaction, useTransactionList } from '../features/transactions/queries';
@@ -69,7 +69,7 @@ function BackfillPage() {
   const batch = batchQuery.data ?? null;
   const draftsQuery = useTransactionList(selectedId ? { periodId: 'all', status: 'draft', batchId: String(selectedId), limit: '1000', sort: 'oldest' } : {});
   const drafts = useMemo(() => (selectedId ? draftsQuery.data?.data ?? [] : []), [selectedId, draftsQuery.data]);
-  const accounts = accountsQuery.data ?? [];
+  const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
   const accountTypes = useMemo(() => new Map(accounts.map((account) => [account.id, account.type])), [accounts]);
   const accountName = (id: number) => accounts.find((account) => account.id === id)?.name ?? `#${id}`;
 
@@ -274,7 +274,7 @@ function BackfillPage() {
                   {draftsQuery.isLoading ? (
                     <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
                   ) : drafts.length === 0 ? (
-                    <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">{batch.status === 'open' ? 'No drafts in this batch. Add one by hand or import a statement.' : 'Nothing pending in this batch.'}</p>
+                    <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">{batch.status === 'open' ? 'No drafts in this batch. Add one by hand or import a CSV.' : 'Nothing pending in this batch.'}</p>
                   ) : (
                     <ul className="-mx-2 mt-2 divide-y divide-[var(--color-border)]">
                       {drafts.map((row) => {
@@ -343,7 +343,22 @@ function BackfillPage() {
           draftBatchId={editing ? null : selectedId}
         />
 
-        <ImportCSVModal isOpen={importOpen} onClose={() => setImportOpen(false)} onSuccess={() => { setImportOpen(false); void refresh(); }} draftBatchId={selectedId} />
+        {selectedId != null && (
+          <StatementImportModal
+            isOpen={importOpen}
+            onClose={() => setImportOpen(false)}
+            batchId={selectedId}
+            accounts={accounts}
+            categories={categoriesQuery.data ?? []}
+            tags={tagsQuery.data ?? []}
+            formatAmount={formatAmount}
+            onSaved={({ drafts, transfers }) => {
+              setImportOpen(false);
+              void refresh();
+              toast.success(`${drafts + transfers} draft${drafts + transfers === 1 ? '' : 's'} added`, transfers > 0 ? `${transfers} paired as transfer${transfers === 1 ? '' : 's'}` : undefined);
+            }}
+          />
+        )}
       </PageContainer>
     </RequireAuth>
   );
