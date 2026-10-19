@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRightLeft, CheckCircle2, FileUp, Lock, Plus, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileUp, Lock, Plus, Upload } from 'lucide-react';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { RequireAuth } from '../lib/auth';
 import { cn, formatDate } from '../lib/utils';
@@ -14,6 +14,7 @@ import { toast, errorMessage } from '../components/ui/useToast';
 import { TransactionModal, type EditingTransaction } from '../components/transactions/TransactionModal';
 import { StatementImportModal } from '../features/backfill/StatementImportModal';
 import { SettlementModal } from '../features/backfill/SettlementModal';
+import { DraftList } from '../features/backfill/DraftList';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { useDeleteTransaction } from '../features/transactions/queries';
@@ -37,18 +38,6 @@ const statusTone: Record<string, string> = {
 
 const card = 'rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] editorial-shadow';
 
-/** The amount a draft moves, signed from the wallet's point of view: out is negative, in is positive. */
-function draftAmount(row: DraftRow, accountTypes: Map<number, string>): { amount: number; kind: 'expense' | 'income' | 'transfer' | 'journal' } {
-  const lines = row.lines ?? [];
-  const assetLines = lines.filter((line) => accountTypes.get(line.accountId) === 'asset');
-  if (row.txType === 'simple_transfer' || (assetLines.length === 2 && lines.length === 2)) {
-    return { amount: Math.max(...lines.map((line) => Math.max(line.debit, line.credit))), kind: 'transfer' };
-  }
-  const net = assetLines.reduce((sum, line) => sum + line.debit - line.credit, 0);
-  if (row.txType === 'simple_expense' || net < 0) return { amount: net, kind: 'expense' };
-  if (row.txType === 'simple_income' || net > 0) return { amount: net, kind: 'income' };
-  return { amount: Math.max(...lines.map((line) => Math.max(line.debit, line.credit)), 0), kind: 'journal' };
-}
 
 function BackfillPage() {
   const { formatAmount } = useBalanceVisibility();
@@ -71,7 +60,6 @@ function BackfillPage() {
   const drafts = useMemo(() => draftsQuery.data ?? [], [draftsQuery.data]);
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
   const accountTypes = useMemo(() => new Map(accounts.map((account) => [account.id, account.type])), [accounts]);
-  const accountName = (id: number) => accounts.find((account) => account.id === id)?.name ?? `#${id}`;
 
   const [newBatchOpen, setNewBatchOpen] = useState(false);
   const [newBatchName, setNewBatchName] = useState('');
@@ -192,7 +180,7 @@ function BackfillPage() {
 
           <section className={cn(card, 'p-6 lg:col-span-8')}>
             {!batch ? (
-              <p className="text-sm text-[var(--ref-on-surface-variant)]">{batches.length === 0 ? 'Create a batch to begin.' : 'Pick a batch to review its drafts.'}</p>
+              <p className="text-sm text-[var(--ref-on-surface-variant)]">{batches.length === 0 ? 'Create a batch to begin.' : batchQuery.isLoading ? 'Loading…' : 'Pick a batch to review its drafts.'}</p>
             ) : (
               <>
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -261,41 +249,22 @@ function BackfillPage() {
 
                 <div className="mt-6">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--ref-outline)]">Drafts</h3>
-                  {draftsQuery.isLoading ? (
-                    <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
-                  ) : drafts.length === 0 ? (
+                  {!draftsQuery.isLoading && drafts.length === 0 ? (
                     <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">{batch.status === 'open' ? 'No drafts in this batch. Add one by hand or import a CSV.' : 'Nothing pending in this batch.'}</p>
                   ) : (
-                    <ul className="-mx-2 mt-2 divide-y divide-[var(--color-border)]">
-                      {drafts.map((row) => {
-                        const { amount, kind } = draftAmount(row, accountTypes);
-                        const walletNames = (row.lines ?? []).filter((line) => accountTypes.get(line.accountId) === 'asset').map((line) => accountName(line.accountId));
-                        const dateMs = typeof row.date === 'number' ? row.date : new Date(row.date as string).getTime();
-                        return (
-                          <li key={row.id} className="group/row flex items-center gap-3 px-2 py-2.5 transition-colors hover:bg-[var(--ref-surface-container-low)]">
-                            <button type="button" onClick={() => openDraft(row)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                              <span className="w-20 shrink-0 text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatDate(dateMs)}</span>
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.description}</span>
-                                <span className="block truncate text-xs text-[var(--ref-on-surface-variant)]">
-                                  {kind === 'transfer' ? <span className="inline-flex items-center gap-1"><ArrowRightLeft className="h-3 w-3" aria-hidden />{walletNames.join(' → ')}</span> : walletNames.join(', ')}
-                                  {row.categoryAllocations && row.categoryAllocations.length > 0 ? ` · ${row.categoryAllocations.map((allocation) => allocation.categoryName ?? '').filter(Boolean).join(', ')}` : ''}
-                                  {(row.tags ?? []).length > 0 ? ` · ${(row.tags ?? []).map((tag) => tag.name).join(', ')}` : ''}
-                                </span>
-                              </span>
-                              <span className={cn('shrink-0 text-sm font-bold tabular-nums', kind === 'expense' ? 'text-[var(--ref-on-surface)]' : kind === 'income' ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface-variant)]')}>
-                                {kind === 'expense' ? '−' : kind === 'income' ? '+' : ''}{formatAmount(Math.abs(amount))}
-                              </span>
-                            </button>
-                            {isOpenBatch && (
-                              <button type="button" onClick={() => void handleDeleteDraft(row)} aria-label={`Delete draft ${row.description}`} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--ref-outline)] opacity-0 transition-opacity hover:bg-[var(--ref-error)]/10 hover:text-[var(--ref-error)] focus-visible:opacity-100 group-hover/row:opacity-100">
-                                <Trash2 className="h-4 w-4" aria-hidden />
-                              </button>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    <DraftList
+                      key={batch.id}
+                      drafts={drafts}
+                      loading={draftsQuery.isLoading}
+                      editable={isOpenBatch}
+                      accounts={accounts}
+                      categories={categoriesQuery.data ?? []}
+                      tags={tagsQuery.data ?? []}
+                      formatAmount={formatAmount}
+                      onOpen={openDraft}
+                      onDelete={(row) => void handleDeleteDraft(row)}
+                      onChanged={refresh}
+                    />
                   )}
                 </div>
 
