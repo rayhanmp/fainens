@@ -25,7 +25,9 @@ import { cn } from '../lib/utils';
 import { PRESET_COLORS } from '../lib/constants';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { Archive, ArchiveRestore, List, MoreHorizontal, Pencil, Plus } from 'lucide-react';
+import { ActionSheet } from '../components/ui/ActionSheet';
+import { usePhoneSheets } from '../hooks/usePhoneSheets';
 
 export const Route = createFileRoute('/categories')({
   component: CategoriesPage,
@@ -85,6 +87,8 @@ function CategoriesPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
+  const menuCategory = allCategories.find((category) => category.id === menuCategoryId) ?? null;
+  const asSheet = usePhoneSheets();
   // The category in focus in "Spending by period", set from its legend or a trend row.
   const [trendFocus, setTrendFocus] = useState<number | null>(null);
   // The category or tag whose entries are open in the related-transactions modal.
@@ -328,7 +332,7 @@ function CategoriesPage() {
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
-                        {menuCategoryId === c.id && (
+                        {menuCategoryId === c.id && !asSheet && (
                           <>
                             <button
                               type="button"
@@ -397,6 +401,22 @@ function CategoriesPage() {
             />
           </div>
         </section>
+
+        {/* Phones get the row's ⋯ menu as a bottom sheet. */}
+        {asSheet && menuCategory && (
+          <ActionSheet
+            isOpen
+            onClose={() => setMenuCategoryId(null)}
+            title={menuCategory.name}
+            actions={[
+              { key: 'entries', label: 'See entries', icon: List, onSelect: () => setRelated({ kind: 'category', id: menuCategory.id, name: menuCategory.name, color: menuCategory.color ?? null }) },
+              { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => openCategoryModal(menuCategory) },
+              menuCategory.isActive
+                ? { key: 'archive', label: 'Archive', icon: Archive, tone: 'danger', onSelect: () => void handleDeleteCategory(menuCategory.id) }
+                : { key: 'restore', label: 'Restore', icon: ArchiveRestore, tone: 'primary', onSelect: () => void handleRestoreCategory(menuCategory.id) },
+            ]}
+          />
+        )}
 
         <RelatedTransactionsModal
           subject={related}

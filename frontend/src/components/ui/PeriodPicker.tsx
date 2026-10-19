@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { usePhoneSheets } from '../../hooks/usePhoneSheets';
+import { ActionSheet } from './ActionSheet';
 
 export type PeriodPickerOption = {
   id: number;
@@ -33,6 +35,8 @@ export function PeriodPicker({
   className,
 }: PeriodPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Phones choose the period from a bottom sheet rather than a small anchored list.
+  const asSheet = usePhoneSheets();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const selectedIndex = periods.findIndex((period) => String(period.id) === value);
@@ -46,7 +50,7 @@ export function PeriodPicker({
       : 'Select period';
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen || asSheet) return undefined;
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) setIsOpen(false);
     };
@@ -62,7 +66,7 @@ export function PeriodPicker({
       document.removeEventListener('pointerdown', closeOnOutsidePointer);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, asSheet]);
 
   const choose = (nextValue: string) => {
     onChange(nextValue);
@@ -111,7 +115,18 @@ export function PeriodPicker({
             {/* On the narrowest phones the label alone opens the list; the chevron gives its room back. */}
             <ChevronDown className={cn('absolute right-1 hidden h-4 w-4 transition-transform min-[400px]:block sm:right-1.5', isOpen && 'rotate-180')} />
           </button>
-          {isOpen && (
+          {asSheet && (
+            <ActionSheet
+              isOpen={isOpen}
+              onClose={() => setIsOpen(false)}
+              title={label ?? ariaLabel}
+              actions={[
+                ...(allOption ? [{ key: allOption.value, label: allOption.label, selected: value === allOption.value, onSelect: () => onChange(allOption.value) }] : []),
+                ...periods.map((period) => ({ key: String(period.id), label: getPeriodLabel(period), selected: String(period.id) === value, onSelect: () => onChange(String(period.id)) })),
+              ]}
+            />
+          )}
+          {isOpen && !asSheet && (
             <div role="listbox" aria-label={`${ariaLabel} options`} className="period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-60 w-full overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-2xl">
               {allOption && (
                 <button type="button" role="option" aria-selected={value === allOption.value} onClick={() => choose(allOption.value)} className={cn('w-full rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors', value === allOption.value ? 'bg-[var(--ref-primary)] text-white shadow-sm' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>

@@ -15,6 +15,8 @@ import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { useDeleteWishlistMutation, useWishlistQuery } from '../features/wishlist/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
+import { ActionSheet } from '../components/ui/ActionSheet';
+import { usePhoneSheets } from '../hooks/usePhoneSheets';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { cn, formatDate } from '../lib/utils';
@@ -73,6 +75,9 @@ export default function WishlistPage() {
   const [linkItem, setLinkItem] = useState<WishlistItem | null>(null);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<WishlistItem | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
+  // Phones get an item's menu as a bottom sheet.
+  const asSheet = usePhoneSheets();
+  const menuItem = items.find((item) => item.id === activeMenuId) ?? null;
 
   async function loadData() {
     await invalidateFinancialSummaries(queryClient);
@@ -266,7 +271,7 @@ export default function WishlistPage() {
                           <MoreVertical className="w-4 h-4 text-[var(--color-muted)]" />
                         </button>
                         
-                        {activeMenuId === item.id && (
+                        {activeMenuId === item.id && !asSheet && (
                           <div className="ui-popover absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-1 shadow-lg">
                             <button
                               onClick={() => {
@@ -486,6 +491,18 @@ export default function WishlistPage() {
             </div>
           </div>
         </div>
+      )}
+      {asSheet && menuItem && (
+        <ActionSheet
+          isOpen
+          onClose={() => setActiveMenuId(null)}
+          title={menuItem.name}
+          actions={[
+            { key: 'fulfil', label: 'Mark as fulfilled', icon: CheckCircle2, onSelect: () => setFulfillItem(menuItem) },
+            { key: 'link', label: 'Link to transaction', icon: LinkIcon, onSelect: () => setLinkItem(menuItem) },
+            { key: 'delete', label: 'Delete', icon: Trash2, tone: 'danger', onSelect: () => setDeleteConfirmItem(menuItem) },
+          ]}
+        />
       )}
     </PageContainer>
   );

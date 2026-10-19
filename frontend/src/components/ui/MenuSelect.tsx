@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { usePhoneSheets } from '../../hooks/usePhoneSheets';
+import { ActionSheet } from './ActionSheet';
 
 export type MenuSelectOption<T extends string> = { value: T; label: string };
 
@@ -26,16 +28,18 @@ export function MenuSelect<T extends string>({ value, options, onChange, ariaLab
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const selected = options.find((option) => option.value === value) ?? options[0];
+  // Phones pick from a bottom sheet instead of a small anchored list.
+  const asSheet = usePhoneSheets();
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || asSheet) return undefined;
     const closeOutside = (event: PointerEvent) => {
       if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener('pointerdown', closeOutside);
     listRef.current?.focus({ preventScroll: true });
     return () => document.removeEventListener('pointerdown', closeOutside);
-  }, [open]);
+  }, [open, asSheet]);
 
   const openMenu = () => {
     setHighlight(Math.max(0, options.findIndex((option) => option.value === value)));
@@ -70,7 +74,15 @@ export function MenuSelect<T extends string>({ value, options, onChange, ariaLab
         <span className={cn(compactOnMobile && 'max-sm:hidden')}>{selected?.label}</span>
         <ChevronDown className={cn('h-3.5 w-3.5 text-[var(--ref-on-surface-variant)] transition-transform', open && 'rotate-180', compactOnMobile && 'max-sm:hidden')} aria-hidden />
       </button>
-      {open && (
+      {asSheet && (
+        <ActionSheet
+          isOpen={open}
+          onClose={() => setOpen(false)}
+          title={ariaLabel}
+          actions={options.map((option) => ({ key: option.value, label: option.label, selected: option.value === value, onSelect: () => onChange(option.value) }))}
+        />
+      )}
+      {open && !asSheet && (
         <div
           ref={listRef}
           id={listId}

@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, FolderPlus, GripVertical, MoreHorizontal, Pencil, P
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { errorMessage, toast } from '../../components/ui/useToast';
 import { cn } from '../../lib/utils';
+import { ActionSheet } from '../../components/ui/ActionSheet';
+import { usePhoneSheets } from '../../hooks/usePhoneSheets';
 import { useCreateTagGroupMutation, useDeleteTagGroupMutation, useMoveTagMutation, useUpdateTagGroupMutation } from './queries';
 
 export type PanelTag = { id: number; name: string; color: string; groupId?: number | null };
@@ -34,9 +36,12 @@ export function TagGroupsPanel({ tags, groups, uses, loading, className, onOpenT
   const [newGroupName, setNewGroupName] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
   const [menuGroupId, setMenuGroupId] = useState<number | null>(null);
+  const asSheet = usePhoneSheets();
 
   const orderedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
   const known = new Set(orderedGroups.map((group) => group.id));
+  const menuGroupIndex = orderedGroups.findIndex((group) => group.id === menuGroupId);
+  const menuGroup = menuGroupIndex >= 0 ? orderedGroups[menuGroupIndex] : null;
   const nameCounts = tags.reduce<Record<string, number>>((counts, tag) => ({ ...counts, [tag.name.trim().toLowerCase()]: (counts[tag.name.trim().toLowerCase()] ?? 0) + 1 }), {});
   const tagsIn = (groupId: number | null) => tags
     .filter((tag) => (groupId == null ? tag.groupId == null || !known.has(tag.groupId) : tag.groupId === groupId))
@@ -195,7 +200,7 @@ export function TagGroupsPanel({ tags, groups, uses, loading, className, onOpenT
                 <button type="button" onClick={() => setMenuGroupId(menuGroupId === group.id ? null : group.id)} className="grid h-7 w-7 place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)]" aria-label={`Actions for ${group.name}`}>
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
-                {menuGroupId === group.id && (
+                {menuGroupId === group.id && !asSheet && (
                   <>
                     <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onClick={() => setMenuGroupId(null)} />
                     <div className="ui-popover absolute right-0 top-full z-20 mt-1 min-w-[150px] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1 shadow-xl">
@@ -240,6 +245,20 @@ export function TagGroupsPanel({ tags, groups, uses, loading, className, onOpenT
           </>
         )}
       </div>
+      {/* Phones get a group's ⋯ menu as a bottom sheet. */}
+      {asSheet && menuGroup && (
+        <ActionSheet
+          isOpen
+          onClose={() => setMenuGroupId(null)}
+          title={menuGroup.name}
+          actions={[
+            { key: 'rename', label: 'Rename', icon: Pencil, onSelect: () => setRenaming({ id: menuGroup.id, name: menuGroup.name }) },
+            ...(menuGroupIndex > 0 ? [{ key: 'up', label: 'Move up', icon: ArrowUp, onSelect: () => void moveGroup(menuGroupIndex, -1) }] : []),
+            ...(menuGroupIndex < orderedGroups.length - 1 ? [{ key: 'down', label: 'Move down', icon: ArrowDown, onSelect: () => void moveGroup(menuGroupIndex, 1) }] : []),
+            { key: 'delete', label: 'Delete group', icon: Trash2, tone: 'danger', onSelect: () => void removeGroup(menuGroup) },
+          ]}
+        />
+      )}
     </aside>
   );
 }

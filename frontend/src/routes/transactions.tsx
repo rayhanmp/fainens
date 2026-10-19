@@ -2,7 +2,7 @@ import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { ReallocationModal } from "../components/transactions/ReallocationModal";
 import { personalActivityKind, reallocationCashAmount } from "../features/transactions/reallocation";
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ArrowUpDown, Ban, Loader2, BarChart3, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, History, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -26,6 +26,7 @@ import type { ListTransactionsParams } from '../generated/client';
 import { cn, formatDateTime, formatIdNominalInput, formatTime, formatWeekdayDate } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { usePhoneSheets } from '../hooks/usePhoneSheets';
 import { subscriptionRenewalOf, useAlignReversal, useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList, useVoidSubscriptionRenewal, type PendingTransactionListItem } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
@@ -266,9 +267,14 @@ function TransactionsPage() {
   useEffect(() => () => setActivePanel(null), [setActivePanel]);
 
   const toolsRef = useRef<HTMLDivElement>(null);
+  // Phones get the tools as a bottom sheet (the sheet handles its own closing); wider screens a popover.
+  const toolsAsSheet = usePhoneSheets();
+  const toolsSurface = (items: ReactNode) => toolsAsSheet
+    ? <Modal isOpen onClose={() => setActivePanel(null)} title="More tools" contentClassName="p-3 [&_button]:min-h-12"><div role="menu" className="space-y-0.5">{items}</div></Modal>
+    : <div role="menu" className="ui-popover absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">{items}</div>;
   // The tools menu closes on an outside press or Escape, like every other popover.
   useEffect(() => {
-    if (!isToolsOpen) return undefined;
+    if (!isToolsOpen || toolsAsSheet) return undefined;
     const closeOutside = (event: PointerEvent) => {
       if (event.target instanceof Node && !toolsRef.current?.contains(event.target)) setActivePanel(null);
     };
@@ -283,7 +289,7 @@ function TransactionsPage() {
       document.removeEventListener('pointerdown', closeOutside);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [isToolsOpen, setActivePanel]);
+  }, [isToolsOpen, toolsAsSheet, setActivePanel]);
   const clearSearch = () => { setFilterQuery(''); setDebouncedQuery(''); };
   // Typing ahead of the debounce, or waiting on the server for a new search, both read as "searching".
   const isSearching = filterQuery.trim() !== debouncedQuery.trim() || (debouncedQuery.trim() !== '' && transactionQuery.isFetching);
@@ -487,7 +493,7 @@ function TransactionsPage() {
         <Button variant="secondary" className="hidden rounded-full md:inline-flex" onClick={() => setIsGmailModalOpen(true)} disabled={gmailStatusQuery.isLoading}><Mail className="mr-2 h-4 w-4" />{gmailLabel}</Button>
         {pendingCount > 0 && <Button variant="secondary" className="hidden rounded-full md:inline-flex" onClick={() => setIsPendingModalOpen(true)}><Clock className="mr-2 h-4 w-4" />Review pending ({pendingCount})</Button>}
         <div ref={toolsRef} className="relative"><Button variant="secondary" className="relative h-11 w-11 rounded-full p-0 md:h-auto md:w-auto md:px-3 md:py-2" aria-label="More tools" aria-haspopup="menu" aria-expanded={isToolsOpen} onClick={() => setActivePanel(isToolsOpen ? null : 'transactions-tools')}><MoreHorizontal className="mx-auto h-4 w-4" /><span className="ml-2 hidden md:inline">More tools</span>{pendingCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-[var(--ref-surface-container-lowest)] md:hidden" aria-hidden />}</Button>
-          {isToolsOpen && <div role="menu" className="ui-popover absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-xl">
+          {isToolsOpen && toolsSurface(<>
             <button type="button" onClick={() => { setActivePanel(null); openReimbursements(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] md:hidden"><HandCoins className="h-4 w-4" />Reimbursements</button>
             <button type="button" onClick={() => { setActivePanel(null); setIsGmailModalOpen(true); }} disabled={gmailStatusQuery.isLoading} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40 md:hidden"><Mail className="h-4 w-4" />{gmailLabel}</button>
             <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setActivePanel(null); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
@@ -496,7 +502,7 @@ function TransactionsPage() {
             <button type="button" onClick={() => { setActivePanel(null); navigate({ to: '/agent', search: { prompt: 'Help me split a bill. I will attach the receipt and tell you who shared it.' } }); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
             <button type="button" onClick={() => { setIsPendingModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Clock className="h-4 w-4" />Review pending {pendingCount > 0 ? '(' + pendingCount + ')' : ''}</button>
             <button type="button" onClick={() => setCompactTables(!compactTables)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><span>Compact rows</span><span className="text-xs text-[var(--ref-on-surface-variant)]">{compactTables ? 'On' : 'Off'}</span></button>
-          </div>}
+          </>)}
         </div>
         <Button className="hidden rounded-full md:inline-flex" onClick={() => openModal()}><Plus className="mr-2 h-4 w-4" />Add transaction</Button>
       </div>
