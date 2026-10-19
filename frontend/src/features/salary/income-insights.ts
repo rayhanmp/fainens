@@ -83,6 +83,8 @@ export type YearPoint = {
   actual: number | null;
   /** What salary alone would have brought in by this month; null before the first pay month. */
   expected: number | null;
+  /** Net spending since the same first month, up to and including this one; null like `actual`. */
+  spent: number | null;
 };
 
 /**
@@ -90,23 +92,33 @@ export type YearPoint = {
  * give. Both lines start at the first month of the year with a salary credit (or any income, when
  * no salary has been recorded), so a job that began in February is not measured from January.
  */
-export function yearToDateCurve(series: MonthIncome[], now: number, expectedNet: number): YearPoint[] {
+export function yearToDateCurve(series: MonthIncome[], now: number, expectedNet: number, spending: Array<{ date: number; expenseCents: number }> = []): YearPoint[] {
   const today = new Date(now);
   const year = today.getFullYear();
   const months = Array.from({ length: 12 }, (_, month) => series.find((item) => item.key === monthKey(year, month)));
+  const spentByMonth = Array.from({ length: 12 }, () => 0);
+  for (const row of spending) {
+    const date = new Date(row.date);
+    if (date.getFullYear() === year) spentByMonth[date.getMonth()] += row.expenseCents;
+  }
   const firstSalary = months.findIndex((entry) => (entry?.salary ?? 0) > 0);
   const firstIncome = months.findIndex((entry) => (entry?.total ?? 0) > 0);
   const start = firstSalary >= 0 ? firstSalary : firstIncome >= 0 ? firstIncome : today.getMonth();
   const points: YearPoint[] = [];
   let actual = 0;
+  let spent = 0;
   for (let month = 0; month < 12; month += 1) {
     const label = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short' });
     if (month < start) {
-      points.push({ label, actual: null, expected: null });
+      points.push({ label, actual: null, expected: null, spent: null });
       continue;
     }
-    if (month <= today.getMonth()) actual += months[month]?.total ?? 0;
-    points.push({ label, actual: month <= today.getMonth() ? actual : null, expected: expectedNet * (month - start + 1) });
+    const reached = month <= today.getMonth();
+    if (reached) {
+      actual += months[month]?.total ?? 0;
+      spent += spentByMonth[month];
+    }
+    points.push({ label, actual: reached ? actual : null, expected: expectedNet * (month - start + 1), spent: reached ? spent : null });
   }
   return points;
 }

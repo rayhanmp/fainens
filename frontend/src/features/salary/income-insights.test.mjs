@@ -45,10 +45,26 @@ test('both lines start at the first salary month, so a job begun in February is 
     { key: '2026-03', label: 'Mar', salary: 100, other: 20, total: 120 },
   ];
   const curve = yearToDateCurve(series, new Date(2026, 2, 10).getTime(), 100);
-  assert.deepEqual(curve[0], { label: 'Jan', actual: null, expected: null });
+  assert.deepEqual(curve[0], { label: 'Jan', actual: null, expected: null, spent: null });
   assert.deepEqual(curve.slice(1, 4).map((point) => point.actual), [100, 220, null]);
   assert.deepEqual(curve.slice(1, 4).map((point) => point.expected), [100, 200, 300]);
   assert.equal(curve[11].expected, 1100);
+});
+
+test('spending accumulates from the same first month, net of refunds, and stops at this month', () => {
+  const series = [
+    { key: '2026-02', label: 'Feb', salary: 100, other: 0, total: 100 },
+    { key: '2026-03', label: 'Mar', salary: 100, other: 0, total: 100 },
+  ];
+  const spending = [
+    { date: new Date(2026, 0, 5).getTime(), expenseCents: 999 },
+    { date: new Date(2026, 1, 3).getTime(), expenseCents: 40 },
+    { date: new Date(2026, 2, 1).getTime(), expenseCents: 30 },
+    { date: new Date(2026, 2, 2).getTime(), expenseCents: -10 },
+    { date: new Date(2025, 2, 2).getTime(), expenseCents: 500 },
+  ];
+  const curve = yearToDateCurve(series, new Date(2026, 2, 10).getTime(), 100, spending);
+  assert.deepEqual(curve.slice(0, 4).map((point) => point.spent), [null, 40, 60, null]);
 });
 
 test('the rolling average trails three months and waits for a second month', () => {

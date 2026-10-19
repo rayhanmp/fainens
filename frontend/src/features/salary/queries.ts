@@ -46,6 +46,10 @@ export function useSalaryIncomeQuery() {
             txType: row.txType,
             incomeCents: row.incomeCents,
           })),
+        // Net spending per entry (refunds count against it), for the year-to-date comparison.
+        spending: factsResult.data.facts.rows
+          .filter((row) => row.expenseCents !== 0)
+          .map((row) => ({ date: row.date, expenseCents: row.expenseCents })),
         accounts: accounts.map((account) => ({ id: account.id, name: account.name, type: account.type })),
       };
     },

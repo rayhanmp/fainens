@@ -100,7 +100,8 @@ function SalaryIncomePage() {
   const monthName = new Date(now).toLocaleDateString('en-US', { month: 'long' });
   const recordedThisMonth = series[series.length - 1]?.total ?? 0;
   const expectedNet = hasPayroll && computed ? computed.estimatedNetMonthly : null;
-  const yearCurve = useMemo(() => (expectedNet != null ? yearToDateCurve(series, now, expectedNet) : []), [series, now, expectedNet]);
+  const spending = incomeQuery.data?.spending;
+  const yearCurve = useMemo(() => (expectedNet != null ? yearToDateCurve(series, now, expectedNet, spending ?? []) : []), [series, now, expectedNet, spending]);
   const [otherTaxableShare, setOtherTaxableShare] = useState<0.5 | 1>(1);
   const year = new Date(now).getFullYear();
   // Wage months this tax year: from the first posted wage month through December, assuming the job continues.

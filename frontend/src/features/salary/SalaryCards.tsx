@@ -331,13 +331,22 @@ type YearCardProps = {
   loading: boolean;
 };
 
-/** The year so far: actual income accumulated against what salary alone would have brought in. */
+/** The spending line: a warm hue that stays apart from the accent blue of income. */
+const SPENT_STROKE = '#d97745';
+
+/**
+ * The year so far: actual income accumulated against what salary alone would have brought in, and
+ * on request what went out over the same months, so the gap between the two lines is what was kept.
+ */
 export function YearToDateCard({ curve, year, expectedNet, balancesHidden, formatAmount, loading }: YearCardProps) {
+  const [showSpending, setShowSpending] = useState(false);
   const latest = [...curve].reverse().find((point) => point.actual != null);
   const startLabel = curve.find((point) => point.expected != null)?.label;
   const actual = latest?.actual ?? 0;
   const expected = latest?.expected ?? 0;
+  const spent = latest?.spent ?? 0;
   const ahead = actual - expected;
+  const kept = actual - spent;
   const axis = (value: number) => (balancesHidden ? '•••' : compactAxisIdr(value));
   return (
     <section className={cn(card, 'flex h-full flex-col')}>
@@ -345,15 +354,26 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
         <h3 className={cardTitle}>{year} so far</h3>
         <p className={cardCaption}>Everything received since {startLabel ?? 'January'} against the wage alone.</p>
       </div>
+      {/* Two stats either way: with spending shown, "Ahead by" gives way to what was kept. */}
       <dl className="mt-4 flex gap-8">
         <div>
           <dt className={statLabel}>Received</dt>
           <dd className={statValue}>{formatAmount(actual)}</dd>
         </div>
-        <div>
-          <dt className={statLabel}>{ahead >= 0 ? 'Ahead by' : 'Behind by'}</dt>
-          <dd className={cn(statValue, ahead >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>{formatAmount(Math.abs(ahead))}</dd>
-        </div>
+        {showSpending ? (
+          <div>
+            <dt className={statLabel}>{kept >= 0 ? 'Kept' : 'Overspent'}</dt>
+            <dd className={cn(statValue, kept >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>
+              {formatAmount(Math.abs(kept))}
+              {actual > 0 && kept >= 0 && <span className="ml-1 text-[11px] font-semibold text-[var(--ref-on-surface-variant)]">{Math.round((kept / actual) * 100)}%</span>}
+            </dd>
+          </div>
+        ) : (
+          <div>
+            <dt className={statLabel}>{ahead >= 0 ? 'Ahead by' : 'Behind by'}</dt>
+            <dd className={cn(statValue, ahead >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>{formatAmount(Math.abs(ahead))}</dd>
+          </div>
+        )}
       </dl>
       {loading ? (
         <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
@@ -383,10 +403,18 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
                         <p className="font-bold text-[var(--ref-on-surface)]">By end of {point.label}</p>
                         {point.actual != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">Received {formatAmount(point.actual)}</p>}
                         <p className="text-[var(--ref-on-surface-variant)]">Wage alone {formatAmount(point.expected)}</p>
-                        {gap != null && (
+                        {gap != null && !showSpending && (
                           <p className={cn('mt-1 font-semibold', gap >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>
                             {gap >= 0 ? '+' : '−'}{formatAmount(Math.abs(gap))}
                           </p>
+                        )}
+                        {showSpending && point.spent != null && point.actual != null && (
+                          <>
+                            <p className="text-[var(--ref-on-surface-variant)]">Spent {formatAmount(point.spent)}</p>
+                            <p className={cn('mt-1 font-semibold', point.actual - point.spent >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>
+                              {point.actual - point.spent >= 0 ? 'Kept ' : 'Overspent '}{formatAmount(Math.abs(point.actual - point.spent))}
+                            </p>
+                          </>
                         )}
                       </div>
                     );
@@ -394,12 +422,26 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
                 />
                 <Line type="monotone" dataKey="expected" stroke={INK} strokeOpacity={0.5} strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="actual" stroke="var(--color-accent)" strokeWidth={2.5} fill="url(#ytd-actual)" dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
+                {showSpending && (
+                  <Line type="monotone" dataKey="spent" stroke={SPENT_STROKE} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
+                )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
             <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: 'var(--color-accent)' }} aria-hidden />Received</span>
             <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: INK, opacity: 0.6 }} aria-hidden />Wage alone ({formatAmount(expectedNet)} a month)</span>
+            {/* The spending toggle lives in the legend, so it adds no height to the card. */}
+            <button
+              type="button"
+              aria-pressed={showSpending}
+              onClick={() => setShowSpending((value) => !value)}
+              title={showSpending ? 'Hide spending' : 'Show spending'}
+              className={cn('-mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 transition-[opacity,background-color] hover:bg-[var(--ref-surface-container-low)]', !showSpending && 'opacity-60 hover:opacity-100')}
+            >
+              <span className="h-0.5 w-4 rounded-full" style={{ background: showSpending ? SPENT_STROKE : 'var(--ref-outline)' }} aria-hidden />
+              {showSpending ? `Spent (${formatAmount(spent)})` : 'Show spending'}
+            </button>
           </div>
         </>
       )}
