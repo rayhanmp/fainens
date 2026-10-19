@@ -46,6 +46,18 @@ export const pulseMetricLabels: Record<PulseMetricId, string> = {
   pendingReview: 'Pending review',
 };
 
+/** Shorter names for the narrow tiles on a phone; metrics not listed keep their full label. */
+export const pulseMetricShortLabels: Partial<Record<PulseMetricId, string>> = {
+  cashFlow: 'Cash flow',
+  dailySpend: 'Daily spend',
+  safePace: 'Safe pace',
+  upcoming: 'Due in 30d',
+  spendVsLast: 'Vs last period',
+  netWorthChange: 'Net worth Δ',
+  reimbursementsDue: 'Reimbursements',
+  subscriptionsMonthly: 'Subs / month',
+};
+
 export const isPulseMetric = (value: unknown): value is PulseMetricId =>
   typeof value === 'string' && (pulseMetricIds as readonly string[]).includes(value);
 

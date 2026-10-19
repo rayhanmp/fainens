@@ -8,7 +8,7 @@ import { cn, formatDecimal } from '../../lib/utils';
 import { tooltipSurface } from './panel-styles';
 import {
   addPulseMetric, choosePulseMetric, defaultPulseMetrics, MAX_PULSE_METRICS, MIN_PULSE_METRICS, movePulseMetric,
-  pulseMetricGroups, pulseMetricLabels, pulseMetricValue, removePulseMetric,
+  pulseMetricGroups, pulseMetricLabels, pulseMetricShortLabels, pulseMetricValue, removePulseMetric,
   type PulseInputs, type PulseMetricId,
 } from './pulse-metrics';
 
@@ -168,7 +168,7 @@ export function PulsePanel({ metrics, onChangeMetrics, inputs, formatAmount }: {
                 onEdit={editing ? undefined : () => setEditing(true)}
                 trigger={(open) => <>
                   <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  <span className="truncate">{pulseMetricLabels[id]}</span>
+                  <span className="truncate"><span className="sm:hidden">{pulseMetricShortLabels[id] ?? pulseMetricLabels[id]}</span><span className="hidden sm:inline">{pulseMetricLabels[id]}</span></span>
                   {/* Quiet until the tile is hovered, so the strip reads as numbers first. */}
                   <ChevronDown className={cn('h-3 w-3 shrink-0 opacity-40 transition-[opacity,transform] group-hover/metric:opacity-100', open && 'rotate-180 opacity-100')} aria-hidden />
                 </>}
