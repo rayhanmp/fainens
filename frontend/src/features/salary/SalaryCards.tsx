@@ -389,7 +389,8 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ref-on-surface-variant)' }} interval={0} />
+                {/* Every month when there's room; on a phone recharts skips labels that would run together. */}
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ref-on-surface-variant)' }} interval="preserveStartEnd" minTickGap={6} />
                 <YAxis axisLine={false} tickLine={false} tickCount={4} width={40} tick={{ fontSize: 10, fill: 'var(--ref-outline)' }} tickFormatter={axis} />
                 <Tooltip
                   cursor={{ stroke: 'var(--ref-outline)', strokeDasharray: '4 4' }}

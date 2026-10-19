@@ -121,9 +121,11 @@
   .loans-row { grid-template-columns: minmax(0, 1fr) minmax(95px, auto); padding: 18px 16px; gap: 10px; border-top: 1px solid var(--color-border); }
   .loans-row + .loans-row { border-top: 1px solid var(--color-border); }
   .loans-row .loans-amount { text-align: right; }
-  .loans-row .loans-due { grid-column: 1; grid-row: 2; }
-  .loans-row .loans-status { grid-column: 2; grid-row: 2; text-align: right; }
-  .loans-row .loans-row-actions { grid-column: 1 / -1; grid-row: 3; }
+  /* Phones: status and actions share the second line; a due date, when there is one, goes under. */
+  .loans-row .loans-status { grid-column: 1; grid-row: 2; }
+  .loans-row .loans-row-actions { grid-column: 2; grid-row: 2; }
+  .loans-row .loans-due { grid-column: 1 / -1; grid-row: 3; }
+  .loans-row .loans-due.is-empty { display: none; }
   .loans-row-actions .brutalist-button { min-height: 36px; }
   .loans-icon-button { min-width: 36px; min-height: 36px; }
   .loans-list-footer { padding: 16px; }
