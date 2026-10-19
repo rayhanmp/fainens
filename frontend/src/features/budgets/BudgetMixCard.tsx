@@ -94,6 +94,8 @@ export function BudgetMixCard({ slices, income, formatAmount }: BudgetMixCardPro
                 style={{ opacity: dimmed ? 0.3 : 1 }}
                 onMouseEnter={() => setActiveId(slice.id)}
                 onMouseLeave={() => setActiveId(null)}
+                // A tap shows the slice too (and a second tap clears it); touch has no hover.
+                onClick={() => setActiveId((current) => (current === slice.id ? null : slice.id))}
               />
             );
           })}

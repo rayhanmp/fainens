@@ -1,16 +1,17 @@
-import { createElement, useState } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { categoryIcon } from './category-icon';
 
 export type HabitPoint = { id: number; name: string; color: string | null; amount: number; count: number; average: number };
 
-/** Drawn in a fixed box that scales with the card's width; text stays readable at card sizes. */
-const W = 640;
-const H = 300;
+/** Width (px) to lay out in until the real one is measured, and the narrowest layout. */
+const DEFAULT_WIDTH = 640;
+const MIN_WIDTH = 300;
 /** The plot sits inside these margins; the axis labels live in the left and bottom ones. */
 const PLOT = { left: 54, right: 8, top: 8, bottom: 26 };
-const MIN_RADIUS = 6;
-const MAX_RADIUS = 24;
+/** Bubble sizes for a wide plot and for a phone-width one, where the same sizes would crowd. */
+const RADIUS = { wide: { min: 6, max: 24 }, narrow: { min: 5, max: 17 } };
+const NARROW_WIDTH = 480;
 /** Bubbles at least this big carry their category's icon. */
 const ICON_RADIUS = 11;
 const LABEL_HEIGHT = 14;
@@ -55,18 +56,34 @@ function logRange(values: number[]) {
  */
 export function HabitMap({ points, format, short, onPick }: { points: HabitPoint[]; format: (value: number) => string; short: (value: number) => string; onPick?: (point: HabitPoint) => void }) {
   const [hovered, setHovered] = useState<number | null>(null);
+  // Laid out at its real width, so text keeps its size instead of shrinking with the card on a phone.
+  const [frame, frameRef] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  useEffect(() => {
+    if (!frame) return;
+    const observer = new ResizeObserver(([entry]) => { if (entry.contentRect.width > 0) setWidth(entry.contentRect.width); });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [frame]);
+  const W = Math.max(MIN_WIDTH, Math.round(width));
+  const narrow = W < NARROW_WIDTH;
+  // A phone-width plot is taller than it is wide-ish, giving the bubbles room to spread up and down.
+  const H = narrow ? 320 : 300;
+  const { min: minRadius, max: maxRadius } = narrow ? RADIUS.narrow : RADIUS.wide;
   const data = points.filter((point) => point.count > 0 && point.amount > 0);
   if (data.length === 0) return null;
 
   const [xMin, xMax] = logRange(data.map((point) => point.count));
   const [yMin, yMax] = logRange(data.map((point) => point.average));
   // Values map inside the plot less the biggest radius, so no bubble is cut by the edge.
-  const inner = { left: PLOT.left + MAX_RADIUS, right: W - PLOT.right - MAX_RADIUS, top: PLOT.top + MAX_RADIUS, bottom: H - PLOT.bottom - MAX_RADIUS };
+  // Bubbles stay clear of the corner captions' rows as well as the edges.
+  const captionRow = 16;
+  const inner = { left: PLOT.left + maxRadius, right: W - PLOT.right - maxRadius, top: PLOT.top + captionRow + maxRadius, bottom: H - PLOT.bottom - captionRow - maxRadius };
   const x = (count: number) => inner.left + ((log(count) - xMin) / (xMax - xMin || 1)) * (inner.right - inner.left);
   const y = (average: number) => inner.bottom - ((log(average) - yMin) / (yMax - yMin || 1)) * (inner.bottom - inner.top);
   const maxAmount = Math.max(...data.map((point) => point.amount));
   // Area, not radius, follows the total.
-  const radius = (amount: number) => MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * Math.sqrt(amount / maxAmount);
+  const radius = (amount: number) => minRadius + (maxRadius - minRadius) * Math.sqrt(amount / maxAmount);
   const midX = x(median(data.map((point) => point.count)));
   const midY = y(median(data.map((point) => point.average)));
   const plot = { x1: PLOT.left, y1: PLOT.top, x2: W - PLOT.right, y2: H - PLOT.bottom };
@@ -110,7 +127,7 @@ export function HabitMap({ points, format, short, onPick }: { points: HabitPoint
   );
 
   return (
-    <div className="relative" onMouseLeave={() => setHovered(null)}>
+    <div ref={frameRef} className="relative" onMouseLeave={() => setHovered(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Categories by how often you spend and how much each time">
         <defs>
           <clipPath id="habit-plot">

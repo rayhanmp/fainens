@@ -149,7 +149,12 @@ export function TagGroupsPanel({ tags, groups, uses, loading, className, onOpenT
       <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3.5">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Tags</h2>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">Drag tags between groups. Groups don't affect reports.</p>
+          {/* Touch screens can't drag tags; there the group is changed in the tag's editor. */}
+          <p className="text-xs text-[var(--ref-on-surface-variant)]">
+            <span className="pointer-coarse:hidden">Drag tags between groups.</span>
+            <span className="hidden pointer-coarse:inline">Tap a tag for its entries; change its group when editing it.</span>
+            {' '}Groups don't affect reports.
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <button type="button" onClick={() => setNewGroupName('')} className="grid h-8 w-8 place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]" aria-label="New group" title="New group">

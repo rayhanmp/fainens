@@ -245,14 +245,15 @@ function CategoriesPage() {
 
         <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-4">
           {[
-            { label: 'Categories', value: String(allCategories.filter((category) => category.isActive).length), meter: null },
-            { label: 'Tags', value: String(tags.length), meter: null },
-            { label: 'Spending categorized', value: `${stats.categorizedPct}%`, meter: stats.categorizedPct },
-            { label: 'Entries tagged', value: `${stats.taggedPct}%`, meter: stats.taggedPct },
+            { label: 'Categories', short: 'Categories', value: String(allCategories.filter((category) => category.isActive).length), meter: null },
+            { label: 'Tags', short: 'Tags', value: String(tags.length), meter: null },
+            { label: 'Spending categorized', short: 'Categorized', value: `${stats.categorizedPct}%`, meter: stats.categorizedPct },
+            { label: 'Entries tagged', short: 'Tagged', value: `${stats.taggedPct}%`, meter: stats.taggedPct },
           ].map((item) => (
             // One line per stat; a meter runs along the cell's bottom edge instead of adding a row.
-            <div key={item.label} className="relative flex items-baseline justify-between gap-3 bg-[var(--ref-surface-container-lowest)] px-5 py-2.5">
-              <dt className="truncate text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{item.label}</dt>
+            // Phones get the short label so it isn't cut off in half the width.
+            <div key={item.label} className="relative flex items-baseline justify-between gap-3 bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 sm:px-5">
+              <dt className="truncate text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]"><span className="sm:hidden">{item.short}</span><span className="hidden sm:inline">{item.label}</span></dt>
               <dd className="font-headline text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
               {item.meter != null && (
                 <div className="absolute inset-x-0 bottom-0 h-[3px] bg-[var(--ref-surface-container-high)]" aria-hidden>
@@ -382,7 +383,8 @@ function CategoriesPage() {
         <section className="mt-6 space-y-6" aria-label="Insights">
           <PeriodSpendChart categories={allCategories} focus={trendFocus} onFocusChange={setTrendFocus} onOpen={setRelated} />
 
-          <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          {/* grid-cols-1 is minmax(0,1fr): without it the single phone column grows to its widest content. */}
+          <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <CategoryBreakdown categories={allCategories} onOpen={setRelated} />
             <CategoryTrendTable
               categories={allCategories}

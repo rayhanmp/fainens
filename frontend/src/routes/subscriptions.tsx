@@ -449,7 +449,8 @@ function SubscriptionsPage() {
                             </div>
                             <div className="flex flex-col items-end gap-2">
                               {statusBadge(display)}
-                              <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 md:opacity-100">
+                              {/* Always visible: phones have no hover to reveal them. */}
+                              <div className="flex gap-1">
                                 <button
                                   type="button"
                                   onClick={() => openEdit(sub)}

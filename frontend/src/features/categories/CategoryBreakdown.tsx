@@ -120,16 +120,20 @@ export function CategoryBreakdown({ categories, onOpen }: { categories: Array<{ 
 
   return (
     <section className="flex h-full flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
-      {/* Title and toggles share the top row; the summary runs underneath so the toggles stay top-right. */}
-      <div className="border-b border-[var(--color-border)] px-5 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      {/* Wide: title and toggles share the top row, the summary runs underneath. Phones: the summary
+          stays with the title and the toggles wrap below, so it isn't wedged under a toggle. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border)] px-5 py-3">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Where the money goes</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <Segmented label="Size tiles by" options={METRICS} value={metric} onChange={setMetric} />
-            <Segmented label="Range" options={RANGES} value={range} onChange={setRange} />
-          </div>
+          <p className="text-xs text-[var(--ref-on-surface-variant)] sm:hidden">
+            {formatAmount(totalAmount)} over {totalCount.toLocaleString('id-ID')} entries
+          </p>
         </div>
-        <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented label="Size tiles by" options={METRICS} value={metric} onChange={setMetric} />
+          <Segmented label="Range" options={RANGES} value={range} onChange={setRange} />
+        </div>
+        <p className="hidden w-full text-xs text-[var(--ref-on-surface-variant)] sm:-mt-1.5 sm:block">
           {formatAmount(totalAmount)} over {totalCount.toLocaleString('id-ID')} entries
         </p>
       </div>
@@ -195,7 +199,7 @@ export function CategoryBreakdown({ categories, onOpen }: { categories: Array<{ 
                 ? hoveredTile.row
                   ? <><span className="font-semibold text-[var(--ref-on-surface)]">{hoveredTile.row.name}</span> · {formatAmount(hoveredTile.row.amount)} over {hoveredTile.row.count} {hoveredTile.row.count === 1 ? 'entry' : 'entries'} · {formatAmount(hoveredTile.row.average)} each · {share(hoveredTile.value)}% of {metric === 'amount' ? 'spending' : 'entries'}</>
                   : <><span className="font-semibold text-[var(--ref-on-surface)]">Other</span> · {folded.map((row) => row.name).join(', ')}</>
-                : 'Hover a tile for its numbers, click it for its entries. Tile size follows the measure you pick.'}
+                : <><span className="pointer-coarse:hidden">Hover a tile for its numbers, click it for its entries.</span><span className="hidden pointer-coarse:inline">Tap a tile for its entries.</span> Tile size follows the measure you pick.</>}
             </p>
           </div>
 

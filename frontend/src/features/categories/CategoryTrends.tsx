@@ -66,10 +66,14 @@ function ChangeLabel({ change }: { change: number }) {
 
 type Segment = { item: Series; value: number };
 
-function Stat({ label, value }: { label: string; value: ReactNode }) {
+/** A stat in the chart's band: label above value on phones, side by side from sm up. */
+function Stat({ label, short, value }: { label: string; short?: string; value: ReactNode }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <dt className="text-[11px] text-[var(--ref-on-surface-variant)]">{label}</dt>
+    <div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
+      <dt className="truncate text-[11px] text-[var(--ref-on-surface-variant)]">
+        <span className="sm:hidden">{short ?? label}</span>
+        <span className="hidden sm:inline">{label}</span>
+      </dt>
       <dd className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{value}</dd>
     </div>
   );
@@ -230,31 +234,43 @@ export function PeriodSpendChart({ categories, focus, onFocusChange, onOpen }: {
               </button>
             )}
           </h2>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">{focused ? 'One category across the salary periods. Clear it to see every category.' : 'Each salary period, split by category. Hover a column for its breakdown, click a slice for its entries.'}</p>
+          <p className="text-xs text-[var(--ref-on-surface-variant)]">{focused ? 'One category across the salary periods. Clear it to see every category.' : 'Each salary period, split by category.'}
+            {!focused && <><span className="pointer-coarse:hidden"> Hover a column for its breakdown, click a slice for its entries.</span><span className="hidden pointer-coarse:inline"> Tap a slice for its entries.</span></>}
+          </p>
         </div>
         {periods.length > 0 && <PeriodScrubber periods={periods} values={statValues} running={running} range={range} onChange={setRange} color={statSeries?.color} />}
       </div>
 
       {periods.length > 0 && (
-        <dl className="flex flex-wrap items-center gap-x-8 gap-y-2 border-b border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-5 py-2.5" aria-live="polite">
-          <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]">
+        <dl className="grid grid-cols-3 gap-x-3 gap-y-2 border-b border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-5 py-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-x-8" aria-live="polite">
+          {/* Phones: what's selected across the top, then the stats as three even columns. */}
+          <div className="col-span-3 flex min-w-0 items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: statSeries?.color ?? 'var(--ref-on-surface)' }} aria-hidden />
             <span className="truncate"><span className="font-semibold text-[var(--ref-on-surface)]">{statSeries ? statSeries.name : 'All categories'}</span> · {rangeLabel}</span>
           </div>
           <Stat label="Total" value={short(statTotal)} />
           {single != null ? (
             <>
-              <Stat label="Against a usual period" value={versusUsual != null ? <ChangeLabel change={versusUsual} /> : '—'} />
+              <Stat label="Against a usual period" short="Vs usual" value={versusUsual != null ? <ChangeLabel change={versusUsual} /> : '—'} />
               {topInSingle && topInSingle.values[single] > 0 ? (
                 <Stat label="Most of it" value={<span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: topInSingle.color }} aria-hidden />{topInSingle.name} · {short(topInSingle.values[single])}</span>} />
               ) : statSeries && totals[single] > 0 ? (
-                <Stat label="Share of the period" value={`${Math.round((statValues[single] / totals[single]) * 100)}% of ${short(totals[single])}`} />
+                <Stat label="Share of the period" short="Share" value={`${Math.round((statValues[single] / totals[single]) * 100)}% of ${short(totals[single])}`} />
               ) : null}
             </>
           ) : (
             <>
-              <Stat label="Average period" value={average != null ? short(average) : '—'} />
-              <Stat label="Highest" value={peak != null ? `${short(statValues[peak])} · ${shortPeriod(periods[peak].name)}` : '—'} />
+              <Stat label="Average period" short="Average" value={average != null ? short(average) : '—'} />
+              <Stat
+                label="Highest"
+                value={peak != null ? (
+                  <>
+                    {short(statValues[peak])}
+                    <span className="sm:hidden"> · {shortPeriod(periods[peak].name).slice(0, 3)}</span>
+                    <span className="hidden sm:inline"> · {shortPeriod(periods[peak].name)}</span>
+                  </>
+                ) : '—'}
+              />
             </>
           )}
         </dl>
@@ -270,11 +286,12 @@ export function PeriodSpendChart({ categories, focus, onFocusChange, onOpen }: {
             <span className="absolute -top-7 left-0 text-[10px] font-medium uppercase tracking-wide text-[var(--ref-outline)]">Spending (Rp)</span>
             {ticks.map((tick) => (
               <div key={tick} className="pointer-events-none absolute inset-x-0 flex translate-y-1/2 items-center gap-2" style={{ bottom: `${(tick / ceiling) * 100}%` }} aria-hidden>
-                <span className="w-12 shrink-0 text-right text-[10px] tabular-nums text-[var(--ref-outline)] opacity-80">{tick === 0 ? '0' : short(tick).replace(/^Rp/, '')}</span>
+                <span className="w-6 shrink-0 text-right text-[10px] tabular-nums text-[var(--ref-outline)] opacity-80 sm:w-12">{tick === 0 ? '0' : short(tick).replace(/^Rp/, '')}</span>
                 <span className={cn('flex-1', tick === 0 ? 'h-px bg-[var(--color-border)]' : 'border-t border-dotted border-[var(--color-border)] opacity-60')} />
               </div>
             ))}
-            <div className="absolute inset-y-0 left-14 right-0 flex items-end gap-2 sm:gap-4" onMouseLeave={() => setHover(null)}>
+            {/* The axis labels ("8 jt") need little room; phones give the rest to the columns. */}
+            <div className="absolute inset-y-0 left-8 right-0 flex items-end gap-2 sm:left-14 sm:gap-4" onMouseLeave={() => setHover(null)}>
               {periods.map((period, periodIndex) => {
                 const columnTotal = values[periodIndex];
                 const segments = segmentsAt(periodIndex);
@@ -303,7 +320,8 @@ export function PeriodSpendChart({ categories, focus, onFocusChange, onOpen }: {
                   >
                     <span className={cn('pointer-events-none absolute -inset-x-1 inset-y-0 rounded-xl bg-[var(--ref-surface-container-low)] transition-opacity sm:-inset-x-1.5', isHovered ? 'opacity-100' : 'opacity-0')} aria-hidden />
                     <span className={cn('relative mb-1.5 truncate text-[11px] font-semibold tabular-nums transition-opacity', isHovered ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]', dimmed && 'opacity-50')}>
-                      {columnTotal > 0 ? short(columnTotal) : ''}
+                      {/* Phones drop the "Rp" so neighbouring totals don't run into each other. */}
+                      {columnTotal > 0 && <><span className="text-[10px] sm:hidden">{short(columnTotal).replace(/^Rp/, '')}</span><span className="hidden sm:inline">{short(columnTotal)}</span></>}
                     </span>
                     <div
                       className={cn('relative flex w-full max-w-[3.25rem] flex-col-reverse gap-px overflow-hidden rounded-t-md transition-opacity', outside && !isHovered ? 'opacity-20' : dimmed ? 'opacity-40' : running[periodIndex] && 'opacity-55')}
@@ -356,7 +374,7 @@ export function PeriodSpendChart({ categories, focus, onFocusChange, onOpen }: {
             </div>
           </div>
           {/* Month names pick periods too: click one, shift-click to stretch the pick to it. */}
-          <div className="ml-14 mt-2 flex gap-2 sm:gap-4">
+          <div className="ml-8 mt-2 flex gap-2 sm:ml-14 sm:gap-4">
             {periods.map((period, index) => (
               <button
                 key={period.id}
@@ -369,8 +387,10 @@ export function PeriodSpendChart({ categories, focus, onFocusChange, onOpen }: {
                   !inRange(index) && 'opacity-50',
                 )}
               >
-                {shortPeriod(period.name)}
-                {running[index] && <span className="font-normal text-[var(--ref-outline)]"> · so far</span>}
+                {/* Eight columns on a phone leave room for three letters; the running one is drawn lighter. */}
+                <span className="sm:hidden">{shortPeriod(period.name).slice(0, 3)}</span>
+                <span className="hidden sm:inline">{shortPeriod(period.name)}</span>
+                {running[index] && <span className="hidden font-normal text-[var(--ref-outline)] sm:inline"> · so far</span>}
               </button>
             ))}
           </div>
@@ -504,7 +524,8 @@ function Sparkline({ values, labels, color, highlightLast, format, onPick }: { v
   const pick = (clientX: number, rect: DOMRect) => setActive(indexAt(clientX, rect));
   return (
     <div
-      className={cn('relative shrink-0 py-1', onPick ? 'cursor-pointer' : 'cursor-crosshair')}
+      // Narrower on phones, so the category's name keeps room beside it.
+      className={cn('relative w-16 shrink-0 py-1 sm:w-24', onPick ? 'cursor-pointer' : 'cursor-crosshair')}
       onMouseMove={(event) => pick(event.clientX, event.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => setActive(null)}
       onClick={(event) => {
@@ -514,7 +535,7 @@ function Sparkline({ values, labels, color, highlightLast, format, onPick }: { v
         onPick(indexAt(event.clientX, event.currentTarget.getBoundingClientRect()));
       }}
     >
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
+      <svg viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full" aria-hidden>
         <polyline points={`${x(0)},${height} ${points} ${x(last)},${height}`} fill={color} fillOpacity={0.1} stroke="none" />
         <polyline points={points} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         {active != null && <line x1={x(active)} x2={x(active)} y1={0} y2={height} stroke="var(--ref-outline)" strokeWidth={1} strokeDasharray="2 2" />}
@@ -525,7 +546,7 @@ function Sparkline({ values, labels, color, highlightLast, format, onPick }: { v
       {active != null && (
         <div
           className="pointer-events-none absolute bottom-full z-20 mb-1 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--ref-on-surface)] px-2 py-1 text-[11px] text-[var(--ref-surface-container-lowest)] shadow-lg"
-          style={{ left: x(active) }}
+          style={{ left: `${(x(active) / width) * 100}%` }}
           role="status"
         >
           <span className="opacity-75">{labels[active]}</span> <span className="font-semibold tabular-nums">{format(values[active])}</span>
@@ -592,7 +613,10 @@ export function CategoryTrendTable({ categories, focus, onSelect, onOpen }: { ca
                   <CategoryIcon name={series.name} color={series.color} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{series.name}</p>
-                    <p className="truncate text-[11px] text-[var(--ref-on-surface-variant)]">{formatAmount(Math.round(average))} a period on average</p>
+                    <p className="truncate text-[11px] text-[var(--ref-on-surface-variant)]">
+                      <span className="sm:hidden">avg {short(Math.round(average))}</span>
+                      <span className="hidden sm:inline">{formatAmount(Math.round(average))} a period on average</span>
+                    </p>
                   </div>
                   <Sparkline
                     values={series.values}
@@ -602,7 +626,7 @@ export function CategoryTrendTable({ categories, focus, onSelect, onOpen }: { ca
                     highlightLast={lastComplete === series.values.length - 1}
                     onPick={onOpen ? (index) => onOpen({ kind: 'category', id: series.id, name: series.name, color: series.color, from: periods[index].startDate, to: periods[index].endDate, scope: periods[index].name }) : undefined}
                   />
-                  <div className="w-24 shrink-0 text-right">
+                  <div className="w-20 shrink-0 text-right sm:w-24">
                     <p className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(latest)}</p>
                     <p className="text-[11px] font-medium">
                       {change == null ? <span className="text-[var(--ref-on-surface-variant)]">new</span> : <ChangeLabel change={change} />}
