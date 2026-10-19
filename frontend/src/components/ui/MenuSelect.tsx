@@ -8,7 +8,7 @@ export type MenuSelectOption<T extends string> = { value: T; label: string };
  * A compact styled replacement for a native `<select>`: a pill trigger and an anchored listbox
  * with arrow-key, Home/End, Enter and Escape support.
  */
-export function MenuSelect<T extends string>({ value, options, onChange, ariaLabel, icon, align = 'left', className }: {
+export function MenuSelect<T extends string>({ value, options, onChange, ariaLabel, icon, align = 'left', className, compactOnMobile = false }: {
   value: T;
   options: readonly MenuSelectOption<T>[];
   onChange: (value: T) => void;
@@ -16,6 +16,8 @@ export function MenuSelect<T extends string>({ value, options, onChange, ariaLab
   icon?: ReactNode;
   align?: 'left' | 'right';
   className?: string;
+  /** Below `sm`, show only the icon in a round button, so it can share a row with other controls. */
+  compactOnMobile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -60,12 +62,13 @@ export function MenuSelect<T extends string>({ value, options, onChange, ariaLab
         }}
         className={cn(
           'inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
+          compactOnMobile && 'max-sm:h-9 max-sm:w-9 max-sm:justify-center max-sm:bg-[var(--ref-surface-container-low)] max-sm:px-0',
           open && 'bg-[var(--ref-surface-container-low)]',
         )}
       >
         {icon}
-        <span>{selected?.label}</span>
-        <ChevronDown className={cn('h-3.5 w-3.5 text-[var(--ref-on-surface-variant)] transition-transform', open && 'rotate-180')} aria-hidden />
+        <span className={cn(compactOnMobile && 'max-sm:hidden')}>{selected?.label}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 text-[var(--ref-on-surface-variant)] transition-transform', open && 'rotate-180', compactOnMobile && 'max-sm:hidden')} aria-hidden />
       </button>
       {open && (
         <div

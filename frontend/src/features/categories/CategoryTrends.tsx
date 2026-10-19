@@ -120,6 +120,9 @@ function PeriodScrubber({ periods, values, running, range, onChange, color }: {
               aria-label={`${period.name}${running[index] ? ' (so far)' : ''}`}
               onPointerDown={(event) => {
                 event.preventDefault();
+                // Touch captures the pointer to this bar; release it so dragging a finger across
+                // the strip reaches the other bars too.
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 if (lone(index)) {
                   onChange(null);
                   return;
@@ -497,19 +500,18 @@ function Sparkline({ values, labels, color, highlightLast, format, onPick }: { v
   const y = (value: number) => height - 4 - (value / max) * (height - 8);
   const points = values.map((value, index) => `${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(' ');
   const last = values.length - 1;
-  const pick = (clientX: number, rect: DOMRect) => {
-    const ratio = (clientX - rect.left) / rect.width;
-    setActive(Math.max(0, Math.min(last, Math.round(ratio * last))));
-  };
+  const indexAt = (clientX: number, rect: DOMRect) => Math.max(0, Math.min(last, Math.round(((clientX - rect.left) / rect.width) * last)));
+  const pick = (clientX: number, rect: DOMRect) => setActive(indexAt(clientX, rect));
   return (
     <div
       className={cn('relative shrink-0 py-1', onPick ? 'cursor-pointer' : 'cursor-crosshair')}
       onMouseMove={(event) => pick(event.clientX, event.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => setActive(null)}
       onClick={(event) => {
-        if (!onPick || active == null) return;
+        if (!onPick) return;
         event.stopPropagation();
-        onPick(active);
+        // From the tap itself: on touch there is no hover beforehand to have set `active`.
+        onPick(indexAt(event.clientX, event.currentTarget.getBoundingClientRect()));
       }}
     >
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>

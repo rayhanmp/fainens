@@ -98,7 +98,7 @@ export function PeriodPicker({
               }
             }}
             className={cn(
-              'relative flex h-9 w-full items-center justify-center rounded-lg pl-1 pr-5 text-center text-xs font-bold sm:pl-2 sm:pr-6 text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
+              'relative flex h-9 w-full items-center justify-center rounded-lg px-1 text-center text-xs font-bold min-[400px]:pr-5 sm:pl-2 sm:pr-6 text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
               isOpen && 'bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]',
             )}
             aria-haspopup="listbox"
@@ -108,7 +108,8 @@ export function PeriodPicker({
             {/* Phones get the short month ("Oct 2026") so the label fits between the arrows. */}
             <span className="min-w-0 truncate text-center sm:hidden">{shortLabel(displayValue)}</span>
             <span className="hidden min-w-0 truncate text-center sm:inline">{displayValue}</span>
-            <ChevronDown className={cn('absolute right-1 h-4 w-4 transition-transform sm:right-1.5', isOpen && 'rotate-180')} />
+            {/* On the narrowest phones the label alone opens the list; the chevron gives its room back. */}
+            <ChevronDown className={cn('absolute right-1 hidden h-4 w-4 transition-transform min-[400px]:block sm:right-1.5', isOpen && 'rotate-180')} />
           </button>
           {isOpen && (
             <div role="listbox" aria-label={`${ariaLabel} options`} className="period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-60 w-full overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-2xl">
