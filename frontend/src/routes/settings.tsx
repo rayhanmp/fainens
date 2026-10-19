@@ -694,7 +694,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
               <input value={settingsSearch} onChange={(event) => setSettingsSearch(event.target.value)} placeholder="Search settings" className="w-full rounded-full border border-[var(--color-border)] bg-transparent py-2 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)]" aria-label="Search settings" />
             </label>
-            <nav className="mt-3 flex gap-1 overflow-x-auto md:block md:space-y-1">
+            <nav className="scrollbar-hide mt-3 flex gap-1 overflow-x-auto md:block md:space-y-1">
               {visibleTabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}

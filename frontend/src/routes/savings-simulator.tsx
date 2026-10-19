@@ -230,7 +230,7 @@ function SavingsSimulatorPage() {
           description="Project your savings growth, compare scenarios, and plan your financial goals."
         />
 
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+        <div className="scrollbar-hide flex gap-2 mb-8 overflow-x-auto pb-2">
           <TabButton
             active={activeTab === 'projection'}
             onClick={() => setActiveTab('projection')}
