@@ -91,7 +91,7 @@ async function start() {
           enqueueMaintenance("dispatch-background-tasks"),
           enqueueMaintenance("cache-invalidation-outbox"),
           enqueueMaintenance("storage-deletion-outbox"),
-          maintenanceQueue.add("precompute-warmup", undefined, { jobId: "maintenance:precompute-warmup" }),
+          maintenanceQueue.add("precompute-warmup", undefined, { jobId: "maintenance-precompute-warmup" }),
           enqueueRecurring("subscription-renewals"),
           enqueueRecurring("salary-posting"),
         ]);

@@ -95,13 +95,13 @@ async function main(): Promise<void> {
   // Kick the first pass immediately after boot. The scheduler then keeps the
   // queues warm without any API-process setInterval timers.
   await Promise.all([
-    maintenanceQueue.add("dispatch-background-tasks", undefined, { jobId: "maintenance:dispatch-background-tasks" }),
-    maintenanceQueue.add("cache-invalidation-outbox", undefined, { jobId: "maintenance:cache-invalidation-outbox" }),
-    maintenanceQueue.add("storage-deletion-outbox", undefined, { jobId: "maintenance:storage-deletion-outbox" }),
-    recurringQueue.add("subscription-renewals", undefined, { jobId: "recurring:subscription-renewals" }),
-    recurringQueue.add("salary-posting", undefined, { jobId: "recurring:salary-posting" }),
-    recurringQueue.add("gmail-sync", undefined, { jobId: "recurring:gmail-sync" }),
-    recurringQueue.add("database-backup", undefined, { jobId: "recurring:database-backup" }),
+    maintenanceQueue.add("dispatch-background-tasks", undefined, { jobId: "maintenance-dispatch-background-tasks" }),
+    maintenanceQueue.add("cache-invalidation-outbox", undefined, { jobId: "maintenance-cache-invalidation-outbox" }),
+    maintenanceQueue.add("storage-deletion-outbox", undefined, { jobId: "maintenance-storage-deletion-outbox" }),
+    recurringQueue.add("subscription-renewals", undefined, { jobId: "recurring-subscription-renewals" }),
+    recurringQueue.add("salary-posting", undefined, { jobId: "recurring-salary-posting" }),
+    recurringQueue.add("gmail-sync", undefined, { jobId: "recurring-gmail-sync" }),
+    recurringQueue.add("database-backup", undefined, { jobId: "recurring-database-backup" }),
   ]);
 
   const workers = [

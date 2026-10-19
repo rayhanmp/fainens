@@ -59,18 +59,19 @@ function optionsForMaintenance(name: MaintenanceJobName) {
 
 /** Compatibility helper for maintenance jobs. Stable IDs make concurrent API
  * processes harmless; the durable outbox/task rows provide the real replay
- * guarantee when a process dies between enqueue attempts. */
+ * guarantee when a process dies between enqueue attempts.
+ * BullMQ rejects ":" in custom job IDs (it separates Redis keys), so IDs use "-". */
 export async function enqueueMaintenance(name: MaintenanceJobName) {
   return maintenanceQueue.add(name, undefined, {
     ...optionsForMaintenance(name),
-    jobId: `maintenance:${name}`,
+    jobId: `maintenance-${name}`,
   });
 }
 
 export async function enqueueRecurring(name: RecurringJobName) {
   return recurringQueue.add(name, undefined, {
     ...maintenanceJobOptions,
-    jobId: `recurring:${name}`,
+    jobId: `recurring-${name}`,
   });
 }
 
@@ -85,7 +86,7 @@ export async function enqueueTask(task: {
   }
   const data = taskJobDataSchema.parse({ taskId: task.id });
   return agentQueue.add(task.jobName, data, {
-    jobId: `task:${task.id}`,
+    jobId: `task-${task.id}`,
     attempts: Math.max(1, Math.min(task.maxAttempts, 10)),
     backoff: { type: "exponential", delay: task.jobName === "budget-outlier-review" ? 30_000 : 5_000 },
     removeOnComplete: { age: task.jobName === "budget-outlier-review" ? 7 * 24 * 60 * 60 : 24 * 60 * 60, count: 1_000 },
