@@ -3954,6 +3954,12 @@ export type ListTags200Item = {
   id: number;
   name: string;
   color: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  groupId?: number | null;
   [key: string]: unknown;
 };
 
@@ -3976,6 +3982,12 @@ export type CreateTag201 = {
   id: number;
   name: string;
   color: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  groupId?: number | null;
   [key: string]: unknown;
 };
 
@@ -3992,6 +4004,12 @@ export type GetTag200 = {
   id: number;
   name: string;
   color: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  groupId?: number | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -4013,6 +4031,12 @@ export type UpdateTagBody = {
   name?: string;
   /** @pattern ^#[0-9A-Fa-f]{6}$ */
   color?: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  groupId?: number | null;
   [key: string]: unknown;
 };
 
@@ -4024,6 +4048,12 @@ export type UpdateTag200 = {
   id: number;
   name: string;
   color: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  groupId?: number | null;
   [key: string]: unknown;
 };
 
@@ -4048,6 +4078,94 @@ export const DeleteTag204 = {
 } as const;
 
 export type DeleteTag404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListTagGroups200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  [key: string]: unknown;
+};
+
+export type CreateTagGroupBody = {
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  name: string;
+  [key: string]: unknown;
+};
+
+export type CreateTagGroup201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  [key: string]: unknown;
+};
+
+export type UpdateTagGroupBody = {
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  name?: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder?: number;
+  [key: string]: unknown;
+};
+
+export type UpdateTagGroup200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  [key: string]: unknown;
+};
+
+export type UpdateTagGroup404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteTagGroup204 = typeof DeleteTagGroup204[keyof typeof DeleteTagGroup204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteTagGroup204 = {
+} as const;
+
+export type DeleteTagGroup404 = {
   error: string;
   [key: string]: unknown;
 };
@@ -20215,6 +20333,155 @@ export const getDeleteTagUrl = (id: number,) => {
 export const deleteTag = async (id: number, options?: RequestInit): Promise<deleteTagResponse> => {
   
   return generatedFetch<deleteTagResponse>(getDeleteTagUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type listTagGroupsResponse200 = {
+  data: ListTagGroups200Item[]
+  status: 200
+}
+    
+export type listTagGroupsResponseSuccess = (listTagGroupsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listTagGroupsResponse = (listTagGroupsResponseSuccess)
+
+export const getListTagGroupsUrl = () => {
+
+
+  
+
+  return `/api/tag-groups`
+}
+
+export const listTagGroups = async ( options?: RequestInit): Promise<listTagGroupsResponse> => {
+  
+  return generatedFetch<listTagGroupsResponse>(getListTagGroupsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type createTagGroupResponse201 = {
+  data: CreateTagGroup201
+  status: 201
+}
+    
+export type createTagGroupResponseSuccess = (createTagGroupResponse201) & {
+  headers: Headers;
+};
+;
+
+export type createTagGroupResponse = (createTagGroupResponseSuccess)
+
+export const getCreateTagGroupUrl = () => {
+
+
+  
+
+  return `/api/tag-groups`
+}
+
+export const createTagGroup = async (createTagGroupBody: CreateTagGroupBody, options?: RequestInit): Promise<createTagGroupResponse> => {
+  
+  return generatedFetch<createTagGroupResponse>(getCreateTagGroupUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createTagGroupBody,)
+  }
+);}
+
+
+
+export type updateTagGroupResponse200 = {
+  data: UpdateTagGroup200
+  status: 200
+}
+
+export type updateTagGroupResponse404 = {
+  data: UpdateTagGroup404
+  status: 404
+}
+    
+export type updateTagGroupResponseSuccess = (updateTagGroupResponse200) & {
+  headers: Headers;
+};
+export type updateTagGroupResponseError = (updateTagGroupResponse404) & {
+  headers: Headers;
+};
+
+export type updateTagGroupResponse = (updateTagGroupResponseSuccess | updateTagGroupResponseError)
+
+export const getUpdateTagGroupUrl = (id: number,) => {
+
+
+  
+
+  return `/api/tag-groups/${id}`
+}
+
+export const updateTagGroup = async (id: number,
+    updateTagGroupBody: UpdateTagGroupBody, options?: RequestInit): Promise<updateTagGroupResponse> => {
+  
+  return generatedFetch<updateTagGroupResponse>(getUpdateTagGroupUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTagGroupBody,)
+  }
+);}
+
+
+
+export type deleteTagGroupResponse204 = {
+  data: DeleteTagGroup204
+  status: 204
+}
+
+export type deleteTagGroupResponse404 = {
+  data: DeleteTagGroup404
+  status: 404
+}
+    
+export type deleteTagGroupResponseSuccess = (deleteTagGroupResponse204) & {
+  headers: Headers;
+};
+export type deleteTagGroupResponseError = (deleteTagGroupResponse404) & {
+  headers: Headers;
+};
+
+export type deleteTagGroupResponse = (deleteTagGroupResponseSuccess | deleteTagGroupResponseError)
+
+export const getDeleteTagGroupUrl = (id: number,) => {
+
+
+  
+
+  return `/api/tag-groups/${id}`
+}
+
+export const deleteTagGroup = async (id: number, options?: RequestInit): Promise<deleteTagGroupResponse> => {
+  
+  return generatedFetch<deleteTagGroupResponse>(getDeleteTagGroupUrl(id),
   {      
     ...options,
     method: 'DELETE'

@@ -1,14 +1,17 @@
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import { db } from "../db/client";
-import { tags, transactionTags } from "../db/schema";
+import { tagGroups, tags, transactionTags } from "../db/schema";
 
 const tagIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
-const tagSchema = z.object({ id: z.number().int(), name: z.string(), color: z.string() }).passthrough();
+const tagSchema = z.object({ id: z.number().int(), name: z.string(), color: z.string(), groupId: z.number().int().nullable().optional() }).passthrough();
 const tagBodySchema = z.object({ name: z.string().trim().min(1).max(100), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/) }).passthrough();
-const tagUpdateBodySchema = tagBodySchema.partial().passthrough();
+const tagUpdateBodySchema = tagBodySchema.partial().extend({ groupId: z.number().int().positive().nullable().optional() }).passthrough();
+const tagGroupSchema = z.object({ id: z.number().int(), name: z.string(), sortOrder: z.number().int() }).passthrough();
+const tagGroupBodySchema = z.object({ name: z.string().trim().min(1).max(60) }).passthrough();
+const tagGroupUpdateBodySchema = z.object({ name: z.string().trim().min(1).max(60).optional(), sortOrder: z.number().int().optional() }).passthrough();
 const tagErrorSchema = z.object({ error: z.string() }).passthrough();
 
 export default async function (fastify: FastifyInstance) {
@@ -24,11 +27,12 @@ export default async function (fastify: FastifyInstance) {
         id: tags.id,
         name: tags.name,
         color: tags.color,
+        groupId: tags.groupId,
         usageCount: sql<number>`count(${transactionTags.transactionId})`,
       })
       .from(tags)
       .leftJoin(transactionTags, eq(tags.id, transactionTags.tagId))
-      .groupBy(tags.id, tags.name, tags.color);
+      .groupBy(tags.id, tags.name, tags.color, tags.groupId);
     return allTags;
   });
 
@@ -98,6 +102,7 @@ export default async function (fastify: FastifyInstance) {
     const body = request.body as Partial<{
       name: string;
       color: string;
+      groupId: number | null;
     }>;
 
     const [existing] = await db
@@ -120,11 +125,20 @@ export default async function (fastify: FastifyInstance) {
       }
     }
 
+    if (body.groupId != null) {
+      const [group] = await db.select({ id: tagGroups.id }).from(tagGroups).where(eq(tagGroups.id, body.groupId)).limit(1);
+      if (!group) {
+        reply.code(400).send({ error: "Tag group not found" });
+        return;
+      }
+    }
+
     const [updated] = await db
       .update(tags)
       .set({
         ...(body.name && { name: body.name }),
         ...(body.color && { color: body.color }),
+        ...(body.groupId !== undefined && { groupId: body.groupId }),
       })
       .where(eq(tags.id, parseInt(id)))
       .returning();
@@ -153,5 +167,46 @@ export default async function (fastify: FastifyInstance) {
     await db.delete(tags).where(eq(tags.id, parseInt(id)));
 
     reply.code(204).send();
+  });
+
+  // Tag groups: folders for the tag list only; reports never look at them.
+  fastify.get("/api/tag-groups", {
+    schema: { operationId: "listTagGroups", tags: ["categories"], response: { 200: z.array(tagGroupSchema) } },
+  }, async () => db.select({ id: tagGroups.id, name: tagGroups.name, sortOrder: tagGroups.sortOrder }).from(tagGroups).orderBy(asc(tagGroups.sortOrder), asc(tagGroups.id)));
+
+  fastify.post("/api/tag-groups", {
+    schema: { operationId: "createTagGroup", tags: ["categories"], body: tagGroupBodySchema, response: { 201: tagGroupSchema } },
+  }, async (request, reply) => {
+    const { name } = request.body as { name: string };
+    const [{ next }] = await db.select({ next: sql<number>`coalesce(max(${tagGroups.sortOrder}), -1) + 1` }).from(tagGroups);
+    const [group] = await db.insert(tagGroups).values({ name: name.trim(), sortOrder: Number(next) })
+      .returning({ id: tagGroups.id, name: tagGroups.name, sortOrder: tagGroups.sortOrder });
+    reply.code(201).send(group);
+  });
+
+  fastify.patch("/api/tag-groups/:id", {
+    schema: { operationId: "updateTagGroup", tags: ["categories"], params: tagIdParamsSchema, body: tagGroupUpdateBodySchema, response: { 200: tagGroupSchema, 404: tagErrorSchema } },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: number };
+    const body = request.body as { name?: string; sortOrder?: number };
+    const [group] = await db.update(tagGroups)
+      .set({ ...(body.name !== undefined && { name: body.name.trim() }), ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }) })
+      .where(eq(tagGroups.id, id))
+      .returning({ id: tagGroups.id, name: tagGroups.name, sortOrder: tagGroups.sortOrder });
+    if (!group) return reply.code(404).send({ error: "Tag group not found" });
+    return group;
+  });
+
+  /** Deleting a group keeps its tags; they just become ungrouped. */
+  fastify.delete("/api/tag-groups/:id", {
+    schema: { operationId: "deleteTagGroup", tags: ["categories"], params: tagIdParamsSchema, response: { 204: z.null(), 404: tagErrorSchema } },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: number };
+    const deleted = db.transaction((tx) => {
+      tx.update(tags).set({ groupId: null }).where(eq(tags.groupId, id)).run();
+      return tx.delete(tagGroups).where(eq(tagGroups.id, id)).run().changes;
+    });
+    if (deleted === 0) return reply.code(404).send({ error: "Tag group not found" });
+    return reply.code(204).send();
   });
 }

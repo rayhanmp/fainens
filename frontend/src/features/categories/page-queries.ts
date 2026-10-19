@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { getClassificationUsage, listAccounts, listCategories, listTags, type ListCategories200Item, type ListTags200Item } from '../../generated/client';
+import { getClassificationUsage, listAccounts, listCategories, listTagGroups, listTags, type ListCategories200Item, type ListTagGroups200Item, type ListTags200Item } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
 
 export type CategoriesPageData = {
   categories: ListCategories200Item[];
   tags: ListTags200Item[];
+  tagGroups: ListTagGroups200Item[];
   /** Usage across the whole posted ledger, counted on the server. */
   usage: {
     byCategory: Record<number, number>;
@@ -41,15 +42,17 @@ export function useCategoriesPageQuery(includeInactive: boolean) {
   return useQuery<CategoriesPageData>({
     queryKey: queryKeys.categories.list(includeInactive),
     queryFn: async () => {
-      const [categories, tags, usage, accounts] = await Promise.all([
+      const [categories, tags, tagGroups, usage, accounts] = await Promise.all([
         unwrapGenerated(listCategories(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load categories'),
         unwrapGenerated(listTags(), 200, 'Failed to load tags'),
+        unwrapGenerated(listTagGroups(), 200, 'Failed to load tag groups'),
         unwrapGenerated(getClassificationUsage(), 200, 'Failed to load category usage'),
         unwrapGenerated(listAccounts({ type: 'expense' }), 200, 'Failed to load expense accounts'),
       ]);
       const result: CategoriesPageData = {
         categories,
         tags,
+        tagGroups,
         usage: {
           byCategory: Object.fromEntries(usage.categories.map((row) => [row.categoryId, row.transactionCount])),
           byTag: Object.fromEntries(usage.tags.map((row) => [row.tagId, row.transactionCount])),

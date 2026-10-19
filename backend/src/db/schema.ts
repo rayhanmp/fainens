@@ -180,10 +180,22 @@ export const transactionCategoryAllocations = sqliteTable("transaction_category_
   uniqueAllocation: uniqueIndex("idx_transaction_category_allocation_unique").on(table.transactionId, table.categoryId),
 }));
 
+/** Folders for tags, purely for organising the tag list; reports never look at them. */
+export const tagGroups = sqliteTable("tag_group", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
 export const tags = sqliteTable("tag", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   color: text("color").notNull(),
+  /** The group the tag is filed under; null leaves it ungrouped. */
+  groupId: integer("group_id").references(() => tagGroups.id, { onDelete: "set null" }),
 });
 
 export const transactionTags = sqliteTable("transaction_tag", {

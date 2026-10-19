@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { useCategoriesPageQuery } from '../features/categories/page-queries';
 import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { CategoryBreakdown } from '../features/categories/CategoryBreakdown';
+import { TagGroupsPanel } from '../features/categories/TagGroupsPanel';
 import {
   useCreateCategoryMutation,
   useCreateTagMutation,
@@ -48,6 +49,7 @@ interface TagRow {
   id: number;
   name: string;
   color: string;
+  groupId?: number | null;
 }
 
 function CategoriesPage() {
@@ -66,6 +68,7 @@ function CategoriesPage() {
   );
   const categories = showArchived ? allCategories : allCategories.filter((category) => category.isActive);
   const tags = (categoriesQuery.data?.tags ?? []) as TagRow[];
+  const tagGroups = categoriesQuery.data?.tagGroups ?? [];
   const expenseAccounts = (categoriesQuery.data?.expenseAccounts ?? []) as ExpenseAccount[];
   const isLoading = categoriesQuery.isPending && !categoriesQuery.data;
   const { confirm } = useConfirm();
@@ -76,7 +79,7 @@ function CategoriesPage() {
   const [editingTag, setEditingTag] = useState<TagRow | null>(null);
 
   const [categoryForm, setCategoryForm] = useState<{ name: string; icon: string; color: string; reportingAccountId: string }>({ name: '', icon: '📌', color: PRESET_COLORS[0], reportingAccountId: '' });
-  const [tagForm, setTagForm] = useState<{ name: string; color: string }>({ name: '', color: PRESET_COLORS[0] });
+  const [tagForm, setTagForm] = useState<{ name: string; color: string; groupId: string }>({ name: '', color: PRESET_COLORS[0], groupId: '' });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
@@ -131,10 +134,12 @@ function CategoriesPage() {
     setFormError('');
     setIsSubmitting(true);
     try {
+      const groupId = tagForm.groupId ? Number(tagForm.groupId) : null;
       if (editingTag) {
-        await updateTagMutation.mutateAsync({ id: editingTag.id, data: tagForm });
+        await updateTagMutation.mutateAsync({ id: editingTag.id, data: { name: tagForm.name, color: tagForm.color, groupId } });
       } else {
-        await createTagMutation.mutateAsync(tagForm);
+        const created = await createTagMutation.mutateAsync({ name: tagForm.name, color: tagForm.color });
+        if (groupId != null) await updateTagMutation.mutateAsync({ id: created.id, data: { groupId } });
       }
       closeTagModal();
     } catch (err) {
@@ -188,10 +193,10 @@ function CategoriesPage() {
   const openTagModal = (tag?: TagRow) => {
     if (tag) {
       setEditingTag(tag);
-      setTagForm({ name: tag.name, color: tag.color });
+      setTagForm({ name: tag.name, color: tag.color, groupId: tag.groupId ? String(tag.groupId) : '' });
     } else {
       setEditingTag(null);
-      setTagForm({ name: '', color: PRESET_COLORS[0] });
+      setTagForm({ name: '', color: PRESET_COLORS[0], groupId: '' });
     }
     setFormError('');
     setIsTagModalOpen(true);
@@ -213,32 +218,9 @@ function CategoriesPage() {
   // Most-used first, archived ones at the end.
   const orderedCategories = [...categories].sort((a, b) => Number(b.isActive) - Number(a.isActive) || usage(b) - usage(a) || a.name.localeCompare(b.name));
   const archivedCount = allCategories.filter((category) => !category.isActive).length;
-  const tagUses = (tag: TagRow) => stats.byTag[tag.id] ?? 0;
-  const orderedTags = [...tags].sort((a, b) => tagUses(b) - tagUses(a) || a.name.localeCompare(b.name));
-  const usedTags = orderedTags.filter((tag) => tagUses(tag) > 0);
-  const unusedTags = orderedTags.filter((tag) => tagUses(tag) === 0);
-  const tagNameCounts = tags.reduce<Record<string, number>>((counts, tag) => ({ ...counts, [tag.name.trim().toLowerCase()]: (counts[tag.name.trim().toLowerCase()] ?? 0) + 1 }), {});
-  // The category list's row menus pop out of the panel, so only the tags panel clips its content.
+  // The category list's row menus pop out of the panel, so it doesn't clip its content.
   const panelFrame = 'rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]';
-  const panel = cn(panelFrame, 'overflow-hidden');
   const panelHeader = 'flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3.5';
-  const tagChip = (tag: TagRow, unused: boolean) => (
-    <button
-      key={tag.id}
-      type="button"
-      onClick={() => openTagModal(tag)}
-      title={(tagNameCounts[tag.name.trim().toLowerCase()] ?? 0) > 1 ? 'Another tag has the same name' : undefined}
-      className={cn(
-        'inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)]',
-        unused ? 'border-dashed border-[var(--color-border)] text-[var(--ref-on-surface-variant)]' : 'border-[var(--color-border)]',
-      )}
-    >
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} aria-hidden />
-      <span className="truncate">{tag.name}</span>
-      {(tagNameCounts[tag.name.trim().toLowerCase()] ?? 0) > 1 && <span className="text-[10px] font-semibold text-[var(--color-warning)]">dup</span>}
-      {!unused && <span className="tabular-nums text-[var(--ref-on-surface-variant)]">{tagUses(tag)}</span>}
-    </button>
-  );
 
   return (
     <RequireAuth>
@@ -380,40 +362,15 @@ function CategoriesPage() {
             )}
           </div>
 
-          <aside className={cn(panel, 'xl:sticky xl:top-24')}>
-            <div className={panelHeader}>
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Tags</h2>
-                <p className="text-xs text-[var(--ref-on-surface-variant)]">Labels across categories, like a trip or a person.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => openTagModal()}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]"
-                aria-label="Add tag"
-                title="Add tag"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-4">
-              {isLoading ? (
-                <p className="text-sm text-[var(--ref-on-surface-variant)]">Loading tags…</p>
-              ) : tags.length === 0 ? (
-                <p className="text-sm text-[var(--ref-on-surface-variant)]">No tags yet. Add tags to label trips, work, reimbursements and so on.</p>
-              ) : (
-                <>
-                  {usedTags.length > 0 && <div className="flex flex-wrap gap-1.5">{usedTags.map((tag) => tagChip(tag, false))}</div>}
-                  {unusedTags.length > 0 && (
-                    <>
-                      <p className={cn('mb-2 text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]', usedTags.length > 0 && 'mt-5')}>Not used yet · {unusedTags.length}</p>
-                      <div className="flex flex-wrap gap-1.5">{unusedTags.map((tag) => tagChip(tag, true))}</div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </aside>
+          <TagGroupsPanel
+            className="xl:sticky xl:top-24"
+            tags={tags}
+            groups={tagGroups}
+            uses={(tagId) => stats.byTag[tagId] ?? 0}
+            loading={isLoading}
+            onEditTag={(tag) => openTagModal(tag)}
+            onAddTag={() => openTagModal()}
+          />
         </section>
 
         <Modal
@@ -508,6 +465,19 @@ function CategoriesPage() {
 
         <Modal isOpen={isTagModalOpen} onClose={closeTagModal} title={editingTag ? 'Edit tag' : 'New tag'}>
           <form onSubmit={handleTagSubmit} className="space-y-4">
+            {tagGroups.length > 0 && (
+              <label className="block">
+                <span className="mb-2 block font-mono text-sm font-medium">Group</span>
+                <select
+                  value={tagForm.groupId}
+                  onChange={(e) => setTagForm({ ...tagForm, groupId: e.target.value })}
+                  className="block min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"
+                >
+                  <option value="">Ungrouped</option>
+                  {[...tagGroups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).map((group) => <option key={group.id} value={String(group.id)}>{group.name}</option>)}
+                </select>
+              </label>
+            )}
             <Input
               label="Name"
               value={tagForm.name}

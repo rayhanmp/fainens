@@ -3,12 +3,15 @@ import {
   archiveCategory,
   createCategory,
   createTag,
+  createTagGroup,
   deleteTag,
+  deleteTagGroup,
   listCategories,
   listTags,
   restoreCategory,
   updateCategory,
   updateTag,
+  updateTagGroup,
 } from '../../generated/client';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
@@ -76,6 +79,51 @@ export function useUpdateTagMutation() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateTag>[1] }) => unwrapGenerated(updateTag(id, data), 200, 'Failed to update tag'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+/**
+ * File a tag under a group (or none), applied to the categories page right away so dragging feels
+ * instant, and rolled back if the server refuses. Groups are organisational only.
+ */
+export function useMoveTagMutation() {
+  const queryClient = useQueryClient();
+  const pageKey = queryKeys.categories.list(true);
+  type PageData = { tags: Array<{ id: number; groupId?: number | null }> } | undefined;
+  return useMutation({
+    mutationFn: ({ id, groupId }: { id: number; groupId: number | null }) => unwrapGenerated(updateTag(id, { groupId }), 200, 'Failed to move tag'),
+    onMutate: async ({ id, groupId }) => {
+      await queryClient.cancelQueries({ queryKey: pageKey });
+      const previous = queryClient.getQueryData<PageData>(pageKey);
+      queryClient.setQueryData<PageData>(pageKey, (data) => data && { ...data, tags: data.tags.map((tag) => (tag.id === id ? { ...tag, groupId } : tag)) });
+      return { previous };
+    },
+    onError: (_error, _input, context) => queryClient.setQueryData(pageKey, context?.previous),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }),
+  });
+}
+
+export function useCreateTagGroupMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => unwrapGenerated(createTagGroup({ name }), 201, 'Failed to create tag group'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }),
+  });
+}
+
+export function useUpdateTagGroupMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateTagGroup>[1] }) => unwrapGenerated(updateTagGroup(id, data), 200, 'Failed to update tag group'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }),
+  });
+}
+
+export function useDeleteTagGroupMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => unwrapGenerated(deleteTagGroup(id), 204, 'Failed to delete tag group'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }),
   });
 }
 

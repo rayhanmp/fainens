@@ -230,6 +230,19 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
     if (tableExists("transaction") && !columnExists("transaction", "tax_treatment")) {
       db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN tax_treatment text");
     }
+    if (!tableExists("tag_group")) {
+      db.$client.exec(`
+        CREATE TABLE IF NOT EXISTS tag_group (
+          id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          name text NOT NULL,
+          sort_order integer DEFAULT 0 NOT NULL,
+          created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
+        )
+      `);
+    }
+    if (tableExists("tag") && !columnExists("tag", "group_id")) {
+      db.$client.exec("ALTER TABLE tag ADD COLUMN group_id integer REFERENCES tag_group(id) ON DELETE SET NULL");
+    }
     if (tableExists("transaction") && !columnExists("transaction", "status")) {
       db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN status text DEFAULT 'posted' NOT NULL");
     }
