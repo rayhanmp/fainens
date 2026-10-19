@@ -27,6 +27,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
 import { Archive, ArchiveRestore, List, MoreHorizontal, Pencil, Plus } from 'lucide-react';
 import { ActionSheet } from '../components/ui/ActionSheet';
+import { SwipeReveal } from '../components/ui/SwipeReveal';
 import { usePhoneSheets } from '../hooks/usePhoneSheets';
 
 export const Route = createFileRoute('/categories')({
@@ -89,6 +90,8 @@ function CategoriesPage() {
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
   const menuCategory = allCategories.find((category) => category.id === menuCategoryId) ?? null;
   const asSheet = usePhoneSheets();
+  // The category row swiped open on a phone, showing its Edit and Archive buttons.
+  const [swipedCategoryId, setSwipedCategoryId] = useState<number | null>(null);
   // The category in focus in "Spending by period", set from its legend or a trend row.
   const [trendFocus, setTrendFocus] = useState<number | null>(null);
   // The category or tag whose entries are open in the related-transactions modal.
@@ -307,12 +310,13 @@ function CategoriesPage() {
                   const count = usage(c);
                   const color = c.color || 'var(--ref-primary)';
                   const reportingAccount = c.reportingAccountId ? expenseAccounts.find((a) => a.id === c.reportingAccountId)?.name ?? 'Mapped expense account' : null;
-                  return (
-                    <li key={c.id} className={cn('group flex items-center gap-3 border-b border-[var(--color-border)] px-5 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] sm:odd:border-r', !c.isActive && 'opacity-60')}>
+                  const openEntries = () => setRelated({ kind: 'category', id: c.id, name: c.name, color: c.color ?? null });
+                  const content = (
+                    <>
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)` }}>
                         <CategoryIcon name={c.name} color={color} />
                       </span>
-                      <button type="button" onClick={() => setRelated({ kind: 'category', id: c.id, name: c.name, color: c.color ?? null })} className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                      <button type="button" onClick={(event) => { event.stopPropagation(); openEntries(); }} className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
                         <span className="flex items-center gap-2">
                           <span className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{c.name}</span>
                           {!c.isActive && <span className="shrink-0 rounded-md bg-[var(--ref-surface-container-high)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--ref-on-surface-variant)]">Archived</span>}
@@ -324,9 +328,11 @@ function CategoriesPage() {
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={() =>
-                            setMenuCategoryId(menuCategoryId === c.id ? null : c.id)
-                          }
+                          onClick={(event) => {
+                            // Not also a tap on the (swipeable) row behind it.
+                            event.stopPropagation();
+                            setMenuCategoryId(menuCategoryId === c.id ? null : c.id);
+                          }}
                           className="grid h-8 w-8 place-items-center rounded-lg text-[var(--ref-on-surface-variant)] transition hover:bg-[var(--ref-surface-container-high)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           aria-label={`More actions for ${c.name}`}
                         >
@@ -366,6 +372,25 @@ function CategoriesPage() {
                           </>
                         )}
                       </div>
+                    </>
+                  );
+                  return (
+                    <li key={c.id} className={cn('border-b border-[var(--color-border)] sm:odd:border-r', !asSheet && 'group flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)]', !c.isActive && 'opacity-60')}>
+                      {/* Phones: swipe a row left for Edit and Archive; a tap still opens its entries. */}
+                      {asSheet ? (
+                        <SwipeReveal
+                          label={c.name}
+                          open={swipedCategoryId === c.id}
+                          onOpenChange={(open) => setSwipedCategoryId(open ? c.id : null)}
+                          onActivate={openEntries}
+                          actions={<>
+                            <button type="button" onClick={() => { setSwipedCategoryId(null); openCategoryModal(c); }} className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 bg-[var(--ref-primary)] px-2 text-[11px] font-bold text-white"><Pencil className="h-5 w-5" />Edit</button>
+                            <button type="button" onClick={() => { setSwipedCategoryId(null); void (c.isActive ? handleDeleteCategory(c.id) : handleRestoreCategory(c.id)); }} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 text-[11px] font-bold text-white', c.isActive ? 'bg-[var(--ref-error)]' : 'bg-emerald-600')}>{c.isActive ? <><Archive className="h-5 w-5" />Archive</> : <><ArchiveRestore className="h-5 w-5" />Restore</>}</button>
+                          </>}
+                        >
+                          <div className="flex items-center gap-3 px-5 py-3">{content}</div>
+                        </SwipeReveal>
+                      ) : content}
                     </li>
                   );
                 })}

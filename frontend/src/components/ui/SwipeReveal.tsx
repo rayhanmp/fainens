@@ -56,7 +56,8 @@ export function SwipeReveal({ children, actions, className, open, onOpenChange, 
   return (
     // Swiping is phone-only, so wider screens let anchored menus overflow the row.
     <article className={cn('relative overflow-hidden md:overflow-visible', className)} aria-label={label}>
-      <div className="absolute inset-y-0 right-0 flex w-44 items-stretch justify-end bg-[var(--ref-surface-container-high)] md:hidden">
+      {/* Hidden until a swipe starts, so its colours can't peek out under the row's edge. */}
+      <div className={cn('absolute inset-y-0 right-0 flex w-44 items-stretch justify-end bg-[var(--ref-surface-container-high)] md:hidden', translate === 0 && 'invisible')}>
         {actions}
       </div>
       <div
