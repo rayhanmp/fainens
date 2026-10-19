@@ -513,22 +513,35 @@ export interface DeleteTransactionsResult {
 }
 
 export async function deleteTransactionsAtomically(ids: number[]): Promise<DeleteTransactionsResult> {
-  const uniqueIds = [...new Set(ids)];
-  if (uniqueIds.length === 0 || uniqueIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+  const requestedIds = [...new Set(ids)];
+  if (requestedIds.length === 0 || requestedIds.some((id) => !Number.isInteger(id) || id <= 0)) {
     throw new TransactionMutationError("Transaction IDs must be positive integers", 400);
   }
-  if (uniqueIds.length > 100) {
+  if (requestedIds.length > 100) {
     throw new TransactionMutationError("At most 100 transactions may be deleted at once", 400);
   }
 
   const result = db.transaction((tx) => {
-    const rows = tx.select().from(transactions).where(inArray(transactions.id, uniqueIds)).all();
-    if (rows.length !== uniqueIds.length) {
-      const found = new Set(rows.map((row) => row.id));
-      const missing = uniqueIds.filter((id) => !found.has(id));
+    const requested = tx.select().from(transactions).where(inArray(transactions.id, requestedIds)).all();
+    if (requested.length !== requestedIds.length) {
+      const found = new Set(requested.map((row) => row.id));
+      const missing = requestedIds.filter((id) => !found.has(id));
       throw new TransactionMutationError(`Transaction not found: ${missing.join(", ")}`, 404);
     }
-    for (const row of rows) assertGenericMutationAllowed(row, tx);
+    // A draft never reached the ledger, so the protections that keep posted history consistent
+    // (workflow types such as salary, linked chains) do not apply to it. Deleting a draft takes its
+    // linked draft children, such as a transfer's fee, along so nothing is left pointing at it.
+    const draftIds = requested.filter((row) => row.status === "draft").map((row) => row.id);
+    const children = draftIds.length === 0 ? [] : tx.select().from(transactions)
+      .where(and(inArray(transactions.linkedTxId, draftIds), eq(transactions.status, "draft")))
+      .all()
+      .filter((child) => !requestedIds.includes(child.id));
+    const rows = [...requested, ...children];
+    const uniqueIds = rows.map((row) => row.id);
+    for (const row of rows) {
+      if (row.status === "draft") assertDraftDeletionAllowed(row, tx);
+      else assertGenericMutationAllowed(row, tx);
+    }
 
     const lines = tx
       .select()
@@ -589,7 +602,7 @@ export async function deleteTransactionsAtomically(ids: number[]): Promise<Delet
   });
 
   await invalidateOnTransactionMutation({
-    transactionId: uniqueIds[0],
+    transactionId: requestedIds[0],
     affectedAccountIds: result.affectedAccountIds,
     affectedPeriodIds: result.affectedPeriodIds,
     revisionBumped: true,
@@ -597,17 +610,28 @@ export async function deleteTransactionsAtomically(ids: number[]): Promise<Delet
   return result;
 }
 
+/** A draft may be deleted unless something still points at it: a reallocation or a workflow record. */
+function assertDraftDeletionAllowed(tx: any, executor: any): void {
+  assertNotReallocated(tx.id, executor);
+  const reasons = workflowLinkReasons(tx, executor);
+  if (reasons.length > 0) {
+    throw new TransactionMutationError(`Draft ${tx.id} is referenced (${reasons.join(", ")}); remove that link first`, 409);
+  }
+}
+
 export interface ImportTransactionRow {
   date: string;
   amount: number;
   description: string;
   /** Optional explicit sign/type used by the CSV UI. Legacy imports infer
-   * expense for positive values and income for negative values. */
-  type?: "expense" | "income";
+   * expense for positive values and income for negative values. Salary is income the salary
+   * schedule recognises as that month's pay, so it will not post the month again. */
+  type?: "expense" | "income" | "salary";
   accountId?: number;
   periodId?: number | null;
   categoryId?: number | null;
   notes?: string | null;
+  place?: string | null;
   reference?: string | null;
   /** Tags for this row, on top of the import-wide tags. */
   tagIds?: number[];
@@ -712,7 +736,7 @@ export async function importTransactionsAtomically(input: {
     if (period?.status === "closed" && !isDraft) {
       throw new TransactionMutationError(`Period ${period.id} is closed; reopen it before importing transactions`, 409);
     }
-    const signedAmount = row.type === "income" ? -Math.abs(row.amount) : row.type === "expense" ? Math.abs(row.amount) : row.amount;
+    const signedAmount = row.type === "income" || row.type === "salary" ? -Math.abs(row.amount) : row.type === "expense" ? Math.abs(row.amount) : row.amount;
     const category = row.categoryId != null ? categoryById.get(row.categoryId) : undefined;
     if (row.categoryId != null && !category) {
       throw new TransactionMutationError(`Row ${index + 1} references an unknown category`, 400);
@@ -725,8 +749,10 @@ export async function importTransactionsAtomically(input: {
       dateMs,
       amount: Math.abs(signedAmount),
       kind: signedAmount >= 0 ? "expense" as const : "income" as const,
+      txType: row.type === "salary" ? "salary_income" : signedAmount >= 0 ? "simple_expense" : "simple_income",
       description,
       notes: row.notes ?? null,
+      place: row.place?.trim() || null,
       reference: row.reference ?? null,
       wallet,
       category,
@@ -751,8 +777,9 @@ export async function importTransactionsAtomically(input: {
         date: new Date(row.dateMs),
         description: row.description,
         notes: row.notes,
+        place: row.place,
         reference: row.reference,
-        txType: `simple_${row.kind}`,
+        txType: row.txType,
         status: isDraft ? "draft" : "posted",
         batchId: isDraft ? input.batchId ?? null : null,
         periodId: row.periodId,

@@ -41,7 +41,9 @@ export async function replaceDraft(transactionId: number, input: CreateJournalEn
   if (current.status !== "draft") throw new TransactionMutationError("Only a draft can be rebuilt; posted journals are corrected by reversal", 409);
 
   const prepared = await prepareJournalEntry({ ...input, status: "draft", batchId: current.batchId ?? null }, db);
-  const { date, dueDate, description, reference, notes, place, txType, periodId, categoryId, originLat, originLng, originName, destLat, destLng, destName, distanceKm } = prepared.transactionValues as Record<string, unknown>;
+  const { date, dueDate, description, reference, notes, place, txType: rebuiltType, periodId, categoryId, originLat, originLng, originName, destLat, destLng, destName, distanceKm } = prepared.transactionValues as Record<string, unknown>;
+  // The entry form edits salary as ordinary income; while it stays income, it stays the month's salary.
+  const txType = current.txType === "salary_income" && rebuiltType === "simple_income" ? "salary_income" : rebuiltType;
 
   db.transaction((tx) => {
     const fresh = tx.select({ status: transactions.status }).from(transactions).where(eq(transactions.id, transactionId)).limit(1).all()[0];
@@ -74,7 +76,7 @@ export async function replaceDraft(transactionId: number, input: CreateJournalEn
       entityId: transactionId,
       action: "update",
       beforeSnapshot: Buffer.from(JSON.stringify(current)),
-      afterSnapshot: Buffer.from(JSON.stringify({ transaction: prepared.transactionValues, lines: prepared.validatedLines, tagIds: prepared.tagIds, source: "draft_rebuild" })),
+      afterSnapshot: Buffer.from(JSON.stringify({ transaction: { ...prepared.transactionValues, txType }, lines: prepared.validatedLines, tagIds: prepared.tagIds, source: "draft_rebuild" })),
     }).run();
     bumpFinancialRevisionSync(tx);
   });

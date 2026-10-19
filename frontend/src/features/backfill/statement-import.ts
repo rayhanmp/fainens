@@ -78,9 +78,17 @@ export type ColumnMapping = {
   /** A row naming a destination account is a transfer out of `account`. */
   toAccount: number | null;
   category: number | null;
-  /** Expense/income (or DB/CR) per row; when set it decides the sign and the amount column may be all positive. */
+  /** Expense/income/salary (or DB/CR) per row; when set it decides the sign and the amount column may be all positive. */
   type: number | null;
+  notes: number | null;
+  /** Tag names separated by commas, semicolons or pipes. */
+  tags: number | null;
+  place: number | null;
+  /** A transfer's admin fee, paid by the sending account. */
+  fee: number | null;
 };
+
+const SALARY_TYPES = /^(salary|gaji|payroll)$/i;
 
 const OUT_TYPES = /^(expense|pengeluaran|keluar|out|debit|debet|db|dr|withdrawal|transfer|tf)$/i;
 const IN_TYPES = /^(income|pemasukan|masuk|in|credit|kredit|cr|deposit)$/i;
@@ -106,7 +114,11 @@ export function guessMapping(headers: string[]): ColumnMapping {
   const credit = match(lower, [/^(credit|kredit|deposit|masuk|cr)\b/, /credit|kredit|deposit|masuk/]);
   const amount = match(lower, [/^(amount|nominal|jumlah|mutasi|nilai)/, /amount|nominal|jumlah|mutasi/]);
   const description = match(lower, [/^(description|keterangan|uraian|deskripsi|narasi|remark|transaksi|merchant|detail)/, /descr|keterangan|uraian|narasi|remark|memo|detail|transaksi/]);
-  const detail = lower.findIndex((header, index) => index !== description && /detail|keterangan 2|note|catatan|reference|referensi/.test(header));
+  const notes = match(lower, [/^(notes?|catatan|memo)$/]);
+  const tags = match(lower, [/^(tags?|labels?)$/]);
+  const place = match(lower, [/^(place|location|lokasi|tempat)$/]);
+  const fee = match(lower, [/^(fee|admin fee|transfer fee|biaya|biaya admin|admin)$/]);
+  const detail = lower.findIndex((header, index) => index !== description && index !== notes && /detail|keterangan 2|reference|referensi/.test(header));
   const split = debit != null && credit != null && debit !== credit;
   const sample = lower.join(' ');
   const dateFormat: DateFormat = /yyyy-mm-dd|iso/.test(sample) ? 'YYYY-MM-DD' : 'DD/MM/YYYY';
@@ -125,6 +137,10 @@ export function guessMapping(headers: string[]): ColumnMapping {
     toAccount,
     category,
     type,
+    notes,
+    tags,
+    place,
+    fee,
   };
 }
 
@@ -233,6 +249,13 @@ export type ParsedStatementRow = {
   accountText: string;
   toAccountText: string;
   categoryText: string;
+  notes: string;
+  place: string;
+  tagNames: string[];
+  /** Admin fee on a transfer row, whole rupiah; null when there is none. */
+  fee: number | null;
+  /** Marked as salary in the type column: income the salary schedule counts as that month's pay. */
+  salary: boolean;
   errors: string[];
 };
 
@@ -269,22 +292,37 @@ export function parseStatementRows(rows: string[][], mapping: ColumnMapping): Pa
       if (debit == null || credit == null) errors.push(`Unreadable amount "${debit == null ? debitText : creditText}"`);
       else amount = Math.abs(credit) - Math.abs(debit);
     }
-    const typeText = mapping.type == null ? '' : (cells[mapping.type] ?? '').trim();
+    const cell = (column: number | null) => (column == null ? '' : (cells[column] ?? '').trim());
+    const typeText = cell(mapping.type);
+    const salary = SALARY_TYPES.test(typeText);
     if (typeText && amount != null) {
       if (OUT_TYPES.test(typeText)) amount = -Math.abs(amount);
-      else if (IN_TYPES.test(typeText)) amount = Math.abs(amount);
+      else if (IN_TYPES.test(typeText) || salary) amount = Math.abs(amount);
       else errors.push(`Unknown type "${typeText}"`);
     }
     if (amount === 0) errors.push('Amount is zero');
-    const cell = (column: number | null) => (column == null ? '' : (cells[column] ?? '').trim());
+    const toAccountText = cell(mapping.toAccount);
+    const feeText = cell(mapping.fee);
+    let fee: number | null = null;
+    if (feeText) {
+      const parsed = parseStatementAmount(feeText);
+      if (parsed == null) errors.push(`Unreadable fee "${feeText}"`);
+      else if (parsed !== 0 && !toAccountText) errors.push('A fee needs a To account; write other fees as their own expense row');
+      else if (parsed !== 0) fee = Math.abs(parsed);
+    }
     return {
       rowNumber: index + 2,
       dateMs,
       description,
       amount,
       accountText: cell(mapping.account),
-      toAccountText: cell(mapping.toAccount),
+      toAccountText,
       categoryText: cell(mapping.category),
+      notes: cell(mapping.notes),
+      place: cell(mapping.place),
+      tagNames: cell(mapping.tags).split(/[,;|]/).map((name) => name.trim()).filter(Boolean),
+      fee,
+      salary,
       errors,
     };
   });

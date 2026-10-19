@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRightLeft, CheckSquare, Copy, FileUp, Link2Off, Square, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, BadgeDollarSign, CheckSquare, Copy, FileUp, Link2Off, Receipt, Square, Trash2 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
@@ -42,6 +42,14 @@ type ReviewRow = {
   /** Category from the file's category column, used as the starting pick. */
   categoryId: number | null;
   categoryText: string;
+  notes: string;
+  place: string;
+  /** Tags named in the file that exist, and the names that did not match any tag. */
+  tagIds: number[];
+  unknownTags: string[];
+  /** Admin fee on a transfer row, paid by the sending account. */
+  fee: number | null;
+  salary: boolean;
   errors: string[];
 };
 
@@ -60,6 +68,8 @@ type StatementImportModalProps = {
 
 const sectionLabel = 'text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]';
 const DAY_MS = 86_400_000;
+/** The category the entry form files transfer fees under. */
+const TRANSFER_FEE_CATEGORY_NAME = 'Bank & Transfer Fees';
 
 /** The date, plus the time when the file gave one (a row without a time sits at midnight). */
 const formatWhen = (ms: number) => {
@@ -124,9 +134,16 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
       toAccountId,
       categoryId: row.categoryText ? matchByName(categories, row.categoryText)?.id ?? null : null,
       categoryText: row.categoryText,
+      notes: row.notes,
+      place: row.place,
+      tagIds: [...new Set(row.tagNames.map((name) => matchByName(tags, name)?.id).filter((id): id is number => id != null))],
+      unknownTags: row.tagNames.filter((name) => !matchByName(tags, name)),
+      fee: row.fee,
+      // Salary is income; a row that moves money elsewhere or out is not pay.
+      salary: row.salary && !row.toAccountText && (row.amount ?? 0) > 0,
       errors,
     };
-  })), [sources, walletAccounts, categories]);
+  })), [sources, walletAccounts, categories, tags]);
 
   const reset = () => {
     setStep('sources');
@@ -204,12 +221,13 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
       setDuplicates(found);
       setDraftedIds(drafted);
       // Rows that already name their destination are transfers on their own; only the rest look for a partner.
-      const pairable = rows.flatMap((row) => (row.errors.length === 0 && row.accountId != null && row.toAccountId == null && !found.has(row.key) ? [{ ...row, accountId: row.accountId }] : []));
+      // Salary is pay, never one side of a transfer, even when another account shows the same amount going out.
+      const pairable = rows.flatMap((row) => (row.errors.length === 0 && row.accountId != null && row.toAccountId == null && !row.salary && !found.has(row.key) ? [{ ...row, accountId: row.accountId }] : []));
       setPairs(pairTransfers(pairable));
       // Coming back from the column step keeps the categories and tags already picked.
       setChoices((current) => Object.fromEntries(rows.map((row) => [row.key, {
         categoryId: current[row.key]?.categoryId ?? row.categoryId,
-        tagIds: current[row.key]?.tagIds ?? [],
+        tagIds: current[row.key]?.tagIds ?? row.tagIds,
         include: row.errors.length === 0 && !found.has(row.key),
       }])));
       setSelected(new Set());
@@ -267,16 +285,20 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
     setSaving(true);
     try {
       let transfersSaved = 0;
-      const saveTransfer = async (input: { dateMs: number; amount: number; from: number; to: number; description: string; notes: string | null; tagIds: number[] }) => {
+      const feeCategoryId = categories.find((category) => category.name === TRANSFER_FEE_CATEGORY_NAME)?.id ?? null;
+      const saveTransfer = async (input: { dateMs: number; amount: number; from: number; to: number; description: string; notes: string | null; place: string | null; tagIds: number[]; fee: number | null }) => {
         await createMutation.mutateAsync({
           kind: 'transfer',
           amountCents: Math.abs(input.amount),
           description: input.description,
           notes: input.notes,
+          place: input.place,
           date: new Date(input.dateMs).toISOString(),
           walletAccountId: input.from,
           toWalletAccountId: input.to,
           tagIds: input.tagIds.length ? input.tagIds : undefined,
+          // Saved with the transfer and linked to it, the way the entry form records an admin fee.
+          transferFee: input.fee ? { amountCents: input.fee, paidBy: 'sender', categoryId: feeCategoryId } : undefined,
           status: 'draft',
           batchId,
         });
@@ -291,12 +313,22 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
           from: out.accountId!,
           to: incoming.accountId!,
           description: out.description,
-          notes: incoming.description !== out.description ? `Statement: ${out.description} / ${incoming.description}` : null,
+          notes: [
+            incoming.description !== out.description ? `Statement: ${out.description} / ${incoming.description}` : '',
+            out.notes,
+            incoming.notes !== out.notes ? incoming.notes : '',
+          ].filter(Boolean).join('\n') || null,
+          place: out.place || incoming.place || null,
           tagIds: [...new Set([...choice(pair.outKey).tagIds, ...choice(pair.inKey).tagIds])],
+          // A fee needs a To account, so rows paired across statements never carry one; the bank's fee line imports as its own expense.
+          fee: null,
         });
       }
       for (const row of plan.directTransfers) {
-        await saveTransfer({ dateMs: row.dateMs!, amount: row.amount!, from: row.accountId!, to: row.toAccountId!, description: row.description, notes: null, tagIds: choice(row.key).tagIds });
+        await saveTransfer({
+          dateMs: row.dateMs!, amount: row.amount!, from: row.accountId!, to: row.toAccountId!, description: row.description,
+          notes: row.notes || null, place: row.place || null, tagIds: choice(row.key).tagIds, fee: row.fee,
+        });
       }
       const singles = [...plan.expenses, ...plan.incomes];
       let draftsSaved = 0;
@@ -309,9 +341,11 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
             date: new Date(row.dateMs!).toISOString(),
             description: row.description,
             amount: Math.abs(row.amount!),
-            type: row.amount! < 0 ? 'expense' as const : 'income' as const,
+            type: row.amount! < 0 ? 'expense' as const : row.salary ? 'salary' as const : 'income' as const,
             accountId: row.accountId!,
             categoryId: row.amount! < 0 ? choice(row.key).categoryId : null,
+            notes: row.notes || null,
+            place: row.place || null,
             tagIds: choice(row.key).tagIds.length ? choice(row.key).tagIds : undefined,
             reference: statementReference(row.accountId!, row.dateMs!, row.amount!, row.description),
           })),
@@ -426,7 +460,10 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
                           const cells = source.csv.rows.map((cells, index) => (index + 2 === row.rowNumber && source.mapping.description != null ? cells.map((cell, column) => (column === source.mapping.description ? event.target.value : column === source.mapping.detail ? '' : cell)) : cells));
                           return { ...source, csv: { ...source.csv, rows: cells } };
                         }))} className="w-full min-w-48 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-[var(--ref-on-surface)] hover:border-[var(--color-border)] focus:border-[var(--ref-primary)] focus:outline-none" />
-                        {rowTags.length > 0 && <span className="block px-1 text-[11px] text-[var(--ref-on-surface-variant)]">{rowTags.join(', ')}</span>}
+                        {(rowTags.length > 0 || row.place) && (
+                          <span className="block px-1 text-[11px] text-[var(--ref-on-surface-variant)]">{[row.place, rowTags.join(', ')].filter(Boolean).join(' · ')}</span>
+                        )}
+                        {row.notes && <span className="block truncate px-1 text-[11px] italic text-[var(--ref-outline)]" title={row.notes}>{row.notes}</span>}
                       </td>
                       <td className={cn('whitespace-nowrap px-2 py-1.5 text-right align-top font-semibold tabular-nums', (row.amount ?? 0) > 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface)]')}>{row.amount == null ? '—' : `${row.amount < 0 ? '−' : '+'}${formatAmount(Math.abs(row.amount))}`}</td>
                       <td className="px-2 py-1.5 align-top">
@@ -442,6 +479,9 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
                             {draftedIds.has(duplicate.id) ? 'Already in this batch' : 'Already recorded'} as “{duplicate.description}”
                           </span>
                         )}
+                        {row.salary && !broken && <span className="flex items-center gap-1 font-semibold text-[var(--color-success)]"><BadgeDollarSign className="h-3.5 w-3.5 shrink-0" aria-hidden />Salary for {row.dateMs != null ? new Date(row.dateMs).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'its month'}</span>}
+                        {row.fee != null && row.toAccountId != null && <span className="flex items-center gap-1 text-[var(--ref-on-surface-variant)]"><Receipt className="h-3.5 w-3.5 shrink-0" aria-hidden />Fee {formatAmount(row.fee)} from {accountName(row.accountId!)}</span>}
+                        {row.unknownTags.length > 0 && <span className="flex items-center gap-1 text-[var(--ref-on-surface-variant)]"><AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />No tag named {row.unknownTags.map((name) => `“${name}”`).join(', ')}</span>}
                         {unknownCategory && <span className="flex items-center gap-1 text-[var(--ref-on-surface-variant)]"><AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />No category named “{row.categoryText}”</span>}
                         {row.toAccountId != null && !broken && (
                           <span className="flex items-center gap-1 text-[var(--color-accent)]"><ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />Transfer to {accountName(row.toAccountId)}</span>
@@ -527,7 +567,11 @@ function SourceCard({ source, accounts, formatAmount, onChange, onMapping, onRem
               <Select label="Account" value={columnValue(source.mapping.account)} onChange={(event) => onMapping({ account: toColumn(event.target.value) })} options={columnOptions} />
               <Select label="To account (transfers)" value={columnValue(source.mapping.toAccount)} onChange={(event) => onMapping({ toAccount: toColumn(event.target.value) })} options={columnOptions} />
               <Select label="Category" value={columnValue(source.mapping.category)} onChange={(event) => onMapping({ category: toColumn(event.target.value) })} options={columnOptions} />
-              <Select label="Type (expense / income)" value={columnValue(source.mapping.type)} onChange={(event) => onMapping({ type: toColumn(event.target.value) })} options={columnOptions} />
+              <Select label="Type (expense / income / salary)" value={columnValue(source.mapping.type)} onChange={(event) => onMapping({ type: toColumn(event.target.value) })} options={columnOptions} />
+              <Select label="Notes" value={columnValue(source.mapping.notes)} onChange={(event) => onMapping({ notes: toColumn(event.target.value) })} options={columnOptions} />
+              <Select label="Tags" value={columnValue(source.mapping.tags)} onChange={(event) => onMapping({ tags: toColumn(event.target.value) })} options={columnOptions} />
+              <Select label="Place" value={columnValue(source.mapping.place)} onChange={(event) => onMapping({ place: toColumn(event.target.value) })} options={columnOptions} />
+              <Select label="Transfer fee" value={columnValue(source.mapping.fee)} onChange={(event) => onMapping({ fee: toColumn(event.target.value) })} options={columnOptions} />
             </div>
             <div className="flex gap-2 text-xs">
               {(['split', 'signed'] as const).map((mode) => (

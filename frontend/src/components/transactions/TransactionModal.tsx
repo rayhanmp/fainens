@@ -705,7 +705,7 @@ export function TransactionModal({
         const lines = editingTransaction.lines;
         const assetLines = lines.filter((line) => accountType(line.accountId) === 'asset');
         const kind = editingTransaction.txType === 'simple_expense' ? 'expense'
-          : editingTransaction.txType === 'simple_income' ? 'income'
+          : editingTransaction.txType === 'simple_income' || editingTransaction.txType === 'salary_income' ? 'income'
             : editingTransaction.txType === 'simple_transfer' ? 'transfer'
               : null;
         if (kind && assetLines.length === (kind === 'transfer' ? 2 : 1)) {

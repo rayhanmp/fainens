@@ -340,6 +340,55 @@ describe("draft transactions and batches", () => {
     expect(state.db.select().from(schema.reconciliationSessions).all()[0]).toMatchObject({ kind: "control", status: "reconciled" });
   });
 
+  it("imports salary as the month's salary with notes and place, and keeps it salary through the entry form", async () => {
+    const batchId = await createBatch();
+    const imported = await app.inject({
+      method: "POST", url: "/api/transactions/import-confirm",
+      payload: {
+        asDraft: true,
+        batchId,
+        rows: [
+          { date: "2026-03-25T09:00:00+07:00", description: "Gaji Maret", amount: 7_554_552, type: "salary", accountId: 1, notes: "Net after PPh 21" },
+          { date: "2026-03-26T12:30:00+07:00", description: "Kopi", amount: 25_000, type: "expense", accountId: 2, categoryId: 1, place: "Kopi Kenangan Kuningan" },
+        ],
+      },
+    });
+    expect(imported.statusCode).toBe(201);
+    const [salaryId, coffeeId] = imported.json().transactions.map((row: { id: number }) => row.id) as number[];
+    expect(txRow(salaryId)).toMatchObject({ txType: "salary_income", status: "draft", notes: "Net after PPh 21" });
+    expect(txRow(coffeeId)).toMatchObject({ txType: "simple_expense", place: "Kopi Kenangan Kuningan" });
+    expect(balance(1)).toBe(0);
+
+    const rebuilt = await app.inject({
+      method: "PUT", url: `/api/transactions/${salaryId}/draft`,
+      payload: { kind: "income", amountCents: 7_600_000, description: "Gaji Maret", date: "2026-03-25T09:00:00+07:00", walletAccountId: 1 },
+    });
+    expect(rebuilt.statusCode).toBe(200);
+    expect(txRow(salaryId)).toMatchObject({ txType: "salary_income", status: "draft" });
+
+    const deleted = await app.inject({ method: "DELETE", url: `/api/transactions/${salaryId}` });
+    expect(deleted.statusCode).toBeLessThan(300);
+    expect(state.db.select().from(schema.transactions).where(eq(schema.transactions.id, salaryId)).all()).toHaveLength(0);
+  });
+
+  it("deletes a transfer draft together with its linked fee draft", async () => {
+    const batchId = await createBatch();
+    const created = await app.inject({
+      method: "POST", url: "/api/transactions",
+      payload: {
+        kind: "transfer", amountCents: 200_000, description: "Top up GoPay", date: "2026-03-20T08:00:00+07:00",
+        walletAccountId: 1, toWalletAccountId: 2, transferFee: { amountCents: 1_000, paidBy: "sender" }, status: "draft", batchId,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const { transactionId, feeTransactionId } = created.json();
+    expect(txRow(feeTransactionId)).toMatchObject({ status: "draft", batchId, linkedTxId: transactionId });
+
+    const deleted = await app.inject({ method: "DELETE", url: `/api/transactions/${transactionId}` });
+    expect(deleted.statusCode).toBeLessThan(300);
+    expect(state.db.select().from(schema.transactions).all()).toHaveLength(0);
+  });
+
   it("refuses a posted journal in a batch and a draft import outside draft mode", async () => {
     const batchId = await createBatch();
     const response = await app.inject({

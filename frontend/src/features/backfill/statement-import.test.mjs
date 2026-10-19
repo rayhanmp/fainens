@@ -47,6 +47,23 @@ test('a type column signs all-positive amounts and flags words it does not know'
   assert.deepEqual(rows[3].errors, ['Unknown type "hmm"']);
 });
 
+test('notes, tags, place, fee and salary columns are read per row', () => {
+  const headers = ['Date', 'Account', 'To account', 'Type', 'Description', 'Notes', 'Tags', 'Place', 'Fee', 'Amount'];
+  const mapping = guessMapping(headers);
+  assert.deepEqual([mapping.notes, mapping.tags, mapping.place, mapping.fee, mapping.detail], [5, 6, 7, 8, null]);
+  const rows = parseStatementRows([
+    ['25/03/2026', 'BNI', '', 'gaji', 'Gaji Maret', 'Net after PPh 21', '', '', '', '7.554.552'],
+    ['26/03/2026', 'BNI', 'GoPay', 'transfer', 'Top up', '', 'topup | ewallet', '', '1.000', '200.000'],
+    ['27/03/2026', 'GoPay', '', 'expense', 'Kopi', '', 'coffee;work', 'Kopi Kenangan Kuningan', '0', '25.000'],
+    ['28/03/2026', 'BNI', '', 'expense', 'Fee without transfer', '', '', '', '2.500', '10.000'],
+  ], { ...mapping, dateFormat: 'DD/MM/YYYY' });
+  assert.deepEqual([rows[0].salary, rows[0].amount, rows[0].notes], [true, 7_554_552, 'Net after PPh 21']);
+  assert.deepEqual([rows[1].fee, rows[1].tagNames, rows[1].amount], [1_000, ['topup', 'ewallet'], -200_000]);
+  assert.deepEqual([rows[2].fee, rows[2].tagNames, rows[2].place, rows[2].errors], [null, ['coffee', 'work'], 'Kopi Kenangan Kuningan', []]);
+  assert.deepEqual(rows[3].errors, ['A fee needs a To account; write other fees as their own expense row']);
+  assert.equal(guessMapping(['Tanggal', 'Keterangan', 'Catatan', 'Biaya admin', 'Lokasi', 'Nominal']).notes, 2);
+});
+
 test('matchByName ignores case, spacing and punctuation', () => {
   const accounts = [{ id: 1, name: 'BNI' }, { id: 2, name: 'Go-Pay' }];
   assert.equal(matchByName(accounts, ' bni ')?.id, 1);
@@ -109,7 +126,10 @@ test('parseStatementRows signs split columns as money out negative, money in pos
     ['25/03/2026', 'Gaji', '', '7.554.552,00'],
     ['xx/03/2026', '', '', ''],
   ], mapping);
-  assert.deepEqual(rows[0], { rowNumber: 2, dateMs: day(2026, 3, 1), description: 'Indomaret', amount: -25_000, accountText: '', toAccountText: '', categoryText: '', errors: [] });
+  assert.deepEqual(rows[0], {
+    rowNumber: 2, dateMs: day(2026, 3, 1), description: 'Indomaret', amount: -25_000,
+    accountText: '', toAccountText: '', categoryText: '', notes: '', place: '', tagNames: [], fee: null, salary: false, errors: [],
+  });
   assert.equal(rows[1].amount, 7_554_552);
   assert.deepEqual(rows[2].errors, ['Unreadable date "xx/03/2026"', 'No description', 'Amount is zero']);
 });

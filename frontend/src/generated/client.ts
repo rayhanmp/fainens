@@ -2175,6 +2175,7 @@ export type ConfirmTransactionImportBodyAnyOfThreeRowsItemType = typeof ConfirmT
 export const ConfirmTransactionImportBodyAnyOfThreeRowsItemType = {
   expense: 'expense',
   income: 'income',
+  salary: 'salary',
 } as const;
 
 export type ConfirmTransactionImportBodyAnyOfThreeRowsItem = {
@@ -2206,6 +2207,11 @@ export type ConfirmTransactionImportBodyAnyOfThreeRowsItem = {
   categoryId?: number | null;
   /** @nullable */
   notes?: string | null;
+  /**
+   * @maxLength 500
+   * @nullable
+   */
+  place?: string | null;
   /** @nullable */
   reference?: string | null;
   /** @maxItems 100 */

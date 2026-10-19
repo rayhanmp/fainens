@@ -4370,7 +4370,8 @@
                               "type": "string",
                               "enum": [
                                 "expense",
-                                "income"
+                                "income",
+                                "salary"
                               ]
                             },
                             "accountId": {
@@ -4393,6 +4394,11 @@
                             "notes": {
                               "nullable": true,
                               "type": "string"
+                            },
+                            "place": {
+                              "nullable": true,
+                              "type": "string",
+                              "maxLength": 500
                             },
                             "reference": {
                               "nullable": true,

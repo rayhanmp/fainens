@@ -233,7 +233,7 @@ const importConfirmBodySchema = z.object({
   rows: z.array(z.object({ date: z.string().min(1), amountCents: z.number().int(), description: z.string() }).passthrough()).min(1).max(1000), accountId: z.number().int().positive(), defaultDescription: z.string().trim().min(1).max(500), tagIds: z.array(z.number().int().positive()).max(100).optional(),
 }).passthrough();
 const legacyImportConfirmBodySchema = z.object({
-  rows: z.array(z.object({ date: z.string().min(1), description: z.string(), amount: z.number().int(), type: z.enum(["expense", "income"]), accountId: z.number().int().positive(), periodId: z.number().int().positive().nullable().optional(), categoryId: z.number().int().positive().nullable().optional(), notes: z.string().nullable().optional(), reference: z.string().nullable().optional(), tagIds: z.array(z.number().int().positive()).max(100).optional() }).passthrough()).min(1).max(1000),
+  rows: z.array(z.object({ date: z.string().min(1), description: z.string(), amount: z.number().int(), type: z.enum(["expense", "income", "salary"]), accountId: z.number().int().positive(), periodId: z.number().int().positive().nullable().optional(), categoryId: z.number().int().positive().nullable().optional(), notes: z.string().nullable().optional(), place: z.string().max(500).nullable().optional(), reference: z.string().nullable().optional(), tagIds: z.array(z.number().int().positive()).max(100).optional() }).passthrough()).min(1).max(1000),
   categoryMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(), accountMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(), periodMappings: z.record(z.string(), z.number().int().positive().nullable()).optional(),
   /** Save every row as a draft (optionally in a batch) instead of posting it. */
   asDraft: z.boolean().optional(),
@@ -1691,7 +1691,7 @@ RULES:
     schema: { operationId: "confirmTransactionImport", tags: ["transactions"], body: importConfirmBodyUnionSchema, response: { 201: importConfirmResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema } },
   }, async (request, reply) => {
     const body = request.body as {
-      rows: Array<{ date: string; amountCents?: number; amount?: number; description: string; type?: "expense" | "income"; accountId?: number; periodId?: number | null; categoryId?: number | null; notes?: string | null; reference?: string | null; tagIds?: number[] }>;
+      rows: Array<{ date: string; amountCents?: number; amount?: number; description: string; type?: "expense" | "income" | "salary"; accountId?: number; periodId?: number | null; categoryId?: number | null; notes?: string | null; place?: string | null; reference?: string | null; tagIds?: number[] }>;
       accountId?: number;
       defaultDescription?: string;
       tagIds?: number[];
@@ -1709,6 +1709,7 @@ RULES:
       ...(row.periodId !== undefined ? { periodId: row.periodId } : {}),
       ...(row.categoryId !== undefined ? { categoryId: row.categoryId } : {}),
       ...(row.notes !== undefined ? { notes: row.notes } : {}),
+      ...(row.place !== undefined ? { place: row.place } : {}),
       ...(row.reference !== undefined ? { reference: row.reference } : {}),
       ...(row.tagIds !== undefined ? { tagIds: row.tagIds } : {}),
     }));
