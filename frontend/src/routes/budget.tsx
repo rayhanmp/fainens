@@ -992,9 +992,11 @@ function BudgetPage() {
                 : 'Give every rupiah a purpose and keep spending on track.'
             }
           />
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Phones: the period on its own row, then the two actions as equal halves. */}
+          <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap sm:gap-3">
             {periods.length > 0 && (
               <PeriodPicker
+                className="col-span-2"
                 periods={periods}
                 value={selectedPeriodId}
                 onChange={(periodId) => {
@@ -1028,7 +1030,8 @@ function BudgetPage() {
           </div>
         </div>
 
-        <nav aria-label="Budget planning tools" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {/* Swipes sideways on phones; its scrollbar read as a stray underline, so it's hidden. */}
+        <nav aria-label="Budget planning tools" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Link to="/subscriptions" className={budgetToolLinkClass}><Repeat className="h-3.5 w-3.5" />Recurring commitments</Link>
           <Link to="/wishlist" className={budgetToolLinkClass}><Sparkles className="h-3.5 w-3.5" />Planned purchases</Link>
           <Link to="/categories" className={budgetToolLinkClass}><Tag className="h-3.5 w-3.5" />Manage categories</Link>
@@ -1052,7 +1055,7 @@ function BudgetPage() {
         {selectedPeriod && (
           <section className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.85fr)]">
             <div className="relative overflow-hidden rounded-[2rem] bg-[var(--ref-primary-container)] p-6 text-white shadow-lg sm:p-8">
-              <div className="relative z-10 flex min-h-[220px] flex-col justify-between">
+              <div className="relative z-10 flex flex-col justify-between sm:min-h-[220px]">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/70">Spent this period</p>
@@ -1068,7 +1071,7 @@ function BudgetPage() {
                     {isPeriodTracked ? `${Math.round(spendingProgress)}% used` : 'Incomplete data'}
                   </span>
                 </div>
-                <div className="mt-10">
+                <div className="mt-6 sm:mt-10">
                   <div className="h-3 overflow-hidden rounded-full bg-white/20">
                     <div
                       className={cn('h-full rounded-full transition-[width] duration-1000 ease-out motion-reduce:transition-none', spendingProgress > 100 ? 'bg-rose-300' : 'bg-white')}
@@ -1153,8 +1156,9 @@ function BudgetPage() {
         {/* Budget controls */}
         {selectedPeriod && budgetRows.length > 0 && (
           <section className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 shadow-sm sm:p-4">
-            <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_190px_220px]">
-              <div className="relative">
+            {/* Phones: search across the top, Compare and Sort side by side under it. */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-[minmax(240px,1fr)_190px_220px]">
+              <div className="relative col-span-2 lg:col-span-1">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
                 <input
                   type="search"
@@ -1171,7 +1175,7 @@ function BudgetPage() {
                   aria-label="Compare budget period"
                   value={comparePeriodId}
                   onChange={(e) => setComparePeriodId(e.target.value)}
-                  className="h-12 w-full cursor-pointer rounded-2xl border border-[var(--color-border)] bg-transparent px-4 pb-1 pt-4 text-sm font-semibold text-[var(--color-text-primary)] focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/15"
+                  className="h-12 w-full cursor-pointer rounded-2xl border border-[var(--color-border)] bg-transparent pb-1 pl-4 pr-8 pt-4 text-xs font-semibold sm:text-sm text-[var(--color-text-primary)] focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/15"
                 >
                   <option value="">None</option>
                   {periods
@@ -1190,19 +1194,19 @@ function BudgetPage() {
                     aria-label="Sort budget categories"
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as SortOption)}
-                    className="h-12 w-full cursor-pointer rounded-2xl border border-[var(--color-border)] bg-transparent px-4 pb-1 pt-4 text-sm font-semibold text-[var(--color-text-primary)] focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/15"
+                    className="h-12 w-full cursor-pointer rounded-2xl border border-[var(--color-border)] bg-transparent pb-1 pl-4 pr-8 pt-4 text-xs font-semibold sm:text-sm text-[var(--color-text-primary)] focus:border-[var(--ref-primary)] focus:ring-2 focus:ring-[var(--ref-primary)]/15"
                   >
                     <option value="urgency">Urgency</option>
                     <option value="name">Name</option>
                     <option value="percentUsed">% Used</option>
-                    <option value="amountSpent">Amount Spent</option>
+                    <option value="amountSpent">Spent</option>
                     <option value="variance">Variance</option>
                   </select>
                 </label>
                 <button
                   type="button"
                   onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-[var(--color-border)] text-[var(--color-muted)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]"
+                  className="grid h-12 w-10 shrink-0 place-items-center rounded-2xl border border-[var(--color-border)] text-[var(--color-muted)] sm:w-12 transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]"
                   title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
                   aria-label={sortDirection === 'asc' ? 'Sort ascending' : 'Sort descending'}
                 >
@@ -1210,7 +1214,8 @@ function BudgetPage() {
                 </button>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] px-1 pt-3">
+            {/* One swipeable row on phones instead of wrapping to two. */}
+            <div className="-mx-3 mt-3 flex items-center gap-2 overflow-x-auto border-t border-[var(--color-border)] px-4 pt-3 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-1 [&::-webkit-scrollbar]:hidden">
               {[
                 { value: 'all', label: 'All', count: stats.total },
                 { value: 'over', label: 'Over', count: stats.over },
@@ -1223,7 +1228,7 @@ function BudgetPage() {
                   key={filter.value}
                   onClick={() => setFilterBy(filter.value as FilterOption)}
                   className={cn(
-                    'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
+                    'inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
                     filterBy === filter.value
                       ? filter.value === 'over'
                         ? 'bg-[var(--ref-error)] text-white border-[var(--ref-error)]'
