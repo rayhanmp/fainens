@@ -238,6 +238,25 @@ function CategoriesPage() {
           </Button>
         </header>
 
+        <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-4">
+          {[
+            { label: 'Categories', value: String(allCategories.filter((category) => category.isActive).length), meter: null },
+            { label: 'Tags', value: String(tags.length), meter: null },
+            { label: 'Spending categorized', value: `${stats.categorizedPct}%`, meter: stats.categorizedPct },
+            { label: 'Entries tagged', value: `${stats.taggedPct}%`, meter: stats.taggedPct },
+          ].map((item) => (
+            <div key={item.label} className="bg-[var(--ref-surface-container-lowest)] px-5 py-4">
+              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{item.label}</dt>
+              <dd className="mt-1 font-headline text-xl font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
+              {item.meter != null && (
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
+                  <div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${item.meter}%` }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </dl>
+
         <section className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className={panelFrame}>
             <div className={panelHeader}>
@@ -356,25 +375,6 @@ function CategoriesPage() {
             <h2 id="classification-insights" className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">Insights</h2>
             <p className="text-sm text-[var(--ref-on-surface-variant)]">How your categories and tags are used, and how spending moves between periods.</p>
           </div>
-
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-4">
-            {[
-              { label: 'Categories', value: String(allCategories.filter((category) => category.isActive).length), meter: null },
-              { label: 'Tags', value: String(tags.length), meter: null },
-              { label: 'Spending categorized', value: `${stats.categorizedPct}%`, meter: stats.categorizedPct },
-              { label: 'Entries tagged', value: `${stats.taggedPct}%`, meter: stats.taggedPct },
-            ].map((item) => (
-              <div key={item.label} className="bg-[var(--ref-surface-container-lowest)] px-5 py-4">
-                <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{item.label}</dt>
-                <dd className="mt-1 font-headline text-xl font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
-                {item.meter != null && (
-                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
-                    <div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${item.meter}%` }} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </dl>
 
           <PeriodSpendChart categories={allCategories} />
 
