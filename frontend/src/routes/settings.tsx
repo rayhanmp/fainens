@@ -32,6 +32,7 @@ import {
   Palette,
   Download,
   Upload,
+  ChevronLeft,
   ChevronRight,
   Check,
   Brain,
@@ -280,6 +281,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('general');
+  // Phones show either the list of sections or one open section, with a way back; wider screens show both.
+  const [phoneSectionOpen, setPhoneSectionOpen] = useState(false);
   const [settingsSearch, setSettingsSearch] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showClearCacheModal, setShowClearCacheModal] = useState(false);
@@ -689,34 +692,41 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         contentClassName="!overflow-hidden !p-0"
       >
         <div className="flex h-full min-h-0 flex-col md:flex-row">
-          <aside className="flex w-full shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-3 md:w-48 md:border-b-0 md:border-r">
+          <aside className={cn('flex w-full shrink-0 flex-col bg-[var(--ref-surface-container-low)] p-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto md:w-48 md:border-r md:border-[var(--color-border)]', phoneSectionOpen && 'max-md:hidden')}>
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
               <input value={settingsSearch} onChange={(event) => setSettingsSearch(event.target.value)} placeholder="Search settings" className="w-full rounded-full border border-[var(--color-border)] bg-transparent py-2 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)]" aria-label="Search settings" />
             </label>
-            <nav className="scrollbar-hide mt-3 flex gap-1 overflow-x-auto md:block md:space-y-1">
+            {/* Phones: a list of sections, each opening on its own. Wider: the side rail beside the open section. */}
+            <nav className="mt-3 flex flex-col gap-1 max-md:mt-4 max-md:gap-0 max-md:divide-y max-md:divide-[var(--color-border)] max-md:overflow-hidden max-md:rounded-2xl max-md:bg-[var(--color-background)]">
               {visibleTabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
-                  onClick={() => setActiveTab(id)}
+                  onClick={() => { setActiveTab(id); setPhoneSectionOpen(true); }}
                   className={cn(
-                    'flex shrink-0 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors md:w-full',
+                    'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors max-md:rounded-none max-md:px-4 max-md:py-3.5 max-md:text-[var(--color-text-primary)]',
                     activeTab === id
-                      ? 'bg-[var(--color-background)] text-[var(--color-text-primary)] shadow-sm'
+                      ? 'md:bg-[var(--color-background)] md:text-[var(--color-text-primary)] md:shadow-sm'
                       : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-background)]/70 hover:text-[var(--color-text-primary)]'
                   )}
                 >
-                  <Icon className={cn('h-4 w-4', activeTab === id && 'text-[var(--color-accent)]')} />
-                  {label}
+                  <Icon className={cn('h-4 w-4', activeTab === id && 'md:text-[var(--color-accent)]')} />
+                  <span className="flex-1 text-left">{label}</span>
+                  <ChevronRight className="h-4 w-4 text-[var(--color-muted)] md:hidden" aria-hidden />
                 </button>
               ))}
               {visibleTabs.length === 0 && <p className="px-2 py-3 text-xs text-[var(--color-muted)]">No matching settings</p>}
             </nav>
           </aside>
 
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <main className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !phoneSectionOpen && 'max-md:hidden')}>
             <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--color-border)] px-4 py-3 sm:px-5">
-              <h1 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">{TABS.find((tab) => tab.id === activeTab)?.label}</h1>
+              <div className="flex min-w-0 items-center gap-1">
+                <button type="button" onClick={() => setPhoneSectionOpen(false)} className="-ml-2 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] md:hidden" aria-label="All settings">
+                  <ChevronLeft className="h-5 w-5" aria-hidden />
+                </button>
+                <h1 className="truncate font-headline text-xl font-bold text-[var(--color-text-primary)]">{TABS.find((tab) => tab.id === activeTab)?.label}</h1>
+              </div>
               {saveStatus !== 'idle' && (
                 <span className={cn('flex items-center gap-1.5 text-xs font-medium', saveStatus === 'saving' ? 'text-[var(--color-accent)]' : 'text-[var(--color-success)]')}>
                   {saveStatus === 'saving' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
