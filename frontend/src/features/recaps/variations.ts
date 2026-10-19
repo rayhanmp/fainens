@@ -115,6 +115,27 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
       { eyebrow: 'Month by month', title: f.busiestMonth ? `${f.busiestMonth} was the big one.` : 'The year, month by month.', body: 'Spending in each month of the year.' },
       { eyebrow: 'The year’s rhythm', title: 'Twelve months, one beat.', body: f.busiestMonth ? `${f.busiestMonth} spent the most.` : 'Each bar is a month of spending.' },
     ];
+    case 'interlude':
+      if (lead === 'orbit') return [{ eyebrow: `Planet ${f.top?.label ?? 'You'}`, title: `Everything orbits ${f.top?.label ?? 'you'}.`, body: 'Your categories, circling the biggest one.' }];
+      if (lead === 'tunnel') return [
+        { eyebrow: 'Warp speed', title: `${plural(f.purchaseCount, 'receipt')}, one tunnel.`, body: 'Hold on to your receipts.' },
+        { eyebrow: 'Hyperdrive', title: 'Punch it.', body: `${plural(f.purchaseCount, 'purchase')} at light speed.` },
+      ];
+      if (lead === 'liquid') return f.keptShare !== null
+        ? [{ eyebrow: 'Fill it up', title: `${f.keptShare}% left in the glass.`, body: 'Income left after expenses, poured out.' }]
+        : [{ eyebrow: 'Fill it up', title: `${f.budgetUsed}% of the plan, poured.`, body: 'The budget, by the glass.' }];
+      if (lead === 'rain') return [
+        { eyebrow: 'Today’s forecast', title: `Cloudy with a chance of ${f.purchaseCount} receipts.`, body: 'Every slip of the period, coming down.' },
+        { eyebrow: 'It’s raining', title: 'It’s raining receipts.', body: `${plural(f.purchaseCount, 'receipt')}, in one downpour.` },
+      ];
+      if (lead === 'kaleido') return [
+        { eyebrow: 'A little trip', title: `${f.period}, through the looking glass.`, body: 'Just a pause. Nothing to read here.' },
+        { eyebrow: 'Breathe', title: 'Breathe in. Breathe out.', body: 'More numbers in a moment.' },
+      ];
+      return [
+        { eyebrow: 'Intermission', title: 'Grab a snack.', body: 'The second half starts in a moment.' },
+        { eyebrow: 'Intermission', title: 'Stretch break.', body: 'Back to the receipts in a sec.' },
+      ];
     case 'mixtape': return [
       { eyebrow: 'Side A', title: 'Your period, as a mixtape.', body: 'Each category gets airtime by its share of spending.' },
       { eyebrow: 'Now playing', title: f.top ? `Now playing: ${f.top.label}.` : 'Now playing: your receipts.', body: 'Thirty minutes, timed by where the money went.' },

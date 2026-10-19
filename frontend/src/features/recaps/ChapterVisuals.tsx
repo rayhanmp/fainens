@@ -28,6 +28,7 @@ export function ChapterVisual({ story, periodId, onShare, variants, run, score }
     case 'intro': return <CoverVisual story={story} {...shared} />;
     case 'overview': return <FlowVisual story={story} run={run} />;
     case 'months': return <MonthsVisual story={story} />;
+    case 'interlude': return <InterludeVisual story={story} run={run} />;
     case 'mixtape': return <MixtapeVisual story={story} />;
     case 'persona': return <PersonaVisual story={story} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} />;
@@ -77,8 +78,56 @@ function FlowVisual({ story, run }: { story: Of<'overview'>; run: number }) {
       <div className="recap-flow-track" aria-hidden="true"><i style={{ '--fill': row.value / max, ...seq(3 + i) } as CSSProperties} /></div>
     </div>)}
     {/* Hidden balances stay hidden: there is nothing to scratch for. */}
-    {story.lead === 'left' && (balancesHidden || story.net < 0 ? net : <ScratchCover seed={run}>{net}</ScratchCover>)}
+    {story.lead === 'left' && (balancesHidden || story.reveal !== 'scratch' ? net : <ScratchCover seed={run}>{net}</ScratchCover>)}
   </div>;
+}
+
+/** Showpiece slides: pure motion, with at most one figure to hold on to. */
+function InterludeVisual({ story, run }: { story: Of<'interlude'>; run: number }) {
+  const random = seeded(run + story.slot * 97 + 5);
+  switch (story.variant) {
+    case 'marquee': {
+      const line = `${story.words.join('  ✳  ')}  ✳  `;
+      return <div className="recap-interlude recap-marquee" aria-hidden="true">
+        <div className="recap-marquee-tilt">{[0, 1, 2, 3, 4].map(row => <div key={row} className={`recap-marquee-row${row % 2 ? ' is-reverse is-outline' : ''}`} style={{ '--row': row } as CSSProperties}><span>{line}{line}</span></div>)}</div>
+        <span className="recap-marquee-badge">✳ Intermission ✳</span>
+      </div>;
+    }
+    case 'orbit': {
+      const [sun, ...planets] = story.orbit;
+      return <div className="recap-interlude recap-orbit" aria-hidden="true">
+        {planets.slice(0, 4).map((planet, i) => <div key={planet.name} className="recap-orbit-ring" style={{ '--o': i } as CSSProperties}>
+          <span className="recap-orbit-planet"><CategoryIcon name={planet.name} color="currentColor" className="h-[1em] w-[1em]" /></span>
+        </div>)}
+        <div className="recap-orbit-sun"><CategoryIcon name={sun.name} color="currentColor" className="h-[1em] w-[1em]" /><span>{sun.label}</span></div>
+      </div>;
+    }
+    case 'tunnel':
+      return <div className="recap-interlude recap-tunnel" aria-hidden="true">
+        {Array.from({ length: 9 }, (_, i) => <i key={i} style={{ '--t': i } as CSSProperties} />)}
+        <div className="recap-tunnel-core"><AnimatedValue value={story.value} /><span>receipts</span></div>
+      </div>;
+    case 'liquid':
+      return <div className="recap-interlude recap-liquid" aria-hidden="true">
+        <div className="recap-glass" style={{ '--level': (story.share ?? 0) / 100 } as CSSProperties}>
+          <div className="recap-liquid-fill"><svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M0 10 Q25 0 50 10 T100 10 T150 10 T200 10 V20 H0 Z" /></svg><svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M0 10 Q25 20 50 10 T100 10 T150 10 T200 10 V20 H0 Z" /></svg></div>
+          {Array.from({ length: 7 }, (_, i) => <b key={i} className="recap-bubble" style={{ '--bx': `${10 + random() * 80}%`, '--bd': `${random() * 2.5}s`, '--bs': .6 + random() * .8 } as CSSProperties} />)}
+          <span className="recap-glass-value"><AnimatedValue value={story.share ?? 0} suffix="%" /></span>
+        </div>
+      </div>;
+    case 'rain': {
+      const slips = Math.min(36, Math.max(6, story.value));
+      return <div className="recap-interlude recap-rain" aria-hidden="true">
+        {Array.from({ length: slips }, (_, i) => <i key={i} className="recap-rain-slip" style={{ '--rx': `${4 + random() * 82}%`, '--rr': `${(random() - .5) * 70}deg`, '--rd': `${random() * 1400}ms`, '--rp': `${Math.floor(i / 7) * 4 + random() * 3}cqw` } as CSSProperties} />)}
+        <span className="recap-rain-count"><AnimatedValue value={story.value} /><small>receipts</small></span>
+      </div>;
+    }
+    case 'kaleido':
+      return <div className="recap-interlude recap-kaleido" aria-hidden="true">
+        <i /><i /><i />
+        <b>✳</b>
+      </div>;
+  }
 }
 
 function MonthsVisual({ story }: { story: Of<'months'> }) {
@@ -347,7 +396,7 @@ function ClosingVisual({ story, periodId, onShare, variants, run, score }: { sto
     </dl>
     <div className="recap-closing-extras recap-seq" style={seq(6)}>
       <span className="recap-closing-persona"><PersonaBadge personaKey={story.persona.key} Icon={personaIcons[story.persona.key]} small /><span><small>Your persona</small>{story.persona.name}</span></span>
-      {score.total > 0 && <span className="recap-closing-score"><small>Quiz {score.correct}/{score.total}</small><span aria-label={`${stars} of 3 stars`}>{'★'.repeat(stars)}{'☆'.repeat(3 - stars)}</span>{verdict && <em>{verdict}</em>}</span>}
+      {score.total > 0 && <span className="recap-closing-score"><small>Games {score.correct}/{score.total}</small><span aria-label={`${stars} of 3 stars`}>{'★'.repeat(stars)}{'☆'.repeat(3 - stars)}</span>{verdict && <em>{verdict}</em>}</span>}
     </div>
     <div className="recap-closing-actions recap-seq" style={seq(7)}>
       <button type="button" className="recap-solid-button" onClick={onShare}><Download size={15} /> Share card</button>

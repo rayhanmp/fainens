@@ -34,16 +34,27 @@ export type ClosingTile = { label: string; value: string; money?: number; note?:
 export type Streak = { start: number; length: number } | null;
 /** A guess-first question shown before a chapter reveals its answer. */
 export type Quiz = { question: string; options: Array<{ label: string; correct: boolean }>; answer: string };
+/** A mini-game a chapter plays before its reveal. A run deals a few, never the same kind twice. */
+export type Play =
+  | { kind: 'quiz'; quiz: Quiz }
+  | { kind: 'slider'; question: string; answer: number; label: string }
+  | { kind: 'reels'; prompt: string; symbols: Array<{ categoryId: number | null; name: string; label: string }>; winner: string }
+  | { kind: 'hold'; prompt: string }
+  | { kind: 'gift'; prompt: string }
+  | { kind: 'piggy'; prompt: string };
+export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido';
 export type PersonaKey = 'weekend' | 'bigTicket' | 'steady' | 'monk' | 'loyal' | 'devotee' | 'explorer' | 'allRounder';
 export type Persona = { key: PersonaKey; name: string; tagline: string; evidence: string[]; dash: string | null };
 export type MixtapeTrack = { title: string; artist: string; length: string; share: number };
 
 type Copy = { eyebrow: string; title: string; body: string };
-// Every chapter can carry a quiz, a fun comparison line, and a question to hand to Fainens Agent.
-type Extras = { quiz?: Quiz; equivalence?: string; ask: string };
+// Every chapter can carry a mini-game, a fun comparison line, a question to hand to Fainens Agent,
+// and its own autoplay length.
+type Extras = { play?: Play; equivalence?: string; ask: string; duration?: number };
 export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number; monthWord: string }
-  | { id: 'overview'; lead: 'left' | 'ratio'; income: number; expenses: number; net: number; keptShare: number | null; spentPer100: number | null }
+  | { id: 'overview'; lead: 'left' | 'ratio'; income: number; expenses: number; net: number; keptShare: number | null; spentPer100: number | null; reveal: 'scratch' | 'piggy' | 'none' }
+  | { id: 'interlude'; variant: InterludeVariant; words: string[]; orbit: CategoryShare[]; value: number; share: number | null; slot: number }
   | { id: 'budget'; planned: number; spent: number; remaining: number; percentUsed: number | null; elapsedShare: number | null; over: Array<{ name: string; over: number }>; unbudgeted: number }
   | { id: 'categories'; lead: 'top' | 'top3' | 'count'; total: number; rows: CategoryShare[]; others: { count: number; amount: number; share: number } | null; count: number; top3Share: number }
   | { id: 'calendar'; lead: 'days' | 'peak'; days: RecapDayCell[] | null; spendingDays: number; elapsedDays: number; peak: { date: number; amount: number; purchaseCount: number } | null }
@@ -220,7 +231,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   const persona = pickPersona(facts, random);
   // The mixtape runs to a 30-minute side; each category gets airtime by its share of spending.
   const artists = ['Various receipts', 'The Small Change', 'Cash & Carry', 'DJ Ledger', 'The Debits', 'Petty Cash Quartet'];
-  const tracks: MixtapeTrack[] = topRows.map(row => {
+  const tracks: MixtapeTrack[] = topRows.slice(0, 4).map(row => {
     const seconds = Math.max(15, Math.round(row.share / 100 * 1800));
     const purchase = receiptItems.find(item => item.category === row.name);
     return { title: row.label, artist: purchase ? `feat. ${purchase.label}` : pickFrom(artists, random), length: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`, share: row.share };
@@ -244,18 +255,34 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     receiptItems.length ? { id: 'receipts', items: receiptItems, largestShare, topShare, purchaseCount: recap.purchaseCount } : null,
     recap.purchaseCount > 1 ? { id: 'habits', lead: leads.habits, purchaseCount: recap.purchaseCount, median: profile?.medianAmount ?? null, average, perDay, spendingDays: recap.spendingDays, repeat: facts.repeat && repeatRow ? { ...facts.repeat, fullLabel: repeatRow.description, total: repeatRow.totalAmount } : null } : null,
   ];
+  const shuffled = <T,>(items: T[]) => items.map(item => ({ item, sort: random() })).sort((a, b) => a.sort - b.sort).map(entry => entry.item);
+  const others = <T,>(items: T[], exclude: T, count: number) => shuffled(items.filter(item => item !== exclude)).slice(0, count);
+
   // Shuffle the middle chapters for a run, keeping the calendar ahead of the chapters built from it.
-  const order = middle.filter(chapter => chapter !== null);
+  // Now and then a regular chapter sits a run out, so no two viewings have the same lineup.
+  const order: ChapterData[] = middle.filter(chapter => chapter !== null)
+    .filter(chapter => run === 0 || (chapter.id !== 'receipts' && chapter.id !== 'habits') || random() >= .2);
   if (run !== 0) {
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
     const calendarAt = order.findIndex(chapter => chapter.id === 'calendar');
     const firstDerived = order.findIndex(chapter => chapter.id === 'weekdays' || chapter.id === 'streak');
     if (calendarAt > firstDerived && firstDerived >= 0) [order[calendarAt], order[firstDerived]] = [order[firstDerived], order[calendarAt]];
+    // Motion interludes: one or two showpieces dropped between chapters, never side by side.
+    const marqueeWords = [recap.period.name, top?.label, `${recap.purchaseCount} receipts`, peak ? dayLabel(peak.date) : null, persona.name.replace(/^The /, '')].filter((word): word is string => Boolean(word));
+    const available: InterludeVariant[] = ['marquee', 'kaleido', ...(topRows.length >= 3 ? ['orbit' as const] : []), ...(recap.purchaseCount > 0 ? ['tunnel' as const] : []),
+      ...(keptShare !== null || budget?.percentUsed != null ? ['liquid' as const] : []), ...(recap.purchaseCount >= 3 ? ['rain' as const] : [])];
+    const picks = shuffled(available).slice(0, random() < .45 ? 2 : 1);
+    const slots = shuffled(Array.from({ length: Math.max(1, order.length - 1) }, (_, i) => i + 1)).slice(0, picks.length).sort((a, b) => b - a);
+    picks.forEach((variant, i) => {
+      if (i > 0 && Math.abs(slots[i] - slots[i - 1]) < 2) return;
+      order.splice(slots[i], 0, { id: 'interlude', variant, words: marqueeWords, orbit: topRows, value: recap.purchaseCount,
+        share: keptShare ?? budget?.percentUsed ?? null, slot: i });
+    });
   }
 
   const chapters: ChapterData[] = [
     { id: 'intro', dateRange: periodDateRange(recap.period), isPartial: recap.isPartial, elapsedDays, totalDays, monthWord: recap.period.name.split(' ')[0] },
-    { id: 'overview', lead: leads.overview, income: recap.income, expenses: recap.expenses, net: recap.net, keptShare, spentPer100 },
+    { id: 'overview', lead: leads.overview, income: recap.income, expenses: recap.expenses, net: recap.net, keptShare, spentPer100, reveal: leads.overview === 'left' && recap.net > 0 ? 'scratch' : 'none' },
     ...(budget ? [{ id: 'budget' as const, planned: budget.planned, spent: budget.spent, remaining: budget.remaining, percentUsed: budget.percentUsed,
       elapsedShare: facts.elapsedShare, over: budget.overBudgetCategories.map(row => ({ name: row.name, over: row.over })), unbudgeted: budget.unbudgetedExpenses }] : []),
     ...order,
@@ -267,29 +294,45 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     { id: 'closing', tiles: closingTiles, persona },
   ];
 
-  // Guess-first questions: a few chapters per run ask before they reveal.
-  const shuffled = <T,>(items: T[]) => items.map(item => ({ item, sort: random() })).sort((a, b) => a.sort - b.sort).map(entry => entry.item);
-  const others = <T,>(items: T[], exclude: T, count: number) => shuffled(items.filter(item => item !== exclude)).slice(0, count);
+  // Mini-games: every eligible (chapter, game) pair goes in a hat, and a run deals two or three of
+  // them with no chapter and no kind of game twice, so the quiz is one game among several.
+  const present = new Set(chapters.map(chapter => chapter.id));
   const spendingDayLabels = elapsed.filter(day => day.amount > 0 && !day.peak).map(day => dayLabel(day.date));
-  const quizzes: Partial<Record<RecapStoryId, Quiz>> = {};
+  const quiz = (question: string, answer: string, options: string[]): Play => ({ kind: 'quiz', quiz: { question, answer, options: shuffled(options).map(label => ({ label, correct: label === answer })) } });
+  const candidates: Array<{ id: RecapStoryId; play: Play }> = [];
   if (run !== 0) {
-    if (top && topRows.length >= 3) quizzes.categories = { question: 'Which category took the biggest slice?', answer: top.label,
-      options: shuffled([top.label, ...others(topRows.slice(1).map(row => row.label), top.label, 2)]).map(label => ({ label, correct: label === top.label })) };
-    if (peak && spendingDayLabels.length >= 2 && !longView) { const answer = dayLabel(peak.date); quizzes.calendar = { question: 'Which day had the most spending?', answer,
-      options: shuffled([answer, ...others(spendingDayLabels, answer, 2)]).map(label => ({ label, correct: label === answer })) }; }
-    if (receiptItems.length >= 3) quizzes.receipts = { question: 'Which was your biggest purchase?', answer: receiptItems[0].label,
-      options: shuffled(receiptItems.map(item => item.label)).map(label => ({ label, correct: label === receiptItems[0].label })) };
+    if (top && topRows.length >= 3) {
+      candidates.push({ id: 'categories', play: quiz('Which category took the biggest slice?', top.label, [top.label, ...others(topRows.slice(1).map(row => row.label), top.label, 2)]) });
+      candidates.push({ id: 'categories', play: { kind: 'slider', question: `What share of spending went to ${top.label}?`, answer: top.share, label: top.label } });
+      candidates.push({ id: 'categories', play: { kind: 'reels', prompt: 'Pull the lever. Three of a kind wins.', symbols: topRows.map(row => ({ categoryId: row.categoryId, name: row.name, label: row.label })), winner: top.name } });
+    }
+    if (peak && !longView) {
+      if (spendingDayLabels.length >= 2) candidates.push({ id: 'calendar', play: quiz('Which day had the most spending?', dayLabel(peak.date), [dayLabel(peak.date), ...others(spendingDayLabels, dayLabel(peak.date), 2)]) });
+      candidates.push({ id: 'calendar', play: { kind: 'hold', prompt: 'Hold to reveal your busiest day' } });
+    }
+    if (receiptItems.length >= 3) candidates.push({ id: 'receipts', play: quiz('Which was your biggest purchase?', receiptItems[0].label, receiptItems.map(item => item.label)) });
+    if (receiptItems.length) candidates.push({ id: 'receipts', play: { kind: 'gift', prompt: 'Tap to unwrap your biggest receipts' } });
     if (recap.purchaseCount >= 5) {
       const truth = recap.purchaseCount;
       const decoys = [...new Set([Math.round(truth * 1.45), Math.max(1, Math.round(truth * .6)), truth + 7].filter(value => value !== truth))].slice(0, 2);
-      quizzes.habits = { question: 'How many purchases this period?', answer: String(truth), options: shuffled([truth, ...decoys]).map(value => ({ label: String(value), correct: value === truth })) };
+      candidates.push({ id: 'habits', play: quiz('How many purchases this period?', String(truth), [truth, ...decoys].map(String)) });
     }
-    if (hasWeek) { const answer = WEEKDAYS[busiestWeekday]; quizzes.weekdays = { question: 'Which day of the week spent the most?', answer,
-      options: shuffled([answer, ...others(WEEKDAYS, answer, 2)]).map(label => ({ label, correct: label === answer })) }; }
-    if (averageChange !== null && averageChange !== 0) { const answer = averageChange > 0 ? 'Higher' : 'Lower'; quizzes.comparison = { question: 'Was the average receipt higher or lower than before?', answer,
-      options: ['Higher', 'Lower'].map(label => ({ label, correct: label === answer })) }; }
+    if (hasWeek) {
+      candidates.push({ id: 'weekdays', play: quiz('Which day of the week spent the most?', WEEKDAYS[busiestWeekday], [WEEKDAYS[busiestWeekday], ...others(WEEKDAYS, WEEKDAYS[busiestWeekday], 2)]) });
+      candidates.push({ id: 'weekdays', play: { kind: 'slider', question: 'What share of spending landed on weekends?', answer: weekendShare, label: 'weekends' } });
+    }
+    if (averageChange !== null && averageChange !== 0) { const answer = averageChange > 0 ? 'Higher' : 'Lower'; candidates.push({ id: 'comparison', play: quiz('Was the average receipt higher or lower than before?', answer, ['Higher', 'Lower']) }); }
+    if (leads.overview === 'left' && recap.net > 0) candidates.push({ id: 'overview', play: { kind: 'piggy', prompt: 'Tap the piggy bank to crack it open' } });
   }
-  const asked = new Set(shuffled(Object.keys(quizzes)).slice(0, 3 + (random() < .3 ? 1 : 0)));
+  const dealt = new Map<RecapStoryId, Play>();
+  const kindsUsed = new Set<Play['kind']>();
+  const hand = 2 + (random() < .5 ? 1 : 0);
+  for (const candidate of shuffled(candidates)) {
+    if (dealt.size >= hand) break;
+    if (!present.has(candidate.id) || dealt.has(candidate.id) || kindsUsed.has(candidate.play.kind)) continue;
+    dealt.set(candidate.id, candidate.play);
+    kindsUsed.add(candidate.play.kind);
+  }
 
   // Playful equivalences, computed only from the figures on the card.
   const typical = profile?.medianAmount ?? null;
@@ -313,14 +356,18 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
 
   const palette = palettes[(seed + run) % palettes.length];
   return chapters.map((chapter, i) => {
-    const copy = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : undefined);
+    const copy = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : undefined);
     const equivalence = equivalences[chapter.id];
+    const play = dealt.get(chapter.id);
     return {
       ...chapter, ...copy, theme: palette[i % palette.length],
+      // The piggy bank replaces the scratch card when it is dealt.
+      ...(chapter.id === 'overview' && play?.kind === 'piggy' ? { reveal: 'piggy' } : {}),
       // Some runs swap the closing line for a playful equivalence.
       body: equivalence && run !== 0 && random() < .55 ? equivalence : copy.body,
-      quiz: asked.has(chapter.id) ? quizzes[chapter.id] : undefined,
-      equivalence,
+      play, equivalence,
+      // Interludes are showpieces: they move on sooner.
+      duration: chapter.id === 'interlude' ? 6_500 : undefined,
       ask: asks[chapter.id] ?? `Tell me more about this from my ${period} recap: ${copy.title}`,
     } as RecapStory;
   });

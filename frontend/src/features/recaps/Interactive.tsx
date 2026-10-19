@@ -1,27 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { Burst } from './Burst';
 import { play } from './sfx';
-import type { Quiz } from './stories';
-
-/** The question a chapter asks before it reveals its answer. */
-export function QuizGate({ quiz, eyebrow, onAnswer, onSkip }: { quiz: Quiz; eyebrow: string; onAnswer: (choice: string, correct: boolean) => void; onSkip: () => void }) {
-  return <div className="recap-quiz">
-    <p className="recap-story-eyebrow">Quick quiz · {eyebrow}</p>
-    <h2 aria-label={quiz.question}>{quiz.question.split(' ').map((word, i) => <span key={i}><span className="recap-word-mask"><span style={{ '--word': i } as CSSProperties}>{word}</span></span>{' '}</span>)}</h2>
-    <div className="recap-quiz-options" role="group" aria-label="Your guess">
-      {quiz.options.map((option, i) => <button key={option.label} type="button" className="recap-quiz-option" style={{ '--o': i } as CSSProperties}
-        onClick={() => { play(option.correct ? 'chime' : 'buzz'); onAnswer(option.label, option.correct); }}>
-        <span className="recap-quiz-key">{String.fromCharCode(65 + i)}</span>{option.label}
-      </button>)}
-    </div>
-    <button type="button" className="recap-quiz-skip" onClick={onSkip}>Just show me</button>
-  </div>;
-}
-
-/** The verdict stamped on a chapter after its quiz. */
-export function QuizVerdict({ correct, answer }: { correct: boolean; answer: string }) {
-  return <p className={`recap-verdict ${correct ? 'is-right' : 'is-wrong'}`} role="status">{correct ? '✓ Nailed it' : `✗ Nope, it was ${answer}`}</p>;
-}
 
 /**
  * A silver scratch-off layer. Rub it away, or tap once, to reveal what is underneath; clearing most of
@@ -60,6 +39,11 @@ export function ScratchCover({ children, seed, label = 'Scratch to reveal' }: { 
     return () => observer.disconnect();
   }, [label]);
 
+  const reveal = () => {
+    if (revealed) return;
+    setRevealed(true);
+    play('fanfare');
+  };
   const scratch = (event: PointerEvent<HTMLCanvasElement>) => {
     const element = canvas.current; const ctx = element?.getContext('2d');
     if (!element || !ctx || !stroke.current) return;
@@ -70,11 +54,6 @@ export function ScratchCover({ children, seed, label = 'Scratch to reveal' }: { 
     stroke.current = { x, y, moved: stroke.current.moved + Math.hypot(x - stroke.current.x, y - stroke.current.y) };
     if (++strokes.current % 6 === 0) play('scratch');
     if (strokes.current % 10 === 0 && clearedShare(element) > .48) reveal();
-  };
-  const reveal = () => {
-    if (revealed) return;
-    setRevealed(true);
-    play('fanfare');
   };
   return <div className={`recap-scratch${revealed ? ' is-revealed' : ''}`}>
     {children}

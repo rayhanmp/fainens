@@ -7,7 +7,7 @@ import { buildStories, periodDateRange, themeColors, type RecapStory } from './s
 import { ShareRecap } from './ShareRecap';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
-import { QuizGate, QuizVerdict } from './Interactive';
+import { GameVerdict, PlayGate, type PlayResult } from './Games';
 import { play, playTicks, setSoundEnabled, soundEnabled } from './sfx';
 import { enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
@@ -51,7 +51,7 @@ function EmptyRecapEdition({ periodId, controls }: { periodId: number; controls:
 
 type Nav = { index: number; visit: number; direction: 'next' | 'prev'; transition: Transition; origin: { x: number; y: number } };
 type Leaving = { story: RecapStory; visit: number; direction: Nav['direction']; transition: Transition; gate: boolean };
-type Answer = { choice: string | null; correct: boolean };
+type Answer = PlayResult;
 /** A chapter's content element is kept by key while it leaves, so it exits without re-animating. */
 const contentKey = (visit: number, gate: boolean) => `c${visit}${gate ? 'q' : ''}`;
 
@@ -82,9 +82,10 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
   const story = stories[index];
   const last = index === stories.length - 1;
   const chapterCount = stories.length;
-  const gateOf = (item: RecapStory) => Boolean(item.quiz && !answers[item.id]);
+  const gateOf = (item: RecapStory) => Boolean(item.play && !answers[item.id]);
   const quizOpen = gateOf(story);
-  const graded = Object.values(answers).filter(answer => answer.choice !== null);
+  const chapterMs = story.duration ?? CHAPTER_MS;
+  const graded = Object.values(answers).filter(answer => answer.scored);
   const score = { correct: graded.filter(answer => answer.correct).length, total: graded.length };
 
   useEffect(() => {
@@ -117,9 +118,9 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
     play('whoosh');
   };
   // Answering (or skipping) zooms the question away and plays the chapter's reveal in its place.
-  const answer = (choice: string | null, correct: boolean) => {
+  const answer = (result: PlayResult) => {
     if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: 'next', transition: 'zoom', gate: true });
-    setAnswers(current => ({ ...current, [story.id]: { choice, correct } }));
+    setAnswers(current => ({ ...current, [story.id]: result }));
     setNav(current => ({ ...current, transition: 'zoom' }));
     arrivalSounds(story, enterDelay('zoom'), variants);
   };
@@ -196,7 +197,7 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
   useEffect(() => {
     const visitId = nav.visit;
     if (autoplayClock.current.chapter !== `${nav.visit}`) {
-      autoplayClock.current = { chapter: `${nav.visit}`, remaining: CHAPTER_MS };
+      autoplayClock.current = { chapter: `${nav.visit}`, remaining: chapterMs };
     }
     // An open quiz waits for its answer.
     if (last || paused || shareOpen || infoOpen || regenerate.isPending || quizOpen) return;
@@ -238,7 +239,7 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
       stopTimer();
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [nav.visit, chapterCount, last, paused, shareOpen, infoOpen, regenerate.isPending, quizOpen]);
+  }, [nav.visit, chapterCount, last, paused, shareOpen, infoOpen, regenerate.isPending, quizOpen, chapterMs]);
 
   const overlay = OVERLAY_TRANSITIONS.has(nav.transition) && nav.visit > 0 && !reducedMotion;
   const paper = themeColors[story.theme].paper;
@@ -256,11 +257,11 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
         if ((event.key === 'r' || event.key === 'R') && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); replay(); }
       }}
       onClick={event => {
-        if ((event.target as HTMLElement).closest('button, a, select, label, summary, details, .recap-scratch, .recap-quiz')) return;
+        if ((event.target as HTMLElement).closest('button, a, select, label, summary, details, input, .recap-scratch, .recap-game')) return;
         const bounds = event.currentTarget.getBoundingClientRect();
         go(index + (event.clientX - bounds.left < bounds.width * .35 ? -1 : 1), { origin: originOf(event) });
       }}
-      onTouchStart={event => { touchStart.current = (event.target as HTMLElement).closest('.recap-scratch, .recap-quiz') ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
+      onTouchStart={event => { touchStart.current = (event.target as HTMLElement).closest('.recap-scratch, .recap-game') ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
       onTouchCancel={() => { touchStart.current = null; }}
       onTouchEnd={event => {
         const start = touchStart.current; touchStart.current = null; if (!start) return;
@@ -274,9 +275,9 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
         const seen = i < index || (last && i === index);
         const running = active && progressReadyVisit === nav.visit
           && !paused && !pageHidden && !shareOpen && !infoOpen && !regenerate.isPending;
-        return <button key={item.id} aria-label={`Chapter ${i + 1}: ${item.eyebrow}`} aria-current={i === index ? 'step' : undefined}
+        return <button key={`${item.id}-${i}`} aria-label={`Chapter ${i + 1}: ${item.eyebrow}`} aria-current={i === index ? 'step' : undefined}
           className={[seen && 'is-seen', active && 'is-active', running && 'is-running'].filter(Boolean).join(' ')}
-          onClick={event => go(i, { origin: originOf(event) })}>{active && <span className="recap-progress-fill" style={{ animationDuration: `${CHAPTER_MS}ms` }} aria-hidden="true" />}</button>;
+          onClick={event => go(i, { origin: originOf(event) })}>{active && <span className="recap-progress-fill" style={{ animationDuration: `${chapterMs}ms` }} aria-hidden="true" />}</button>;
       })}</div>
       {/* Long-press the ✳ for party mode. */}
       <div className="recap-story-brand"><span>fainens<span className="recap-brand-dot" aria-hidden="true"
@@ -311,12 +312,12 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
 }
 
 function ChapterContent({ story, className, style, live = false, gate = false, answer, onAnswer, periodId, variants, run, score, onShare }: {
-  story: RecapStory; className: string; style?: CSSProperties; live?: boolean; gate?: boolean; answer?: Answer; onAnswer?: (choice: string | null, correct: boolean) => void;
+  story: RecapStory; className: string; style?: CSSProperties; live?: boolean; gate?: boolean; answer?: Answer; onAnswer?: (result: PlayResult) => void;
   periodId: number; variants: SectionVariants; run: number; score: QuizScore; onShare: () => void;
 }) {
-  if (gate && story.quiz) {
+  if (gate && story.play) {
     return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
-      <QuizGate quiz={story.quiz} eyebrow={story.eyebrow} onAnswer={(choice, correct) => onAnswer?.(choice, correct)} onSkip={() => onAnswer?.(null, false)} />
+      <PlayGate play={story.play} eyebrow={story.eyebrow} seed={run} onDone={result => onAnswer?.(result)} />
     </div>;
   }
   // Each word knows how many letters came before it, so the typewriter take types at a steady pace.
@@ -325,7 +326,7 @@ function ChapterContent({ story, className, style, live = false, gate = false, a
     return line.split(' ').map((word, i, words) => ({ word, letter: before + words.slice(0, i).join(' ').length + (i ? 1 : 0) }));
   });
   return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
-    {answer?.choice != null && story.quiz && <QuizVerdict correct={answer.correct} answer={story.quiz.answer} />}
+    {answer?.verdict && <GameVerdict verdict={answer.verdict} />}
     <p className="recap-story-eyebrow">{story.eyebrow}</p>
     <h2 className={story.title.length > 40 ? 'recap-title-long' : undefined} aria-label={story.title}>
       {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map(({ word, letter }, i) =>
@@ -365,6 +366,7 @@ function ChapterBackdrop({ chapter, seed }: { chapter: string; seed: number }) {
   const motifs: Record<string, string> = {
     intro: seed % 2 === 0 ? 'portal' : 'contour', overview: 'current', budget: 'rail', categories: 'halo',
     calendar: 'orbit', weekdays: 'steps', streak: 'wave', receipts: 'receipt', habits: 'ripple', comparison: 'wave', closing: 'horizon',
+    interlude: 'none', months: 'steps', mixtape: 'orbit', persona: 'halo',
   };
   return <div className={`recap-backdrop recap-backdrop-${motifs[chapter] ?? 'contour'} recap-backdrop-edition-${seed % 3}`} aria-hidden="true">
     {[0, 1, 2, 3].map(ring => <i key={ring} style={{ '--ring': ring } as CSSProperties} />)}
