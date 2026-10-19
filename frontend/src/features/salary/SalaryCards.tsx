@@ -535,9 +535,10 @@ export function TaxIncomeCard({ year, rows, totals, loading, savingId, onChange,
       {open && (
         <div id="tax-income-entries">
           <p className={cn(cardCaption, 'mt-4')}>Everything but the wage. Entries count as taxable until you mark them; only taxable income goes into the tax outlook.</p>
-          <dl className="mt-4 grid grid-cols-3 gap-2">
+          {/* Phones: one row per treatment (label left, amount right); three tiles would clip the amounts. */}
+          <dl className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             {TREATMENT_ORDER.map((treatment) => (
-              <div key={treatment} className="rounded-2xl bg-[var(--ref-surface-container-low)] px-3 py-2.5">
+              <div key={treatment} className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--ref-surface-container-low)] px-3 py-2.5 sm:block">
                 <dt className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
                   {TAX_TREATMENT_LABELS[treatment]}
                   <Hint text={TREATMENT_HINTS[treatment]}>
@@ -546,7 +547,7 @@ export function TaxIncomeCard({ year, rows, totals, loading, savingId, onChange,
                     </span>
                   </Hint>
                 </dt>
-                <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(totals[treatment])}</dd>
+                <dd className="text-sm font-bold tabular-nums text-[var(--ref-on-surface)] sm:mt-0.5">{formatAmount(totals[treatment])}</dd>
               </div>
             ))}
           </dl>
@@ -555,15 +556,16 @@ export function TaxIncomeCard({ year, rows, totals, loading, savingId, onChange,
           ) : rows.length === 0 ? (
             <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">No other income recorded in {year}.</p>
           ) : (
-            <ul className="mt-4 max-h-[28rem] overflow-y-auto">
+            // Phones: the entry's name on top and the choice full width under it, and no scroll box inside the page.
+            <ul className="mt-4 sm:max-h-[28rem] sm:overflow-y-auto">
               {rows.map((row) => (
-                <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--color-border)] py-2.5 last:border-b-0">
-                  <div className="min-w-0 flex-1">
+                <li key={row.id} className="flex flex-col gap-2 border-b border-[var(--color-border)] py-2.5 last:border-b-0 sm:flex-row sm:items-center sm:gap-3">
+                  <div className="min-w-0 sm:flex-1">
                     <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.description}</p>
                     <p className="text-xs text-[var(--ref-on-surface-variant)]">{formatDate(row.date)} · {formatAmount(row.incomeCents)}{row.marked ? '' : ' · not marked yet'}</p>
                   </div>
                   <div
-                    className={cn('ui-segmented ui-segmented--3 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1', savingId === row.id && 'opacity-60')}
+                    className={cn('ui-segmented ui-segmented--3 grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1 sm:inline-grid', savingId === row.id && 'opacity-60')}
                     role="radiogroup"
                     aria-label={`Tax treatment of ${row.description}`}
                     data-segment-index={row.marked ? TREATMENT_ORDER.indexOf(row.taxTreatment) : -1}
