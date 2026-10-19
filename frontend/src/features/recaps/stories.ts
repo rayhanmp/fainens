@@ -1,7 +1,7 @@
 import type { PeriodRecap, SavedRecapStory } from './queries';
 import { recapDisplayCopy, shortDisplayLabel } from './display-copy';
 import { pickFrom, seeded } from './motion';
-import { chapterCopy, type CopyFacts } from './variations';
+import { chapterCopy, chapterEyebrows, type CopyFacts } from './variations';
 import { formatRecapCurrency } from './currency';
 
 const DAY_MS = 86_400_000;
@@ -48,6 +48,17 @@ export type Play =
   | { kind: 'gift'; prompt: string }
   | { kind: 'piggy'; prompt: string };
 export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido' | 'ejected';
+/** How the ejection reads each verdict; `{x}` is the category and `{n}` the suspects still standing. */
+export type EjectVerdicts = { innocent: string; guilty: string; remain: string };
+const EJECT_VERDICTS: EjectVerdicts[] = [
+  { innocent: '{x} was not The Big Spender.', guilty: '{x} was The Big Spender.', remain: 'Suspects left: {n}' },
+  { innocent: '{x} was not the impostor.', guilty: '{x} was the impostor.', remain: 'On the ship: {n}' },
+  { innocent: '{x} was ejected. Innocent.', guilty: '{x} was ejected. Guilty.', remain: 'Crew left: {n}' },
+  { innocent: '{x} has been voted out. Not it.', guilty: '{x} has been voted out. Busted.', remain: 'Still on board: {n}' },
+  { innocent: 'Not {x}. Keep looking.', guilty: 'It was {x} all along.', remain: 'Left to question: {n}' },
+  { innocent: '{x}: innocent.', guilty: '{x}: caught red-handed.', remain: 'In the lineup: {n}' },
+  { innocent: '{x} had an alibi.', guilty: '{x} had no alibi.', remain: 'Alibis to check: {n}' },
+];
 /** What the finale prints, whichever form it takes: receipt, credits, certificate or high scores. */
 export type FinaleFacts = {
   period: string; dateLabel: string; income: number; expenses: number; net: number; keptShare: number | null;
@@ -79,7 +90,7 @@ type Extras = { play?: Play; equivalence?: string; ask: string; duration?: numbe
 export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number; monthWord: string; cover: CoverFacts }
   | { id: 'overview'; lead: 'left' | 'ratio'; income: number; expenses: number; net: number; keptShare: number | null; spentPer100: number | null; reveal: 'scratch' | 'piggy' | 'none' }
-  | { id: 'interlude'; variant: InterludeVariant; words: string[]; orbit: CategoryShare[]; value: number; share: number | null; slot: number }
+  | { id: 'interlude'; variant: InterludeVariant; words: string[]; orbit: CategoryShare[]; value: number; share: number | null; slot: number; verdicts: EjectVerdicts }
   | { id: 'budget'; planned: number; spent: number; remaining: number; percentUsed: number | null; elapsedShare: number | null; over: Array<{ name: string; over: number }>; unbudgeted: number }
   | { id: 'categories'; lead: 'top' | 'top3' | 'count'; total: number; rows: CategoryShare[]; others: { count: number; amount: number; share: number } | null; count: number; top3Share: number }
   | { id: 'calendar'; lead: 'days' | 'peak'; days: RecapDayCell[] | null; spendingDays: number; elapsedDays: number; peak: { date: number; amount: number; purchaseCount: number } | null }
@@ -123,15 +134,38 @@ export function crawlText(recap: PeriodRecap, run: number) {
   const total = recap.categories.filter(row => row.amount > 0).reduce((sum, row) => sum + row.amount, 0);
   const share = top && total > 0 ? Math.round(top.amount / total * 100) : null;
   const peak = recap.highlights?.peakSpendingDay;
-  const titles = ['The receipts awaken', 'A new budget', 'The spending strikes back', 'Return of the salary', 'Revenge of the receipts', 'The last payday'];
+  const titles = ['The receipts awaken', 'A new budget', 'The spending strikes back', 'Return of the salary', 'Revenge of the receipts', 'The last payday',
+    'Attack of the receipts', 'The phantom budget', 'Rogue receipt', 'A new hope', 'A ledger of the galaxy', 'Rise of the budget', 'The force of habit', 'The empire of expenses'];
   const money = formatRecapCurrency;
+  const pick = (lines: string[]) => lines[Math.floor(random() * lines.length)];
+  const income = money(recap.income);
+  const expenses = money(Math.max(0, recap.expenses));
+  const next = /^\d{4}$/.test(recap.period.name) ? 'year' : 'period';
   const paragraphs = [
-    recap.net >= 0
-      ? `It is a period of surplus. ${money(recap.income)} came in, and only ${money(Math.max(0, recap.expenses))} went out.`
-      : `It is a period of unrest. ${money(Math.max(0, recap.expenses))} went out against ${money(recap.income)} coming in.`,
-    top && share !== null ? `But ${top.name} has seized ${share}% of the galaxy’s spending, and its grip only tightens.` : 'The categories are restless, each claiming a share of the galaxy.',
-    peak ? `On ${formatRecapDay(peak.date, { weekday: 'long', day: 'numeric', month: 'long' })}, ${peak.purchaseCount} receipts were filed in a single day.` : `${recap.purchaseCount} receipts have been filed across the period.`,
-    `Now, with ${recap.purchaseCount} receipts behind it, the budget prepares for the next ${/^\d{4}$/.test(recap.period.name) ? 'year' : 'period'}…`,
+    recap.net >= 0 ? pick([
+      `It is a period of surplus. ${income} came in, and only ${expenses} went out.`,
+      `Peace holds across the ledger. ${income} arrived; ${expenses} escaped.`,
+      `The treasury stands strong. ${income} in, ${expenses} out, and the difference kept safe.`,
+    ]) : pick([
+      `It is a period of unrest. ${expenses} went out against ${income} coming in.`,
+      `Turmoil grips the ledger. ${expenses} has fled, outrunning the ${income} that arrived.`,
+      `The treasury is under siege. Expenses of ${expenses} broke past ${income} of income.`,
+    ]),
+    top && share !== null ? pick([
+      `But ${top.name} has seized ${share}% of the galaxy’s spending, and its grip only tightens.`,
+      `Meanwhile, the mighty ${top.name} commands ${share}% of every coin that leaves.`,
+      `From its distant stronghold, ${top.name} has claimed ${share}% of all spending.`,
+    ]) : 'The categories are restless, each claiming a share of the galaxy.',
+    peak ? pick([
+      `On ${formatRecapDay(peak.date, { weekday: 'long', day: 'numeric', month: 'long' })}, ${peak.purchaseCount} receipts were filed in a single day.`,
+      `Legends still speak of ${formatRecapDay(peak.date, { weekday: 'long', day: 'numeric', month: 'long' })}, when ${peak.purchaseCount} receipts fell in one day.`,
+      `The great battle came on ${formatRecapDay(peak.date, { weekday: 'long', day: 'numeric', month: 'long' })}: ${peak.purchaseCount} receipts, one day.`,
+    ]) : `${recap.purchaseCount} receipts have been filed across the period.`,
+    pick([
+      `Now, with ${recap.purchaseCount} receipts behind it, the budget prepares for the next ${next}…`,
+      `As ${recap.purchaseCount} receipts settle into the archives, a new ${next} rises on the horizon…`,
+      `With ${recap.purchaseCount} receipts recorded, the ledger turns toward the next ${next}…`,
+    ]),
   ];
   return { episode: `Episode ${roman(recap.period.id)}`, title: titles[Math.floor(random() * titles.length)], paragraphs };
 }
@@ -275,8 +309,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     const saved = savedCopy(id);
     // Without a run (the share card, first paint) the saved edition's copy leads; otherwise it is one
     // voice among the generated ones.
-    if (saved && (run === 0 || random() < .4)) return { ...saved, eyebrow: pool[0]?.eyebrow ?? saved.eyebrow };
-    return pool.length ? pickFrom(pool, random) : saved ?? { eyebrow: '', title: recap.period.name, body: '' };
+    if (saved && (run === 0 || random() < .2)) return { ...saved, eyebrow: pool[0]?.eyebrow ?? saved.eyebrow };
+    const copy = pool.length ? pickFrom(pool, random) : saved ?? { eyebrow: '', title: recap.period.name, body: '' };
+    // Half the time the eyebrow comes from the chapter's own pool, so labels and headlines mix freely.
+    const eyebrows = chapterEyebrows(id);
+    return run !== 0 && eyebrows.length && random() < .5 ? { ...copy, eyebrow: pickFrom(eyebrows, random) } : copy;
   };
 
   const persona = pickPersona(facts, random);
@@ -326,10 +363,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       ...(topRows.length >= 4 ? ['ejected' as const, 'ejected' as const] : [])];
     const picks = [...new Set(shuffled(available))].slice(0, random() < .45 ? 2 : 1);
     const slots = shuffled(Array.from({ length: Math.max(1, order.length - 1) }, (_, i) => i + 1)).slice(0, picks.length).sort((a, b) => b - a);
+    const verdicts = pickFrom(EJECT_VERDICTS, random);
     picks.forEach((variant, i) => {
       if (i > 0 && Math.abs(slots[i] - slots[i - 1]) < 2) return;
       order.splice(slots[i], 0, { id: 'interlude', variant, words: marqueeWords, orbit: topRows, value: recap.purchaseCount,
-        share: keptShare ?? budget?.percentUsed ?? null, slot: i });
+        share: keptShare ?? budget?.percentUsed ?? null, slot: i, verdicts });
     });
   }
 
@@ -409,7 +447,12 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     comparison: averageChange !== null && averageChange <= -10 ? { title: 'Trimmed down', detail: `Average receipt ${Math.abs(averageChange)}% smaller` } : undefined,
   };
   // A toast on every chapter wears thin: a run unlocks just one, on a chapter of its choosing.
-  achievements.closing = { title: 'Recap complete', detail: `You watched all of ${recap.period.name}` };
+  achievements.closing = pickFrom([
+    { title: 'Recap complete', detail: `You watched all of ${recap.period.name}` },
+    { title: '100% completion', detail: `Every chapter of ${recap.period.name}, seen` },
+    { title: 'Credits watched', detail: `Stayed to the end of ${recap.period.name}` },
+    { title: 'Level cleared', detail: `${recap.period.name}, start to finish` },
+  ], random);
   const shown = new Set(shuffled(chapters.map(chapter => chapter.id).filter(id => achievements[id])).slice(0, 1));
   const equivalences: Partial<Record<RecapStoryId, string>> = {
     overview: recap.net > 0 && perDay > 0 ? `Left over ≈ ${Math.round(recap.net / perDay)} days of spending at this pace.` : undefined,
