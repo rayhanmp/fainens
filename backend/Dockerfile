@@ -4,7 +4,8 @@ RUN apk add --no-cache python3 make g++
 COPY package.json tsconfig.json ./
 COPY src ./src
 COPY drizzle ./drizzle
-RUN npm install && npm run build
+# npm 10's peer resolver crashes on an optional peer (canvas); none of the peers are needed here.
+RUN npm install --legacy-peer-deps && npm run build
 
 FROM node:20-alpine
 WORKDIR /app
