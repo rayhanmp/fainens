@@ -1,17 +1,12 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useRef, useState } from 'react';
 import { Download, X } from 'lucide-react';
-import type { PeriodRecap, SavedRecapStory } from './queries';
-import { buildStories, periodDateRange, type RecapTheme } from './stories';
+import type { PeriodRecap } from './queries';
+import { periodDateRange, themeColors, type RecapTheme } from './stories';
 import { formatRecapCurrency as formatCurrency } from './currency';
 
 const W = 1080;
 const H = 1350;
-// The same paper and ink pairs as the story themes in recaps.css.
-const themeColors: Record<RecapTheme, { paper: string; ink: string }> = {
-  lime: { paper: '#d5f478', ink: '#183529' }, ink: { paper: '#1f3a31', ink: '#e2f5bd' }, lilac: { paper: '#d8cff7', ink: '#2d2348' },
-  peach: { paper: '#ffd2b7', ink: '#5e3021' }, cream: { paper: '#eee9dd', ink: '#2f3a30' },
-};
 const heading = (weight: number, size: number) => `${weight} ${size}px Manrope, Inter, system-ui, sans-serif`;
 const text = (weight: number, size: number) => `${weight} ${size}px Inter, system-ui, sans-serif`;
 
@@ -79,7 +74,7 @@ function drawCard(canvas: HTMLCanvasElement, recap: PeriodRecap, theme: RecapThe
   ctx.globalAlpha = 1;
 }
 
-export function ShareRecap({ recap, edition, onClose }: { recap: PeriodRecap; edition?: SavedRecapStory; onClose: () => void }) {
+export function ShareRecap({ recap, theme, onClose }: { recap: PeriodRecap; theme: RecapTheme; onClose: () => void }) {
   const { balancesHidden } = useBalanceVisibility();
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -87,7 +82,6 @@ export function ShareRecap({ recap, edition, onClose }: { recap: PeriodRecap; ed
   const includeAmounts = showAmounts && !balancesHidden;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const theme = buildStories(recap, edition)[0]?.theme ?? 'lime';
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
