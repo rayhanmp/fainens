@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import {
+  alignReversalWithOriginal,
   approvePendingTransaction,
   bulkDeleteTransactions,
   confirmTransactionImport,
@@ -25,6 +26,7 @@ import {
   updatePendingTransaction,
   updateTransaction,
   updateTransportRouteTemplate,
+  voidSubscriptionOccurrence,
   type ListTransactionsParams,
   type PreviewTransactionImport200AnyOfFour,
   type CreatePendingTransactionBodyParsed,
@@ -121,6 +123,29 @@ export function useCreateTransaction() {
 export function useReverseTransaction() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (id: number) => unwrapGenerated(reverseTransaction(id), 201, 'Failed to reverse transaction'), onSuccess: () => invalidateFinancialSummaries(queryClient) });
+}
+
+/** Moves a reversal onto the date of the entry it reverses. */
+export function useAlignReversal() {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (id: number) => unwrapGenerated(alignReversalWithOriginal(id), 200, 'Failed to move the reversal'), onSuccess: () => invalidateFinancialSummaries(queryClient) });
+}
+
+/** The subscription and due date a posted renewal belongs to, read from its reference. */
+export function subscriptionRenewalOf(transaction: { txType: string; status: string; reference?: string | null }) {
+  if (transaction.txType !== 'subscription_renewal' || transaction.status !== 'posted') return null;
+  const match = /^(?:subscription|sub):(\d+):(\d+)$/.exec(transaction.reference ?? '');
+  return match ? { subscriptionId: Number(match[1]), dueAt: Number(match[2]) } : null;
+}
+
+/** Withdraws a renewal that never charged: reversed on its own date, the occurrence skipped. */
+export function useVoidSubscriptionRenewal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ subscriptionId, dueAt, reason }: { subscriptionId: number; dueAt: number; reason: string }) =>
+      unwrapGenerated(voidSubscriptionOccurrence(subscriptionId, dueAt, { reason }), 201, 'Failed to void the renewal'),
+    onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
 }
 
 /**

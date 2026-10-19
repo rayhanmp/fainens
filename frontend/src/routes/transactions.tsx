@@ -4,7 +4,7 @@ import { personalActivityKind, reallocationCashAmount } from "../features/transa
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ArrowUpDown, Loader2, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, History, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, ArrowUpDown, Ban, Loader2, BarChart3, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, History, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { SwipeReveal } from '../components/ui/SwipeReveal';
@@ -25,7 +25,7 @@ import type { ListTransactionsParams } from '../generated/client';
 import { cn, formatDateTime, formatIdNominalInput, formatTime, formatWeekdayDate } from '../lib/utils';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList, type PendingTransactionListItem } from '../features/transactions/queries';
+import { subscriptionRenewalOf, useAlignReversal, useDeleteTransaction, usePendingTransactionsQuery, useReverseTransaction, useTransactionDetailQuery, useTransactionList, useVoidSubscriptionRenewal, type PendingTransactionListItem } from '../features/transactions/queries';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { fetchPeriods, usePeriodsQuery } from '../features/periods/queries';
@@ -213,6 +213,8 @@ function TransactionsPage() {
   const periodsQuery = usePeriodsQuery();
   const tagsQuery = useTagsQuery();
   const reverseTransactionMutation = useReverseTransaction();
+  const alignReversalMutation = useAlignReversal();
+  const voidRenewalMutation = useVoidSubscriptionRenewal();
   const deleteTransactionMutation = useDeleteTransaction();
   const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
   const actionTransaction = transactions.find((transaction) => transaction.id === rowActionsId) ?? null;
@@ -311,6 +313,8 @@ function TransactionsPage() {
     const item = cn('flex w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold disabled:opacity-40', surface === 'sheet' ? 'min-h-12' : 'min-h-10');
     const icon = surface === 'sheet' ? 'h-5 w-5' : 'h-4 w-4';
     const role = surface === 'menu' ? 'menuitem' : undefined;
+    const renewal = subscriptionRenewalOf(transaction);
+    const lateReversal = transaction.txType === 'reversal' && transaction.status === 'posted' && transaction.reversalOfTxId != null;
     // Let the menu close before opening the next layer, so focus restoration does not fight it.
     const then = (action: () => void) => { setRowActionsKey(null); window.setTimeout(action, 0); };
     return <div className="space-y-0.5">
@@ -319,6 +323,8 @@ function TransactionsPage() {
       {kind !== 'loan' && <button type="button" role={role} onClick={() => then(() => repeatTransaction(transaction))} className={cn(item, 'hover:bg-[var(--ref-surface-container-low)]')}><CopyPlus className={cn(icon, 'text-[var(--ref-primary)]')} />Repeat transaction</button>}
       {reimbursable && <button type="button" role={role} onClick={() => { setRowActionsKey(null); navigate({ to: '/reimbursements', search: { sourceTransactionId: String(transaction.id), expenseLineId: String(reimbursementLine.id), categoryId: transaction.categoryAllocations.length === 1 ? String(transaction.categoryAllocations[0]!.categoryId) : undefined, amount: String(remainingReimbursableExpense(transaction)) } }); }} className={cn(item, 'text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10')}><HandCoins className={icon} />Mark reimbursable</button>}
       {surface === 'menu' && <div className="my-1 h-px bg-[var(--color-border)]" role="separator" />}
+      {renewal && <button type="button" role={role} onClick={() => then(() => void handleVoidRenewal(transaction, renewal))} className={cn(item, 'text-amber-700 hover:bg-amber-500/10 dark:text-amber-300')}><Ban className={icon} />Void renewal (never charged)</button>}
+      {lateReversal && <button type="button" role={role} onClick={() => then(() => void handleAlignReversal(transaction))} className={cn(item, 'text-amber-700 hover:bg-amber-500/10 dark:text-amber-300')}><CalendarClock className={icon} />Move to the original's date</button>}
       {transaction.status === 'draft'
         ? <button type="button" role={role} onClick={() => then(() => void handleDeleteDraft(transaction))} className={cn(item, 'text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10')}><Trash2 className={icon} />Delete draft</button>
         : <button type="button" role={role} disabled={correction} onClick={() => then(() => void handleCorrect(transaction))} className={cn(item, 'text-amber-700 hover:bg-amber-500/10 dark:text-amber-300')}><RotateCcw className={icon} />{transaction.reallocation ? 'Unlink before correcting' : correction ? 'Correction cannot be reversed' : 'Correct transaction'}</button>}
@@ -429,6 +435,22 @@ function TransactionsPage() {
         action: { label: 'Add replacement', onClick: () => repeatTransaction(transaction) },
       });
     } catch (error) { toast.error('Could not correct transaction', errorMessage(error)); }
+  };
+  const handleVoidRenewal = async (transaction: TransactionRow, renewal: { subscriptionId: number; dueAt: number }) => {
+    if (!await confirm({ title: 'Void renewal', message: `Use this when "${transaction.description}" was never actually charged. It is reversed on its own date and the subscription won't post this renewal again.`, confirmLabel: 'Void renewal', variant: 'warning' })) return;
+    try {
+      await voidRenewalMutation.mutateAsync({ ...renewal, reason: 'Never charged: no matching payment on any statement' });
+      await loadData();
+      toast.success('Renewal voided');
+    } catch (error) { toast.error('Could not void the renewal', errorMessage(error)); }
+  };
+  const handleAlignReversal = async (transaction: TransactionRow) => {
+    if (!await confirm({ title: "Move to the original's date", message: 'The reversal moves onto the date of the entry it reverses, so the months in between no longer count the mistake. Both periods must be open.', confirmLabel: 'Move reversal', variant: 'warning' })) return;
+    try {
+      await alignReversalMutation.mutateAsync(transaction.id);
+      await loadData();
+      toast.success("Reversal moved to the original's date");
+    } catch (error) { toast.error('Could not move the reversal', errorMessage(error)); }
   };
   const handleDeleteDraft = async (transaction: TransactionRow) => {
     if (!await confirm({ title: 'Delete draft', message: 'This draft has not affected reports or balances. Delete it?', confirmLabel: 'Delete draft', variant: 'danger' })) return;
