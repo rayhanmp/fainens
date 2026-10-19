@@ -10,8 +10,9 @@ export function Card({ children, title, action, className, ...props }: CardProps
   return (
     <div className={cn('brutalist-card', className)} {...props}>
       {(title || action) && (
-        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-          {title && <h3 className="font-semibold text-base">{title}</h3>}
+        // Wraps when the title and actions don't fit side by side (a phone), instead of pushing the actions out.
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-[var(--color-border)]">
+          {title && <h3 className="min-w-0 font-semibold text-base">{title}</h3>}
           {action && <div>{action}</div>}
         </div>
       )}

@@ -277,7 +277,8 @@ function ReportsPage() {
 
         {/* Summary Dashboard */}
         {summaryData && effectivePeriodId && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {/* Two by two on phones too, so the four figures fit on one screen. */}
             <SummaryCard
               title="Total Revenue"
               amount={summaryData.totalRevenue}
@@ -364,19 +365,20 @@ function SummaryCard({
     : null;
 
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5 shadow-sm transition-shadow hover:shadow-md">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <span className="pt-1 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">{title}</span>
-        <div className={cn('rounded-xl border p-2.5', colorClasses[color])}>
+    // Phones fit two of these side by side: tighter padding, a smaller icon and value.
+    <div className="min-w-0 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3.5 shadow-sm transition-shadow hover:shadow-md sm:p-5">
+      <div className="mb-2 flex items-start justify-between gap-2 sm:mb-4 sm:gap-3">
+        <span className="pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-muted)] sm:text-xs sm:tracking-[0.1em]">{title}</span>
+        <div className={cn('shrink-0 rounded-xl border p-1.5 sm:p-2.5 [&>svg]:h-4 [&>svg]:w-4 sm:[&>svg]:h-5 sm:[&>svg]:w-5', colorClasses[color])}>
           {icon}
         </div>
       </div>
-      <p className="font-headline text-2xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+      <p className="truncate font-headline text-lg font-extrabold tracking-tight text-[var(--color-text-primary)] sm:text-2xl">
         {formatAmount(amount)}
       </p>
       {percentageChange !== null && (
         <div className={cn(
-          'mt-3 flex items-center gap-1 text-xs font-medium',
+          'mt-1.5 flex items-center gap-1 text-[11px] font-medium sm:mt-3 sm:text-xs',
           percentageChange >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
         )}>
           {percentageChange >= 0 ? (
