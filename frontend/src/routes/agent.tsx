@@ -15,6 +15,7 @@ import {
   ImagePlus,
   Images,
   LoaderCircle,
+  MessagesSquare,
   Pencil,
   Plus,
   RefreshCw,
@@ -1996,12 +1997,15 @@ function AgentPage() {
                   <button
                     type="button"
                     onClick={() => setIsMobileHistoryOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)] xl:hidden"
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-primary)] max-sm:h-9 max-sm:w-9 max-sm:justify-center max-sm:px-0 xl:hidden"
                     aria-expanded={isMobileHistoryOpen}
                     aria-controls="agent-mobile-history"
+                    aria-label="Chat history"
                   >
-                    <span className="hidden sm:inline">History</span><span className="sm:hidden">Chats</span>
-                    <ChevronDown className="h-4 w-4 -rotate-90" aria-hidden="true" />
+                    {/* Phones get an icon, so the conversation title keeps the room. */}
+                    <MessagesSquare className="h-4 w-4 sm:hidden" aria-hidden="true" />
+                    <span className="hidden sm:inline">History</span>
+                    <ChevronDown className="hidden h-4 w-4 -rotate-90 sm:block" aria-hidden="true" />
                   </button>
                   <div ref={agentModelMenuRef} className="relative hidden sm:block">
                     <button

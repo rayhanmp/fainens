@@ -253,7 +253,7 @@ function CategoriesPage() {
             // One line per stat; a meter runs along the cell's bottom edge instead of adding a row.
             // Phones get the short label so it isn't cut off in half the width.
             <div key={item.label} className="relative flex items-baseline justify-between gap-3 bg-[var(--ref-surface-container-lowest)] px-4 py-2.5 sm:px-5">
-              <dt className="truncate text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]"><span className="sm:hidden">{item.short}</span><span className="hidden sm:inline">{item.label}</span></dt>
+              <dt className="truncate text-[11px] font-medium uppercase tracking-wide text-[var(--ref-on-surface-variant)] sm:tracking-wider"><span className="sm:hidden">{item.short}</span><span className="hidden sm:inline">{item.label}</span></dt>
               <dd className="font-headline text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
               {item.meter != null && (
                 <div className="absolute inset-x-0 bottom-0 h-[3px] bg-[var(--ref-surface-container-high)]" aria-hidden>

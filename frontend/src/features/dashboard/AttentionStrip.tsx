@@ -22,11 +22,12 @@ export function AttentionStrip({ items, readState, maskAmounts }: {
       <p className={cn(microLabel, 'text-[var(--ref-on-surface-variant)]')}>Needs attention</p>
       <ul className="flex min-w-0 flex-wrap items-center gap-2">
         {shown.map((item) => (
-          <li key={item.id} title={maskAmounts(item.detail)} className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-1 pl-3 pr-1 text-xs shadow-sm">
+          // On phones the chip is a card whose title can wrap; a one-line pill would cut it in half.
+          <li key={item.id} title={maskAmounts(item.detail)} className="flex min-w-0 max-w-full items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-1 pl-3 pr-1 text-xs shadow-sm sm:rounded-full">
             <span className={cn('h-2 w-2 shrink-0 rounded-full ring-[3px]', toneDot[item.tone], toneRing[item.tone])} aria-hidden />
-            <span className="min-w-0 truncate font-bold text-[var(--ref-on-surface)]">{item.title}</span>
+            <span className="min-w-0 font-bold leading-snug text-[var(--ref-on-surface)] sm:truncate">{item.title}</span>
             <Link to={item.to} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap font-bold text-[var(--ref-primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ref-primary)]">{item.action} <ArrowRight className="h-3 w-3" aria-hidden /></Link>
-            <button type="button" onClick={() => markReadWithUndo(readState, [item])} aria-label={`Mark "${item.title}" read`} title="Mark read" className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"><X className="h-3.5 w-3.5" /></button>
+            <button type="button" onClick={() => markReadWithUndo(readState, [item])} aria-label={`Mark "${item.title}" read`} title="Mark read" className="grid h-6 w-6 shrink-0 place-items-center pointer-coarse:h-8 pointer-coarse:w-8 rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"><X className="h-3.5 w-3.5" /></button>
           </li>
         ))}
       </ul>
