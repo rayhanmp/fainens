@@ -41,7 +41,10 @@ import {
   Pin,
   PinOff,
   ChevronDown,
+  Pencil,
 } from 'lucide-react';
+import { ActionSheet } from '../components/ui/ActionSheet';
+import { usePhoneSheets } from '../hooks/usePhoneSheets';
 
 export const Route = createFileRoute('/accounts')({
   component: AccountsPage,
@@ -553,6 +556,9 @@ function AccountTile({
   reconciliation?: { asOfDate: number; status: string; difference: number; kind: string };
 }) {
   const { formatAmount } = useBalanceVisibility();
+  // Phones get the card's actions as a bottom sheet instead of the small dropdown.
+  const asSheet = usePhoneSheets();
+  const [actionsOpen, setActionsOpen] = useState(false);
   const identifier = maskAccountNumber(account.accountNumber);
   const isLiability = account.type === 'liability';
   const balance = isLiability ? Math.abs(account.balance) : account.balance;
@@ -585,15 +591,32 @@ function AccountTile({
         {account.isActive && <button type="button" className={cn('account-pin-button', isPinned && 'is-pinned')} aria-pressed={isPinned} aria-label={(isPinned ? 'Unpin ' : 'Pin ') + account.name} title={(isPinned ? 'Unpin ' : 'Pin ') + account.name} onClick={onTogglePin}>
           {isPinned ? <PinOff className="h-4 w-4" aria-hidden /> : <Pin className="h-4 w-4" aria-hidden />}
         </button>}
-        <details className="account-actions">
-          <summary aria-label={'Actions for ' + account.name} title="Account actions"><MoreHorizontal className="h-4 w-4" aria-hidden /></summary>
-          <div className="account-actions-menu">
-            <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onEdit(); }}>Edit account</button>
-            <button type="button" disabled={lifecyclePending} onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); (account.isActive ? onDelete : onRestore)(); }}>
-              {account.isActive ? <><Archive className="h-3.5 w-3.5" aria-hidden />Archive account</> : <><RotateCcw className="h-3.5 w-3.5" aria-hidden />Restore account</>}
-            </button>
+        {asSheet ? (
+          <div className="account-actions">
+            <button type="button" className="account-actions-trigger" aria-label={'Actions for ' + account.name} aria-haspopup="menu" onClick={() => setActionsOpen(true)}><MoreHorizontal className="h-4 w-4" aria-hidden /></button>
+            <ActionSheet
+              isOpen={actionsOpen}
+              onClose={() => setActionsOpen(false)}
+              title={account.name}
+              actions={[
+                { key: 'edit', label: 'Edit account', icon: Pencil, onSelect: onEdit },
+                account.isActive
+                  ? { key: 'archive', label: 'Archive account', icon: Archive, tone: 'danger', disabled: lifecyclePending, onSelect: onDelete }
+                  : { key: 'restore', label: 'Restore account', icon: RotateCcw, tone: 'primary', disabled: lifecyclePending, onSelect: onRestore },
+              ]}
+            />
           </div>
-        </details>
+        ) : (
+          <details className="account-actions">
+            <summary aria-label={'Actions for ' + account.name} title="Account actions"><MoreHorizontal className="h-4 w-4" aria-hidden /></summary>
+            <div className="account-actions-menu">
+              <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onEdit(); }}>Edit account</button>
+              <button type="button" disabled={lifecyclePending} onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); (account.isActive ? onDelete : onRestore)(); }}>
+                {account.isActive ? <><Archive className="h-3.5 w-3.5" aria-hidden />Archive account</> : <><RotateCcw className="h-3.5 w-3.5" aria-hidden />Restore account</>}
+              </button>
+            </div>
+          </details>
+        )}
       </div>
       <div className="account-card-balance">
         <p>{isLiability ? 'Amount owed' : group.key === 'investment' ? 'Current value' : group.key === 'receivable' ? 'Owed to you' : 'Available balance'}</p>

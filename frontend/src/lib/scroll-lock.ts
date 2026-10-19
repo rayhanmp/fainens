@@ -21,6 +21,8 @@ export function lockPageScroll(): () => void {
     }
     // Fixed elements pinned to the right edge can use this to stay put too.
     documentElement.style.setProperty('--scroll-lock-gap', `${Math.max(0, scrollbarWidth)}px`);
+    // Lets page chrome step aside while an overlay is open (the phone dock would sit on top of a sheet).
+    documentElement.dataset.overlayOpen = 'true';
     body.style.overflow = 'hidden';
   }
   lockCount += 1;
@@ -33,6 +35,7 @@ export function lockPageScroll(): () => void {
     body.style.overflow = saved.overflow;
     body.style.paddingRight = saved.paddingRight;
     documentElement.style.removeProperty('--scroll-lock-gap');
+    delete documentElement.dataset.overlayOpen;
     saved = null;
   };
 }

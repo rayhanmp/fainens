@@ -1491,6 +1491,8 @@ button[data-variant="danger"]:focus-visible,
   background: var(--color-surface);
   box-shadow: inset 0 1px 0 #ffffffd1, inset 0 -1px 0 #18315320, 0 8px 28px #162b4d1f;
 }
+/* A sheet or dialog covers the dock, as on native apps, instead of the dock covering the sheet. */
+html[data-overlay-open] .finance-glass-dock { visibility: hidden; }
 .finance-glass-dock::before {
   content: '';
   position: absolute;

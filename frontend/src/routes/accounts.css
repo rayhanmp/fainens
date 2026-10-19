@@ -89,8 +89,8 @@
 .account-card-name h4 a:hover { color: var(--ref-primary); text-decoration: underline; }
 .account-kind { margin-top: 3px; font-size: 11px; line-height: 1.4; color: var(--accounts-muted); overflow-wrap: anywhere; }
 .account-card-controls { justify-content: flex-end; gap: 3px; }
-.account-pin-button, .account-actions summary { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--accounts-muted); cursor: pointer; }
-.account-pin-button:hover, .account-actions summary:hover, .account-actions[open] summary { color: var(--color-accent); background: var(--accounts-soft); }
+.account-pin-button, .account-actions summary, .account-actions-trigger { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--accounts-muted); cursor: pointer; }
+.account-pin-button:hover, .account-actions summary:hover, .account-actions[open] summary, .account-actions-trigger:hover { color: var(--color-accent); background: var(--accounts-soft); }
 .account-pin-button.is-pinned { background: color-mix(in srgb, var(--color-accent) 10%, var(--accounts-panel)); color: var(--ref-primary); }
 .account-actions { position: relative; flex-shrink: 0; }
 .account-actions summary { list-style: none; }
@@ -208,7 +208,7 @@
   .account-layout-row .account-card-meta { grid-column: 1 / -1; grid-row: 3; }
 }
 @media (pointer: coarse) {
-  .account-pin-button, .account-actions summary { width: 40px; height: 44px; }
+  .account-pin-button, .account-actions summary, .account-actions-trigger { width: 40px; height: 44px; }
   .account-card-controls { gap: 0; }
   .accounts-view-choice, .accounts-view-toggle, .accounts-archive-indicator { min-height: 44px; }
   .account-actions-menu button { min-height: 44px; }
