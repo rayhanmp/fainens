@@ -24,8 +24,9 @@ export type CategoriesPageData = {
 };
 
 /** Spending and entries per category within a date range (inclusive, ms), for the breakdown. */
-export function useCategoryBreakdownQuery(range: { from?: number; to?: number }) {
+export function useCategoryBreakdownQuery(range: { from?: number; to?: number }, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: [...queryKeys.categories.all, 'breakdown', range.from ?? null, range.to ?? null] as const,
     queryFn: async () => {
       const usage = await unwrapGenerated(getClassificationUsage({ from: range.from, to: range.to }), 200, 'Failed to load the category breakdown');

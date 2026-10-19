@@ -308,13 +308,14 @@ function CategoriesPage() {
                 </Button>
               </div>
             ) : (
-              <ul className="divide-y divide-[var(--color-border)]">
+              // Two columns; the last row's bottom borders tuck under the panel's own border.
+              <ul className="-mb-px grid sm:grid-cols-2">
                 {orderedCategories.map((c) => {
                   const count = usage(c);
                   const color = c.color || 'var(--ref-primary)';
                   const reportingAccount = c.reportingAccountId ? expenseAccounts.find((a) => a.id === c.reportingAccountId)?.name ?? 'Mapped expense account' : null;
                   return (
-                    <li key={c.id} className={cn('group flex items-center gap-3 px-5 py-3 transition-colors last:rounded-b-2xl hover:bg-[var(--ref-surface-container-low)]', !c.isActive && 'opacity-60')}>
+                    <li key={c.id} className={cn('group flex items-center gap-3 border-b border-[var(--color-border)] px-5 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] sm:odd:border-r', !c.isActive && 'opacity-60')}>
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)` }}>
                         <CategoryIcon name={c.name} color={color} />
                       </span>
