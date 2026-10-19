@@ -66,15 +66,17 @@ function Insight({ icon, label, row, value, detail }: { icon: ReactNode; label: 
   if (!row) return null;
   const tint = row.color ?? 'var(--ref-primary)';
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] px-3.5 py-3">
-      <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `color-mix(in srgb, ${tint} 14%, transparent)` }}>
-        <CategoryIcon name={row.name} color={tint} className="h-5 w-5" />
-        <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] text-[var(--ref-on-surface-variant)]">{icon}</span>
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{label}</p>
-        <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.name} · <span className="tabular-nums">{value}</span></p>
-        <p className="truncate text-xs text-[var(--ref-on-surface-variant)]">{detail}</p>
+    <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--color-border)] p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{icon}{label}</p>
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `color-mix(in srgb, ${tint} 14%, transparent)` }}>
+          <CategoryIcon name={row.name} color={tint} className="h-3.5 w-3.5" />
+        </span>
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-[var(--ref-on-surface-variant)]">{row.name}</p>
+        <p className="font-headline text-lg font-bold tabular-nums leading-tight text-[var(--ref-on-surface)]">{value}</p>
+        <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">{detail}</p>
       </div>
     </div>
   );
@@ -133,7 +135,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
   const rangeInfo = RANGES.find((item) => item.id === range)!;
 
   return (
-    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
+    <section className="flex h-full flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3.5">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Where the money goes</h2>
@@ -208,7 +210,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
             </p>
           </div>
 
-          <div className="grid content-start gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid content-start gap-2.5 sm:grid-cols-2">
             <Insight icon={<Crown className="h-3 w-3" />} label="Biggest" row={biggest} value={biggest ? formatAmount(biggest.amount) : ''} detail={biggest ? `${Math.round((biggest.amount / Math.max(1, totalAmount)) * 100)}% of all spending` : ''} />
             <Insight icon={<Repeat2 className="h-3 w-3" />} label="Most frequent" row={frequent} value={frequent ? `${frequent.count}×` : ''} detail={frequent ? `${formatAmount(frequent.average)} each on average` : ''} />
             <Insight icon={<Gem className="h-3 w-3" />} label="Priciest per entry" row={priciest} value={priciest ? formatAmount(priciest.average) : ''} detail={priciest ? `across ${priciest.count} entries` : ''} />

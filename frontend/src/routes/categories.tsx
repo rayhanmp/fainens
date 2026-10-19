@@ -84,6 +84,8 @@ function CategoriesPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
+  // The category in focus in "Spending by period", set from its legend or a trend row.
+  const [trendFocus, setTrendFocus] = useState<number | null>(null);
 
   const usedCategoryColors = useMemo(() => new Set(
     allCategories
@@ -376,11 +378,18 @@ function CategoriesPage() {
             <p className="text-sm text-[var(--ref-on-surface-variant)]">How your categories and tags are used, and how spending moves between periods.</p>
           </div>
 
-          <PeriodSpendChart categories={allCategories} />
+          <PeriodSpendChart categories={allCategories} focus={trendFocus} onFocusChange={setTrendFocus} />
 
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <CategoryBreakdown categories={allCategories} />
-            <CategoryTrendTable categories={allCategories} />
+            <CategoryTrendTable
+              categories={allCategories}
+              focus={trendFocus}
+              onSelect={(id) => {
+                setTrendFocus((current) => (current === id ? null : id));
+                document.getElementById('spending-by-period')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            />
           </div>
         </section>
 
