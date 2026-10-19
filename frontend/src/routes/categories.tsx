@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -10,6 +9,7 @@ import { useCategoriesPageQuery } from '../features/categories/page-queries';
 import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { CategoryBreakdown } from '../features/categories/CategoryBreakdown';
 import { TagGroupsPanel } from '../features/categories/TagGroupsPanel';
+import { ColorPicker, Field, textInputClass } from '../features/categories/EditorParts';
 import {
   useCreateCategoryMutation,
   useCreateTagMutation,
@@ -377,144 +377,92 @@ function CategoriesPage() {
           isOpen={isCategoryModalOpen}
           onClose={closeCategoryModal}
           title={editingCategory ? 'Edit category' : 'New category'}
+          footer={(
+            <div className="flex items-center gap-2">
+              {editingCategory && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const category = editingCategory;
+                    closeCategoryModal();
+                    if (category.isActive) void handleDeleteCategory(category.id);
+                    else void handleRestoreCategory(category.id);
+                  }}
+                  className={cn('rounded-lg px-3 py-2 text-sm font-medium', editingCategory.isActive ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]')}
+                >
+                  {editingCategory.isActive ? 'Archive' : 'Restore'}
+                </button>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <button type="button" onClick={closeCategoryModal} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]">Cancel</button>
+                <Button type="submit" form="category-form" isLoading={isSubmitting}>{editingCategory ? 'Save changes' : 'Create category'}</Button>
+              </div>
+            </div>
+          )}
         >
-          <form onSubmit={handleCategorySubmit} className="space-y-4">
-            <Input
-              label="Name"
-              value={categoryForm.name}
-              onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-              required
-            />
-            <div>
-              <p className="mb-2 block font-mono text-sm font-medium">Icon</p>
-              <div className="flex items-center gap-3 text-sm text-[var(--ref-on-surface-variant)]">
-                <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--ref-surface-container-low)]">
-                  <CategoryIcon name={categoryForm.name} color={categoryForm.color} className="h-5 w-5" />
-                </span>
-                Picked from the name, in the category's colour.
+          <form id="category-form" onSubmit={handleCategorySubmit} className="space-y-5">
+            {/* Live preview: how the category shows up across the app. */}
+            <div className="flex items-center gap-3.5 rounded-2xl p-3.5" style={{ backgroundColor: `color-mix(in srgb, ${categoryForm.color} 10%, transparent)` }}>
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl" style={{ backgroundColor: `color-mix(in srgb, ${categoryForm.color} 20%, var(--ref-surface-container-lowest))` }}>
+                <CategoryIcon name={categoryForm.name} color={categoryForm.color} className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate font-headline text-lg font-bold text-[var(--ref-on-surface)]">{categoryForm.name.trim() || 'New category'}</p>
+                <p className="text-xs text-[var(--ref-on-surface-variant)]">
+                  {editingCategory ? `${stats.byCat[editingCategory.id] ?? 0} transactions · ` : ''}The icon follows the name
+                </p>
               </div>
             </div>
-            <div>
-              <label className="mb-2 block font-mono text-sm font-medium">Color</label>
-              <div className="flex flex-wrap gap-2">
-                {PRESET_COLORS.map((color) => {
-                  const isUsed = usedCategoryColors.has(color);
-                  return (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => { setCategoryForm({ ...categoryForm, color }); setFormError(''); }}
-                      disabled={isUsed}
-                      aria-label={`${color}${isUsed ? ', already used by another category' : ''}`}
-                      aria-pressed={categoryForm.color.toUpperCase() === color}
-                      title={isUsed ? 'Already used by another category' : color}
-                      className={cn(
-                        'h-9 w-9 rounded-full border-2 disabled:cursor-not-allowed disabled:opacity-25',
-                        categoryForm.color.toUpperCase() === color
-                          ? 'border-[var(--color-text-primary)]'
-                          : 'border-transparent',
-                      )}
-                      style={{ backgroundColor: color }}
-                    />
-                  );
-                })}
-                <label className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-[var(--color-border)] text-xs font-bold" title="Choose a custom color">
-                  <span aria-hidden="true">+</span>
-                  <input
-                    type="color"
-                    value={/^#[0-9A-Fa-f]{6}$/.test(categoryForm.color) ? categoryForm.color : '#000000'}
-                    aria-label="Choose a custom category color"
-                    className="sr-only"
-                    onChange={(event) => {
-                      const color = event.target.value.toUpperCase();
-                      if (usedCategoryColors.has(color)) {
-                        setFormError('That color is already assigned to another category.');
-                        return;
-                      }
-                      setCategoryForm({ ...categoryForm, color });
-                      setFormError('');
-                    }}
-                  />
-                </label>
+
+            <Field label="Name" htmlFor="category-name">
+              <input id="category-name" required value={categoryForm.name} placeholder="e.g. Groceries" onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} className={textInputClass} />
+            </Field>
+
+            <Field label="Colour" hint="Each category has its own colour; ones already taken are struck through.">
+              <ColorPicker
+                label="Category colour"
+                colors={PRESET_COLORS}
+                value={categoryForm.color}
+                taken={usedCategoryColors}
+                onTaken={() => setFormError('That colour already belongs to another category.')}
+                onChange={(color) => { setCategoryForm({ ...categoryForm, color }); setFormError(''); }}
+              />
+            </Field>
+
+            <details className="group rounded-xl border border-[var(--color-border)] px-3.5 py-2.5" open={Boolean(categoryForm.reportingAccountId)}>
+              <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-[var(--ref-on-surface-variant)]">
+                Accounting
+                <span className="font-normal">{categoryForm.reportingAccountId ? expenseAccounts.find((account) => String(account.id) === categoryForm.reportingAccountId)?.name : 'Default expense account'}</span>
+              </summary>
+              <div className="mt-3">
+                <Field label="Reporting expense account" htmlFor="category-account" hint="New simple expenses post to this account; category totals still come from allocations.">
+                  <select id="category-account" value={categoryForm.reportingAccountId} onChange={(e) => setCategoryForm({ ...categoryForm, reportingAccountId: e.target.value })} className={textInputClass}>
+                    <option value="">Default expense account</option>
+                    {expenseAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                  </select>
+                </Field>
               </div>
-              <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Each category needs a unique color. Used colors are dimmed.</p>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium">Reporting expense account</label>
-              <select
-                value={categoryForm.reportingAccountId}
-                onChange={(e) => setCategoryForm({ ...categoryForm, reportingAccountId: e.target.value })}
-                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
-              >
-                <option value="">Use default expense account</option>
-                {expenseAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-              </select>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">New simple expenses use this account; category totals still come from allocations.</p>
-            </div>
-            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
-            <div className="flex gap-3 pt-4">
-              <Button type="submit" isLoading={isSubmitting} className="flex-1">
-                {editingCategory ? 'Save' : 'Create'}
-              </Button>
-              <Button type="button" variant="secondary" onClick={closeCategoryModal}>
-                Cancel
-              </Button>
-            </div>
+            </details>
+
+            {formError && <p className="rounded-lg bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{formError}</p>}
           </form>
         </Modal>
 
-        <Modal isOpen={isTagModalOpen} onClose={closeTagModal} title={editingTag ? 'Edit tag' : 'New tag'}>
-          <form onSubmit={handleTagSubmit} className="space-y-4">
-            {tagGroups.length > 0 && (
-              <label className="block">
-                <span className="mb-2 block font-mono text-sm font-medium">Group</span>
-                <select
-                  value={tagForm.groupId}
-                  onChange={(e) => setTagForm({ ...tagForm, groupId: e.target.value })}
-                  className="block min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)] px-3 py-2 text-sm"
-                >
-                  <option value="">Ungrouped</option>
-                  {[...tagGroups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).map((group) => <option key={group.id} value={String(group.id)}>{group.name}</option>)}
-                </select>
-              </label>
-            )}
-            <Input
-              label="Name"
-              value={tagForm.name}
-              onChange={(e) => setTagForm({ ...tagForm, name: e.target.value })}
-              required
-            />
-            <div>
-              <label className="mb-2 block font-mono text-sm font-medium">Color</label>
-              <div className="flex flex-wrap gap-2">
-                {PRESET_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setTagForm({ ...tagForm, color })}
-                    className={cn(
-                      'h-9 w-9 rounded-full border-2',
-                      tagForm.color === color ? 'border-[var(--color-text-primary)]' : 'border-transparent',
-                    )}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
-            {formError && <p className="text-sm text-[var(--color-danger)]">{formError}</p>}
-            <div className="flex flex-wrap gap-3 pt-4">
-              <Button type="submit" isLoading={isSubmitting} className="flex-1">
-                {editingTag ? 'Save' : 'Create'}
-              </Button>
+        <Modal
+          isOpen={isTagModalOpen}
+          onClose={closeTagModal}
+          title={editingTag ? 'Edit tag' : 'New tag'}
+          footer={(
+            <div className="flex items-center gap-2">
               {editingTag && (
-                <Button
+                <button
                   type="button"
-                  variant="danger"
                   onClick={async () => {
+                    const uses = stats.byTag[editingTag.id] ?? 0;
                     const confirmed = await confirm({
-                      title: 'Delete Tag',
-                      message: 'Are you sure you want to delete this tag?',
-                      confirmLabel: 'Delete',
+                      title: 'Delete tag',
+                      message: uses > 0 ? `Delete "${editingTag.name}"? It comes off the ${uses} transaction${uses === 1 ? '' : 's'} that carry it; the transactions stay.` : `Delete "${editingTag.name}"?`,
+                      confirmLabel: 'Delete tag',
                       variant: 'danger',
                     });
                     if (!confirmed) return;
@@ -526,14 +474,61 @@ function CategoriesPage() {
                       toast.error('Could not delete tag', errorMessage(err));
                     }
                   }}
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
                 >
                   Delete
-                </Button>
+                </button>
               )}
-              <Button type="button" variant="secondary" onClick={closeTagModal}>
-                Cancel
-              </Button>
+              <div className="ml-auto flex items-center gap-2">
+                <button type="button" onClick={closeTagModal} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]">Cancel</button>
+                <Button type="submit" form="tag-form" isLoading={isSubmitting}>{editingTag ? 'Save changes' : 'Create tag'}</Button>
+              </div>
             </div>
+          )}
+        >
+          <form id="tag-form" onSubmit={handleTagSubmit} className="space-y-5">
+            {/* Live preview of the chip. */}
+            <div className="grid place-items-center rounded-2xl bg-[var(--ref-surface-container-low)] px-4 py-6">
+              <span className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-3.5 py-2 text-sm font-semibold text-[var(--ref-on-surface)] shadow-sm">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tagForm.color }} aria-hidden />
+                {tagForm.name.trim() || 'New tag'}
+                {editingTag && <span className="font-normal tabular-nums text-[var(--ref-on-surface-variant)]">{stats.byTag[editingTag.id] ?? 0}</span>}
+              </span>
+            </div>
+
+            <Field label="Name" htmlFor="tag-name">
+              <input id="tag-name" required value={tagForm.name} placeholder="e.g. Bali trip" onChange={(e) => setTagForm({ ...tagForm, name: e.target.value })} className={textInputClass} />
+            </Field>
+
+            {tagGroups.length > 0 && (
+              <Field label="Group">
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Group">
+                  {[{ id: '', name: 'Ungrouped' }, ...[...tagGroups].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).map((group) => ({ id: String(group.id), name: group.name }))].map((group) => (
+                    <button
+                      key={group.id || 'none'}
+                      type="button"
+                      role="radio"
+                      aria-checked={tagForm.groupId === group.id}
+                      onClick={() => setTagForm({ ...tagForm, groupId: group.id })}
+                      className={cn(
+                        'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+                        tagForm.groupId === group.id
+                          ? 'border-[var(--ref-primary)] bg-[color-mix(in_srgb,var(--ref-primary)_10%,transparent)] text-[var(--ref-on-surface)]'
+                          : 'border-[var(--color-border)] text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]',
+                      )}
+                    >
+                      {group.name}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            )}
+
+            <Field label="Colour">
+              <ColorPicker label="Tag colour" colors={PRESET_COLORS} value={tagForm.color} onChange={(color) => setTagForm({ ...tagForm, color })} />
+            </Field>
+
+            {formError && <p className="rounded-lg bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{formError}</p>}
           </form>
         </Modal>
       </PageContainer>
