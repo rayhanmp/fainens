@@ -68,6 +68,7 @@ import { toast, errorMessage } from '../ui/useToast';
 import { ComboBox, DateTimeField, EntryTypeSwitch, Field, fieldControl, fieldLabel as fieldLabelClass, type PickerOption } from './EntryPickers';
 import { entryAccent } from './entry-types';
 import { categoryIcon } from '../../features/categories/category-icon';
+import { useReplaceDraftMutation } from '../../features/backfill/queries';
 import {
   reverseTransactionNow,
   useApprovePendingTransactionMutation,
@@ -141,6 +142,9 @@ export type EditingTransaction = {
   place?: string;
   categoryId?: number | null;
   txType?: string;
+  /** "draft" opens the full entry form instead of the read-only detail. */
+  status?: string;
+  batchId?: number | null;
   reallocation?: ReallocationInfo | null;
   expenseCents?: number;
   incomeCents?: number;
@@ -178,6 +182,8 @@ interface TransactionModalProps {
     parsedData: PendingTransactionParsed;
   } | null;
   initialPrefill?: TransactionPrefill;
+  /** When set, a new entry is saved as a draft in this batch instead of being posted. */
+  draftBatchId?: number | null;
 }
 
 const SIMPLE_DRAFT_KEY = 'transaction:new:simple';
@@ -225,6 +231,7 @@ export function TransactionModal({
   onClose,
   onSaved,
   onSuccess,
+  draftBatchId = null,
   accounts,
   categories,
   tags,
@@ -253,6 +260,11 @@ export function TransactionModal({
     },
   });
   const createTransactionMutation = useCreateTransaction();
+  const replaceDraftMutation = useReplaceDraftMutation();
+  // A draft opens the full entry form again and is rebuilt on save; a new entry in a batch is saved as a draft.
+  const isDraftEdit = editingTransaction?.status === 'draft';
+  const savesAsDraft = isDraftEdit || draftBatchId != null;
+  const draftFields = draftBatchId != null ? { status: 'draft' as const, batchId: draftBatchId } : {};
   const updateTransactionMutation = useUpdateTransaction();
   const previewPendingMutation = usePreviewPendingTransactionMutation();
   const createPendingMutation = useCreatePendingTransactionMutation();
@@ -686,6 +698,37 @@ export function TransactionModal({
     if (editingTransaction) {
       setInputMode('simple');
       const txDate = new Date(editingTransaction.date);
+      if (editingTransaction.status === 'draft') {
+        // A draft reopens as the form it was entered with: simple entries rebuild amount, accounts and
+        // category from their two lines; anything else edits as a journal.
+        const accountType = (accountId: number) => accounts.find((account) => account.id === accountId)?.type;
+        const lines = editingTransaction.lines;
+        const assetLines = lines.filter((line) => accountType(line.accountId) === 'asset');
+        const kind = editingTransaction.txType === 'simple_expense' ? 'expense'
+          : editingTransaction.txType === 'simple_income' ? 'income'
+            : editingTransaction.txType === 'simple_transfer' ? 'transfer'
+              : null;
+        if (kind && assetLines.length === (kind === 'transfer' ? 2 : 1)) {
+          const debitAsset = assetLines.find((line) => line.debit > 0);
+          const creditAsset = assetLines.find((line) => line.credit > 0);
+          const amount = Math.max(...lines.map((line) => Math.max(line.debit, line.credit)));
+          setSimpleForm({
+            ...createSimpleFormDefaults(),
+            type: kind,
+            dateTime: toDatetimeLocal(txDate),
+            amount: formatIdNominalInput(String(amount)),
+            description: editingTransaction.description,
+            notes: editingTransaction.notes || '',
+            place: editingTransaction.place || '',
+            categoryId: editingTransaction.categoryId?.toString() || '',
+            tagIds: editingTransaction.tags.map((tag) => tag.tagId),
+            fromAccountId: kind === 'income' ? '' : String((creditAsset ?? assetLines[0]).accountId),
+            toAccountId: kind === 'expense' ? '' : String((debitAsset ?? assetLines[0]).accountId),
+          });
+        } else {
+          setInputMode('journal');
+        }
+      }
       setEditMeta({
         date: toDateInputLocal(txDate),
         time: toTimeInputLocal(txDate),
@@ -1239,6 +1282,27 @@ export function TransactionModal({
         }
       }
       
+      if (isDraftEdit && editingTransaction) {
+        // Rebuild the draft in place; a transfer fee is settled when the batch posts, not on a draft.
+        await replaceDraftMutation.mutateAsync({ id: editingTransaction.id, input: {
+          kind: simpleForm.type as 'expense' | 'income' | 'transfer',
+          amountCents: amount,
+          description: simpleForm.description,
+          notes: finalNotes,
+          place: simpleForm.place || null,
+          date: dateIso,
+          tagIds: simpleForm.tagIds.length ? simpleForm.tagIds : undefined,
+          categoryId: simpleForm.type === 'expense' && simpleForm.categoryId ? parseInt(simpleForm.categoryId, 10) : null,
+          walletAccountId,
+          toWalletAccountId,
+        } });
+        if (pendingAttachments.length > 0) await uploadPendingAttachments(editingTransaction.id, pendingAttachments);
+        toast.success('Draft saved', simpleForm.description || undefined);
+        onSaved();
+        onClose();
+        return;
+      }
+
       // Handle transfer with fee - create main transfer first
       let mainTransaction;
       const linkedTransactionIds: number[] = [];
@@ -1250,7 +1314,7 @@ export function TransactionModal({
           // The transfer and its fee are saved in one request, so they succeed or fail together.
           // The fee debits the wallet that actually paid it (recipient-deducted fees reduce the destination).
           const transferFeeCategory = categories.find((category) => category.name === TRANSFER_FEE_CATEGORY_NAME);
-          mainTransaction = await createTransactionMutation.mutateAsync({
+          mainTransaction = await createTransactionMutation.mutateAsync({ ...draftFields,
             kind: 'transfer',
             amountCents: amount,
             description: simpleForm.description,
@@ -1271,7 +1335,7 @@ export function TransactionModal({
           if (mainTransaction.feeTransactionId != null) linkedTransactionIds.push(mainTransaction.feeTransactionId);
         } else {
           // No fee - create normal transfer
-          mainTransaction = await createTransactionMutation.mutateAsync({
+          mainTransaction = await createTransactionMutation.mutateAsync({ ...draftFields,
             kind: 'transfer',
             amountCents: amount,
             description: simpleForm.description,
@@ -1287,7 +1351,7 @@ export function TransactionModal({
         }
       } else {
         // Non-transfer transactions
-        mainTransaction = await createTransactionMutation.mutateAsync({
+        mainTransaction = await createTransactionMutation.mutateAsync({ ...draftFields,
           kind: simpleForm.type,
           amountCents: amount,
           description: simpleForm.description,
@@ -1335,7 +1399,8 @@ export function TransactionModal({
       );
       clearStoredDraft(SIMPLE_DRAFT_KEY);
       const createdIds = [mainTransaction.id, ...linkedTransactionIds];
-      offerUndo(createdIds.length > 1 ? 'Transfer and fee added' : 'Transaction added', createdIds, simpleForm.description || undefined);
+      if (savesAsDraft) toast.success('Draft saved', simpleForm.description || undefined);
+      else offerUndo(createdIds.length > 1 ? 'Transfer and fee added' : 'Transaction added', createdIds, simpleForm.description || undefined);
       onSaved();
       onSuccess?.(mainTransaction.id, createdIds);
       onClose();
@@ -1461,7 +1526,7 @@ export function TransactionModal({
     setIsSubmitting(true);
     try {
       const dateIso = new Date(values.dateTime).toISOString();
-      const journal = await createTransactionMutation.mutateAsync({
+      const journalInput = {
         date: dateIso,
         description: values.description,
         notes: values.notes || null,
@@ -1475,9 +1540,16 @@ export function TransactionModal({
           cashFlowClass: line.cashFlowClass || undefined,
         })),
         categoryAllocations: parsedAllocations,
-      });
-      clearStoredDraft(JOURNAL_DRAFT_KEY);
-      offerUndo('Journal entry posted', [journal.id], values.description || undefined);
+      };
+      if (isDraftEdit && editingTransaction) {
+        await replaceDraftMutation.mutateAsync({ id: editingTransaction.id, input: journalInput });
+        toast.success('Draft saved', values.description || undefined);
+      } else {
+        const journal = await createTransactionMutation.mutateAsync({ ...draftFields, ...journalInput });
+        clearStoredDraft(JOURNAL_DRAFT_KEY);
+        if (savesAsDraft) toast.success('Draft saved', values.description || undefined);
+        else offerUndo('Journal entry posted', [journal.id], values.description || undefined);
+      }
       onSaved();
       onClose();
     } catch (err) {
@@ -1494,7 +1566,7 @@ export function TransactionModal({
     (editingTransaction.txType?.startsWith('simple_expense') ||
       editingTransaction.categoryId != null);
 
-  if (editingTransaction) {
+  if (editingTransaction && !isDraftEdit) {
     // View Mode - Show transaction details read-only
     if (viewMode) {
       const category = editingTransaction.categoryId ? categories.find(c => c.id === editingTransaction.categoryId) : null;
@@ -2466,7 +2538,7 @@ export function TransactionModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={pendingTransaction ? 'Review pending item' : inputMode === 'journal' ? 'Journal entry' : 'Add transaction'}
+      title={pendingTransaction ? 'Review pending item' : isDraftEdit ? 'Edit draft' : savesAsDraft ? 'Add draft' : inputMode === 'journal' ? 'Journal entry' : 'Add transaction'}
       subtitle={inputMode === 'journal' ? 'Record balanced debit and credit lines.' : undefined}
       size="xl"
       // A form reads best around 44rem; the journal keeps the full width for its line grid.
@@ -2490,7 +2562,7 @@ export function TransactionModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
             <Button type="button" variant="secondary" onClick={onClose} className="rounded-full py-3 sm:min-w-[120px]">Cancel</Button>
             <Button type="submit" form="journal-transaction-form" isLoading={isSubmitting} className="rounded-full py-3 shadow-lg sm:min-w-[200px]">
-              <Save className="h-5 w-5" /> Record journal
+              <Save className="h-5 w-5" /> {savesAsDraft ? 'Save draft' : 'Record journal'}
             </Button>
           </div>
         </div>
@@ -2502,7 +2574,7 @@ export function TransactionModal({
             <p className="min-w-0 text-sm leading-snug text-[var(--ref-on-surface-variant)] sm:truncate" aria-live="polite">{entrySummary}</p>
             <Button type="submit" form="simple-transaction-form" isLoading={isSubmitting} className="shrink-0 rounded-full px-6 py-3 text-base shadow-lg sm:min-w-[12rem]">
               {simpleForm.type === 'paylater' ? <CreditCard className="mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}
-              {{ expense: 'Save expense', income: 'Save income', transfer: 'Save transfer', paylater: 'Record payment' }[simpleForm.type]}
+              {savesAsDraft && simpleForm.type !== 'paylater' ? 'Save draft' : { expense: 'Save expense', income: 'Save income', transfer: 'Save transfer', paylater: 'Record payment' }[simpleForm.type]}
             </Button>
           </div>
         </div>

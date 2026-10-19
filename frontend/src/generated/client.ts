@@ -1609,6 +1609,282 @@ export type ReverseTransaction409 = {
   [key: string]: unknown;
 };
 
+export type ReplaceDraftTransactionBodyAnyOfKind = typeof ReplaceDraftTransactionBodyAnyOfKind[keyof typeof ReplaceDraftTransactionBodyAnyOfKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReplaceDraftTransactionBodyAnyOfKind = {
+  expense: 'expense',
+  income: 'income',
+  transfer: 'transfer',
+} as const;
+
+export type ReplaceDraftTransactionBodyAnyOfTransferFeePaidBy = typeof ReplaceDraftTransactionBodyAnyOfTransferFeePaidBy[keyof typeof ReplaceDraftTransactionBodyAnyOfTransferFeePaidBy];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReplaceDraftTransactionBodyAnyOfTransferFeePaidBy = {
+  sender: 'sender',
+  recipient: 'recipient',
+} as const;
+
+export type ReplaceDraftTransactionBodyAnyOfTransferFee = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amountCents: number;
+  paidBy: ReplaceDraftTransactionBodyAnyOfTransferFeePaidBy;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+};
+
+export type ReplaceDraftTransactionBodyAnyOfStatus = typeof ReplaceDraftTransactionBodyAnyOfStatus[keyof typeof ReplaceDraftTransactionBodyAnyOfStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReplaceDraftTransactionBodyAnyOfStatus = {
+  draft: 'draft',
+} as const;
+
+export type ReplaceDraftTransactionBodyAnyOf = {
+  kind: ReplaceDraftTransactionBodyAnyOfKind;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amountCents: number;
+  /** @minLength 1 */
+  description: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  place?: string | null;
+  /** @minLength 1 */
+  date: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  periodId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  tagIds?: number[];
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  walletAccountId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  toWalletAccountId?: number | null;
+  transferFee?: ReplaceDraftTransactionBodyAnyOfTransferFee;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  linkedTxId?: number | null;
+  /** @nullable */
+  originLat?: number | null;
+  /** @nullable */
+  originLng?: number | null;
+  /** @nullable */
+  originName?: string | null;
+  /** @nullable */
+  destLat?: number | null;
+  /** @nullable */
+  destLng?: number | null;
+  /** @nullable */
+  destName?: string | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  distanceKm?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  subscriptionId?: number;
+  status?: ReplaceDraftTransactionBodyAnyOfStatus;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  batchId?: number | null;
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransactionBodyAnyOfSixTxType = typeof ReplaceDraftTransactionBodyAnyOfSixTxType[keyof typeof ReplaceDraftTransactionBodyAnyOfSixTxType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReplaceDraftTransactionBodyAnyOfSixTxType = {
+  manual: 'manual',
+} as const;
+
+export type ReplaceDraftTransactionBodyAnyOfSixCategoryAllocationsItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  categoryId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type ReplaceDraftTransactionBodyAnyOfSixLinesItemCashFlowClass = typeof ReplaceDraftTransactionBodyAnyOfSixLinesItemCashFlowClass[keyof typeof ReplaceDraftTransactionBodyAnyOfSixLinesItemCashFlowClass] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReplaceDraftTransactionBodyAnyOfSixLinesItemCashFlowClass = {
+  operating: 'operating',
+  investing: 'investing',
+  financing: 'financing',
+  transfer: 'transfer',
+  recovery: 'recovery',
+} as const;
+
+export type ReplaceDraftTransactionBodyAnyOfSixLinesItem = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  accountId: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  debit: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  credit: number;
+  description?: string;
+  /** @nullable */
+  cashFlowClass?: ReplaceDraftTransactionBodyAnyOfSixLinesItemCashFlowClass;
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransactionBodyAnyOfSixStatus = typeof ReplaceDraftTransactionBodyAnyOfSixStatus[keyof typeof ReplaceDraftTransactionBodyAnyOfSixStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReplaceDraftTransactionBodyAnyOfSixStatus = {
+  draft: 'draft',
+} as const;
+
+export type ReplaceDraftTransactionBodyAnyOfSix = {
+  /** @minLength 1 */
+  date: string;
+  /** @minLength 1 */
+  description: string;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  place?: string | null;
+  txType?: ReplaceDraftTransactionBodyAnyOfSixTxType;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  periodId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  linkedTxId?: number | null;
+  tagIds?: number[];
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  categoryAllocations?: ReplaceDraftTransactionBodyAnyOfSixCategoryAllocationsItem[];
+  /** @minItems 2 */
+  lines: ReplaceDraftTransactionBodyAnyOfSixLinesItem[];
+  status?: ReplaceDraftTransactionBodyAnyOfSixStatus;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  batchId?: number | null;
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransactionBody = ReplaceDraftTransactionBodyAnyOf | ReplaceDraftTransactionBodyAnyOfSix;
+
+export type ReplaceDraftTransaction200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId?: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  feeTransactionId?: number;
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransaction400 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransaction404 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransaction409 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type ReplaceDraftTransaction500 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
 export type BulkDeleteTransactionsBody = {
   /** @minItems 1 */
   ids: number[];
@@ -18016,6 +18292,63 @@ export const reverseTransaction = async (id: number, options?: RequestInit): Pro
     method: 'POST'
     
     
+  }
+);}
+
+
+
+export type replaceDraftTransactionResponse200 = {
+  data: ReplaceDraftTransaction200
+  status: 200
+}
+
+export type replaceDraftTransactionResponse400 = {
+  data: ReplaceDraftTransaction400
+  status: 400
+}
+
+export type replaceDraftTransactionResponse404 = {
+  data: ReplaceDraftTransaction404
+  status: 404
+}
+
+export type replaceDraftTransactionResponse409 = {
+  data: ReplaceDraftTransaction409
+  status: 409
+}
+
+export type replaceDraftTransactionResponse500 = {
+  data: ReplaceDraftTransaction500
+  status: 500
+}
+    
+export type replaceDraftTransactionResponseSuccess = (replaceDraftTransactionResponse200) & {
+  headers: Headers;
+};
+export type replaceDraftTransactionResponseError = (replaceDraftTransactionResponse400 | replaceDraftTransactionResponse404 | replaceDraftTransactionResponse409 | replaceDraftTransactionResponse500) & {
+  headers: Headers;
+};
+
+export type replaceDraftTransactionResponse = (replaceDraftTransactionResponseSuccess | replaceDraftTransactionResponseError)
+
+export const getReplaceDraftTransactionUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transactions/${id}/draft`
+}
+
+export const replaceDraftTransaction = async (id: number,
+    replaceDraftTransactionBody: ReplaceDraftTransactionBody, options?: RequestInit): Promise<replaceDraftTransactionResponse> => {
+  
+  return generatedFetch<replaceDraftTransactionResponse>(getReplaceDraftTransactionUrl(id),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      replaceDraftTransactionBody,)
   }
 );}
 

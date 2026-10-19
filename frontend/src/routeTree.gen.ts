@@ -28,6 +28,7 @@ import { Route as HelpRouteImport } from './routes/help'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as BudgetRouteImport } from './routes/budget'
+import { Route as BackfillRouteImport } from './routes/backfill'
 import { Route as AuditLogRouteImport } from './routes/audit-log'
 import { Route as AnomaliesRouteImport } from './routes/anomalies'
 import { Route as AgentRouteImport } from './routes/agent'
@@ -129,6 +130,11 @@ const BudgetRoute = BudgetRouteImport.update({
   path: '/budget',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BackfillRoute = BackfillRouteImport.update({
+  id: '/backfill',
+  path: '/backfill',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuditLogRoute = AuditLogRouteImport.update({
   id: '/audit-log',
   path: '/audit-log',
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/agent': typeof AgentRoute
   '/anomalies': typeof AnomaliesRoute
   '/audit-log': typeof AuditLogRoute
+  '/backfill': typeof BackfillRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/agent': typeof AgentRoute
   '/anomalies': typeof AnomaliesRoute
   '/audit-log': typeof AuditLogRoute
+  '/backfill': typeof BackfillRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/agent': typeof AgentRoute
   '/anomalies': typeof AnomaliesRoute
   '/audit-log': typeof AuditLogRoute
+  '/backfill': typeof BackfillRoute
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/anomalies'
     | '/audit-log'
+    | '/backfill'
     | '/budget'
     | '/categories'
     | '/gallery'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/anomalies'
     | '/audit-log'
+    | '/backfill'
     | '/budget'
     | '/categories'
     | '/gallery'
@@ -294,6 +305,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/anomalies'
     | '/audit-log'
+    | '/backfill'
     | '/budget'
     | '/categories'
     | '/gallery'
@@ -321,6 +333,7 @@ export interface RootRouteChildren {
   AgentRoute: typeof AgentRoute
   AnomaliesRoute: typeof AnomaliesRoute
   AuditLogRoute: typeof AuditLogRoute
+  BackfillRoute: typeof BackfillRoute
   BudgetRoute: typeof BudgetRoute
   CategoriesRoute: typeof CategoriesRoute
   GalleryRoute: typeof GalleryRoute
@@ -477,6 +490,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BudgetRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/backfill': {
+      id: '/backfill'
+      path: '/backfill'
+      fullPath: '/backfill'
+      preLoaderRoute: typeof BackfillRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/audit-log': {
       id: '/audit-log'
       path: '/audit-log'
@@ -521,6 +541,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgentRoute: AgentRoute,
   AnomaliesRoute: AnomaliesRoute,
   AuditLogRoute: AuditLogRoute,
+  BackfillRoute: BackfillRoute,
   BudgetRoute: BudgetRoute,
   CategoriesRoute: CategoriesRoute,
   GalleryRoute: GalleryRoute,

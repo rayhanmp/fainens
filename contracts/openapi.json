@@ -3239,6 +3239,452 @@
         }
       }
     },
+    "/api/transactions/{id}/draft": {
+      "put": {
+        "operationId": "replaceDraftTransaction",
+        "tags": [
+          "transactions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "expense",
+                          "income",
+                          "transfer"
+                        ]
+                      },
+                      "amountCents": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "notes": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "place": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "date": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "periodId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "categoryId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "tagIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "walletAccountId": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "toWalletAccountId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "transferFee": {
+                        "type": "object",
+                        "properties": {
+                          "amountCents": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          },
+                          "paidBy": {
+                            "type": "string",
+                            "enum": [
+                              "sender",
+                              "recipient"
+                            ]
+                          },
+                          "categoryId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "amountCents",
+                          "paidBy"
+                        ]
+                      },
+                      "linkedTxId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "originLat": {
+                        "nullable": true,
+                        "type": "number"
+                      },
+                      "originLng": {
+                        "nullable": true,
+                        "type": "number"
+                      },
+                      "originName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "destLat": {
+                        "nullable": true,
+                        "type": "number"
+                      },
+                      "destLng": {
+                        "nullable": true,
+                        "type": "number"
+                      },
+                      "destName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "distanceKm": {
+                        "nullable": true,
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "subscriptionId": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "draft"
+                        ]
+                      },
+                      "batchId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "amountCents",
+                      "description",
+                      "date",
+                      "walletAccountId"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "reference": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "notes": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "place": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "txType": {
+                        "type": "string",
+                        "enum": [
+                          "manual"
+                        ]
+                      },
+                      "periodId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "linkedTxId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "tagIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "categoryId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "categoryAllocations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "categoryId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "amount": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "categoryId",
+                            "amount"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "lines": {
+                        "minItems": 2,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "accountId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "debit": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "credit": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "cashFlowClass": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "operating",
+                                "investing",
+                                "financing",
+                                "transfer",
+                                "recovery"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "accountId",
+                            "debit",
+                            "credit"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "draft"
+                        ]
+                      },
+                      "batchId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "description",
+                      "lines"
+                    ],
+                    "additionalProperties": {}
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "transactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "feeTransactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transactions/bulk-delete": {
       "post": {
         "operationId": "bulkDeleteTransactions",

@@ -773,6 +773,7 @@ export const api = {
           place: string | null;
           txType: string;
           status: string;
+          batchId?: number | null;
           reversalOfTxId: number | null;
           categoryId: number | null;
           periodId: number | null;

@@ -15,8 +15,62 @@ import {
 } from "../db/schema";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import { bumpFinancialRevisionSync } from "./financial-revision";
+import { prepareJournalEntry, type CreateJournalEntryInput } from "./ledger";
 import { periodContainsDate, type PeriodState } from "./period-locking";
 import { TransactionMutationError } from "./transaction-mutations";
+
+/**
+ * Rebuild a draft from scratch: header, lines, tags and allocations are replaced with what the
+ * input describes, the way a fresh save would create them, while the id, batch and attachments
+ * stay. This is how the full entry form edits a draft without re-implementing journal building.
+ */
+export async function replaceDraft(transactionId: number, input: CreateJournalEntryInput): Promise<{ transactionId: number }> {
+  const [current] = await db.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+  if (!current) throw new TransactionMutationError("Transaction not found", 404);
+  if (current.status !== "draft") throw new TransactionMutationError("Only a draft can be rebuilt; posted journals are corrected by reversal", 409);
+
+  const prepared = await prepareJournalEntry({ ...input, status: "draft", batchId: current.batchId ?? null }, db);
+  const { date, dueDate, description, reference, notes, place, txType, periodId, categoryId, originLat, originLng, originName, destLat, destLng, destName, distanceKm } = prepared.transactionValues as Record<string, unknown>;
+
+  db.transaction((tx) => {
+    const fresh = tx.select({ status: transactions.status }).from(transactions).where(eq(transactions.id, transactionId)).limit(1).all()[0];
+    if (!fresh || fresh.status !== "draft") throw new TransactionMutationError("Draft changed while editing; reload it and retry", 409);
+    tx.update(transactions)
+      .set({ date, dueDate, description, reference, notes, place, txType, periodId, categoryId, originLat, originLng, originName, destLat, destLng, destName, distanceKm })
+      .where(eq(transactions.id, transactionId))
+      .run();
+    tx.delete(transactionLines).where(eq(transactionLines.transactionId, transactionId)).run();
+    tx.insert(transactionLines).values(prepared.validatedLines.map((line) => ({
+      transactionId,
+      accountId: line.accountId,
+      debit: line.debit,
+      credit: line.credit,
+      description: line.description ?? null,
+      cashFlowClass: line.cashFlowClass ?? null,
+    }))).run();
+    tx.delete(transactionTags).where(eq(transactionTags.transactionId, transactionId)).run();
+    if (prepared.tagIds.length > 0) {
+      tx.insert(transactionTags).values(prepared.tagIds.map((tagId) => ({ transactionId, tagId }))).run();
+    }
+    tx.delete(transactionCategoryAllocations).where(eq(transactionCategoryAllocations.transactionId, transactionId)).run();
+    if (prepared.categoryAllocations.length > 0) {
+      tx.insert(transactionCategoryAllocations).values(prepared.categoryAllocations.map((allocation) => ({
+        transactionId, categoryId: allocation.categoryId, amount: allocation.amount,
+      }))).run();
+    }
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: transactionId,
+      action: "update",
+      beforeSnapshot: Buffer.from(JSON.stringify(current)),
+      afterSnapshot: Buffer.from(JSON.stringify({ transaction: prepared.transactionValues, lines: prepared.validatedLines, tagIds: prepared.tagIds, source: "draft_rebuild" })),
+    }).run();
+    bumpFinancialRevisionSync(tx);
+  });
+
+  await invalidateOnTransactionMutation({ transactionId, affectedAccountIds: prepared.accountIds, affectedPeriodIds: [], revisionBumped: true });
+  return { transactionId };
+}
 
 export type BatchSummary = {
   id: number;

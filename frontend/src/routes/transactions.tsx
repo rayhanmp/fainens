@@ -4,7 +4,7 @@ import { personalActivityKind, reallocationCashAmount } from "../features/transa
 import { Link, createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ArrowUpDown, Loader2, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, ArrowUpDown, Loader2, BarChart3, ChevronLeft, ChevronRight, CircleAlert, Clock, CopyPlus, Download, FileUp, History, HandCoins, Landmark, Mail, MoreHorizontal, ArrowRightLeft, Plus, Receipt, RotateCcw, Search, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { SwipeReveal } from '../components/ui/SwipeReveal';
@@ -232,7 +232,7 @@ function TransactionsPage() {
   const openModal = useCallback((transaction?: TransactionRow, mode: 'view' | 'edit' = 'edit', prefill?: TransactionPrefill) => {
     setModalInitialMode(mode);
     setModalPrefill(prefill);
-    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, reference: transaction.reference ?? undefined, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, displayPart: transaction.displayPart, expenseCents: transaction.expenseCents, incomeCents: transaction.incomeCents, reallocation: transaction.reallocation, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
+    setEditingTransaction(transaction ? { id: transaction.id, date: transaction.date, description: transaction.description, reference: transaction.reference ?? undefined, notes: transaction.notes ?? undefined, place: transaction.place ?? undefined, categoryId: transaction.categoryId, txType: transaction.txType, status: transaction.status, batchId: transaction.batchId ?? null, displayPart: transaction.displayPart, expenseCents: transaction.expenseCents, incomeCents: transaction.incomeCents, reallocation: transaction.reallocation, lines: transaction.lines, categoryAllocations: transaction.categoryAllocations, tags: transaction.tags } : null);
     setIsModalOpen(true);
   }, []);
 
@@ -463,6 +463,7 @@ function TransactionsPage() {
             <button type="button" onClick={() => { setActivePanel(null); setIsGmailModalOpen(true); }} disabled={gmailStatusQuery.isLoading} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40 md:hidden"><Mail className="h-4 w-4" />{gmailLabel}</button>
             <button type="button" onClick={() => { downloadPageCsv(transactions, categories); setActivePanel(null); }} disabled={transactions.length === 0} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)] disabled:opacity-40"><Download className="h-4 w-4" />Export this page</button>
             <button type="button" onClick={() => { setIsImportModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><FileUp className="h-4 w-4" />Import CSV</button>
+            <button type="button" onClick={() => { setActivePanel(null); navigate({ to: '/backfill' }); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><History className="h-4 w-4" />Backfill history</button>
             <button type="button" onClick={() => { setActivePanel(null); navigate({ to: '/agent', search: { prompt: 'Help me split a bill. I will attach the receipt and tell you who shared it.' } }); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Receipt className="h-4 w-4" />Split a receipt</button>
             <button type="button" onClick={() => { setIsPendingModalOpen(true); setActivePanel(null); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><Clock className="h-4 w-4" />Review pending {pendingCount > 0 ? '(' + pendingCount + ')' : ''}</button>
             <button type="button" onClick={() => setCompactTables(!compactTables)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold hover:bg-[var(--ref-surface-container-low)]"><span>Compact rows</span><span className="text-xs text-[var(--ref-on-surface-variant)]">{compactTables ? 'On' : 'Off'}</span></button>

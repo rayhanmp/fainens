@@ -234,6 +234,31 @@ describe("draft transactions and batches", () => {
     expect(again.statusCode).toBe(409);
   });
 
+  it("rebuilds a draft from the entry form input, keeping its id and batch", async () => {
+    const batchId = await createBatch();
+    const { id } = (await draftExpense(batchId)).json();
+    const rebuilt = await app.inject({
+      method: "PUT", url: `/api/transactions/${id}/draft`,
+      payload: {
+        kind: "transfer", amountCents: 200_000, description: "Top up GoPay", date: "2026-03-20T08:00:00+07:00",
+        walletAccountId: 1, toWalletAccountId: 2, tagIds: [1],
+      },
+    });
+    expect(rebuilt.statusCode).toBe(200);
+    expect(rebuilt.json().id).toBe(id);
+    const row = txRow(id);
+    expect(row).toMatchObject({ status: "draft", batchId, txType: "simple_transfer", description: "Top up GoPay", categoryId: null });
+    const lines = state.db.select().from(schema.transactionLines).where(eq(schema.transactionLines.transactionId, id)).all();
+    expect(lines.map((line: { accountId: number; debit: number; credit: number }) => [line.accountId, line.debit, line.credit]).sort()).toEqual([[1, 0, 200_000], [2, 200_000, 0]]);
+    expect(state.db.select().from(schema.transactionCategoryAllocations).where(eq(schema.transactionCategoryAllocations.transactionId, id)).all()).toHaveLength(0);
+    expect(balance(1)).toBe(0);
+
+    const posted = await app.inject({ method: "POST", url: `/api/transaction-batches/${batchId}/post`, payload: {} });
+    expect(posted.json().posted).toEqual([id]);
+    const again = await app.inject({ method: "PUT", url: `/api/transactions/${id}/draft`, payload: { kind: "expense", amountCents: 1, description: "x", date: "2026-03-20T08:00:00+07:00", walletAccountId: 1 } });
+    expect(again.statusCode).toBe(409);
+  });
+
   it("refuses a posted journal in a batch and a draft import outside draft mode", async () => {
     const batchId = await createBatch();
     const response = await app.inject({

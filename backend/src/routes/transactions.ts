@@ -24,6 +24,7 @@ import {
   updateTransactionAtomically,
 } from "../services/transaction-mutations";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
+import { replaceDraft } from "../services/transaction-batches";
 import { parseIdrInteger } from "../services/money";
 import { findPeriodForDate, inclusivePeriodEnd } from "../services/period-locking";
 import { suggestTransactionTags, TagSuggestionError, type TagSuggestionContext } from "../services/transaction-tag-suggestions";
@@ -1483,6 +1484,79 @@ RULES:
       return reply.code(status).send({
         error: err instanceof Error ? err.message : "Failed to update transaction",
       });
+    }
+  });
+
+  /** Rebuild a draft from the same input the create endpoint takes, keeping its id, batch and attachments. */
+  fastify.put("/api/transactions/:id/draft", {
+    schema: {
+      operationId: "replaceDraftTransaction",
+      tags: ["transactions"],
+      params: transactionIdParamsSchema,
+      body: transactionCreateBodySchema,
+      response: { 200: transactionMutationResponseSchema, 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
+    const transactionId = parseIdParam((request.params as { id: string }).id);
+    if (transactionId === null) return reply.code(400).send({ error: "Invalid transaction ID" });
+    const body = request.body as Record<string, unknown>;
+    try {
+      let input;
+      if ("kind" in body) {
+        const simple = body as {
+          kind: "expense" | "income" | "transfer"; amountCents: number; description: string; notes?: string | null; place?: string | null; date: string;
+          categoryId?: number | null; tagIds?: number[]; walletAccountId: number; toWalletAccountId?: number | null; linkedTxId?: number | null;
+          originLat?: number | null; originLng?: number | null; originName?: string | null; destLat?: number | null; destLng?: number | null; destName?: string | null; distanceKm?: number | null;
+        };
+        if (simple.kind === "transfer" && !simple.toWalletAccountId) {
+          return reply.code(400).send({ error: "toWalletAccountId is required for transfers" });
+        }
+        input = await buildSimpleJournalInput({
+          kind: simple.kind,
+          amountCents: simple.amountCents,
+          description: simple.description,
+          notes: simple.notes,
+          place: simple.place,
+          date: new Date(simple.date),
+          categoryId: simple.categoryId,
+          walletAccountId: simple.walletAccountId,
+          toWalletAccountId: simple.toWalletAccountId ?? undefined,
+          linkedTxId: simple.linkedTxId,
+          originLat: simple.originLat, originLng: simple.originLng, originName: simple.originName,
+          destLat: simple.destLat, destLng: simple.destLng, destName: simple.destName, distanceKm: simple.distanceKm,
+          tagIds: simple.tagIds,
+          status: "draft",
+        });
+      } else {
+        const journal = body as {
+          date: string; description: string; reference?: string | null; notes?: string | null; place?: string | null; txType?: string;
+          linkedTxId?: number | null; tagIds?: number[]; categoryId?: number | null; categoryAllocations?: Array<{ categoryId: number; amount: number }>;
+          lines: Array<{ accountId: number; debit: number; credit: number; description?: string; cashFlowClass?: "operating" | "investing" | "financing" | "transfer" | "recovery" | null }>;
+        };
+        if (journal.txType != null && journal.txType !== "manual") {
+          return reply.code(400).send({ error: "Manual journal creation cannot choose a system transaction type" });
+        }
+        input = {
+          date: new Date(journal.date),
+          description: journal.description,
+          reference: journal.reference ?? null,
+          notes: journal.notes ?? null,
+          place: journal.place ?? null,
+          txType: journal.txType,
+          linkedTxId: journal.linkedTxId,
+          categoryId: journal.categoryId,
+          categoryAllocations: journal.categoryAllocations,
+          tagIds: journal.tagIds,
+          lines: journal.lines,
+          status: "draft" as const,
+        };
+      }
+      const result = await replaceDraft(transactionId, input);
+      return reply.code(200).send({ id: result.transactionId, transactionId: result.transactionId });
+    } catch (err) {
+      fastify.log.error(err);
+      const status = transactionRouteErrorStatus((err instanceof TransactionMutationError || err instanceof ReallocationError) ? err.statusCode : 400);
+      return reply.code(status).send({ error: err instanceof Error ? err.message : "Failed to update draft" });
     }
   });
 

@@ -10,6 +10,8 @@ interface ImportCSVModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** When set, rows are saved as drafts in this batch instead of being posted. */
+  draftBatchId?: number | null;
 }
 
 interface PreviewRow {
@@ -79,7 +81,7 @@ function updateImportRow(row: PreviewRow, updates: Partial<PreviewRow>): Preview
   };
 }
 
-export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalProps) {
+export function ImportCSVModal({ isOpen, onClose, onSuccess, draftBatchId = null }: ImportCSVModalProps) {
   const { formatAmount } = useBalanceVisibility();
   const importTransactionsMutation = useImportTransactions();
   const previewImportMutation = usePreviewTransactionImportMutation();
@@ -251,7 +253,8 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalPro
         })),
         categoryMappings,
         accountMappings,
-        periodMappings
+        periodMappings,
+        ...(draftBatchId != null ? { asDraft: true, batchId: draftBatchId } : {}),
       });
       
       setImportResult(result);

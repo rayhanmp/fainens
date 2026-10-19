@@ -19,7 +19,7 @@ export const navigationGroups = [
 ];
 
 export const areaNavigation = [
-  { parent: '/transactions', label: 'Transactions', items: [{ to: '/transactions', label: 'All transactions' }, { to: '/reimbursements', label: 'Reimbursements' }] },
+  { parent: '/transactions', label: 'Transactions', items: [{ to: '/transactions', label: 'All transactions' }, { to: '/reimbursements', label: 'Reimbursements' }, { to: '/backfill', label: 'Backfill' }] },
   { parent: '/salary-income', label: 'Income & salary', items: [{ to: '/salary-income', label: 'Income & salary' }, { to: '/periods', label: 'Salary periods' }] },
   { parent: '/budget', label: 'Budget', items: [{ to: '/budget', label: 'Budget' }, { to: '/savings-simulator', label: 'Savings simulator' }] },
   { parent: '/settings', label: 'Settings', items: [{ to: '/settings', label: 'Preferences' }, { to: '/help', label: 'Help & glossary' }, { to: '/anomalies', label: 'Data quality' }, { to: '/gallery', label: 'Image storage' }, { to: '/audit-log', label: 'Security audit' }] },
