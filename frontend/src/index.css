@@ -1228,6 +1228,7 @@ button[data-variant="danger"]:focus-visible,
   transition: transform 180ms cubic-bezier(.2, .8, .2, 1), background-color 180ms ease;
 }
 .ui-segmented--2::before { width: calc(50% - 6px); }
+.ui-segmented--3::before { width: calc(33.333% - 5.333px); }
 .ui-segmented--4::before { width: calc(25% - 5px); }
 .ui-segmented--5::before { width: calc(20% - 4.8px); }
 .ui-segmented--accent::before {

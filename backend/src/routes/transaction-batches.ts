@@ -3,7 +3,16 @@ import { z } from "zod";
 
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { TransactionMutationError } from "../services/transaction-mutations";
-import { createBatch, discardBatch, getBatch, listBatches, postBatchDrafts } from "../services/transaction-batches";
+import {
+  createBatch,
+  discardBatch,
+  getBatch,
+  getBatchBalanceAt,
+  getBatchSettlement,
+  listBatches,
+  postBatchDrafts,
+  type BatchSettlementInput,
+} from "../services/transaction-batches";
 
 const batchErrorSchema = z.object({ error: z.string() }).passthrough();
 const batchIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -38,16 +47,41 @@ const createBatchBodySchema = z.object({
   source: z.string().trim().min(1).max(80).optional(),
   note: z.string().max(1000).nullable().optional(),
 }).passthrough();
+const settlementSchema = z.discriminatedUnion("mode", [
+  z.object({ accountId: z.number().int().positive(), mode: z.literal("keep_current"), asOfDate: z.number().int().nonnegative() }),
+  z.object({ accountId: z.number().int().positive(), mode: z.literal("match"), asOfDate: z.number().int().nonnegative(), actualBalance: z.number().int() }),
+]);
 const postBatchBodySchema = z.object({
   /** Post only these drafts; omitted posts every draft in the batch. */
   transactionIds: z.array(z.number().int().positive()).max(1000).optional(),
+  /** Balance adjustments to post in the same commit, at most one per account. */
+  settlements: z.array(settlementSchema).max(100).optional(),
 }).passthrough();
 const postBatchResponseSchema = z.object({
   posted: z.array(z.number().int()),
   failed: z.array(z.object({ id: z.number().int(), error: z.string() }).passthrough()),
   reopenedPeriodIds: z.array(z.number().int()),
   batchStatus: z.string(),
+  settlements: z.array(z.object({ accountId: z.number().int(), difference: z.number().int(), transactionId: z.number().int().nullable() }).passthrough()),
 }).passthrough();
+const settlementResponseSchema = z.object({
+  accounts: z.array(z.object({
+    accountId: z.number().int(),
+    accountName: z.string(),
+    accountType: z.enum(["asset", "liability"]),
+    currentBalance: z.number().int(),
+    batchDelta: z.number().int(),
+    draftCount: z.number().int().nonnegative(),
+    firstDraftDate: z.number(),
+    lastDraftDate: z.number(),
+    adjustments: z.array(z.object({ sessionId: z.number().int(), kind: z.string(), asOfDate: z.number(), difference: z.number().int() }).passthrough()),
+  }).passthrough()),
+}).passthrough();
+const balanceAtQuerySchema = z.object({
+  accountId: z.coerce.number().int().positive(),
+  asOfDate: z.coerce.number().int().nonnegative(),
+});
+const balanceAtResponseSchema = z.object({ postedBalance: z.number().int(), draftDelta: z.number().int() }).passthrough();
 const discardResponseSchema = z.object({ success: z.literal(true), deletedCount: z.number().int().nonnegative() }).passthrough();
 
 function errorStatus(err: unknown): 400 | 404 | 409 | 500 {
@@ -89,12 +123,33 @@ export default async function transactionBatchRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.get("/api/transaction-batches/:id/settlement", {
+    schema: { operationId: "getTransactionBatchSettlement", tags: ["transaction-batches"], params: batchIdParamsSchema, response: { 200: settlementResponseSchema, 400: batchErrorSchema, 404: batchErrorSchema, 409: batchErrorSchema, 500: batchErrorSchema } },
+  }, async (request, reply) => {
+    try {
+      return await getBatchSettlement((request.params as { id: number }).id);
+    } catch (err) {
+      return reply.code(errorStatus(err)).send({ error: err instanceof Error ? err.message : "Failed to load the settlement" });
+    }
+  });
+
+  fastify.get("/api/transaction-batches/:id/balance-at", {
+    schema: { operationId: "getTransactionBatchBalanceAt", tags: ["transaction-batches"], params: batchIdParamsSchema, querystring: balanceAtQuerySchema, response: { 200: balanceAtResponseSchema, 400: batchErrorSchema, 404: batchErrorSchema, 409: batchErrorSchema, 500: batchErrorSchema } },
+  }, async (request, reply) => {
+    try {
+      const { accountId, asOfDate } = request.query as { accountId: number; asOfDate: number };
+      return await getBatchBalanceAt((request.params as { id: number }).id, accountId, asOfDate);
+    } catch (err) {
+      return reply.code(errorStatus(err)).send({ error: err instanceof Error ? err.message : "Failed to read the balance" });
+    }
+  });
+
   fastify.post("/api/transaction-batches/:id/post", {
     schema: { operationId: "postTransactionBatch", tags: ["transaction-batches"], params: batchIdParamsSchema, body: postBatchBodySchema, response: { 200: postBatchResponseSchema, 400: batchErrorSchema, 404: batchErrorSchema, 409: batchErrorSchema, 500: batchErrorSchema } },
   }, async (request, reply) => {
     try {
-      const { transactionIds } = request.body as { transactionIds?: number[] };
-      return await postBatchDrafts((request.params as { id: number }).id, transactionIds);
+      const { transactionIds, settlements } = request.body as { transactionIds?: number[]; settlements?: BatchSettlementInput[] };
+      return await postBatchDrafts((request.params as { id: number }).id, transactionIds, settlements ?? []);
     } catch (err) {
       fastify.log.error(err);
       return reply.code(errorStatus(err)).send({ error: err instanceof Error ? err.message : "Failed to post batch" });

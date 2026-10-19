@@ -13,10 +13,11 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
 import { TransactionModal, type EditingTransaction } from '../components/transactions/TransactionModal';
 import { StatementImportModal } from '../features/backfill/StatementImportModal';
+import { SettlementModal } from '../features/backfill/SettlementModal';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
 import { useDeleteTransaction, useTransactionList } from '../features/transactions/queries';
-import { useBatchesQuery, useBatchQuery, useCreateBatchMutation, useDiscardBatchMutation, usePostBatchMutation, type BatchSummary, type PostBatchResult } from '../features/backfill/queries';
+import { useBatchesQuery, useBatchQuery, useCreateBatchMutation, useDiscardBatchMutation, type BatchSummary, type PostBatchResult } from '../features/backfill/queries';
 import type { ListTransactions200DataItem } from '../generated/client';
 
 export const Route = createFileRoute('/backfill')({
@@ -59,7 +60,6 @@ function BackfillPage() {
   const categoriesQuery = useCategoriesQuery();
   const tagsQuery = useTagsQuery();
   const createBatch = useCreateBatchMutation();
-  const postBatch = usePostBatchMutation();
   const discardBatch = useDiscardBatchMutation();
   const deleteTransaction = useDeleteTransaction();
 
@@ -78,6 +78,7 @@ function BackfillPage() {
   const [editing, setEditing] = useState<EditingTransaction | null>(null);
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [settleOpen, setSettleOpen] = useState(false);
   // Kept with the batch it belongs to, so switching batches hides it without an effect.
   const [lastPostResult, setLastPostResult] = useState<(PostBatchResult & { batchId: number }) | null>(null);
   const lastPost = lastPostResult && lastPostResult.batchId === selectedId ? lastPostResult : null;
@@ -122,26 +123,15 @@ function BackfillPage() {
     await Promise.all([draftsQuery.refetch(), batchQuery.refetch(), batchesQuery.refetch()]);
   };
 
-  const handlePost = async () => {
-    if (!batch || drafts.length === 0) return;
-    const closed = batch.periods.filter((period) => period.status === 'closed');
-    const ok = await confirm({
-      title: `Post ${drafts.length} draft${drafts.length === 1 ? '' : 's'}?`,
-      message: closed.length > 0
-        ? `${closed.map((period) => period.periodName).join(', ')} ${closed.length === 1 ? 'is' : 'are'} closed. The period${closed.length === 1 ? '' : 's'} will be reopened for the posting and closed again straight after. Balances change by the amounts shown above.`
-        : 'The drafts become ordinary posted transactions and balances change by the amounts shown above.',
-      confirmLabel: 'Post batch',
-    });
-    if (!ok) return;
-    try {
-      const result = await postBatch.mutateAsync({ id: batch.id });
-      setLastPostResult({ ...result, batchId: batch.id });
-      await refresh();
-      if (result.failed.length === 0) toast.success(`Posted ${result.posted.length} draft${result.posted.length === 1 ? '' : 's'}`);
-      else toast.info(`Posted ${result.posted.length}, ${result.failed.length} need attention`);
-    } catch (error) {
-      toast.error('Could not post batch', errorMessage(error));
-    }
+  const handlePosted = async (result: PostBatchResult) => {
+    if (!batch) return;
+    setSettleOpen(false);
+    setLastPostResult({ ...result, batchId: batch.id });
+    await refresh();
+    const adjusted = result.settlements.filter((settlement) => settlement.transactionId != null).length;
+    const extra = adjusted > 0 ? `${adjusted} balance adjustment${adjusted === 1 ? '' : 's'} booked` : undefined;
+    if (result.failed.length === 0) toast.success(`Posted ${result.posted.length} draft${result.posted.length === 1 ? '' : 's'}`, extra);
+    else toast.info(`Posted ${result.posted.length}, ${result.failed.length} need attention`, extra);
   };
 
   const handleDiscard = async () => {
@@ -220,7 +210,7 @@ function BackfillPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Button type="button" variant="secondary" className="rounded-full" onClick={() => { setEditing(null); setDraftModalOpen(true); }}><Plus className="h-4 w-4" />Add draft</Button>
                       <Button type="button" variant="secondary" className="rounded-full" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" />Import CSV</Button>
-                      <Button type="button" className="rounded-full" disabled={drafts.length === 0 || postBatch.isPending} onClick={() => void handlePost()}><Upload className="h-4 w-4" />{postBatch.isPending ? 'Posting…' : 'Post batch'}</Button>
+                      <Button type="button" className="rounded-full" disabled={drafts.length === 0} onClick={() => setSettleOpen(true)}><Upload className="h-4 w-4" />Post batch</Button>
                     </div>
                   )}
                 </div>
@@ -342,6 +332,17 @@ function BackfillPage() {
           initialMode="edit"
           draftBatchId={editing ? null : selectedId}
         />
+
+        {batch && settleOpen && (
+          <SettlementModal
+            isOpen={settleOpen}
+            onClose={() => setSettleOpen(false)}
+            batch={batch}
+            draftCount={drafts.length}
+            formatAmount={formatAmount}
+            onPosted={(result) => void handlePosted(result)}
+          />
+        )}
 
         {selectedId != null && (
           <StatementImportModal

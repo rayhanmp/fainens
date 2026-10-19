@@ -14616,9 +14616,188 @@ export type DiscardTransactionBatch500 = {
   [key: string]: unknown;
 };
 
+export type GetTransactionBatchSettlement200AccountsItemAccountType = typeof GetTransactionBatchSettlement200AccountsItemAccountType[keyof typeof GetTransactionBatchSettlement200AccountsItemAccountType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetTransactionBatchSettlement200AccountsItemAccountType = {
+  asset: 'asset',
+  liability: 'liability',
+} as const;
+
+export type GetTransactionBatchSettlement200AccountsItemAdjustmentsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sessionId: number;
+  kind: string;
+  asOfDate: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  difference: number;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchSettlement200AccountsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  accountId: number;
+  accountName: string;
+  accountType: GetTransactionBatchSettlement200AccountsItemAccountType;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  currentBalance: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  batchDelta: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  draftCount: number;
+  firstDraftDate: number;
+  lastDraftDate: number;
+  adjustments: GetTransactionBatchSettlement200AccountsItemAdjustmentsItem[];
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchSettlement200 = {
+  accounts: GetTransactionBatchSettlement200AccountsItem[];
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchSettlement400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchSettlement404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchSettlement409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchSettlement500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchBalanceAtParams = {
+/**
+ * @maximum 9007199254740991
+ * @exclusiveMinimum
+ */
+accountId: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+asOfDate: number;
+};
+
+export type GetTransactionBatchBalanceAt200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  postedBalance: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  draftDelta: number;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchBalanceAt400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchBalanceAt404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchBalanceAt409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetTransactionBatchBalanceAt500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PostTransactionBatchBodySettlementsItemOneOfMode = typeof PostTransactionBatchBodySettlementsItemOneOfMode[keyof typeof PostTransactionBatchBodySettlementsItemOneOfMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const PostTransactionBatchBodySettlementsItemOneOfMode = {
+  keep_current: 'keep_current',
+} as const;
+
+export type PostTransactionBatchBodySettlementsItemOneOf = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  accountId: number;
+  mode: PostTransactionBatchBodySettlementsItemOneOfMode;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  asOfDate: number;
+};
+
+export type PostTransactionBatchBodySettlementsItemOneOfThreeMode = typeof PostTransactionBatchBodySettlementsItemOneOfThreeMode[keyof typeof PostTransactionBatchBodySettlementsItemOneOfThreeMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const PostTransactionBatchBodySettlementsItemOneOfThreeMode = {
+  match: 'match',
+} as const;
+
+export type PostTransactionBatchBodySettlementsItemOneOfThree = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  accountId: number;
+  mode: PostTransactionBatchBodySettlementsItemOneOfThreeMode;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  asOfDate: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  actualBalance: number;
+};
+
+export type PostTransactionBatchBodySettlementsItem = PostTransactionBatchBodySettlementsItemOneOf | PostTransactionBatchBodySettlementsItemOneOfThree;
+
 export type PostTransactionBatchBody = {
   /** @maxItems 1000 */
   transactionIds?: number[];
+  /** @maxItems 100 */
+  settlements?: PostTransactionBatchBodySettlementsItem[];
   [key: string]: unknown;
 };
 
@@ -14632,11 +14811,32 @@ export type PostTransactionBatch200FailedItem = {
   [key: string]: unknown;
 };
 
+export type PostTransactionBatch200SettlementsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  accountId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  difference: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  transactionId: number | null;
+  [key: string]: unknown;
+};
+
 export type PostTransactionBatch200 = {
   posted: number[];
   failed: PostTransactionBatch200FailedItem[];
   reopenedPeriodIds: number[];
   batchStatus: string;
+  settlements: PostTransactionBatch200SettlementsItem[];
   [key: string]: unknown;
 };
 
@@ -26704,6 +26904,125 @@ export const discardTransactionBatch = async (id: number, options?: RequestInit)
   {      
     ...options,
     method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type getTransactionBatchSettlementResponse200 = {
+  data: GetTransactionBatchSettlement200
+  status: 200
+}
+
+export type getTransactionBatchSettlementResponse400 = {
+  data: GetTransactionBatchSettlement400
+  status: 400
+}
+
+export type getTransactionBatchSettlementResponse404 = {
+  data: GetTransactionBatchSettlement404
+  status: 404
+}
+
+export type getTransactionBatchSettlementResponse409 = {
+  data: GetTransactionBatchSettlement409
+  status: 409
+}
+
+export type getTransactionBatchSettlementResponse500 = {
+  data: GetTransactionBatchSettlement500
+  status: 500
+}
+    
+export type getTransactionBatchSettlementResponseSuccess = (getTransactionBatchSettlementResponse200) & {
+  headers: Headers;
+};
+export type getTransactionBatchSettlementResponseError = (getTransactionBatchSettlementResponse400 | getTransactionBatchSettlementResponse404 | getTransactionBatchSettlementResponse409 | getTransactionBatchSettlementResponse500) & {
+  headers: Headers;
+};
+
+export type getTransactionBatchSettlementResponse = (getTransactionBatchSettlementResponseSuccess | getTransactionBatchSettlementResponseError)
+
+export const getGetTransactionBatchSettlementUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transaction-batches/${id}/settlement`
+}
+
+export const getTransactionBatchSettlement = async (id: number, options?: RequestInit): Promise<getTransactionBatchSettlementResponse> => {
+  
+  return generatedFetch<getTransactionBatchSettlementResponse>(getGetTransactionBatchSettlementUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getTransactionBatchBalanceAtResponse200 = {
+  data: GetTransactionBatchBalanceAt200
+  status: 200
+}
+
+export type getTransactionBatchBalanceAtResponse400 = {
+  data: GetTransactionBatchBalanceAt400
+  status: 400
+}
+
+export type getTransactionBatchBalanceAtResponse404 = {
+  data: GetTransactionBatchBalanceAt404
+  status: 404
+}
+
+export type getTransactionBatchBalanceAtResponse409 = {
+  data: GetTransactionBatchBalanceAt409
+  status: 409
+}
+
+export type getTransactionBatchBalanceAtResponse500 = {
+  data: GetTransactionBatchBalanceAt500
+  status: 500
+}
+    
+export type getTransactionBatchBalanceAtResponseSuccess = (getTransactionBatchBalanceAtResponse200) & {
+  headers: Headers;
+};
+export type getTransactionBatchBalanceAtResponseError = (getTransactionBatchBalanceAtResponse400 | getTransactionBatchBalanceAtResponse404 | getTransactionBatchBalanceAtResponse409 | getTransactionBatchBalanceAtResponse500) & {
+  headers: Headers;
+};
+
+export type getTransactionBatchBalanceAtResponse = (getTransactionBatchBalanceAtResponseSuccess | getTransactionBatchBalanceAtResponseError)
+
+export const getGetTransactionBatchBalanceAtUrl = (id: number,
+    params: GetTransactionBatchBalanceAtParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/transaction-batches/${id}/balance-at?${stringifiedParams}` : `/api/transaction-batches/${id}/balance-at`
+}
+
+export const getTransactionBatchBalanceAt = async (id: number,
+    params: GetTransactionBatchBalanceAtParams, options?: RequestInit): Promise<getTransactionBatchBalanceAtResponse> => {
+  
+  return generatedFetch<getTransactionBatchBalanceAtResponse>(getGetTransactionBatchBalanceAtUrl(id,params),
+  {      
+    ...options,
+    method: 'GET'
     
     
   }

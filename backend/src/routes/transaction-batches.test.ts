@@ -171,7 +171,7 @@ describe("draft transactions and batches", () => {
 
     const response = await app.inject({ method: "POST", url: `/api/transaction-batches/${batchId}/post`, payload: {} });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ posted: [first, second], failed: [], reopenedPeriodIds: [10], batchStatus: "posted" });
+    expect(response.json()).toEqual({ posted: [first, second], failed: [], reopenedPeriodIds: [10], batchStatus: "posted", settlements: [] });
     expect(txRow(first).status).toBe("posted");
     expect(txRow(second).status).toBe("posted");
     expect(periodStatus(10)).toBe("closed");
@@ -257,6 +257,87 @@ describe("draft transactions and batches", () => {
     expect(posted.json().posted).toEqual([id]);
     const again = await app.inject({ method: "PUT", url: `/api/transactions/${id}/draft`, payload: { kind: "expense", amountCents: 1, description: "x", date: "2026-03-20T08:00:00+07:00", walletAccountId: 1 } });
     expect(again.statusCode).toBe(409);
+  });
+
+  const postIncome = (amount: number, date: string, walletAccountId = 1) => app.inject({
+    method: "POST", url: "/api/transactions",
+    payload: { kind: "income", amountCents: amount, description: "Salary", date, walletAccountId },
+  });
+  const MARCH_31_EVENING = new Date(2026, 2, 31, 23, 59, 59, 999).getTime();
+
+  it("previews what the batch does to each account and settles one by keeping today's balance", async () => {
+    expect((await postIncome(1_000_000, "2026-10-02T09:00:00+07:00")).statusCode).toBe(201);
+    const batchId = await createBatch();
+    await draftExpense(batchId);
+    await draftExpense(batchId, { kind: "income", amountCents: 7_000_000, description: "Salary income - March 2026", categoryId: undefined, tagIds: undefined });
+
+    const preview = await app.inject({ method: "GET", url: `/api/transaction-batches/${batchId}/settlement` });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().accounts).toEqual([expect.objectContaining({
+      accountId: 1, accountName: "BNI", accountType: "asset", currentBalance: 1_000_000, batchDelta: 6_950_000, draftCount: 2, adjustments: [],
+    })]);
+
+    const response = await app.inject({
+      method: "POST", url: `/api/transaction-batches/${batchId}/post`,
+      payload: { settlements: [{ accountId: 1, mode: "keep_current", asOfDate: MARCH_31_EVENING }] },
+    });
+    expect(response.statusCode).toBe(200);
+    const [settlement] = response.json().settlements;
+    expect(settlement).toMatchObject({ accountId: 1, difference: -6_950_000 });
+    expect(balance(1)).toBe(1_000_000);
+    expect(txRow(settlement.transactionId)).toMatchObject({ status: "posted", txType: "balance_adjustment", periodId: 10, batchId });
+    expect(periodStatus(10)).toBe("closed");
+
+    const items = state.db.select().from(schema.reconciliationItems).all();
+    expect(items).toEqual([expect.objectContaining({ accountId: 1, ledgerBalance: 6_950_000, actualBalance: 0, difference: -6_950_000, correctionTransactionId: settlement.transactionId })]);
+    const session = state.db.select().from(schema.reconciliationSessions).all()[0];
+    expect(session).toMatchObject({ kind: "adjustment", status: "adjusted" });
+
+    const after = await app.inject({ method: "GET", url: `/api/transaction-batches/${batchId}/settlement` });
+    expect(after.json().accounts).toEqual([]);
+  });
+
+  it("matches a statement's closing balance on one account and leaves the other to move", async () => {
+    const batchId = await createBatch();
+    await app.inject({
+      method: "POST", url: "/api/transactions",
+      payload: { kind: "transfer", amountCents: 200_000, description: "Top up GoPay", date: "2026-03-20T08:00:00+07:00", walletAccountId: 1, toWalletAccountId: 2, status: "draft", batchId },
+    });
+    await draftExpense(batchId, { amountCents: 30_000, description: "Kopi", date: "2026-03-21T08:00:00+07:00", walletAccountId: 2 });
+
+    const at = await app.inject({ method: "GET", url: `/api/transaction-batches/${batchId}/balance-at?accountId=2&asOfDate=${MARCH_31_EVENING}` });
+    expect(at.statusCode).toBe(200);
+    expect(at.json()).toEqual({ postedBalance: 0, draftDelta: 170_000 });
+
+    const response = await app.inject({
+      method: "POST", url: `/api/transaction-batches/${batchId}/post`,
+      payload: { settlements: [{ accountId: 2, mode: "match", asOfDate: MARCH_31_EVENING, actualBalance: 150_000 }] },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().settlements).toEqual([expect.objectContaining({ accountId: 2, difference: -20_000 })]);
+    expect(balance(2)).toBe(150_000);
+    expect(balance(1)).toBe(-200_000);
+  });
+
+  it("records a matched statement balance without an adjustment, and refuses settling an account twice", async () => {
+    const batchId = await createBatch();
+    await draftExpense(batchId);
+    const twice = await app.inject({
+      method: "POST", url: `/api/transaction-batches/${batchId}/post`,
+      payload: { settlements: [
+        { accountId: 1, mode: "keep_current", asOfDate: MARCH_31_EVENING },
+        { accountId: 1, mode: "match", asOfDate: MARCH_31_EVENING, actualBalance: 0 },
+      ] },
+    });
+    expect(twice.statusCode).toBe(400);
+    expect(balance(1)).toBe(0);
+
+    const response = await app.inject({
+      method: "POST", url: `/api/transaction-batches/${batchId}/post`,
+      payload: { settlements: [{ accountId: 1, mode: "match", asOfDate: MARCH_31_EVENING, actualBalance: -50_000 }] },
+    });
+    expect(response.json().settlements).toEqual([{ accountId: 1, difference: 0, transactionId: null }]);
+    expect(state.db.select().from(schema.reconciliationSessions).all()[0]).toMatchObject({ kind: "control", status: "reconciled" });
   });
 
   it("refuses a posted journal in a batch and a draft import outside draft mode", async () => {
