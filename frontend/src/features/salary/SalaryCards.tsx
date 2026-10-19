@@ -509,21 +509,24 @@ export function TaxIncomeCard({ year, rows, totals, loading, savingId, onChange,
                 className={cn('ui-segmented ui-segmented--3 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1', savingId === row.id && 'opacity-60')}
                 role="radiogroup"
                 aria-label={`Tax treatment of ${row.description}`}
-                data-segment-index={TREATMENT_ORDER.indexOf(row.taxTreatment)}
+                data-segment-index={row.marked ? TREATMENT_ORDER.indexOf(row.taxTreatment) : -1}
               >
-                {TREATMENT_ORDER.map((treatment) => (
-                  <button
-                    key={treatment}
-                    type="button"
-                    role="radio"
-                    aria-checked={row.taxTreatment === treatment}
-                    disabled={savingId === row.id}
-                    onClick={() => { if (treatment !== row.taxTreatment || !row.marked) onChange(row.id, treatment); }}
-                    className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', row.taxTreatment === treatment ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}
-                  >
-                    {TAX_TREATMENT_LABELS[treatment]}
-                  </button>
-                ))}
+                {TREATMENT_ORDER.map((treatment) => {
+                  const chosen = row.marked && row.taxTreatment === treatment;
+                  return (
+                    <button
+                      key={treatment}
+                      type="button"
+                      role="radio"
+                      aria-checked={chosen}
+                      disabled={savingId === row.id}
+                      onClick={() => { if (!chosen) onChange(row.id, treatment); }}
+                      className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', chosen ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}
+                    >
+                      {TAX_TREATMENT_LABELS[treatment]}
+                    </button>
+                  );
+                })}
               </div>
             </li>
           ))}

@@ -1240,6 +1240,8 @@ button[data-variant="danger"]:focus-visible,
 .ui-segmented[data-segment-index="2"]::before { transform: translateX(calc(200% + .5rem)); }
 .ui-segmented[data-segment-index="3"]::before { transform: translateX(calc(300% + .75rem)); }
 .ui-segmented[data-segment-index="4"]::before { transform: translateX(calc(400% + 1rem)); }
+/* Nothing chosen yet: no thumb. */
+.ui-segmented[data-segment-index="-1"]::before { opacity: 0; }
 
 /* Menus appear promptly, with just enough movement to establish their source. */
 .ui-popover,
