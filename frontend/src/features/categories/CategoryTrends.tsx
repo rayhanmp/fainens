@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
@@ -62,6 +62,90 @@ function ChangeLabel({ change }: { change: number }) {
 
 type Segment = { item: Series; value: number };
 
+function Stat({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="text-[11px] text-[var(--ref-on-surface-variant)]">{label}</dt>
+      <dd className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * A strip of tiny columns, one per period, for picking which periods the stats cover: press one to
+ * pick it, drag across to pick a run, press the lone pick again (or "All") to go back to every period.
+ */
+function PeriodScrubber({ periods, values, running, range, onChange, color }: {
+  periods: Array<{ id: number; name: string }>;
+  values: number[];
+  running: boolean[];
+  range: [number, number] | null;
+  onChange: (range: [number, number] | null) => void;
+  color?: string;
+}) {
+  const [anchor, setAnchor] = useState<number | null>(null);
+  useEffect(() => {
+    if (anchor == null) return;
+    const release = () => setAnchor(null);
+    window.addEventListener('pointerup', release);
+    return () => window.removeEventListener('pointerup', release);
+  }, [anchor]);
+  const max = Math.max(1, ...values);
+  const span = (from: number, to: number) => onChange([Math.min(from, to), Math.max(from, to)]);
+  const lone = (index: number) => range != null && range[0] === index && range[1] === index;
+  const toggle = (index: number) => (lone(index) ? onChange(null) : span(index, index));
+
+  return (
+    <div className="flex items-end gap-3">
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        aria-pressed={range == null}
+        className={cn('mb-3.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors', range == null ? 'bg-[var(--ref-on-surface)] text-[var(--ref-surface-container-lowest)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]')}
+      >
+        All
+      </button>
+      <div className="flex touch-none select-none items-end gap-1" role="group" aria-label="Pick salary periods">
+        {periods.map((period, index) => {
+          const on = range == null || (index >= range[0] && index <= range[1]);
+          return (
+            <button
+              key={period.id}
+              type="button"
+              aria-pressed={range != null && on}
+              aria-label={`${period.name}${running[index] ? ' (so far)' : ''}`}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                if (lone(index)) {
+                  onChange(null);
+                  return;
+                }
+                setAnchor(index);
+                span(index, index);
+              }}
+              onPointerEnter={() => anchor != null && span(anchor, index)}
+              // Keyboard presses arrive as clicks with no pointer behind them.
+              onClick={(event) => event.detail === 0 && toggle(index)}
+              className="group flex w-7 flex-col items-center gap-1 rounded-md pt-1 outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]"
+            >
+              <span className="flex h-7 w-4 items-end">
+                <span
+                  className={cn('w-full rounded-[3px] transition-[background-color,opacity] group-hover:opacity-100', running[index] && 'opacity-60')}
+                  style={{
+                    height: `${Math.max(10, (values[index] / max) * 100)}%`,
+                    backgroundColor: on ? (color ?? 'var(--ref-primary)') : 'var(--ref-outline-variant)',
+                  }}
+                />
+              </span>
+              <span className={cn('text-[10px] leading-none', on && range != null ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>{shortPeriod(period.name).slice(0, 3)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Spending per salary period as stacked columns, the biggest categories at the bottom. Hovering a
  * column lists what it is made of; clicking a legend entry (or a trend row) focuses that category.
@@ -72,6 +156,8 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
   const { periods, ranked, isLoading, isFetching } = usePeriodSeries(categories, 8);
   const [hover, setHover] = useState<{ period: number; series: number | null } | null>(null);
   const [legendHover, setLegendHover] = useState<number | null>(null);
+  // The periods picked in the scrubber, as first and last index; null is every period.
+  const [range, setRange] = useState<[number, number] | null>(null);
   const [now] = useState(() => Date.now());
   const short = (value: number) => (balancesHidden ? formatAmount(value) : shortRupiah(value));
 
@@ -89,12 +175,30 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
   const ticks = Array.from({ length: stepCount + 1 }, (_, index) => index * step).filter((_, index) => stepCount <= 2 || index % 2 === 0 || index === stepCount);
   const running = periods.map((period) => period.endDate > now);
   const complete = periods.map((_, index) => index).filter((index) => !running[index]);
-  // The header stats follow the focused category, else the one hovered in the legend, else everything.
+  // The stats follow the focused category, else the one hovered in the legend, else everything;
+  // and the periods picked in the scrubber, else all of them.
   const statSeries = focused ?? series.find((item) => item.id === legendHover) ?? null;
   const statValues = statSeries ? statSeries.values : totals;
-  const average = complete.length > 0 ? complete.reduce((sum, index) => sum + statValues[index], 0) / complete.length : null;
-  const peak = complete.length > 0 ? complete.reduce((best, index) => (statValues[index] > statValues[best] ? index : best), complete[0]) : null;
-  const statTotal = statValues.reduce((sum, value) => sum + value, 0);
+  const inRange = (index: number) => range == null || (index >= range[0] && index <= range[1]);
+  const picked = periods.map((_, index) => index).filter(inRange);
+  const pickedComplete = picked.filter((index) => !running[index]);
+  const averageOf = (indices: number[]) => (indices.length > 0 ? indices.reduce((sum, index) => sum + statValues[index], 0) / indices.length : null);
+  const average = averageOf(pickedComplete);
+  const overallAverage = averageOf(complete);
+  const peakPool = pickedComplete.length > 0 ? pickedComplete : picked;
+  const peak = peakPool.length > 0 ? peakPool.reduce((best, index) => (statValues[index] > statValues[best] ? index : best), peakPool[0]) : null;
+  const statTotal = picked.reduce((sum, index) => sum + statValues[index], 0);
+  const single = range != null && range[0] === range[1] ? range[0] : null;
+  const rangeLabel = range == null
+    ? `all ${periods.length} periods`
+    : single != null ? shortPeriod(periods[single].name) : `${shortPeriod(periods[range[0]].name)} – ${shortPeriod(periods[range[1]].name)}`;
+  // For one period: how it sits against the usual period, and what took most of it.
+  const versusUsual = single != null && overallAverage ? (statValues[single] - overallAverage) / overallAverage : null;
+  const topInSingle = single != null && !statSeries ? [...series].sort((a, b) => b.values[single] - a.values[single])[0] : null;
+  const pickPeriod = (index: number, extend: boolean) => {
+    if (extend && range) setRange([Math.min(range[0], index), Math.max(range[1], index)]);
+    else setRange(single === index ? null : [index, index]);
+  };
   const changeAt = (index: number) => (index > 0 && !running[index] && values[index - 1] > 0 ? (values[index] - values[index - 1]) / values[index - 1] : null);
   const grandTotal = totals.reduce((sum, value) => sum + value, 0);
 
@@ -121,27 +225,33 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
           </h2>
           <p className="text-xs text-[var(--ref-on-surface-variant)]">{focused ? 'One category across the salary periods. Clear it to see every category.' : 'Each salary period, split by category. Hover a column for its breakdown.'}</p>
         </div>
-        {periods.length > 0 && (
-          <dl className="flex items-end gap-6 text-right" aria-live="polite">
-            <div className="flex items-center gap-1.5 self-center text-xs font-medium text-[var(--ref-on-surface)]">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: statSeries?.color ?? 'var(--ref-on-surface)' }} aria-hidden />
-              {statSeries ? statSeries.name : 'All categories'}
-            </div>
-            <div>
-              <dt className="text-[11px] text-[var(--ref-on-surface-variant)]">Total, {periods.length} periods</dt>
-              <dd className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{short(statTotal)}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] text-[var(--ref-on-surface-variant)]">Average period</dt>
-              <dd className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{average != null ? short(average) : '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] text-[var(--ref-on-surface-variant)]">Highest</dt>
-              <dd className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{peak != null ? `${short(statValues[peak])} · ${shortPeriod(periods[peak].name)}` : '—'}</dd>
-            </div>
-          </dl>
-        )}
+        {periods.length > 0 && <PeriodScrubber periods={periods} values={statValues} running={running} range={range} onChange={setRange} color={statSeries?.color} />}
       </div>
+
+      {periods.length > 0 && (
+        <dl className="flex flex-wrap items-center gap-x-8 gap-y-2 border-b border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 px-5 py-2.5" aria-live="polite">
+          <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: statSeries?.color ?? 'var(--ref-on-surface)' }} aria-hidden />
+            <span className="truncate"><span className="font-semibold text-[var(--ref-on-surface)]">{statSeries ? statSeries.name : 'All categories'}</span> · {rangeLabel}</span>
+          </div>
+          <Stat label="Total" value={short(statTotal)} />
+          {single != null ? (
+            <>
+              <Stat label="Against a usual period" value={versusUsual != null ? <ChangeLabel change={versusUsual} /> : '—'} />
+              {topInSingle && topInSingle.values[single] > 0 ? (
+                <Stat label="Most of it" value={<span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: topInSingle.color }} aria-hidden />{topInSingle.name} · {short(topInSingle.values[single])}</span>} />
+              ) : statSeries && totals[single] > 0 ? (
+                <Stat label="Share of the period" value={`${Math.round((statValues[single] / totals[single]) * 100)}% of ${short(totals[single])}`} />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Stat label="Average period" value={average != null ? short(average) : '—'} />
+              <Stat label="Highest" value={peak != null ? `${short(statValues[peak])} · ${shortPeriod(periods[peak].name)}` : '—'} />
+            </>
+          )}
+        </dl>
+      )}
 
       {isLoading ? (
         <p className="px-5 py-10 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
@@ -164,7 +274,8 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                 const isHovered = hover?.period === periodIndex;
                 // Legend hover only dims while every category is shown; a focused chart stays as it is.
                 const legendDim = focused ? null : legendHover;
-                const dimmed = (hover != null && !isHovered) || (legendDim != null && !segments.some((segment) => segment.item.id === legendDim));
+                const outside = !inRange(periodIndex);
+                const dimmed = outside || (hover != null && !isHovered) || (legendDim != null && !segments.some((segment) => segment.item.id === legendDim));
                 const tooltipLeft = periodIndex < periods.length / 2;
                 return (
                   <div
@@ -182,7 +293,7 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                       {columnTotal > 0 ? short(columnTotal) : ''}
                     </span>
                     <div
-                      className={cn('relative flex w-full max-w-[3.25rem] flex-col-reverse gap-px overflow-hidden rounded-t-md transition-opacity', dimmed && 'opacity-40', !dimmed && running[periodIndex] && 'opacity-55')}
+                      className={cn('relative flex w-full max-w-[3.25rem] flex-col-reverse gap-px overflow-hidden rounded-t-md transition-opacity', outside && !isHovered ? 'opacity-20' : dimmed ? 'opacity-40' : running[periodIndex] && 'opacity-55')}
                       style={{ height: `${(columnTotal / ceiling) * 100}%` }}
                     >
                       {segments.map(({ item, value }) => (
@@ -218,12 +329,23 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
               })}
             </div>
           </div>
+          {/* Month names pick periods too: click one, shift-click to stretch the pick to it. */}
           <div className="ml-14 mt-2 flex gap-2 sm:gap-4">
             {periods.map((period, index) => (
-              <p key={period.id} className={cn('min-w-0 flex-1 truncate text-center text-xs', hover?.period === index ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>
+              <button
+                key={period.id}
+                type="button"
+                onClick={(event) => pickPeriod(index, event.shiftKey)}
+                title="Click to pick this period, shift-click to pick a run"
+                className={cn(
+                  'min-w-0 flex-1 truncate rounded-md py-0.5 text-center text-xs transition-colors hover:bg-[var(--ref-surface-container-low)]',
+                  hover?.period === index || (range != null && inRange(index)) ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]',
+                  !inRange(index) && 'opacity-50',
+                )}
+              >
                 {shortPeriod(period.name)}
-                {running[index] && <span className="text-[var(--ref-outline)]"> · so far</span>}
-              </p>
+                {running[index] && <span className="font-normal text-[var(--ref-outline)]"> · so far</span>}
+              </button>
             ))}
           </div>
 

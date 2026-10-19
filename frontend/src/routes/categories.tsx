@@ -259,8 +259,9 @@ function CategoriesPage() {
           ))}
         </dl>
 
-        <section className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className={panelFrame}>
+        {/* Both panels share the row's height, so the category list never ends short of the tags. */}
+        <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className={cn(panelFrame, 'flex flex-col')}>
             <div className={panelHeader}>
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Categories</h2>
@@ -289,8 +290,9 @@ function CategoriesPage() {
                 </Button>
               </div>
             ) : (
-              // Two columns; the last row's bottom borders tuck under the panel's own border.
-              <ul className="-mb-px grid sm:grid-cols-2">
+              // Two columns of equal-height rows that fill the panel; the last row's bottom borders tuck
+              // under the panel's own border.
+              <ul className="-mb-px grid flex-1 auto-rows-fr sm:grid-cols-2">
                 {orderedCategories.map((c) => {
                   const count = usage(c);
                   const color = c.color || 'var(--ref-primary)';
