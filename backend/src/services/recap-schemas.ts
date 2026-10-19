@@ -14,7 +14,9 @@ export const recapSchema = z.object({
     topPurchases: z.array(z.object({ description: z.string(), amount: z.number().positive(), date: z.number(), category: z.string() })).max(3).optional(),
     repeatPurchases: z.array(z.object({ description: z.string(), occurrences: z.number().int().positive(), totalAmount: z.number().positive(), category: z.string() })).max(2).optional(),
   }).optional(),
-  categories: z.array(z.object({ name: z.string(), amount: z.number() })),
+  // Optional so editions saved before these fields existed still parse.
+  daily: z.array(z.object({ date: z.number(), amount: z.number().positive(), purchaseCount: z.number().int().nonnegative() })).max(62).optional(),
+  categories: z.array(z.object({ categoryId: z.number().int().nullable().optional(), name: z.string(), amount: z.number() })),
   baseline: z.object({
     periodCount: z.number().int().min(1).max(3), matchedElapsed: z.boolean(),
     income: z.number(), expenses: z.number(), purchaseCount: z.number().nonnegative(), purchaseTotal: z.number().nonnegative().optional(),

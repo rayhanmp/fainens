@@ -35,7 +35,7 @@ describe("salary-period recaps", () => {
     expect(summary).toMatchObject({ expenses: 70, income: 200, net: 130, activityCount: 3, purchaseCount: 1, spendingDays: 1 });
     expect(summary.largestPurchase?.amount).toBe(100);
     expect(summary.purchaseProfile).toEqual({ totalAmount: 100, medianAmount: 100 });
-    expect(summary.categories).toEqual([{ name: "Food", amount: 70 }]);
+    expect(summary.categories).toEqual([{ categoryId: 1, name: "Food", amount: 70 }]);
     expect(summarizeRecap(facts()).largestPurchase).toBeNull();
   });
   it("summarizes repeat purchases and the peak net expense day without treating credits as purchases", () => {
@@ -46,6 +46,16 @@ describe("salary-period recaps", () => {
     expect(summary.highlights.topPurchases.map(purchase => purchase.description)).toEqual(["Coffee", "Coffee", "Train"]);
     expect(summary.highlights.repeatPurchases).toEqual([{ description: "Coffee", occurrences: 2, totalAmount: 300, category: "Food" }]);
     expect(summarizeRecap(facts()).highlights).toEqual({ averagePurchaseAmount: null, peakSpendingDay: null, topPurchases: [], repeatPurchases: [] });
+    expect(summary.daily).toEqual([
+      { date: local(2026, 7, 25), amount: 20, purchaseCount: 2 },
+      { date: local(2026, 7, 26), amount: 50, purchaseCount: 1 },
+    ]);
+  });
+  it("does not count the app's own transfer fees as repeat purchases", () => {
+    const fee = (id: number) => ({ ...row(id, 1000), description: "Transfer fee: Transfer BNI" });
+    const summary = summarizeRecap(facts({ rows: [fee(1), fee(2), fee(3)] }));
+    expect(summary.highlights.repeatPurchases).toEqual([]);
+    expect(summary.purchaseCount).toBe(3);
   });
   it("uses the exact cross-month salary boundaries and assigned period identity", async () => {
     mocks.facts.mockResolvedValueOnce(facts({ totalSpentCents: 80 })).mockResolvedValueOnce(facts({ totalSpentCents: 100 }));

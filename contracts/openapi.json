@@ -20286,11 +20286,45 @@
                               ],
                               "additionalProperties": false
                             },
+                            "daily": {
+                              "maxItems": 62,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "date": {
+                                    "type": "number"
+                                  },
+                                  "amount": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "exclusiveMinimum": true
+                                  },
+                                  "purchaseCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "date",
+                                  "amount",
+                                  "purchaseCount"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
                             "categories": {
                               "type": "array",
                               "items": {
                                 "type": "object",
                                 "properties": {
+                                  "categoryId": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
                                   "name": {
                                     "type": "string"
                                   },
@@ -20909,11 +20943,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "daily": {
+                          "maxItems": 62,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "number"
+                              },
+                              "amount": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              },
+                              "purchaseCount": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "date",
+                              "amount",
+                              "purchaseCount"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "categories": {
                           "type": "array",
                           "items": {
                             "type": "object",
                             "properties": {
+                              "categoryId": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
                               "name": {
                                 "type": "string"
                               },
@@ -21576,11 +21644,45 @@
                       ],
                       "additionalProperties": false
                     },
+                    "daily": {
+                      "maxItems": 62,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "number"
+                          },
+                          "amount": {
+                            "type": "number",
+                            "minimum": 0,
+                            "exclusiveMinimum": true
+                          },
+                          "purchaseCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "amount",
+                          "purchaseCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "categories": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
+                          "categoryId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "name": {
                             "type": "string"
                           },

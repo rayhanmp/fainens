@@ -9000,7 +9000,27 @@ export type GetSavedRecapStory200StorySnapshotHighlights = {
   repeatPurchases?: GetSavedRecapStory200StorySnapshotHighlightsRepeatPurchasesItem[];
 };
 
+export type GetSavedRecapStory200StorySnapshotDailyItem = {
+  date: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+};
+
 export type GetSavedRecapStory200StorySnapshotCategoriesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId?: number | null;
   name: string;
   amount: number;
 };
@@ -9111,6 +9131,8 @@ export type GetSavedRecapStory200StorySnapshot = {
   /** @nullable */
   purchaseProfile?: GetSavedRecapStory200StorySnapshotPurchaseProfile;
   highlights?: GetSavedRecapStory200StorySnapshotHighlights;
+  /** @maxItems 62 */
+  daily?: GetSavedRecapStory200StorySnapshotDailyItem[];
   categories: GetSavedRecapStory200StorySnapshotCategoriesItem[];
   /** @nullable */
   baseline?: GetSavedRecapStory200StorySnapshotBaseline;
@@ -9327,7 +9349,27 @@ export type WriteRecapStory200SnapshotHighlights = {
   repeatPurchases?: WriteRecapStory200SnapshotHighlightsRepeatPurchasesItem[];
 };
 
+export type WriteRecapStory200SnapshotDailyItem = {
+  date: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+};
+
 export type WriteRecapStory200SnapshotCategoriesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId?: number | null;
   name: string;
   amount: number;
 };
@@ -9438,6 +9480,8 @@ export type WriteRecapStory200Snapshot = {
   /** @nullable */
   purchaseProfile?: WriteRecapStory200SnapshotPurchaseProfile;
   highlights?: WriteRecapStory200SnapshotHighlights;
+  /** @maxItems 62 */
+  daily?: WriteRecapStory200SnapshotDailyItem[];
   categories: WriteRecapStory200SnapshotCategoriesItem[];
   /** @nullable */
   baseline?: WriteRecapStory200SnapshotBaseline;
@@ -9647,7 +9691,27 @@ export type GetPeriodRecap200Highlights = {
   repeatPurchases?: GetPeriodRecap200HighlightsRepeatPurchasesItem[];
 };
 
+export type GetPeriodRecap200DailyItem = {
+  date: number;
+  /**
+   * @minimum 0
+   * @exclusiveMinimum
+   */
+  amount: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  purchaseCount: number;
+};
+
 export type GetPeriodRecap200CategoriesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId?: number | null;
   name: string;
   amount: number;
 };
@@ -9758,6 +9822,8 @@ export type GetPeriodRecap200 = {
   /** @nullable */
   purchaseProfile?: GetPeriodRecap200PurchaseProfile;
   highlights?: GetPeriodRecap200Highlights;
+  /** @maxItems 62 */
+  daily?: GetPeriodRecap200DailyItem[];
   categories: GetPeriodRecap200CategoriesItem[];
   /** @nullable */
   baseline?: GetPeriodRecap200Baseline;

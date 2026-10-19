@@ -30,7 +30,8 @@ export function summarizeRecap(facts: FinancialFacts) {
   const repeatedPurchases = new Map<string, { description: string; occurrences: number; totalAmount: number; category: string }>();
   for (const row of expenses) {
     const description = row.description.trim();
-    if (!description) continue;
+    // Transfer fees are written by the app for each transfer, not purchases someone chose to repeat.
+    if (!description || /^transfer fee:/i.test(description)) continue;
     const key = description.toLowerCase();
     const repeated = repeatedPurchases.get(key) ?? { description, occurrences: 0, totalAmount: 0, category: row.category ?? "Unallocated" };
     repeated.occurrences += 1;
@@ -63,7 +64,10 @@ export function summarizeRecap(facts: FinancialFacts) {
     purchaseProfile: amounts.length ? { totalAmount: purchaseTotal,
       medianAmount: Math.round(amounts.length % 2 ? amounts[middle] : (amounts[middle - 1] + amounts[middle]) / 2) } : null,
     spendingDays: days.size,
-    categories: facts.byCategory.filter(row => row.spentCents > 0).map(row => ({ name: row.category, amount: row.spentCents })),
+    // Net expenses per local day, for the recap's calendar.
+    daily: [...daily].filter(([, value]) => value.amount > 0).sort((a, b) => a[0] - b[0])
+      .map(([date, value]) => ({ date, amount: value.amount, purchaseCount: value.purchaseCount })),
+    categories: facts.byCategory.filter(row => row.spentCents > 0).map(row => ({ categoryId: row.categoryId, name: row.category, amount: row.spentCents })),
     largestPurchase: largest ? { description: largest.description || "A recorded purchase", amount: largest.expenseCents, date: largest.date } : null,
   };
 }
