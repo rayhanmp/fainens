@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getClassificationUsage, listAccounts, listCategories, listTagGroups, listTags, type ListCategories200Item, type ListTagGroups200Item, type ListTags200Item } from '../../generated/client';
+import { getClassificationUsage, getPeriodCategoryUsage, listAccounts, listCategories, listTagGroups, listTags, type ListCategories200Item, type ListTagGroups200Item, type ListTags200Item } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
 
@@ -33,6 +33,15 @@ export function useCategoryBreakdownQuery(range: { from?: number; to?: number },
       const usage = await unwrapGenerated(getClassificationUsage({ from: range.from, to: range.to }), 200, 'Failed to load the category breakdown');
       return usage.categories;
     },
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Spending per category in each of the latest salary periods, oldest first. */
+export function usePeriodCategoryUsageQuery(count: number) {
+  return useQuery({
+    queryKey: [...queryKeys.categories.all, 'by-period', count] as const,
+    queryFn: async () => (await unwrapGenerated(getPeriodCategoryUsage({ count }), 200, 'Failed to load spending by period')).periods,
     placeholderData: (previous) => previous,
   });
 }

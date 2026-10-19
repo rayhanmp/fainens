@@ -3577,6 +3577,49 @@ export type GetClassificationUsage200 = {
   [key: string]: unknown;
 };
 
+export type GetPeriodCategoryUsageParams = {
+/**
+ * @minimum 1
+ * @maximum 24
+ */
+count?: number;
+};
+
+export type GetPeriodCategoryUsage200PeriodsItemCategoriesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  categoryId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+};
+
+export type GetPeriodCategoryUsage200PeriodsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  startDate: number;
+  endDate: number;
+  categories: GetPeriodCategoryUsage200PeriodsItemCategoriesItem[];
+};
+
+export type GetPeriodCategoryUsage200 = {
+  periods: GetPeriodCategoryUsage200PeriodsItem[];
+  [key: string]: unknown;
+};
+
 export type ListCategoriesParams = {
 /**
  * @maxLength 100
@@ -19792,6 +19835,46 @@ export const getGetClassificationUsageUrl = (params?: GetClassificationUsagePara
 export const getClassificationUsage = async (params?: GetClassificationUsageParams, options?: RequestInit): Promise<getClassificationUsageResponse> => {
   
   return generatedFetch<getClassificationUsageResponse>(getGetClassificationUsageUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getPeriodCategoryUsageResponse200 = {
+  data: GetPeriodCategoryUsage200
+  status: 200
+}
+    
+export type getPeriodCategoryUsageResponseSuccess = (getPeriodCategoryUsageResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getPeriodCategoryUsageResponse = (getPeriodCategoryUsageResponseSuccess)
+
+export const getGetPeriodCategoryUsageUrl = (params?: GetPeriodCategoryUsageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/categories/usage-by-period?${stringifiedParams}` : `/api/categories/usage-by-period`
+}
+
+export const getPeriodCategoryUsage = async (params?: GetPeriodCategoryUsageParams, options?: RequestInit): Promise<getPeriodCategoryUsageResponse> => {
+  
+  return generatedFetch<getPeriodCategoryUsageResponse>(getGetPeriodCategoryUsageUrl(params),
   {      
     ...options,
     method: 'GET'

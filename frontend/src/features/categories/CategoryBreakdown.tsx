@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { CategoryIcon } from './CategoryIcon';
 import { useCategoryBreakdownQuery } from './page-queries';
 import { squarify } from './treemap';
+import { shortRupiah } from './short-rupiah';
 
 type Metric = 'amount' | 'count';
 type Range = '30d' | 'year' | 'all';
@@ -20,17 +21,10 @@ const RANGES: { id: Range; label: string; previous: string | null }[] = [
 ];
 /** Tiles past this many fold into one "Other" tile, so every tile stays big enough to read. */
 const MAX_TILES = 9;
-const BOX = { w: 160, h: 100 };
+/** A wide, short strip: the layout box must match the container's aspect ratio (5:2). */
+const BOX = { w: 200, h: 80 };
 const DAY = 86_400_000;
 
-/** Short rupiah for tight tiles: Rp6,7 jt, Rp850 rb. */
-function shortRupiah(value: number): string {
-  const units: [number, string][] = [[1e9, 'M'], [1e6, 'jt'], [1e3, 'rb']];
-  for (const [size, unit] of units) {
-    if (value >= size) return `Rp${(value / size).toLocaleString('id-ID', { maximumFractionDigits: value / size >= 100 ? 0 : 1 })} ${unit}`;
-  }
-  return `Rp${value.toLocaleString('id-ID')}`;
-}
 
 function bounds(range: Range, now: number, previous: boolean): { from?: number; to?: number } {
   if (range === '30d') return previous ? { from: now - 60 * DAY, to: now - 30 * DAY - 1 } : { from: now - 30 * DAY, to: now };
@@ -158,10 +152,10 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
       ) : tiles.length === 0 ? (
         <p className="px-5 py-10 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending in this range.</p>
       ) : (
-        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="grid gap-4 p-4">
           <div className="relative">
             <div
-              className={cn('relative aspect-[16/10] w-full transition-opacity', current.isFetching && 'opacity-60')}
+              className={cn('relative aspect-[5/2] w-full transition-opacity', current.isFetching && 'opacity-60')}
               role="list"
               aria-label={`Categories by ${metric === 'amount' ? 'amount spent' : 'number of entries'}`}
               onMouseLeave={() => setHovered(null)}
@@ -171,8 +165,8 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
                 const width = (rect.w / BOX.w) * 100;
                 const height = (rect.h / BOX.h) * 100;
                 const tint = tile.row?.color ?? 'var(--ref-outline)';
-                const roomy = width > 17 && height > 20;
-                const compact = !roomy && width > 9 && height > 11;
+                const roomy = width > 12 && height > 32;
+                const compact = !roomy && width > 6 && height > 18;
                 const name = tile.row?.name ?? `Other (${folded.length})`;
                 return (
                   <div
@@ -195,7 +189,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
                       )}
                       {roomy && (
                         <div className="min-w-0">
-                          <p className={cn('truncate font-headline font-bold tabular-nums text-[var(--ref-on-surface)]', width > 30 ? 'text-lg' : width > 21 ? 'text-base' : 'text-xs')}>{metric === 'amount' ? (balancesHidden ? formatAmount(tile.value) : shortRupiah(tile.value)) : tile.value.toLocaleString('id-ID')}</p>
+                          <p className={cn('truncate font-headline font-bold tabular-nums text-[var(--ref-on-surface)]', width > 24 ? 'text-lg' : width > 16 ? 'text-base' : 'text-xs')}>{metric === 'amount' ? (balancesHidden ? formatAmount(tile.value) : shortRupiah(tile.value)) : tile.value.toLocaleString('id-ID')}</p>
                           <p className="text-[11px] tabular-nums text-[var(--ref-on-surface-variant)]">{share(tile.value)}%</p>
                         </div>
                       )}
@@ -214,7 +208,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
             </p>
           </div>
 
-          <div className="grid content-start gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid content-start gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
             <Insight icon={<Crown className="h-3 w-3" />} label="Biggest" row={biggest} value={biggest ? formatAmount(biggest.amount) : ''} detail={biggest ? `${Math.round((biggest.amount / Math.max(1, totalAmount)) * 100)}% of all spending` : ''} />
             <Insight icon={<Repeat2 className="h-3 w-3" />} label="Most frequent" row={frequent} value={frequent ? `${frequent.count}×` : ''} detail={frequent ? `${formatAmount(frequent.average)} each on average` : ''} />
             <Insight icon={<Gem className="h-3 w-3" />} label="Priciest per entry" row={priciest} value={priciest ? formatAmount(priciest.average) : ''} detail={priciest ? `across ${priciest.count} entries` : ''} />

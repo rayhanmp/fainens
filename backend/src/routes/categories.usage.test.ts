@@ -92,6 +92,26 @@ describe("category and tag usage", () => {
     expect(usage).toMatchObject({ expenseCount: 3, categorizedExpenseCount: 2, transactionCount: 4, taggedCount: 2 });
   });
 
+  it("splits spending by salary period, oldest first, skipping periods that haven't started", async () => {
+    state.db.insert(schema.salaryPeriods).values([
+      { id: 1, name: "May 2026", startDate: new Date(2026, 3, 25).getTime(), endDate: new Date(2026, 4, 24).getTime() },
+      { id: 2, name: "June 2026", startDate: new Date(2026, 4, 25).getTime(), endDate: new Date(2026, 5, 24).getTime() },
+      { id: 3, name: "Far future", startDate: new Date(2099, 0, 1).getTime(), endDate: new Date(2099, 1, 1).getTime() },
+    ]).run();
+    entry({ categoryId: 1, date: new Date(2026, 4, 2) }, [[2, 30_000, 0], [1, 0, 30_000]]);
+    // The last day of May's period counts in May, not June.
+    entry({ categoryId: 2, date: new Date(2026, 4, 24, 20, 0) }, [[2, 15_000, 0], [1, 0, 15_000]]);
+    entry({ categoryId: 2, date: new Date(2026, 5, 2) }, [[2, 70_000, 0], [1, 0, 70_000]]);
+
+    const response = await app.inject({ method: "GET", url: "/api/categories/usage-by-period?count=5" });
+    expect(response.statusCode).toBe(200);
+    const { periods } = response.json();
+    expect(periods.map((period: { name: string }) => period.name)).toEqual(["May 2026", "June 2026"]);
+    const amounts = (period: { categories: Array<{ categoryId: number; amount: number }> }) => Object.fromEntries(period.categories.map((row) => [row.categoryId, row.amount]));
+    expect(amounts(periods[0])).toEqual({ 1: 30_000, 2: 15_000 });
+    expect(amounts(periods[1])).toEqual({ 2: 70_000 });
+  });
+
   it("puts single-category spending on its category and nets out a reimbursement, within a date range", async () => {
     entry({ categoryId: 1, date: new Date(2026, 4, 2) }, [[2, 30_000, 0], [1, 0, 30_000]]);
     entry({ categoryId: 2, date: new Date(2026, 6, 2) }, [[2, 70_000, 0], [1, 0, 70_000]]);

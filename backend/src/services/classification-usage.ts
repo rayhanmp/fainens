@@ -1,6 +1,35 @@
-import { sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, lte, sql, type SQL } from "drizzle-orm";
 
 import { db } from "../db/client";
+import { salaryPeriods } from "../db/schema";
+import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
+
+export interface PeriodCategoryUsage {
+  periods: Array<{
+    id: number;
+    name: string;
+    startDate: number;
+    endDate: number;
+    categories: Array<{ categoryId: number; transactionCount: number; amount: number }>;
+  }>;
+}
+
+/** Spending per category in each of the latest salary periods that have started, oldest first. */
+export async function getPeriodCategoryUsage(count: number, now = Date.now()): Promise<PeriodCategoryUsage> {
+  const periods = await db.select({ id: salaryPeriods.id, name: salaryPeriods.name, startDate: salaryPeriods.startDate, endDate: salaryPeriods.endDate })
+    .from(salaryPeriods)
+    .where(and(eq(salaryPeriods.isActive, true), lte(salaryPeriods.startDate, now)))
+    .orderBy(desc(salaryPeriods.startDate))
+    .limit(count);
+  const result = [];
+  for (const period of periods.reverse()) {
+    const from = inclusivePeriodStart(Number(period.startDate));
+    const to = inclusivePeriodEnd(Number(period.endDate));
+    const usage = await getClassificationUsage({ from, to });
+    result.push({ id: period.id, name: period.name, startDate: from, endDate: to, categories: usage.categories });
+  }
+  return { periods: result };
+}
 
 export interface ClassificationUsage {
   /** Entries per category, and the spending allocated to it (net of refunds and reimbursements). */

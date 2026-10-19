@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { accounts, auditLogs, budgetPlans, budgetTemplateItems, categories, transactionCategoryAllocations, transactions } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
-import { getClassificationUsage } from "../services/classification-usage";
+import { getClassificationUsage, getPeriodCategoryUsage } from "../services/classification-usage";
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -126,6 +126,24 @@ export default async function (fastify: FastifyInstance) {
       }).passthrough() },
     },
   }, async (request) => getClassificationUsage(request.query as { from?: number; to?: number }));
+
+  /** Spending per category in each of the latest salary periods, for trends between periods. */
+  fastify.get("/api/categories/usage-by-period", {
+    schema: {
+      operationId: "getPeriodCategoryUsage",
+      tags: ["categories"],
+      querystring: z.object({ count: z.coerce.number().int().min(1).max(24).default(8) }),
+      response: { 200: z.object({
+        periods: z.array(z.object({
+          id: z.number().int(),
+          name: z.string(),
+          startDate: z.number(),
+          endDate: z.number(),
+          categories: z.array(z.object({ categoryId: z.number().int(), transactionCount: z.number().int(), amount: z.number().int() })),
+        })),
+      }).passthrough() },
+    },
+  }, async (request) => getPeriodCategoryUsage((request.query as { count: number }).count));
 
   fastify.get("/api/categories", {
     schema: { operationId: "listCategories", tags: ["categories"], querystring: categoryListQuerySchema, response: categoryListResponse },
