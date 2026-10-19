@@ -306,7 +306,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
   );
   const rowsByKey = useMemo(() => new Map(planRows.map((row) => [row.key, row])), [planRows]);
   // A note of just punctuation ("-") is a placeholder, not a note.
-  const notesByKey = useMemo(() => new Map(budgetRows.flatMap((plan) => {
+  const notesByKey = useMemo(() => new Map<string, string>(budgetRows.flatMap((plan) => {
     const note = plan.note?.trim() ?? '';
     return /[\p{L}\p{N}]/u.test(note) ? [[`c${plan.categoryId}`, note] as const] : [];
   })), [budgetRows]);
