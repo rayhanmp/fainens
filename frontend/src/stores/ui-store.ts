@@ -21,9 +21,12 @@ type UiStore = {
   closeTransactionComposer: () => void;
 };
 
+/** Phones start with balances hidden: the screen is easily seen by others. Wider screens show them. */
+const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+
 export const useUiStore = create<UiStore>()(persist((set) => ({
   compactTables: false,
-  balancesHidden: false,
+  balancesHidden: isPhone(),
   toggleBalancesHidden: () => set((state) => ({ balancesHidden: !state.balancesHidden })),
   activePanel: null,
   setCompactTables: (compactTables) => set({ compactTables }),
@@ -36,4 +39,14 @@ export const useUiStore = create<UiStore>()(persist((set) => ({
   transactionComposer: { isOpen: false },
   openTransactionComposer: (prefill) => set({ transactionComposer: { isOpen: true, prefill } }),
   closeTransactionComposer: () => set({ transactionComposer: { isOpen: false } }),
-}), { name: "fainens-ui", partialize: (state) => ({ compactTables: state.compactTables, balancesHidden: state.balancesHidden }) }));
+}), {
+  name: "fainens-ui",
+  partialize: (state) => ({ compactTables: state.compactTables, balancesHidden: state.balancesHidden }),
+  // Version 1 made hidden balances the phone default. A phone that saved the old default (shown)
+  // switches to hidden once; whatever is chosen after that is kept.
+  version: 1,
+  migrate: (persisted, version) => {
+    const state = (persisted ?? {}) as { compactTables?: boolean; balancesHidden?: boolean };
+    return version < 1 && isPhone() ? { ...state, balancesHidden: true } : state;
+  },
+}));
