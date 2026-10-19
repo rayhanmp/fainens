@@ -27,7 +27,8 @@ export function useSalaryIncomeQuery() {
     queryKey: queryKeys.salary.income,
     queryFn: async ({ signal }) => {
       const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime();
+      // Twelve months, so the income page can show a year of history.
+      const start = new Date(now.getFullYear(), now.getMonth() - 11, 1).getTime();
       const [factsResult, accounts] = await Promise.all([
         fetchFinancialFacts({ startDate: start, endDate: Date.now() }, { signal }),
         unwrapGenerated(listAccounts(undefined, { signal }), 200, 'Failed to load accounts'),

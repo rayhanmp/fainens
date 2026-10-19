@@ -1,14 +1,48 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { incomeKind, monthlyIncomeSeries, payCycle, takeHomeBreakdown } from './income-insights.ts';
+import { incomeKind, monthlyIncomeSeries, payCycle, takeHomeBreakdown, withRollingAverage, yearToDateCurve } from './income-insights.ts';
+
+test('the year-to-date curve accumulates actuals up to this month against a salary-only line', () => {
+  const series = [
+    { key: '2026-01', label: 'Jan', salary: 100, other: 0, total: 100 },
+    { key: '2026-02', label: 'Feb', salary: 100, other: 50, total: 150 },
+    { key: '2025-12', label: 'Dec', salary: 999, other: 0, total: 999 },
+  ];
+  const curve = yearToDateCurve(series, new Date(2026, 2, 10).getTime(), 100);
+  assert.equal(curve.length, 12);
+  assert.deepEqual(curve.slice(0, 4).map((point) => point.actual), [100, 250, 250, null]);
+  assert.deepEqual(curve.slice(0, 3).map((point) => point.expected), [100, 200, 300]);
+  assert.equal(curve[11].expected, 1200);
+});
+
+test('both lines start at the first salary month, so a job begun in February is not measured from January', () => {
+  const series = [
+    { key: '2026-01', label: 'Jan', salary: 0, other: 30, total: 30 },
+    { key: '2026-02', label: 'Feb', salary: 100, other: 0, total: 100 },
+    { key: '2026-03', label: 'Mar', salary: 100, other: 20, total: 120 },
+  ];
+  const curve = yearToDateCurve(series, new Date(2026, 2, 10).getTime(), 100);
+  assert.deepEqual(curve[0], { label: 'Jan', actual: null, expected: null });
+  assert.deepEqual(curve.slice(1, 4).map((point) => point.actual), [100, 220, null]);
+  assert.deepEqual(curve.slice(1, 4).map((point) => point.expected), [100, 200, 300]);
+  assert.equal(curve[11].expected, 1100);
+});
+
+test('the rolling average trails three months and waits for a second month', () => {
+  const series = [100, 200, 300, 400].map((total, index) => ({ key: String(index), label: '', salary: total, other: 0, total }));
+  assert.deepEqual(withRollingAverage(series).map((month) => month.rolling), [null, 150, 200, 300]);
+});
 
 const at = (year, month, day) => new Date(year, month - 1, day, 10).getTime();
 
-test('salary credits are recognised by name, in English or Indonesian', () => {
-  assert.equal(incomeKind('Salary income - September 2026'), 'salary');
-  assert.equal(incomeKind('Gaji Oktober'), 'salary');
-  assert.equal(incomeKind('Freelance On-Frontier (Model Evaluation)'), 'other');
-  assert.equal(incomeKind('Refund on Donation'), 'other');
+test('salary is what the profile posted, or a hand-entered credit named as salary without a side-income marker', () => {
+  assert.equal(incomeKind({ description: 'Anything', txType: 'salary_income' }), 'salary');
+  assert.equal(incomeKind({ description: 'Salary income - September 2026', txType: 'manual' }), 'salary');
+  assert.equal(incomeKind({ description: 'Gaji Oktober' }), 'salary');
+  assert.equal(incomeKind({ description: 'Income salary - September 2026 (Freelance)', txType: 'manual' }), 'other');
+  assert.equal(incomeKind({ description: 'Freelance On-Frontier (Model Evaluation)' }), 'other');
+  assert.equal(incomeKind({ description: 'Refund on Donation' }), 'other');
+  assert.equal(incomeKind({ description: 'Salary bonus' }), 'other');
 });
 
 test('the monthly series covers the last six months, oldest first, split by kind', () => {

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
-import { monthlyIncomeSeries, payCycle, takeHomeBreakdown } from '../features/salary/income-insights';
-import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard } from '../features/salary/SalaryCards';
+import { monthlyIncomeSeries, payCycle, takeHomeBreakdown, yearToDateCurve } from '../features/salary/income-insights';
+import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard, YearToDateCard } from '../features/salary/SalaryCards';
 import { queryKeys } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -50,7 +50,7 @@ type Account = { id: number; name: string; type: string };
 const menuItem = 'flex min-h-10 w-full cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 text-left text-sm font-medium text-[var(--ref-on-surface)] outline-none hover:bg-[var(--ref-surface-container-low)] focus-visible:bg-[var(--ref-surface-container-low)]';
 
 function SalaryIncomePage() {
-  const { formatAmount } = useBalanceVisibility();
+  const { formatAmount, balancesHidden } = useBalanceVisibility();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const incomeQuery = useSalaryIncomeQuery();
@@ -87,7 +87,7 @@ function SalaryIncomePage() {
     [transactions],
   );
   const now = Date.now();
-  const series = useMemo(() => monthlyIncomeSeries(incomeTxs, now), [incomeTxs, now]);
+  const series = useMemo(() => monthlyIncomeSeries(incomeTxs, now, 12), [incomeTxs, now]);
   const payrollDay = salary?.settings.payrollDay ?? 25;
   const cycle = useMemo(() => payCycle(payrollDay, now), [payrollDay, now]);
   const recordedSinceLastPayday = useMemo(
@@ -99,6 +99,8 @@ function SalaryIncomePage() {
   const segments = useMemo(() => (hasPayroll && computed ? takeHomeBreakdown(computed) : []), [hasPayroll, computed]);
   const monthName = new Date(now).toLocaleDateString('en-US', { month: 'long' });
   const recordedThisMonth = series[series.length - 1]?.total ?? 0;
+  const expectedNet = hasPayroll && computed ? computed.estimatedNetMonthly : null;
+  const yearCurve = useMemo(() => (expectedNet != null ? yearToDateCurve(series, now, expectedNet) : []), [series, now, expectedNet]);
 
   const postDueSalary = async () => {
     setPosting(true);
@@ -203,6 +205,9 @@ function SalaryIncomePage() {
                 notes={computed.notes}
                 depositAccountName={salary?.settings.depositAccountName ?? null}
                 payrollDay={payrollDay}
+                ptkpCode={computed.ptkpCode}
+                ptkpAnnual={computed.ptkpAnnual}
+                employerContribution={computed.employerJkk + computed.employerJkm + computed.employerBpjsKes}
                 formatAmount={formatAmount}
                 onEditProfile={() => setProfileOpen(true)}
               />
@@ -213,19 +218,25 @@ function SalaryIncomePage() {
           <div className="lg:col-span-4">
             <PaydayCard
               cycle={cycle}
-              expectedNet={hasPayroll && computed ? computed.estimatedNetMonthly : null}
+              monthLabel={new Date(now).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              expectedNet={expectedNet}
               depositAccountName={salary?.settings.depositAccountName ?? null}
               recordedSinceLastPayday={recordedSinceLastPayday}
               formatAmount={formatAmount}
               postAction={hasPayroll && salary?.settings.depositAccountId ? { label: 'Post due salary', busy: posting, onClick: () => void postDueSalary() } : undefined}
             />
           </div>
-          <div className="lg:col-span-7">
-            <IncomeHistoryCard series={series} formatAmount={formatAmount} loading={isLoading} />
+          <div className={expectedNet != null ? 'lg:col-span-8' : 'lg:col-span-12'}>
+            <IncomeHistoryCard series={series} expectedNet={expectedNet} balancesHidden={balancesHidden} formatAmount={formatAmount} loading={isLoading} />
           </div>
-          <div className="lg:col-span-5">
+          {expectedNet != null && (
+            <div className="lg:col-span-4">
+              <YearToDateCard curve={yearCurve} year={new Date(now).getFullYear()} expectedNet={expectedNet} balancesHidden={balancesHidden} formatAmount={formatAmount} loading={isLoading} />
+            </div>
+          )}
+          <div className="lg:col-span-12">
             <RecentIncomeCard
-              rows={incomeTxs.slice(0, 8)}
+              rows={incomeTxs.slice(0, 10)}
               loading={isLoading}
               formatAmount={formatAmount}
               viewAllHref={(

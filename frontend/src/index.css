@@ -1227,6 +1227,7 @@ button[data-variant="danger"]:focus-visible,
   box-shadow: 0 1px 3px #1118271a, inset 0 1px 0 #ffffff80;
   transition: transform 180ms cubic-bezier(.2, .8, .2, 1), background-color 180ms ease;
 }
+.ui-segmented--2::before { width: calc(50% - 6px); }
 .ui-segmented--4::before { width: calc(25% - 5px); }
 .ui-segmented--5::before { width: calc(20% - 4.8px); }
 .ui-segmented--accent::before {
