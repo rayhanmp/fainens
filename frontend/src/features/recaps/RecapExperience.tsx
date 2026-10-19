@@ -1,7 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Link } from '@tanstack/react-router';
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Pause, Play, RefreshCw, Rewind, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Music, Pause, Play, RefreshCw, Rewind, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
 import { useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type SavedRecapStory } from './queries';
 import { combineYear, recapYear, yearEdition } from './year';
 import { buildStories, periodDateRange, themeColors, type RecapStory } from './stories';
@@ -9,8 +9,8 @@ import { ShareRecap } from './ShareRecap';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
-import { play, playTicks, setSoundEnabled, soundEnabled } from './sfx';
-import { enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type Opening, type SectionVariants, type Transition } from './motion';
+import { play, playTicks, setSoundMode, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
+import { chapterStyle, enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
 
 type ExperienceProps = { initialPeriodId?: number; onPeriodChange?: (periodId: number) => void; onClose?: () => void };
@@ -99,7 +99,12 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const regenerate = useRegenerateRecap(recap.period.id);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
-  const [sound, setSound] = useState(soundEnabled);
+  const [sound, setSound] = useState<SoundMode>(soundMode);
+  // Music mode runs a groove under the whole recap; its tempo and chords follow the run.
+  useEffect(() => {
+    if (sound === 'music') startGroove(run);
+    return () => stopGroove();
+  }, [sound, run]);
   const [party, setParty] = useState(0);
   const index = Math.min(nav.index, stories.length - 1);
   const story = stories[index];
@@ -108,6 +113,12 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
   const gateOf = (item: RecapStory) => Boolean(item.play && !answers[item.id]);
   const quizOpen = gateOf(story);
   const chapterMs = story.duration ?? CHAPTER_MS;
+  // The cover and full-bleed finales keep their own art direction; every other chapter gets remixed.
+  const remixOf = (item: RecapStory) => {
+    const style = chapterStyle(run, `${item.id}:${item.id === 'interlude' ? item.slot : ''}`);
+    return item.id === 'intro' || (item.id === 'closing' && variants.finale !== 'card') ? { ...style, pattern: 'none' as const, frame: 'none' as const, sticker: null } : style;
+  };
+  const remix = remixOf(story);
   const graded = Object.values(answers).filter(answer => answer.scored);
   const score = { correct: graded.filter(answer => answer.correct).length, total: graded.length };
 
@@ -128,7 +139,7 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
     const transition = reducedMotion ? 'slide' : options.transition ?? nextTransition(run, nav.visit + 1, nav.transition);
     if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: nav.direction, transition, gate: quizOpen });
     setNav({ index: next, visit: nav.visit + 1, direction: next >= index ? 'next' : 'prev', transition, origin: options.origin ?? { x: next >= index ? 82 : 18, y: 92 } });
-    play('whoosh');
+    play(transitionSounds[transition]);
     if (!gateOf(stories[next])) arrivalSounds(stories[next], enterDelay(transition), variants);
   };
   // A replay rewinds to the cover with fresh dice, so the second viewing differs from the first.
@@ -138,7 +149,7 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
     setRun(fresh);
     setAnswers({});
     setNav({ index: 0, visit: nav.visit + 1, direction: 'prev', transition: 'rewind', origin: { x: 50, y: 50 } });
-    play('whoosh');
+    play('rewind');
   };
   // Answering (or skipping) zooms the question away and plays the chapter's reveal in its place.
   const answer = (result: PlayResult) => {
@@ -213,6 +224,7 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
   useEffect(() => {
     if (greeted.current) return;
     greeted.current = true;
+    if (opening) play('jingle', 150);
     arrivalSounds(stories[0], opening ? 1050 : 120, variants);
   });
   const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -292,7 +304,8 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
         if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) go(index + (dx < 0 ? 1 : -1));
       }}>
       {/* A year in review is computed live from its periods, so there is no saved take to rewrite. */}
-      <div className="recap-overlay-actions">{controls}{!yearMode && <button className="recap-icon-pill" disabled={regenerate.isPending} onClick={() => regenerate.mutate()} aria-label="New take" title="Rewrite the story and refresh its figures"><RefreshCw size={15} className={regenerate.isPending ? 'recap-spin' : ''} /></button>}<button className="recap-icon-pill" onClick={() => setShareOpen(true)} aria-label="Share recap"><Download size={15} /></button><button className="recap-icon-pill" aria-pressed={sound} onClick={() => { const next = !sound; setSoundEnabled(next); setSound(next); play('pop'); }} aria-label={sound ? 'Turn sound and haptics off' : 'Turn sound and haptics on'} title="Sound and haptics">{sound ? <Volume2 size={15} /> : <VolumeX size={15} />}</button></div>
+      <div className="recap-overlay-actions">{controls}{!yearMode && <button className="recap-icon-pill" disabled={regenerate.isPending} onClick={() => regenerate.mutate()} aria-label="New take" title="Rewrite the story and refresh its figures"><RefreshCw size={15} className={regenerate.isPending ? 'recap-spin' : ''} /></button>}<button className="recap-icon-pill" onClick={() => setShareOpen(true)} aria-label="Share recap"><Download size={15} /></button><button className="recap-icon-pill" aria-pressed={sound !== 'off'} onClick={() => { const next = nextSoundMode[sound]; setSoundMode(next); setSound(next); play(next === 'music' ? 'chord' : 'pop'); }}
+        aria-label={soundLabels[sound]} title={soundLabels[sound]}>{sound === 'music' ? <Music size={15} /> : sound === 'fx' ? <Volume2 size={15} /> : <VolumeX size={15} />}</button></div>
       {regenerate.isError && <p className="recap-inline-error" role="alert">{regenerate.error.message}</p>}
       <div className="recap-progress" aria-label="Story chapters">{stories.map((item, i) => {
         const active = i === index && !last;
@@ -309,15 +322,17 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
         onPointerUp={() => clearTimeout(pressTimer.current)} onPointerLeave={() => clearTimeout(pressTimer.current)}>✳</span></span><span>{yearMode ? (recap.isPartial ? 'Your year so far' : 'The year in review') : recap.isPartial ? 'Your period so far' : 'The period edit'}</span></div>
       {party > 0 && <div key={party} className="recap-party" aria-hidden="true" style={{ '--enter': '0ms' } as CSSProperties}><Burst seed={party} kind="stars" count={60} origin="center" /><Burst seed={party + 1} kind="confetti" count={50} origin="cannons" delay={300} /></div>}
       <ChapterBackdrop key={`${nav.visit}-backdrop`} chapter={story.id} seed={edition.seed + run} />
+      {remix.pattern !== 'none' && <div key={`pattern-${nav.visit}`} className={`recap-pattern recap-pattern-${remix.pattern}`} style={{ '--bx': `${remix.blob.x}%`, '--by': `${remix.blob.y}%` } as CSSProperties} aria-hidden="true" />}
+      {remix.frame !== 'none' && <div key={`frame-${nav.visit}`} className={`recap-frame recap-frame-${remix.frame}`} aria-hidden="true" />}
       {/* The next chapter's colour washes over the card, between the leaving and arriving content. */}
       {overlay && <div key={`wipe-${nav.visit}`} className={`recap-wipe recap-wipe-${nav.transition} recap-dir-${nav.direction}`} style={{ '--wipe': paper } as CSSProperties} aria-hidden="true">
         {nav.transition === 'blinds' && Array.from({ length: 7 }, (_, i) => <i key={i} style={{ '--b': i } as CSSProperties} />)}
         {nav.transition === 'rewind' && <Rewind className="recap-rewind-icon" />}
       </div>}
       <div className="recap-stage">
-        {leaving && contentKey(leaving.visit, leaving.gate) !== contentKey(nav.visit, quizOpen) && <ChapterContent key={contentKey(leaving.visit, leaving.gate)} story={leaving.story} gate={leaving.gate}
+        {leaving && contentKey(leaving.visit, leaving.gate) !== contentKey(nav.visit, quizOpen) && <ChapterContent key={contentKey(leaving.visit, leaving.gate)} story={leaving.story} gate={leaving.gate} remix={remixOf(leaving.story)}
           className={`recap-leaving recap-out-${leaving.transition} recap-dir-${nav.direction}`} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={() => setShareOpen(true)} />}
-        <ChapterContent key={contentKey(nav.visit, quizOpen)} story={story} live gate={quizOpen} answer={answers[story.id]}
+        <ChapterContent key={contentKey(nav.visit, quizOpen)} story={story} live gate={quizOpen} answer={answers[story.id]} remix={remix}
           onAnswer={answer} className={`recap-arriving recap-in-${nav.visit === 0 ? 'first' : nav.transition} recap-dir-${nav.direction} recap-intro-${variants.intro}`}
           style={{ '--enter': `${entering}ms` } as CSSProperties} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={() => setShareOpen(true)} />
       </div>
@@ -336,48 +351,121 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
   </section>;
 }
 
-function ChapterContent({ story, className, style, live = false, gate = false, answer, onAnswer, periodId, variants, run, score, onShare }: {
+function ChapterContent({ story, className: baseClass, style: baseStyle, live = false, gate = false, answer, onAnswer, periodId, variants, run, score, onShare, remix }: {
   story: RecapStory; className: string; style?: CSSProperties; live?: boolean; gate?: boolean; answer?: Answer; onAnswer?: (result: PlayResult) => void;
-  periodId: number; variants: SectionVariants; run: number; score: QuizScore; onShare: () => void;
+  periodId: number; variants: SectionVariants; run: number; score: QuizScore; onShare: () => void; remix: ChapterStyle;
 }) {
+  const className = `${baseClass} recap-title-${remix.title} recap-align-${remix.align}`;
+  const style = { ...baseStyle, '--tilt': `${remix.tilt}deg`, '--tempo': remix.tempo } as CSSProperties;
+  const sticker = remix.sticker && <span className={`recap-sticker recap-sticker-${remix.sticker.corner}`} style={{ '--spin': `${remix.sticker.spin}deg` } as CSSProperties} aria-hidden="true">{remix.sticker.text}</span>;
+  const root = useRef<HTMLDivElement>(null);
+  // The cover, and every finale except the summary card, are full-bleed designs that set their own type.
+  const fullBleed = !gate && (story.id === 'intro' || (story.id === 'closing' && variants.finale !== 'card'));
+  useFitContent(root, !fullBleed);
   if (gate && story.play) {
-    return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
+    return <div ref={root} className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
       <PlayGate play={story.play} eyebrow={story.eyebrow} seed={run} onDone={result => onAnswer?.(result)} />
     </div>;
   }
   const lines = story.title.split('\n').map(line => line.split(' '));
-  // The cover is a full-bleed design that sets its own headline.
-  if (story.id === 'intro') {
-    return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
+  const totalWords = lines.flat().length;
+  if (fullBleed) {
+    return <div ref={root} className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
       <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} score={score} /></div>
     </div>;
   }
-  return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
-    {answer?.verdict && <GameVerdict verdict={answer.verdict} />}
+  return <div ref={root} className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
+    {answer?.verdict ? <GameVerdict verdict={answer.verdict} /> : sticker}
     <p className="recap-story-eyebrow">{story.eyebrow}</p>
     <h2 className={story.title.length > 40 ? 'recap-title-long' : undefined} aria-label={story.title}>
-      {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map((word, i) =>
-        <Fragment key={i}><span className="recap-word-mask"><span style={{ '--word': Math.min(14, lineIndex * 5 + i) } as CSSProperties}>{word}</span></span>{' '}</Fragment>)}</span>)}
+      {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map((word, i) => {
+        const n = lineIndex * 5 + i;
+        // The highlight take marks one word; the mixed take sets every other word in italic serif.
+        const marked = remix.title === 'highlight' && n === remix.mark % Math.max(1, totalWords);
+        const alt = remix.title === 'mixed' && n % 2 === 1;
+        return <Fragment key={i}><span className={['recap-word-mask', marked && 'recap-mark', alt && 'recap-word-alt'].filter(Boolean).join(' ')}><span style={{ '--word': Math.min(14, n) } as CSSProperties}>{word}</span></span>{' '}</Fragment>;
+      })}</span>)}
     </h2>
     <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} score={score} /></div>
     <p className="recap-story-body">{story.body}</p>
   </div>;
 }
 
+/**
+ * A safety net for the many combinations of layout, copy and data: when a chapter's content runs past
+ * its box, it is zoomed down until it fits, never below 72%. Measured from layout, not from the
+ * mid-entrance transforms, and again once the fonts have loaded or the card changes size.
+ */
+function useFitContent(ref: RefObject<HTMLDivElement | null>, enabled: boolean) {
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !enabled) return;
+    const fit = () => {
+      element.style.removeProperty('--fit');
+      delete element.dataset.fit;
+      for (let pass = 0; pass < 2; pass++) {
+        const children = [...element.children].filter((child): child is HTMLElement => child instanceof HTMLElement && getComputedStyle(child).position !== 'absolute');
+        if (!children.length) return;
+        const styles = getComputedStyle(element);
+        const available = element.clientHeight - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom);
+        const top = Math.min(...children.map(child => child.offsetTop - parseFloat(getComputedStyle(child).marginTop)));
+        const bottom = Math.max(...children.map(child => child.offsetTop + child.offsetHeight + parseFloat(getComputedStyle(child).marginBottom)));
+        const used = bottom - top;
+        if (used <= available + 1) return;
+        const current = Number(element.style.getPropertyValue('--fit') || 1);
+        element.style.setProperty('--fit', Math.max(.72, current * available / used).toFixed(3));
+        element.dataset.fit = '';
+      }
+    };
+    fit();
+    void document.fonts?.ready.then(fit);
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref, enabled]);
+}
+
+// The sound button cycles: off, then effects and haptics, then effects with the groove.
+const nextSoundMode: Record<SoundMode, SoundMode> = { off: 'fx', fx: 'music', music: 'off' };
+const soundLabels: Record<SoundMode, string> = { off: 'Sound off. Turn on effects and haptics', fx: 'Effects on. Add music', music: 'Effects and music on. Turn sound off' };
+const transitionSounds: Record<Transition, Sound> = {
+  slide: 'whoosh', drop: 'thud', zoom: 'zoom', flip: 'flap', spin: 'whirl', glitch: 'glitch', iris: 'bloom', blinds: 'shutter', curtain: 'swish', rewind: 'rewind',
+};
+
 /** Sounds timed to a chapter's choreography: slot-machine ticks, stamps landing, the finale. */
 function arrivalSounds(story: RecapStory, enter: number, variants: SectionVariants) {
+  if (story.id === 'interlude') {
+    const cue: Record<typeof story.variant, Sound> = { marquee: 'chord', orbit: 'shimmer', tunnel: 'warp', liquid: 'pour', rain: 'patter', kaleido: 'chord' };
+    play(cue[story.variant], enter + 200);
+    if (story.variant === 'marquee') play('horn', enter + 700);
+  }
+  if (story.id === 'persona') { play('drumroll', enter); play('cymbal', enter + 1250); play('thunk', enter + 1250); }
+  if (story.id === 'overview') {
+    if (variants.overview === 'coins') for (let i = 0; i < 10; i++) play('coin', enter + 500 + i * 110);
+    if (variants.overview === 'scale') { play('flap', enter + 600); play('thunk', enter + 2300); }
+    if (variants.overview === 'donut') play('bloom', enter + 300);
+    if (variants.overview === 'bucket') { play('pour', enter + 300); play('swish', enter + 1600); }
+  }
+  if (story.id === 'budget' && variants.budget === 'gauge') { play('zoom', enter + 300); play('tick', enter + 1500); }
+  if (story.id === 'comparison' && variants.versus === 'versus') { play('thud', enter + 450); play('thud', enter + 600); play('ding', enter + 950); }
+  if (story.id === 'mixtape') play('needle', enter + 300);
+  if (story.id === 'closing') {
+    if (variants.finale === 'receipt') { playTicks(10, 1400, enter + 250); play('cash', enter + 1700); }
+    if (variants.finale === 'credits') { play('chord', enter + 300); play('fanfare', enter + 3300); }
+    if (variants.finale === 'certificate') { play('fanfare', enter + 600); play('thunk', enter + 1300); }
+    if (variants.finale === 'scoreboard') { play('arcade', enter + 400); playTicks(6, 1600, enter + 500); }
+  }
   if (story.id === 'intro') {
-    if (variants.intro === 'magazine') { playTicks(7, 700, enter); play('pop', enter + 900); }
-    if (variants.intro === 'poster') { play('thunk', enter + 650); play('pop', enter + 1100); }
-    if (variants.intro === 'vinyl') { play('thunk', enter + 400); play('scratch', enter + 1100); play('scratch', enter + 1250); }
-    if (variants.intro === 'boarding') { play('whoosh', enter + 700); play('thunk', enter + 1500); }
+    if (variants.intro === 'magazine') { playTicks(7, 700, enter); play('shutter', enter + 850); play('pop', enter + 950); }
+    if (variants.intro === 'poster') { play('thunk', enter + 650); play('bloom', enter + 700); }
+    if (variants.intro === 'vinyl') { play('thunk', enter + 400); play('needle', enter + 1100); play('scratch', enter + 1300); }
+    if (variants.intro === 'boarding') { play('ding', enter + 200); play('whoosh', enter + 700); play('thunk', enter + 1500); }
   }
   if (story.id === 'overview') playTicks(16, 1500, enter + 380);
   if (story.id === 'habits' && story.repeat) play('thunk', enter + 1000);
   if (story.id === 'calendar' && story.peak) play('pop', enter + 1500);
   if (story.id === 'receipts' && variants.receipts === 'print') playTicks(8, 1300, enter + 250);
-  if (story.id === 'persona') { play('thunk', enter + 650); play('chime', enter + 1000); }
-  if (story.id === 'closing') { playTicks(12, 1400, enter + 380); play('fanfare', enter + 900); }
+  if (story.id === 'closing' && variants.finale === 'card') { playTicks(12, 1400, enter + 380); play('fanfare', enter + 900); play('horn', enter + 1300); }
 }
 
 /** The title sequence before the cover: the brand, the period, then the card opens on the story. */

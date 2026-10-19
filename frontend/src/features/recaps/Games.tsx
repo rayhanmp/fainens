@@ -78,7 +78,7 @@ function ReelsGame({ play, seed, onDone }: { play: Extract<Play, { kind: 'reels'
   useEffect(() => {
     if (state !== 'spinning') return;
     playTicks(22, 2300);
-    const win = setTimeout(() => { setState('won'); sfx('fanfare'); }, 2500);
+    const win = setTimeout(() => { setState('won'); sfx('fanfare'); sfx('coin', 250); sfx('coin', 500); sfx('cash', 750); }, 2500);
     const done = setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: `Jackpot! ${winner.label} ×3`, tone: 'party' } }), 3900);
     return () => { clearTimeout(win); clearTimeout(done); };
   }, [state, onDone, winner.label]);
@@ -110,7 +110,7 @@ function HoldGame({ prompt, onDone }: { prompt: string } & GateProps) {
         const next = Math.max(0, Math.min(1, value + (holding.current ? dt / 1600 : -dt / 900)));
         if (next >= 1 && !done.current) {
           done.current = true;
-          sfx('thunk'); sfx('chime', 120);
+          sfx('thunk'); sfx('cymbal'); sfx('chime', 120);
           setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🥁 Ta-da!', tone: 'party' } }), 650);
         }
         return next;
@@ -121,7 +121,10 @@ function HoldGame({ prompt, onDone }: { prompt: string } & GateProps) {
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
   }, [onDone]);
-  const press = (down: boolean) => { holding.current = down && !done.current; };
+  const press = (down: boolean) => {
+    if (down && !holding.current && !done.current) sfx('riser');
+    holding.current = down && !done.current;
+  };
   return <div className={`recap-hold${progress >= 1 ? ' is-full' : ''}`}>
     <button type="button" className="recap-hold-button" style={{ '--p': progress } as CSSProperties} aria-label={prompt}
       onPointerDown={() => press(true)} onPointerUp={() => press(false)} onPointerLeave={() => press(false)} onPointerCancel={() => press(false)}
@@ -139,7 +142,7 @@ function GiftGame({ prompt, seed, onDone }: { prompt: string; seed: number } & G
   const [open, setOpen] = useState(false);
   const unwrap = () => {
     if (open) return;
-    setOpen(true); sfx('pop'); sfx('fanfare', 150);
+    setOpen(true); sfx('pop'); sfx('horn', 120); sfx('fanfare', 300);
     setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🎁 Ta-da!', tone: 'party' } }), 1100);
   };
   return <div className={`recap-gift${open ? ' is-open' : ''}`}>
@@ -159,8 +162,8 @@ function PiggyGame({ prompt, seed, onDone }: { prompt: string; seed: number } & 
     if (taps >= NEEDED) return;
     const next = taps + 1;
     setTaps(next);
-    if (next < NEEDED) { sfx('thunk'); return; }
-    sfx('fanfare');
+    if (next < NEEDED) { sfx('oink'); sfx('thunk', 60); return; }
+    sfx('thud'); sfx('cash', 150); sfx('coin', 400);
     setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🐷 Smashed it!', tone: 'party' } }), 1000);
   };
   const cracks: ReactNode[] = ['M48 18 L42 34 L50 42 L44 58', 'M62 30 L70 44 L64 52', 'M30 46 L40 52 L36 64', 'M56 60 L60 74 L52 82'].slice(0, Math.max(0, taps - 1)).map((d, i) => <path key={i} d={d} />);

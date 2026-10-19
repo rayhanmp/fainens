@@ -21,11 +21,16 @@ export function periodDateRange(period: { startDate: number; endDate: number }) 
   return `${formatRecapDay(period.startDate, options)} – ${formatRecapDay(period.endDate, options)}`;
 }
 
-export type RecapTheme = 'lime' | 'ink' | 'lilac' | 'peach' | 'cream';
+export type RecapTheme = 'lime' | 'ink' | 'lilac' | 'peach' | 'cream' | 'sky' | 'rose' | 'mint' | 'butter' | 'tangerine' | 'coral'
+  | 'acid' | 'plum' | 'navy' | 'cocoa' | 'noir' | 'electric';
 // The same paper and ink pairs as the story themes in recaps.css, for drawing outside CSS.
 export const themeColors: Record<RecapTheme, { paper: string; ink: string }> = {
   lime: { paper: '#d5f478', ink: '#183529' }, ink: { paper: '#1f3a31', ink: '#e2f5bd' }, lilac: { paper: '#d8cff7', ink: '#2d2348' },
   peach: { paper: '#ffd2b7', ink: '#5e3021' }, cream: { paper: '#eee9dd', ink: '#2f3a30' },
+  sky: { paper: '#bfe3ff', ink: '#0f2e4d' }, rose: { paper: '#ffc9d6', ink: '#5a1730' }, mint: { paper: '#bff0d9', ink: '#0f3d2c' },
+  butter: { paper: '#fbe7a1', ink: '#4a3510' }, tangerine: { paper: '#ffb37a', ink: '#4a1f05' }, coral: { paper: '#ff8f7a', ink: '#3d0d05' },
+  acid: { paper: '#e6ff3d', ink: '#1a1a1a' }, plum: { paper: '#3a1f4d', ink: '#f2d9ff' }, navy: { paper: '#14223d', ink: '#cfe3ff' },
+  cocoa: { paper: '#3b2a22', ink: '#ffe2c7' }, noir: { paper: '#121212', ink: '#f5f5f0' }, electric: { paper: '#2d1fd8', ink: '#f3f1ff' },
 };
 export type CategoryShare = { categoryId: number | null; name: string; label: string; amount: number; share: number };
 export type RecapDayCell = { key: string; date: number; amount: number; purchaseCount: number; future: boolean; peak: boolean };
@@ -43,6 +48,11 @@ export type Play =
   | { kind: 'gift'; prompt: string }
   | { kind: 'piggy'; prompt: string };
 export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido';
+/** What the finale prints, whichever form it takes: receipt, credits, certificate or high scores. */
+export type FinaleFacts = {
+  period: string; dateLabel: string; income: number; expenses: number; net: number; keptShare: number | null;
+  categories: Array<{ label: string; share: number }>; peakLabel: string | null; purchaseCount: number; spendingDays: number; passenger: string;
+};
 /** What the cover prints: the issue, the dates, and teasers for this run's chapters. */
 export type CoverFacts = {
   issue: number; year: string; startLabel: string; endLabel: string; teasers: string[]; chapterCount: number;
@@ -71,7 +81,7 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'months'; months: Array<{ label: string; amount: number }>; busiest: number }
   | { id: 'mixtape'; tracks: MixtapeTrack[]; tapeName: string }
   | { id: 'persona'; persona: Persona }
-  | { id: 'closing'; tiles: ClosingTile[]; persona: Persona }
+  | { id: 'closing'; tiles: ClosingTile[]; persona: Persona; finale: FinaleFacts }
 );
 export type RecapStoryId = RecapStory['id'];
 type ChapterData = RecapStory extends infer Story ? Story extends RecapStory ? Omit<Story, 'theme' | keyof Copy | keyof Extras> : never : never;
@@ -79,16 +89,16 @@ type ChapterData = RecapStory extends infer Story ? Story extends RecapStory ? O
 // Older editions saved app-written transfer fees as a "recurring purchase"; they are not habits.
 const isSystemDescription = (description: string) => /^transfer fee:/i.test(description.trim());
 
-const palettes: RecapTheme[][] = [
-  ['lime', 'ink', 'lilac', 'cream', 'peach', 'ink', 'lilac', 'cream', 'lime', 'peach', 'ink'],
-  ['lilac', 'cream', 'ink', 'peach', 'lime', 'ink', 'cream', 'peach', 'lilac', 'lime', 'ink'],
-  ['peach', 'ink', 'lime', 'lilac', 'cream', 'ink', 'peach', 'lilac', 'lime', 'cream', 'peach'],
-  ['cream', 'peach', 'ink', 'lime', 'lilac', 'ink', 'cream', 'lime', 'peach', 'lilac', 'cream'],
-  ['ink', 'lime', 'peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'lilac', 'cream', 'ink'],
-  ['peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'ink', 'lime', 'cream', 'lilac', 'peach'],
-  ['lilac', 'lime', 'cream', 'ink', 'peach', 'lilac', 'ink', 'cream', 'lime', 'peach', 'lilac'],
-  ['lime', 'peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'ink', 'cream', 'lilac', 'lime'],
-];
+/** Palette families: a run picks one and deals its colours out, so each viewing has its own mood. */
+export const PALETTE_FAMILIES: Record<string, RecapTheme[]> = {
+  original: ['lime', 'ink', 'lilac', 'cream', 'peach'],
+  sunset: ['tangerine', 'plum', 'rose', 'butter', 'cocoa', 'coral'],
+  ocean: ['sky', 'navy', 'mint', 'cream', 'electric'],
+  candy: ['rose', 'lilac', 'butter', 'mint', 'plum', 'sky'],
+  midnight: ['noir', 'navy', 'plum', 'cocoa', 'electric', 'ink'],
+  neon: ['acid', 'noir', 'electric', 'coral', 'ink'],
+  earth: ['cocoa', 'butter', 'mint', 'cream', 'ink', 'tangerine'],
+};
 
 /** Longest run of days matching `test`, among elapsed days. */
 function longestRun(days: RecapDayCell[], test: (day: RecapDayCell) => boolean): Streak {
@@ -299,7 +309,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       : recap.comparison ? [{ id: 'comparison' as const, mode: 'total' as const, now: recap.expenses, before: recap.comparison.previousExpenses, change: Math.round(recap.comparison.changePercent),
         beforeLabel: shortDisplayLabel(recap.comparison.periodName, 24), matchedElapsed: false }] : []),
     ...(recap.purchaseCount > 2 ? [{ id: 'persona' as const, persona }] : []),
-    { id: 'closing', tiles: closingTiles, persona },
+    { id: 'closing', tiles: closingTiles, persona, finale: {
+      period: recap.period.name, dateLabel: periodDateRange(recap.period), income: recap.income, expenses: recap.expenses, net: recap.net, keptShare,
+      categories: topRows.slice(0, 3).map(row => ({ label: row.label, share: row.share })), peakLabel: peak ? dayLabel(peak.date) : null,
+      purchaseCount: recap.purchaseCount, spendingDays: recap.spendingDays, passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 18),
+    } },
   ];
 
   // Mini-games: every eligible (chapter, game) pair goes in a hat, and a run deals two or three of
@@ -362,7 +376,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     persona: `What do my spending patterns in ${period} say about my habits?`,
   };
 
-  const palette = palettes[(seed + run) % palettes.length];
+  // Without a run the original family leads; a run deals one family's colours in a shuffled order.
+  const familyNames = Object.keys(PALETTE_FAMILIES);
+  const family = PALETTE_FAMILIES[run === 0 ? 'original' : familyNames[Math.floor(random() * familyNames.length)]];
+  const palette = run === 0 ? [...family.slice(seed % family.length), ...family.slice(0, seed % family.length)] : shuffled(family);
   // A year in review reuses the period copy, reworded for a year.
   const yearView = /^\d{4}$/.test(recap.period.name);
   const forYear = (text: string) => !yearView ? text : text

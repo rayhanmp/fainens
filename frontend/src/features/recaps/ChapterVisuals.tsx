@@ -26,12 +26,12 @@ export function ChapterVisual({ story, periodId, onShare, variants, run, score }
   const shared = { variants, run };
   switch (story.id) {
     case 'intro': return <CoverVisual story={story} {...shared} />;
-    case 'overview': return <FlowVisual story={story} run={run} />;
+    case 'overview': return <FlowVisual story={story} {...shared} />;
     case 'months': return <MonthsVisual story={story} />;
     case 'interlude': return <InterludeVisual story={story} run={run} />;
     case 'mixtape': return <MixtapeVisual story={story} />;
     case 'persona': return <PersonaVisual story={story} />;
-    case 'budget': return <BudgetVisual story={story} periodId={periodId} />;
+    case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;
     case 'weekdays': return <WeekdaysVisual story={story} />;
@@ -110,9 +110,73 @@ function CoverVisual({ story, variants, run }: { story: Of<'intro'> } & Shared) 
   }
 }
 
-function FlowVisual({ story, run }: { story: Of<'overview'>; run: number }) {
+/** Money in against money out, drawn as one of five objects a run picks. */
+function FlowVisual({ story, run, variants }: { story: Of<'overview'> } & Shared) {
+  const income = Math.max(0, story.income);
+  const spent = Math.max(0, story.expenses);
+  const max = Math.max(income, spent, 1);
+  const spentShare = income > 0 ? Math.min(1, spent / income) : 1;
+  const keep = story.net >= 0 ? story.keptShare : null;
+  const legend = <dl className="recap-pair recap-seq" style={seq(5)}>
+    <div><dt>Came in</dt><dd><RollingValue value={income} /></dd></div>
+    <div><dt>Went out</dt><dd><RollingValue value={spent} /></dd></div>
+  </dl>;
+  const leftChip = <p className="recap-flow-chip recap-seq" style={seq(6)}><span>{story.net >= 0 ? 'Left over' : 'Short by'}</span><strong><Money value={Math.abs(story.net)} /></strong>{keep !== null && <em>{keep}%</em>}</p>;
+  switch (variants.overview) {
+    case 'scale': {
+      // The beam tips toward the heavier side: income down when more came in than went out.
+      const tilt = Math.max(-16, Math.min(16, (spent - income) / max * 16));
+      return <div className="recap-flow-scale">
+        <div className="recap-scale" style={{ '--tilt': `${tilt}deg` } as CSSProperties} aria-hidden="true">
+          <div className="recap-scale-beam">
+            <span className="recap-scale-pan recap-scale-in"><b /><small>In</small></span>
+            <span className="recap-scale-pan recap-scale-out"><b /><small>Out</small></span>
+          </div>
+          <i className="recap-scale-post" />
+        </div>
+        {legend}{leftChip}
+      </div>;
+    }
+    case 'coins': {
+      const coinsIn = Math.max(1, Math.round(income / max * 12));
+      const coinsOut = Math.max(spent > 0 ? 1 : 0, Math.round(spent / max * 12));
+      const keptCoins = Math.max(0, coinsIn - coinsOut);
+      return <div className="recap-flow-coins">
+        <div className="recap-coin-towers" aria-hidden="true">
+          {[{ key: 'in', count: coinsIn, label: 'Came in' }, { key: 'out', count: coinsOut, label: 'Went out' }].map((tower, t) => <div key={tower.key} className={`recap-coin-tower recap-coin-${tower.key}`}>
+            <div>{Array.from({ length: tower.count }, (_, i) => <i key={i} className={tower.key === 'in' && i >= tower.count - keptCoins ? 'is-kept' : undefined} style={{ '--c': i, '--t': t } as CSSProperties} />)}</div>
+            <span>{tower.label}</span>
+          </div>)}
+        </div>
+        {legend}{leftChip}
+      </div>;
+    }
+    case 'donut': {
+      const r = 40; const circumference = 2 * Math.PI * r;
+      return <div className="recap-flow-donut">
+        <div className="recap-donut" aria-hidden="true">
+          <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r={r} className="recap-donut-track" />
+            <circle cx="50" cy="50" r={r} className="recap-donut-spent" style={{ '--dash': circumference, '--arc': circumference * spentShare } as CSSProperties} /></svg>
+          <span><strong>{keep !== null ? <AnimatedValue value={keep} suffix="%" /> : <AnimatedValue value={Math.round(spentShare * 100)} suffix="%" />}</strong><small>{keep !== null ? 'left over' : 'went out'}</small></span>
+        </div>
+        {legend}{leftChip}
+      </div>;
+    }
+    case 'bucket':
+      return <div className="recap-flow-bucket">
+        {/* Income pours in to the brim, then expenses drain it down to what was left. */}
+        <div className="recap-glass recap-bucket" style={{ '--level': keep !== null ? keep / 100 : 0 } as CSSProperties} aria-hidden="true">
+          <div className="recap-liquid-fill recap-bucket-fill"><svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M0 10 Q25 0 50 10 T100 10 T150 10 T200 10 V20 H0 Z" /></svg></div>
+          <span className="recap-glass-value">{keep !== null ? <AnimatedValue value={keep} suffix="%" /> : '0%'}</span>
+        </div>
+        {legend}{leftChip}
+      </div>;
+    default: return <FlowBars story={story} run={run} max={max} />;
+  }
+}
+
+function FlowBars({ story, run, max }: { story: Of<'overview'>; run: number; max: number }) {
   const { balancesHidden } = useBalanceVisibility();
-  const max = Math.max(story.income, story.expenses, 1);
   const net = <div className="recap-flow-net recap-seq" style={seq(5)}>
     <span>{story.net >= 0 ? 'Left over' : 'Short by'}</span>
     <strong><RollingValue value={Math.abs(story.net)} /></strong>
@@ -234,17 +298,30 @@ function PersonaBadge({ personaKey, Icon, small = false }: { personaKey: string;
   </span>;
 }
 
-function BudgetVisual({ story, periodId }: { story: Of<'budget'>; periodId: number }) {
+function BudgetVisual({ story, periodId, gauge }: { story: Of<'budget'>; periodId: number; gauge: boolean }) {
   const used = story.percentUsed;
   const over = story.remaining < 0;
+  // The speedometer's arc spans 206° about its centre; its far end is 125% of the plan, the red zone.
+  const angle = (share: number) => -103 + Math.min(1, Math.max(0, share / 125)) * 206;
   return <div className="recap-budget">
-    <div className="recap-big-stat recap-seq" style={seq(3)}>
-      {used !== null ? <><AnimatedValue value={used} suffix="%" /><span>of the plan used</span></> : <><Money value={story.spent} /><span>spent in budgeted categories</span></>}
-    </div>
-    <div className={`recap-meter recap-seq${over ? ' is-over' : ''}`} style={seq(4)} aria-hidden="true">
-      <i style={{ '--fill': Math.min(1, Math.max(0, (used ?? 0) / 100)) } as CSSProperties} />
-      {story.elapsedShare !== null && <b style={{ left: `${story.elapsedShare}%` }}><span>Today</span></b>}
-    </div>
+    {gauge && used !== null ? <div className={`recap-gauge recap-seq${over ? ' is-over' : ''}`} style={{ ...seq(3), '--needle': `${angle(used)}deg`, '--today': `${angle(story.elapsedShare ?? 0)}deg` } as CSSProperties}>
+      <svg viewBox="0 0 200 120" aria-hidden="true">
+        <path d="M 22 110 A 80 80 0 1 1 178 110" className="recap-gauge-track" pathLength={1} />
+        <path d="M 22 110 A 80 80 0 1 1 178 110" className="recap-gauge-red" pathLength={1} />
+        <path d="M 22 110 A 80 80 0 1 1 178 110" className="recap-gauge-fill" pathLength={1} style={{ '--fill': Math.min(1, Math.max(0, used / 125)) } as CSSProperties} />
+      </svg>
+      {story.elapsedShare !== null && <i className="recap-gauge-today" aria-hidden="true"><span>Today</span></i>}
+      <i className="recap-gauge-needle" aria-hidden="true" />
+      <span className="recap-gauge-value"><AnimatedValue value={used} suffix="%" /><small>of the plan used</small></span>
+    </div> : <>
+      <div className="recap-big-stat recap-seq" style={seq(3)}>
+        {used !== null ? <><AnimatedValue value={used} suffix="%" /><span>of the plan used</span></> : <><Money value={story.spent} /><span>spent in budgeted categories</span></>}
+      </div>
+      <div className={`recap-meter recap-seq${over ? ' is-over' : ''}`} style={seq(4)} aria-hidden="true">
+        <i style={{ '--fill': Math.min(1, Math.max(0, (used ?? 0) / 100)) } as CSSProperties} />
+        {story.elapsedShare !== null && <b style={{ left: `${story.elapsedShare}%` }}><span>Today</span></b>}
+      </div>
+    </>}
     {story.elapsedShare !== null && used !== null && <p className="recap-fact recap-seq" style={seq(5)}>{used}% of the plan used, {story.elapsedShare}% of the period gone.</p>}
     <dl className="recap-pair recap-seq" style={seq(6)}>
       <div><dt>Planned</dt><dd><Money value={story.planned} /></dd></div>
@@ -416,6 +493,20 @@ function ComparisonVisual({ story, variants }: { story: Of<'comparison'> } & Sha
   const max = Math.max(story.now, story.before, 1);
   const up = story.change > 0;
   const bars = [{ key: 'before', label: story.beforeLabel, value: story.before }, { key: 'now', label: 'This period', value: story.now }];
+  if (variants.versus === 'versus') {
+    // A fight-night poster: before and now slam in from either side, VS between them.
+    return <div className="recap-versus">
+      {bars.map((bar, i) => <div key={bar.key} className={`recap-versus-card recap-versus-${bar.key}${bar.value === max ? ' is-bigger' : ''}`} style={{ '--side': i ? 1 : -1 } as CSSProperties}>
+        <small>{bar.label}</small>
+        <strong><Money value={bar.value} /></strong>
+        <span>{story.mode === 'average' ? 'per purchase' : 'in expenses'}</span>
+      </div>)}
+      <b className="recap-versus-badge" aria-hidden="true">VS</b>
+      <p className="recap-versus-result recap-seq" style={seq(7)}>
+        {story.change === 0 ? 'A draw.' : <>{up ? <ArrowUpRight aria-hidden="true" /> : <ArrowDownRight aria-hidden="true" />}<AnimatedValue value={Math.abs(story.change)} suffix="%" /> {up ? 'higher' : 'lower'} this time</>}
+      </p>
+    </div>;
+  }
   return <div className={`recap-compare recap-compare-${variants.comparison}`}>
     <div className="recap-big-stat recap-seq" style={seq(3)}>
       <span className="recap-compare-change">{story.change === 0 ? null : up ? <ArrowUpRight aria-hidden="true" /> : <ArrowDownRight aria-hidden="true" />}<AnimatedValue value={Math.abs(story.change)} suffix="%" /></span>
@@ -436,8 +527,29 @@ function ClosingVisual({ story, periodId, onShare, variants, run, score }: { sto
   const random = seeded(run + 41);
   const stars = score.total ? Math.round(score.correct / score.total * 3) : 0;
   const verdict = !score.total ? null : score.correct === score.total ? 'You know your money.' : score.correct === 0 ? 'The receipts had secrets.' : 'Pretty sharp.';
+  const actions = <div className="recap-closing-actions recap-seq" style={seq(9)}>
+    <button type="button" className="recap-solid-button" onClick={onShare}><Download size={15} /> Share card</button>
+    <Link to="/budget" search={{ periodId: String(periodId) }} className="recap-ghost-button">Review budget</Link>
+  </div>;
+  const burst = <Burst seed={run} kind={variants.burst} count={variants.burst === 'coins' ? 30 : 52} origin={random() < .5 ? 'center' : 'cannons'} delay={variants.finale === 'credits' ? 3200 : 1100} />;
+  const { finale, persona } = story;
+  const games = score.total ? `${score.correct}/${score.total} ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : null;
+  if (variants.finale !== 'card') {
+    // The eyebrow belongs to the form the finale takes, not the copy pool's.
+    const eyebrow = { receipt: 'Your receipt, please', credits: 'Roll credits', certificate: 'Graduation day', scoreboard: 'Game over' }[variants.finale];
+    return <div className={`recap-finale recap-finale-${variants.finale}`}>
+      <p className="recap-story-eyebrow">{eyebrow}</p>
+      {variants.finale === 'receipt' && <FinaleReceipt story={story} games={games} />}
+      {variants.finale === 'credits' && <FinaleCredits story={story} games={games} />}
+      {variants.finale === 'certificate' && <FinaleCertificate story={story} />}
+      {variants.finale === 'scoreboard' && <FinaleScoreboard story={story} games={games} />}
+      {burst}
+      {actions}
+      <span className="sr-only">{finale.period}: {persona.name}</span>
+    </div>;
+  }
   return <div className={`recap-closing recap-closing-${variants.closing}`}>
-    <Burst seed={run} kind={variants.burst} count={variants.burst === 'coins' ? 30 : 52} origin={random() < .5 ? 'center' : 'cannons'} delay={900} />
+    {burst}
     <dl className="recap-wrap-card">
       {story.tiles.map((tile, i) => <div key={tile.label} style={{ '--t': i, '--fr': `${(random() - .5) * 50}deg`, '--fx': `${(random() - .5) * 30}cqw` } as CSSProperties}>
         <dt>{tile.label}</dt>
@@ -449,9 +561,93 @@ function ClosingVisual({ story, periodId, onShare, variants, run, score }: { sto
       <span className="recap-closing-persona"><PersonaBadge personaKey={story.persona.key} Icon={personaIcons[story.persona.key]} small /><span><small>Your persona</small>{story.persona.name}</span></span>
       {score.total > 0 && <span className="recap-closing-score"><small>Games {score.correct}/{score.total}</small><span aria-label={`${stars} of 3 stars`}>{'★'.repeat(stars)}{'☆'.repeat(3 - stars)}</span>{verdict && <em>{verdict}</em>}</span>}
     </div>
-    <div className="recap-closing-actions recap-seq" style={seq(7)}>
-      <button type="button" className="recap-solid-button" onClick={onShare}><Download size={15} /> Share card</button>
-      <Link to="/budget" search={{ periodId: String(periodId) }} className="recap-ghost-button">Review budget</Link>
+    {actions}
+  </div>;
+}
+
+/** The finale as a till receipt: the period itemised, totalled, and thanked. */
+function FinaleReceipt({ story, games }: { story: Of<'closing'>; games: string | null }) {
+  const { finale, persona } = story;
+  const lines: Array<{ label: string; value: ReactNode; strong?: boolean; rule?: boolean }> = [
+    { label: 'Came in', value: <Money value={finale.income} /> },
+    { label: 'Went out', value: <Money value={Math.max(0, finale.expenses)} /> },
+    { label: finale.net >= 0 ? 'Left over' : 'Short by', value: <RollingValue value={Math.abs(finale.net)} />, strong: true, rule: true },
+    ...(finale.categories[0] ? [{ label: 'Top category', value: `${finale.categories[0].label} ${finale.categories[0].share}%` }] : []),
+    ...(finale.peakLabel ? [{ label: 'Busiest day', value: finale.peakLabel }] : []),
+    { label: 'Purchases', value: String(finale.purchaseCount) },
+    { label: 'Persona', value: persona.name.replace(/^The /, '') },
+    ...(games ? [{ label: 'Games', value: games }] : []),
+  ];
+  return <div className="recap-receipt-stage recap-receipt-print">
+    <span className="recap-printer" aria-hidden="true" />
+    <div className="recap-receipt recap-finale-slip">
+      <p className="recap-slip-head"><b>✳ FAINENS ✳</b><span>{finale.period}</span><span>{finale.dateLabel}</span></p>
+      <ul>{lines.map((line, i) => <li key={line.label} className={['recap-receipt-line', line.strong && 'is-total', line.rule && 'has-rule'].filter(Boolean).join(' ')} style={{ '--line': i } as CSSProperties}>
+        <span>{line.label}</span><i aria-hidden="true" /><strong>{line.value}</strong>
+      </li>)}</ul>
+      <p className="recap-slip-foot"><span>Thank you, come again</span><span>Next period</span><span className="recap-barcode" aria-hidden="true" /></p>
     </div>
+  </div>;
+}
+
+/** The finale as end credits rolling up the card. */
+function FinaleCredits({ story, games }: { story: Of<'closing'>; games: string | null }) {
+  const { finale, persona } = story;
+  const [lead, ...cast] = finale.categories;
+  const credits: Array<[string, string]> = [
+    ...(lead ? [['Starring', lead.label] as [string, string]] : []),
+    ...(cast.length ? [['Supporting cast', cast.map(row => row.label).join(' · ')] as [string, string]] : []),
+    ...(finale.peakLabel ? [['Busiest scene', finale.peakLabel] as [string, string]] : []),
+    ['Original score', `${finale.purchaseCount} receipts`],
+    ['Casting', persona.name],
+    ...(games ? [['Stunts', `Games ${games}`] as [string, string]] : []),
+    ['Directed by', finale.passenger],
+    ['Filmed on location', finale.period],
+  ];
+  return <div className="recap-credits" aria-label="Closing credits">
+    <div className="recap-credits-roll">
+      {credits.map(([role, name]) => <p key={role}><small>{role}</small><span>{name}</span></p>)}
+      <p className="recap-credits-end">The End</p>
+      <small className="recap-credits-fine">No receipts were harmed in the making of this recap.</small>
+    </div>
+  </div>;
+}
+
+/** The finale as a certificate awarding the period's money personality. */
+function FinaleCertificate({ story }: { story: Of<'closing'> }) {
+  const { finale, persona } = story;
+  return <div className="recap-cert">
+    <small className="recap-cert-academy">The Fainens Academy of Receipts</small>
+    <h3>Certificate</h3>
+    <p className="recap-cert-of">of completion</p>
+    <p>This certifies that</p>
+    <p className="recap-cert-who">{finale.passenger}</p>
+    <p>completed {finale.period} as</p>
+    <p className="recap-cert-title">{persona.name}</p>
+    <p className="recap-cert-reason">{persona.tagline}</p>
+    <div className="recap-cert-foot">
+      <span className="recap-cert-sign"><b>fainens ✳</b><small>Chief Receipt Officer</small></span>
+      <span className="recap-cert-seal" aria-hidden="true"><i /><i /><b>✳</b></span>
+    </div>
+  </div>;
+}
+
+/** The finale as an arcade high-score table. */
+function FinaleScoreboard({ story, games }: { story: Of<'closing'>; games: string | null }) {
+  const { finale, persona } = story;
+  const rows: Array<[string, ReactNode]> = [
+    [finale.net >= 0 ? 'Left over' : 'Short by', <Money value={Math.abs(finale.net)} />],
+    ...(finale.categories[0] ? [['Top cat', `${finale.categories[0].label} ${finale.categories[0].share}%`] as [string, ReactNode]] : []),
+    ...(finale.peakLabel ? [['Busy day', finale.peakLabel] as [string, ReactNode]] : []),
+    ['Receipts', String(finale.purchaseCount)],
+    ['Player', persona.name.replace(/^The /, '')],
+    ...(games ? [['Games', games] as [string, ReactNode]] : []),
+  ];
+  const ranks = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
+  return <div className="recap-arcade">
+    <p className="recap-arcade-title">★ High scores ★</p>
+    <ol>{rows.map(([label, value], i) => <li key={label} style={{ '--r': i } as CSSProperties}><span>{ranks[i]}</span><span>{label}</span><strong>{value}</strong></li>)}</ol>
+    <p className="recap-arcade-press">Press ▶ to play again</p>
+    <p className="recap-arcade-credit"><span>Credit 01</span><span>{finale.period}</span></p>
   </div>;
 }

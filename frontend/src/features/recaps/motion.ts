@@ -38,15 +38,58 @@ const sectionVariants = {
   calendar: ['ripple', 'diagonal', 'scatter', 'sweep'],
   receipts: ['print', 'toss', 'unroll'],
   comparison: ['race', 'rise'],
+  overview: ['bars', 'scale', 'coins', 'donut', 'bucket'],
+  budget: ['meter', 'gauge'],
+  versus: ['bars', 'versus'],
   closing: ['deal', 'flip'],
+  finale: ['card', 'receipt', 'credits', 'certificate', 'scoreboard'],
   burst: ['confetti', 'stars', 'coins'],
-} as const satisfies Partial<Record<RecapStoryId | 'burst', readonly string[]>>;
+} as const satisfies Partial<Record<RecapStoryId | 'burst' | 'finale' | 'versus', readonly string[]>>;
 export type SectionVariants = { [Key in keyof typeof sectionVariants]: typeof sectionVariants[Key][number] };
 
 export function runVariants(run: number): SectionVariants & { opening: Opening } {
   const roll = (key: string) => seeded(run ^ hash(key));
   const entries = Object.entries(sectionVariants).map(([key, options]) => [key, pickFrom(options, roll(key))]);
   return { ...Object.fromEntries(entries) as SectionVariants, opening: pickFrom(OPENINGS, roll('opening')) };
+}
+
+/**
+ * A style remix rolled for every chapter of a run, layered over its own design: how the headline is set,
+ * where it sits, a background pattern, a frame, a sticker and the tempo of its entrance. Mixed together
+ * they make thousands of combinations, so the same chapter rarely looks the same twice.
+ */
+export type ChapterStyle = {
+  title: 'plain' | 'shadow' | 'serif' | 'caps' | 'highlight' | 'mixed';
+  align: 'left' | 'center';
+  pattern: 'none' | 'dots' | 'grid' | 'stripes' | 'blobs' | 'rays' | 'halftone';
+  frame: 'none' | 'border' | 'corners';
+  tilt: number;
+  mark: number;
+  sticker: { text: string; corner: 'tl' | 'tr' | 'br'; spin: number } | null;
+  tempo: number;
+  blob: { x: number; y: number };
+};
+
+export function chapterStyle(run: number, key: string): ChapterStyle {
+  const random = seeded((run ^ hash(key)) + 13);
+  const roll = <T,>(items: readonly T[], weights: readonly number[]) => {
+    let pick = random() * weights.reduce((sum, w) => sum + w, 0);
+    for (let i = 0; i < items.length; i++) { pick -= weights[i]; if (pick <= 0) return items[i]; }
+    return items[items.length - 1];
+  };
+  // Without a run (first paint, the share card) every chapter keeps its house style.
+  if (run === 0) return { title: 'plain', align: 'left', pattern: 'none', frame: 'none', tilt: 0, mark: 0, sticker: null, tempo: 1, blob: { x: 70, y: 20 } };
+  return {
+    title: roll(['plain', 'shadow', 'serif', 'caps', 'highlight', 'mixed'] as const, [3, 1, 1.2, 1, 1.6, 1.2]),
+    align: roll(['left', 'center'] as const, [3, 1]),
+    pattern: roll(['none', 'dots', 'grid', 'stripes', 'blobs', 'rays', 'halftone'] as const, [2.5, 1, 1, .8, 1.2, .8, .8]),
+    frame: roll(['none', 'border', 'corners'] as const, [4, 1, 1]),
+    tilt: random() < .3 ? Math.round((random() - .5) * 6) : 0,
+    mark: Math.floor(random() * 6),
+    sticker: random() < .22 ? { text: pickFrom(['NEW!', 'WOW', 'FRESH', 'HOT', 'LIVE', 'OMG', 'YAY', 'NICE', '✳✳✳'], random), corner: pickFrom(['tl', 'tr', 'br'] as const, random), spin: Math.round((random() - .5) * 40) } : null,
+    tempo: roll([.8, 1, 1.25] as const, [1, 2, 1]),
+    blob: { x: Math.round(random() * 100), y: Math.round(random() * 100) },
+  };
 }
 
 export const prefersReducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
