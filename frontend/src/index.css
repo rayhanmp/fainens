@@ -1564,6 +1564,13 @@ button[data-variant="danger"]:focus-visible,
   .ui-segmented::before, .ui-segmented > button, .finance-glass-dock a, .finance-glass-dock button { transition: none; }
 }
 
+/* A row that scrolls sideways (filter chips, tabs) without a scrollbar drawn under it; it still
+ * scrolls by swipe, trackpad or shift-wheel. */
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
 /* Small controls (text links, tiny chips) get a larger tap area on touch screens without changing
  * how they look: an invisible layer reaching ~10px past the control takes the tap. Only for elements
  * that aren't otherwise positioned, since it makes them `position: relative`. */
