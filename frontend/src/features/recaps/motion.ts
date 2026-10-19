@@ -29,7 +29,7 @@ export function nextTransition(run: number, visit: number, previous: Transition)
   return choice;
 }
 
-export const OPENINGS = ['split', 'zoom', 'shutter', 'spin'] as const;
+export const OPENINGS = ['split', 'zoom', 'shutter', 'spin', 'crawl'] as const;
 export type Opening = typeof OPENINGS[number];
 
 const sectionVariants = {

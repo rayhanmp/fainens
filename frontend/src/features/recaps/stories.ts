@@ -47,7 +47,7 @@ export type Play =
   | { kind: 'hold'; prompt: string }
   | { kind: 'gift'; prompt: string }
   | { kind: 'piggy'; prompt: string };
-export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido';
+export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido' | 'ejected';
 /** What the finale prints, whichever form it takes: receipt, credits, certificate or high scores. */
 export type FinaleFacts = {
   period: string; dateLabel: string; income: number; expenses: number; net: number; keptShare: number | null;
@@ -73,7 +73,9 @@ export type MixtapeTrack = { title: string; artist: string; length: string; shar
 type Copy = { eyebrow: string; title: string; body: string };
 // Every chapter can carry a mini-game, a fun comparison line, a question to hand to Fainens Agent,
 // and its own autoplay length.
-type Extras = { play?: Play; equivalence?: string; ask: string; duration?: number };
+/** A pixel-game toast a chapter can unlock when it arrives. */
+export type Achievement = { title: string; detail: string };
+type Extras = { play?: Play; equivalence?: string; ask: string; duration?: number; achievement?: Achievement };
 export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number; monthWord: string; cover: CoverFacts }
   | { id: 'overview'; lead: 'left' | 'ratio'; income: number; expenses: number; net: number; keptShare: number | null; spentPer100: number | null; reveal: 'scratch' | 'piggy' | 'none' }
@@ -107,6 +109,32 @@ export const PALETTE_FAMILIES: Record<string, RecapTheme[]> = {
   neon: ['acid', 'noir', 'electric', 'coral', 'ink'],
   earth: ['cocoa', 'butter', 'mint', 'cream', 'ink', 'tangerine'],
 };
+
+const roman = (value: number) => {
+  let n = Math.max(1, Math.min(3999, Math.round(value))); let out = '';
+  for (const [v, s] of [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']] as const) while (n >= v) { out += s; n -= v; }
+  return out;
+};
+
+/** The opening crawl: an episode number, a title and a few paragraphs written from the period's figures. */
+export function crawlText(recap: PeriodRecap, run: number) {
+  const random = seeded(run + 307);
+  const top = recap.categories.find(row => row.amount > 0);
+  const total = recap.categories.filter(row => row.amount > 0).reduce((sum, row) => sum + row.amount, 0);
+  const share = top && total > 0 ? Math.round(top.amount / total * 100) : null;
+  const peak = recap.highlights?.peakSpendingDay;
+  const titles = ['The receipts awaken', 'A new budget', 'The spending strikes back', 'Return of the salary', 'Revenge of the receipts', 'The last payday'];
+  const money = formatRecapCurrency;
+  const paragraphs = [
+    recap.net >= 0
+      ? `It is a period of surplus. ${money(recap.income)} came in, and only ${money(Math.max(0, recap.expenses))} went out.`
+      : `It is a period of unrest. ${money(Math.max(0, recap.expenses))} went out against ${money(recap.income)} coming in.`,
+    top && share !== null ? `But ${top.name} has seized ${share}% of the galaxy’s spending, and its grip only tightens.` : 'The categories are restless, each claiming a share of the galaxy.',
+    peak ? `On ${formatRecapDay(peak.date, { weekday: 'long', day: 'numeric', month: 'long' })}, ${peak.purchaseCount} receipts were filed in a single day.` : `${recap.purchaseCount} receipts have been filed across the period.`,
+    `Now, with ${recap.purchaseCount} receipts behind it, the budget prepares for the next ${/^\d{4}$/.test(recap.period.name) ? 'year' : 'period'}…`,
+  ];
+  return { episode: `Episode ${roman(recap.period.id)}`, title: titles[Math.floor(random() * titles.length)], paragraphs };
+}
 
 /** Longest run of days matching `test`, among elapsed days. */
 function longestRun(days: RecapDayCell[], test: (day: RecapDayCell) => boolean): Streak {
@@ -293,8 +321,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     // Motion interludes: one or two showpieces dropped between chapters, never side by side.
     const marqueeWords = [recap.period.name, top?.label, `${recap.purchaseCount} receipts`, peak ? dayLabel(peak.date) : null, persona.name.replace(/^The /, '')].filter((word): word is string => Boolean(word));
     const available: InterludeVariant[] = ['marquee', 'kaleido', ...(topRows.length >= 3 ? ['orbit' as const] : []), ...(recap.purchaseCount > 0 ? ['tunnel' as const] : []),
-      ...(keptShare !== null || budget?.percentUsed != null ? ['liquid' as const] : []), ...(recap.purchaseCount >= 3 ? ['rain' as const] : [])];
-    const picks = shuffled(available).slice(0, random() < .45 ? 2 : 1);
+      ...(keptShare !== null || budget?.percentUsed != null ? ['liquid' as const] : []), ...(recap.purchaseCount >= 3 ? ['rain' as const] : []),
+      // Three suspects and a culprit; it is drawn twice as often as the others.
+      ...(topRows.length >= 4 ? ['ejected' as const, 'ejected' as const] : [])];
+    const picks = [...new Set(shuffled(available))].slice(0, random() < .45 ? 2 : 1);
     const slots = shuffled(Array.from({ length: Math.max(1, order.length - 1) }, (_, i) => i + 1)).slice(0, picks.length).sort((a, b) => b - a);
     picks.forEach((variant, i) => {
       if (i > 0 && Math.abs(slots[i] - slots[i - 1]) < 2) return;
@@ -366,6 +396,21 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
 
   // Playful equivalences, computed only from the figures on the card.
   const typical = profile?.medianAmount ?? null;
+  // Achievements: unlocked by what the figures actually show, one per chapter at most.
+  const quietRun = quiet?.length ?? 0;
+  const achievements: Partial<Record<RecapStoryId, Achievement>> = {
+    overview: keptShare !== null && keptShare >= 50 ? { title: 'Half and half', detail: `Kept ${keptShare}% of what came in` } : undefined,
+    budget: budget && budget.overBudgetCategoryCount === 0 && budget.planned > 0 ? { title: 'Stayed in the lines', detail: 'No category went over its allocation' } : undefined,
+    calendar: !showStreak && quietRun >= 3 ? { title: 'Zen mode', detail: `${quietRun} days in a row, nothing spent` } : undefined,
+    streak: quietRun >= 3 ? { title: 'Zen mode', detail: `${quietRun} days in a row, nothing spent` } : busy && busy.length >= 5 ? { title: 'On a roll', detail: `${busy.length} spending days in a row` } : undefined,
+    categories: positiveCategories.length >= 8 ? { title: 'Explorer', detail: `${positiveCategories.length} categories visited` } : undefined,
+    receipts: receiptItems[0] ? { title: 'Big ticket', detail: `${receiptItems[0].label}: ${formatRecapCurrency(receiptItems[0].amount)}` } : undefined,
+    habits: recap.purchaseCount >= 30 ? { title: 'Regular customer', detail: `${recap.purchaseCount} purchases this period` } : undefined,
+    comparison: averageChange !== null && averageChange <= -10 ? { title: 'Trimmed down', detail: `Average receipt ${Math.abs(averageChange)}% smaller` } : undefined,
+  };
+  // A toast on every chapter wears thin: a run unlocks just one, on a chapter of its choosing.
+  achievements.closing = { title: 'Recap complete', detail: `You watched all of ${recap.period.name}` };
+  const shown = new Set(shuffled(chapters.map(chapter => chapter.id).filter(id => achievements[id])).slice(0, 1));
   const equivalences: Partial<Record<RecapStoryId, string>> = {
     overview: recap.net > 0 && perDay > 0 ? `Left over ≈ ${Math.round(recap.net / perDay)} days of spending at this pace.` : undefined,
     categories: top && typical ? `${top.label} ≈ ${Math.round(top.amount / typical)} typical receipts.` : undefined,
@@ -418,8 +463,9 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       // Some runs swap the closing line for a playful equivalence.
       body: equivalence && run !== 0 && random() < .55 ? equivalence : copy.body,
       play: play?.kind === 'quiz' ? { ...play, quiz: { ...play.quiz, question: forYear(play.quiz.question) } } : play, equivalence,
-      // Interludes are showpieces: they move on sooner.
-      duration: chapter.id === 'interlude' ? 6_500 : undefined,
+      // Interludes are showpieces: they move on sooner, except the ejection, which needs its full sequence.
+      duration: chapter.id === 'interlude' ? (chapter.variant === 'ejected' ? 9_000 : 6_500) : undefined,
+      achievement: run !== 0 && shown.has(chapter.id) && achievements[chapter.id] ?{ ...achievements[chapter.id]!, detail: forYear(achievements[chapter.id]!.detail) } : undefined,
       ask: asks[chapter.id] ?? `Tell me more about this from my ${period} recap: ${copy.title}`,
     } as RecapStory;
   });

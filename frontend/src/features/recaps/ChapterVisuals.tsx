@@ -238,6 +238,19 @@ function InterludeVisual({ story, run }: { story: Of<'interlude'>; run: number }
         <span className="recap-rain-count"><AnimatedValue value={story.value} /><small>receipts</small></span>
       </div>;
     }
+    case 'ejected': {
+      // Smaller categories float off into space one at a time; the last one standing is the culprit.
+      const [culprit, ...rest] = story.orbit;
+      const suspects = rest.slice(0, 3).reverse();
+      return <div className="recap-interlude recap-ejected">
+        {suspects.map((suspect, k) => <Fragment key={suspect.name}>
+          <span className="recap-eject-body" style={{ '--k': k } as CSSProperties} aria-hidden="true"><CategoryIcon name={suspect.name} color="currentColor" className="h-[1em] w-[1em]" /></span>
+          <p className="recap-eject-line" style={{ '--k': k } as CSSProperties}><span className="recap-eject-type">{suspect.label} was not The Big Spender.</span><small>{suspects.length - k} suspects remain</small></p>
+        </Fragment>)}
+        <span className="recap-eject-culprit" style={{ '--k': suspects.length } as CSSProperties} aria-hidden="true"><CategoryIcon name={culprit.name} color="currentColor" className="h-[1em] w-[1em]" /></span>
+        <p className="recap-eject-line recap-eject-final" style={{ '--k': suspects.length } as CSSProperties}><span className="recap-eject-type">{culprit.label} was The Big Spender.</span><small>{culprit.share}% of everything that went out</small></p>
+      </div>;
+    }
     case 'kaleido':
       return <div className="recap-interlude recap-kaleido" aria-hidden="true">
         <i /><i /><i />

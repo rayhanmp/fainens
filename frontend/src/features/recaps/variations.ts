@@ -128,6 +128,10 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
         { eyebrow: 'Today’s forecast', title: `Cloudy with a chance of ${f.purchaseCount} receipts.`, body: 'Every slip of the period, coming down.' },
         { eyebrow: 'It’s raining', title: 'It’s raining receipts.', body: `${plural(f.purchaseCount, 'receipt')}, in one downpour.` },
       ];
+      if (lead === 'ejected') return [
+        { eyebrow: 'Emergency meeting', title: 'Who was The Big Spender?', body: 'Every category is a suspect.' },
+        { eyebrow: 'Emergency meeting', title: 'There is a big spender among us.', body: 'Vote them out, one category at a time.' },
+      ];
       if (lead === 'kaleido') return [
         { eyebrow: 'A little trip', title: `${f.period}, through the looking glass.`, body: 'Just a pause. Nothing to read here.' },
         { eyebrow: 'Breathe', title: 'Breathe in. Breathe out.', body: 'More numbers in a moment.' },
