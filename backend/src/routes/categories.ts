@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { accounts, auditLogs, budgetPlans, budgetTemplateItems, categories, transactionCategoryAllocations, transactions } from "../db/schema";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
+import { getClassificationUsage } from "../services/classification-usage";
 
 // Sanitize search input to prevent SQL injection
 function sanitizeSearchInput(input: string): string {
@@ -108,6 +109,23 @@ const categoryDependencyResponse = {
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
+
+  /** How often each category and tag is used across the posted ledger, for category management. */
+  fastify.get("/api/categories/usage", {
+    schema: {
+      operationId: "getClassificationUsage",
+      tags: ["categories"],
+      querystring: z.object({ from: z.coerce.number().int().nonnegative().optional(), to: z.coerce.number().int().nonnegative().optional() }),
+      response: { 200: z.object({
+        categories: z.array(z.object({ categoryId: z.number().int(), transactionCount: z.number().int(), amount: z.number().int() })),
+        tags: z.array(z.object({ tagId: z.number().int(), transactionCount: z.number().int() })),
+        expenseCount: z.number().int(),
+        categorizedExpenseCount: z.number().int(),
+        transactionCount: z.number().int(),
+        taggedCount: z.number().int(),
+      }).passthrough() },
+    },
+  }, async (request) => getClassificationUsage(request.query as { from?: number; to?: number }));
 
   fastify.get("/api/categories", {
     schema: { operationId: "listCategories", tags: ["categories"], querystring: categoryListQuerySchema, response: categoryListResponse },

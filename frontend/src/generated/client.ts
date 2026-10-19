@@ -3507,6 +3507,76 @@ export type VoidReconciliation409 = {
   [key: string]: unknown;
 };
 
+export type GetClassificationUsageParams = {
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+from?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+to?: number;
+};
+
+export type GetClassificationUsage200CategoriesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  categoryId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+};
+
+export type GetClassificationUsage200TagsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  tagId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionCount: number;
+};
+
+export type GetClassificationUsage200 = {
+  categories: GetClassificationUsage200CategoriesItem[];
+  tags: GetClassificationUsage200TagsItem[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  expenseCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  categorizedExpenseCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  taggedCount: number;
+  [key: string]: unknown;
+};
+
 export type ListCategoriesParams = {
 /**
  * @maxLength 100
@@ -19569,6 +19639,46 @@ export const voidReconciliation = async (id: number,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       voidReconciliationBody,)
+  }
+);}
+
+
+
+export type getClassificationUsageResponse200 = {
+  data: GetClassificationUsage200
+  status: 200
+}
+    
+export type getClassificationUsageResponseSuccess = (getClassificationUsageResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getClassificationUsageResponse = (getClassificationUsageResponseSuccess)
+
+export const getGetClassificationUsageUrl = (params?: GetClassificationUsageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/categories/usage?${stringifiedParams}` : `/api/categories/usage`
+}
+
+export const getClassificationUsage = async (params?: GetClassificationUsageParams, options?: RequestInit): Promise<getClassificationUsageResponse> => {
+  
+  return generatedFetch<getClassificationUsageResponse>(getGetClassificationUsageUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
   }
 );}
 

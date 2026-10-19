@@ -8,6 +8,7 @@ import { RequireAuth } from '../lib/auth';
 import { useMemo, useState } from 'react';
 import { useCategoriesPageQuery } from '../features/categories/page-queries';
 import { CategoryIcon } from '../features/categories/CategoryIcon';
+import { CategoryBreakdown } from '../features/categories/CategoryBreakdown';
 import {
   useCreateCategoryMutation,
   useCreateTagMutation,
@@ -21,14 +22,7 @@ import { cn } from '../lib/utils';
 import { PRESET_COLORS } from '../lib/constants';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
-import {
-  Plus,
-  Sparkles,
-  Wand2,
-  ChevronRight,
-  Archive,
-  MoreVertical,
-} from 'lucide-react';
+import { MoreHorizontal, Plus } from 'lucide-react';
 
 export const Route = createFileRoute('/categories')({
   component: CategoriesPage,
@@ -56,12 +50,6 @@ interface TagRow {
   color: string;
 }
 
-interface TxRow {
-  id: number;
-  categoryId: number | null;
-  tags: Array<{ tagId: number; name: string; color: string }>;
-}
-
 function CategoriesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const categoriesQuery = useCategoriesPageQuery(true);
@@ -78,7 +66,6 @@ function CategoriesPage() {
   );
   const categories = showArchived ? allCategories : allCategories.filter((category) => category.isActive);
   const tags = (categoriesQuery.data?.tags ?? []) as TagRow[];
-  const transactions = (categoriesQuery.data?.transactions ?? []) as TxRow[];
   const expenseAccounts = (categoriesQuery.data?.expenseAccounts ?? []) as ExpenseAccount[];
   const isLoading = categoriesQuery.isPending && !categoriesQuery.data;
   const { confirm } = useConfirm();
@@ -102,31 +89,14 @@ function CategoriesPage() {
   ), [allCategories, editingCategory?.id]);
   const firstAvailableCategoryColor = PRESET_COLORS.find((color) => !usedCategoryColors.has(color)) ?? PRESET_COLORS[0];
 
-  const stats = useMemo(() => {
-    const byCat: Record<number, number> = {};
-    const byTag: Record<number, number> = {};
-    let categorized = 0;
-    let tagged = 0;
-    for (const tx of transactions) {
-      if (tx.categoryId != null) {
-        categorized++;
-        byCat[tx.categoryId] = (byCat[tx.categoryId] ?? 0) + 1;
-      }
-      if (tx.tags.length) {
-        tagged++;
-        for (const t of tx.tags) {
-          byTag[t.tagId] = (byTag[t.tagId] ?? 0) + 1;
-        }
-      }
-    }
-    const n = transactions.length;
-    return {
-      byCat,
-      byTag,
-      categorizedPct: n ? Math.round((categorized / n) * 100) : 0,
-      taggedPct: n ? Math.round((tagged / n) * 100) : 0,
-    };
-  }, [transactions]);
+  // Counted on the server across every posted entry, so the numbers don't depend on what's loaded.
+  const usageData = categoriesQuery.data?.usage;
+  const stats = {
+    byCat: usageData?.byCategory ?? {},
+    byTag: usageData?.byTag ?? {},
+    categorizedPct: usageData?.expenseCount ? Math.round((usageData.categorizedExpenseCount / usageData.expenseCount) * 100) : 0,
+    taggedPct: usageData?.transactionCount ? Math.round((usageData.taggedCount / usageData.transactionCount) * 100) : 0,
+  };
 
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,103 +209,134 @@ function CategoriesPage() {
     setFormError('');
   };
 
+  const usage = (category: Category) => stats.byCat[category.id] ?? 0;
+  // Most-used first, archived ones at the end.
+  const orderedCategories = [...categories].sort((a, b) => Number(b.isActive) - Number(a.isActive) || usage(b) - usage(a) || a.name.localeCompare(b.name));
+  const archivedCount = allCategories.filter((category) => !category.isActive).length;
+  const tagUses = (tag: TagRow) => stats.byTag[tag.id] ?? 0;
+  const orderedTags = [...tags].sort((a, b) => tagUses(b) - tagUses(a) || a.name.localeCompare(b.name));
+  const usedTags = orderedTags.filter((tag) => tagUses(tag) > 0);
+  const unusedTags = orderedTags.filter((tag) => tagUses(tag) === 0);
+  const tagNameCounts = tags.reduce<Record<string, number>>((counts, tag) => ({ ...counts, [tag.name.trim().toLowerCase()]: (counts[tag.name.trim().toLowerCase()] ?? 0) + 1 }), {});
+  // The category list's row menus pop out of the panel, so only the tags panel clips its content.
+  const panelFrame = 'rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]';
+  const panel = cn(panelFrame, 'overflow-hidden');
+  const panelHeader = 'flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3.5';
+  const tagChip = (tag: TagRow, unused: boolean) => (
+    <button
+      key={tag.id}
+      type="button"
+      onClick={() => openTagModal(tag)}
+      title={(tagNameCounts[tag.name.trim().toLowerCase()] ?? 0) > 1 ? 'Another tag has the same name' : undefined}
+      className={cn(
+        'inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)]',
+        unused ? 'border-dashed border-[var(--color-border)] text-[var(--ref-on-surface-variant)]' : 'border-[var(--color-border)]',
+      )}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} aria-hidden />
+      <span className="truncate">{tag.name}</span>
+      {(tagNameCounts[tag.name.trim().toLowerCase()] ?? 0) > 1 && <span className="text-[10px] font-semibold text-[var(--color-warning)]">dup</span>}
+      {!unused && <span className="tabular-nums text-[var(--ref-on-surface-variant)]">{tagUses(tag)}</span>}
+    </button>
+  );
+
   return (
     <RequireAuth>
       <PageContainer>
-        {/* Hero — Stitch Categories & Tags Management */}
-        <header className="mb-10 lg:mb-12">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <PageHeader
-              subtext="Category management"
-              title="Ledger classification"
-              description="Manage how spending is categorized and tagged across every transaction."
-            />
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]">
-              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-              Show archived
-            </label>
-                          <button
-                type="button"
-                onClick={() => openCategoryModal()}
-                className="inline-flex items-center gap-2 rounded-full bg-[var(--ref-secondary-container)] px-6 py-3 text-sm font-bold text-[var(--ref-on-secondary-container)] shadow-sm transition-all hover:shadow-md"
-              >
-                <Plus className="h-4 w-4" />
-                New category
-              </button>
-              <button
-                type="button"
-                disabled
-                title="Coming soon"
-                className="inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-bold text-white opacity-60 shadow-md shadow-[var(--color-accent)]/20"
-              >
-                <Wand2 className="h-4 w-4" />
-                Auto-rules
-              </button>
-            </div>
-          </div>
+        <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <PageHeader
+            subtext="Category management"
+            title="Ledger classification"
+            description="How spending is grouped in reports and budgets, and the tags you add on top."
+          />
+          <Button onClick={() => openCategoryModal()} className="self-start md:self-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            New category
+          </Button>
         </header>
 
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
-          {/* Categories — left */}
-          <div className="lg:col-span-9">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <h2 className="font-headline text-lg font-bold text-[var(--color-text-primary)]">
-                Categories
-              </h2>
-              <span className="text-xs font-medium text-[var(--color-text-secondary)]">
-                {categories.length} total
-              </span>
+        <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-4">
+          {[
+            { label: 'Categories', value: String(allCategories.filter((category) => category.isActive).length), meter: null },
+            { label: 'Tags', value: String(tags.length), meter: null },
+            { label: 'Spending categorized', value: `${stats.categorizedPct}%`, meter: stats.categorizedPct },
+            { label: 'Entries tagged', value: `${stats.taggedPct}%`, meter: stats.taggedPct },
+          ].map((item) => (
+            <div key={item.label} className="bg-[var(--ref-surface-container-lowest)] px-5 py-4">
+              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{item.label}</dt>
+              <dd className="mt-1 font-headline text-xl font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
+              {item.meter != null && (
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
+                  <div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${item.meter}%` }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </dl>
+
+        <div className="mb-6">
+          <CategoryBreakdown categories={allCategories} />
+        </div>
+
+        <section className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className={panelFrame}>
+            <div className={panelHeader}>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Categories</h2>
+                <p className="text-xs text-[var(--ref-on-surface-variant)]">Most used first. Click one to edit it.</p>
+              </div>
+              {archivedCount > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={showArchived}
+                  onClick={() => setShowArchived((value) => !value)}
+                  className={cn('shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors', showArchived ? 'bg-[var(--ref-surface-container-high)] text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]')}
+                >
+                  {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+                </button>
+              )}
             </div>
 
             {isLoading ? (
-              <p className="text-[var(--color-text-secondary)]">Loading…</p>
+              <p className="px-5 py-8 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
             ) : categories.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--ref-surface-container-low)] p-10 text-center">
-                <p className="mb-4 text-[var(--color-text-secondary)]">No categories yet.</p>
-                <Button onClick={() => openCategoryModal()} className="rounded-full">
+              <div className="px-5 py-12 text-center">
+                <p className="mb-4 text-sm text-[var(--ref-on-surface-variant)]">No categories yet.</p>
+                <Button onClick={() => openCategoryModal()}>
                   <Plus className="mr-2 h-4 w-4" />
                   Create category
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {categories.map((c) => {
-                  const count = stats.byCat[c.id] ?? 0;
-                  const bgTint = c.color ? `${c.color}22` : 'var(--ref-primary-fixed)';
+              <ul className="divide-y divide-[var(--color-border)]">
+                {orderedCategories.map((c) => {
+                  const count = usage(c);
+                  const color = c.color || 'var(--ref-primary)';
+                  const reportingAccount = c.reportingAccountId ? expenseAccounts.find((a) => a.id === c.reportingAccountId)?.name ?? 'Mapped expense account' : null;
                   return (
-                    <div
-                      key={c.id}
-                      className="group relative flex items-center gap-3 rounded-xl bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:translate-y-[-2px]"
-                    >
-                      <div
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg cursor-pointer"
-                        style={{ backgroundColor: bgTint }}
-                        onClick={() => openCategoryModal(c)}
-                      >
-                        <CategoryIcon name={c.name} color={c.color || 'var(--color-accent)'} className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3
-                          className="font-headline text-base font-bold text-[var(--color-text-primary)] truncate cursor-pointer hover:text-[var(--color-accent)] transition-colors"
-                          onClick={() => openCategoryModal(c)}
-                        >
-                          {c.name}
-                        </h3>
-                        <p className="text-xs text-[var(--color-text-secondary)]">
-                          {count} txns{c.reportingAccountId ? ` · ${expenseAccounts.find((a) => a.id === c.reportingAccountId)?.name ?? 'Mapped expense account'}` : ' · Unmapped'}
-                        </p>
-                      </div>
+                    <li key={c.id} className={cn('group flex items-center gap-3 px-5 py-3 transition-colors last:rounded-b-2xl hover:bg-[var(--ref-surface-container-low)]', !c.isActive && 'opacity-60')}>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)` }}>
+                        <CategoryIcon name={c.name} color={color} />
+                      </span>
+                      <button type="button" onClick={() => openCategoryModal(c)} className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{c.name}</span>
+                          {!c.isActive && <span className="shrink-0 rounded-md bg-[var(--ref-surface-container-high)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--ref-on-surface-variant)]">Archived</span>}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">
+                          {count} {count === 1 ? 'transaction' : 'transactions'}{reportingAccount ? ` · reports to ${reportingAccount}` : ''}
+                        </span>
+                      </button>
                       <div className="relative">
                         <button
                           type="button"
                           onClick={() =>
                             setMenuCategoryId(menuCategoryId === c.id ? null : c.id)
                           }
-                          className="rounded-lg p-1.5 opacity-60 transition-all hover:bg-[var(--ref-surface-container-low)] hover:opacity-100 cursor-pointer"
-                          aria-label="More actions"
+                          className="grid h-8 w-8 place-items-center rounded-lg text-[var(--ref-on-surface-variant)] transition hover:bg-[var(--ref-surface-container-high)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          aria-label={`More actions for ${c.name}`}
                         >
-                          <MoreVertical className="h-4 w-4 text-[var(--color-muted)]" />
+                          <MoreHorizontal className="h-4 w-4" />
                         </button>
                         {menuCategoryId === c.id && (
                           <>
@@ -345,10 +346,10 @@ function CategoriesPage() {
                               aria-label="Close menu"
                               onClick={() => setMenuCategoryId(null)}
                             />
-                            <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
+                            <div className="ui-popover absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1 shadow-xl">
                               <button
                                 type="button"
-                                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)] cursor-pointer"
+                                className="block w-full rounded-lg px-3 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)]"
                                 onClick={() => {
                                   setMenuCategoryId(null);
                                   openCategoryModal(c);
@@ -358,7 +359,7 @@ function CategoriesPage() {
                               </button>
                               <button
                                 type="button"
-                                className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 cursor-pointer"
+                                className={cn('block w-full rounded-lg px-3 py-1.5 text-left text-sm', c.isActive ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10' : 'hover:bg-[var(--ref-surface-container-low)]')}
                                 onClick={() => {
                                   setMenuCategoryId(null);
                                   if (c.isActive) void handleDeleteCategory(c.id);
@@ -371,129 +372,47 @@ function CategoriesPage() {
                           </>
                         )}
                       </div>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
-
-            {/* Smart rules — placeholder */}
-            <div className="mt-8 rounded-xl bg-[var(--ref-surface-container-low)] p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-headline text-sm font-bold text-[var(--color-text-primary)]">
-                    Auto-rules
-                  </h2>
-                  <p className="text-xs text-[var(--color-text-secondary)]">
-                    Auto-categorize by merchant (coming soon)
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Tags + stats — right sticky */}
-          <div className="lg:col-span-3">
-            <div className="space-y-10 lg:sticky lg:top-24">
-              <div>
-                <div className="mb-8 flex items-center justify-between">
-                  <h2 className="font-headline text-2xl font-bold text-[var(--color-text-primary)]">
-                    Global tags
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => openTagModal()}
-                    className="rounded-full p-2 text-[var(--color-accent)] transition-colors hover:bg-[var(--ref-primary-fixed)]"
-                    title="Add tag"
-                  >
-                    <Plus className="h-6 w-6" />
-                  </button>
-                </div>
-
-                {isLoading ? (
-                  <p className="text-sm text-[var(--color-text-secondary)]">Loading tags…</p>
-                ) : tags.length === 0 ? (
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    No tags yet. Add tags to label trips, work, reimbursements, etc.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-3">
-                    {tags.map((tag) => {
-                      const uses = stats.byTag[tag.id] ?? 0;
-                      return (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          onClick={() => openTagModal(tag)}
-                          className="group flex items-center gap-2 rounded-full px-4 py-2 text-left transition-all bg-[var(--ref-surface-container)] border border-[var(--color-border)] hover:bg-[var(--ref-surface-container-highest)]"
-                        >
-                          <span className="text-sm font-medium text-[var(--color-text-secondary)]">#{tag.name}</span>
-                          <span className="text-[10px] font-bold text-[var(--color-muted)]">{uses}x</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+          <aside className={cn(panel, 'xl:sticky xl:top-24')}>
+            <div className={panelHeader}>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Tags</h2>
+                <p className="text-xs text-[var(--ref-on-surface-variant)]">Labels across categories, like a trip or a person.</p>
               </div>
-
-              {/* Classification health */}
-              <div className="rounded-3xl bg-[var(--ref-surface-container-lowest)] p-8 shadow-sm">
-                <h3 className="mb-6 font-headline text-lg font-bold text-[var(--color-text-primary)]">
-                  Classification health
-                </h3>
-                <div className="space-y-6">
-                  <div>
-                    <div className="mb-2 flex justify-between text-xs font-bold uppercase tracking-wider">
-                      <span className="text-[var(--color-text-secondary)]">Categorized</span>
-                      <span className="text-[var(--color-success)]">{stats.categorizedPct}%</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--color-success)] transition-all"
-                        style={{ width: `${stats.categorizedPct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-2 flex justify-between text-xs font-bold uppercase tracking-wider">
-                      <span className="text-[var(--color-text-secondary)]">Tagged</span>
-                      <span className="text-[var(--ref-tertiary)]">{stats.taggedPct}%</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--ref-tertiary)] transition-all"
-                        style={{ width: `${stats.taggedPct}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <p className="mt-8 text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                  A higher rate keeps reports and budgets aligned with how you actually spend.
-                </p>
-              </div>
-
-              {/* Archival placeholder */}
               <button
                 type="button"
-                disabled
-                className="flex w-full cursor-not-allowed items-center gap-4 rounded-2xl border border-[var(--color-border)]/50 p-6 text-left opacity-70 transition-colors"
+                onClick={() => openTagModal()}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)]"
+                aria-label="Add tag"
+                title="Add tag"
               >
-                <Archive className="h-5 w-5 shrink-0 text-[var(--color-muted)]" />
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-sm font-bold text-[var(--color-text-primary)]">
-                    Archive cleanup
-                  </h4>
-                  <p className="text-xs text-[var(--color-text-secondary)]">
-                    Find unused tags and categories (coming soon)
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-[var(--color-muted)]" />
+                <Plus className="h-4 w-4" />
               </button>
             </div>
-          </div>
+            <div className="p-4">
+              {isLoading ? (
+                <p className="text-sm text-[var(--ref-on-surface-variant)]">Loading tags…</p>
+              ) : tags.length === 0 ? (
+                <p className="text-sm text-[var(--ref-on-surface-variant)]">No tags yet. Add tags to label trips, work, reimbursements and so on.</p>
+              ) : (
+                <>
+                  {usedTags.length > 0 && <div className="flex flex-wrap gap-1.5">{usedTags.map((tag) => tagChip(tag, false))}</div>}
+                  {unusedTags.length > 0 && (
+                    <>
+                      <p className={cn('mb-2 text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]', usedTags.length > 0 && 'mt-5')}>Not used yet · {unusedTags.length}</p>
+                      <div className="flex flex-wrap gap-1.5">{unusedTags.map((tag) => tagChip(tag, true))}</div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </aside>
         </section>
 
         <Modal

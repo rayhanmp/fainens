@@ -1,12 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
-import { listAccounts, listCategories, listTags, listTransactions, type ListCategories200Item, type ListTags200Item } from '../../generated/client';
+import { getClassificationUsage, listAccounts, listCategories, listTags, type ListCategories200Item, type ListTags200Item } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
 
 export type CategoriesPageData = {
   categories: ListCategories200Item[];
   tags: ListTags200Item[];
-  transactions: Array<{ id: number; categoryId: number | null; tags: Array<{ tagId: number; name: string; color: string }> }>;
+  /** Usage across the whole posted ledger, counted on the server. */
+  usage: {
+    byCategory: Record<number, number>;
+    byTag: Record<number, number>;
+    expenseCount: number;
+    categorizedExpenseCount: number;
+    transactionCount: number;
+    taggedCount: number;
+  };
   expenseAccounts: Array<{
     id: number;
     name: string;
@@ -15,25 +23,40 @@ export type CategoriesPageData = {
   }>;
 };
 
+/** Spending and entries per category within a date range (inclusive, ms), for the breakdown. */
+export function useCategoryBreakdownQuery(range: { from?: number; to?: number }) {
+  return useQuery({
+    queryKey: [...queryKeys.categories.all, 'breakdown', range.from ?? null, range.to ?? null] as const,
+    queryFn: async () => {
+      const usage = await unwrapGenerated(getClassificationUsage({ from: range.from, to: range.to }), 200, 'Failed to load the category breakdown');
+      return usage.categories;
+    },
+    placeholderData: (previous) => previous,
+  });
+}
+
 /** Loads classification records and the lookup data used by category management. */
 export function useCategoriesPageQuery(includeInactive: boolean) {
   return useQuery<CategoriesPageData>({
     queryKey: queryKeys.categories.list(includeInactive),
     queryFn: async () => {
-      const [categories, tags, transactionResponse, accounts] = await Promise.all([
+      const [categories, tags, usage, accounts] = await Promise.all([
         unwrapGenerated(listCategories(includeInactive ? { includeInactive: 'true' } : undefined), 200, 'Failed to load categories'),
         unwrapGenerated(listTags(), 200, 'Failed to load tags'),
-        unwrapGenerated(listTransactions({ limit: '2000' }), 200, 'Failed to load transactions'),
+        unwrapGenerated(getClassificationUsage(), 200, 'Failed to load category usage'),
         unwrapGenerated(listAccounts({ type: 'expense' }), 200, 'Failed to load expense accounts'),
       ]);
       const result: CategoriesPageData = {
         categories,
         tags,
-        transactions: transactionResponse.data.map((transaction) => ({
-          id: transaction.id,
-          categoryId: transaction.categoryId ?? null,
-          tags: transaction.tags ?? [],
-        })),
+        usage: {
+          byCategory: Object.fromEntries(usage.categories.map((row) => [row.categoryId, row.transactionCount])),
+          byTag: Object.fromEntries(usage.tags.map((row) => [row.tagId, row.transactionCount])),
+          expenseCount: usage.expenseCount,
+          categorizedExpenseCount: usage.categorizedExpenseCount,
+          transactionCount: usage.transactionCount,
+          taggedCount: usage.taggedCount,
+        },
         expenseAccounts: accounts
           .filter((account) => account.type === 'expense' && account.isActive)
           .map((account) => ({
