@@ -236,12 +236,20 @@ export function TransactionModal({
   accounts,
   categories,
   tags,
-  editingTransaction,
+  editingTransaction: editingTransactionProp,
   periodId,
   initialMode = 'edit',
-  pendingTransaction,
+  pendingTransaction: pendingTransactionProp,
   initialPrefill,
 }: TransactionModalProps) {
+  // Callers clear the entry as they close the modal; keep showing what was open until the closing
+  // animation ends, or it would fall back to the empty "new transaction" form on the way out.
+  const [retained, setRetained] = useState({ editing: editingTransactionProp, pending: pendingTransactionProp });
+  if (isOpen && (retained.editing !== editingTransactionProp || retained.pending !== pendingTransactionProp)) {
+    setRetained({ editing: editingTransactionProp, pending: pendingTransactionProp });
+  }
+  const editingTransaction = isOpen ? editingTransactionProp : retained.editing;
+  const pendingTransaction = isOpen ? pendingTransactionProp : retained.pending;
   const { formatAmount, maskAmounts } = useBalanceVisibility();
   const queryClient = useQueryClient();
   /** Posted entries are never deleted; Undo reverses the first one (a transfer's fee goes with it), keeping history auditable. */
