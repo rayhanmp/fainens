@@ -2,153 +2,158 @@ import type { PeriodRecap, SavedRecapStory } from './queries';
 import { formatRecapCurrency as formatCurrency } from './currency';
 import { recapDisplayCopy, shortDisplayLabel } from './display-copy';
 
+const DAY_MS = 86_400_000;
+
+/** Recap days are local midnights in the server's time zone. Noon of the same instant lands on the same
+ * calendar date for any zone within ±12h, so dates read the same whether the server runs in WIB or UTC. */
+export const recapDay = (ms: number) => new Date(ms + DAY_MS / 2);
+export const recapDayKey = (ms: number) => recapDay(ms).toISOString().slice(0, 10);
+export const formatRecapDay = (ms: number, options: Intl.DateTimeFormatOptions) =>
+  new Intl.DateTimeFormat('en', { ...options, timeZone: 'UTC' }).format(recapDay(ms));
+
 export function periodDateRange(period: { startDate: number; endDate: number }) {
-  const format = new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-  return `${format.format(new Date(period.startDate))} – ${format.format(new Date(period.endDate))}`;
+  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+  return `${formatRecapDay(period.startDate, options)} – ${formatRecapDay(period.endDate, options)}`;
 }
 
-export type RecapStory = {
-  id: string; eyebrow: string; title: string; body: string;
-  theme: 'lime' | 'ink' | 'lilac' | 'peach' | 'cream';
-  stat?: { value: number; money?: boolean; suffix?: string; label?: string };
-  metrics?: Array<{ label: string; amount: number; fullLabel?: string }>;
-  bars?: Array<{ label: string; value: number; fullLabel?: string }>;
-  layout: 'cover' | 'flow' | 'budget' | 'podium' | 'spotlight' | 'mosaic' | 'orbit' | 'receipt' | 'calendar' | 'poster' | 'balance' | 'timeline' | 'outro';
-  budgetUse?: number;
-  detail?: string;
-  fullDetail?: string;
-};
+export type RecapTheme = 'lime' | 'ink' | 'lilac' | 'peach' | 'cream';
+export type CategoryShare = { categoryId: number | null; name: string; label: string; amount: number; share: number };
+export type RecapDayCell = { key: string; date: number; amount: number; purchaseCount: number; future: boolean; peak: boolean };
+export type ReceiptItem = { label: string; fullLabel: string; category: string; date: number; amount: number };
+export type ClosingTile = { label: string; value: string; money?: number; note?: string };
+
+type Copy = { eyebrow: string; title: string; body: string };
+export type RecapStory = Copy & { theme: RecapTheme } & (
+  | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number }
+  | { id: 'overview'; income: number; expenses: number; net: number; keptShare: number | null }
+  | { id: 'budget'; planned: number; spent: number; remaining: number; percentUsed: number | null; elapsedShare: number | null; over: Array<{ name: string; over: number }>; unbudgeted: number }
+  | { id: 'categories'; total: number; rows: CategoryShare[]; others: { count: number; amount: number; share: number } | null; count: number }
+  | { id: 'calendar'; days: RecapDayCell[] | null; spendingDays: number; totalDays: number; peak: { date: number; amount: number; purchaseCount: number } | null }
+  | { id: 'receipts'; items: ReceiptItem[]; largestShare: number | null; purchaseCount: number }
+  | { id: 'habits'; purchaseCount: number; median: number | null; average: number | null; spendingDays: number; repeat: { label: string; fullLabel: string; occurrences: number; total: number } | null }
+  | { id: 'comparison'; mode: 'average' | 'total'; now: number; before: number; change: number; beforeLabel: string; matchedElapsed: boolean }
+  | { id: 'closing'; tiles: ClosingTile[] }
+);
+export type RecapStoryId = RecapStory['id'];
+type ChapterData = RecapStory extends infer Story ? Story extends RecapStory ? Omit<Story, 'theme' | keyof Copy> : never : never;
+
+// Older editions saved app-written transfer fees as a "recurring purchase"; they are not habits.
+const isSystemDescription = (description: string) => /^transfer fee:/i.test(description.trim());
+
+const palettes: RecapTheme[][] = [
+  ['lime', 'ink', 'lilac', 'cream', 'peach', 'ink', 'lilac', 'cream', 'lime'],
+  ['lilac', 'cream', 'ink', 'peach', 'lime', 'ink', 'cream', 'peach', 'lilac'],
+  ['peach', 'ink', 'lime', 'lilac', 'cream', 'ink', 'peach', 'lilac', 'peach'],
+  ['cream', 'peach', 'ink', 'lime', 'lilac', 'ink', 'cream', 'lime', 'cream'],
+  ['ink', 'lime', 'peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'ink'],
+  ['peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'ink', 'lime', 'peach'],
+  ['lilac', 'lime', 'cream', 'ink', 'peach', 'lilac', 'ink', 'cream', 'lilac'],
+  ['lime', 'peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'ink', 'lime'],
+];
 
 export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory): RecapStory[] {
-  const period = recap.period.name;
   const { labels, compact } = recapDisplayCopy(recap, edition);
   const seed = edition?.seed ?? recap.period.id;
-  const name = seed % 8 === 4 ? edition?.personalization?.preferredName : undefined;
-  const top = recap.categories[0];
-  const categoryShare = top && recap.expenses > 0 && top.amount <= recap.expenses
-    ? Math.round(top.amount / recap.expenses * 100) : null;
-  const peak = recap.highlights?.peakSpendingDay;
+  const saved = (id: string) => edition?.copy.chapters.find(chapter => chapter.id === id);
+  const totalDays = Math.max(1, Math.round((recap.endMs - recap.startMs + 1) / DAY_MS));
+  const elapsedDays = Math.min(totalDays, Math.max(1, Math.floor((Math.min(recap.generatedAt, recap.endMs) - recap.startMs) / DAY_MS) + 1));
+  const peak = recap.highlights?.peakSpendingDay ?? null;
   const budget = recap.budget;
-  const profile = recap.purchaseProfile;
-  const repeat = recap.highlights?.repeatPurchases?.[0];
+  const profile = recap.purchaseProfile ?? null;
+  const repeatRow = recap.highlights?.repeatPurchases?.find(row => !isSystemDescription(row.description)) ?? null;
   const baseline = recap.coverageComplete ? recap.baseline : null;
-  const averagePurchase = profile && recap.purchaseCount > 0 ? profile.totalAmount / recap.purchaseCount : null;
+  const average = profile && recap.purchaseCount > 0 ? profile.totalAmount / recap.purchaseCount : null;
   const priorAverage = baseline?.purchaseTotal !== undefined && baseline.purchaseTotal > 0 && baseline.purchaseCount > 0
     ? baseline.purchaseTotal / baseline.purchaseCount : null;
-  const averageChange = averagePurchase !== null && priorAverage !== null ? Math.round((averagePurchase - priorAverage) / priorAverage * 100) : null;
-  const budgetDetails = budget ? [
-    budget.overBudgetCategoryCount ? `${labels.budgetCategory1}${budget.overBudgetCategoryCount > 1 ? ` + ${budget.overBudgetCategoryCount - 1} more` : ''} above category allocation` : null,
-    budget.unbudgetedExpenses !== 0 ? `${formatCurrency(budget.unbudgetedExpenses)} outside these allocations` : null,
-  ].filter(Boolean).join(' · ') : undefined;
-  const totalDays = Math.max(1, Math.ceil((recap.endMs - recap.startMs + 1) / 86_400_000));
-  const elapsedDays = Math.min(totalDays, Math.max(1, Math.floor((Math.min(recap.generatedAt, recap.endMs) - recap.startMs) / 86_400_000) + 1));
-  const dateFormat = new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' });
-  const stories: RecapStory[] = [
-    { id: 'intro', eyebrow: 'Your personal highlight reel', title: name ? `${name}, shall we rewind a little?` : 'Roll the highlights.', theme: 'lime', layout: 'cover',
-      body: `${period} has entered the chat. Let’s give those receipts their close-up${recap.isPartial ? '—the story is still unfolding' : ''}.` },
-    { id: 'overview', eyebrow: 'Meet the cast', title: 'Money in. Money out. Plot twist?', theme: 'ink', layout: 'flow',
-      body: 'Income, expenses, and what sits between them. Everyone gets a speaking part.', metrics: [
-        { label: 'Recorded income', amount: recap.income }, { label: 'Recorded expenses', amount: recap.expenses }, { label: 'Income − expenses', amount: recap.net },
-      ] },
-    { id: 'budget', eyebrow: recap.isPartial ? 'The plan, so far' : 'The plan meets the receipts',
-      title: !budget ? 'No budget lines this time.' : budget.overBudgetCategoryCount ? 'Some categories redrew the lines.' : budget.spent < 0 ? 'Credits rewrote part of the plan.' : budget.remaining === 0 ? 'The recorded totals lined up.' : recap.coverageComplete && !recap.isPartial ? 'The outline kept some room.' : 'The outline is still taking shape.',
-      theme: 'cream', layout: 'budget',
-      body: !budget ? 'This period has entries, but no category budgets to compare them with.' : budget.overBudgetCategoryCount ? `${labels.budgetCategory1} crossed its category allocation. The receipts wrote that part.` : 'Your allocations and the entries captured so far, side by side.',
-      stat: budget ? budget.percentUsed !== null ? { value: budget.percentUsed, suffix: '%', label: recap.isPartial ? 'recorded allocation use so far' : 'recorded allocation use' } : { value: budget.spent, money: true, label: 'recorded in budgeted categories' } : undefined,
-      budgetUse: budget?.percentUsed ?? undefined,
-      metrics: budget ? [{ label: 'Planned allocation', amount: budget.planned }, { label: budget.remaining < 0 ? 'Above allocation' : 'Recorded remainder', amount: Math.abs(budget.remaining) }] : undefined,
-      detail: budgetDetails,
-      fullDetail: budget?.overBudgetCategories.map(row => `${row.name}: ${formatCurrency(row.over)} above allocation`).join(' · '),
-    },
-    { id: 'categories', eyebrow: 'The expense leaderboard', title: 'And the nominees are…', theme: 'lilac', layout: 'podium',
-      body: top ? 'Your largest expense categories, ranked by net recorded amounts. Refunds and shared-cost adjustments are included.' : 'No category with positive net expenses to rank this time.',
-      bars: top ? recap.categories.slice(0, 3).map((category, i) => ({ label: labels[`category${i + 1}`], fullLabel: category.name, value: category.amount })) : undefined },
-    { id: 'spotlight', eyebrow: 'Top billing', title: top ? `${labels.category1} gets the mic.` : 'A quiet spotlight.', theme: 'cream', layout: 'spotlight',
-      body: top ? 'The leading category in your recorded expenses. Every headline has a story behind it.' : 'No positive expense category to put centre stage in this edition.',
-      stat: categoryShare !== null ? { value: categoryShare, suffix: '%', label: 'of recorded net expenses' } : top ? { value: top.amount, money: true, label: 'largest category by net expenses' } : undefined,
-      detail: categoryShare !== null ? `${labels.category1} · ${formatCurrency(top!.amount)}` : undefined,
-      fullDetail: categoryShare !== null ? `${top!.name} · ${formatCurrency(top!.amount)}` : undefined },
-    { id: 'variety', eyebrow: 'The supporting cast', title: 'Your receipts had range.', theme: 'peach', layout: 'mosaic',
-      body: 'Every category with positive net expenses adds another thread. Variety, in ledger form.',
-      stat: { value: recap.categories.length, label: 'categories with positive net expenses' },
-      detail: recap.categories.slice(0, 4).map((_, i) => labels[`category${i + 1}`]).join(' · ') || 'No positive expense categories' },
-    { id: 'rhythm', eyebrow: 'The beat behind the receipts', title: 'Cue the receipt drumroll.', theme: 'lime', layout: 'orbit',
-      body: 'These are the days with recorded purchases. A rhythm made from entries, not a guess about your routine.',
-      stat: { value: recap.spendingDays, label: 'days with purchases' } },
-    { id: 'purchases', eyebrow: 'The little plot points', title: 'One entry at a time.', theme: 'ink', layout: 'receipt',
-      body: recap.highlights?.repeatPurchases?.[0]
-        ? `${labels.repeatPurchase1} came back for an encore. Even receipts have recurring characters.`
-        : recap.highlights?.topPurchases?.[0]
-          ? `${labels.purchase1} takes the close-up; ${labels.purchase2 ?? 'the supporting cast'} brings the plot.`
-          : 'The small purchases had their moment. Every good story needs a supporting cast.',
-      stat: { value: recap.purchaseCount, label: 'purchases' },
-      detail: repeat ? `${formatCurrency(repeat.totalAmount)} across ${repeat.occurrences} ${labels.repeatPurchase1} entries` : undefined },
-    { id: 'peak', eyebrow: peak ? 'A day with main-character energy' : 'The story, in entries', title: peak ? 'This day turned up the volume.' : 'Every entry gets a part.', theme: 'lilac', layout: 'calendar',
-      body: peak ? 'The day with your highest net recorded expenses. A headline in the ledger, not a verdict on the day.' : 'Income, purchases and expense credits all have a place in this period’s recorded activity.',
-      stat: peak ? { value: peak.amount, money: true, label: 'net expenses that day' } : { value: recap.activityCount, label: 'recorded financial entries' },
-      detail: peak ? `${dateFormat.format(new Date(peak.date))} · ${peak.purchaseCount} ${peak.purchaseCount === 1 ? 'purchase' : 'purchases'}` : undefined },
-    { id: 'moment', eyebrow: 'The standout receipt', title: recap.largestPurchase ? 'One receipt stole the scene.' : 'No purchase cameo this time.', theme: 'peach', layout: 'poster',
-      body: recap.largestPurchase ? 'Your largest recorded purchase gets a close-up. You know the story behind this one.' : 'There’s no positive recorded purchase to feature. That doesn’t mean the period had no money movement.',
-      stat: recap.largestPurchase ? { value: recap.largestPurchase.amount, money: true, label: 'largest recorded purchase' } : undefined,
-      detail: labels.standoutPurchase, fullDetail: recap.largestPurchase?.description },
-    { id: 'balance', eyebrow: 'The typical receipt', title: 'The big receipts weren’t the whole story.', theme: 'cream', layout: 'balance',
-      body: 'The middle-sized receipt puts the larger purchases in perspective.',
-      stat: profile ? { value: profile.medianAmount, money: true, label: 'middle purchase amount' } : undefined,
-      detail: averagePurchase !== null ? `Average purchase: ${formatCurrency(Math.round(averagePurchase))}` : undefined },
-    { id: 'comparison', eyebrow: 'Then and now', title: averageChange !== null ? 'The average receipt changed size.' : 'The expense total changed.', theme: 'ink', layout: 'poster',
-      body: recap.comparison ? 'Different periods bring different needs. Here’s the change against your previous complete period.' : recap.isPartial ? 'This edition captures the period so far. No finished-period comparison yet.' : 'No comparable previous period is available for this edition. This chapter stands on its own.',
-      stat: averageChange !== null ? { value: Math.abs(averageChange), suffix: '%', label: 'change in average purchase size' }
-        : recap.comparison ? { value: Math.abs(Math.round(recap.comparison.changePercent)), suffix: '%', label: 'change in recorded expenses' } : { value: elapsedDays, label: `of ${totalDays} days elapsed when saved` },
-      detail: averageChange !== null ? `${formatCurrency(Math.round(averagePurchase!))} now · ${formatCurrency(Math.round(priorAverage!))} before${recap.baseline?.matchedElapsed ? ' · same elapsed time' : ''}`
-        : recap.comparison ? `${Math.abs(Math.round(recap.comparison.changePercent))}% ${recap.comparison.changePercent > 0 ? 'higher' : recap.comparison.changePercent < 0 ? 'lower' : 'change'} than ${recap.comparison.periodName}` : periodDateRange(recap.period) },
-    { id: 'closing', eyebrow: 'Your next chapter', title: 'Same you. Fresh chapter.', theme: 'lime', layout: 'outro',
-      body: 'What gets a little more room in the next period? Your budget is ready for its next edit.' },
-  ];
-  const palettes: RecapStory['theme'][][] = [
-    ['lime', 'ink', 'lilac', 'cream', 'peach', 'lime', 'ink', 'lilac', 'peach', 'cream', 'ink', 'lime'],
-    ['lilac', 'cream', 'ink', 'peach', 'lime', 'lilac', 'cream', 'peach', 'ink', 'lime', 'cream', 'lilac'],
-    ['peach', 'ink', 'lime', 'lilac', 'cream', 'peach', 'ink', 'cream', 'lilac', 'lime', 'ink', 'peach'],
-    ['cream', 'peach', 'ink', 'lime', 'lilac', 'cream', 'peach', 'ink', 'lime', 'lilac', 'cream', 'peach'],
-    ['ink', 'lime', 'peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'cream', 'lilac', 'ink', 'lime'],
-    ['peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'cream', 'lime', 'ink', 'lilac', 'peach', 'cream'],
-    ['lilac', 'lime', 'cream', 'ink', 'peach', 'lilac', 'lime', 'cream', 'peach', 'ink', 'lilac', 'lime'],
-    ['lime', 'peach', 'cream', 'lilac', 'ink', 'lime', 'peach', 'lilac', 'cream', 'ink', 'lime', 'peach'],
-  ];
-  const design = seed % palettes.length;
-  return stories.filter(story => {
-    if (story.id === 'budget') return recap.budget !== undefined;
-    if (story.id === 'balance') return Boolean(profile && recap.purchaseCount > 1);
-    if (story.id === 'comparison') return averageChange !== null || Boolean(recap.comparison);
-    if (story.id === 'moment') return Boolean(recap.largestPurchase);
-    if (story.id === 'peak') return Boolean(peak);
-    if (story.id === 'purchases' || story.id === 'rhythm') return recap.purchaseCount > 0;
-    if (story.id === 'categories' || story.id === 'spotlight') return recap.categories.length > 0;
-    if (story.id === 'variety') return recap.categories.length > 1;
-    return true;
-  }).map((story, i) => {
-    const saved = edition?.copy.chapters.find(chapter => chapter.id === story.id);
-    // Old cached filler can still describe the saved figures accurately. This
-    // display repair neither fetches fresh facts nor rewrites the saved edition.
-    const oldOverview = story.id === 'overview' && (saved?.body ?? story.body) === 'Income, expenses, and what sits between them. Everyone gets a speaking part.';
-    const observedShare = recap.income > 0 && recap.expenses >= 0 ? Math.round(recap.expenses / recap.income * 100) : null;
-    const title = oldOverview ? observedShare !== null
-      ? recap.net < 0 ? 'Expenses overtook income.' : recap.net > 0 ? 'More came in than went out.' : 'Income and expenses met in the middle.'
-      : recap.expenses < 0 ? 'Credits changed the balance.' : 'No positive income recorded yet.'
-      : compact(saved?.title ?? story.title);
-    let body = oldOverview ? observedShare !== null
-      ? `Expenses${recap.isPartial ? ' so far' : ''} used ${observedShare}% of recorded income, ${recap.net > 0 ? 'leaving a recorded surplus' : recap.net < 0 ? 'exceeding recorded income' : 'matching recorded income'}.`
-      : recap.expenses < 0 ? 'Expense credits outweighed purchases in this period’s entries.' : 'No positive income is recorded to compare with these expenses.'
-      : compact(saved?.body ?? story.body);
-    if (story.id === 'purchases' && recap.purchaseProfile === undefined) body = repeat && recap.purchaseCount > 0
-      ? `${labels.repeatPurchase1} appeared ${repeat.occurrences} times, accounting for ${Math.round(repeat.occurrences / recap.purchaseCount * 100)}% of your purchases.`
-      : 'No named purchase repeated in these entries.';
-    if (story.id === 'comparison' && recap.purchaseProfile === undefined && recap.comparison) body = `Recorded expenses were ${Math.abs(Math.round(recap.comparison.changePercent))}% ${recap.comparison.changePercent >= 0 ? 'higher' : 'lower'} than ${shortDisplayLabel(recap.comparison.periodName, 42)}.`;
+  const averageChange = average !== null && priorAverage !== null ? Math.round((average - priorAverage) / priorAverage * 100) : null;
+  const keptShare = recap.income > 0 && recap.net >= 0 ? Math.round(recap.net / recap.income * 100) : null;
+  const positiveCategories = recap.categories.filter(row => row.amount > 0);
+  const categoryTotal = positiveCategories.reduce((sum, row) => sum + row.amount, 0);
+  const share = (amount: number) => categoryTotal > 0 ? Math.round(amount / categoryTotal * 100) : 0;
+  const topRows: CategoryShare[] = positiveCategories.slice(0, 5).map((row, i) => ({
+    categoryId: row.categoryId ?? null, name: row.name, label: labels[`category${i + 1}`] ?? shortDisplayLabel(row.name), amount: row.amount, share: share(row.amount),
+  }));
+  const rest = positiveCategories.slice(5);
+  const restAmount = rest.reduce((sum, row) => sum + row.amount, 0);
+  const top = topRows[0];
+
+  // Every day of the period, with net expenses where the saved edition has them.
+  const dailyByKey = new Map((recap.daily ?? []).map(day => [recapDayKey(day.date), day]));
+  const peakKey = peak ? recapDayKey(peak.date) : null;
+  const days: RecapDayCell[] | null = recap.daily ? Array.from({ length: totalDays }, (_, i) => {
+    const date = recap.startMs + i * DAY_MS;
+    const key = recapDayKey(date);
+    const day = dailyByKey.get(key);
+    return { key, date, amount: day?.amount ?? 0, purchaseCount: day?.purchaseCount ?? 0, future: recap.isPartial && i >= elapsedDays, peak: key === peakKey };
+  }) : null;
+
+  const purchases = recap.highlights?.topPurchases ?? [];
+  const receiptItems: ReceiptItem[] = purchases.map((row, i) => ({
+    label: labels[`purchase${i + 1}`] ?? shortDisplayLabel(row.description), fullLabel: row.description, category: row.category, date: row.date, amount: row.amount,
+  }));
+  const largestShare = profile && recap.largestPurchase ? Math.min(100, Math.round(recap.largestPurchase.amount / profile.totalAmount * 100)) : null;
+  const dayLabel = (ms: number) => formatRecapDay(ms, { weekday: 'short', day: 'numeric', month: 'short' });
+
+  const fallback: Record<RecapStoryId, Copy> = {
+    intro: { eyebrow: 'Your period, in review', title: 'Roll the highlights.', body: `${recap.period.name}${recap.isPartial ? ', so far' : ''}. Let’s look back.` },
+    overview: { eyebrow: 'Money in, money out', title: recap.net >= 0 ? 'More came in than went out.' : 'Expenses overtook income.', body: 'Income and expenses for the period, side by side.' },
+    budget: { eyebrow: recap.isPartial ? 'The plan, so far' : 'The plan meets the receipts', title: budget?.overBudgetCategoryCount ? 'Some categories redrew the lines.' : 'The plan held its shape.', body: 'Your allocations next to what was spent in them.' },
+    categories: { eyebrow: 'Where it went', title: top ? `${top.label} led the way.` : 'A quiet period.', body: 'Your expense categories, by share of spending.' },
+    calendar: { eyebrow: 'The period, day by day', title: peak ? 'One day turned up the volume.' : 'Your period had a beat.', body: 'Darker days had more spending.' },
+    receipts: { eyebrow: 'The standout receipts', title: 'The biggest receipts.', body: 'Your three largest purchases this period.' },
+    habits: { eyebrow: 'How you bought', title: 'Small receipts did the heavy lifting.', body: 'How often you bought, and what a typical receipt looked like.' },
+    comparison: { eyebrow: 'Then and now', title: averageChange !== null ? 'The average receipt changed size.' : 'The expense total changed.', body: 'Compared with your previous periods.' },
+    closing: { eyebrow: 'The period, in one card', title: 'Same you. Fresh chapter.', body: 'What gets a little more room next period?' },
+  };
+  // Each new chapter reads the saved copy written for the chapter whose job it now does.
+  const copySource: Record<RecapStoryId, string> = {
+    intro: 'intro', overview: 'overview', budget: 'budget', categories: 'spotlight', calendar: peak ? 'peak' : 'rhythm',
+    receipts: 'moment', habits: repeatRow ? 'purchases' : 'balance', comparison: 'comparison', closing: 'closing',
+  };
+  const copyFor = (id: RecapStoryId): Copy => {
+    const source = saved(copySource[id]);
+    const base = fallback[id];
+    if (!source) return base;
+    // A fee-led "recurring receipt" line from an older edition no longer matches what the chapter shows.
+    if (id === 'habits' && /transfer fee:/i.test(source.body)) return base;
+    const title = compact(source.title);
+    // Older editions could open a body with an interpolated lower-case insight ("income rose…").
+    const body = compact(source.body).replace(/^\p{Ll}/u, letter => letter.toUpperCase());
     // A complete fallback hook is preferable to clipping an overlong old headline.
     const titleFits = title.length <= 56 && !/(?:\b(?:and|with|at|dan|dengan|di)|[,;:]|…|\.\.\.)\s*$/i.test(title);
-    return { ...story, ...saved,
-      title: titleFits ? title : compact(story.title),
-      eyebrow: shortDisplayLabel(saved?.eyebrow ?? story.eyebrow, 40),
-      body: body.length <= 160 ? body : compact(story.body),
-      theme: palettes[design][i % palettes[design].length] };
-  });
+    return {
+      eyebrow: id === 'categories' || id === 'calendar' || id === 'receipts' || id === 'closing' ? base.eyebrow : shortDisplayLabel(source.eyebrow, 40),
+      title: titleFits ? title : base.title,
+      body: body.length <= 160 ? body : base.body,
+    };
+  };
+
+  const closingTiles: ClosingTile[] = [
+    { label: recap.net >= 0 ? 'Left over' : 'Shortfall', value: formatCurrency(Math.abs(recap.net)), money: Math.abs(recap.net), note: keptShare !== null ? `${keptShare}% of income` : undefined },
+    ...(top ? [{ label: 'Top category', value: top.label, note: `${top.share}% of spending` }] : []),
+    ...(peak ? [{ label: 'Busiest day', value: dayLabel(peak.date), note: `${peak.purchaseCount} ${peak.purchaseCount === 1 ? 'purchase' : 'purchases'}` }] : []),
+    { label: 'Purchases', value: String(recap.purchaseCount), note: `over ${recap.spendingDays} ${recap.spendingDays === 1 ? 'day' : 'days'}` },
+  ];
+
+  const chapters: Array<ChapterData | null> = [
+    { id: 'intro', dateRange: periodDateRange(recap.period), isPartial: recap.isPartial, elapsedDays, totalDays },
+    { id: 'overview', income: recap.income, expenses: recap.expenses, net: recap.net, keptShare },
+    budget ? { id: 'budget', planned: budget.planned, spent: budget.spent, remaining: budget.remaining, percentUsed: budget.percentUsed,
+      elapsedShare: recap.isPartial ? Math.round(elapsedDays / totalDays * 100) : null,
+      over: budget.overBudgetCategories.map(row => ({ name: row.name, over: row.over })), unbudgeted: budget.unbudgetedExpenses } : null,
+    top ? { id: 'categories', total: categoryTotal, rows: topRows, others: rest.length ? { count: rest.length, amount: restAmount, share: share(restAmount) } : null, count: positiveCategories.length } : null,
+    recap.purchaseCount > 0 ? { id: 'calendar', days, spendingDays: recap.spendingDays, totalDays, peak } : null,
+    receiptItems.length ? { id: 'receipts', items: receiptItems, largestShare, purchaseCount: recap.purchaseCount } : null,
+    recap.purchaseCount > 1 ? { id: 'habits', purchaseCount: recap.purchaseCount, median: profile?.medianAmount ?? null, average, spendingDays: recap.spendingDays,
+      repeat: repeatRow ? { label: labels.repeatPurchase1 && !isSystemDescription(labels.repeatPurchase1) ? labels.repeatPurchase1 : shortDisplayLabel(repeatRow.description), fullLabel: repeatRow.description, occurrences: repeatRow.occurrences, total: repeatRow.totalAmount } : null } : null,
+    averageChange !== null ? { id: 'comparison', mode: 'average', now: Math.round(average!), before: Math.round(priorAverage!), change: averageChange,
+      beforeLabel: baseline!.periodCount === 1 ? 'Previous period' : `Avg of ${baseline!.periodCount} periods`, matchedElapsed: Boolean(baseline?.matchedElapsed) }
+      : recap.comparison ? { id: 'comparison', mode: 'total', now: recap.expenses, before: recap.comparison.previousExpenses, change: Math.round(recap.comparison.changePercent),
+        beforeLabel: shortDisplayLabel(recap.comparison.periodName, 24), matchedElapsed: false } : null,
+    { id: 'closing', tiles: closingTiles },
+  ];
+  const palette = palettes[seed % palettes.length];
+  return chapters.filter(chapter => chapter !== null).map((chapter, i) => ({
+    ...chapter, ...copyFor(chapter.id), theme: palette[i % palette.length],
+  }) as RecapStory);
 }
