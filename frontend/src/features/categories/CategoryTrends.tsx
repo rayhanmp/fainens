@@ -488,7 +488,7 @@ function PeriodTooltip({ name, running, total, periodTotal, change, segments, fo
 function Sparkline({ values, labels, color, highlightLast, format }: { values: number[]; labels: string[]; color: string; highlightLast: boolean; format: (value: number) => string }) {
   const [active, setActive] = useState<number | null>(null);
   const max = Math.max(1, ...values);
-  const width = 112;
+  const width = 96;
   const height = 32;
   const x = (index: number) => (values.length <= 1 ? width / 2 : (index / (values.length - 1)) * (width - 8) + 4);
   const y = (value: number) => height - 4 - (value / max) * (height - 8);
@@ -539,7 +539,7 @@ export function CategoryTrendTable({ categories, focus, onSelect }: { categories
   const lastComplete = periods.reduce((found, period, index) => (period.endDate <= now ? index : found), -1);
   const previousIndex = lastComplete - 1;
   const labels = periods.map((period) => shortPeriod(period.name));
-  const rows = ranked.slice(0, 8).map((series) => {
+  const rows = ranked.map((series) => {
     const latest = lastComplete >= 0 ? series.values[lastComplete] : 0;
     const before = previousIndex >= 0 ? series.values[previousIndex] : 0;
     return { series, latest, before, change: before > 0 ? (latest - before) / before : null, average: series.total / Math.max(1, periods.length) };
@@ -575,7 +575,7 @@ export function CategoryTrendTable({ categories, focus, onSelect }: { categories
                     }
                   }}
                   className={cn(
-                    'flex flex-1 cursor-pointer items-center gap-3 px-5 py-2.5 outline-none transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:bg-[var(--ref-surface-container-low)]',
+                    'flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-5 py-2 outline-none transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:bg-[var(--ref-surface-container-low)]',
                     selected && 'bg-[var(--ref-surface-container-low)] shadow-[inset_3px_0_0_var(--ref-primary)]',
                   )}
                 >
@@ -585,7 +585,7 @@ export function CategoryTrendTable({ categories, focus, onSelect }: { categories
                     <p className="truncate text-[11px] text-[var(--ref-on-surface-variant)]">{formatAmount(Math.round(average))} a period on average</p>
                   </div>
                   <Sparkline values={series.values} labels={labels} format={short} color={series.color} highlightLast={lastComplete === series.values.length - 1} />
-                  <div className="w-28 shrink-0 text-right">
+                  <div className="w-24 shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(latest)}</p>
                     <p className="text-[11px] font-medium">
                       {change == null ? <span className="text-[var(--ref-on-surface-variant)]">new</span> : <ChangeLabel change={change} />}

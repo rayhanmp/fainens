@@ -247,12 +247,13 @@ function CategoriesPage() {
             { label: 'Spending categorized', value: `${stats.categorizedPct}%`, meter: stats.categorizedPct },
             { label: 'Entries tagged', value: `${stats.taggedPct}%`, meter: stats.taggedPct },
           ].map((item) => (
-            <div key={item.label} className="bg-[var(--ref-surface-container-lowest)] px-5 py-4">
-              <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{item.label}</dt>
-              <dd className="mt-1 font-headline text-xl font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
+            // One line per stat; a meter runs along the cell's bottom edge instead of adding a row.
+            <div key={item.label} className="relative flex items-baseline justify-between gap-3 bg-[var(--ref-surface-container-lowest)] px-5 py-2.5">
+              <dt className="truncate text-[11px] font-medium uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{item.label}</dt>
+              <dd className="font-headline text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">{item.value}</dd>
               {item.meter != null && (
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
-                  <div className="h-full rounded-full bg-[var(--ref-primary)]" style={{ width: `${item.meter}%` }} />
+                <div className="absolute inset-x-0 bottom-0 h-[3px] bg-[var(--ref-surface-container-high)]" aria-hidden>
+                  <div className="h-full bg-[var(--ref-primary)]" style={{ width: `${item.meter}%` }} />
                 </div>
               )}
             </div>
@@ -375,12 +376,7 @@ function CategoriesPage() {
           />
         </section>
 
-        <section className="mt-10 space-y-6" aria-labelledby="classification-insights">
-          <div>
-            <h2 id="classification-insights" className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">Insights</h2>
-            <p className="text-sm text-[var(--ref-on-surface-variant)]">How your categories and tags are used, and how spending moves between periods.</p>
-          </div>
-
+        <section className="mt-6 space-y-6" aria-label="Insights">
           <PeriodSpendChart categories={allCategories} focus={trendFocus} onFocusChange={setTrendFocus} />
 
           <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">

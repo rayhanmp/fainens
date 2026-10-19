@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDownRight, ArrowUpRight, Crown, Gem, Repeat2 } from 'lucide-react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
@@ -21,8 +21,8 @@ const RANGES: { id: Range; label: string; previous: string | null }[] = [
 ];
 /** Tiles past this many fold into one "Other" tile, so every tile stays big enough to read. */
 const MAX_TILES = 9;
-/** A wide, short strip: the layout box must match the container's aspect ratio (5:2). */
-const BOX = { w: 200, h: 80 };
+/** Layout size (px) until the treemap's real box has been measured. */
+const FALLBACK_BOX = { w: 640, h: 256 };
 const DAY = 86_400_000;
 
 
@@ -92,6 +92,18 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
   const [metric, setMetric] = useState<Metric>('amount');
   const [range, setRange] = useState<Range>('year');
   const [hovered, setHovered] = useState<number | null>(null);
+  // The treemap is laid out in its real pixel box, so tiles keep sensible shapes at any height.
+  const [boxEl, boxRef] = useState<HTMLDivElement | null>(null);
+  const [box, setBox] = useState(FALLBACK_BOX);
+  useEffect(() => {
+    if (!boxEl) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setBox({ w: width, h: height });
+    });
+    observer.observe(boxEl);
+    return () => observer.disconnect();
+  }, [boxEl]);
   const [now] = useState(() => Date.now());
   const current = useCategoryBreakdownQuery(useMemo(() => bounds(range, now, false), [range, now]));
   const previous = useCategoryBreakdownQuery(useMemo(() => bounds(range, now, true), [range, now]), range !== 'all');
@@ -117,7 +129,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
     ...shown.map((row) => ({ key: row.id, row, value: row[metric] })),
     ...(folded.length > 0 ? [{ key: -1, row: null as Row | null, value: folded.reduce((sum, row) => sum + row[metric], 0) }] : []),
   ];
-  const rects = squarify(tiles.map((tile) => tile.value), BOX.w, BOX.h);
+  const rects = squarify(tiles.map((tile) => tile.value), box.w, box.h);
   const share = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
   const show = (value: number) => (metric === 'amount' ? formatAmount(value) : `${value.toLocaleString('id-ID')} ${value === 1 ? 'entry' : 'entries'}`);
 
@@ -136,17 +148,18 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
 
   return (
     <section className="flex h-full flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3.5">
-        <div className="min-w-0">
+      {/* Title and toggles share the top row; the summary runs underneath so the toggles stay top-right. */}
+      <div className="border-b border-[var(--color-border)] px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Where the money goes</h2>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">
-            {formatAmount(totalAmount)} over {totalCount.toLocaleString('id-ID')} entries · {formatAmount(totalCount > 0 ? Math.round(totalAmount / totalCount) : 0)} each on average
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented label="Size tiles by" options={METRICS} value={metric} onChange={setMetric} />
+            <Segmented label="Range" options={RANGES} value={range} onChange={setRange} />
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented label="Size tiles by" options={METRICS} value={metric} onChange={setMetric} />
-          <Segmented label="Range" options={RANGES} value={range} onChange={setRange} />
-        </div>
+        <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">
+          {formatAmount(totalAmount)} over {totalCount.toLocaleString('id-ID')} entries
+        </p>
       </div>
 
       {current.isPending && !current.data ? (
@@ -154,21 +167,24 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
       ) : tiles.length === 0 ? (
         <p className="px-5 py-10 text-sm text-[var(--ref-on-surface-variant)]">No categorized spending in this range.</p>
       ) : (
-        <div className="grid gap-4 p-4">
-          <div className="relative">
+        <div className="flex flex-1 flex-col gap-4 p-4">
+          {/* The treemap takes whatever height the card has left, so the card never ends in a gap. */}
+          <div className="relative flex flex-1 flex-col">
             <div
-              className={cn('relative aspect-[5/2] w-full transition-opacity', current.isFetching && 'opacity-60')}
+              ref={boxRef}
+              className={cn('relative min-h-60 w-full flex-1 transition-opacity', current.isFetching && 'opacity-60')}
               role="list"
               aria-label={`Categories by ${metric === 'amount' ? 'amount spent' : 'number of entries'}`}
               onMouseLeave={() => setHovered(null)}
             >
               {tiles.map((tile, index) => {
                 const rect = rects[index];
-                const width = (rect.w / BOX.w) * 100;
-                const height = (rect.h / BOX.h) * 100;
+                const width = (rect.w / box.w) * 100;
+                const height = (rect.h / box.h) * 100;
                 const tint = tile.row?.color ?? 'var(--ref-outline)';
-                const roomy = width > 12 && height > 32;
-                const compact = !roomy && width > 6 && height > 18;
+                // Labels depend on the tile's real size in pixels.
+                const roomy = rect.w > 78 && rect.h > 76;
+                const compact = !roomy && rect.w > 40 && rect.h > 44;
                 const name = tile.row?.name ?? `Other (${folded.length})`;
                 return (
                   <div
@@ -176,7 +192,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
                     role="listitem"
                     aria-label={`${name}: ${show(tile.value)}, ${share(tile.value)}%`}
                     className="absolute p-[2px]"
-                    style={{ left: `${(rect.x / BOX.w) * 100}%`, top: `${(rect.y / BOX.h) * 100}%`, width: `${width}%`, height: `${height}%` }}
+                    style={{ left: `${(rect.x / box.w) * 100}%`, top: `${(rect.y / box.h) * 100}%`, width: `${width}%`, height: `${height}%` }}
                     onMouseEnter={() => setHovered(tile.key)}
                   >
                     <div
@@ -191,7 +207,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
                       )}
                       {roomy && (
                         <div className="min-w-0">
-                          <p className={cn('truncate font-headline font-bold tabular-nums text-[var(--ref-on-surface)]', width > 24 ? 'text-lg' : width > 16 ? 'text-base' : 'text-xs')}>{metric === 'amount' ? (balancesHidden ? formatAmount(tile.value) : shortRupiah(tile.value)) : tile.value.toLocaleString('id-ID')}</p>
+                          <p className={cn('truncate font-headline font-bold tabular-nums text-[var(--ref-on-surface)]', rect.w > 156 ? 'text-lg' : rect.w > 104 ? 'text-base' : 'text-xs')}>{metric === 'amount' ? (balancesHidden ? formatAmount(tile.value) : shortRupiah(tile.value)) : tile.value.toLocaleString('id-ID')}</p>
                           <p className="text-[11px] tabular-nums text-[var(--ref-on-surface-variant)]">{share(tile.value)}%</p>
                         </div>
                       )}
