@@ -134,7 +134,7 @@ function MonthsVisual({ story }: { story: Of<'months'> }) {
   const max = Math.max(1, ...story.months.map(month => month.amount));
   return <div className="recap-weekdays">
     <div className="recap-big-stat recap-seq" style={seq(3)}><span className="recap-stat-word">{story.months[story.busiest].label}</span><span>the biggest month of the year</span></div>
-    <div className="recap-week-bars recap-month-bars recap-seq" style={seq(4)} role="img" aria-label={`Spending by month, highest in ${story.months[story.busiest].label}`}>
+    <div className="recap-week-bars recap-month-bars recap-seq" style={{ ...seq(4), gridTemplateColumns: `repeat(${story.months.length}, minmax(0, 1fr))` }} role="img" aria-label={`Spending by month, highest in ${story.months[story.busiest].label}`}>
       {story.months.map((month, i) => <div key={month.label} className={i === story.busiest ? 'is-top' : undefined}>
         <i style={{ '--fill': month.amount / max, '--i': i } as CSSProperties} />
         <span>{month.label.slice(0, 3)}</span>

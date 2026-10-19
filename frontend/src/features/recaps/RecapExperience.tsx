@@ -2,7 +2,8 @@ import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Link } from '@tanstack/react-router';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Pause, Play, RefreshCw, Rewind, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
-import { useRecapArchive, useRecapStory, useRegenerateRecap, type SavedRecapStory } from './queries';
+import { useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type SavedRecapStory } from './queries';
+import { combineYear, recapYear, yearEdition } from './year';
 import { buildStories, periodDateRange, themeColors, type RecapStory } from './stories';
 import { ShareRecap } from './ShareRecap';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
@@ -21,17 +22,30 @@ const newRun = () => 1 + Math.floor(Math.random() * 2_000_000_000);
 export function RecapExperience({ initialPeriodId, onPeriodChange, onClose }: ExperienceProps) {
   const archive = useRecapArchive();
   const [selected, setSelected] = useState(initialPeriodId);
+  const [year, setYear] = useState<number | null>(null);
   const periodId = selected ?? archive.data?.[0]?.id;
   const period = archive.data?.find(item => item.id === periodId);
-  const edition = useRecapStory(periodId);
+  const edition = useRecapStory(year === null ? periodId : undefined);
+  // A year in review is on offer once a calendar year has at least two periods.
+  const years = [...new Set((archive.data ?? []).map(recapYear))].filter(value => (archive.data ?? []).filter(item => recapYear(item) === value).length >= 2).sort((a, b) => b - a);
   const controls = <>
-    <label className="recap-period-pill"><span>{period?.name ?? 'Your periods'}</span><ChevronDown size={12} /><select aria-label="Recap period" value={periodId ?? ''} onChange={event => { setSelected(Number(event.target.value)); onPeriodChange?.(Number(event.target.value)); }}>
-      {periodId && !period && <option value={periodId}>Period {periodId}</option>}
-      {archive.data?.map(item => <option key={item.id} value={item.id}>{item.name} · {periodDateRange(item)}{item.isPartial ? ' · So far' : ''}</option>)}
+    <label className="recap-period-pill"><span>{year !== null ? `${year} · Year in review` : period?.name ?? 'Your periods'}</span><ChevronDown size={12} /><select aria-label="Recap period" value={year !== null ? `year:${year}` : periodId ?? ''} onChange={event => {
+      const value = event.target.value;
+      if (value.startsWith('year:')) { setYear(Number(value.slice(5))); return; }
+      setYear(null); setSelected(Number(value)); onPeriodChange?.(Number(value));
+    }}>
+      {years.length > 0 && <optgroup label="Year in review">{years.map(value => <option key={value} value={`year:${value}`}>{value} · Year in review</option>)}</optgroup>}
+      <optgroup label="Salary periods">
+        {periodId && !period && <option value={periodId}>Period {periodId}</option>}
+        {archive.data?.map(item => <option key={item.id} value={item.id}>{item.name} · {periodDateRange(item)}{item.isPartial ? ' · So far' : ''}</option>)}
+      </optgroup>
     </select></label>
     {onClose && <button className="recap-icon-pill recap-close" onClick={onClose} aria-label="Close recap"><X size={16} /></button>}
   </>;
   const fallbackControls = <div className="recap-overlay-actions">{controls}</div>;
+  if (year !== null) {
+    return <div className="recap-experience"><YearRecap key={year} year={year} periodIds={(archive.data ?? []).filter(item => recapYear(item) === year).map(item => item.id)} controls={controls} fallbackControls={fallbackControls} /></div>;
+  }
   return <div className="recap-experience">
     {archive.isPending || (periodId && edition.isPending) ? <div className="recap-writing" role="status">{fallbackControls}<div className="recap-writing-orbit" aria-hidden="true"><i /><i /><i /><Sparkles size={30} /></div><h3>Rewinding your period.</h3><p>Putting your edition together.</p></div>
       : archive.isError || edition.isError ? <div className="recap-empty" role="alert">{fallbackControls}<h2>Your story couldn’t load.</h2><p>{edition.error?.message ?? 'Please try again in a moment.'}</p><button className="recap-primary" onClick={() => { void archive.refetch(); if (periodId) void edition.refetch(); }}><RefreshCw size={16} />Try again</button></div>
@@ -39,6 +53,15 @@ export function RecapExperience({ initialPeriodId, onPeriodChange, onClose }: Ex
       : edition.data.snapshot.activityCount === 0 ? <EmptyRecapEdition periodId={periodId} controls={fallbackControls} />
       : <RecapViewer key={`${periodId}:${edition.data.savedAt}`} edition={edition.data} controls={controls} />}
   </div>;
+}
+
+/** The whole year in one story, combined from its periods' recaps. Nothing is saved or rewritten. */
+function YearRecap({ year, periodIds, controls, fallbackControls }: { year: number; periodIds: number[]; controls: ReactNode; fallbackControls: ReactNode }) {
+  const recaps = useYearRecaps(periodIds);
+  const edition = useMemo(() => recaps.data ? yearEdition(combineYear(recaps.data, year), year) : null, [recaps.data, year]);
+  if (recaps.error) return <div className="recap-empty" role="alert">{fallbackControls}<h2>The year couldn’t load.</h2><p>{recaps.error.message}</p></div>;
+  if (!edition) return <div className="recap-writing" role="status">{fallbackControls}<div className="recap-writing-orbit" aria-hidden="true"><i /><i /><i /><Sparkles size={30} /></div><h3>Rewinding {year}.</h3><p>Stitching {periodIds.length} periods together.</p></div>;
+  return <RecapViewer edition={edition} controls={controls} yearMode />;
 }
 
 function EmptyRecapEdition({ periodId, controls }: { periodId: number; controls: ReactNode }) {
@@ -55,7 +78,7 @@ type Answer = PlayResult;
 /** A chapter's content element is kept by key while it leaves, so it exits without re-animating. */
 const contentKey = (visit: number, gate: boolean) => `c${visit}${gate ? 'q' : ''}`;
 
-function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls: ReactNode }) {
+function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRecapStory; controls: ReactNode; yearMode?: boolean }) {
   const { maskAmounts } = useBalanceVisibility();
   const recap = edition.snapshot;
   const reducedMotion = useMemo(() => prefersReducedMotion(), []);
@@ -268,7 +291,8 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
         const dx = event.changedTouches[0].clientX - start.x; const dy = event.changedTouches[0].clientY - start.y;
         if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) go(index + (dx < 0 ? 1 : -1));
       }}>
-      <div className="recap-overlay-actions">{controls}<button className="recap-icon-pill" disabled={regenerate.isPending} onClick={() => regenerate.mutate()} aria-label="New take" title="Rewrite the story and refresh its figures"><RefreshCw size={15} className={regenerate.isPending ? 'recap-spin' : ''} /></button><button className="recap-icon-pill" onClick={() => setShareOpen(true)} aria-label="Share recap"><Download size={15} /></button><button className="recap-icon-pill" aria-pressed={sound} onClick={() => { const next = !sound; setSoundEnabled(next); setSound(next); play('pop'); }} aria-label={sound ? 'Turn sound and haptics off' : 'Turn sound and haptics on'} title="Sound and haptics">{sound ? <Volume2 size={15} /> : <VolumeX size={15} />}</button></div>
+      {/* A year in review is computed live from its periods, so there is no saved take to rewrite. */}
+      <div className="recap-overlay-actions">{controls}{!yearMode && <button className="recap-icon-pill" disabled={regenerate.isPending} onClick={() => regenerate.mutate()} aria-label="New take" title="Rewrite the story and refresh its figures"><RefreshCw size={15} className={regenerate.isPending ? 'recap-spin' : ''} /></button>}<button className="recap-icon-pill" onClick={() => setShareOpen(true)} aria-label="Share recap"><Download size={15} /></button><button className="recap-icon-pill" aria-pressed={sound} onClick={() => { const next = !sound; setSoundEnabled(next); setSound(next); play('pop'); }} aria-label={sound ? 'Turn sound and haptics off' : 'Turn sound and haptics on'} title="Sound and haptics">{sound ? <Volume2 size={15} /> : <VolumeX size={15} />}</button></div>
       {regenerate.isError && <p className="recap-inline-error" role="alert">{regenerate.error.message}</p>}
       <div className="recap-progress" aria-label="Story chapters">{stories.map((item, i) => {
         const active = i === index && !last;
@@ -282,7 +306,7 @@ function RecapViewer({ edition, controls }: { edition: SavedRecapStory; controls
       {/* Long-press the ✳ for party mode. */}
       <div className="recap-story-brand"><span>fainens<span className="recap-brand-dot" aria-hidden="true"
         onPointerDown={() => { clearTimeout(pressTimer.current); pressTimer.current = setTimeout(startParty, 650); }}
-        onPointerUp={() => clearTimeout(pressTimer.current)} onPointerLeave={() => clearTimeout(pressTimer.current)}>✳</span></span><span>{recap.isPartial ? 'Your period so far' : 'The period edit'}</span></div>
+        onPointerUp={() => clearTimeout(pressTimer.current)} onPointerLeave={() => clearTimeout(pressTimer.current)}>✳</span></span><span>{yearMode ? (recap.isPartial ? 'Your year so far' : 'The year in review') : recap.isPartial ? 'Your period so far' : 'The period edit'}</span></div>
       {party > 0 && <div key={party} className="recap-party" aria-hidden="true" style={{ '--enter': '0ms' } as CSSProperties}><Burst seed={party} kind="stars" count={60} origin="center" /><Burst seed={party + 1} kind="confetti" count={50} origin="cannons" delay={300} /></div>}
       <ChapterBackdrop key={`${nav.visit}-backdrop`} chapter={story.id} seed={edition.seed + run} />
       {/* The next chapter's colour washes over the card, between the leaving and arriving content. */}

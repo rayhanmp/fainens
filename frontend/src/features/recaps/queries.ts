@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPeriodRecap, getRecapHighlightState, getSavedRecapStory, listRecapPeriods, markRecapHighlightSeen, writeRecapStory, type GetPeriodRecap200, type WriteRecapStory200 } from '../../generated/client';
 import { queryKeys } from '../core/query-keys';
 import { unwrapGenerated } from '../core/generated-response';
@@ -66,6 +66,21 @@ export function useRecapArchive() {
   return useQuery({
     queryKey: [...queryKeys.reports.all, 'recaps'],
     queryFn: ({ signal }) => unwrapGenerated(listRecapPeriods({ signal }), 200, 'Unable to load your recap archive.'),
+  });
+}
+
+/** Every period's live recap for a year in review, ready once all of them have loaded. */
+export function useYearRecaps(periodIds: number[]) {
+  return useQueries({
+    queries: periodIds.map(periodId => ({
+      queryKey: [...queryKeys.reports.all, 'recap', periodId],
+      queryFn: ({ signal }: { signal: AbortSignal }) => unwrapGenerated(getPeriodRecap(periodId, { signal }), 200, 'Unable to load this period’s recap.'),
+    })),
+    combine: results => ({
+      data: results.length && results.every(result => result.data) ? results.map(result => result.data!) : undefined,
+      isPending: results.some(result => result.isPending),
+      error: results.find(result => result.error)?.error ?? null,
+    }),
   });
 }
 

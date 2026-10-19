@@ -355,8 +355,15 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   };
 
   const palette = palettes[(seed + run) % palettes.length];
+  // A year in review reuses the period copy, reworded for a year.
+  const yearView = /^\d{4}$/.test(recap.period.name);
+  const forYear = (text: string) => !yearView ? text : text
+    .replace(/\b(this|the|your) period\b/gi, (_, word: string) => `${word} year`)
+    .replace(/\bnext period\b/gi, 'next year').replace(/\bper period\b/gi, 'per year')
+    .replace(/\bsalary to salary\b/gi, 'month to month');
   return chapters.map((chapter, i) => {
-    const copy = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : undefined);
+    const raw = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : undefined);
+    const copy = { eyebrow: forYear(raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
     const equivalence = equivalences[chapter.id];
     const play = dealt.get(chapter.id);
     return {
@@ -365,7 +372,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       ...(chapter.id === 'overview' && play?.kind === 'piggy' ? { reveal: 'piggy' } : {}),
       // Some runs swap the closing line for a playful equivalence.
       body: equivalence && run !== 0 && random() < .55 ? equivalence : copy.body,
-      play, equivalence,
+      play: play?.kind === 'quiz' ? { ...play, quiz: { ...play.quiz, question: forYear(play.quiz.question) } } : play, equivalence,
       // Interludes are showpieces: they move on sooner.
       duration: chapter.id === 'interlude' ? 6_500 : undefined,
       ask: asks[chapter.id] ?? `Tell me more about this from my ${period} recap: ${copy.title}`,
