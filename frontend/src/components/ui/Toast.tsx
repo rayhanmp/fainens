@@ -112,7 +112,9 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
   if (!toasts || toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed right-[calc(1rem+var(--scroll-lock-gap,0px))] top-4 z-[100] flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 overflow-y-auto">
+    // overflow-x-hidden: with overflow-y-auto the other axis would be auto too, and a toast sliding
+    // out to the right would flash a horizontal scrollbar.
+    <div className="pointer-events-none fixed right-[calc(1rem+var(--scroll-lock-gap,0px))] top-4 z-[100] flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 overflow-y-auto overflow-x-hidden">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
