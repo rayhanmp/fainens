@@ -19,6 +19,9 @@ type PeriodPickerProps = {
   className?: string;
 };
 
+/** "October 2026" → "Oct 2026"; anything that isn't a month and year is kept as it is. */
+const shortLabel = (label: string) => label.replace(/^([A-Za-z]{3})[A-Za-z]+(\s+\d{4})$/, '$1$2');
+
 export function PeriodPicker({
   periods,
   value,
@@ -75,13 +78,15 @@ export function PeriodPicker({
           type="button"
           disabled={!olderPeriod}
           onClick={() => olderPeriod && choose(String(olderPeriod.id))}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30"
+          className="grid h-9 w-8 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30 sm:w-9"
           aria-label="Previous period"
           title={olderPeriod ? `Previous: ${olderPeriod.name}` : 'No previous period'}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <div ref={rootRef} className="relative w-[min(145px,calc(100vw-7rem))] shrink-0">
+        {/* The label gives way (and truncates) before the arrows do, so in a narrow column the pill
+            keeps both arrows inside its border. */}
+        <div ref={rootRef} className="relative w-[min(145px,calc(100vw-7rem))] min-w-0 shrink">
           <button
             ref={triggerRef}
             type="button"
@@ -93,15 +98,17 @@ export function PeriodPicker({
               }
             }}
             className={cn(
-              'relative flex h-9 w-full items-center justify-center rounded-lg px-4 text-center text-xs font-bold text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
+              'relative flex h-9 w-full items-center justify-center rounded-lg pl-1 pr-5 text-center text-xs font-bold sm:pl-2 sm:pr-6 text-[var(--ref-on-surface)] transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]',
               isOpen && 'bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]',
             )}
             aria-haspopup="listbox"
             aria-expanded={isOpen}
             aria-label={ariaLabel}
           >
-            <span className="-translate-x-1 truncate text-center">{displayValue}</span>
-            <ChevronDown className={cn('absolute right-2 h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+            {/* Phones get the short month ("Oct 2026") so the label fits between the arrows. */}
+            <span className="min-w-0 truncate text-center sm:hidden">{shortLabel(displayValue)}</span>
+            <span className="hidden min-w-0 truncate text-center sm:inline">{displayValue}</span>
+            <ChevronDown className={cn('absolute right-1 h-4 w-4 transition-transform sm:right-1.5', isOpen && 'rotate-180')} />
           </button>
           {isOpen && (
             <div role="listbox" aria-label={`${ariaLabel} options`} className="period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-60 w-full overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 shadow-2xl">
@@ -126,7 +133,7 @@ export function PeriodPicker({
           type="button"
           disabled={!newerPeriod}
           onClick={() => newerPeriod && choose(String(newerPeriod.id))}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30"
+          className="grid h-9 w-8 shrink-0 place-items-center rounded-full text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-30 sm:w-9"
           aria-label="Next period"
           title={newerPeriod ? `Next: ${newerPeriod.name}` : 'No next period'}
         >
