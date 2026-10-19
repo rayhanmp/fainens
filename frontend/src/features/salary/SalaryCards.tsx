@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Banknote, Calendar, Coins, Info, Landmark } from 'lucide-react';
 import { cn, formatDate } from '../../lib/utils';
-import { incomeKind, withRollingAverage, type MonthIncome, type MonthIncomeTrend, type PayCycle, type TakeHomeSegment, type TaxOutlook, type YearPoint } from './income-insights';
+import { incomeKind, TAX_TREATMENT_LABELS, withRollingAverage, type MonthIncome, type MonthIncomeTrend, type PayCycle, type TakeHomeSegment, type TaxOutlook, type TaxTreatment, type YearPoint } from './income-insights';
 
 const card = 'rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 editorial-shadow';
 const cardTitle = 'font-headline text-lg font-bold text-[var(--ref-on-surface)]';
@@ -262,7 +262,7 @@ export function IncomeHistoryCard({ series, expectedNet, balancesHidden, formatA
         <div>
           <dt className={cn(statLabel, 'flex items-center gap-1')}>
             Other income
-            <Hint text="Regular wage is what your salary profile posted, plus hand-entered credits named salary, gaji or payroll. Anything marked freelance, bonus, THR or refund counts as other income. Both are taxable; only the wage has tax withheld by the employer.">
+            <Hint text="Regular wage is what your salary profile posted, plus hand-entered credits named salary, gaji, payroll or paycheck. Anything marked freelance, bonus, THR or refund counts as other income. Only the wage has tax withheld by the employer; mark other income as taxable, final or not taxable in the list for the annual return.">
               <span tabIndex={0} aria-label="How salary is told apart" className="grid h-4 w-4 place-items-center rounded text-[var(--ref-outline)] outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
                 <Info className="h-3 w-3" aria-hidden />
               </span>
@@ -453,6 +453,86 @@ export function RecentIncomeCard({ rows, loading, formatAmount, viewAllHref }: R
   );
 }
 
+type TaxIncomeCardRow = { id: number; date: number; description: string; incomeCents: number; taxTreatment: TaxTreatment; marked: boolean };
+
+type TaxIncomeCardProps = {
+  year: number;
+  rows: TaxIncomeCardRow[];
+  totals: Record<TaxTreatment, number>;
+  loading: boolean;
+  savingId: number | null;
+  onChange: (id: number, taxTreatment: TaxTreatment) => void;
+  formatAmount: (amount: number) => string;
+};
+
+const TREATMENT_ORDER: TaxTreatment[] = ['taxable', 'final', 'exempt'];
+const TREATMENT_HINTS: Record<TaxTreatment, string> = {
+  taxable: 'Adds to PKP: freelance, bonus and other work income.',
+  final: 'Already taxed at source, such as bank interest. Listed on the SPT, not added to PKP.',
+  exempt: 'Not a tax object, such as a gift from your parents or a refund.',
+};
+
+/** The year's other income, each entry marked for how it counts on the annual return. */
+export function TaxIncomeCard({ year, rows, totals, loading, savingId, onChange, formatAmount }: TaxIncomeCardProps) {
+  return (
+    <section className={card}>
+      <h3 className={cardTitle}>Other income for the {year} return</h3>
+      <p className={cardCaption}>Everything but the wage. Entries count as taxable until you mark them; only taxable income goes into the tax outlook.</p>
+      <dl className="mt-4 grid grid-cols-3 gap-2">
+        {TREATMENT_ORDER.map((treatment) => (
+          <div key={treatment} className="rounded-2xl bg-[var(--ref-surface-container-low)] px-3 py-2.5">
+            <dt className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
+              {TAX_TREATMENT_LABELS[treatment]}
+              <Hint text={TREATMENT_HINTS[treatment]}>
+                <span tabIndex={0} aria-label={`About ${TAX_TREATMENT_LABELS[treatment]}`} className="grid h-4 w-4 place-items-center rounded outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                  <Info className="h-3 w-3" aria-hidden />
+                </span>
+              </Hint>
+            </dt>
+            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(totals[treatment])}</dd>
+          </div>
+        ))}
+      </dl>
+      {loading ? (
+        <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">No other income recorded in {year}.</p>
+      ) : (
+        <ul className="mt-4 max-h-[28rem] overflow-y-auto">
+          {rows.map((row) => (
+            <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--color-border)] py-2.5 last:border-b-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.description}</p>
+                <p className="text-xs text-[var(--ref-on-surface-variant)]">{formatDate(row.date)} · {formatAmount(row.incomeCents)}{row.marked ? '' : ' · not marked yet'}</p>
+              </div>
+              <div
+                className={cn('ui-segmented ui-segmented--3 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1', savingId === row.id && 'opacity-60')}
+                role="radiogroup"
+                aria-label={`Tax treatment of ${row.description}`}
+                data-segment-index={TREATMENT_ORDER.indexOf(row.taxTreatment)}
+              >
+                {TREATMENT_ORDER.map((treatment) => (
+                  <button
+                    key={treatment}
+                    type="button"
+                    role="radio"
+                    aria-checked={row.taxTreatment === treatment}
+                    disabled={savingId === row.id}
+                    onClick={() => { if (treatment !== row.taxTreatment || !row.marked) onChange(row.id, treatment); }}
+                    className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', row.taxTreatment === treatment ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}
+                  >
+                    {TAX_TREATMENT_LABELS[treatment]}
+                  </button>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 type TaxOutlookCardProps = {
   year: number;
   outlook: TaxOutlook;
@@ -475,7 +555,7 @@ export function TaxOutlookCard({ year, outlook, wageMonths, otherIncome, otherTa
   const lines: { label: string; value: string; hint?: string; strong?: boolean; sign?: string }[] = [
     { label: `Wage, ${wageMonths} month${wageMonths === 1 ? '' : 's'}`, value: formatAmount(outlook.wageBruto), hint: 'Gross pay plus employer-paid premiums, which count as income for tax.' },
     { label: 'Biaya jabatan and pension', value: formatAmount(outlook.biayaJabatan + outlook.pension), sign: '−', hint: '5% of bruto up to Rp6.000.000 a year, plus your own JHT and JP contributions.' },
-    { label: `Other income${otherTaxableShare === 0.5 ? ' at 50%' : ''}`, value: formatAmount(outlook.otherTaxable), sign: '+', hint: otherTaxableShare === 0.5 ? 'Half of the recorded amount, the NPPN norma many freelance professions may use.' : 'Every rupiah of recorded freelance and side income, taxed in full.' },
+    { label: `Other income${otherTaxableShare === 0.5 ? ' at 50%' : ''}`, value: formatAmount(outlook.otherTaxable), sign: '+', hint: otherTaxableShare === 0.5 ? 'Half of the recorded amount, the NPPN norma many freelance professions may use.' : 'Other income marked taxable, in full. Final and not-taxable income is left out.' },
     { label: 'PTKP', value: formatAmount(outlook.ptkp), sign: '−' },
     { label: 'Taxable income (PKP)', value: formatAmount(outlook.pkp), strong: true },
     { label: 'Annual PPh at Pasal 17 rates', value: formatAmount(outlook.annualTax), strong: true },

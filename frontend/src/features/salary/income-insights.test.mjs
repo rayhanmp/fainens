@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { incomeKind, monthlyIncomeSeries, payCycle, progressivePPh, takeHomeBreakdown, taxOutlook, withRollingAverage, yearToDateCurve } from './income-insights.ts';
+import { incomeKind, monthlyIncomeSeries, otherIncomeByTreatment, payCycle, progressivePPh, takeHomeBreakdown, taxOutlook, withRollingAverage, yearToDateCurve } from './income-insights.ts';
 
 test('progressive PPh fills the brackets in order and reports each slice', () => {
   assert.deepEqual(progressivePPh(0), { tax: 0, slices: [] });
@@ -107,4 +107,14 @@ test('take-home breakdown lists only the deductions that apply, as shares of gro
   assert.deepEqual(segments.map((segment) => segment.key), ['net', 'pph21', 'jht', 'jp']);
   assert.ok(Math.abs(segments[0].share - 0.944319) < 1e-6);
   assert.ok(Math.abs(segments.reduce((sum, segment) => sum + segment.share, 0) - 0.9894) < 1e-3);
+});
+
+test('only other income marked taxable adds to PKP; the wage is left out', () => {
+  const totals = otherIncomeByTreatment([
+    { description: 'Salary income - March 2026', txType: 'salary_income', incomeCents: 7_600_000, taxTreatment: 'taxable' },
+    { description: 'Freelance July', txType: 'simple_income', incomeCents: 6_720_000, taxTreatment: 'taxable' },
+    { description: 'THR Nenek', txType: 'simple_income', incomeCents: 500_000, taxTreatment: 'exempt' },
+    { description: 'Interest BNI', txType: 'simple_income', incomeCents: 4_482, taxTreatment: 'final' },
+  ]);
+  assert.deepEqual(totals, { taxable: 6_720_000, final: 4_482, exempt: 500_000 });
 });

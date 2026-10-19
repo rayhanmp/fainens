@@ -14951,6 +14951,125 @@ export type PostTransactionBatch500 = {
   [key: string]: unknown;
 };
 
+export type ListTaxYearIncomeParams = {
+/**
+ * @minimum -9007199254740991
+ * @maximum 9007199254740991
+ */
+year: number;
+};
+
+export type ListTaxYearIncome200RowsItemTaxTreatment = typeof ListTaxYearIncome200RowsItemTaxTreatment[keyof typeof ListTaxYearIncome200RowsItemTaxTreatment];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListTaxYearIncome200RowsItemTaxTreatment = {
+  taxable: 'taxable',
+  final: 'final',
+  exempt: 'exempt',
+} as const;
+
+export type ListTaxYearIncome200RowsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  date: number;
+  description: string;
+  txType: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  incomeCents: number;
+  taxTreatment: ListTaxYearIncome200RowsItemTaxTreatment;
+  marked: boolean;
+  [key: string]: unknown;
+};
+
+export type ListTaxYearIncome200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  year: number;
+  rows: ListTaxYearIncome200RowsItem[];
+  [key: string]: unknown;
+};
+
+export type ListTaxYearIncome400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListTaxYearIncome404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListTaxYearIncome500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type SetTransactionTaxTreatmentBodyTaxTreatment = typeof SetTransactionTaxTreatmentBodyTaxTreatment[keyof typeof SetTransactionTaxTreatmentBodyTaxTreatment] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SetTransactionTaxTreatmentBodyTaxTreatment = {
+  taxable: 'taxable',
+  final: 'final',
+  exempt: 'exempt',
+} as const;
+
+export type SetTransactionTaxTreatmentBody = {
+  /** @nullable */
+  taxTreatment: SetTransactionTaxTreatmentBodyTaxTreatment;
+};
+
+/**
+ * @nullable
+ */
+export type SetTransactionTaxTreatment200TaxTreatment = typeof SetTransactionTaxTreatment200TaxTreatment[keyof typeof SetTransactionTaxTreatment200TaxTreatment] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SetTransactionTaxTreatment200TaxTreatment = {
+  taxable: 'taxable',
+  final: 'final',
+  exempt: 'exempt',
+} as const;
+
+export type SetTransactionTaxTreatment200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /** @nullable */
+  taxTreatment: SetTransactionTaxTreatment200TaxTreatment;
+  [key: string]: unknown;
+};
+
+export type SetTransactionTaxTreatment400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SetTransactionTaxTreatment404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SetTransactionTaxTreatment500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ScanSplitBillReceiptBody = {
   /** @minLength 1 */
   imageData: string;
@@ -27272,6 +27391,115 @@ export const postTransactionBatch = async (id: number,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       postTransactionBatchBody,)
+  }
+);}
+
+
+
+export type listTaxYearIncomeResponse200 = {
+  data: ListTaxYearIncome200
+  status: 200
+}
+
+export type listTaxYearIncomeResponse400 = {
+  data: ListTaxYearIncome400
+  status: 400
+}
+
+export type listTaxYearIncomeResponse404 = {
+  data: ListTaxYearIncome404
+  status: 404
+}
+
+export type listTaxYearIncomeResponse500 = {
+  data: ListTaxYearIncome500
+  status: 500
+}
+    
+export type listTaxYearIncomeResponseSuccess = (listTaxYearIncomeResponse200) & {
+  headers: Headers;
+};
+export type listTaxYearIncomeResponseError = (listTaxYearIncomeResponse400 | listTaxYearIncomeResponse404 | listTaxYearIncomeResponse500) & {
+  headers: Headers;
+};
+
+export type listTaxYearIncomeResponse = (listTaxYearIncomeResponseSuccess | listTaxYearIncomeResponseError)
+
+export const getListTaxYearIncomeUrl = (params: ListTaxYearIncomeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/tax-income?${stringifiedParams}` : `/api/tax-income`
+}
+
+export const listTaxYearIncome = async (params: ListTaxYearIncomeParams, options?: RequestInit): Promise<listTaxYearIncomeResponse> => {
+  
+  return generatedFetch<listTaxYearIncomeResponse>(getListTaxYearIncomeUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type setTransactionTaxTreatmentResponse200 = {
+  data: SetTransactionTaxTreatment200
+  status: 200
+}
+
+export type setTransactionTaxTreatmentResponse400 = {
+  data: SetTransactionTaxTreatment400
+  status: 400
+}
+
+export type setTransactionTaxTreatmentResponse404 = {
+  data: SetTransactionTaxTreatment404
+  status: 404
+}
+
+export type setTransactionTaxTreatmentResponse500 = {
+  data: SetTransactionTaxTreatment500
+  status: 500
+}
+    
+export type setTransactionTaxTreatmentResponseSuccess = (setTransactionTaxTreatmentResponse200) & {
+  headers: Headers;
+};
+export type setTransactionTaxTreatmentResponseError = (setTransactionTaxTreatmentResponse400 | setTransactionTaxTreatmentResponse404 | setTransactionTaxTreatmentResponse500) & {
+  headers: Headers;
+};
+
+export type setTransactionTaxTreatmentResponse = (setTransactionTaxTreatmentResponseSuccess | setTransactionTaxTreatmentResponseError)
+
+export const getSetTransactionTaxTreatmentUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transactions/${id}/tax-treatment`
+}
+
+export const setTransactionTaxTreatment = async (id: number,
+    setTransactionTaxTreatmentBody: SetTransactionTaxTreatmentBody, options?: RequestInit): Promise<setTransactionTaxTreatmentResponse> => {
+  
+  return generatedFetch<setTransactionTaxTreatmentResponse>(getSetTransactionTaxTreatmentUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      setTransactionTaxTreatmentBody,)
   }
 );}
 

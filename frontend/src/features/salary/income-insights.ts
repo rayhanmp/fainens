@@ -9,12 +9,32 @@ export const SALARY_TX_TYPE = 'salary_income';
 
 /**
  * Salary is what the salary profile posted. A hand-entered credit counts too when its name says
- * salary, gaji or payroll, unless the name also marks it as freelance, bonus, THR or a refund.
+ * salary, gaji, payroll or paycheck, unless the name also marks it as freelance, bonus, THR or a refund.
  */
 export function incomeKind(row: Pick<IncomeRow, 'description' | 'txType'>): IncomeKind {
   if (row.txType === SALARY_TX_TYPE) return 'salary';
   if (/\b(freelance|side|project|bonus|thr|refund|reimburse|cashback)\b/i.test(row.description)) return 'other';
-  return /\b(salary|gaji|payroll)\b/i.test(row.description) ? 'salary' : 'other';
+  return /\b(salary|gaji|payroll|paycheck)\b/i.test(row.description) ? 'salary' : 'other';
+}
+
+/** How an income entry counts on the annual return; unmarked entries count as taxable. */
+export type TaxTreatment = 'taxable' | 'final' | 'exempt';
+
+export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = { taxable: 'Taxable', final: 'Final', exempt: 'Not taxable' };
+
+export type TaxIncomeRow = Pick<IncomeRow, 'description' | 'txType' | 'incomeCents'> & { taxTreatment: TaxTreatment };
+
+/**
+ * Other income (everything but the wage) split by how it is taxed: only the taxable part adds to
+ * PKP; final income was taxed at source and exempt income is no tax object.
+ */
+export function otherIncomeByTreatment(rows: TaxIncomeRow[]): Record<TaxTreatment, number> {
+  const totals: Record<TaxTreatment, number> = { taxable: 0, final: 0, exempt: 0 };
+  for (const row of rows) {
+    if (row.incomeCents <= 0 || incomeKind(row) === 'salary') continue;
+    totals[row.taxTreatment] += row.incomeCents;
+  }
+  return totals;
 }
 
 export type MonthIncome = { key: string; label: string; salary: number; other: number; total: number };

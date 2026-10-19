@@ -227,6 +227,9 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
       );
       db.$client.exec("CREATE INDEX IF NOT EXISTS transaction_batch_id_idx ON \"transaction\" (batch_id)");
     }
+    if (tableExists("transaction") && !columnExists("transaction", "tax_treatment")) {
+      db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN tax_treatment text");
+    }
     if (tableExists("transaction") && !columnExists("transaction", "status")) {
       db.$client.exec("ALTER TABLE \"transaction\" ADD COLUMN status text DEFAULT 'posted' NOT NULL");
     }

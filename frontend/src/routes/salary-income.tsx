@@ -3,9 +3,9 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
-import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
-import { monthlyIncomeSeries, payCycle, takeHomeBreakdown, taxOutlook, yearToDateCurve } from '../features/salary/income-insights';
-import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard, TaxOutlookCard, YearToDateCard } from '../features/salary/SalaryCards';
+import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery, useSetTaxTreatmentMutation, useTaxYearIncomeQuery } from '../features/salary/queries';
+import { incomeKind, monthlyIncomeSeries, otherIncomeByTreatment, payCycle, takeHomeBreakdown, taxOutlook, yearToDateCurve, type TaxTreatment } from '../features/salary/income-insights';
+import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard, TaxIncomeCard, TaxOutlookCard, YearToDateCard } from '../features/salary/SalaryCards';
 import { queryKeys } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -107,7 +107,15 @@ function SalaryIncomePage() {
   const yearMonths = series.filter((month) => month.key.startsWith(`${year}-`));
   const firstWageMonth = yearMonths.findIndex((month) => month.salary > 0);
   const wageMonths = firstWageMonth >= 0 ? 12 - (Number(yearMonths[firstWageMonth].key.slice(5)) - 1) : 0;
-  const otherIncomeThisYear = yearMonths.reduce((sum, month) => sum + month.other, 0);
+  // Only other income marked (or left) taxable counts toward PKP; final and exempt income is left out.
+  const taxIncomeQuery = useTaxYearIncomeQuery(year);
+  const setTaxTreatment = useSetTaxTreatmentMutation();
+  const otherTaxRows = useMemo(() => (taxIncomeQuery.data ?? []).filter((row) => incomeKind(row) === 'other').sort((a, b) => b.date - a.date), [taxIncomeQuery.data]);
+  const otherByTreatment = useMemo(() => otherIncomeByTreatment(taxIncomeQuery.data ?? []), [taxIncomeQuery.data]);
+  const otherIncomeThisYear = taxIncomeQuery.data ? otherByTreatment.taxable : yearMonths.reduce((sum, month) => sum + month.other, 0);
+  const changeTaxTreatment = (id: number, taxTreatment: TaxTreatment) => {
+    setTaxTreatment.mutate({ id, taxTreatment }, { onError: (error) => toast.error('Could not save the tax treatment', errorMessage(error)) });
+  };
   const outlook = useMemo(() => (hasPayroll && computed ? taxOutlook({
     wageMonths,
     monthlyBruto: computed.taxBasisBruto,
@@ -263,6 +271,17 @@ function SalaryIncomePage() {
               />
             </div>
           )}
+          <div className="lg:col-span-12">
+            <TaxIncomeCard
+              year={year}
+              rows={otherTaxRows}
+              totals={otherByTreatment}
+              loading={taxIncomeQuery.isPending && !taxIncomeQuery.data}
+              savingId={setTaxTreatment.isPending ? setTaxTreatment.variables?.id ?? null : null}
+              onChange={changeTaxTreatment}
+              formatAmount={formatAmount}
+            />
+          </div>
           <div className="lg:col-span-12">
             <RecentIncomeCard
               rows={incomeTxs.slice(0, 10)}

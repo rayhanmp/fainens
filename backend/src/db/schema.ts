@@ -77,6 +77,11 @@ export const transactions: any = sqliteTable("transaction", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   /** The batch a draft was prepared in; cleared when the batch is discarded. */
   batchId: integer("batch_id").references(() => transactionBatches.id, { onDelete: "set null" }),
+  /**
+   * How an income entry counts on the annual tax return: "taxable" (also when null), "final" when
+   * taxed at source (bank interest) or "exempt" when not a tax object (a gift from parents).
+   */
+  taxTreatment: text("tax_treatment"),
   date: integer("date", { mode: "timestamp_ms" }).notNull(),
   /** Optional due date for paylater recognition/interest installments (ms since epoch). */
   dueDate: integer("due_date", { mode: "timestamp_ms" }),

@@ -3,6 +3,8 @@ import { fetchFinancialFacts } from '../agent/queries';
 import {
   getSalarySettings,
   listAccounts,
+  listTaxYearIncome,
+  setTransactionTaxTreatment,
   previewSalaryCatchUp,
   previewSalaryCalculation,
   processSalaryCatchUp,
@@ -13,6 +15,7 @@ import {
 } from '../../generated/client';
 import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
+import type { TaxTreatment } from './income-insights';
 
 export type SalaryIncomeRow = {
   id: number;
@@ -47,6 +50,24 @@ export function useSalaryIncomeQuery() {
       };
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+/** Every income entry of a calendar year with its tax treatment, for the annual-return view. */
+export function useTaxYearIncomeQuery(year: number) {
+  return useQuery({
+    queryKey: [...queryKeys.salary.all, 'tax-income', year] as const,
+    queryFn: async () => (await unwrapGenerated(listTaxYearIncome({ year }), 200, 'Failed to load income for tax')).rows,
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useSetTaxTreatmentMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, taxTreatment }: { id: number; taxTreatment: TaxTreatment | null }) =>
+      unwrapGenerated(setTransactionTaxTreatment(id, { taxTreatment }), 200, 'Failed to save the tax treatment'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...queryKeys.salary.all, 'tax-income'] }),
   });
 }
 
