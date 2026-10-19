@@ -59,6 +59,8 @@ export type AmountMode = 'signed' | 'split';
 
 export type ColumnMapping = {
   date: number | null;
+  /** Separate time column; a time written in the date cell itself is read without it. */
+  time: number | null;
   description: number | null;
   /** Second description column, appended when present (statements often split merchant and note). */
   detail: number | null;
@@ -98,7 +100,8 @@ export function guessMapping(headers: string[]): ColumnMapping {
   const account = match(lower.map((header, index) => (index === toAccount ? '' : header)), [/^(account|wallet|akun|rekening|dompet|from account|dari akun|from|source)$/, /account|wallet|akun|rekening|dompet/]);
   const category = match(lower, [/^(category|kategori)$/, /category|kategori/]);
   const type = match(lower, [/^(type|jenis|tipe|kind|db\/cr|d\/k)$/, /transaction type|jenis transaksi/]);
-  const date = match(lower, [/^(tanggal|tgl|date|posting date|transaction date|waktu)/, /date|tanggal|tgl/]);
+  const time = match(lower, [/^(time|jam|pukul|waktu)$/, /^(time|jam|pukul)\b/]);
+  const date = match(lower.map((header, index) => (index === time ? '' : header)), [/^(tanggal|tgl|date|posting date|transaction date|waktu)/, /date|tanggal|tgl/]);
   const debit = match(lower, [/^(debit|debet|withdrawal|keluar|dr)\b/, /debit|debet|withdraw|keluar/]);
   const credit = match(lower, [/^(credit|kredit|deposit|masuk|cr)\b/, /credit|kredit|deposit|masuk/]);
   const amount = match(lower, [/^(amount|nominal|jumlah|mutasi|nilai)/, /amount|nominal|jumlah|mutasi/]);
@@ -109,6 +112,7 @@ export function guessMapping(headers: string[]): ColumnMapping {
   const dateFormat: DateFormat = /yyyy-mm-dd|iso/.test(sample) ? 'YYYY-MM-DD' : 'DD/MM/YYYY';
   return {
     date,
+    time,
     description,
     detail: detail >= 0 ? detail : null,
     dateFormat,
@@ -129,10 +133,45 @@ const MONTHS: Record<string, number> = {
   january: 0, februari: 1, february: 1, maret: 2, march: 2, april: 3, juni: 5, june: 5, juli: 6, july: 6, agustus: 7, august: 7, september: 8, oktober: 9, october: 9, november: 10, desember: 11, december: 11,
 };
 
-/** A local-midnight timestamp for a statement date, or null when the text does not fit the format. */
+const TIME = String.raw`(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?(?:\.\d+)?\s*(am|pm)?`;
+// A trailing zone ("Z", "+07:00", "WIB") is ignored: statement times are read as local time.
+const TIME_ZONE = String.raw`(?:\s*(?:z|[+-]\d{2}:?\d{2}|wib|wita|wit))?`;
+
+/** Hours, minutes and seconds from "14:22", "14.22", "14:22:01" or "2:22 PM"; null when it is not a time. */
+export function parseStatementTime(value: string): [number, number, number] | null {
+  const parts = value.trim().match(new RegExp(`^${TIME}${TIME_ZONE}$`, 'i'));
+  return parts ? timeFromParts(parts[1]!, parts[2]!, parts[3], parts[4]) : null;
+}
+
+function timeFromParts(hourText: string, minuteText: string, secondText: string | undefined, meridiem: string | undefined): [number, number, number] | null {
+  let hours = Number(hourText);
+  const minutes = Number(minuteText);
+  const seconds = Number(secondText ?? 0);
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    hours = (hours % 12) + (meridiem.toLowerCase() === 'pm' ? 12 : 0);
+  }
+  if (hours > 23 || minutes > 59 || seconds > 59) return null;
+  return [hours, minutes, seconds];
+}
+
+/** Moves a local-midnight timestamp to the given time of that day. */
+export function withTime(dateMs: number, [hours, minutes, seconds]: [number, number, number]): number {
+  const date = new Date(dateMs);
+  date.setHours(hours, minutes, seconds, 0);
+  return date.getTime();
+}
+
+/**
+ * A local timestamp for a statement date, or null when the text does not fit the format. A time
+ * after the date ("10/03/2026 14:22", "2026-03-10T14:22:01") is kept; without one it is midnight.
+ */
 export function parseStatementDate(value: string, format: DateFormat): number | null {
-  const text = value.trim().replace(/\s+\d{1,2}:\d{2}(:\d{2})?.*$/, '');
+  const split = value.trim().match(new RegExp(`^(.*?)(?:(?:\\s+|T)${TIME}${TIME_ZONE})?$`, 'i'));
+  const text = split?.[1]?.trim() ?? '';
   if (!text) return null;
+  const time = split?.[3] != null ? timeFromParts(split[2]!, split[3], split[4], split[5]) : [0, 0, 0] as [number, number, number];
+  if (!time) return null;
   let year: number; let month: number; let day: number;
   if (format === 'DD MMM YYYY') {
     const parts = text.match(/^(\d{1,2})[\s-]+([A-Za-z]+)[\s-]+(\d{2,4})$/);
@@ -152,7 +191,7 @@ export function parseStatementDate(value: string, format: DateFormat): number | 
   if (month < 0 || month > 11 || day < 1 || day > 31) return null;
   const date = new Date(year, month, day);
   if (date.getMonth() !== month || date.getDate() !== day) return null;
-  return date.getTime();
+  return withTime(date.getTime(), time);
 }
 
 /**
@@ -202,8 +241,14 @@ export function parseStatementRows(rows: string[][], mapping: ColumnMapping): Pa
   return rows.map((cells, index) => {
     const errors: string[] = [];
     const dateText = mapping.date == null ? '' : cells[mapping.date] ?? '';
-    const dateMs = mapping.date == null ? null : parseStatementDate(dateText, mapping.dateFormat);
+    let dateMs = mapping.date == null ? null : parseStatementDate(dateText, mapping.dateFormat);
     if (dateMs == null) errors.push(mapping.date == null ? 'No date column' : `Unreadable date "${dateText}"`);
+    const timeText = mapping.time == null ? '' : (cells[mapping.time] ?? '').trim();
+    if (timeText) {
+      const time = parseStatementTime(timeText);
+      if (!time) errors.push(`Unreadable time "${timeText}"`);
+      else if (dateMs != null) dateMs = withTime(dateMs, time);
+    }
     const description = [mapping.description, mapping.detail]
       .filter((column): column is number => column != null)
       .map((column) => (cells[column] ?? '').trim())
@@ -318,5 +363,9 @@ export function matchByName<T extends { id: number; name: string }>(items: T[], 
 export function statementReference(accountId: number, dateMs: number, amount: number, description: string): string {
   let hash = 0;
   for (const char of `${description}`) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return `stmt:${accountId}:${new Date(dateMs).toISOString().slice(0, 10)}:${amount}:${hash.toString(36)}`;
+  // Local date and time, as written on the statement; the UTC date would be a day early before 07:00 WIB.
+  const date = new Date(dateMs);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const when = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}`;
+  return `stmt:${accountId}:${when}:${amount}:${hash.toString(36)}`;
 }

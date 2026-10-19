@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   findExistingMatches, guessMapping, matchByName, pairTransfers, parseCsv, parseStatementAmount, parseStatementDate, parseStatementRows,
+  parseStatementTime, statementReference,
 } from './statement-import.ts';
 
 const day = (y, m, d) => new Date(y, m - 1, d).getTime();
@@ -57,11 +58,35 @@ test('matchByName ignores case, spacing and punctuation', () => {
 test('statement dates parse in every supported format and reject impossible days', () => {
   assert.equal(parseStatementDate('10/03/2026', 'DD/MM/YYYY'), day(2026, 3, 10));
   assert.equal(parseStatementDate('03/10/2026', 'MM/DD/YYYY'), day(2026, 3, 10));
-  assert.equal(parseStatementDate('2026-03-10 14:22:01', 'YYYY-MM-DD'), day(2026, 3, 10));
+  assert.equal(parseStatementDate('2026-03-10', 'YYYY-MM-DD'), day(2026, 3, 10));
   assert.equal(parseStatementDate('10 Mar 2026', 'DD MMM YYYY'), day(2026, 3, 10));
   assert.equal(parseStatementDate('10-Agu-26', 'DD MMM YYYY'), day(2026, 8, 10));
   assert.equal(parseStatementDate('31/02/2026', 'DD/MM/YYYY'), null);
   assert.equal(parseStatementDate('', 'DD/MM/YYYY'), null);
+});
+
+test('a time in the date cell or in its own column is kept, and a bad one is flagged', () => {
+  const at = (y, m, d, h, mi, s = 0) => new Date(y, m - 1, d, h, mi, s).getTime();
+  assert.equal(parseStatementDate('10/03/2026 14:22', 'DD/MM/YYYY'), at(2026, 3, 10, 14, 22));
+  assert.equal(parseStatementDate('10/03/2026 14.22.05', 'DD/MM/YYYY'), at(2026, 3, 10, 14, 22, 5));
+  assert.equal(parseStatementDate('2026-03-10T14:22:01.000Z', 'YYYY-MM-DD'), at(2026, 3, 10, 14, 22, 1));
+  assert.equal(parseStatementDate('10 Mar 2026 2:05 PM', 'DD MMM YYYY'), at(2026, 3, 10, 14, 5));
+  assert.equal(parseStatementDate('10/03/2026 25:00', 'DD/MM/YYYY'), null);
+  assert.deepEqual(parseStatementTime('07:30 WIB'), [7, 30, 0]);
+  assert.equal(parseStatementTime('12:00 AM')[0], 0);
+  assert.equal(parseStatementTime('lunch'), null);
+
+  const mapping = guessMapping(['Tanggal', 'Jam', 'Akun', 'Keterangan', 'Nominal']);
+  assert.deepEqual([mapping.date, mapping.time], [0, 1]);
+  const rows = parseStatementRows([
+    ['10/03/2026', '08:15', 'BNI', 'Kopi', '-25000'],
+    ['10/03/2026', '', 'BNI', 'No time', '-1000'],
+    ['10/03/2026', 'pagi', 'BNI', 'Bad time', '-1000'],
+  ], mapping);
+  assert.equal(rows[0].dateMs, at(2026, 3, 10, 8, 15));
+  assert.equal(rows[1].dateMs, day(2026, 3, 10));
+  assert.deepEqual(rows[2].errors, ['Unreadable time "pagi"']);
+  assert.equal(statementReference(1, at(2026, 3, 10, 6, 0), -25_000, 'Kopi').split(':').slice(0, 3).join(':'), 'stmt:1:2026-03-10T0600');
 });
 
 test('statement amounts parse Indonesian and English groupings, parentheses and DB/CR marks', () => {

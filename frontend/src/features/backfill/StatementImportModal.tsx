@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
 import { ComboBox, type PickerOption } from '../../components/transactions/EntryPickers';
 import { toast, errorMessage } from '../../components/ui/useToast';
-import { cn, formatDate } from '../../lib/utils';
+import { cn, formatDate, formatDateTime } from '../../lib/utils';
 import { categoryIcon } from '../categories/category-icon';
 import { listTransactions } from '../../generated/client';
 import { useCreateTransaction, useImportTransactions } from '../transactions/queries';
@@ -60,6 +60,12 @@ type StatementImportModalProps = {
 
 const sectionLabel = 'text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]';
 const DAY_MS = 86_400_000;
+
+/** The date, plus the time when the file gave one (a row without a time sits at midnight). */
+const formatWhen = (ms: number) => {
+  const date = new Date(ms);
+  return date.getHours() || date.getMinutes() || date.getSeconds() ? formatDateTime(ms) : formatDate(ms);
+};
 
 let sourceCounter = 0;
 
@@ -409,7 +415,7 @@ export function StatementImportModal({ isOpen, onClose, batchId, accounts, categ
                     <tr key={row.key} className={cn(!current.include && 'opacity-55', broken && 'bg-[var(--color-warning)]/6')}>
                       <td className="px-2 py-1.5 align-top"><button type="button" aria-label={`Select row ${row.rowNumber}`} onClick={() => toggleSelected(row.key)} className="text-[var(--ref-on-surface-variant)]">{selected.has(row.key) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}</button></td>
                       <td className="px-1 py-1.5 align-top"><input type="checkbox" aria-label={`Include row ${row.rowNumber}`} checked={current.include} disabled={broken} onChange={(event) => setChoice([row.key], { include: event.target.checked })} /></td>
-                      <td className="whitespace-nowrap px-2 py-1.5 align-top tabular-nums text-[var(--ref-on-surface-variant)]">{row.dateMs != null ? formatDate(row.dateMs) : '—'}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 align-top tabular-nums text-[var(--ref-on-surface-variant)]">{row.dateMs != null ? formatWhen(row.dateMs) : '—'}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 align-top">
                         {row.accountId != null ? accountName(row.accountId) : row.accountText || '—'}
                         {row.toAccountId != null && <span className="text-[var(--ref-on-surface-variant)]"> → {accountName(row.toAccountId)}</span>}
@@ -514,6 +520,7 @@ function SourceCard({ source, accounts, formatAmount, onChange, onMapping, onRem
             <p className={sectionLabel}>Columns</p>
             <div className="grid grid-cols-2 gap-2">
               <Select label="Date" value={columnValue(source.mapping.date)} onChange={(event) => onMapping({ date: toColumn(event.target.value) })} options={columnOptions} />
+              <Select label="Time (if separate)" value={columnValue(source.mapping.time)} onChange={(event) => onMapping({ time: toColumn(event.target.value) })} options={columnOptions} />
               <Select label="Date format" value={source.mapping.dateFormat} onChange={(event) => onMapping({ dateFormat: event.target.value as ColumnMapping['dateFormat'] })} options={DATE_FORMATS.map((format) => ({ value: format, label: format }))} />
               <Select label="Description" value={columnValue(source.mapping.description)} onChange={(event) => onMapping({ description: toColumn(event.target.value) })} options={columnOptions} />
               <Select label="Extra detail" value={columnValue(source.mapping.detail)} onChange={(event) => onMapping({ detail: toColumn(event.target.value) })} options={columnOptions} />
@@ -547,7 +554,7 @@ function SourceCard({ source, accounts, formatAmount, onChange, onMapping, onRem
               <tbody className="divide-y divide-[var(--color-border)]">
                 {preview.map((row) => (
                   <tr key={row.rowNumber} className={cn(row.errors.length > 0 && 'text-[var(--color-warning)]')}>
-                    <td className="whitespace-nowrap py-1.5 pr-2 tabular-nums">{row.dateMs != null ? formatDate(row.dateMs) : row.errors[0]}</td>
+                    <td className="whitespace-nowrap py-1.5 pr-2 tabular-nums">{row.dateMs != null ? formatWhen(row.dateMs) : row.errors[0]}</td>
                     {perRowAccount && <td className="whitespace-nowrap py-1.5 pr-2">{row.accountText || '—'}{row.toAccountText && ` → ${row.toAccountText}`}</td>}
                     <td className="max-w-56 truncate py-1.5 pr-2">{row.description || '—'}</td>
                     <td className="whitespace-nowrap py-1.5 text-right tabular-nums">{row.amount == null ? '—' : `${row.amount < 0 ? '−' : '+'}${formatAmount(Math.abs(row.amount))}`}</td>
