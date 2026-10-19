@@ -16,8 +16,8 @@ import { StatementImportModal } from '../features/backfill/StatementImportModal'
 import { SettlementModal } from '../features/backfill/SettlementModal';
 import { useAccountsQuery } from '../features/accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../features/categories/queries';
-import { useDeleteTransaction, useTransactionList } from '../features/transactions/queries';
-import { useBatchesQuery, useBatchQuery, useCreateBatchMutation, useDiscardBatchMutation, type BatchSummary, type PostBatchResult } from '../features/backfill/queries';
+import { useDeleteTransaction } from '../features/transactions/queries';
+import { useBatchDraftsQuery, useBatchesQuery, useBatchQuery, useCreateBatchMutation, useDiscardBatchMutation, type BatchSummary, type PostBatchResult } from '../features/backfill/queries';
 import type { ListTransactions200DataItem } from '../generated/client';
 
 export const Route = createFileRoute('/backfill')({
@@ -67,8 +67,8 @@ function BackfillPage() {
   const selectedId = search.batchId ? Number(search.batchId) : batches.find((batch) => batch.status === 'open')?.id ?? batches[0]?.id ?? null;
   const batchQuery = useBatchQuery(selectedId);
   const batch = batchQuery.data ?? null;
-  const draftsQuery = useTransactionList(selectedId ? { periodId: 'all', status: 'draft', batchId: String(selectedId), limit: '1000', sort: 'oldest' } : {});
-  const drafts = useMemo(() => (selectedId ? draftsQuery.data?.data ?? [] : []), [selectedId, draftsQuery.data]);
+  const draftsQuery = useBatchDraftsQuery(selectedId);
+  const drafts = useMemo(() => draftsQuery.data ?? [], [draftsQuery.data]);
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
   const accountTypes = useMemo(() => new Map(accounts.map((account) => [account.id, account.type])), [accounts]);
   const accountName = (id: number) => accounts.find((account) => account.id === id)?.name ?? `#${id}`;

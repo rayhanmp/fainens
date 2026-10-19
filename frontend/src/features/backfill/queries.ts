@@ -5,11 +5,13 @@ import {
   getTransactionBatch,
   getTransactionBatchSettlement,
   listTransactionBatches,
+  listTransactions,
   postTransactionBatch,
   replaceDraftTransaction,
   type CreateTransactionBatchBody,
   type GetTransactionBatch200,
   type GetTransactionBatchSettlement200AccountsItem,
+  type ListTransactions200DataItem,
   type PostTransactionBatchBodySettlementsItem,
   type ListTransactionBatches200Item,
   type PostTransactionBatch200,
@@ -23,6 +25,23 @@ export type BatchDetail = GetTransactionBatch200;
 export type PostBatchResult = PostTransactionBatch200;
 export type SettlementAccount = GetTransactionBatchSettlement200AccountsItem;
 export type SettlementInput = PostTransactionBatchBodySettlementsItem;
+
+/** Every draft in a batch, oldest first. The API returns at most 100 rows per request, so this pages through. */
+export function useBatchDraftsQuery(id: number | null) {
+  return useQuery({
+    queryKey: [...queryKeys.transactions.batch(id ?? 0), 'drafts'],
+    queryFn: async ({ signal }) => {
+      const drafts: ListTransactions200DataItem[] = [];
+      for (let offset = 0; ; offset += 100) {
+        const response = await listTransactions({ periodId: 'all', status: 'draft', batchId: String(id), sort: 'oldest', limit: '100', offset: String(offset) }, { signal });
+        if (response.status !== 200) throw new Error('Failed to load drafts');
+        drafts.push(...response.data.data);
+        if (!response.data.pagination.hasMore) return drafts;
+      }
+    },
+    enabled: id != null,
+  });
+}
 
 /** Each account the batch's drafts touch, with today's balance and what posting adds. */
 export function useBatchSettlementQuery(id: number | null, enabled: boolean) {
