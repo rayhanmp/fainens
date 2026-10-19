@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { cn, formatDate } from '../../lib/utils';
+import { CategoryIcon } from '../categories/CategoryIcon';
 import { relativeDay } from './navigation';
 import { PanelHeader, PanelLink } from './PanelParts';
 import { panelCard } from './panel-styles';
@@ -48,7 +49,7 @@ const amountTone = (kind: Kind) => (kind === 'income' ? 'text-[var(--color-succe
 
 export function ActivityPanel({ transactions, categories, compact, now, formatAmount, maskAmounts }: {
   transactions: readonly RecentTransaction[];
-  categories: readonly { id: number; name: string }[];
+  categories: readonly { id: number; name: string; color?: string | null }[];
   /** Phone layout: fewer rows. */
   compact: boolean;
   /** Ticking clock, so "Today" rolls over at midnight. */
@@ -58,6 +59,7 @@ export function ActivityPanel({ transactions, categories, compact, now, formatAm
 }) {
   const visible = transactions.filter((transaction) => !isTransferFee(transaction)).slice(0, compact ? 4 : 8);
   const dateLabel = (tx: RecentTransaction) => relativeDay(tx.date, now) ?? formatDate(tx.date);
+  const categoryOf = (tx: RecentTransaction) => (tx.categoryId == null ? undefined : categories.find((item) => item.id === tx.categoryId));
   const categoryName = (tx: RecentTransaction, kind: Kind) => (tx.categoryId == null ? undefined : categories.find((item) => item.id === tx.categoryId)?.name)
     ?? (kind === 'income' ? 'Income' : kind === 'neutral' ? 'Transfer or adjustment' : 'Unallocated');
 
@@ -68,7 +70,7 @@ export function ActivityPanel({ transactions, categories, compact, now, formatAm
         {visible.length === 0 ? <p className="py-6 text-sm text-[var(--ref-on-surface-variant)]">No activity recorded in this period.</p> : visible.map((tx) => {
           const kind = classifyTx(tx);
           return <Link key={tx.id} to="/transactions" search={{ transactionId: String(tx.id) }} className="dashboard-activity-row -mx-2 flex items-start justify-between gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">
-            <div className="min-w-0"><p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{categoryName(tx, kind)} · {dateLabel(tx)}</p></div>
+            <div className="min-w-0"><p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{maskAmounts(tx.description)}</p><p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-[var(--ref-on-surface-variant)]">{categoryOf(tx) && <CategoryIcon name={categoryOf(tx)!.name} color={categoryOf(tx)!.color} className="h-3.5 w-3.5" />}<span className="truncate">{categoryName(tx, kind)} · {dateLabel(tx)}</span></p></div>
             <p className={cn('shrink-0 text-sm font-bold tabular-nums', amountTone(kind))}>{sign(kind)}{formatAmount(transactionAmount(tx))}</p>
           </Link>;
         })}

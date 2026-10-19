@@ -58,6 +58,7 @@ import { BudgetCategoryRow } from '../features/budgets/BudgetCategoryRow';
 import { BudgetMixCard } from '../features/budgets/BudgetMixCard';
 import { budgetGroupTitles, budgetLineStatus, compareByUrgency, type BudgetLineGroup } from '../features/budgets/budget-line';
 import { periodPacing } from '../features/dashboard/pacing';
+import { CategoryIcon } from '../features/categories/CategoryIcon';
 
 export const Route = createFileRoute('/budget')({
   component: BudgetPage,
@@ -1790,7 +1791,7 @@ function BudgetPage() {
                         <li key={allocation.key} className="py-2.5 first:pt-0 last:pb-0">
                           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 text-sm">
                             <span className="flex min-w-0 items-center gap-2 font-medium text-[var(--ref-on-surface)]">
-                              <i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: allocation.color }} />
+                              <CategoryIcon name={allocation.categoryName} color={allocation.color} />
                               <span className="truncate">{allocation.categoryName}</span>
                               {allocation.isNew && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-[var(--ref-primary)]">New</span>}
                               {allocation.isChanged && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-[var(--color-warning)]">Edited</span>}
@@ -1873,6 +1874,7 @@ function BudgetPage() {
                           }}
                           className="flex cursor-grab items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-3 active:cursor-grabbing"
                         >
+                          <CategoryIcon name={category.name} color={category.color} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{category.name}</p>
                             {recurringAmount > 0 && <p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">Recurring · {formatAmount(recurringAmount)}</p>}
@@ -1943,7 +1945,7 @@ function BudgetPage() {
                     return (
                       <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_minmax(112px,0.8fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-[var(--color-border)] py-2 last:border-b-0 sm:gap-x-3">
                         <div className="min-w-0">
-                          <h3 className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{categoryName}</h3>
+                          <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[var(--ref-on-surface)]">{category && <CategoryIcon name={category.name} color={category.color} />}<span className="truncate">{categoryName}</span></h3>
                           {line.existingBudgetId != null && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Current allocation · {formatAmount(line.originalPlannedAmount ?? 0)}</p>}
                           {lineAmount > 0 && <p className="mt-0.5 truncate text-[10px] font-medium text-[var(--ref-primary)]">{allocationShare.toFixed(1)}% of planned total</p>}
                           {subscriptionAmount > 0 && <p className="mt-0.5 truncate text-[10px] text-[var(--ref-on-surface-variant)]">Recurring · {formatAmount(subscriptionAmount)}</p>}

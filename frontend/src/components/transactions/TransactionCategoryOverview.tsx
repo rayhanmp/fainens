@@ -1,6 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
+import { CategoryIcon } from '../../features/categories/CategoryIcon';
 
 export interface CategoryOverviewItem {
   name: string;
@@ -37,7 +38,7 @@ export function TransactionCategoryOverview({ items, loading, updating, onSelect
           {hoveredItem && <div role="status" className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--ref-on-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--ref-surface-container-lowest)] shadow-lg"><strong>{hoveredItem.name}</strong><span className="ml-1.5">{formatAmount(hoveredItem.amountCents)} · {Math.round(hoveredItem.share * 100)}%</span></div>}
         </div>
         <div className="mt-1.5 flex min-w-0 items-center gap-1.5 overflow-x-auto text-[10px] text-[var(--ref-on-surface-variant)] [scrollbar-width:none]">
-          {visibleItems.map((item, index) => item.name === 'Other categories' ? <span key={item.name} title={`${item.name}: ${formatAmount(item.amountCents)} (${Math.round(item.share * 100)}%)`} className="inline-flex shrink-0 items-center gap-1 px-1 py-0.5"><span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', !item.color && fallbackColorClasses[index])} style={item.color ? { backgroundColor: item.color } : undefined} /><span className="whitespace-nowrap">{item.name}</span><span className="tabular-nums">{Math.round(item.share * 100)}%</span></span> : <button key={item.name} type="button" disabled={updating} onClick={() => onSelect(item.name)} title={`${item.name}: ${formatAmount(item.amountCents)} (${Math.round(item.share * 100)}%)`} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1 py-0.5 hover:bg-[var(--ref-surface-container-low)] disabled:opacity-50"><span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', !item.color && fallbackColorClasses[index])} style={item.color ? { backgroundColor: item.color } : undefined} /><span className="whitespace-nowrap">{item.name}</span><span className="tabular-nums">{Math.round(item.share * 100)}%</span></button>)}
+          {visibleItems.map((item, index) => item.name === 'Other categories' ? <span key={item.name} title={`${item.name}: ${formatAmount(item.amountCents)} (${Math.round(item.share * 100)}%)`} className="inline-flex shrink-0 items-center gap-1 px-1 py-0.5"><span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', !item.color && fallbackColorClasses[index])} style={item.color ? { backgroundColor: item.color } : undefined} /><span className="whitespace-nowrap">{item.name}</span><span className="tabular-nums">{Math.round(item.share * 100)}%</span></span> : <button key={item.name} type="button" disabled={updating} onClick={() => onSelect(item.name)} title={`${item.name}: ${formatAmount(item.amountCents)} (${Math.round(item.share * 100)}%)`} className="inline-flex shrink-0 items-center gap-1 rounded-md px-1 py-0.5 hover:bg-[var(--ref-surface-container-low)] disabled:opacity-50"><CategoryIcon name={item.name} color={item.color} className="h-3 w-3" /><span className="whitespace-nowrap">{item.name}</span><span className="tabular-nums">{Math.round(item.share * 100)}%</span></button>)}
         </div>
       </>}
   </div>;

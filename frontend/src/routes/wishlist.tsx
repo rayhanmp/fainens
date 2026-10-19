@@ -10,9 +10,8 @@ import {
   CheckCircle2, 
   Link as LinkIcon,
   ShoppingBag,
-  Plane,
-  Heart
 } from 'lucide-react';
+import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { useDeleteWishlistMutation, useWishlistQuery } from '../features/wishlist/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
@@ -111,13 +110,7 @@ export default function WishlistPage() {
   function getCategoryIcon(categoryId: number | null) {
     const category = categories.find(c => c.id === categoryId);
     if (!category) return <ShoppingBag className="w-4 h-4" />;
-    
-    // Map category names to icons
-    const name = category.name.toLowerCase();
-    if (name.includes('travel') || name.includes('trip')) return <Plane className="w-4 h-4" />;
-    if (name.includes('tech') || name.includes('gadget')) return <ShoppingBag className="w-4 h-4" />;
-    if (name.includes('lifestyle')) return <Heart className="w-4 h-4" />;
-    return <ShoppingBag className="w-4 h-4" />;
+    return <CategoryIcon name={category.name} color={category.color} />;
   }
 
   if (isLoading) {

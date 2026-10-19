@@ -7,6 +7,7 @@ import { PageContainer } from '../components/ui/PageContainer';
 import { RequireAuth } from '../lib/auth';
 import { useMemo, useState } from 'react';
 import { useCategoriesPageQuery } from '../features/categories/page-queries';
+import { CategoryIcon } from '../features/categories/CategoryIcon';
 import {
   useCreateCategoryMutation,
   useCreateTagMutation,
@@ -308,14 +309,11 @@ function CategoriesPage() {
                       className="group relative flex items-center gap-3 rounded-xl bg-[var(--ref-surface-container-lowest)] p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:translate-y-[-2px]"
                     >
                       <div
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl cursor-pointer"
-                        style={{
-                          backgroundColor: bgTint,
-                          color: c.color || 'var(--color-accent)',
-                        }}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg cursor-pointer"
+                        style={{ backgroundColor: bgTint }}
                         onClick={() => openCategoryModal(c)}
                       >
-                        {c.icon || '📁'}
+                        <CategoryIcon name={c.name} color={c.color || 'var(--color-accent)'} className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3
@@ -510,11 +508,15 @@ function CategoriesPage() {
               onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
               required
             />
-            <Input
-              label="Icon (emoji)"
-              value={categoryForm.icon}
-              onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
-            />
+            <div>
+              <p className="mb-2 block font-mono text-sm font-medium">Icon</p>
+              <div className="flex items-center gap-3 text-sm text-[var(--ref-on-surface-variant)]">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--ref-surface-container-low)]">
+                  <CategoryIcon name={categoryForm.name} color={categoryForm.color} className="h-5 w-5" />
+                </span>
+                Picked from the name, in the category's colour.
+              </div>
+            </div>
             <div>
               <label className="mb-2 block font-mono text-sm font-medium">Color</label>
               <div className="flex flex-wrap gap-2">

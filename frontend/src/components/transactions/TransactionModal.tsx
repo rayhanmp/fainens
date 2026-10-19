@@ -68,6 +68,7 @@ import { toast, errorMessage } from '../ui/useToast';
 import { ComboBox, DateTimeField, EntryTypeSwitch, Field, fieldControl, fieldLabel as fieldLabelClass, type PickerOption } from './EntryPickers';
 import { entryAccent } from './entry-types';
 import { categoryIcon } from '../../features/categories/category-icon';
+import { CategoryIcon } from '../../features/categories/CategoryIcon';
 import { useReplaceDraftMutation } from '../../features/backfill/queries';
 import {
   reverseTransactionNow,
@@ -1812,8 +1813,8 @@ export function TransactionModal({
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[var(--ref-surface-container)] flex items-center justify-center">
-                    {category?.icon ? (
-                      <span className="text-lg">{category.icon}</span>
+                    {category ? (
+                      <CategoryIcon name={category.name} color={category.color} className="h-5 w-5" />
                     ) : (
                       <ShoppingCart className="w-5 h-5 text-[var(--color-primary)]" />
                     )}

@@ -22,6 +22,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast, errorMessage } from '../components/ui/useToast';
+import { CategoryIcon } from '../features/categories/CategoryIcon';
 import {
   Download,
   FileText,
@@ -874,6 +875,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
       value: item.amount,
       percentage: item.percentage,
       color: cat?.color || '#737785',
+      isOther: false,
     };
   });
   if (omitted.length > 0) {
@@ -883,6 +885,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
       value,
       percentage: data.total > 0 ? (value / data.total) * 100 : 0,
       color: '#9ca3af',
+      isOther: true,
     });
   }
 
@@ -935,10 +938,11 @@ function SpendingReport({ periodId }: { periodId?: number }) {
           {chartData.map((item, i) => (
             <div key={i} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
               <div className="flex items-center gap-2">
-                <div
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
+                {item.isOther ? (
+                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                ) : (
+                  <CategoryIcon name={item.name} color={item.color} />
+                )}
                 <span className="truncate text-sm font-medium">{item.name}</span>
               </div>
               <div className="text-right">

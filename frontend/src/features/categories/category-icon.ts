@@ -1,6 +1,6 @@
 import {
   Baby, Banknote, Briefcase, Bus, Car, Clapperboard, Coffee, CreditCard, Dumbbell, Fuel, Gamepad2, Gift, GraduationCap,
-  HeartPulse, Home, Landmark, Music, PawPrint, Plane, Receipt, Repeat, Shapes, ShieldCheck, Shirt, ShoppingBag,
+  HeartPulse, Home, Landmark, Laptop, Music, Palette, PawPrint, Plane, Receipt, Repeat, Shapes, ShieldCheck, Shirt, ShoppingBag,
   ShoppingCart, Smartphone, Sparkles, Tag, TrendingUp, Utensils, Wifi, Wrench, Zap, type LucideIcon,
 } from 'lucide-react';
 
@@ -18,6 +18,8 @@ const rules: [RegExp, LucideIcon][] = [
   [/health|medic|doctor|pharma|obat|hospital|dokter|clinic/i, HeartPulse],
   [/insurance|asuransi|bpjs/i, ShieldCheck],
   [/game|gaming|steam/i, Gamepad2],
+  [/tech|gadget|electronic|computer|laptop|software/i, Laptop],
+  [/hobb|craft|\bart\b|photo/i, Palette],
   [/music|spotify|concert|konser/i, Music],
   [/entertain|movie|cinema|film|bioskop|streaming|netflix|hiburan/i, Clapperboard],
   [/fashion|cloth|apparel|shoe|baju|sepatu|outfit/i, Shirt],

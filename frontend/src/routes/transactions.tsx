@@ -18,6 +18,7 @@ import { TransactionModal, type EditingTransaction, type TransactionPrefill, typ
 import { ImportCSVModal } from '../components/transactions/ImportCSVModal';
 import { PendingTransactionsModal } from '../components/transactions/PendingTransactionsModal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { toast, errorMessage } from '../components/ui/useToast';
 import { RequireAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -118,6 +119,12 @@ function coverageMessage(period: Period) {
   if (period.coverageStatus === 'skipped') return 'This period was skipped during an untracked break. An empty activity list is not proof of zero activity.';
   if (period.coverageStatus === 'partial') return 'Some activity is missing in this period. Recorded totals are not a full financial result.';
   return 'This period’s activity coverage has not been reviewed. Treat totals as recorded activity only.';
+}
+/** The category a row is drawn with: its first allocation, or its single category. */
+function primaryCategory(transaction: TransactionRow, categories: Category[]) {
+  const allocation = transaction.categoryAllocations.find((item) => item.amount !== 0);
+  const id = allocation?.categoryId ?? transaction.categoryId;
+  return id == null ? null : categories.find((category) => category.id === id) ?? null;
 }
 function categoryLabel(transaction: TransactionRow, categories: Category[]) {
   const allocations = transaction.categoryAllocations.filter((allocation) => allocation.amount !== 0);
@@ -609,6 +616,8 @@ function TransactionsPage() {
       isLoading ? <TransactionRowsSkeleton compact={compactTables} /> : total === 0 ? <div className="p-12 text-center"><Wallet className="mx-auto mb-3 h-10 w-10 text-[var(--ref-outline)]" /><p className="font-headline font-bold">No activity in this view</p><p className="mt-1 text-sm text-[var(--ref-on-surface-variant)]">{hasFilters ? 'Try removing filters to see more activity.' : 'Add your first transaction for this period.'}</p><Button variant="secondary" className="mt-4" onClick={hasFilters ? clearFilters : () => openModal()}>{hasFilters ? 'Clear filters' : 'Add transaction'}</Button></div> : <div className="divide-y divide-[var(--ref-outline-variant)]/20">
         {transactionRows.map((transaction, index) => {
           const kind = getKind(transaction); const amount = displayAmount(transaction); const category = transaction.displayPart === 'loan' ? 'Loan' : categoryLabel(transaction, categories);
+          // Expenses show their category's icon; corrections and uncategorised rows keep the plain receipt.
+          const rowCategory = kind === 'expense' && transaction.displayPart !== 'loan' && transaction.status !== 'reversed' && transaction.txType !== 'reversal' && transaction.txType !== 'domain_reversal' ? primaryCategory(transaction, categories) : null;
           const loanLabel = kind === 'loan' ? compactLoanActivityLabel(transaction).replace(/^Split bill/, 'Loans') : null;
           const rowKey = `${transaction.id}:${transaction.displayPart ?? 'transaction'}`;
           const isCashIn = transaction.reallocation?.role === 'incoming' || transaction.expenseCents < 0 || kind === 'income' || (kind === 'loan' && amount > 0 && transaction.loanActivity != null && transaction.txType !== 'split_bill_borrowed');
@@ -635,7 +644,7 @@ function TransactionsPage() {
                 : <button type="button" disabled={correction || Boolean(transaction.reallocation)} onClick={() => { setSwipedRowId(null); void handleCorrect(transaction); }} className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 bg-amber-600 px-2 text-[11px] font-bold text-white disabled:opacity-40"><RotateCcw className="h-5 w-5" />Correct</button>}
             </>}
           ><div className={cn('group grid grid-cols-[2.5rem_minmax(0,1fr)_2rem] cursor-pointer items-center gap-x-3 gap-y-1 px-4 sm:flex transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-6', compactTables ? 'py-2.5' : 'py-4', correction && 'bg-[var(--ref-surface-container-low)]/60')}>
-            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
+            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl', kind === 'income' ? 'bg-emerald-500/10 text-emerald-700' : kind === 'transfer' ? 'bg-sky-500/10 text-sky-700' : correction ? 'bg-amber-500/10 text-amber-800' : !rowCategory && 'bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]')} style={rowCategory ? { backgroundColor: `color-mix(in srgb, ${rowCategory.color ?? 'var(--ref-primary)'} 12%, transparent)` } : undefined}>{kind === 'transfer' ? <ArrowLeftRight className="h-5 w-5" /> : kind === 'income' ? <Landmark className="h-5 w-5" /> : rowCategory ? <CategoryIcon name={rowCategory.name} color={rowCategory.color ?? 'var(--ref-primary)'} className="h-5 w-5" /> : <Receipt className="h-5 w-5" />}</div>
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); openModal(transaction, 'view'); }} className="truncate text-left font-headline font-bold text-[var(--ref-on-surface)] focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]">{maskAmounts(transaction.description)}</button>{correction && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Accounting correction</span>}</div><p className="mt-1 truncate text-xs text-[var(--ref-on-surface-variant)]">{sort === 'largest' ? formatDateTime(transaction.date) : formatTime(transaction.date)} · {kind === 'transfer' && transferSource && transferDestination ? `${transferSource.accountName ?? accounts.find((account) => account.id === transferSource.accountId)?.name ?? 'Source'} → ${transferDestination.accountName ?? accounts.find((account) => account.id === transferDestination.accountId)?.name ?? 'Destination'}` : accountName ?? 'Account not available'}{transaction.place ? ' · ' + transaction.place : ''}</p><p className="mt-1 text-xs text-[var(--ref-on-surface-variant)] sm:hidden">{category ?? (kind === 'transfer' ? 'Transfer' : kind === 'income' ? 'Income' : 'Unallocated')}</p>{isTransferFee(transaction) && <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">Linked transfer fee</p>}</div>
             <div className="hidden w-32 shrink-0 text-right sm:block"><p className="truncate text-xs font-semibold text-[var(--ref-on-surface-variant)]" title={category ?? undefined}>{category ?? (kind === 'income' ? 'Income' : kind === 'transfer' ? 'Transfer' : kind === 'loan' ? 'Loan' : 'Unallocated')}</p>{transaction.categoryAllocations.length > 1 && <p className="mt-0.5 text-[10px] text-[var(--ref-outline)]">Split allocation</p>}</div>
             <div className="col-start-2 row-start-2 text-left sm:ml-auto sm:min-w-32 sm:shrink-0 sm:text-right">
