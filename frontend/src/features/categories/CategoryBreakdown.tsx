@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDownRight, ArrowUpRight, Crown, Gem, Repeat2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
 import { CategoryIcon } from './CategoryIcon';
+import { HabitMap } from './HabitMap';
 import { useCategoryBreakdownQuery } from './page-queries';
 import { squarify } from './treemap';
 import { shortRupiah } from './short-rupiah';
@@ -14,10 +14,10 @@ const METRICS: { id: Metric; label: string }[] = [
   { id: 'amount', label: 'Amount' },
   { id: 'count', label: 'Entries' },
 ];
-const RANGES: { id: Range; label: string; previous: string | null }[] = [
-  { id: '30d', label: '30 days', previous: 'the 30 days before' },
-  { id: 'year', label: 'This year', previous: 'the same stretch last year' },
-  { id: 'all', label: 'All time', previous: null },
+const RANGES: { id: Range; label: string }[] = [
+  { id: '30d', label: '30 days' },
+  { id: 'year', label: 'This year' },
+  { id: 'all', label: 'All time' },
 ];
 /** Tiles past this many fold into one "Other" tile, so every tile stays big enough to read. */
 const MAX_TILES = 9;
@@ -26,13 +26,9 @@ const FALLBACK_BOX = { w: 640, h: 256 };
 const DAY = 86_400_000;
 
 
-function bounds(range: Range, now: number, previous: boolean): { from?: number; to?: number } {
-  if (range === '30d') return previous ? { from: now - 60 * DAY, to: now - 30 * DAY - 1 } : { from: now - 30 * DAY, to: now };
-  if (range === 'year') {
-    const year = new Date(now).getFullYear() - (previous ? 1 : 0);
-    const to = previous ? new Date(now).setFullYear(year) : now;
-    return { from: new Date(year, 0, 1).getTime(), to };
-  }
+function bounds(range: Range, now: number): { from?: number; to?: number } {
+  if (range === '30d') return { from: now - 30 * DAY, to: now };
+  if (range === 'year') return { from: new Date(new Date(now).getFullYear(), 0, 1).getTime(), to: now };
   return {};
 }
 
@@ -62,30 +58,10 @@ function Segmented<T extends string>({ options, value, onChange, label }: { opti
 
 type Row = { id: number; name: string; color: string | null; amount: number; count: number; average: number };
 
-function Insight({ icon, label, row, value, detail }: { icon: ReactNode; label: string; row: Row | null; value: string; detail: string }) {
-  if (!row) return null;
-  const tint = row.color ?? 'var(--ref-primary)';
-  return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--color-border)] p-3.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">{icon}{label}</p>
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `color-mix(in srgb, ${tint} 14%, transparent)` }}>
-          <CategoryIcon name={row.name} color={tint} className="h-3.5 w-3.5" />
-        </span>
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-[var(--ref-on-surface-variant)]">{row.name}</p>
-        <p className="font-headline text-lg font-bold tabular-nums leading-tight text-[var(--ref-on-surface)]">{value}</p>
-        <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">{detail}</p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Where the money goes: a treemap where each category's tile is its share of spending (or of
- * entries), drawn in the category's own colour and labelled on the tile, beside a few callouts
- * (the biggest, the most frequent, the priciest per entry, the biggest change).
+ * entries), drawn in the category's own colour and labelled on the tile, above a habit map of how
+ * often and how much each time.
  */
 export function CategoryBreakdown({ categories }: { categories: Array<{ id: number; name: string; color: string | null }> }) {
   const { formatAmount, balancesHidden } = useBalanceVisibility();
@@ -105,8 +81,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
     return () => observer.disconnect();
   }, [boxEl]);
   const [now] = useState(() => Date.now());
-  const current = useCategoryBreakdownQuery(useMemo(() => bounds(range, now, false), [range, now]));
-  const previous = useCategoryBreakdownQuery(useMemo(() => bounds(range, now, true), [range, now]), range !== 'all');
+  const current = useCategoryBreakdownQuery(useMemo(() => bounds(range, now), [range, now]));
 
   const rows = useMemo<Row[]>(() => {
     const byId = new Map(categories.map((category) => [category.id, category]));
@@ -133,18 +108,7 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
   const share = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
   const show = (value: number) => (metric === 'amount' ? formatAmount(value) : `${value.toLocaleString('id-ID')} ${value === 1 ? 'entry' : 'entries'}`);
 
-  // Callouts.
-  const biggest = [...rows].sort((a, b) => b.amount - a.amount)[0] ?? null;
-  const frequent = [...rows].sort((a, b) => b.count - a.count)[0] ?? null;
-  const priciest = [...rows].filter((row) => row.count >= 3).sort((a, b) => b.average - a.average)[0] ?? null;
-  const before = new Map((previous.data ?? []).map((row) => [row.categoryId, Math.max(0, row.amount)]));
-  // Only meaningful when the earlier stretch had spending too (the ledger may not go back that far).
-  const changes = range === 'all' || !previous.data || before.size === 0 ? [] : rows.map((row) => ({ row, delta: row.amount - (before.get(row.id) ?? 0) }));
-  const mover = changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0] ?? null;
-  const moverBase = mover ? before.get(mover.row.id) ?? 0 : 0;
-
   const hoveredTile = tiles.find((tile) => tile.key === hovered) ?? null;
-  const rangeInfo = RANGES.find((item) => item.id === range)!;
 
   return (
     <section className="flex h-full flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
@@ -226,19 +190,10 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
             </p>
           </div>
 
-          <div className="grid content-start gap-2.5 sm:grid-cols-2">
-            <Insight icon={<Crown className="h-3 w-3" />} label="Biggest" row={biggest} value={biggest ? formatAmount(biggest.amount) : ''} detail={biggest ? `${Math.round((biggest.amount / Math.max(1, totalAmount)) * 100)}% of all spending` : ''} />
-            <Insight icon={<Repeat2 className="h-3 w-3" />} label="Most frequent" row={frequent} value={frequent ? `${frequent.count}×` : ''} detail={frequent ? `${formatAmount(frequent.average)} each on average` : ''} />
-            <Insight icon={<Gem className="h-3 w-3" />} label="Priciest per entry" row={priciest} value={priciest ? formatAmount(priciest.average) : ''} detail={priciest ? `across ${priciest.count} entries` : ''} />
-            {mover && mover.delta !== 0 && (
-              <Insight
-                icon={mover.delta > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                label={mover.delta > 0 ? 'Biggest rise' : 'Biggest drop'}
-                row={mover.row}
-                value={`${mover.delta > 0 ? '+' : '−'}${formatAmount(Math.abs(mover.delta))}`}
-                detail={moverBase > 0 ? `${mover.delta > 0 ? '+' : '−'}${Math.round((Math.abs(mover.delta) / moverBase) * 100)}% vs ${rangeInfo.previous}` : `nothing in ${rangeInfo.previous}`}
-              />
-            )}
+          <div className="border-t border-[var(--color-border)] pt-3">
+            <h3 className="text-xs font-semibold text-[var(--ref-on-surface)]">Spending habits</h3>
+            <p className="mb-1 text-[11px] text-[var(--ref-on-surface-variant)]">How often against how much each time; bubble size is the total.</p>
+            <HabitMap points={rows} format={formatAmount} short={(value) => (balancesHidden ? formatAmount(value) : shortRupiah(value))} />
           </div>
         </div>
       )}

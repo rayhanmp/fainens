@@ -266,8 +266,8 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
             <span className="absolute -top-7 left-0 text-[10px] font-medium uppercase tracking-wide text-[var(--ref-outline)]">Spending (Rp)</span>
             {ticks.map((tick) => (
               <div key={tick} className="pointer-events-none absolute inset-x-0 flex translate-y-1/2 items-center gap-2" style={{ bottom: `${(tick / ceiling) * 100}%` }} aria-hidden>
-                <span className="w-12 shrink-0 text-right text-[10px] tabular-nums text-[var(--ref-outline)]">{tick === 0 ? '0' : short(tick).replace(/^Rp/, '')}</span>
-                <span className={cn('h-px flex-1', tick === 0 ? 'bg-[var(--ref-outline-variant)]' : 'bg-[var(--color-border)] opacity-50')} />
+                <span className="w-12 shrink-0 text-right text-[10px] tabular-nums text-[var(--ref-outline)] opacity-80">{tick === 0 ? '0' : short(tick).replace(/^Rp/, '')}</span>
+                <span className={cn('flex-1', tick === 0 ? 'h-px bg-[var(--color-border)]' : 'border-t border-dotted border-[var(--color-border)] opacity-60')} />
               </div>
             ))}
             <div className="absolute inset-y-0 left-14 right-0 flex items-end gap-2 sm:gap-4" onMouseLeave={() => setHover(null)}>
