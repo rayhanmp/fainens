@@ -521,7 +521,9 @@ export async function prepareJournalEntry(
     if (account?.liquidityClass !== "cash_equivalent" && line.cashFlowClass != null) {
       throw new Error(`cashFlowClass may be set only on cash-equivalent account lines (account ${line.accountId})`);
     }
-    if (line.cashFlowClass === "recovery" && !["historical_recovery_adjustment", "balance_adjustment"].includes(input.txType ?? "manual")) {
+    // A reversal mirrors the lines it undoes, including a balance adjustment's recovery class.
+    const reversesAdjustment = input.txType === "reversal" && input.reversalOfTxId != null;
+    if (line.cashFlowClass === "recovery" && !reversesAdjustment && !["historical_recovery_adjustment", "balance_adjustment"].includes(input.txType ?? "manual")) {
       throw new Error("cashFlowClass recovery is reserved for balance-adjustment workflows");
     }
   }

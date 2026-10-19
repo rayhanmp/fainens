@@ -15,8 +15,10 @@ import {
   insertPreparedJournalEntrySync,
   prepareJournalEntry,
 } from "../services/ledger";
+import { reversalCashFlowClasses } from "../services/domain-reversal";
 import { invalidateOnTransactionMutation } from "../cache/invalidation";
 import {
+  alignReversalWithOriginal,
   assertGenericReversalAllowed,
   deleteTransactionsAtomically,
   importTransactionsAtomically,
@@ -1338,6 +1340,25 @@ RULES:
   });
 
   /** Reverse a posted journal without erasing its audit history. */
+  /** Move a reversal onto its original's date, so the months in between aren't inflated by the mistake. */
+  fastify.post("/api/transactions/:id/align-reversal", {
+    schema: {
+      operationId: "alignReversalWithOriginal",
+      tags: ["transactions"],
+      params: transactionIdParamsSchema,
+      response: { 200: z.object({ id: z.number().int(), date: z.number(), periodId: z.number().int().nullable() }).passthrough(), 400: transactionErrorSchema, 404: transactionErrorSchema, 409: transactionErrorSchema, 500: transactionErrorSchema },
+    },
+  }, async (request, reply) => {
+    const transactionId = parseIdParam((request.params as { id?: string }).id);
+    if (transactionId === null) return reply.code(400).send({ error: "Invalid transaction ID" });
+    try {
+      return await alignReversalWithOriginal(transactionId);
+    } catch (err) {
+      const status = transactionRouteErrorStatus(err instanceof TransactionMutationError ? err.statusCode : 500);
+      return reply.code(status).send({ error: err instanceof Error ? err.message : "Failed to align the reversal" });
+    }
+  });
+
   fastify.post("/api/transactions/:id/reverse", {
     schema: {
       operationId: "reverseTransaction",
@@ -1376,6 +1397,7 @@ RULES:
           amount: transactionCategoryAllocations.amount,
         }).from(transactionCategoryAllocations)
           .where(eq(transactionCategoryAllocations.transactionId, target.id));
+        const classes = await reversalCashFlowClasses(targetLines, db);
         preparedEntries.push({ target, prepared: await prepareJournalEntry({
           date: reversalDate,
           description: `Reversal: ${target.description}`,
@@ -1391,12 +1413,12 @@ RULES:
               amount: -allocation.amount,
             })),
           } : {}),
-          lines: targetLines.map((line) => ({
+          lines: targetLines.map((line, index) => ({
             accountId: line.accountId,
             debit: line.credit,
             credit: line.debit,
             description: `Reversal of ${line.description ?? target.description}`,
-            cashFlowClass: line.cashFlowClass as "operating" | "investing" | "financing" | "transfer" | "recovery" | null,
+            cashFlowClass: classes[index],
           })),
         }, db) });
       }

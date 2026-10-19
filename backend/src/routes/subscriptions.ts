@@ -9,6 +9,7 @@ import {
   applySubscriptionOccurrences,
   correctSubscriptionOccurrence,
   previewDueSubscriptionRenewals,
+  voidSubscriptionOccurrence,
 } from "../services/subscription-renewals";
 
 type SubRow = typeof subscriptions.$inferSelect;
@@ -54,6 +55,8 @@ const subscriptionRunRenewalsBodySchema = z.object({ mode: z.enum(["post", "skip
 const subscriptionRunRenewalsResponseSchema = z.object({ posted: z.number().int().nonnegative(), skipped: z.number().int().nonnegative(), transactionIds: z.array(z.number().int()) }).passthrough();
 const subscriptionCorrectionBodySchema = z.object({ reason: z.string().trim().min(1).max(500), effectiveDate: z.number().int().nonnegative().optional(), amount: z.number().int().positive().optional(), linkedAccountId: z.number().int().positive().optional(), categoryId: z.number().int().positive().nullable().optional() }).passthrough();
 const subscriptionCorrectionResponseSchema = z.object({ reversalTransactionId: z.number().int(), replacementTransactionId: z.number().int() }).passthrough();
+const subscriptionVoidBodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).passthrough();
+const subscriptionVoidResponseSchema = z.object({ reversalTransactionId: z.number().int() }).passthrough();
 
 function isStatus(s: string): s is (typeof STATUS)[number] {
   return (STATUS as readonly string[]).includes(s);
@@ -125,6 +128,20 @@ export default async function (fastify: FastifyInstance) {
       return reply.code(201).send(result);
     } catch (error) {
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to correct subscription occurrence" });
+    }
+  });
+
+  /** Withdraw a posted renewal that never charged: reversed on its own date, the occurrence skipped. */
+  fastify.post("/api/subscriptions/:id/occurrences/:dueAt/void", {
+    schema: { operationId: "voidSubscriptionOccurrence", tags: ["subscriptions"], params: subscriptionOccurrenceParamsSchema, body: subscriptionVoidBodySchema, response: { 201: subscriptionVoidResponseSchema, 409: subscriptionErrorSchema } },
+  }, async (request, reply) => {
+    const subscriptionId = Number((request.params as { id?: string }).id);
+    const dueAt = Number((request.params as { dueAt?: string }).dueAt);
+    try {
+      const result = await voidSubscriptionOccurrence({ subscriptionId, dueAt, reason: (request.body as { reason: string }).reason });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Failed to void subscription occurrence" });
     }
   });
 

@@ -27,8 +27,9 @@ import {
   type CreateJournalEntryInput,
   type PreparedJournalEntry,
 } from "./ledger";
+import { reversalCashFlowClasses } from "./domain-reversal";
 import { periodContainsDate, type PeriodState } from "./period-locking";
-import { TransactionMutationError } from "./transaction-mutations";
+import { HISTORICAL_REVERSAL_TYPES, TransactionMutationError, assertGenericReversalAllowed } from "./transaction-mutations";
 
 /**
  * Rebuild a draft from scratch: header, lines, tags and allocations are replaced with what the
@@ -114,6 +115,8 @@ export type PostBatchResult = {
   batchStatus: string;
   /** Balance adjustments posted with the batch, one per settled account. */
   settlements: Array<{ accountId: number; difference: number; transactionId: number | null }>;
+  /** Posted entries the batch replaced, each reversed on its original date. */
+  reversed: Array<{ id: number; reversalId: number }>;
 };
 
 /**
@@ -444,16 +447,80 @@ async function prepareSettlements(
   return prepared;
 }
 
+type PreparedReversal = { targetId: number; journal: PreparedJournalEntry; accountIds: number[] };
+
+/**
+ * Reversals a backfill posts alongside its drafts: each target (and any linked child, such as a
+ * transfer's fee) is reversed on its own original date, so the history before and after it reads
+ * as if the entry had never been made. Old balance plugs and an unlinked salary entry are allowed
+ * on top of the types the generic reverse accepts; workflow-owned entries are still refused.
+ */
+async function prepareHistoricalReversals(batchId: number, ids: number[]): Promise<PreparedReversal[]> {
+  const prepared: PreparedReversal[] = [];
+  const seen = new Set<number>();
+  for (const id of [...new Set(ids)]) {
+    if (!Number.isInteger(id) || id <= 0) throw new TransactionMutationError("reverseTransactionIds must contain positive integers", 400);
+    const [original] = await db.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+    if (!original) throw new TransactionMutationError(`Transaction ${id} not found`, 404);
+    if (original.status !== "posted") throw new TransactionMutationError(`Transaction ${id} is not posted`, 409);
+    const { childIds } = assertGenericReversalAllowed(original, db, HISTORICAL_REVERSAL_TYPES);
+    const children = childIds.length ? await db.select().from(transactions).where(inArray(transactions.id, childIds)) : [];
+    for (const target of [original, ...children]) {
+      if (seen.has(target.id)) continue;
+      seen.add(target.id);
+      const [existing] = await db.select({ id: transactions.id }).from(transactions).where(eq(transactions.reversalOfTxId, target.id)).limit(1);
+      if (existing) throw new TransactionMutationError(`Transaction ${target.id} already has reversal ${existing.id}`, 409);
+      const lines = await db.select().from(transactionLines).where(eq(transactionLines.transactionId, target.id));
+      if (lines.length < 2) throw new TransactionMutationError(`Cannot reverse incomplete journal ${target.id}`, 409);
+      const allocations = await db.select({ categoryId: transactionCategoryAllocations.categoryId, amount: transactionCategoryAllocations.amount })
+        .from(transactionCategoryAllocations).where(eq(transactionCategoryAllocations.transactionId, target.id));
+      const classes = await reversalCashFlowClasses(lines, db);
+      // Prepared like a draft so a closed period doesn't refuse it here; the commit reopens that period.
+      const draftLike = await prepareJournalEntry({
+        date: toMs(target.date)!,
+        description: `Reversal: ${target.description}`,
+        reference: target.reference ? `REVERSAL:${target.reference}` : `REVERSAL:${target.id}`,
+        notes: `Reverses posted transaction #${target.id}, replaced by backfill batch #${batchId}`,
+        txType: "reversal",
+        reversalOfTxId: target.id,
+        categoryId: target.categoryId,
+        ...(allocations.length > 0 ? { categoryAllocations: allocations.map((allocation) => ({ categoryId: allocation.categoryId, amount: -allocation.amount })) } : {}),
+        lines: lines.map((line, index) => ({
+          accountId: line.accountId,
+          debit: line.credit,
+          credit: line.debit,
+          description: `Reversal of ${line.description ?? target.description}`,
+          cashFlowClass: classes[index],
+        })),
+        status: "draft",
+        batchId,
+      }, db);
+      prepared.push({
+        targetId: target.id,
+        journal: { ...draftLike, transactionValues: { ...draftLike.transactionValues, status: "posted" } },
+        accountIds: draftLike.accountIds,
+      });
+    }
+  }
+  return prepared;
+}
+
 /**
  * Post a batch's drafts. Every draft is validated first; the valid ones post in one commit. A
  * closed period a draft falls in is reopened inside that commit and closed again once the drafts
  * are in, with both steps in the audit log, so a backfill never leaves a period open by accident.
+ * `reverseTransactionIds` reverses posted entries the backfill replaces, on their original dates,
+ * in the same commit.
  */
-export async function postBatchDrafts(batchId: number, transactionIds?: number[], settlements: BatchSettlementInput[] = []): Promise<PostBatchResult> {
+export async function postBatchDrafts(batchId: number, transactionIds?: number[], settlements: BatchSettlementInput[] = [], reverseTransactionIds: number[] = []): Promise<PostBatchResult> {
   const [batch] = await db.select().from(transactionBatches).where(eq(transactionBatches.id, batchId)).limit(1);
   if (!batch) throw new TransactionMutationError("Batch not found", 404);
   if (batch.status === "discarded") throw new TransactionMutationError("This batch was discarded", 409);
   validateSettlements(settlements);
+  if (settlements.length > 0 && reverseTransactionIds.length > 0) {
+    throw new TransactionMutationError("Post reversals and settlements separately; a settlement's expected balance doesn't include reversals", 400);
+  }
+  const preparedReversals = await prepareHistoricalReversals(batchId, reverseTransactionIds);
 
   const requested = transactionIds == null ? null : [...new Set(transactionIds)];
   if (requested?.some((id) => !Number.isInteger(id) || id <= 0)) {
@@ -471,8 +538,8 @@ export async function postBatchDrafts(batchId: number, transactionIds?: number[]
     const found = new Set(drafts.map((draft) => draft.id));
     throw new TransactionMutationError(`Not a draft in this batch: ${requested.filter((id) => !found.has(id)).join(", ")}`, 404);
   }
-  if (drafts.length === 0) {
-    return { posted: [], failed: [], reopenedPeriodIds: [], batchStatus: batch.status, settlements: [] };
+  if (drafts.length === 0 && preparedReversals.length === 0) {
+    return { posted: [], failed: [], reopenedPeriodIds: [], batchStatus: batch.status, settlements: [], reversed: [] };
   }
 
   const draftIds = drafts.map((draft) => draft.id);
@@ -519,8 +586,8 @@ export async function postBatchDrafts(batchId: number, transactionIds?: number[]
     ready.push({ id: draft.id, periodId: period?.id ?? null, accountIds: [...new Set(draftLines.map((line) => line.accountId))] });
   }
 
-  if (ready.length === 0) {
-    return { posted: [], failed, reopenedPeriodIds: [], batchStatus: batch.status, settlements: [] };
+  if (ready.length === 0 && preparedReversals.length === 0) {
+    return { posted: [], failed, reopenedPeriodIds: [], batchStatus: batch.status, settlements: [], reversed: [] };
   }
 
   const draftDateById = new Map(drafts.map((draft) => [draft.id, toMs(draft.date) ?? 0]));
@@ -537,6 +604,7 @@ export async function postBatchDrafts(batchId: number, transactionIds?: number[]
     const touchedPeriodIds = [...new Set([
       ...ready.map((item) => item.periodId),
       ...preparedSettlements.map((settlement) => settlement.journal?.periodId ?? null),
+      ...preparedReversals.map((reversal) => reversal.journal.periodId),
     ].filter((id): id is number => id != null))];
     const periodRows = touchedPeriodIds.length === 0 ? [] : tx
       .select().from(salaryPeriods).where(inArray(salaryPeriods.id, touchedPeriodIds)).all();
@@ -572,6 +640,25 @@ export async function postBatchDrafts(batchId: number, transactionIds?: number[]
         beforeSnapshot: Buffer.from(JSON.stringify(fresh)),
         afterSnapshot: Buffer.from(JSON.stringify({ ...fresh, status: "posted", periodId: item.periodId, batchId })),
       }).run();
+    }
+
+    const reversed: PostBatchResult["reversed"] = [];
+    for (const reversal of preparedReversals) {
+      const fresh = tx.select().from(transactions).where(eq(transactions.id, reversal.targetId)).limit(1).all()[0];
+      if (!fresh || fresh.status !== "posted") throw new TransactionMutationError(`Transaction ${reversal.targetId} changed while posting; retry`, 409);
+      const already = tx.select({ id: transactions.id }).from(transactions).where(eq(transactions.reversalOfTxId, reversal.targetId)).limit(1).all()[0];
+      if (already) throw new TransactionMutationError(`Transaction ${reversal.targetId} already has reversal ${already.id}`, 409);
+      const reversalId = insertPreparedJournalEntrySync(tx, reversal.journal);
+      tx.update(transactions).set({ status: "reversed" })
+        .where(and(eq(transactions.id, reversal.targetId), eq(transactions.status, "posted"))).run();
+      tx.insert(auditLogs).values({
+        entityType: "transaction",
+        entityId: reversal.targetId,
+        action: "update",
+        beforeSnapshot: Buffer.from(JSON.stringify(fresh)),
+        afterSnapshot: Buffer.from(JSON.stringify({ ...fresh, status: "reversed", reversalTransactionId: reversalId, batchId })),
+      }).run();
+      reversed.push({ id: reversal.targetId, reversalId });
     }
 
     const settled: PostBatchResult["settlements"] = [];
@@ -635,14 +722,15 @@ export async function postBatchDrafts(batchId: number, transactionIds?: number[]
       .where(eq(transactionBatches.id, batchId))
       .run();
     bumpFinancialRevisionSync(tx);
-    return { reopened, batchStatus, settled, touchedPeriodIds };
+    return { reopened, batchStatus, settled, touchedPeriodIds, reversed };
   });
 
   await invalidateOnTransactionMutation({
-    transactionId: ready[0].id,
+    transactionId: ready[0]?.id ?? result.reversed[0]!.reversalId,
     affectedAccountIds: [...new Set([
       ...ready.flatMap((item) => item.accountIds),
       ...preparedSettlements.flatMap((settlement) => settlement.journal?.accountIds ?? []),
+      ...preparedReversals.flatMap((reversal) => reversal.accountIds),
     ])],
     affectedPeriodIds: result.touchedPeriodIds,
     revisionBumped: true,
@@ -654,6 +742,7 @@ export async function postBatchDrafts(batchId: number, transactionIds?: number[]
     reopenedPeriodIds: result.reopened,
     batchStatus: result.batchStatus,
     settlements: result.settled,
+    reversed: result.reversed,
   };
 }
 

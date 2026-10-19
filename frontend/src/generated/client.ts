@@ -1577,6 +1577,46 @@ export type DeleteTransaction500 = {
   [key: string]: unknown;
 };
 
+export type AlignReversalWithOriginal200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  date: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  periodId: number | null;
+  [key: string]: unknown;
+};
+
+export type AlignReversalWithOriginal400 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type AlignReversalWithOriginal404 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type AlignReversalWithOriginal409 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
+export type AlignReversalWithOriginal500 = {
+  error?: string;
+  errors?: string[];
+  [key: string]: unknown;
+};
+
 export type ReverseTransaction201 = {
   /**
    * @minimum -9007199254740991
@@ -10645,6 +10685,29 @@ export type CorrectSubscriptionOccurrence409 = {
   [key: string]: unknown;
 };
 
+export type VoidSubscriptionOccurrenceBody = {
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  reason: string;
+  [key: string]: unknown;
+};
+
+export type VoidSubscriptionOccurrence201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  reversalTransactionId: number;
+  [key: string]: unknown;
+};
+
+export type VoidSubscriptionOccurrence409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type GetSubscription200BillingCycle = typeof GetSubscription200BillingCycle[keyof typeof GetSubscription200BillingCycle];
 
 
@@ -11729,6 +11792,11 @@ export type CreateLoanBody = {
    * @exclusiveMinimum
    */
   walletAccountId: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  date?: number;
   [key: string]: unknown;
 };
 
@@ -14804,6 +14872,8 @@ export type PostTransactionBatchBody = {
   transactionIds?: number[];
   /** @maxItems 100 */
   settlements?: PostTransactionBatchBodySettlementsItem[];
+  /** @maxItems 500 */
+  reverseTransactionIds?: number[];
   [key: string]: unknown;
 };
 
@@ -14837,12 +14907,27 @@ export type PostTransactionBatch200SettlementsItem = {
   [key: string]: unknown;
 };
 
+export type PostTransactionBatch200ReversedItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  reversalId: number;
+  [key: string]: unknown;
+};
+
 export type PostTransactionBatch200 = {
   posted: number[];
   failed: PostTransactionBatch200FailedItem[];
   reopenedPeriodIds: number[];
   batchStatus: string;
   settlements: PostTransactionBatch200SettlementsItem[];
+  reversed: PostTransactionBatch200ReversedItem[];
   [key: string]: unknown;
 };
 
@@ -18446,6 +18531,61 @@ export const deleteTransaction = async (id: number, options?: RequestInit): Prom
   {      
     ...options,
     method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type alignReversalWithOriginalResponse200 = {
+  data: AlignReversalWithOriginal200
+  status: 200
+}
+
+export type alignReversalWithOriginalResponse400 = {
+  data: AlignReversalWithOriginal400
+  status: 400
+}
+
+export type alignReversalWithOriginalResponse404 = {
+  data: AlignReversalWithOriginal404
+  status: 404
+}
+
+export type alignReversalWithOriginalResponse409 = {
+  data: AlignReversalWithOriginal409
+  status: 409
+}
+
+export type alignReversalWithOriginalResponse500 = {
+  data: AlignReversalWithOriginal500
+  status: 500
+}
+    
+export type alignReversalWithOriginalResponseSuccess = (alignReversalWithOriginalResponse200) & {
+  headers: Headers;
+};
+export type alignReversalWithOriginalResponseError = (alignReversalWithOriginalResponse400 | alignReversalWithOriginalResponse404 | alignReversalWithOriginalResponse409 | alignReversalWithOriginalResponse500) & {
+  headers: Headers;
+};
+
+export type alignReversalWithOriginalResponse = (alignReversalWithOriginalResponseSuccess | alignReversalWithOriginalResponseError)
+
+export const getAlignReversalWithOriginalUrl = (id: number,) => {
+
+
+  
+
+  return `/api/transactions/${id}/align-reversal`
+}
+
+export const alignReversalWithOriginal = async (id: number, options?: RequestInit): Promise<alignReversalWithOriginalResponse> => {
+  
+  return generatedFetch<alignReversalWithOriginalResponse>(getAlignReversalWithOriginalUrl(id),
+  {      
+    ...options,
+    method: 'POST'
     
     
   }
@@ -24132,6 +24272,50 @@ export const correctSubscriptionOccurrence = async (id: number,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       correctSubscriptionOccurrenceBody,)
+  }
+);}
+
+
+
+export type voidSubscriptionOccurrenceResponse201 = {
+  data: VoidSubscriptionOccurrence201
+  status: 201
+}
+
+export type voidSubscriptionOccurrenceResponse409 = {
+  data: VoidSubscriptionOccurrence409
+  status: 409
+}
+    
+export type voidSubscriptionOccurrenceResponseSuccess = (voidSubscriptionOccurrenceResponse201) & {
+  headers: Headers;
+};
+export type voidSubscriptionOccurrenceResponseError = (voidSubscriptionOccurrenceResponse409) & {
+  headers: Headers;
+};
+
+export type voidSubscriptionOccurrenceResponse = (voidSubscriptionOccurrenceResponseSuccess | voidSubscriptionOccurrenceResponseError)
+
+export const getVoidSubscriptionOccurrenceUrl = (id: number,
+    dueAt: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/occurrences/${dueAt}/void`
+}
+
+export const voidSubscriptionOccurrence = async (id: number,
+    dueAt: number,
+    voidSubscriptionOccurrenceBody: VoidSubscriptionOccurrenceBody, options?: RequestInit): Promise<voidSubscriptionOccurrenceResponse> => {
+  
+  return generatedFetch<voidSubscriptionOccurrenceResponse>(getVoidSubscriptionOccurrenceUrl(id,dueAt),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      voidSubscriptionOccurrenceBody,)
   }
 );}
 

@@ -171,7 +171,7 @@ describe("draft transactions and batches", () => {
 
     const response = await app.inject({ method: "POST", url: `/api/transaction-batches/${batchId}/post`, payload: {} });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ posted: [first, second], failed: [], reopenedPeriodIds: [10], batchStatus: "posted", settlements: [] });
+    expect(response.json()).toEqual({ posted: [first, second], failed: [], reopenedPeriodIds: [10], batchStatus: "posted", settlements: [], reversed: [] });
     expect(txRow(first).status).toBe("posted");
     expect(txRow(second).status).toBe("posted");
     expect(periodStatus(10)).toBe("closed");
@@ -387,6 +387,97 @@ describe("draft transactions and batches", () => {
     const deleted = await app.inject({ method: "DELETE", url: `/api/transactions/${transactionId}` });
     expect(deleted.statusCode).toBeLessThan(300);
     expect(state.db.select().from(schema.transactions).all()).toHaveLength(0);
+  });
+
+  it("reverses replaced entries on their original dates, through a closed period, with a transfer's fee", async () => {
+    // An old balance plug inside closed March, the kind a backfill replaces with real history.
+    const plugDate = new Date(2026, 2, 20, 7, 0).getTime();
+    const plug = state.db.insert(schema.transactions).values({
+      date: new Date(plugDate), description: "Reconciliation: BNI", txType: "reconciliation_expense", status: "posted", periodId: 10,
+    }).returning().all()[0];
+    // Recorded before cash-flow classes existed: its cash line has none.
+    state.db.insert(schema.transactionLines).values([
+      { transactionId: plug.id, accountId: 3, debit: 90_000, credit: 0 },
+      { transactionId: plug.id, accountId: 1, debit: 0, credit: 90_000 },
+    ]).run();
+    const legacyMove = state.db.insert(schema.transactions).values({
+      date: new Date(plugDate), description: "GoPay Reconciliation", txType: "simple_transfer", status: "posted", periodId: 10,
+    }).returning().all()[0];
+    state.db.insert(schema.transactionLines).values([
+      { transactionId: legacyMove.id, accountId: 2, debit: 5_000, credit: 0 },
+      { transactionId: legacyMove.id, accountId: 1, debit: 0, credit: 5_000 },
+    ]).run();
+    const transfer = await app.inject({
+      method: "POST", url: "/api/transactions",
+      payload: { kind: "transfer", amountCents: 200_000, description: "Top up GoPay", date: "2026-10-05T08:00:00+07:00", walletAccountId: 1, toWalletAccountId: 2, transferFee: { amountCents: 1_000, paidBy: "sender" } },
+    });
+    expect(transfer.statusCode).toBe(201);
+    const { transactionId: transferId, feeTransactionId } = transfer.json();
+    expect(balance(1)).toBe(-90_000 - 5_000 - 200_000 - 1_000);
+
+    const batchId = await createBatch("Rebuild");
+    await draftExpense(batchId, { amountCents: 90_000, description: "Real March spending" });
+    const response = await app.inject({
+      method: "POST", url: `/api/transaction-batches/${batchId}/post`,
+      payload: { reverseTransactionIds: [plug.id, legacyMove.id, transferId] },
+    });
+    expect(response.statusCode).toBe(200);
+    const result = response.json();
+    expect(result.reversed.map((item: { id: number }) => item.id).sort()).toEqual([plug.id, legacyMove.id, transferId, feeTransactionId].sort());
+    // Missing classes are filled in the way the simple builders classify: spending is operating, cash to cash a transfer.
+    const reversalOf = (id: number) => (result.reversed as Array<{ id: number; reversalId: number }>).find((item) => item.id === id)!.reversalId;
+    const cashClass = (txId: number) => state.db.select().from(schema.transactionLines).all()
+      .filter((line: typeof schema.transactionLines.$inferSelect) => line.transactionId === txId && line.accountId === 1)[0]?.cashFlowClass;
+    expect(cashClass(reversalOf(plug.id))).toBe("operating");
+    expect(cashClass(reversalOf(legacyMove.id))).toBe("transfer");
+    for (const { id, reversalId } of result.reversed as Array<{ id: number; reversalId: number }>) {
+      expect(txRow(id).status).toBe("reversed");
+      expect(txRow(reversalId)).toMatchObject({ status: "posted", txType: "reversal", reversalOfTxId: id, batchId });
+      expect(new Date(txRow(reversalId).date).getTime()).toBe(new Date(txRow(id).date).getTime());
+    }
+    expect(periodStatus(10)).toBe("closed");
+    // The plug's Rp90.000 is replaced by the real draft; the transfer and its fee are gone.
+    expect(balance(1)).toBe(-90_000);
+    expect(balance(2)).toBe(0);
+  });
+
+  it("aligns a late reversal with the entry it reverses, but not across a closed period", async () => {
+    const created = await app.inject({
+      method: "POST", url: "/api/transactions",
+      payload: { kind: "expense", amountCents: 6_000, description: "Duplicate ride", date: "2026-10-03T09:00:00+07:00", walletAccountId: 1 },
+    });
+    const originalId = created.json().id as number;
+    const reversed = await app.inject({ method: "POST", url: `/api/transactions/${originalId}/reverse`, payload: {} });
+    expect(reversed.statusCode).toBe(201);
+    const reversalId = reversed.json().id as number;
+    expect(new Date(txRow(reversalId).date).getTime()).not.toBe(new Date(txRow(originalId).date).getTime());
+
+    const aligned = await app.inject({ method: "POST", url: `/api/transactions/${reversalId}/align-reversal`, payload: {} });
+    expect(aligned.statusCode).toBe(200);
+    expect(new Date(txRow(reversalId).date).getTime()).toBe(new Date(txRow(originalId).date).getTime());
+    expect(txRow(reversalId).periodId).toBe(11);
+
+    // A reversal of an entry inside closed March stays where it is.
+    const old = state.db.insert(schema.transactions).values({ date: new Date(2026, 2, 10), description: "Old", txType: "simple_expense", status: "reversed", periodId: 10 }).returning().all()[0];
+    const late = state.db.insert(schema.transactions).values({ date: new Date(2026, 9, 10), description: "Reversal: Old", txType: "reversal", status: "posted", periodId: 11, reversalOfTxId: old.id }).returning().all()[0];
+    const refused = await app.inject({ method: "POST", url: `/api/transactions/${late.id}/align-reversal`, payload: {} });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toMatch(/original's period is closed/);
+    expect(await app.inject({ method: "POST", url: `/api/transactions/${originalId}/align-reversal`, payload: {} }).then((r: { statusCode: number }) => r.statusCode)).toBe(409);
+  });
+
+  it("refuses to reverse a workflow-owned entry", async () => {
+    const loan = state.db.insert(schema.transactions).values({
+      date: new Date(2026, 9, 3), description: "Loan to Aufar", txType: "loan_creation", status: "posted", periodId: 11,
+    }).returning().all()[0];
+    state.db.insert(schema.transactionLines).values([
+      { transactionId: loan.id, accountId: 2, debit: 60_500, credit: 0 },
+      { transactionId: loan.id, accountId: 1, debit: 0, credit: 60_500, cashFlowClass: "investing" },
+    ]).run();
+    const batchId = await createBatch();
+    const response = await app.inject({ method: "POST", url: `/api/transaction-batches/${batchId}/post`, payload: { reverseTransactionIds: [loan.id] } });
+    expect(response.statusCode).toBe(409);
+    expect(txRow(loan.id).status).toBe("posted");
   });
 
   it("refuses a posted journal in a batch and a draft import outside draft mode", async () => {

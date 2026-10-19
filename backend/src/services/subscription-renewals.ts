@@ -294,3 +294,60 @@ export async function correctSubscriptionOccurrence(input: {
   });
   return result;
 }
+
+/**
+ * Withdraw a renewal that never charged anything (a lapsed plan, or a duplicate of an entry made by
+ * hand): its journal is reversed on its own date and the occurrence counts as skipped, so the
+ * subscription won't post it again. When a different charge did happen, correct it instead.
+ */
+export async function voidSubscriptionOccurrence(input: {
+  subscriptionId: number;
+  dueAt: number;
+  reason: string;
+}): Promise<{ reversalTransactionId: number }> {
+  if (!Number.isSafeInteger(input.subscriptionId) || input.subscriptionId <= 0) throw new Error("Invalid subscriptionId");
+  if (!Number.isSafeInteger(input.dueAt) || input.dueAt < 0) throw new Error("dueAt must be a valid timestamp");
+  const reason = input.reason.trim();
+  if (!reason || reason.length > 500) throw new Error("reason is required and must be at most 500 characters");
+  const identity = and(
+    eq(recurringOccurrences.jobType, "subscription"),
+    eq(recurringOccurrences.scheduleId, input.subscriptionId),
+    eq(recurringOccurrences.occurrenceDate, new Date(input.dueAt)),
+  );
+  const [occurrence] = await db.select().from(recurringOccurrences).where(identity).limit(1);
+  // Renewals posted before occurrences were recorded carry only their "sub:<id>:<due>" reference.
+  const [legacy] = occurrence ? [] : await db.select({ id: transactions.id }).from(transactions).where(and(
+    eq(transactions.reference, `sub:${input.subscriptionId}:${input.dueAt}`),
+    eq(transactions.txType, "subscription_renewal"),
+    eq(transactions.status, "posted"),
+  )).limit(1);
+  const originalTransactionId = occurrence?.status === "posted" ? occurrence.transactionId : legacy?.id;
+  if (!originalTransactionId) throw new Error("Only a posted subscription occurrence can be voided");
+  const reversal = await prepareDomainReversal(originalTransactionId, reason, db, { atOriginalDate: true });
+  const reversalTransactionId = db.transaction((tx) => {
+    const current = tx.select().from(recurringOccurrences).where(identity).limit(1).all()[0];
+    if (occurrence ? (!current || current.status !== "posted" || current.transactionId !== originalTransactionId) : current) {
+      throw new Error("Subscription occurrence changed; retry voiding it");
+    }
+    const id = insertDomainReversalSync(tx, originalTransactionId, reversal.prepared, reason);
+    const voided = { status: "skipped", transactionId: null, lastError: `Voided: ${reason} (transaction ${originalTransactionId} reversed by ${id})`, updatedAt: new Date() };
+    const row = current
+      ? tx.update(recurringOccurrences).set(voided).where(eq(recurringOccurrences.id, current.id)).returning().all()[0]
+      : tx.insert(recurringOccurrences).values({ jobType: "subscription", scheduleId: input.subscriptionId, occurrenceDate: new Date(input.dueAt), ...voided }).returning().all()[0];
+    tx.insert(auditLogs).values({
+      entityType: "recurring_occurrence",
+      entityId: row.id,
+      action: "void",
+      beforeSnapshot: current ? Buffer.from(JSON.stringify(current)) : null,
+      afterSnapshot: Buffer.from(JSON.stringify({ ...row, reversedTransactionId: originalTransactionId, reversalTransactionId: id, reason })),
+    }).run();
+    return id;
+  });
+  await invalidateOnTransactionMutation({
+    transactionId: reversalTransactionId,
+    affectedAccountIds: reversal.prepared.accountIds,
+    affectedPeriodIds: [reversal.originalPeriodId, reversal.periodId].filter((id): id is number => id != null),
+    revisionBumped: true,
+  });
+  return { reversalTransactionId };
+}

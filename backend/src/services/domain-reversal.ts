@@ -1,8 +1,28 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
-import { auditLogs, transactionCategoryAllocations, transactionLines, transactions } from "../db/schema";
+import { accounts, auditLogs, transactionCategoryAllocations, transactionLines, transactions } from "../db/schema";
 import { insertPreparedJournalEntrySync, prepareJournalEntry, type CategoryAllocationInput, type PreparedJournalEntry } from "./ledger";
 import { findPeriodIdForDate } from "./transaction-mutations";
+
+type CashFlowClass = "operating" | "investing" | "financing" | "transfer" | "recovery";
+
+/**
+ * The cash-flow class each line of a reversal should carry. Entries recorded before cash-flow
+ * classes existed have none on their cash lines, which a new journal requires: they are
+ * classified as the simple builders would, cash to cash as a transfer and anything else as
+ * operating.
+ */
+export async function reversalCashFlowClasses(
+  lines: Array<{ accountId: number; cashFlowClass: string | null }>,
+  dbLike: any,
+): Promise<Array<CashFlowClass | null>> {
+  const rows: Array<{ id: number; liquidityClass: string | null }> = await dbLike.select({ id: accounts.id, liquidityClass: accounts.liquidityClass })
+    .from(accounts).where(inArray(accounts.id, lines.map((line) => line.accountId)));
+  const isCash = new Set(rows.filter((row) => row.liquidityClass === "cash_equivalent").map((row) => row.id));
+  const allCash = lines.every((line) => isCash.has(line.accountId));
+  return lines.map((line) => (line.cashFlowClass as CashFlowClass | null)
+    ?? (isCash.has(line.accountId) ? (allCash ? "transfer" : "operating") : null));
+}
 
 /**
  * A reversal is still a journal, but domain owners must update their own
@@ -14,6 +34,8 @@ export async function prepareDomainReversal(
   originalTransactionId: number,
   reason: string,
   dbLike: any,
+  /** Date the reversal on the original's own date, for an entry that should never have existed. */
+  options: { atOriginalDate?: boolean } = {},
 ): Promise<{ original: typeof transactions.$inferSelect; prepared: PreparedJournalEntry; periodId: number | null; originalPeriodId: number | null }> {
   const [original] = await dbLike.select().from(transactions)
     .where(eq(transactions.id, originalTransactionId)).limit(1);
@@ -31,8 +53,11 @@ export async function prepareDomainReversal(
   }).from(transactionCategoryAllocations)
     .where(eq(transactionCategoryAllocations.transactionId, originalTransactionId));
 
-  const reversalDate = Date.now();
+  const reversalDate = options.atOriginalDate
+    ? (original.date instanceof Date ? original.date.getTime() : Number(original.date))
+    : Date.now();
   const periodId = await findPeriodIdForDate(reversalDate);
+  const classes = await reversalCashFlowClasses(lines, dbLike);
   const prepared = await prepareJournalEntry({
     date: reversalDate,
     description: `Correction reversal: ${original.description}`,
@@ -48,12 +73,12 @@ export async function prepareDomainReversal(
         amount: -allocation.amount,
       })),
     } : {}),
-    lines: lines.map((line: typeof transactionLines.$inferSelect) => ({
+    lines: lines.map((line: typeof transactionLines.$inferSelect, index: number) => ({
       accountId: line.accountId,
       debit: line.credit,
       credit: line.debit,
       description: `Correction reversal of ${line.description ?? original.description}`,
-      cashFlowClass: line.cashFlowClass,
+      cashFlowClass: classes[index],
     })),
   }, dbLike);
   return { original, prepared, periodId, originalPeriodId: original.periodId };

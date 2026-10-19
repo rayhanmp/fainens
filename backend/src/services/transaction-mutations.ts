@@ -11,6 +11,7 @@ import {
   loanPayments,
   loans,
   paylaterInstallments,
+  recurringOccurrences,
   reimbursementClaimSources,
   reimbursementClaims,
   reimbursementReceipts,
@@ -88,10 +89,15 @@ function assertGenericMutationAllowed(tx: any, executor: any): void {
  * Checks for the generic reverse endpoint. Returns the posted child entries (such as a transfer's
  * fee) that must be reversed together with the transaction; refuses anything a workflow owns.
  */
-export function assertGenericReversalAllowed(tx: any, executor: any): { childIds: number[] } {
+export function assertGenericReversalAllowed(tx: any, executor: any, extraTypes: ReadonlySet<string> = new Set()): { childIds: number[] } {
   assertNotReallocated(tx.id, executor);
   const reasons: string[] = [];
-  if (!isGenericallyReversibleType(tx.txType)) reasons.push(`type ${tx.txType}`);
+  if (!isGenericallyReversibleType(tx.txType) && !extraTypes.has(tx.txType)) reasons.push(`type ${tx.txType}`);
+  if (tx.txType === "salary_income") {
+    const occurrence = executor.select({ id: recurringOccurrences.id }).from(recurringOccurrences)
+      .where(eq(recurringOccurrences.transactionId, tx.id)).limit(1).all()[0];
+    if (occurrence) reasons.push(`salary occurrence ${occurrence.id}`);
+  }
   if (tx.subscriptionId != null) reasons.push("subscription occurrence");
   if (tx.reversalOfTxId != null) reasons.push(`reversal of transaction ${tx.reversalOfTxId}`);
   reasons.push(...workflowLinkReasons(tx, executor));
@@ -123,6 +129,18 @@ export function assertGenericReversalAllowed(tx: any, executor: any): { childIds
   }
   return { childIds };
 }
+
+/**
+ * Types a backfill may additionally reverse at their original date: old balance plugs being replaced
+ * by the real history, and a salary entry that no salary occurrence points at.
+ */
+export const HISTORICAL_REVERSAL_TYPES: ReadonlySet<string> = new Set([
+  "reconciliation_expense",
+  "reconciliation_income",
+  "historical_recovery_adjustment",
+  "balance_adjustment",
+  "salary_income",
+]);
 
 /** Workflow records (loans, PayLater, wishlist, reimbursements) that own or reference a transaction. */
 function workflowLinkReasons(tx: { id: number }, executor: any): string[] {
@@ -195,6 +213,57 @@ function workflowLinkReasons(tx: { id: number }, executor: any): string[] {
     .all()[0];
   if (reimbursementReceipt) reasons.push(`reimbursement receipt ${reimbursementReceipt.id}`);
   return reasons;
+}
+
+/**
+ * Move a reversal onto the date of the entry it reverses, so balances in between read as if the
+ * entry had never been made (a mistake reversed weeks later otherwise inflates every month in
+ * between). Only plain reversals: a workflow's reversal dates belong to that workflow. Both the
+ * reversal's current period and the original's must be open.
+ */
+export async function alignReversalWithOriginal(reversalId: number): Promise<{ id: number; date: number; periodId: number | null }> {
+  const [reversal] = await db.select().from(transactions).where(eq(transactions.id, reversalId)).limit(1);
+  if (!reversal) throw new TransactionMutationError("Transaction not found", 404);
+  if (reversal.txType !== "reversal" || reversal.reversalOfTxId == null || reversal.status !== "posted") {
+    throw new TransactionMutationError("Only a posted reversal can be aligned with the entry it reverses", 409);
+  }
+  const [original] = await db.select().from(transactions).where(eq(transactions.id, reversal.reversalOfTxId)).limit(1);
+  if (!original) throw new TransactionMutationError("The reversed entry no longer exists", 409);
+  const from = toMs(reversal.date);
+  const to = toMs(original.date);
+  if (from === to) return { id: reversal.id, date: to, periodId: reversal.periodId };
+  try {
+    await assertJournalPeriodOpen(from, null);
+  } catch (error) {
+    throw new TransactionMutationError(`The reversal's period is closed: ${error instanceof Error ? error.message : error}`, 409);
+  }
+  let periodId: number | null;
+  try {
+    periodId = await assertJournalPeriodOpen(to, null);
+  } catch (error) {
+    throw new TransactionMutationError(`The original's period is closed: ${error instanceof Error ? error.message : error}`, 409);
+  }
+  db.transaction((tx) => {
+    const fresh = tx.select().from(transactions).where(eq(transactions.id, reversal.id)).limit(1).all()[0];
+    if (!fresh || fresh.status !== "posted" || toMs(fresh.date) !== from) throw new TransactionMutationError("Reversal changed; reload it and retry", 409);
+    tx.update(transactions).set({ date: new Date(to), periodId }).where(eq(transactions.id, reversal.id)).run();
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: reversal.id,
+      action: "update",
+      beforeSnapshot: auditSnapshot({ transaction: fresh }),
+      afterSnapshot: auditSnapshot({ transaction: { ...fresh, date: new Date(to), periodId }, reason: `aligned with reversed transaction #${original.id}` }),
+    }).run();
+    bumpFinancialRevisionSync(tx);
+  });
+  const lines = await db.select({ accountId: transactionLines.accountId }).from(transactionLines).where(eq(transactionLines.transactionId, reversal.id));
+  await invalidateOnTransactionMutation({
+    transactionId: reversal.id,
+    affectedAccountIds: [...new Set(lines.map((line) => line.accountId))],
+    affectedPeriodIds: [reversal.periodId, periodId].filter((id): id is number => id != null),
+    revisionBumped: true,
+  });
+  return { id: reversal.id, date: to, periodId };
 }
 
 export interface UpdateTransactionInput {

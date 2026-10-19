@@ -34,7 +34,16 @@ const loanListItemSchema = loanSchema.extend({ contact: z.object({ id: z.number(
 const loanDetailSchema = loanSchema.extend({ contact: z.object({ id: z.number().int(), name: z.string() }).passthrough(), payments: z.array(loanPaymentSchema), isOverdue: z.boolean(), daysOverdue: z.number().int() }).passthrough();
 const loanSummarySchema = z.object({ totalLent: z.number(), totalBorrowed: z.number(), netPosition: z.number(), totalRepaid: z.number(), activeLoansCount: z.number().int(), repaidLoansCount: z.number().int(), defaultedLoansCount: z.number().int() }).passthrough();
 const loanListQuerySchema = z.object({ direction: loanDirectionSchema.optional(), status: z.enum(["active", "repaid", "defaulted", "written_off"]).optional(), contactId: z.string().regex(/^\d+$/).optional(), includeHistory: z.enum(["true", "false"]).optional() });
-const loanCreateBodySchema = z.object({ contactId: z.number().int().positive(), direction: loanDirectionSchema, amountCents: z.number().int().positive(), description: z.string().trim().max(500).optional(), dueDate: z.number().int().positive().nullable().optional(), walletAccountId: z.number().int().positive() }).passthrough();
+const loanCreateBodySchema = z.object({
+  contactId: z.number().int().positive(),
+  direction: loanDirectionSchema,
+  amountCents: z.number().int().positive(),
+  description: z.string().trim().max(500).optional(),
+  dueDate: z.number().int().positive().nullable().optional(),
+  walletAccountId: z.number().int().positive(),
+  /** When the money actually moved, for loans recorded after the fact; defaults to now. */
+  date: z.number().int().positive().optional(),
+}).passthrough();
 const loanPaymentBodySchema = z.object({ amountCents: z.number().int().positive(), paymentDate: z.number().int().positive().optional(), notes: z.string().max(2000).optional(), walletAccountId: z.number().int().positive() }).passthrough();
 const loanReasonBodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).passthrough();
 const loanUpdateBodySchema = z.object({ status: z.enum(["active", "repaid", "defaulted", "written_off"]).optional(), description: z.string().max(500).optional() }).passthrough();
@@ -253,7 +262,13 @@ export default async function (fastify: FastifyInstance) {
         description?: string;
         dueDate?: number | null;
         walletAccountId: number;
+        date?: number;
       };
+      const loanDate = body.date ?? Date.now();
+      if (!Number.isSafeInteger(loanDate) || loanDate > Date.now()) {
+        reply.code(400).send({ error: "date must be a past or current timestamp" });
+        return;
+      }
 
       // Validate required fields
       if (!Number.isSafeInteger(body.contactId) || body.contactId <= 0) {
@@ -303,7 +318,7 @@ export default async function (fastify: FastifyInstance) {
 
       const loanAccountId = body.direction === 'lent' ? loansReceivable.id : loansPayable.id;
       const journalInput = {
-        date: Date.now(),
+        date: loanDate,
         description: body.description || `${body.direction === 'lent' ? 'Loan to' : 'Loan from'} ${contact.name}`,
         txType: 'loan_creation',
         lines: body.direction === 'lent'
@@ -327,7 +342,7 @@ export default async function (fastify: FastifyInstance) {
           direction: body.direction,
           amountCents: body.amountCents,
           remainingCents: body.amountCents,
-          startDate: new Date(),
+          startDate: new Date(loanDate),
           dueDate: body.dueDate ? new Date(body.dueDate) : null,
           status: 'active',
           description: body.description ?? null,

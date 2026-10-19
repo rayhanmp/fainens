@@ -56,6 +56,8 @@ const postBatchBodySchema = z.object({
   transactionIds: z.array(z.number().int().positive()).max(1000).optional(),
   /** Balance adjustments to post in the same commit, at most one per account. */
   settlements: z.array(settlementSchema).max(100).optional(),
+  /** Posted entries this batch replaces; each is reversed on its original date in the same commit. */
+  reverseTransactionIds: z.array(z.number().int().positive()).max(500).optional(),
 }).passthrough();
 const postBatchResponseSchema = z.object({
   posted: z.array(z.number().int()),
@@ -63,6 +65,7 @@ const postBatchResponseSchema = z.object({
   reopenedPeriodIds: z.array(z.number().int()),
   batchStatus: z.string(),
   settlements: z.array(z.object({ accountId: z.number().int(), difference: z.number().int(), transactionId: z.number().int().nullable() }).passthrough()),
+  reversed: z.array(z.object({ id: z.number().int(), reversalId: z.number().int() }).passthrough()),
 }).passthrough();
 const settlementResponseSchema = z.object({
   accounts: z.array(z.object({
@@ -148,8 +151,8 @@ export default async function transactionBatchRoutes(fastify: FastifyInstance) {
     schema: { operationId: "postTransactionBatch", tags: ["transaction-batches"], params: batchIdParamsSchema, body: postBatchBodySchema, response: { 200: postBatchResponseSchema, 400: batchErrorSchema, 404: batchErrorSchema, 409: batchErrorSchema, 500: batchErrorSchema } },
   }, async (request, reply) => {
     try {
-      const { transactionIds, settlements } = request.body as { transactionIds?: number[]; settlements?: BatchSettlementInput[] };
-      return await postBatchDrafts((request.params as { id: number }).id, transactionIds, settlements ?? []);
+      const { transactionIds, settlements, reverseTransactionIds } = request.body as { transactionIds?: number[]; settlements?: BatchSettlementInput[]; reverseTransactionIds?: number[] };
+      return await postBatchDrafts((request.params as { id: number }).id, transactionIds, settlements ?? [], reverseTransactionIds ?? []);
     } catch (err) {
       fastify.log.error(err);
       return reply.code(errorStatus(err)).send({ error: err instanceof Error ? err.message : "Failed to post batch" });
