@@ -108,19 +108,89 @@
 .recap-fact strong { font-weight: 800; }
 .recap-animated-value { font-variant-numeric: tabular-nums; }
 
-/* Cover */
-.recap-chapter-intro .recap-story h2, .recap-chapter-intro h2 { font-size: 11cqw; }
-.recap-chapter-intro h2.recap-title-long { font-size: 9cqw; }
-.recap-cover-word { position: absolute; z-index: -1; left: -8cqw; bottom: -2cqw; font-size: 31cqw; font-weight: 800; letter-spacing: -.07em; line-height: 1; white-space: nowrap; color: transparent; -webkit-text-stroke: 1.2px var(--recap-ink); opacity: .22; pointer-events: none;
-  animation: recap-cover-word-in 1.4s var(--enter) cubic-bezier(.16,1,.3,1) both, recap-drift-x 18s calc(var(--enter) + 1.4s) ease-in-out infinite alternate; }
-.recap-cover-word > span { display: inline-block; }
-.recap-cover-ticket { margin-top: 6cqw; padding: 3.5cqw 4cqw; border-radius: 4cqw; background: color-mix(in srgb, var(--recap-paper) 55%, transparent); border: 1px solid var(--recap-line); backdrop-filter: blur(10px); }
-.recap-cover-ticket-row { display: flex; align-items: baseline; justify-content: space-between; gap: 3cqw; }
-.recap-cover-ticket-row > span { font-size: 2cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .75; }
-.recap-cover-ticket-row > strong { font-size: 3.1cqw; font-weight: 750; }
-.recap-cover-ticket > p { margin-top: 2cqw; font-size: 2.4cqw; font-weight: 600; opacity: .75; }
-.recap-cover-track { position: relative; height: 1.4cqw; margin-top: 3cqw; border-radius: 99px; background: var(--recap-soft); overflow: hidden; }
-.recap-cover-track > i, .recap-flow-track > i, .recap-meter > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--fill) * 100%); border-radius: inherit; background: var(--recap-ink); animation: recap-reveal-x 1.2s cubic-bezier(.16,1,.3,1) both; animation-delay: calc(var(--enter) + 530ms); }
+/* ---------- The cover: a full-bleed object, printed differently each run. ---------- */
+.recap-chapter-intro .recap-story-content { justify-content: stretch; padding: 2cqw 0 0; }
+.recap-chapter-intro .recap-visual { display: flex; flex: 1; min-height: 0; }
+.recap-cover { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.recap-story .recap-cover-headline { font-size: 9.4cqw; line-height: 1; }
+.recap-cover-body { margin-top: 2.6cqw; font-size: 3cqw; line-height: 1.5; opacity: .82; animation: recap-fade .7s calc(var(--enter) + 1s) both; }
+.recap-barcode { position: relative; display: inline-block; flex-shrink: 0; width: 26cqw; height: 8cqw; overflow: hidden;
+  background: repeating-linear-gradient(90deg, currentColor 0 .5cqw, transparent .5cqw .9cqw, currentColor .9cqw 1.1cqw, transparent 1.1cqw 1.6cqw, currentColor 1.6cqw 2.4cqw, transparent 2.4cqw 2.8cqw, currentColor 2.8cqw 3cqw, transparent 3cqw 3.7cqw); }
+.recap-barcode::after { content: ''; position: absolute; top: -10%; bottom: -10%; left: 0; width: 2px; background: #ff2a2a; box-shadow: 0 0 2cqw 1px #ff2a2a; animation: recap-laser 1.1s ease-in-out calc(var(--enter) + 1.3s) 2 alternate both; }
+
+/* Magazine: masthead, issue line, cover lines, a sticker and a barcode. The masthead is the brand,
+   so the small brand line steps aside while it is on screen. */
+.recap-story:has(.recap-arriving .recap-cover-magazine) .recap-story-brand { visibility: hidden; height: 0; margin: 0; }
+.recap-mag-masthead { display: flex; align-items: flex-start; margin: 0 -1.2cqw; font-size: 23.5cqw; font-weight: 800; letter-spacing: -.085em; line-height: .8; }
+.recap-mag-masthead > span { display: inline-block; animation: recap-mast-drop .75s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(var(--enter) + var(--l) * 55ms); }
+.recap-mag-masthead > b { margin: .06em 0 0 .06em; font-size: .3em; animation: recap-badge-in .9s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 420ms) both, recap-turn 10s linear calc(var(--enter) + 1.3s) infinite; }
+.recap-mag-rule { display: flex; justify-content: space-between; gap: 2cqw; margin-top: 2.4cqw; padding: 1.5cqw 0; border-top: 2px solid currentColor; border-bottom: 1px solid var(--recap-line); font-size: 2cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  animation: recap-reveal-x .8s cubic-bezier(.7, 0, .2, 1) calc(var(--enter) + 380ms) both; }
+.recap-mag-bigword { position: absolute; z-index: -1; right: -7cqw; top: 22cqw; writing-mode: vertical-rl; rotate: 180deg; font-size: 40cqw; font-weight: 800; letter-spacing: -.08em; line-height: .8; text-transform: uppercase; color: color-mix(in srgb, var(--recap-ink) 9%, transparent);
+  animation: recap-fade 1.2s calc(var(--enter) + 200ms) both; }
+.recap-mag-middle { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3cqw; min-height: 0; }
+.recap-mag-lines { display: grid; gap: 2.6cqw; }
+.recap-mag-lines li { display: flex; gap: 1.6cqw; font-size: 3.3cqw; font-weight: 750; line-height: 1.2; animation: recap-line-in .6s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 650ms + var(--c) * 120ms); }
+.recap-mag-lines b { color: var(--recap-accent); font-weight: 900; }
+.recap-mag-sticker { display: grid; justify-items: center; align-content: center; width: 30cqw; height: 30cqw; border-radius: 50%; background: #ff5a5f; color: #fff; rotate: 12deg; text-align: center; box-shadow: 0 0 0 1cqw color-mix(in srgb, #ff5a5f 30%, transparent), 0 2cqw 4cqw -2cqw #0008;
+  animation: recap-sticker .8s cubic-bezier(.2, 1.5, .4, 1) calc(var(--enter) + 850ms) both, recap-wobble 3s calc(var(--enter) + 2s) ease-in-out infinite; }
+.recap-mag-sticker strong { font-size: 11cqw; font-weight: 800; letter-spacing: -.06em; line-height: .9; }
+.recap-mag-sticker small { font-size: 2cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.recap-cover-magazine .recap-cover-headline { margin-top: 3cqw; }
+.recap-mag-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 3cqw; margin-top: 2.2cqw; font-size: 2.2cqw; font-weight: 700; animation: recap-fade .6s calc(var(--enter) + 1.1s) both; }
+
+/* Swiss poster: the month set huge down the side, the year outlined, a red circle and a grid. */
+.recap-poster-grid { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.recap-poster-grid > i { position: absolute; top: 0; bottom: 0; left: calc(var(--g) * 20%); width: 1px; background: var(--recap-line); transform-origin: top; animation: recap-draw-y .9s cubic-bezier(.7, 0, .2, 1) both; animation-delay: calc(var(--enter) + var(--g) * 70ms); }
+.recap-poster-month { position: absolute; left: -2cqw; top: 0; bottom: 34cqw; display: flex; align-items: center; writing-mode: vertical-rl; rotate: 180deg; font-size: min(30cqw, calc(150cqw / var(--n))); font-weight: 800; letter-spacing: -.05em; line-height: .78; text-transform: uppercase; }
+.recap-poster-month > span { display: inline-block; animation: recap-poster-letter .8s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + var(--l) * 60ms); }
+.recap-poster-year { position: absolute; right: -1cqw; top: 0; font-size: 19cqw; font-weight: 800; letter-spacing: -.06em; line-height: .85; color: transparent; -webkit-text-stroke: 1.5px var(--recap-ink); animation: recap-mast-drop .9s cubic-bezier(.3, 1.4, .5, 1) calc(var(--enter) + 300ms) both; }
+.recap-poster-dot { position: absolute; right: 7cqw; top: 26cqw; width: 30cqw; height: 30cqw; border-radius: 50%; background: #ff5a5f; animation: recap-ring-in .9s cubic-bezier(.2, 1.5, .4, 1) calc(var(--enter) + 550ms) both, recap-pulse 3.2s calc(var(--enter) + 1.6s) ease-in-out infinite; }
+.recap-poster-meta { position: absolute; right: 0; top: 62cqw; display: grid; gap: 1.2cqw; text-align: right; font-size: 2.3cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; animation: recap-fade .6s calc(var(--enter) + 900ms) both; }
+.recap-poster-copy { margin-top: auto; margin-left: 30cqw; }
+.recap-poster-copy .recap-cover-headline { font-size: 8.2cqw; }
+.recap-poster-copy p { margin-top: 2cqw; font-size: 2.8cqw; line-height: 1.5; opacity: .82; animation: recap-fade .7s calc(var(--enter) + 1s) both; }
+
+/* Vinyl: the sleeve lands, the record slides out and spins. */
+.recap-vinyl-stage { position: relative; height: 64cqw; margin-top: 2cqw; flex-shrink: 0; }
+.recap-vinyl-sleeve { position: absolute; z-index: 1; left: 0; top: 0; width: 62cqw; height: 62cqw; padding: 4cqw; overflow: hidden; border-radius: 1.4cqw; background: radial-gradient(circle at 80% 15%, color-mix(in srgb, var(--recap-accent) 55%, transparent), transparent 55%), var(--recap-ink); color: var(--recap-paper); box-shadow: 0 3cqw 6cqw -2cqw #0008;
+  animation: recap-sleeve-in .9s cubic-bezier(.2, 1.2, .35, 1) var(--enter) both; }
+.recap-sleeve-art { position: absolute; left: -2cqw; bottom: -5cqw; font-size: 24cqw; font-weight: 800; letter-spacing: -.08em; line-height: .8; text-transform: uppercase; white-space: nowrap; }
+.recap-sleeve-artist { position: relative; font-size: 2.4cqw; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+.recap-advisory { position: absolute; right: 3cqw; top: 3cqw; display: grid; padding: .6cqw 1.4cqw; border: .5cqw solid #fff; background: #000; color: #fff; text-align: center; text-transform: uppercase; line-height: 1.05; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.3s) both; }
+.recap-advisory b { font-size: 1.7cqw; font-weight: 800; letter-spacing: .06em; }
+.recap-advisory small { font-size: 2.5cqw; font-weight: 900; }
+.recap-vinyl-disc { position: absolute; left: 2cqw; top: 2cqw; width: 58cqw; height: 58cqw; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, transparent 0 30%, #0000 30%), repeating-radial-gradient(circle, #121212 0 .55cqw, #262626 .55cqw .85cqw); box-shadow: 0 2cqw 4cqw -1cqw #0009;
+  animation: recap-disc-out 1s cubic-bezier(.3, 1.1, .4, 1) calc(var(--enter) + 550ms) both, recap-turn 2.2s linear calc(var(--enter) + 1.5s) infinite; }
+.recap-vinyl-disc::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 20deg, transparent 0 15%, #ffffff22 20%, transparent 26% 65%, #ffffff18 70%, transparent 76%); }
+.recap-vinyl-label { display: grid; justify-items: center; align-content: center; width: 20cqw; height: 20cqw; border-radius: 50%; background: #ff5a5f; color: #fff; text-align: center; }
+.recap-vinyl-label b { font-size: 6cqw; line-height: 1; }
+.recap-vinyl-label small { max-width: 16cqw; overflow: hidden; font-size: 1.7cqw; font-weight: 800; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.recap-vinyl-kicker { margin-top: 2cqw; font-size: 2.2cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .75; animation: recap-fade .6s calc(var(--enter) + 900ms) both; }
+.recap-cover-vinyl .recap-cover-headline { margin-top: 2cqw; }
+
+/* Boarding pass: from the first day to the last, with a plane on the route and a stamp. */
+.recap-cover-boarding { justify-content: center; }
+.recap-cover-boarding .recap-cover-headline { margin-bottom: 4cqw; }
+.recap-pass { position: relative; overflow: hidden; border-radius: 4cqw; background: #fbfaf5; color: #1d211c; rotate: -2deg; box-shadow: 0 3cqw 6cqw -3cqw #0007; animation: recap-pass-in .9s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 300ms) both; }
+.recap-pass-head { display: flex; justify-content: space-between; padding: 2.8cqw 4cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.3cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.recap-pass-route { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3cqw; padding: 4cqw 4cqw 3cqw; }
+.recap-pass-route small, .recap-pass-grid small { display: block; font-size: 1.9cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .55; }
+.recap-pass-route strong { font-size: 7.2cqw; font-weight: 800; letter-spacing: -.04em; white-space: nowrap; }
+.recap-pass-route > div:last-child { text-align: right; }
+.recap-pass-path { position: relative; height: 2px; background: repeating-linear-gradient(90deg, #1d211c66 0 1.2cqw, transparent 1.2cqw 2.2cqw); }
+.recap-plane { position: absolute; top: 50%; left: 0; translate: -50% -50%; display: grid; color: #1d211c; animation: recap-fly 1.6s cubic-bezier(.5, 0, .3, 1) calc(var(--enter) + 700ms) both; }
+.recap-plane svg { width: 6cqw; height: 6cqw; rotate: 45deg; fill: currentColor; }
+.recap-pass-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2cqw; padding: 0 4cqw 3.6cqw; }
+.recap-pass-grid b { display: block; margin-top: .6cqw; overflow: hidden; font-size: 3.6cqw; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.recap-pass-stub { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 3cqw; padding: 3.4cqw 4cqw; border-top: .5cqw dashed #1d211c44; font-size: 2.2cqw; font-weight: 700; }
+.recap-pass-stub::before, .recap-pass-stub::after { content: ''; position: absolute; top: -2.8cqw; width: 5cqw; height: 5cqw; border-radius: 50%; background: var(--recap-paper); }
+.recap-pass-stub::before { left: -2.5cqw; }
+.recap-pass-stub::after { right: -2.5cqw; }
+.recap-pass-stamp { position: absolute; right: 4cqw; bottom: 13cqw; padding: 1.2cqw 2.6cqw; border: .7cqw solid #e0393e; border-radius: 2cqw; color: #e0393e; font-size: 4cqw; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; rotate: -14deg; opacity: .88; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.5s) both; }
+.recap-cover-boarding .recap-cover-body { margin-top: 4cqw; }
+
+.recap-flow-track > i, .recap-meter > i { position: absolute; inset: 0 auto 0 0; width: calc(var(--fill) * 100%); border-radius: inherit; background: var(--recap-ink); animation: recap-reveal-x 1.2s cubic-bezier(.16,1,.3,1) both; animation-delay: calc(var(--enter) + 530ms); }
 
 /* Money in, money out */
 .recap-flow { display: grid; gap: 3.5cqw; margin-top: 5cqw; }
@@ -377,16 +447,6 @@
 .recap-particle-sparkle { font-size: calc(2.6cqw * var(--size)); animation-duration: 1.4s; }
 .recap-particle-coins { display: grid; place-items: center; width: calc(4.6cqw * var(--size)); height: calc(4.6cqw * var(--size)); background: radial-gradient(circle at 35% 30%, #fff1a8, #f2b705 58%, #a87400); color: #6b4a00; font-size: calc(1.5cqw * var(--size)); font-weight: 800; box-shadow: inset 0 0 0 .4cqw #0000001a; }
 
-/* Cover takes. Stamp: the ticket slams down and the headline flinches. Rain: the month's letters fall
-   one by one. Typewriter: the headline is typed out behind a blinking caret. */
-.recap-chapter-intro .recap-ticket-stamp { animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 700ms) both; }
-.recap-chapter-intro .recap-arriving.recap-intro-stamp h2 { animation: recap-shake .4s calc(var(--enter) + 1.05s) both; }
-.recap-cover-word-rain { animation: none; opacity: .26; }
-.recap-cover-word-rain > span { animation: recap-letter-drop .95s cubic-bezier(.3, 1.45, .5, 1) both; animation-delay: calc(var(--enter) + 250ms + var(--l) * 75ms); }
-.recap-cover-word-rain > span:nth-child(odd) { --tilt: -18deg; }
-.recap-cover-word-rain > span:nth-child(even) { --tilt: 14deg; }
-.recap-chapter-intro .recap-arriving.recap-intro-typewriter .recap-word-mask > span { animation: recap-type .01s both; animation-delay: calc(var(--enter) + var(--letter) * 42ms); }
-.recap-chapter-intro .recap-arriving.recap-intro-typewriter .recap-title-line:last-child::after { content: ''; display: inline-block; width: .07em; height: .85em; margin-left: .04em; vertical-align: -.05em; background: currentColor; animation: recap-caret .9s steps(1) infinite; }
 
 /* Your week */
 .recap-stat-word { text-transform: none; }
@@ -477,7 +537,8 @@
 
 /* Tilt: depth layers drift against the pointer or the phone. */
 .recap-backdrop { transform: translate3d(calc(var(--px, 0) * -4cqw), calc(var(--py, 0) * -4cqw), 0); transition: transform .35s ease-out; }
-.recap-cover-word { transform: translate3d(calc(var(--px, 0) * 7cqw), calc(var(--py, 0) * 3cqw), 0); transition: transform .3s ease-out; }
+.recap-mag-bigword, .recap-poster-month, .recap-poster-dot { transform: translate3d(calc(var(--px, 0) * 6cqw), calc(var(--py, 0) * 3cqw), 0); transition: transform .3s ease-out; }
+.recap-vinyl-stage, .recap-pass, .recap-mag-sticker { transform: translate3d(calc(var(--px, 0) * -2cqw), calc(var(--py, 0) * -1.5cqw), 0); transition: transform .3s ease-out; }
 .recap-big-stat, .recap-persona-badge, .recap-cassette, .recap-receipt-stage { transform: translate3d(calc(var(--px, 0) * 1.6cqw), calc(var(--py, 0) * 1.2cqw), 0); transition: transform .3s ease-out; }
 
 /* ---------- Mini-games ---------- */
@@ -665,9 +726,6 @@
   100% { opacity: 0; transform: translate(calc(var(--x) * 1.3), calc(var(--y) + var(--fall))) rotate(var(--spin)) scale(.85); } }
 @keyframes recap-stamp { 0% { opacity: 0; scale: 2.6; rotate: -14deg; } 60% { opacity: 1; scale: .94; } 100% { opacity: 1; scale: 1; } }
 @keyframes recap-shake { 0%, 100% { translate: 0 0; } 20% { translate: -1.2cqw .4cqw; } 40% { translate: 1cqw -.4cqw; } 60% { translate: -.6cqw 0; } 80% { translate: .4cqw 0; } }
-@keyframes recap-letter-drop { from { opacity: 0; translate: 0 -150cqw; rotate: var(--tilt, 0deg); } }
-@keyframes recap-type { from { opacity: 0; } }
-@keyframes recap-caret { 50% { opacity: 0; } }
 @keyframes recap-assemble { from { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--dr)) scale(.3); } }
 @keyframes recap-stack { 0% { opacity: 0; translate: 0 -30cqw; } 60% { opacity: 1; translate: 0 1cqw; } 100% { translate: 0 0; } }
 @keyframes recap-icon-pop { from { scale: 0; rotate: -120deg; } }
@@ -690,8 +748,16 @@
 @keyframes recap-pop { from { opacity: 0; scale: .4; } }
 @keyframes recap-ping { 0% { opacity: .9; scale: 1; } 80%, 100% { opacity: 0; scale: 1.7; } }
 @keyframes recap-unroll { from { clip-path: inset(0 0 100% 0); translate: 0 -3cqw; } to { clip-path: inset(0 0 -3cqw 0); translate: 0 0; } }
-@keyframes recap-cover-word-in { from { opacity: 0; translate: 0 12cqw; } }
-@keyframes recap-drift-x { from { translate: 0 0; } to { translate: -14cqw 0; } }
+@keyframes recap-mast-drop { from { opacity: 0; translate: 0 -70%; } }
+@keyframes recap-line-in { from { opacity: 0; translate: -8cqw 0; } }
+@keyframes recap-sticker { from { opacity: 0; scale: 0; rotate: -200deg; } }
+@keyframes recap-laser { from { left: 0; } to { left: calc(100% - 2px); } }
+@keyframes recap-draw-y { from { scale: 1 0; } }
+@keyframes recap-poster-letter { from { opacity: 0; translate: -30cqw 0; } }
+@keyframes recap-sleeve-in { from { opacity: 0; translate: -50cqw 0; rotate: -14deg; } }
+@keyframes recap-disc-out { from { translate: 0 0; } to { translate: 30cqw 0; } }
+@keyframes recap-pass-in { from { opacity: 0; translate: 0 60cqw; } }
+@keyframes recap-fly { from { left: 0; } to { left: 100%; } }
 @keyframes recap-contour-unfold { from { opacity: 0; scale: .8; rotate: -12deg; } to { opacity: 1; scale: 1; rotate: 0deg; } }
 @keyframes recap-breathe { from { scale: 1; } to { scale: 1.035; } }
 @keyframes recap-breathe-text { to { opacity: .45; } }
@@ -711,8 +777,9 @@
   .dashboard-recap *, .recap-experience *, .recap-share-dialog, .recap-share-dialog * { animation: none !important; transition: none !important; }
   .recap-story { transition: none; }
   .recap-wipe, .recap-opening, .recap-burst, .recap-leaving, .recap-printer, .recap-party { display: none; }
-  .recap-backdrop, .recap-cover-word, .recap-big-stat, .recap-persona-badge, .recap-cassette, .recap-receipt-stage { transform: none; }
-  .recap-chapter-intro .recap-arriving.recap-intro-typewriter .recap-title-line:last-child::after { display: none; }
+  .recap-backdrop, .recap-big-stat, .recap-persona-badge, .recap-cassette, .recap-receipt-stage,
+  .recap-mag-bigword, .recap-poster-month, .recap-poster-dot, .recap-vinyl-stage, .recap-pass, .recap-mag-sticker { transform: none; }
+  .recap-vinyl-disc { translate: 30cqw 0; }
   .recap-progress button.is-active::after { opacity: .85; }
   .recap-progress-fill { display: none; }
 }

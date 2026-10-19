@@ -43,6 +43,11 @@ export type Play =
   | { kind: 'gift'; prompt: string }
   | { kind: 'piggy'; prompt: string };
 export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido';
+/** What the cover prints: the issue, the dates, and teasers for this run's chapters. */
+export type CoverFacts = {
+  issue: number; year: string; startLabel: string; endLabel: string; teasers: string[]; chapterCount: number;
+  purchaseCount: number; keptShare: number | null; passenger: string; seat: string;
+};
 export type PersonaKey = 'weekend' | 'bigTicket' | 'steady' | 'monk' | 'loyal' | 'devotee' | 'explorer' | 'allRounder';
 export type Persona = { key: PersonaKey; name: string; tagline: string; evidence: string[]; dash: string | null };
 export type MixtapeTrack = { title: string; artist: string; length: string; share: number };
@@ -52,7 +57,7 @@ type Copy = { eyebrow: string; title: string; body: string };
 // and its own autoplay length.
 type Extras = { play?: Play; equivalence?: string; ask: string; duration?: number };
 export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
-  | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number; monthWord: string }
+  | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number; monthWord: string; cover: CoverFacts }
   | { id: 'overview'; lead: 'left' | 'ratio'; income: number; expenses: number; net: number; keptShare: number | null; spentPer100: number | null; reveal: 'scratch' | 'piggy' | 'none' }
   | { id: 'interlude'; variant: InterludeVariant; words: string[]; orbit: CategoryShare[]; value: number; share: number | null; slot: number }
   | { id: 'budget'; planned: number; spent: number; remaining: number; percentUsed: number | null; elapsedShare: number | null; over: Array<{ name: string; over: number }>; unbudgeted: number }
@@ -281,7 +286,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   }
 
   const chapters: ChapterData[] = [
-    { id: 'intro', dateRange: periodDateRange(recap.period), isPartial: recap.isPartial, elapsedDays, totalDays, monthWord: recap.period.name.split(' ')[0] },
+    { id: 'intro', dateRange: periodDateRange(recap.period), isPartial: recap.isPartial, elapsedDays, totalDays, monthWord: recap.period.name.split(' ')[0],
+      cover: { issue: recap.period.id, year: String(recapDay(recap.period.endDate).getUTCFullYear()), startLabel: formatRecapDay(recap.period.startDate, { day: 'numeric', month: 'short' }),
+        endLabel: formatRecapDay(recap.period.endDate, { day: 'numeric', month: 'short' }), teasers: [], chapterCount: 0, purchaseCount: recap.purchaseCount, keptShare,
+        passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 14), seat: `${(seed % 30) + 1}${'ABCDEF'[seed % 6]}` } },
     { id: 'overview', lead: leads.overview, income: recap.income, expenses: recap.expenses, net: recap.net, keptShare, spentPer100, reveal: leads.overview === 'left' && recap.net > 0 ? 'scratch' : 'none' },
     ...(budget ? [{ id: 'budget' as const, planned: budget.planned, spent: budget.spent, remaining: budget.remaining, percentUsed: budget.percentUsed,
       elapsedShare: facts.elapsedShare, over: budget.overBudgetCategories.map(row => ({ name: row.name, over: row.over })), unbudgeted: budget.unbudgetedExpenses }] : []),
@@ -361,7 +369,19 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     .replace(/\b(this|the|your) period\b/gi, (_, word: string) => `${word} year`)
     .replace(/\bnext period\b/gi, 'next year').replace(/\bper period\b/gi, 'per year')
     .replace(/\bsalary to salary\b/gi, 'month to month');
+  // The cover's teasers advertise what this run actually holds, games included.
+  const teaserFor: Partial<Record<RecapStoryId, string>> = {
+    budget: 'The plan vs. reality', categories: 'Where the money really went', calendar: 'The day that turned up the volume',
+    weekdays: 'Which weekday ran the show?', streak: 'The longest streak, revealed', receipts: 'The receipts that stole the show',
+    habits: 'How you really buy', comparison: 'Then vs. now', persona: 'Your money personality, unmasked',
+    mixtape: 'Side A of your period mixtape', months: 'Every month, ranked',
+  };
+  const gameTeaser: Record<Play['kind'], string> = { quiz: 'a pop quiz', slider: 'a guessing game', reels: 'a jackpot round', hold: 'a drumroll', gift: 'a surprise gift', piggy: 'a piggy bank to smash' };
+  const games = [...dealt.values()].map(item => gameTeaser[item.kind]);
+  const teasers = [...shuffled(chapters.map(chapter => teaserFor[chapter.id]).filter((line): line is string => Boolean(line))).slice(0, 3),
+    ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   return chapters.map((chapter, i) => {
+    if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
     const raw = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : undefined);
     const copy = { eyebrow: forYear(raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
     const equivalence = equivalences[chapter.id];

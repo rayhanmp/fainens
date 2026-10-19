@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Coffee, Compass, Crown, Download, Gem, Leaf, PartyPopper, Repeat2, Shapes, type LucideIcon } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Coffee, Compass, Crown, Download, Gem, Leaf, PartyPopper, Plane, Repeat2, Shapes, type LucideIcon } from 'lucide-react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { ScratchCover } from './Interactive';
 import { CategoryIcon } from '../categories/CategoryIcon';
@@ -43,20 +43,71 @@ export function ChapterVisual({ story, periodId, onShare, variants, run, score }
   }
 }
 
+/** A headline whose words rise in one after another, from `start`. */
+function Words({ text, start = 0 }: { text: string; start?: number }) {
+  return text.split(/\s+/).map((word, i) => <Fragment key={i}><span className="recap-word-mask"><span style={{ '--word': start + i } as CSSProperties}>{word}</span></span>{' '}</Fragment>);
+}
+const letters = (word: string) => [...word].map((letter, i) => <span key={i} style={{ '--l': i } as CSSProperties}>{letter}</span>);
+
+/** The cover owns the whole card, and each run prints it as a different object. */
 function CoverVisual({ story, variants, run }: { story: Of<'intro'> } & Shared) {
-  const progress = story.isPartial ? story.elapsedDays / story.totalDays : 1;
-  return <>
-    {/* The month, set huge behind the cover; in the rain take its letters fall in one by one. */}
-    <span className={`recap-cover-word recap-cover-word-${variants.intro}`} aria-hidden="true">
-      {[...story.monthWord].map((letter, i) => <span key={i} style={{ '--l': i } as CSSProperties}>{letter}</span>)}
-    </span>
-    <Burst seed={run} kind="sparkle" count={16} origin="title" delay={variants.intro === 'typewriter' ? 1100 : 650} />
-    <div className={`recap-cover-ticket recap-seq recap-ticket-${variants.intro}`} style={seq(4)}>
-      <div className="recap-cover-ticket-row"><span>{story.isPartial ? 'In progress' : 'Complete'}</span><strong>{story.dateRange}</strong></div>
-      <div className="recap-cover-track" aria-hidden="true"><i style={{ '--fill': progress } as CSSProperties} /></div>
-      <p>{story.isPartial ? `Day ${story.elapsedDays} of ${story.totalDays}` : `${story.totalDays} days, start to finish`}</p>
-    </div>
-  </>;
+  const { cover } = story;
+  // In a year in review the month word is the year itself, so the second line says what it is.
+  const second = story.monthWord === cover.year ? 'Year' : cover.year;
+  const headline = <h2 className="recap-cover-headline" aria-label={story.title}><Words text={story.title} start={3} /></h2>;
+  switch (variants.intro) {
+    case 'magazine': return <div className="recap-cover recap-cover-magazine">
+      <span className="recap-mag-bigword" aria-hidden="true">{story.monthWord}</span>
+      <div className="recap-mag-masthead" aria-hidden="true">{letters('fainens')}<b>✳</b></div>
+      <div className="recap-mag-rule"><span>Issue Nº {cover.issue}</span><span>{story.isPartial ? 'Live edition' : 'Collector’s edition'}</span><span>Rp0</span></div>
+      <div className="recap-mag-middle">
+        <ul className="recap-mag-lines">{cover.teasers.map((line, i) => <li key={line} style={{ '--c': i } as CSSProperties}><b>+</b>{line}</li>)}</ul>
+        <div className="recap-mag-sticker"><small>Inside</small><strong>{cover.purchaseCount}</strong><small>receipts</small></div>
+      </div>
+      <Burst seed={run} kind="sparkle" count={14} origin="title" delay={1200} />
+      {headline}
+      <div className="recap-mag-foot"><span className="recap-barcode" aria-hidden="true" /><span>{story.dateRange}</span></div>
+    </div>;
+    case 'poster': return <div className="recap-cover recap-cover-poster">
+      <div className="recap-poster-grid" aria-hidden="true">{[0, 1, 2, 3, 4, 5].map(i => <i key={i} style={{ '--g': i } as CSSProperties} />)}</div>
+      <span className="recap-poster-month" style={{ '--n': story.monthWord.length } as CSSProperties} aria-hidden="true">{letters(story.monthWord)}</span>
+      <span className="recap-poster-year" aria-hidden="true">{second}</span>
+      <span className="recap-poster-dot" aria-hidden="true" />
+      <div className="recap-poster-meta"><span>{cover.startLabel} — {cover.endLabel}</span><span>Nº {cover.issue}</span><span>{cover.chapterCount} chapters</span></div>
+      <div className="recap-poster-copy">{headline}<p>{story.body}</p></div>
+    </div>;
+    case 'vinyl': return <div className="recap-cover recap-cover-vinyl">
+      <div className="recap-vinyl-stage" aria-hidden="true">
+        <div className="recap-vinyl-disc"><span className="recap-vinyl-label"><b>✳</b><small>{story.monthWord}</small></span></div>
+        <div className="recap-vinyl-sleeve">
+          <span className="recap-sleeve-art">{story.monthWord}</span>
+          <span className="recap-sleeve-artist">fainens ✳ {second}</span>
+          <span className="recap-advisory"><b>Parental advisory</b><small>Explicit receipts</small></span>
+        </div>
+      </div>
+      <p className="recap-vinyl-kicker">{story.isPartial ? 'Out now · still recording' : 'Out now'} · Deluxe edition · {cover.chapterCount} tracks</p>
+      {headline}
+      <p className="recap-cover-body">{story.body}</p>
+    </div>;
+    case 'boarding': return <div className="recap-cover recap-cover-boarding">
+      {headline}
+      <div className="recap-pass">
+        <div className="recap-pass-head"><span>✳ Fainens Air</span><span>Boarding pass</span></div>
+        <div className="recap-pass-route">
+          <div><small>From</small><strong>{cover.startLabel}</strong></div>
+          <div className="recap-pass-path" aria-hidden="true"><i className="recap-plane"><Plane /></i></div>
+          <div><small>To</small><strong>{cover.endLabel}</strong></div>
+        </div>
+        <div className="recap-pass-grid">
+          <div><small>Passenger</small><b>{cover.passenger}</b></div><div><small>Flight</small><b>FN {cover.issue}</b></div>
+          <div><small>Seat</small><b>{cover.seat}</b></div><div><small>Gate</small><b>✳</b></div>
+        </div>
+        <div className="recap-pass-stub"><span className="recap-barcode" aria-hidden="true" /><span>{cover.chapterCount} stops · {cover.purchaseCount} receipts</span></div>
+        <span className="recap-pass-stamp" aria-hidden="true">{story.isPartial ? 'In flight' : 'Landed'}</span>
+      </div>
+      <p className="recap-cover-body">{story.body}</p>
+    </div>;
+  }
 }
 
 function FlowVisual({ story, run }: { story: Of<'overview'>; run: number }) {

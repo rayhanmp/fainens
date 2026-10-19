@@ -345,17 +345,19 @@ function ChapterContent({ story, className, style, live = false, gate = false, a
       <PlayGate play={story.play} eyebrow={story.eyebrow} seed={run} onDone={result => onAnswer?.(result)} />
     </div>;
   }
-  // Each word knows how many letters came before it, so the typewriter take types at a steady pace.
-  const lines = story.title.split('\n').map((line, lineIndex, all) => {
-    const before = all.slice(0, lineIndex).join(' ').length + (lineIndex ? 1 : 0);
-    return line.split(' ').map((word, i, words) => ({ word, letter: before + words.slice(0, i).join(' ').length + (i ? 1 : 0) }));
-  });
+  const lines = story.title.split('\n').map(line => line.split(' '));
+  // The cover is a full-bleed design that sets its own headline.
+  if (story.id === 'intro') {
+    return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
+      <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} score={score} /></div>
+    </div>;
+  }
   return <div className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
     {answer?.verdict && <GameVerdict verdict={answer.verdict} />}
     <p className="recap-story-eyebrow">{story.eyebrow}</p>
     <h2 className={story.title.length > 40 ? 'recap-title-long' : undefined} aria-label={story.title}>
-      {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map(({ word, letter }, i) =>
-        <Fragment key={i}><span className="recap-word-mask"><span style={{ '--word': Math.min(14, lineIndex * 5 + i), '--letter': letter } as CSSProperties}>{word}</span></span>{' '}</Fragment>)}</span>)}
+      {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map((word, i) =>
+        <Fragment key={i}><span className="recap-word-mask"><span style={{ '--word': Math.min(14, lineIndex * 5 + i) } as CSSProperties}>{word}</span></span>{' '}</Fragment>)}</span>)}
     </h2>
     <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} score={score} /></div>
     <p className="recap-story-body">{story.body}</p>
@@ -364,7 +366,12 @@ function ChapterContent({ story, className, style, live = false, gate = false, a
 
 /** Sounds timed to a chapter's choreography: slot-machine ticks, stamps landing, the finale. */
 function arrivalSounds(story: RecapStory, enter: number, variants: SectionVariants) {
-  if (story.id === 'intro') { play('pop', enter + 650); if (variants.intro === 'stamp') play('thunk', enter + 950); if (variants.intro === 'typewriter') playTicks(18, 1300, enter); }
+  if (story.id === 'intro') {
+    if (variants.intro === 'magazine') { playTicks(7, 700, enter); play('pop', enter + 900); }
+    if (variants.intro === 'poster') { play('thunk', enter + 650); play('pop', enter + 1100); }
+    if (variants.intro === 'vinyl') { play('thunk', enter + 400); play('scratch', enter + 1100); play('scratch', enter + 1250); }
+    if (variants.intro === 'boarding') { play('whoosh', enter + 700); play('thunk', enter + 1500); }
+  }
   if (story.id === 'overview') playTicks(16, 1500, enter + 380);
   if (story.id === 'habits' && story.repeat) play('thunk', enter + 1000);
   if (story.id === 'calendar' && story.peak) play('pop', enter + 1500);

@@ -33,7 +33,7 @@ export const OPENINGS = ['split', 'zoom', 'shutter', 'spin'] as const;
 export type Opening = typeof OPENINGS[number];
 
 const sectionVariants = {
-  intro: ['stamp', 'rain', 'typewriter'],
+  intro: ['magazine', 'poster', 'vinyl', 'boarding'],
   categories: ['assemble', 'stack', 'grow'],
   calendar: ['ripple', 'diagonal', 'scatter', 'sweep'],
   receipts: ['print', 'toss', 'unroll'],
