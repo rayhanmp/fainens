@@ -4,33 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
+import { monthlyIncomeSeries, payCycle, takeHomeBreakdown } from '../features/salary/income-insights';
+import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard } from '../features/salary/SalaryCards';
 import { queryKeys } from '../features/core/query-keys';
-import { cn, formatDate, formatDayMonth } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { PageContainer } from '../components/ui/PageContainer';
 import { SalaryProfileModal } from '../components/salary/SalaryProfileModal';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
-import {
-  Download,
-  Plus,
-  TrendingUp,
-  Calendar,
-  Landmark,
-  Gift,
-  Banknote,
-  Info,
-  MoreVertical,
-} from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
+import { Calendar, ChevronRight, Download, MoreHorizontal, Plus } from 'lucide-react';
 
 export const Route = createFileRoute('/salary-income')({
   component: SalaryIncomePage,
@@ -44,54 +27,13 @@ interface TxRow {
   incomeCents: number;
 }
 
-function txAmount(tx: TxRow): number {
-  return Math.max(0, tx.incomeCents);
-}
-
-function isIncomeTx(tx: TxRow): boolean {
-  return tx.incomeCents > 0;
-}
-
-function monthKey(ts: number) {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthLabel(key: string) {
-  const [y, m] = key.split('-').map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-}
-
-function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-}
-
-function daysUntilPayday(payDay = 25) {
-  const now = new Date();
-  const today = now.getDate();
-  const d = Math.min(Math.max(1, payDay), 31);
-  
-  if (today === d) {
-    return { days: 0, date: new Date(now.getFullYear(), now.getMonth(), d, 0, 1, 0, 0) };
-  }
-  
-  let target = new Date(now.getFullYear(), now.getMonth(), d, 0, 1, 0, 0);
-  if (today > d) {
-    target = new Date(now.getFullYear(), now.getMonth() + 1, d, 0, 1, 0, 0);
-  }
-  const ms = target.getTime() - now.getTime();
-  const days = Math.max(0, Math.ceil(ms / 86400000));
-  return { days, date: target };
-}
-
 function downloadIncomeCsv(rows: TxRow[]) {
   const header = 'Date,Description,Amount (IDR)\n';
   const body = rows
     .map((tx) => {
-      const a = txAmount(tx);
       const d = new Date(tx.date).toISOString().slice(0, 10);
       const desc = tx.description.replace(/"/g, '""');
-      return `${d},"${desc}",${a}`;
+      return `${d},"${desc}",${Math.max(0, tx.incomeCents)}`;
     })
     .join('\n');
   const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
@@ -105,6 +47,8 @@ function downloadIncomeCsv(rows: TxRow[]) {
 
 type Account = { id: number; name: string; type: string };
 
+const menuItem = 'flex min-h-10 w-full cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 text-left text-sm font-medium text-[var(--ref-on-surface)] outline-none hover:bg-[var(--ref-surface-container-low)] focus-visible:bg-[var(--ref-surface-container-low)]';
+
 function SalaryIncomePage() {
   const { formatAmount } = useBalanceVisibility();
   const navigate = useNavigate();
@@ -117,6 +61,7 @@ function SalaryIncomePage() {
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
   const salary = salaryQuery.data ?? null;
   const accounts = (incomeQuery.data?.accounts ?? []) as Account[];
   const transactions = (incomeQuery.data?.transactions ?? []) as TxRow[];
@@ -128,71 +73,60 @@ function SalaryIncomePage() {
     const close = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', escape);
+    };
   }, [menuOpen]);
 
   const incomeTxs = useMemo(
-    () => transactions.filter(isIncomeTx).sort((a, b) => b.date - a.date),
+    () => transactions.filter((tx) => tx.incomeCents > 0).sort((a, b) => b.date - a.date),
     [transactions],
   );
-
-  const now = new Date();
-  const thisMonthStart = startOfMonth(now);
-  const lastMonthStart = startOfMonth(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-
-  const thisMonthIncome = useMemo(() => {
-    return incomeTxs.filter((tx) => tx.date >= thisMonthStart).reduce((s, tx) => s + txAmount(tx), 0);
-  }, [incomeTxs, thisMonthStart]);
-
-  const lastMonthIncome = useMemo(() => {
-    return incomeTxs
-      .filter((tx) => tx.date >= lastMonthStart && tx.date < thisMonthStart)
-      .reduce((s, tx) => s + txAmount(tx), 0);
-  }, [incomeTxs, lastMonthStart, thisMonthStart]);
-
-  const momPct = useMemo(() => {
-    if (lastMonthIncome <= 0) return thisMonthIncome > 0 ? 100 : 0;
-    return ((thisMonthIncome - lastMonthIncome) / lastMonthIncome) * 100;
-  }, [thisMonthIncome, lastMonthIncome]);
-
-  const last6Months = useMemo(() => {
-    const today = new Date();
-    const keys: string[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-    }
-    const byMonth = new Map<string, number>();
-    for (const k of keys) byMonth.set(k, 0);
-    for (const tx of incomeTxs) {
-      const k = monthKey(tx.date);
-      if (byMonth.has(k)) byMonth.set(k, (byMonth.get(k) ?? 0) + txAmount(tx));
-    }
-    return keys.map((k) => ({
-      key: k,
-      label: monthLabel(k),
-      net: byMonth.get(k) ?? 0,
-    }));
-  }, [incomeTxs]);
-
+  const now = Date.now();
+  const series = useMemo(() => monthlyIncomeSeries(incomeTxs, now), [incomeTxs, now]);
   const payrollDay = salary?.settings.payrollDay ?? 25;
-  const payday = useMemo(() => daysUntilPayday(payrollDay), [payrollDay]);
+  const cycle = useMemo(() => payCycle(payrollDay, now), [payrollDay, now]);
+  const recordedSinceLastPayday = useMemo(
+    () => incomeTxs.filter((tx) => tx.date >= cycle.lastPayday).reduce((sum, tx) => sum + tx.incomeCents, 0),
+    [incomeTxs, cycle.lastPayday],
+  );
   const computed = salary?.computed;
-  const hasPayroll = (salary?.settings.grossMonthly ?? 0) > 0;
-  const payJourney = useMemo(() => {
-    const d = new Date();
-    const day = d.getDate();
-    return Math.min(100, Math.round((day / 30) * 100));
-  }, []);
+  const hasPayroll = (salary?.settings.grossMonthly ?? 0) > 0 && computed != null;
+  const segments = useMemo(() => (hasPayroll && computed ? takeHomeBreakdown(computed) : []), [hasPayroll, computed]);
+  const monthName = new Date(now).toLocaleDateString('en-US', { month: 'long' });
+  const recordedThisMonth = series[series.length - 1]?.total ?? 0;
 
-  const recentIncome = useMemo(() => incomeTxs.slice(0, 8), [incomeTxs]);
-
-  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-  const heroMainAmount = hasPayroll && computed ? computed.estimatedNetMonthly : thisMonthIncome;
-  const heroTitle =
-    hasPayroll && computed ? 'Estimated take-home (payroll)' : 'Total net take-home (this month)';
+  const postDueSalary = async () => {
+    setPosting(true);
+    try {
+      const previewResult = await catchUpPreviewQuery.refetch();
+      const preview = previewResult.data;
+      if (!preview) throw new Error('Could not load salary catch-up preview');
+      const due = preview.occurrences.filter((occurrence) => occurrence.status === 'due');
+      if (due.length === 0) {
+        toast.info('Salary is up to date', preview.message || 'No unprocessed salary months are due.');
+        return;
+      }
+      const firstMonth = new Date(due[0].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const lastMonth = new Date(due[due.length - 1].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const monthCount = `${due.length} salary month${due.length === 1 ? '' : 's'}`;
+      if (!await confirm({
+        title: 'Post due salary?',
+        message: `Post ${monthCount} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`,
+        confirmLabel: `Post ${monthCount}`,
+      })) return;
+      await salaryCatchUpMutation.mutateAsync({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
+      toast.success(`Posted ${monthCount}`);
+    } catch (e) {
+      toast.error('Could not post salary', errorMessage(e));
+    } finally {
+      setPosting(false);
+    }
+  };
 
   return (
     <RequireAuth>
@@ -218,393 +152,89 @@ function SalaryIncomePage() {
           onSaved={(res) => queryClient.setQueryData(queryKeys.salary.settings, res)}
         />
 
-        {/* Header */}
         <header className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
-          <div className="flex flex-1 flex-wrap items-start gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-3">
-                <PageHeader
-                  subtext="Income management"
-                  title="Salary & income"
-                />
-                <div className="relative" ref={menuRef} style={{ marginTop: '2rem', marginLeft: '-0.5rem' }}>
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-full p-2 text-[var(--color-text-secondary)] transition hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--color-text-primary)]"
-                    aria-label="Open salary menu"
-                    aria-expanded={menuOpen}
-                    onClick={() => setMenuOpen((o) => !o)}
-                  >
-                    <MoreVertical className="h-6 w-6" />
-                  </button>
-                  {menuOpen && (
-                    <div className="ui-popover absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg">
-                      <button
-                        type="button"
-                        className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          setProfileOpen(true);
-                        }}
-                      >
-                        Edit salary profile…
-                      </button>
-                      {hasPayroll && salary?.settings.depositAccountId && (
-                        <button
-                          type="button"
-                          className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)]"
-                          onClick={async () => {
-                          setMenuOpen(false);
-                            try {
-                              const previewResult = await catchUpPreviewQuery.refetch();
-                              const preview = previewResult.data;
-                              if (!preview) throw new Error('Could not load salary catch-up preview');
-                              const due = preview.occurrences.filter((occurrence) => occurrence.status === 'due');
-                              if (due.length === 0) {
-                                toast.info('Salary is up to date', preview.message || 'No unprocessed salary months are due.');
-                                return;
-                              }
-                              const firstMonth = new Date(due[0].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                              const lastMonth = new Date(due[due.length - 1].occurrenceDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                              const monthCount = `${due.length} salary month${due.length === 1 ? '' : 's'}`;
-                              if (!await confirm({
-                                title: 'Post due salary?',
-                                message: `Post ${monthCount} (${firstMonth}${due.length > 1 ? `–${lastMonth}` : ''}) using the saved payroll estimate?`,
-                                confirmLabel: `Post ${monthCount}`,
-                              })) return;
-                              await salaryCatchUpMutation.mutateAsync({ mode: 'post', occurrenceDates: due.map((occurrence) => occurrence.occurrenceDate) });
-                              toast.success(`Posted ${monthCount}`);
-                            } catch (e) {
-                              toast.error('Could not post salary', errorMessage(e));
-                            }
-                          }}
-                        >
-                          Review & post due salary
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <p className="mt-2 max-w-xl font-body text-[var(--color-text-secondary)]">
-                {isLoading || salaryLoading
-                  ? 'Loading earnings…'
-                  : hasPayroll
-                    ? `Payroll estimates from your profile; ledger income for ${monthName} shown below for comparison.`
-                    : `Recorded income credits for ${monthName}. Set salary via the menu for PPh 21 & BPJS estimates.`}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" className="rounded-full px-6 py-3" onClick={() => navigate({ to: '/periods' })}>
-              <Calendar className="h-4 w-4" />Salary periods
-            </Button>
-            <button
-              type="button"
-              disabled={incomeTxs.length === 0}
-              onClick={() => downloadIncomeCsv(incomeTxs)}
-              className="cursor-pointer disabled:cursor-not-allowed inline-flex items-center gap-2 rounded-full bg-[var(--ref-secondary-container)] px-6 py-3 text-sm font-bold text-[var(--ref-on-secondary-container)] transition-opacity hover:opacity-90 disabled:opacity-40"
-            >
-              <Download className="h-4 w-4" />
-              Download CSV
-            </button>
-            <Button
-              type="button"
-              className="rounded-full px-6 py-3 shadow-lg shadow-[var(--color-accent)]/20"
-              onClick={() => navigate({ to: '/transactions' })}
-            >
+          <PageHeader
+            subtext="Income management"
+            title="Salary & income"
+            description={isLoading || salaryLoading
+              ? 'Loading earnings…'
+              : hasPayroll
+                ? 'Payroll estimates from your profile, next to the income your ledger has actually recorded.'
+                : `Income recorded so far, with ${monthName} on top. Add a salary profile for tax and BPJS estimates.`}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" className="rounded-full px-5 py-3 shadow-lg shadow-[var(--color-accent)]/20" onClick={() => navigate({ to: '/transactions', search: { action: 'new-income' } })}>
               <Plus className="h-4 w-4" />
               Add income
             </Button>
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                className="grid h-11 w-11 cursor-pointer place-items-center rounded-full border border-[var(--color-border)] text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+              {menuOpen && (
+                <div role="menu" className="absolute right-0 top-full z-20 mt-1.5 min-w-52 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-xl ring-1 ring-black/5">
+                  <button type="button" role="menuitem" className={menuItem} onClick={() => { setMenuOpen(false); navigate({ to: '/periods' }); }}>
+                    <Calendar className="h-4 w-4 text-[var(--ref-on-surface-variant)]" aria-hidden />Salary periods
+                  </button>
+                  <button type="button" role="menuitem" className={menuItem} disabled={incomeTxs.length === 0} onClick={() => { setMenuOpen(false); downloadIncomeCsv(incomeTxs); }}>
+                    <Download className="h-4 w-4 text-[var(--ref-on-surface-variant)]" aria-hidden />Download CSV
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Bento grid */}
-        <div className="grid grid-cols-12 gap-6">
-          {/* Hero net */}
-          <section className="relative col-span-12 flex min-h-[280px] flex-col justify-between overflow-hidden rounded-xl bg-[var(--ref-surface-container-low)] p-6 sm:p-8 lg:col-span-8">
-            <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[var(--color-accent)]/5 blur-3xl" />
-            <div className="relative z-10">
-              <div className="mb-6 flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[var(--color-success)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
-                  Net credits
-                </span>
-                <span
-                  className={cn(
-                    'flex items-center gap-1 text-sm font-bold',
-                    momPct >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]',
-                  )}
-                >
-                  <TrendingUp className="h-4 w-4" />
-                  {momPct >= 0 ? '+' : ''}
-                  {momPct.toFixed(1)}% vs last month
-                </span>
-              </div>
-              <h2 className="mb-1 font-body text-lg text-[var(--color-text-secondary)]">{heroTitle}</h2>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="font-headline text-2xl font-bold text-[var(--color-accent)]">Rp</span>
-                <span className="font-headline text-4xl font-black tracking-tighter text-[var(--color-text-primary)] sm:text-5xl md:text-6xl">
-                  {formatAmount(heroMainAmount).replace('Rp', '')}
-                </span>
-              </div>
-              {hasPayroll && computed && (
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  Ledger this month:{' '}
-                  <span className="font-semibold text-[var(--color-text-primary)]">
-                    {formatAmount(thisMonthIncome)}
-                  </span>
-                </p>
-              )}
-            </div>
-            <div className="relative z-10 mt-8 grid grid-cols-1 gap-6 border-t border-[var(--color-border)]/60 pt-8 sm:grid-cols-3">
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                  Gross (payroll)
-                </p>
-                <p className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                  {hasPayroll && computed ? formatAmount(computed.grossMonthly) : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                  Tax &amp; withholdings
-                </p>
-                <p className="font-headline text-xl font-bold text-[var(--color-danger)]">
-                  {hasPayroll && computed ? formatAmount(computed.pph21Monthly) : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                  BPJS (employee)
-                </p>
-                <p className="font-headline text-xl font-bold text-[var(--color-success)]">
-                  {hasPayroll && computed
-                    ? formatAmount(
-                        computed.jhtMonthly + computed.jpMonthly,
-                      )
-                    : '—'}
-                </p>
-              </div>
-            </div>
-            <p className="relative z-10 mt-4 text-xs text-[var(--color-text-secondary)]">
-              {hasPayroll && computed
-                ? 'PPh 21 uses biaya jabatan, JHT/JP as iuran pensiun, PTKP, and Pasal 17 brackets. BPJS uses standard employee rates (capped bases). Not tax advice.'
-                : 'Set your gross salary and PTKP via the menu to see automated PPh 21 and BPJS estimates. Ledger income stays separate.'}
-            </p>
-          </section>
-
-          {/* Payday card */}
-          <section className="relative col-span-12 flex flex-col justify-between overflow-hidden rounded-xl bg-[var(--color-accent)] p-6 text-white sm:p-8 lg:col-span-4">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-10"
-              style={{
-                backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
-                backgroundSize: '24px 24px',
-              }}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            {hasPayroll && computed ? (
+              <TakeHomeCard
+                gross={computed.grossMonthly}
+                net={computed.estimatedNetMonthly}
+                segments={segments}
+                method={computed.calculationMethod}
+                notes={computed.notes}
+                depositAccountName={salary?.settings.depositAccountName ?? null}
+                payrollDay={payrollDay}
+                formatAmount={formatAmount}
+                onEditProfile={() => setProfileOpen(true)}
+              />
+            ) : (
+              <SalarySetupCard recordedThisMonth={recordedThisMonth} monthName={monthName} formatAmount={formatAmount} onEditProfile={() => setProfileOpen(true)} />
+            )}
+          </div>
+          <div className="lg:col-span-4">
+            <PaydayCard
+              cycle={cycle}
+              expectedNet={hasPayroll && computed ? computed.estimatedNetMonthly : null}
+              depositAccountName={salary?.settings.depositAccountName ?? null}
+              recordedSinceLastPayday={recordedSinceLastPayday}
+              formatAmount={formatAmount}
+              postAction={hasPayroll && salary?.settings.depositAccountId ? { label: 'Post due salary', busy: posting, onClick: () => void postDueSalary() } : undefined}
             />
-            <div className="relative z-10">
-              <div className="mb-8 flex items-start justify-between">
-                <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-md">
-                  <Calendar className="h-8 w-8" />
-                </div>
-                <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold">
-                  {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </span>
-              </div>
-              <h3 className="font-headline text-3xl font-extrabold leading-tight sm:text-4xl">
-                {payday.days === 0 ? (
-                  <>Yeay, today is payday!</>
-                ) : (
-                  <>
-                    {payday.days} day{payday.days === 1 ? '' : 's'}
-                    <br />
-                    to payday
-                  </>
-                )}
-              </h3>
-              <p className="mt-2 text-sm text-[var(--ref-primary-fixed)]">
-                Assumed disbursement:{' '}
-                {formatDate(payday.date.getTime())}{' '}
-                (day {payrollDay} of each month)
-              </p>
-            </div>
-            <div className="relative z-10 mt-8">
-              <div className="mb-2 h-2 w-full rounded-full bg-white/20">
-                <div
-                  className="h-full rounded-full bg-white transition-all"
-                  style={{ width: `${payJourney}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-white/60">
-                <span>Month progress</span>
-                <span>{payJourney}%</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Breakdown */}
-          <section className="col-span-12 rounded-xl bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm sm:p-8 lg:col-span-7">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <h3 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                Income breakdown
-              </h3>
-              <Link
-                to="/transactions"
-                className="inline-flex items-center gap-1 text-sm font-bold text-[var(--color-accent)] hover:underline"
-              >
-                View all <span aria-hidden>›</span>
-              </Link>
-            </div>
-            {isLoading ? (
-              <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>
-            ) : recentIncome.length === 0 ? (
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                No income transactions yet. Record salary or side income from Transactions → income.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {recentIncome.map((tx, i) => {
-                  const amt = txAmount(tx);
-                  const icons = [Landmark, Gift, Banknote];
-                  const Icon = icons[i % 3];
-                  return (
-                    <div
-                      key={tx.id}
-                      className="flex flex-col gap-4 rounded-xl bg-[var(--ref-surface-container-low)] p-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white shadow-sm">
-                          <Icon className="h-6 w-6 text-[var(--color-accent)]" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-[var(--color-text-primary)]">{tx.description}</h4>
-                          <p className="text-xs text-[var(--color-text-secondary)]">
-                            Income ·{' '}
-                            {formatDayMonth(new Date(tx.date).getTime())}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-left sm:text-right">
-                        <p className="font-headline font-bold text-[var(--color-text-primary)]">
-                          {formatAmount(amt)}
-                        </p>
-                        <span className="mt-1 inline-block rounded bg-[var(--color-success)]/15 px-2 py-0.5 text-[10px] font-bold text-[var(--color-success)]">
-                          POSTED
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Deductions placeholder */}
-          <section className="col-span-12 rounded-xl bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm sm:p-8 lg:col-span-5">
-            <h3 className="mb-8 font-headline text-xl font-bold text-[var(--color-text-primary)]">
-              Mandatory deductions
-            </h3>
-            <div className="space-y-6">
-              <div className="relative border-l-2 border-[var(--color-danger)]/30 pl-6">
-                <p className="mb-1 text-xs font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
-                  PPh 21 (income tax)
-                </p>
-                <div className="flex flex-wrap items-end justify-between gap-2">
-                  <h4 className="font-headline text-2xl font-bold text-[var(--color-text-primary)]">
-                    {hasPayroll && computed ? formatAmount(computed.pph21Monthly) : '—'}
-                  </h4>
-                  <span className="text-xs italic text-[var(--color-text-secondary)]">
-                    {hasPayroll && computed
-                      ? `Method: ${computed.calculationMethod}`
-                      : 'Set salary profile'}
-                  </span>
-                </div>
-              </div>
-              <div className="relative border-l-2 border-[var(--color-success)]/30 pl-6">
-                <p className="mb-1 text-xs font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
-                  BPJS Ketenagakerjaan (JHT + JP)
-                </p>
-                <div className="flex flex-wrap items-end justify-between gap-2">
-                  <h4 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                    {hasPayroll && computed ? formatAmount(computed.jhtMonthly + computed.jpMonthly) : '—'}
-                  </h4>
-                  <span className="text-xs text-[var(--color-text-secondary)]">
-                    {hasPayroll && computed
-                      ? `JHT ${formatAmount(computed.jhtMonthly)} · JP ${formatAmount(computed.jpMonthly)}`
-                      : 'Employee share (estimated)'}
-                  </span>
-                </div>
-              </div>
-              {salary?.settings.bpjsKesehatanActive && (
-                <div className="relative border-l-2 border-[var(--color-accent)]/30 pl-6">
-                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-[var(--color-text-secondary)]">
-                    BPJS Kesehatan
-                  </p>
-                  <div className="flex flex-wrap items-end justify-between gap-2">
-                    <h4 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                      {hasPayroll && computed ? formatAmount(computed.bpjsKesehatanMonthly) : '—'}
-                    </h4>
-                    <span className="text-xs text-[var(--color-text-secondary)]">Employee 1% (capped base)</span>
-                  </div>
-                </div>
+          </div>
+          <div className="lg:col-span-7">
+            <IncomeHistoryCard series={series} formatAmount={formatAmount} loading={isLoading} />
+          </div>
+          <div className="lg:col-span-5">
+            <RecentIncomeCard
+              rows={incomeTxs.slice(0, 8)}
+              loading={isLoading}
+              formatAmount={formatAmount}
+              viewAllHref={(
+                <Link to="/transactions" className="inline-flex shrink-0 items-center gap-0.5 text-sm font-bold text-[var(--color-accent)] hover:underline">
+                  View all<ChevronRight className="h-4 w-4" aria-hidden />
+                </Link>
               )}
-            </div>
-            <div className="mt-8 flex items-start gap-3 rounded-xl bg-[var(--ref-surface-container-highest)] p-4">
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-accent)]" />
-              <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                {hasPayroll && computed
-                  ? 'Figures are estimates from your salary profile. Your ledger still records actual bank credits when you add income transactions.'
-                  : 'Open the menu → Edit salary profile to enter gross pay and PTKP. We’ll estimate PPh 21 and BPJS employee contributions.'}
-              </p>
-            </div>
-          </section>
-
-          {/* Chart */}
-          <section className="col-span-12 rounded-xl bg-[var(--ref-surface-container-lowest)] p-6 shadow-sm sm:p-8">
-            <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-              <div>
-                <h3 className="font-headline text-xl font-bold text-[var(--color-text-primary)]">
-                  Historical trends
-                </h3>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Last 6 months — income credits (simple income)
-                </p>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-[var(--color-accent)]" />
-                  <span className="text-xs font-bold text-[var(--color-text-primary)]">Net income</span>
-                </div>
-              </div>
-            </div>
-            {isLoading ? (
-              <p className="text-sm text-[var(--color-text-secondary)]">Loading chart…</p>
-            ) : (
-              <div className="h-52 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={last6Months} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} />
-                    <Tooltip
-                      formatter={(value) => [formatAmount(Number(value)), 'Income']}
-                      labelStyle={{ color: 'var(--color-text-primary)' }}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-surface)',
-                      }}
-                    />
-                    <Bar
-                      dataKey="net"
-                      fill="var(--color-accent)"
-                      radius={[6, 6, 0, 0]}
-                      maxBarSize={48}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </section>
+            />
+          </div>
         </div>
       </PageContainer>
     </RequireAuth>

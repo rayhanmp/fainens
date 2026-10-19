@@ -377,10 +377,10 @@ function TransactionsPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1); }, [search.periodId, search.accountId, search.tagId, categoryFilter, debouncedQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, pageSize]);
   useEffect(() => {
-    if (search.action !== 'new' || isModalOpen) return;
-    // Route actions open the existing modal after navigation.
+    if ((search.action !== 'new' && search.action !== 'new-income') || isModalOpen) return;
+    // Route actions open the existing modal after navigation; "new-income" lands on the Income tab.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    openModal();
+    openModal(undefined, 'edit', search.action === 'new-income' ? { type: 'income' } : undefined);
     navigate({ search: (previous) => ({ ...previous, action: undefined }) });
   }, [search.action, isModalOpen, navigate, openModal]);
   useEffect(() => {
