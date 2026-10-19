@@ -1,6 +1,29 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { incomeKind, monthlyIncomeSeries, payCycle, takeHomeBreakdown, withRollingAverage, yearToDateCurve } from './income-insights.ts';
+import { incomeKind, monthlyIncomeSeries, payCycle, progressivePPh, takeHomeBreakdown, taxOutlook, withRollingAverage, yearToDateCurve } from './income-insights.ts';
+
+test('progressive PPh fills the brackets in order and reports each slice', () => {
+  assert.deepEqual(progressivePPh(0), { tax: 0, slices: [] });
+  assert.equal(progressivePPh(60_000_000).tax, 3_000_000);
+  const { tax, slices } = progressivePPh(100_000_000);
+  assert.equal(tax, 3_000_000 + 6_000_000);
+  assert.deepEqual(slices.map((slice) => [slice.rate, slice.amount]), [[0.05, 60_000_000], [0.15, 40_000_000]]);
+});
+
+test('other income raises the annual bill beyond what the employer withheld', () => {
+  const base = { wageMonths: 11, monthlyBruto: 8_363_200, monthlyPension: 240_000, monthlyWithheld: 125_448, ptkpAnnual: 54_000_000 };
+  const wageOnly = taxOutlook({ ...base, otherIncome: 0, otherTaxableShare: 1 });
+  assert.equal(wageOnly.wageBruto, 91_995_200);
+  assert.equal(wageOnly.biayaJabatan, 4_599_760);
+  assert.equal(wageOnly.pkp, Math.floor((91_995_200 - 4_599_760 - 2_640_000 - 54_000_000) / 1000) * 1000);
+  assert.equal(wageOnly.withheld, 125_448 * 11);
+  const withSide = taxOutlook({ ...base, otherIncome: 40_000_000, otherTaxableShare: 1 });
+  assert.equal(withSide.pkp, wageOnly.pkp + 40_000_000);
+  assert.ok(withSide.balance > wageOnly.balance);
+  const norma = taxOutlook({ ...base, otherIncome: 40_000_000, otherTaxableShare: 0.5 });
+  assert.equal(norma.otherTaxable, 20_000_000);
+  assert.ok(norma.annualTax < withSide.annualTax);
+});
 
 test('the year-to-date curve accumulates actuals up to this month against a salary-only line', () => {
   const series = [

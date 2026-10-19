@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Banknote, Calendar, Coins, Info, Landmark } from 'lucide-react';
 import { cn, formatDate } from '../../lib/utils';
-import { incomeKind, withRollingAverage, type MonthIncome, type MonthIncomeTrend, type PayCycle, type TakeHomeSegment, type YearPoint } from './income-insights';
+import { incomeKind, withRollingAverage, type MonthIncome, type MonthIncomeTrend, type PayCycle, type TakeHomeSegment, type TaxOutlook, type YearPoint } from './income-insights';
 
 const card = 'rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 editorial-shadow';
 const cardTitle = 'font-headline text-lg font-bold text-[var(--ref-on-surface)]';
@@ -244,7 +244,7 @@ export function IncomeHistoryCard({ series, expectedNet, balancesHidden, formatA
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className={cardTitle}>Income history</h3>
-          <p className={cardCaption}>Salary and other income by calendar month, with a three-month average.</p>
+          <p className={cardCaption}>Regular wage and other income by calendar month, with a three-month average.</p>
         </div>
         <div className="ui-segmented ui-segmented--2 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1" role="radiogroup" aria-label="Range" data-segment-index={months === 6 ? 0 : 1}>
           {([6, 12] as const).map((option) => (
@@ -262,7 +262,7 @@ export function IncomeHistoryCard({ series, expectedNet, balancesHidden, formatA
         <div>
           <dt className={cn(statLabel, 'flex items-center gap-1')}>
             Other income
-            <Hint text="Salary is what your salary profile posted, plus hand-entered credits named salary, gaji or payroll. Anything marked freelance, bonus, THR or refund counts as other income.">
+            <Hint text="Regular wage is what your salary profile posted, plus hand-entered credits named salary, gaji or payroll. Anything marked freelance, bonus, THR or refund counts as other income. Both are taxable; only the wage has tax withheld by the employer.">
               <span tabIndex={0} aria-label="How salary is told apart" className="grid h-4 w-4 place-items-center rounded text-[var(--ref-outline)] outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
                 <Info className="h-3 w-3" aria-hidden />
               </span>
@@ -290,7 +290,7 @@ export function IncomeHistoryCard({ series, expectedNet, balancesHidden, formatA
                     return (
                       <div className={chartTip}>
                         <p className="font-bold text-[var(--ref-on-surface)]">{month.label} · {formatAmount(month.total)}</p>
-                        <p className="mt-1 text-[var(--ref-on-surface-variant)]">Salary {formatAmount(month.salary)} · Other {formatAmount(month.other)}</p>
+                        <p className="mt-1 text-[var(--ref-on-surface-variant)]">Wage {formatAmount(month.salary)} · Other {formatAmount(month.other)}</p>
                         {month.rolling != null && <p className="text-[var(--ref-on-surface-variant)]">3-month average {formatAmount(Math.round(month.rolling))}</p>}
                         {delta != null && month.total > 0 && (
                           <p className={cn('mt-1 font-semibold', delta >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-on-surface-variant)]')}>
@@ -311,7 +311,7 @@ export function IncomeHistoryCard({ series, expectedNet, balancesHidden, formatA
             </ResponsiveContainer>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: SALARY_FILL }} aria-hidden />Salary</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: SALARY_FILL }} aria-hidden />Regular wage</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: OTHER_FILL }} aria-hidden />Other income</span>
             <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: INK }} aria-hidden />3-month average</span>
             {expectedNet != null && <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: INK, opacity: 0.6 }} aria-hidden />Expected salary</span>}
@@ -343,7 +343,7 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
     <section className={cn(card, 'flex h-full flex-col')}>
       <div>
         <h3 className={cardTitle}>{year} so far</h3>
-        <p className={cardCaption}>Everything received since {startLabel ?? 'January'} against salary alone.</p>
+        <p className={cardCaption}>Everything received since {startLabel ?? 'January'} against the wage alone.</p>
       </div>
       <dl className="mt-4 flex gap-8">
         <div>
@@ -382,7 +382,7 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
                       <div className={chartTip}>
                         <p className="font-bold text-[var(--ref-on-surface)]">By end of {point.label}</p>
                         {point.actual != null && <p className="mt-1 text-[var(--ref-on-surface-variant)]">Received {formatAmount(point.actual)}</p>}
-                        <p className="text-[var(--ref-on-surface-variant)]">Salary alone {formatAmount(point.expected)}</p>
+                        <p className="text-[var(--ref-on-surface-variant)]">Wage alone {formatAmount(point.expected)}</p>
                         {gap != null && (
                           <p className={cn('mt-1 font-semibold', gap >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>
                             {gap >= 0 ? '+' : '−'}{formatAmount(Math.abs(gap))}
@@ -399,7 +399,7 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
             <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: 'var(--color-accent)' }} aria-hidden />Received</span>
-            <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: INK, opacity: 0.6 }} aria-hidden />Salary alone ({formatAmount(expectedNet)} a month)</span>
+            <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: INK, opacity: 0.6 }} aria-hidden />Wage alone ({formatAmount(expectedNet)} a month)</span>
           </div>
         </>
       )}
@@ -441,7 +441,7 @@ export function RecentIncomeCard({ rows, loading, formatAmount, viewAllHref }: R
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.description}</p>
-                  <p className="text-xs text-[var(--ref-on-surface-variant)]">{kind === 'salary' ? 'Salary' : 'Other income'} · {formatDate(row.date)}</p>
+                  <p className="text-xs text-[var(--ref-on-surface-variant)]">{kind === 'salary' ? 'Regular wage' : 'Other income'} · {formatDate(row.date)}</p>
                 </div>
                 <p className="shrink-0 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(row.incomeCents)}</p>
               </li>
@@ -449,6 +449,104 @@ export function RecentIncomeCard({ rows, loading, formatAmount, viewAllHref }: R
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+type TaxOutlookCardProps = {
+  year: number;
+  outlook: TaxOutlook;
+  wageMonths: number;
+  otherIncome: number;
+  otherTaxableShare: 0.5 | 1;
+  onOtherTaxableShareChange: (share: 0.5 | 1) => void;
+  formatAmount: (amount: number) => string;
+};
+
+const bracketFill = ['var(--color-accent)', 'color-mix(in srgb, var(--color-accent) 70%, var(--ref-on-surface))', 'color-mix(in srgb, var(--ref-on-surface) 70%, transparent)', 'color-mix(in srgb, var(--ref-on-surface) 50%, transparent)', 'color-mix(in srgb, var(--ref-on-surface) 35%, transparent)'];
+
+/**
+ * What the annual return will look like once other income is counted. The employer withholds
+ * PPh 21 on the wage only, so side income shows up here as extra tax due at the SPT.
+ */
+export function TaxOutlookCard({ year, outlook, wageMonths, otherIncome, otherTaxableShare, onOtherTaxableShareChange, formatAmount }: TaxOutlookCardProps) {
+  const due = outlook.balance > 0;
+  const settled = Math.abs(outlook.balance) < 1000;
+  const lines: { label: string; value: string; hint?: string; strong?: boolean; sign?: string }[] = [
+    { label: `Wage, ${wageMonths} month${wageMonths === 1 ? '' : 's'}`, value: formatAmount(outlook.wageBruto), hint: 'Gross pay plus employer-paid premiums, which count as income for tax.' },
+    { label: 'Biaya jabatan and pension', value: formatAmount(outlook.biayaJabatan + outlook.pension), sign: '−', hint: '5% of bruto up to Rp6.000.000 a year, plus your own JHT and JP contributions.' },
+    { label: `Other income${otherTaxableShare === 0.5 ? ' at 50%' : ''}`, value: formatAmount(outlook.otherTaxable), sign: '+', hint: otherTaxableShare === 0.5 ? 'Half of the recorded amount, the NPPN norma many freelance professions may use.' : 'Every rupiah of recorded freelance and side income, taxed in full.' },
+    { label: 'PTKP', value: formatAmount(outlook.ptkp), sign: '−' },
+    { label: 'Taxable income (PKP)', value: formatAmount(outlook.pkp), strong: true },
+    { label: 'Annual PPh at Pasal 17 rates', value: formatAmount(outlook.annualTax), strong: true },
+    { label: 'Already withheld by employer', value: formatAmount(outlook.withheld), sign: '−' },
+  ];
+  return (
+    <section className={cn(card, 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]')}>
+      <div className="flex flex-col">
+        <h3 className={cardTitle}>Tax outlook {year}</h3>
+        <p className={cardCaption}>The wage is withheld at source; freelance and other income is not, so it lands on the annual return.</p>
+        <p className={cn('mt-5 text-[10px] font-bold uppercase tracking-widest', settled ? 'text-[var(--ref-outline)]' : due ? 'text-[var(--ref-error)]' : 'text-[var(--color-success)]')}>
+          {settled ? 'Roughly settled at the SPT' : due ? 'Likely still due at the SPT' : 'Likely refund at the SPT'}
+        </p>
+        <p className="mt-1 font-headline text-4xl font-black tracking-tight text-[var(--ref-on-surface)]">{settled ? formatAmount(0) : formatAmount(Math.abs(outlook.balance))}</p>
+        <p className="mt-2 text-sm text-[var(--ref-on-surface-variant)]">
+          Effective rate <span className="font-semibold text-[var(--ref-on-surface)]">{(outlook.effectiveRate * 100).toFixed(1)}%</span> on {formatAmount(outlook.wageBruto + otherIncome)} earned. Wage months after today are assumed paid as usual; other income is what has been recorded so far.
+        </p>
+
+        {outlook.slices.length > 0 && (
+          <div className="mt-5">
+            <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]" aria-hidden>
+              {outlook.slices.map((slice, index) => (
+                <div key={slice.rate} className="h-full" style={{ width: `${(slice.amount / outlook.pkp) * 100}%`, background: bracketFill[index] }} />
+              ))}
+            </div>
+            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
+              {outlook.slices.map((slice, index) => (
+                <li key={slice.rate} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ background: bracketFill[index] }} aria-hidden />
+                  {Math.round(slice.rate * 100)}% bracket · {formatAmount(slice.amount)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-auto pt-6">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Other income is taxable</p>
+          <div className="ui-segmented ui-segmented--2 mt-1.5 inline-grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1" role="radiogroup" aria-label="How much of other income is taxable" data-segment-index={otherTaxableShare === 1 ? 0 : 1}>
+            {([1, 0.5] as const).map((option) => (
+              <button key={option} type="button" role="radio" aria-checked={otherTaxableShare === option} onClick={() => onOtherTaxableShareChange(option)} className={cn('rounded-lg px-3 py-1 text-xs font-bold', otherTaxableShare === option ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>
+                {option === 1 ? 'In full' : '50% norma'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <dl className="divide-y divide-[var(--color-border)] self-start rounded-2xl bg-[var(--ref-surface-container-low)] px-4">
+        {lines.map((line) => (
+          <div key={line.label} className="flex items-center justify-between gap-4 py-2.5 text-sm">
+            <dt className={cn('flex items-center gap-1', line.strong ? 'font-bold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>
+              {line.label}
+              {line.hint && (
+                <Hint text={line.hint}>
+                  <span tabIndex={0} aria-label={`About ${line.label}`} className="grid h-4 w-4 place-items-center rounded text-[var(--ref-outline)] outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                    <Info className="h-3 w-3" aria-hidden />
+                  </span>
+                </Hint>
+              )}
+            </dt>
+            <dd className={cn('shrink-0 tabular-nums', line.strong ? 'font-bold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface)]')}>
+              {line.sign && <span className="mr-1 text-[var(--ref-outline)]">{line.sign}</span>}{line.value}
+            </dd>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-4 py-2.5 text-sm">
+          <dt className="font-bold text-[var(--ref-on-surface)]">{due ? 'Still due' : settled ? 'Balance' : 'Refund'}</dt>
+          <dd className={cn('shrink-0 font-bold tabular-nums', settled ? 'text-[var(--ref-on-surface)]' : due ? 'text-[var(--ref-error)]' : 'text-[var(--color-success)]')}>{formatAmount(Math.abs(outlook.balance))}</dd>
+        </div>
+      </dl>
     </section>
   );
 }

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RequireAuth } from '../lib/auth';
 import { useSalaryCatchUpMutation, useSalaryCatchUpPreviewQuery, useSalaryIncomeQuery, useSalarySettingsQuery } from '../features/salary/queries';
-import { monthlyIncomeSeries, payCycle, takeHomeBreakdown, yearToDateCurve } from '../features/salary/income-insights';
-import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard, YearToDateCard } from '../features/salary/SalaryCards';
+import { monthlyIncomeSeries, payCycle, takeHomeBreakdown, taxOutlook, yearToDateCurve } from '../features/salary/income-insights';
+import { IncomeHistoryCard, PaydayCard, RecentIncomeCard, SalarySetupCard, TakeHomeCard, TaxOutlookCard, YearToDateCard } from '../features/salary/SalaryCards';
 import { queryKeys } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -101,6 +101,22 @@ function SalaryIncomePage() {
   const recordedThisMonth = series[series.length - 1]?.total ?? 0;
   const expectedNet = hasPayroll && computed ? computed.estimatedNetMonthly : null;
   const yearCurve = useMemo(() => (expectedNet != null ? yearToDateCurve(series, now, expectedNet) : []), [series, now, expectedNet]);
+  const [otherTaxableShare, setOtherTaxableShare] = useState<0.5 | 1>(1);
+  const year = new Date(now).getFullYear();
+  // Wage months this tax year: from the first posted wage month through December, assuming the job continues.
+  const yearMonths = series.filter((month) => month.key.startsWith(`${year}-`));
+  const firstWageMonth = yearMonths.findIndex((month) => month.salary > 0);
+  const wageMonths = firstWageMonth >= 0 ? 12 - (Number(yearMonths[firstWageMonth].key.slice(5)) - 1) : 0;
+  const otherIncomeThisYear = yearMonths.reduce((sum, month) => sum + month.other, 0);
+  const outlook = useMemo(() => (hasPayroll && computed ? taxOutlook({
+    wageMonths,
+    monthlyBruto: computed.taxBasisBruto,
+    monthlyPension: computed.jhtMonthly + computed.jpMonthly,
+    monthlyWithheld: computed.pph21Monthly,
+    ptkpAnnual: computed.ptkpAnnual,
+    otherIncome: otherIncomeThisYear,
+    otherTaxableShare,
+  }) : null), [hasPayroll, computed, wageMonths, otherIncomeThisYear, otherTaxableShare]);
 
   const postDueSalary = async () => {
     setPosting(true);
@@ -232,6 +248,19 @@ function SalaryIncomePage() {
           {expectedNet != null && (
             <div className="lg:col-span-4">
               <YearToDateCard curve={yearCurve} year={new Date(now).getFullYear()} expectedNet={expectedNet} balancesHidden={balancesHidden} formatAmount={formatAmount} loading={isLoading} />
+            </div>
+          )}
+          {outlook && (
+            <div className="lg:col-span-12">
+              <TaxOutlookCard
+                year={year}
+                outlook={outlook}
+                wageMonths={wageMonths}
+                otherIncome={otherIncomeThisYear}
+                otherTaxableShare={otherTaxableShare}
+                onOtherTaxableShareChange={setOtherTaxableShare}
+                formatAmount={formatAmount}
+              />
             </div>
           )}
           <div className="lg:col-span-12">
