@@ -201,6 +201,62 @@ function Tile({ row, tile, mapWidth, note, formatAmount }: {
   );
 }
 
+/** Whether the screen is phone-width; a treemap's tiles get too small to label there. */
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsPhone(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return isPhone;
+}
+
+const TONE_RANK: Record<string, number> = { danger: 0, warning: 1 };
+const toneColor = (tone: string) => (tone === 'danger' ? 'var(--color-danger)' : tone === 'warning' ? 'var(--color-warning)' : 'var(--ref-primary)');
+
+/**
+ * The phone version of the map: one row per category, most urgent first, with a bar for what's spent
+ * of the plan and a tick where it will likely finish.
+ */
+function BudgetList({ rows, formatAmount }: { rows: readonly PlanRow[]; formatAmount: (cents: number) => string }) {
+  const ordered = [...rows].sort((a, b) => (TONE_RANK[a.tone] ?? 2) - (TONE_RANK[b.tone] ?? 2)
+    || (b.actual / Math.max(1, b.planned)) - (a.actual / Math.max(1, a.planned)));
+  return (
+    <ul className="mt-3 divide-y divide-[var(--color-border)]" aria-label="Budget by category">
+      {ordered.map((row) => {
+        const hasPlan = row.planned > 0;
+        const used = hasPlan ? clampRatio(row.actual / row.planned) : 1;
+        const forecast = hasPlan && row.projected != null ? clampRatio(row.projected / row.planned) : null;
+        const forecastText = formatForecastRange(row.projectedLow, row.projectedHigh, row.projected, formatAmount);
+        const status = row.tone === 'danger' ? 'Over plan' : row.tone === 'warning' ? 'At risk' : null;
+        const Icon = row.tone === 'danger' ? CircleAlert : TriangleAlert;
+        const color = toneColor(row.tone);
+        return (
+          <li key={row.key} className="py-2.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-[var(--ref-on-surface)]">
+                <span className="truncate">{row.name}</span>
+                {status && <Icon size={13} strokeWidth={2.25} className="shrink-0 self-center" style={{ color }} aria-label={status} />}
+              </p>
+              <span className="shrink-0 text-sm font-bold tabular-nums" style={{ color: status ? color : undefined }}>{hasPlan ? percentOf(row.actual, row.planned) : formatAmount(row.actual)}</span>
+            </div>
+            <div className="relative mt-1.5 h-1.5 rounded-full bg-[var(--ref-surface-container-high)]">
+              <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${used * 100}%`, background: color }} />
+              {forecast != null && forecast > used && <span className="absolute -top-1 h-3.5 w-0.5 rounded-full bg-[var(--ref-on-surface)] opacity-40" style={{ left: `calc(${forecast * 100}% - 1px)` }} aria-hidden />}
+            </div>
+            <p className="mt-1 truncate text-[11px] tabular-nums text-[var(--ref-on-surface-variant)]">
+              {hasPlan ? `${formatAmount(row.actual)} of ${formatAmount(row.planned)}` : 'No plan set'}
+              {forecastText && forecast != null && forecast > used ? ` · likely ${forecastText}` : ''}
+            </p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 // `remaining` stays in the contract for the hero's "Budget left"; this panel no longer repeats it.
 export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, outlook, budgetRows, spending, totalPlanned, dailyBudget, formatAmount }: {
   periodId: number | null;
@@ -236,6 +292,7 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
       likelyFinish && `Likely ${likelyFinish} by period end`,
     ].filter(Boolean).join(' · ');
 
+  const isPhone = useIsPhone();
   const [mapRef, mapSize] = useElementSize();
   const { move, leave } = useSlosh();
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -271,16 +328,18 @@ export function BudgetPanel({ periodId, coverageStatus, isLoading, isTracked, ou
           : planRows.length === 0
             ? <div className="dashboard-budget-notice">No categorized spending yet. Add transactions or set a budget to start planning.</div>
             : <>
-              <div ref={mapRef} className="dashboard-budget-map mt-4" role="list" aria-label="Budget by category, tile size follows the plan" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
-                {tiles.map((tile) => {
-                  const row = rowsByKey.get(tile.key);
-                  return row ? <Tile key={tile.key} row={row} tile={tile} mapWidth={mapSize.width} note={notesByKey.get(tile.key) ?? null} formatAmount={formatAmount} /> : null;
-                })}
-              </div>
+              {isPhone ? <BudgetList rows={planRows} formatAmount={formatAmount} /> : (
+                <div ref={mapRef} className="dashboard-budget-map mt-4" role="list" aria-label="Budget by category, tile size follows the plan" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
+                  {tiles.map((tile) => {
+                    const row = rowsByKey.get(tile.key);
+                    return row ? <Tile key={tile.key} row={row} tile={tile} mapWidth={mapSize.width} note={notesByKey.get(tile.key) ?? null} formatAmount={formatAmount} /> : null;
+                  })}
+                </div>
+              )}
               <div className="dashboard-budget-legend">
                 <span aria-hidden><i data-key="spent" />Spent of plan</span>
                 {currentOutlook?.total.projectedAmount != null && <span aria-hidden><i data-key="forecast" />Likely finish</span>}
-                <span aria-hidden><i data-key="tile" />Tile size follows the plan</span>
+                {!isPhone && <span aria-hidden><i data-key="tile" />Tile size follows the plan</span>}
                 {dailyBudget != null && daysLeft != null && daysLeft > 0 && <span className="dashboard-budget-legend-note">Safe pace {formatAmount(dailyBudget)} a day · {daysLeft} day{daysLeft === 1 ? '' : 's'} left</span>}
               </div>
             </>}
