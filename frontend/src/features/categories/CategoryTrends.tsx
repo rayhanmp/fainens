@@ -39,6 +39,9 @@ function usePeriodSeries(categories: Category[], count: number) {
 }
 
 const PLOT_HEIGHT = 240;
+/** Slices under this share of their period fold into the column's grey "Other" band. */
+const FOLD_SHARE = 0.03;
+const OTHER_ID = -1;
 
 /** A round gridline step (1, 2, 2.5 or 5 × 10ⁿ) that splits max into about `intervals` parts. */
 function niceStep(max: number, intervals: number) {
@@ -207,7 +210,7 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
 
   return (
     <section id="spending-by-period" className="scroll-mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-[var(--color-border)] px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-[var(--color-border)] px-5 py-3.5">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--ref-on-surface)]">
             Spending by period
@@ -271,6 +274,12 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
               {periods.map((period, periodIndex) => {
                 const columnTotal = values[periodIndex];
                 const segments = segmentsAt(periodIndex);
+                // Slices too small to read fold into one grey "Other" band on top; a focused
+                // category is always drawn on its own.
+                const visible = focused ? segments : segments.filter((segment) => segment.value >= columnTotal * FOLD_SHARE);
+                const folded = segments.filter((segment) => !visible.includes(segment));
+                const foldedTotal = folded.reduce((sum, segment) => sum + segment.value, 0);
+                const foldedIds = folded.map((segment) => segment.item.id);
                 const isHovered = hover?.period === periodIndex;
                 // Legend hover only dims while every category is shown; a focused chart stays as it is.
                 const legendDim = focused ? null : legendHover;
@@ -296,7 +305,7 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                       className={cn('relative flex w-full max-w-[3.25rem] flex-col-reverse gap-px overflow-hidden rounded-t-md transition-opacity', outside && !isHovered ? 'opacity-20' : dimmed ? 'opacity-40' : running[periodIndex] && 'opacity-55')}
                       style={{ height: `${(columnTotal / ceiling) * 100}%` }}
                     >
-                      {segments.map(({ item, value }) => (
+                      {visible.map(({ item, value }) => (
                         <div
                           key={item.id}
                           onMouseEnter={() => setHover({ period: periodIndex, series: item.id })}
@@ -308,6 +317,17 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                           }}
                         />
                       ))}
+                      {foldedTotal > 0 && (
+                        <div
+                          onMouseEnter={() => setHover({ period: periodIndex, series: OTHER_ID })}
+                          className="w-full min-h-[3px] transition-opacity"
+                          style={{
+                            flex: `${foldedTotal} 1 0`,
+                            backgroundColor: OTHER_COLOR,
+                            opacity: (isHovered && hover?.series != null && hover.series !== OTHER_ID) || (legendDim != null && !foldedIds.includes(legendDim)) ? 0.3 : 1,
+                          }}
+                        />
+                      )}
                     </div>
 
                     {isHovered && (
@@ -318,6 +338,7 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                         periodTotal={totals[periodIndex]}
                         change={changeAt(periodIndex)}
                         segments={segments}
+                        foldedIds={foldedIds}
                         activeId={hover?.series ?? null}
                         focused={focused != null}
                         format={formatAmount}
@@ -373,6 +394,12 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                 </button>
               );
             })}
+            {!focused && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--ref-outline)]" title={`Categories under ${FOLD_SHARE * 100}% of a period share one grey band. Pick one to see it on its own.`}>
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: OTHER_COLOR }} aria-hidden />
+                Other (small slices)
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -380,20 +407,29 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
   );
 }
 
-/** What one column is made of: the period's total, its change, and its categories biggest first. */
-function PeriodTooltip({ name, running, total, periodTotal, change, segments, activeId, focused, format, side }: {
+/**
+ * What one column is made of: the period's total, its change, and its categories biggest first,
+ * with the small slices listed under the "Other" band they share.
+ */
+function PeriodTooltip({ name, running, total, periodTotal, change, segments, foldedIds, activeId, focused, format, side }: {
   name: string;
   running: boolean;
   total: number;
   periodTotal: number;
   change: number | null;
   segments: Segment[];
+  foldedIds: number[];
   activeId: number | null;
   focused: boolean;
   format: (value: number) => string;
   side: 'left' | 'right';
 }) {
   const sorted = [...segments].sort((a, b) => b.value - a.value);
+  const shown = sorted.filter((segment) => !foldedIds.includes(segment.item.id));
+  const folded = sorted.filter((segment) => foldedIds.includes(segment.item.id));
+  const foldedTotal = folded.reduce((sum, segment) => sum + segment.value, 0);
+  const otherActive = activeId === OTHER_ID;
+  const share = (value: number) => (total > 0 ? `${Math.round((value / total) * 100)}%` : '');
 
   return (
     <div
@@ -409,17 +445,36 @@ function PeriodTooltip({ name, running, total, periodTotal, change, segments, ac
       {focused && periodTotal > 0 && <p className="text-[11px] text-[var(--ref-on-surface-variant)]">{Math.round((total / periodTotal) * 100)}% of {format(periodTotal)} that period</p>}
       {!focused && (
         <ul className="mt-2 space-y-0.5 border-t border-[var(--color-border)] pt-2">
-          {sorted.map(({ item, value }) => {
+          {shown.map(({ item, value }) => {
             const highlighted = item.id === activeId;
             return (
               <li key={item.id} className={cn('-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-0.5', highlighted && 'bg-[var(--ref-surface-container-low)]')}>
                 <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: item.color }} aria-hidden />
                 <span className={cn('min-w-0 flex-1 truncate', highlighted ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>{item.name}</span>
                 <span className="tabular-nums text-[var(--ref-on-surface)]">{format(value)}</span>
-                <span className="w-8 text-right tabular-nums text-[var(--ref-outline)]">{total > 0 ? `${Math.round((value / total) * 100)}%` : ''}</span>
+                <span className="w-8 text-right tabular-nums text-[var(--ref-outline)]">{share(value)}</span>
               </li>
             );
           })}
+          {folded.length > 0 && (
+            <li className={cn('-mx-1.5 rounded-md px-1.5 py-0.5', otherActive && 'bg-[var(--ref-surface-container-low)]')}>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: OTHER_COLOR }} aria-hidden />
+                <span className={cn('min-w-0 flex-1 truncate', otherActive ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>Other</span>
+                <span className="tabular-nums text-[var(--ref-on-surface)]">{format(foldedTotal)}</span>
+                <span className="w-8 text-right tabular-nums text-[var(--ref-outline)]">{share(foldedTotal)}</span>
+              </div>
+              <ul className="mt-0.5 space-y-0.5 pl-4 text-[11px] text-[var(--ref-outline)]">
+                {folded.map(({ item, value }) => (
+                  <li key={item.id} className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                    <span className="tabular-nums">{format(value)}</span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          )}
         </ul>
       )}
     </div>
