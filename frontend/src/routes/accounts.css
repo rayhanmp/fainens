@@ -195,7 +195,10 @@
   .accounts-ledger-actions { gap: 12px; }
   .accounts-view-menu { position: static; }
   .accounts-view-popover { top: calc(100% + 6px); right: 0; width: 224px; max-width: 100%; }
-  .account-layout-row { grid-template-columns: minmax(0, 1fr) 64px; gap: 5px 8px; padding: 12px 2px; }
+  /* Rows and group headings share the pinned tiles' inner edge (18px padding + 1px border), so names
+     line up down the page whether an account is pinned or listed. */
+  .account-layout-row { grid-template-columns: minmax(0, 1fr) 64px; gap: 5px 8px; padding: 12px 19px; }
+  .accounts-group-heading { padding-inline: 19px; }
   .account-layout-row .account-avatar { display: none; }
   .account-layout-row .account-card-heading { grid-column: 1; grid-row: 1; }
   .account-layout-row .account-card-controls { grid-column: 2; grid-row: 1; }
