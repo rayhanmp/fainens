@@ -241,38 +241,36 @@ export function IncomeHistoryCard({ series, expectedNet, balancesHidden, formatA
   const axis = (value: number) => (balancesHidden ? '•••' : compactAxisIdr(value));
   return (
     <section className={cn(card, 'flex h-full flex-col')}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className={cardTitle}>Income history</h3>
           <p className={cardCaption}>Salary and other income by calendar month, with a three-month average.</p>
         </div>
-        <div className="flex items-center gap-5">
-          <dl className="flex gap-6 text-right">
-            <div>
-              <dt className={statLabel}>Monthly average</dt>
-              <dd className={statValue}>{formatAmount(Math.round(average))}</dd>
-            </div>
-            <div>
-              <dt className={cn(statLabel, 'flex items-center justify-end gap-1')}>
-                Other income
-                <Hint align="right" text="Salary is what your salary profile posted, plus hand-entered credits named salary, gaji or payroll. Anything marked freelance, bonus, THR or refund counts as other income.">
-                  <span tabIndex={0} aria-label="How salary is told apart" className="grid h-4 w-4 place-items-center rounded text-[var(--ref-outline)] outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
-                    <Info className="h-3 w-3" aria-hidden />
-                  </span>
-                </Hint>
-              </dt>
-              <dd className={statValue}>{otherShare}%</dd>
-            </div>
-          </dl>
-          <div className="ui-segmented ui-segmented--2 inline-grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1" role="radiogroup" aria-label="Range" data-segment-index={months === 6 ? 0 : 1}>
-            {([6, 12] as const).map((option) => (
-              <button key={option} type="button" role="radio" aria-checked={months === option} onClick={() => setMonths(option)} className={cn('rounded-lg px-3 py-1 text-xs font-bold', months === option ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>
-                {option}M
-              </button>
-            ))}
-          </div>
+        <div className="ui-segmented ui-segmented--2 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1" role="radiogroup" aria-label="Range" data-segment-index={months === 6 ? 0 : 1}>
+          {([6, 12] as const).map((option) => (
+            <button key={option} type="button" role="radio" aria-checked={months === option} onClick={() => setMonths(option)} className={cn('rounded-lg px-3 py-1 text-xs font-bold', months === option ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>
+              {option}M
+            </button>
+          ))}
         </div>
       </div>
+      <dl className="mt-4 flex gap-8">
+        <div>
+          <dt className={statLabel}>Monthly average</dt>
+          <dd className={statValue}>{formatAmount(Math.round(average))}</dd>
+        </div>
+        <div>
+          <dt className={cn(statLabel, 'flex items-center gap-1')}>
+            Other income
+            <Hint text="Salary is what your salary profile posted, plus hand-entered credits named salary, gaji or payroll. Anything marked freelance, bonus, THR or refund counts as other income.">
+              <span tabIndex={0} aria-label="How salary is told apart" className="grid h-4 w-4 place-items-center rounded text-[var(--ref-outline)] outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                <Info className="h-3 w-3" aria-hidden />
+              </span>
+            </Hint>
+          </dt>
+          <dd className={statValue}>{otherShare}%</dd>
+        </div>
+      </dl>
       {loading ? (
         <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
       ) : (
@@ -343,22 +341,20 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
   const axis = (value: number) => (balancesHidden ? '•••' : compactAxisIdr(value));
   return (
     <section className={cn(card, 'flex h-full flex-col')}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h3 className={cardTitle}>{year} so far</h3>
-          <p className={cardCaption}>Everything received since {startLabel ?? 'January'} against salary alone.</p>
-        </div>
-        <dl className="flex gap-6 text-right">
-          <div>
-            <dt className={statLabel}>Received</dt>
-            <dd className={statValue}>{formatAmount(actual)}</dd>
-          </div>
-          <div>
-            <dt className={statLabel}>{ahead >= 0 ? 'Ahead by' : 'Behind by'}</dt>
-            <dd className={cn(statValue, ahead >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>{formatAmount(Math.abs(ahead))}</dd>
-          </div>
-        </dl>
+      <div>
+        <h3 className={cardTitle}>{year} so far</h3>
+        <p className={cardCaption}>Everything received since {startLabel ?? 'January'} against salary alone.</p>
       </div>
+      <dl className="mt-4 flex gap-8">
+        <div>
+          <dt className={statLabel}>Received</dt>
+          <dd className={statValue}>{formatAmount(actual)}</dd>
+        </div>
+        <div>
+          <dt className={statLabel}>{ahead >= 0 ? 'Ahead by' : 'Behind by'}</dt>
+          <dd className={cn(statValue, ahead >= 0 ? 'text-[var(--color-success)]' : 'text-[var(--ref-error)]')}>{formatAmount(Math.abs(ahead))}</dd>
+        </div>
+      </dl>
       {loading ? (
         <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
       ) : (
