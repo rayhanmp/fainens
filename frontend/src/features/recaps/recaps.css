@@ -304,6 +304,10 @@
 .recap-share-toggle input { accent-color: var(--color-accent); width: 18px; height: 18px; }
 .recap-share-dialog .recap-muted { margin-top: 8px; font-size: 12px; }
 .recap-share-dialog > .recap-primary { width: 100%; min-height: 46px; margin-top: 16px; font-size: 13px; }
+.recap-secondary { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin-top: 8px; border-radius: 100px; border: 1px solid var(--color-border-strong); font-size: 13px; font-weight: 650; cursor: pointer; }
+.recap-secondary:hover { background: var(--ref-surface-container-low); }
+.recap-secondary:disabled { cursor: progress; }
+.recap-secondary-progress { position: absolute; left: 0; top: 0; bottom: 0; z-index: -1; background: var(--ref-surface-container-high); transition: width .2s linear; }
 
 /* ---------- Motion: how chapters leave and arrive. One transition is rolled per move. ---------- */
 /* The leaving chapter clears out before the arriving one is legible, so two headlines never overlap. */

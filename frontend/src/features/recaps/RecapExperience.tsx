@@ -331,7 +331,8 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
         <button className="recap-icon-pill" onClick={event => last ? replay() : go(index + 1, { origin: originOf(event) })} aria-label={last ? 'Replay recap' : 'Next chapter'}>{last ? <RefreshCw size={16} /> : <ArrowRight size={16} />}</button>
       </div>
     </div>
-    {shareOpen && <ShareRecap recap={recap} theme={stories[0].theme} onClose={() => setShareOpen(false)} />}
+    {shareOpen && <ShareRecap recap={recap} theme={stories[0].theme} themes={stories.map(item => item.theme)}
+      persona={stories.find(item => item.id === 'closing')?.persona ?? null} onClose={() => setShareOpen(false)} />}
   </section>;
 }
 

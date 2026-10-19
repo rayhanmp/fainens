@@ -1,8 +1,9 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useRef, useState } from 'react';
-import { Download, X } from 'lucide-react';
+import { Clapperboard, Download, X } from 'lucide-react';
 import type { PeriodRecap } from './queries';
-import { periodDateRange, themeColors, type RecapTheme } from './stories';
+import { periodDateRange, themeColors, type Persona, type RecapTheme } from './stories';
+import { recordStoryVideo } from './storyVideo';
 import { formatRecapCurrency as formatCurrency } from './currency';
 
 const W = 1080;
@@ -74,14 +75,22 @@ function drawCard(canvas: HTMLCanvasElement, recap: PeriodRecap, theme: RecapThe
   ctx.globalAlpha = 1;
 }
 
-export function ShareRecap({ recap, theme, onClose }: { recap: PeriodRecap; theme: RecapTheme; onClose: () => void }) {
+export function ShareRecap({ recap, theme, themes, persona, onClose }: { recap: PeriodRecap; theme: RecapTheme; themes: RecapTheme[]; persona: Persona | null; onClose: () => void }) {
   const { balancesHidden } = useBalanceVisibility();
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [showAmounts, setShowAmounts] = useState(false);
   const includeAmounts = showAmounts && !balancesHidden;
   const [saving, setSaving] = useState(false);
+  const [recording, setRecording] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const saveVideo = async () => {
+    setRecording(0); setError('');
+    try {
+      const { blob, extension } = await recordStoryVideo({ recap, themes, persona, showAmounts: includeAmounts }, setRecording);
+      download(blob, `fainens-period-${recap.period.id}.${extension}`);
+    } catch (err) { setError(err instanceof Error ? err.message : 'The video could not be made. Please try again.'); } finally { setRecording(null); }
+  };
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
@@ -110,11 +119,20 @@ export function ShareRecap({ recap, theme, onClose }: { recap: PeriodRecap; them
         if (!element) throw new Error('missing canvas');
         drawCard(element, recap, theme, includeAmounts);
         const blob = await new Promise<Blob>((resolve, reject) => element.toBlob(value => value ? resolve(value) : reject(new Error('Unable to create the image.')), 'image/png'));
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.download = `fainens-period-${recap.period.id}.png`;
-        document.body.appendChild(link); link.click(); link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        download(blob, `fainens-period-${recap.period.id}.png`);
       } catch { setError('The image could not be saved. Please try again.'); } finally { setSaving(false); }
     }}><Download size={18} />{saving ? 'Creating image…' : 'Download share card'}</button>
+    {/* The reel plays once in real time while it records, so it takes about as long as it lasts. */}
+    <button className="recap-secondary" disabled={recording !== null} onClick={saveVideo}>
+      <Clapperboard size={18} />{recording !== null ? `Recording the reel… ${Math.round(recording * 100)}%` : 'Download story video'}
+      {recording !== null && <i className="recap-secondary-progress" style={{ width: `${recording * 100}%` }} aria-hidden="true" />}
+    </button>
   </dialog>;
+}
+
+function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.href = url; link.download = name;
+  document.body.appendChild(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
