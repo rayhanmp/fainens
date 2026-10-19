@@ -53,7 +53,7 @@ function logRange(values: number[]) {
  * habit and a yearly splurge differ by orders of magnitude. The medians split the plot into four
  * habits, named in the corners; names go beside bubbles only where they fit, the rest on hover.
  */
-export function HabitMap({ points, format, short }: { points: HabitPoint[]; format: (value: number) => string; short: (value: number) => string }) {
+export function HabitMap({ points, format, short, onPick }: { points: HabitPoint[]; format: (value: number) => string; short: (value: number) => string; onPick?: (point: HabitPoint) => void }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const data = points.filter((point) => point.count > 0 && point.amount > 0);
   if (data.length === 0) return null;
@@ -145,7 +145,7 @@ export function HabitMap({ points, format, short }: { points: HabitPoint[]; form
           const color = point.color ?? 'var(--ref-outline)';
           const dim = hovered != null && hovered !== point.id;
           return (
-            <g key={point.id} onMouseEnter={() => setHovered(point.id)} className={cn('transition-opacity', dim && 'opacity-25')}>
+            <g key={point.id} onMouseEnter={() => setHovered(point.id)} onClick={() => onPick?.(point)} className={cn('transition-opacity', dim && 'opacity-25', onPick && 'cursor-pointer')}>
               {/* A bigger invisible target than the mark, so small bubbles are easy to hover. */}
               <circle cx={cx} cy={cy} r={Math.max(r, 10)} fill="transparent" />
               <circle cx={cx} cy={cy} r={r} fill={color} fillOpacity={hovered === point.id ? 1 : 0.82} stroke="var(--ref-surface-container-lowest)" strokeWidth={2} />

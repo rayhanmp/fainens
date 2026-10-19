@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { CategoryIcon } from './CategoryIcon';
 import { usePeriodCategoryUsageQuery } from './page-queries';
 import { shortRupiah } from './short-rupiah';
+import type { RelatedSubject } from './RelatedTransactionsModal';
 
 type Category = { id: number; name: string; color: string | null };
 type Series = { id: number; name: string; color: string; values: number[]; total: number };
@@ -154,7 +155,7 @@ function PeriodScrubber({ periods, values, running, range, onChange, color }: {
  * column lists what it is made of; clicking a legend entry (or a trend row) focuses that category.
  * The period still under way is drawn lighter, labelled "so far" and left out of the average.
  */
-export function PeriodSpendChart({ categories, focus, onFocusChange }: { categories: Category[]; focus: number | null; onFocusChange: (id: number | null) => void }) {
+export function PeriodSpendChart({ categories, focus, onFocusChange, onOpen }: { categories: Category[]; focus: number | null; onFocusChange: (id: number | null) => void; onOpen?: (subject: RelatedSubject) => void }) {
   const { formatAmount, balancesHidden } = useBalanceVisibility();
   const { periods, ranked, isLoading, isFetching } = usePeriodSeries(categories, 8);
   const [hover, setHover] = useState<{ period: number; series: number | null } | null>(null);
@@ -226,7 +227,7 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
               </button>
             )}
           </h2>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">{focused ? 'One category across the salary periods. Clear it to see every category.' : 'Each salary period, split by category. Hover a column for its breakdown.'}</p>
+          <p className="text-xs text-[var(--ref-on-surface-variant)]">{focused ? 'One category across the salary periods. Clear it to see every category.' : 'Each salary period, split by category. Hover a column for its breakdown, click a slice for its entries.'}</p>
         </div>
         {periods.length > 0 && <PeriodScrubber periods={periods} values={statValues} running={running} range={range} onChange={setRange} color={statSeries?.color} />}
       </div>
@@ -309,7 +310,8 @@ export function PeriodSpendChart({ categories, focus, onFocusChange }: { categor
                         <div
                           key={item.id}
                           onMouseEnter={() => setHover({ period: periodIndex, series: item.id })}
-                          className="w-full min-h-px transition-opacity"
+                          onClick={() => onOpen?.({ kind: 'category', id: item.id, name: item.name, color: item.color, from: period.startDate, to: period.endDate, scope: period.name })}
+                          className={cn('w-full min-h-px transition-opacity', onOpen && 'cursor-pointer')}
                           style={{
                             flex: `${value} 1 0`,
                             backgroundColor: item.color,
@@ -483,9 +485,10 @@ function PeriodTooltip({ name, running, total, periodTotal, change, segments, fo
 
 /**
  * A small line of one category across the periods. Hovering it shows a crosshair on the nearest
- * period with that period's amount above it.
+ * period with that period's amount above it; clicking opens that period's entries (and doesn't
+ * also select the row).
  */
-function Sparkline({ values, labels, color, highlightLast, format }: { values: number[]; labels: string[]; color: string; highlightLast: boolean; format: (value: number) => string }) {
+function Sparkline({ values, labels, color, highlightLast, format, onPick }: { values: number[]; labels: string[]; color: string; highlightLast: boolean; format: (value: number) => string; onPick?: (index: number) => void }) {
   const [active, setActive] = useState<number | null>(null);
   const max = Math.max(1, ...values);
   const width = 96;
@@ -500,9 +503,14 @@ function Sparkline({ values, labels, color, highlightLast, format }: { values: n
   };
   return (
     <div
-      className="relative shrink-0 cursor-crosshair py-1"
+      className={cn('relative shrink-0 py-1', onPick ? 'cursor-pointer' : 'cursor-crosshair')}
       onMouseMove={(event) => pick(event.clientX, event.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => setActive(null)}
+      onClick={(event) => {
+        if (!onPick || active == null) return;
+        event.stopPropagation();
+        onPick(active);
+      }}
     >
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
         <polyline points={`${x(0)},${height} ${points} ${x(last)},${height}`} fill={color} fillOpacity={0.1} stroke="none" />
@@ -530,7 +538,7 @@ function Sparkline({ values, labels, color, highlightLast, format }: { values: n
  * period against the one before it. The period still under way is left out of the comparison.
  * Clicking a row focuses that category in "Spending by period".
  */
-export function CategoryTrendTable({ categories, focus, onSelect }: { categories: Category[]; focus: number | null; onSelect: (id: number) => void }) {
+export function CategoryTrendTable({ categories, focus, onSelect, onOpen }: { categories: Category[]; focus: number | null; onSelect: (id: number) => void; onOpen?: (subject: RelatedSubject) => void }) {
   const { formatAmount, balancesHidden } = useBalanceVisibility();
   const short = (value: number) => (balancesHidden ? formatAmount(value) : shortRupiah(value));
   const { periods, ranked, isLoading } = usePeriodSeries(categories, 8);
@@ -584,7 +592,14 @@ export function CategoryTrendTable({ categories, focus, onSelect }: { categories
                     <p className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{series.name}</p>
                     <p className="truncate text-[11px] text-[var(--ref-on-surface-variant)]">{formatAmount(Math.round(average))} a period on average</p>
                   </div>
-                  <Sparkline values={series.values} labels={labels} format={short} color={series.color} highlightLast={lastComplete === series.values.length - 1} />
+                  <Sparkline
+                    values={series.values}
+                    labels={labels}
+                    format={short}
+                    color={series.color}
+                    highlightLast={lastComplete === series.values.length - 1}
+                    onPick={onOpen ? (index) => onOpen({ kind: 'category', id: series.id, name: series.name, color: series.color, from: periods[index].startDate, to: periods[index].endDate, scope: periods[index].name }) : undefined}
+                  />
                   <div className="w-24 shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(latest)}</p>
                     <p className="text-[11px] font-medium">

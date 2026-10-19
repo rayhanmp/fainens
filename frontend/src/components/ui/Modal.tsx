@@ -198,7 +198,9 @@ export function Modal({
 
   return (
     <div 
-      className={cn('fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 lg:p-5', overlayClassName)}
+      // `!m-0`: a modal rendered inside a `space-y-*` container would otherwise get its gap as a
+      // bottom margin whenever another element follows it, leaving a strip uncovered.
+      className={cn('fixed inset-0 z-50 !m-0 flex items-center justify-center p-3 sm:p-4 lg:p-5', overlayClassName)}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

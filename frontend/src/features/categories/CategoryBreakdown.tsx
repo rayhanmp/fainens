@@ -3,6 +3,7 @@ import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
 import { CategoryIcon } from './CategoryIcon';
 import { HabitMap } from './HabitMap';
+import type { RelatedSubject } from './RelatedTransactionsModal';
 import { useCategoryBreakdownQuery } from './page-queries';
 import { squarify } from './treemap';
 import { shortRupiah } from './short-rupiah';
@@ -19,6 +20,8 @@ const RANGES: { id: Range; label: string }[] = [
   { id: 'year', label: 'This year' },
   { id: 'all', label: 'All time' },
 ];
+/** How each range reads in the related-transactions modal. */
+const RANGE_SCOPES: Record<Range, string | undefined> = { '30d': 'Last 30 days', year: 'This year', all: undefined };
 /** Tiles past this many fold into one "Other" tile, so every tile stays big enough to read. */
 const MAX_TILES = 9;
 /** Layout size (px) until the treemap's real box has been measured. */
@@ -63,7 +66,7 @@ type Row = { id: number; name: string; color: string | null; amount: number; cou
  * entries), drawn in the category's own colour and labelled on the tile, above a habit map of how
  * often and how much each time.
  */
-export function CategoryBreakdown({ categories }: { categories: Array<{ id: number; name: string; color: string | null }> }) {
+export function CategoryBreakdown({ categories, onOpen }: { categories: Array<{ id: number; name: string; color: string | null }>; onOpen?: (subject: RelatedSubject) => void }) {
   const { formatAmount, balancesHidden } = useBalanceVisibility();
   const [metric, setMetric] = useState<Metric>('amount');
   const [range, setRange] = useState<Range>('year');
@@ -109,6 +112,11 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
   const show = (value: number) => (metric === 'amount' ? formatAmount(value) : `${value.toLocaleString('id-ID')} ${value === 1 ? 'entry' : 'entries'}`);
 
   const hoveredTile = tiles.find((tile) => tile.key === hovered) ?? null;
+  // Opens a category's entries within the range shown here.
+  const open = (row: { id: number; name: string; color: string | null }) => {
+    const { from, to } = bounds(range, now);
+    onOpen?.({ kind: 'category', id: row.id, name: row.name, color: row.color, from, to, scope: RANGE_SCOPES[range] });
+  };
 
   return (
     <section className="flex h-full flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
@@ -155,9 +163,10 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
                     key={tile.key}
                     role="listitem"
                     aria-label={`${name}: ${show(tile.value)}, ${share(tile.value)}%`}
-                    className="absolute p-[2px]"
+                    className={cn('absolute p-[2px]', tile.row && onOpen && 'cursor-pointer')}
                     style={{ left: `${(rect.x / box.w) * 100}%`, top: `${(rect.y / box.h) * 100}%`, width: `${width}%`, height: `${height}%` }}
                     onMouseEnter={() => setHovered(tile.key)}
+                    onClick={() => tile.row && open(tile.row)}
                   >
                     <div
                       className={cn('flex h-full w-full flex-col justify-between overflow-hidden rounded-xl p-2.5 transition-[filter,box-shadow] duration-150', hovered === tile.key && 'brightness-110 ring-2 ring-[var(--ref-on-surface)]/20')}
@@ -186,14 +195,14 @@ export function CategoryBreakdown({ categories }: { categories: Array<{ id: numb
                 ? hoveredTile.row
                   ? <><span className="font-semibold text-[var(--ref-on-surface)]">{hoveredTile.row.name}</span> · {formatAmount(hoveredTile.row.amount)} over {hoveredTile.row.count} {hoveredTile.row.count === 1 ? 'entry' : 'entries'} · {formatAmount(hoveredTile.row.average)} each · {share(hoveredTile.value)}% of {metric === 'amount' ? 'spending' : 'entries'}</>
                   : <><span className="font-semibold text-[var(--ref-on-surface)]">Other</span> · {folded.map((row) => row.name).join(', ')}</>
-                : 'Hover a tile for its numbers. Tile size follows the measure you pick.'}
+                : 'Hover a tile for its numbers, click it for its entries. Tile size follows the measure you pick.'}
             </p>
           </div>
 
           <div className="border-t border-[var(--color-border)] pt-3">
             <h3 className="text-xs font-semibold text-[var(--ref-on-surface)]">Spending habits</h3>
             <p className="mb-1 text-[11px] text-[var(--ref-on-surface-variant)]">How often against how much each time; bubble size is the total.</p>
-            <HabitMap points={rows} format={formatAmount} short={(value) => (balancesHidden ? formatAmount(value) : shortRupiah(value))} />
+            <HabitMap points={rows} format={formatAmount} short={(value) => (balancesHidden ? formatAmount(value) : shortRupiah(value))} onPick={onOpen ? open : undefined} />
           </div>
         </div>
       )}

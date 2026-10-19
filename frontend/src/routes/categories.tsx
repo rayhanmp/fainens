@@ -10,6 +10,7 @@ import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { CategoryBreakdown } from '../features/categories/CategoryBreakdown';
 import { CategoryTrendTable, PeriodSpendChart } from '../features/categories/CategoryTrends';
 import { TagGroupsPanel } from '../features/categories/TagGroupsPanel';
+import { RelatedTransactionsModal, type RelatedSubject } from '../features/categories/RelatedTransactionsModal';
 import { ColorPicker, Field, textInputClass } from '../features/categories/EditorParts';
 import {
   useCreateCategoryMutation,
@@ -86,6 +87,8 @@ function CategoriesPage() {
   const [menuCategoryId, setMenuCategoryId] = useState<number | null>(null);
   // The category in focus in "Spending by period", set from its legend or a trend row.
   const [trendFocus, setTrendFocus] = useState<number | null>(null);
+  // The category or tag whose entries are open in the related-transactions modal.
+  const [related, setRelated] = useState<RelatedSubject | null>(null);
 
   const usedCategoryColors = useMemo(() => new Set(
     allCategories
@@ -267,7 +270,7 @@ function CategoriesPage() {
             <div className={panelHeader}>
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-[var(--ref-on-surface)]">Categories</h2>
-                <p className="text-xs text-[var(--ref-on-surface-variant)]">Most used first. Click one to edit it.</p>
+                <p className="text-xs text-[var(--ref-on-surface-variant)]">Most used first. Click one to see its entries.</p>
               </div>
               {archivedCount > 0 && (
                 <button
@@ -304,7 +307,7 @@ function CategoriesPage() {
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)` }}>
                         <CategoryIcon name={c.name} color={color} />
                       </span>
-                      <button type="button" onClick={() => openCategoryModal(c)} className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                      <button type="button" onClick={() => setRelated({ kind: 'category', id: c.id, name: c.name, color: c.color ?? null })} className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
                         <span className="flex items-center gap-2">
                           <span className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{c.name}</span>
                           {!c.isActive && <span className="shrink-0 rounded-md bg-[var(--ref-surface-container-high)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--ref-on-surface-variant)]">Archived</span>}
@@ -371,19 +374,20 @@ function CategoriesPage() {
             groups={tagGroups}
             uses={(tagId) => stats.byTag[tagId] ?? 0}
             loading={isLoading}
-            onEditTag={(tag) => openTagModal(tag)}
+            onOpenTag={(tag) => setRelated({ kind: 'tag', id: tag.id, name: tag.name, color: tag.color ?? null })}
             onAddTag={() => openTagModal()}
           />
         </section>
 
         <section className="mt-6 space-y-6" aria-label="Insights">
-          <PeriodSpendChart categories={allCategories} focus={trendFocus} onFocusChange={setTrendFocus} />
+          <PeriodSpendChart categories={allCategories} focus={trendFocus} onFocusChange={setTrendFocus} onOpen={setRelated} />
 
           <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            <CategoryBreakdown categories={allCategories} />
+            <CategoryBreakdown categories={allCategories} onOpen={setRelated} />
             <CategoryTrendTable
               categories={allCategories}
               focus={trendFocus}
+              onOpen={setRelated}
               onSelect={(id) => {
                 setTrendFocus((current) => (current === id ? null : id));
                 document.getElementById('spending-by-period')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -391,6 +395,22 @@ function CategoriesPage() {
             />
           </div>
         </section>
+
+        <RelatedTransactionsModal
+          subject={related}
+          categories={allCategories}
+          onClose={() => setRelated(null)}
+          onEdit={(subject) => {
+            setRelated(null);
+            if (subject.kind === 'category') {
+              const category = allCategories.find((item) => item.id === subject.id);
+              if (category) openCategoryModal(category);
+            } else {
+              const tag = tags.find((item) => item.id === subject.id);
+              if (tag) openTagModal(tag);
+            }
+          }}
+        />
 
         <Modal
           isOpen={isCategoryModalOpen}

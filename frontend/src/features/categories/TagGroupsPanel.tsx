@@ -14,13 +14,14 @@ const DRAG_TYPE = 'application/x-fainens-tag';
  * Tags filed into groups you make yourself. Drag a tag onto a group (or onto "Ungrouped") to move
  * it; groups are only for keeping the list tidy and never affect reports.
  */
-export function TagGroupsPanel({ tags, groups, uses, loading, className, onEditTag, onAddTag }: {
+export function TagGroupsPanel({ tags, groups, uses, loading, className, onOpenTag, onAddTag }: {
   tags: PanelTag[];
   groups: PanelTagGroup[];
   uses: (tagId: number) => number;
   loading: boolean;
   className?: string;
-  onEditTag: (tag: PanelTag) => void;
+  /** Shows the tag's entries; editing is offered from there. */
+  onOpenTag: (tag: PanelTag) => void;
   onAddTag: () => void;
 }) {
   const { confirm } = useConfirm();
@@ -108,8 +109,8 @@ export function TagGroupsPanel({ tags, groups, uses, loading, className, onEditT
         draggable
         onDragStart={(event) => { event.dataTransfer.setData(DRAG_TYPE, String(tag.id)); event.dataTransfer.effectAllowed = 'move'; setDraggingId(tag.id); }}
         onDragEnd={() => { setDraggingId(null); setDropTarget(null); }}
-        onClick={() => onEditTag(tag)}
-        title={duplicate ? 'Another tag has the same name' : 'Drag to another group, or click to edit'}
+        onClick={() => onOpenTag(tag)}
+        title={duplicate ? 'Another tag has the same name' : 'Drag to another group, or click to see its entries'}
         className={cn(
           'inline-flex max-w-full cursor-grab items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-[background-color,opacity] hover:bg-[var(--ref-surface-container-low)] active:cursor-grabbing',
           count === 0 ? 'border-dashed border-[var(--color-border)] text-[var(--ref-on-surface-variant)]' : 'border-[var(--color-border)] text-[var(--ref-on-surface)]',
