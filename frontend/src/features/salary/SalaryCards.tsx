@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Banknote, Calendar, Coins, Info, Landmark } from 'lucide-react';
+import { Banknote, Calendar, ChevronDown, Coins, Info, Landmark } from 'lucide-react';
 import { cn, formatDate } from '../../lib/utils';
 import { incomeKind, TAX_TREATMENT_LABELS, withRollingAverage, type MonthIncome, type MonthIncomeTrend, type PayCycle, type TakeHomeSegment, type TaxOutlook, type TaxTreatment, type YearPoint } from './income-insights';
 
@@ -474,63 +474,79 @@ const TREATMENT_HINTS: Record<TaxTreatment, string> = {
 
 /** The year's other income, each entry marked for how it counts on the annual return. */
 export function TaxIncomeCard({ year, rows, totals, loading, savingId, onChange, formatAmount }: TaxIncomeCardProps) {
+  // Closed until asked for: it's a once-a-year chore, not something to see on every visit.
+  const [open, setOpen] = useState(false);
+  const unmarked = rows.filter((row) => !row.marked).length;
   return (
     <section className={card}>
-      <h3 className={cardTitle}>Other income for the {year} return</h3>
-      <p className={cardCaption}>Everything but the wage. Entries count as taxable until you mark them; only taxable income goes into the tax outlook.</p>
-      <dl className="mt-4 grid grid-cols-3 gap-2">
-        {TREATMENT_ORDER.map((treatment) => (
-          <div key={treatment} className="rounded-2xl bg-[var(--ref-surface-container-low)] px-3 py-2.5">
-            <dt className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
-              {TAX_TREATMENT_LABELS[treatment]}
-              <Hint text={TREATMENT_HINTS[treatment]}>
-                <span tabIndex={0} aria-label={`About ${TAX_TREATMENT_LABELS[treatment]}`} className="grid h-4 w-4 place-items-center rounded outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
-                  <Info className="h-3 w-3" aria-hidden />
-                </span>
-              </Hint>
-            </dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(totals[treatment])}</dd>
-          </div>
-        ))}
-      </dl>
-      {loading ? (
-        <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">No other income recorded in {year}.</p>
-      ) : (
-        <ul className="mt-4 max-h-[28rem] overflow-y-auto">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--color-border)] py-2.5 last:border-b-0">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.description}</p>
-                <p className="text-xs text-[var(--ref-on-surface-variant)]">{formatDate(row.date)} · {formatAmount(row.incomeCents)}{row.marked ? '' : ' · not marked yet'}</p>
+      <button type="button" aria-expanded={open} aria-controls="tax-income-entries" onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+        <div className="min-w-0 flex-1">
+          <h3 className={cardTitle}>Other income for the {year} return</h3>
+          <p className={cardCaption}>
+            {TREATMENT_ORDER.map((treatment) => `${TAX_TREATMENT_LABELS[treatment]} ${formatAmount(totals[treatment])}`).join(' · ')}
+            {unmarked > 0 && <span className="font-semibold text-[var(--ref-on-surface)]"> · {unmarked} not marked yet</span>}
+          </p>
+        </div>
+        <ChevronDown className={cn('h-5 w-5 shrink-0 text-[var(--ref-on-surface-variant)] transition-transform', open && 'rotate-180')} aria-hidden />
+      </button>
+      {open && (
+        <div id="tax-income-entries">
+          <p className={cn(cardCaption, 'mt-4')}>Everything but the wage. Entries count as taxable until you mark them; only taxable income goes into the tax outlook.</p>
+          <dl className="mt-4 grid grid-cols-3 gap-2">
+            {TREATMENT_ORDER.map((treatment) => (
+              <div key={treatment} className="rounded-2xl bg-[var(--ref-surface-container-low)] px-3 py-2.5">
+                <dt className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">
+                  {TAX_TREATMENT_LABELS[treatment]}
+                  <Hint text={TREATMENT_HINTS[treatment]}>
+                    <span tabIndex={0} aria-label={`About ${TAX_TREATMENT_LABELS[treatment]}`} className="grid h-4 w-4 place-items-center rounded outline-none hover:text-[var(--ref-on-surface-variant)] focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]">
+                      <Info className="h-3 w-3" aria-hidden />
+                    </span>
+                  </Hint>
+                </dt>
+                <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(totals[treatment])}</dd>
               </div>
-              <div
-                className={cn('ui-segmented ui-segmented--3 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1', savingId === row.id && 'opacity-60')}
-                role="radiogroup"
-                aria-label={`Tax treatment of ${row.description}`}
-                data-segment-index={row.marked ? TREATMENT_ORDER.indexOf(row.taxTreatment) : -1}
-              >
-                {TREATMENT_ORDER.map((treatment) => {
-                  const chosen = row.marked && row.taxTreatment === treatment;
-                  return (
-                    <button
-                      key={treatment}
-                      type="button"
-                      role="radio"
-                      aria-checked={chosen}
-                      disabled={savingId === row.id}
-                      onClick={() => { if (!chosen) onChange(row.id, treatment); }}
-                      className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', chosen ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}
-                    >
-                      {TAX_TREATMENT_LABELS[treatment]}
-                    </button>
-                  );
-                })}
-              </div>
-            </li>
-          ))}
-        </ul>
+            ))}
+          </dl>
+          {loading ? (
+            <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
+          ) : rows.length === 0 ? (
+            <p className="mt-6 text-sm text-[var(--ref-on-surface-variant)]">No other income recorded in {year}.</p>
+          ) : (
+            <ul className="mt-4 max-h-[28rem] overflow-y-auto">
+              {rows.map((row) => (
+                <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--color-border)] py-2.5 last:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[var(--ref-on-surface)]">{row.description}</p>
+                    <p className="text-xs text-[var(--ref-on-surface-variant)]">{formatDate(row.date)} · {formatAmount(row.incomeCents)}{row.marked ? '' : ' · not marked yet'}</p>
+                  </div>
+                  <div
+                    className={cn('ui-segmented ui-segmented--3 inline-grid shrink-0 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-[var(--ref-surface-container)] p-1', savingId === row.id && 'opacity-60')}
+                    role="radiogroup"
+                    aria-label={`Tax treatment of ${row.description}`}
+                    data-segment-index={row.marked ? TREATMENT_ORDER.indexOf(row.taxTreatment) : -1}
+                  >
+                    {TREATMENT_ORDER.map((treatment) => {
+                      const chosen = row.marked && row.taxTreatment === treatment;
+                      return (
+                        <button
+                          key={treatment}
+                          type="button"
+                          role="radio"
+                          aria-checked={chosen}
+                          disabled={savingId === row.id}
+                          onClick={() => { if (!chosen) onChange(row.id, treatment); }}
+                          className={cn('rounded-lg px-2.5 py-1 text-xs font-bold', chosen ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}
+                        >
+                          {TAX_TREATMENT_LABELS[treatment]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   );
