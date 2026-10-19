@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { cn, formatDecimal } from '../../lib/utils';
 import { tooltipSurface } from './panel-styles';
+import { Modal } from '../../components/ui/Modal';
+import { usePhoneSheets } from '../../hooks/usePhoneSheets';
 import {
   addPulseMetric, choosePulseMetric, defaultPulseMetrics, MAX_PULSE_METRICS, MIN_PULSE_METRICS, movePulseMetric,
   pulseMetricGroups, pulseMetricLabels, pulseMetricShortLabels, pulseMetricValue, removePulseMetric,
@@ -267,15 +269,17 @@ function MetricPicker({ current, shown, align, preview, ariaLabel, className, tr
     .filter((group) => group.ids.length > 0);
   const options = groups.flatMap((group) => group.ids);
 
+  // Phones choose from a bottom sheet (which closes itself) instead of the anchored list.
+  const asSheet = usePhoneSheets();
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || asSheet) return undefined;
     const closeOutside = (event: globalThis.PointerEvent) => {
       if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener('pointerdown', closeOutside);
     listRef.current?.focus({ preventScroll: true });
     return () => document.removeEventListener('pointerdown', closeOutside);
-  }, [open]);
+  }, [open, asSheet]);
 
   // Keep the highlighted option in view while moving with the keyboard.
   useEffect(() => {
@@ -285,6 +289,9 @@ function MetricPicker({ current, shown, align, preview, ariaLabel, className, tr
   const openMenu = () => { setHighlight(adding ? 0 : Math.max(0, options.indexOf(current))); setOpen(true); };
   const close = () => { setOpen(false); triggerRef.current?.focus(); };
   const choose = (id: PulseMetricId) => { onChoose(id); close(); };
+  const surface = (list: ReactNode) => (asSheet
+    ? <Modal isOpen onClose={close} title={adding ? 'Add a metric' : 'Change metric'} contentClassName="p-2">{list}</Modal>
+    : list);
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
@@ -301,7 +308,7 @@ function MetricPicker({ current, shown, align, preview, ariaLabel, className, tr
       >
         {trigger(open)}
       </button>
-      {open && (
+      {open && surface(
         <div
           ref={listRef}
           id={listId}
@@ -318,8 +325,10 @@ function MetricPicker({ current, shown, align, preview, ariaLabel, className, tr
             if ((event.key === 'Enter' || event.key === ' ') && options[highlight]) { event.preventDefault(); choose(options[highlight]); }
           }}
           className={cn(
-            'ui-popover absolute top-[calc(100%+0.4rem)] z-50 max-h-[min(26rem,70vh)] w-72 overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 text-left shadow-2xl outline-none',
-            align === 'right' ? 'right-0' : 'left-0',
+            asSheet
+              ? 'text-left outline-none [&_[role=option]]:min-h-12'
+              : 'ui-popover absolute top-[calc(100%+0.4rem)] z-50 max-h-[min(26rem,70vh)] w-72 overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1.5 text-left shadow-2xl outline-none',
+            !asSheet && (align === 'right' ? 'right-0' : 'left-0'),
           )}
         >
           {adding && <p className="px-2.5 pb-0.5 pt-1.5 text-xs font-bold text-[var(--ref-on-surface)]">Add a metric</p>}
