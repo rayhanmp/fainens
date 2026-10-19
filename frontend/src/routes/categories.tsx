@@ -259,8 +259,9 @@ function CategoriesPage() {
           ))}
         </dl>
 
-        {/* Both panels share the row's height, so the category list never ends short of the tags. */}
-        <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Both panels share the row's height, so the category list never ends short of the tags; the
+            tags get a wide column so their chips wrap into fewer rows and the row stays short. */}
+        <section className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className={cn(panelFrame, 'flex flex-col')}>
             <div className={panelHeader}>
               <div className="min-w-0">
