@@ -55,6 +55,11 @@
 .loans-row-actions { justify-content: flex-end; gap: 8px; }
 .loans-row-actions .brutalist-button { padding: 7px 10px; font-size: 11px; white-space: nowrap; }
 .loans-details { gap: 4px; color: var(--ref-primary); font-size: 12px; font-weight: 600; cursor: pointer; }
+/* The name and Details links are ~20px tall; on touch screens an invisible layer widens their tap area. */
+@media (pointer: coarse) {
+  .loans-name, .loans-details { position: relative; }
+  .loans-name::after, .loans-details::after { content: ''; position: absolute; inset: -10px -6px; }
+}
 .loans-details:hover { text-decoration: underline; }
 .loans-icon-button { display: grid; place-items: center; min-width: 32px; min-height: 32px; border-radius: 8px; color: var(--color-muted); cursor: pointer; }
 .loans-icon-button:hover { background: color-mix(in srgb, var(--ref-error) 8%, var(--color-surface)); color: var(--ref-error); }

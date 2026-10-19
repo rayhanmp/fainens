@@ -54,7 +54,7 @@ export function DashboardNotifications({ items, readState, maskAmounts }: {
       <div className={cn(popoverSurface, 'absolute right-0 top-[calc(100%+0.65rem)] z-40 w-[min(24rem,calc(100vw-2rem))] p-3')}>
         <div className="flex items-center justify-between gap-3 px-2 py-1">
           <h2 className="font-headline text-base font-extrabold">Notifications</h2>
-          <div className="flex items-center gap-2"><span className="text-xs text-[var(--ref-on-surface-variant)]">{unread.length || 'All clear'}</span>{unread.length > 0 && <button type="button" onClick={() => markReadWithUndo(readState, items)} className="text-[11px] font-bold text-[var(--ref-primary)] hover:underline">Mark all read</button>}<button type="button" onClick={close} aria-label="Close notifications" className="grid h-8 w-8 place-items-center rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"><X className="h-4 w-4" /></button></div>
+          <div className="flex items-center gap-2"><span className="text-xs text-[var(--ref-on-surface-variant)]">{unread.length || 'All clear'}</span>{unread.length > 0 && <button type="button" onClick={() => markReadWithUndo(readState, items)} className="touch-hit text-[11px] font-bold text-[var(--ref-primary)] hover:underline">Mark all read</button>}<button type="button" onClick={close} aria-label="Close notifications" className="grid h-8 w-8 place-items-center rounded-full text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ref-primary)]"><X className="h-4 w-4" /></button></div>
         </div>
         {items.length === 0 ? <p className="px-2 py-5 text-sm text-[var(--ref-on-surface-variant)]">Nothing needs your attention right now.</p> : <div className="mt-2 divide-y divide-[var(--color-border)]">{items.map((item) => {
           const read = isRead(item);
@@ -64,8 +64,8 @@ export function DashboardNotifications({ items, readState, maskAmounts }: {
               <span className="min-w-0"><strong className="block text-sm">{item.title}</strong><span className="mt-0.5 block text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{maskAmounts(item.detail)}</span><span className="mt-1.5 block text-xs font-bold text-[var(--ref-primary)]">{item.action}</span></span>
             </Link>
             {read
-              ? <button type="button" onClick={() => readState.markUnread([item])} className="mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline" title="Mark as unread">Read</button>
-              : <button type="button" onClick={() => markReadWithUndo(readState, [item])} className="mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline">Mark read</button>}
+              ? <button type="button" onClick={() => readState.markUnread([item])} className="touch-hit mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline" title="Mark as unread">Read</button>
+              : <button type="button" onClick={() => markReadWithUndo(readState, [item])} className="touch-hit mt-3 shrink-0 px-1 text-[10px] font-bold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-primary)] hover:underline">Mark read</button>}
           </div>;
         })}</div>}
       </div>

@@ -437,7 +437,7 @@ export function YearToDateCard({ curve, year, expectedNet, balancesHidden, forma
               aria-pressed={showSpending}
               onClick={() => setShowSpending((value) => !value)}
               title={showSpending ? 'Hide spending' : 'Show spending'}
-              className={cn('-mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 transition-[opacity,background-color] hover:bg-[var(--ref-surface-container-low)]', !showSpending && 'opacity-60 hover:opacity-100')}
+              className={cn('touch-hit -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 transition-[opacity,background-color] hover:bg-[var(--ref-surface-container-low)]', !showSpending && 'opacity-60 hover:opacity-100')}
             >
               <span className="h-0.5 w-4 rounded-full" style={{ background: showSpending ? SPENT_STROKE : 'var(--ref-outline)' }} aria-hidden />
               {showSpending ? `Spent (${formatAmount(spent)})` : 'Show spending'}

@@ -37,6 +37,11 @@
 .accounts-ledger-actions { gap: 18px; }
 .accounts-utility-action { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 550; color: var(--color-text-secondary); }
 .accounts-utility-action:hover { color: var(--color-accent); }
+/* These text actions are ~18px tall; on touch screens an invisible layer widens what a tap can hit. */
+@media (pointer: coarse) {
+  .accounts-text-action, .accounts-utility-action { position: relative; }
+  .accounts-text-action::after, .accounts-utility-action::after { content: ''; position: absolute; inset: -10px -6px; }
+}
 .accounts-toolbar { padding: 7px; margin-bottom: 20px; border: 1px solid var(--accounts-line); border-radius: 12px; background: var(--accounts-panel); gap: 12px; }
 .accounts-filter-tabs { display: flex; gap: 4px; min-width: 0; }
 .accounts-filter-tab { display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; padding: 9px 12px; border-radius: 7px; font-size: 12px; font-weight: 550; color: var(--color-text-secondary); }

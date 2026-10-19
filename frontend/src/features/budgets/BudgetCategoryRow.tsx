@@ -244,7 +244,7 @@ export function BudgetCategoryRow({ row, categoryColor, status, tracked, compari
                   type="button"
                   onClick={() => setDraft(formatIdNominalInput(String(row.plannedAmount)))}
                   title="Change the planned amount"
-                  className="relative z-[1] mr-4 shrink-0 border-b border-transparent font-semibold tabular-nums text-[var(--ref-on-surface)] transition-colors hover:border-[var(--ref-outline)] focus-visible:border-[var(--ref-primary)]"
+                  className="touch-hit relative z-[1] mr-4 shrink-0 border-b border-transparent font-semibold tabular-nums text-[var(--ref-on-surface)] transition-colors hover:border-[var(--ref-outline)] focus-visible:border-[var(--ref-primary)]"
                 >
                   {formatAmount(row.plannedAmount)}
                   <Pencil className="absolute left-full top-1/2 ml-1 h-3 w-3 -translate-y-1/2 text-[var(--ref-outline)] opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100" aria-hidden />

@@ -81,7 +81,7 @@ export function AIInsightCard({ type, periodId, className }: AIInsightCardProps)
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
           aria-expanded={!isCollapsed}
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+          className="touch-hit flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
         >
           <div className="flex min-w-0 items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--ref-primary)]" />

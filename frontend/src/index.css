@@ -1564,6 +1564,14 @@ button[data-variant="danger"]:focus-visible,
   .ui-segmented::before, .ui-segmented > button, .finance-glass-dock a, .finance-glass-dock button { transition: none; }
 }
 
+/* Small controls (text links, tiny chips) get a larger tap area on touch screens without changing
+ * how they look: an invisible layer reaching ~10px past the control takes the tap. Only for elements
+ * that aren't otherwise positioned, since it makes them `position: relative`. */
+@media (pointer: coarse) {
+  .touch-hit { position: relative; }
+  .touch-hit::after { content: ''; position: absolute; inset: -10px -6px; }
+}
+
 /* Button loading spinner; slower rather than frozen when motion is reduced, so progress still reads. */
 .button-spinner { animation: button-spin 700ms linear infinite; }
 @keyframes button-spin { to { transform: rotate(360deg); } }

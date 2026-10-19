@@ -278,7 +278,7 @@ function CategoriesPage() {
                   type="button"
                   aria-pressed={showArchived}
                   onClick={() => setShowArchived((value) => !value)}
-                  className={cn('shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors', showArchived ? 'bg-[var(--ref-surface-container-high)] text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]')}
+                  className={cn('touch-hit shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors', showArchived ? 'bg-[var(--ref-surface-container-high)] text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]')}
                 >
                   {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
                 </button>
