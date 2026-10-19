@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, Coffee, Compass, Crown, Downl
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { ScratchCover } from './Interactive';
+import { PersonaScene } from './PersonaScenes';
 import { CategoryIcon } from '../categories/CategoryIcon';
 import { useCategoriesQuery } from '../categories/queries';
 import { AnimatedValue, RollingValue } from './AnimatedValue';
@@ -30,7 +31,7 @@ export function ChapterVisual({ story, periodId, onShare, variants, run, score }
     case 'months': return <MonthsVisual story={story} />;
     case 'interlude': return <InterludeVisual story={story} run={run} />;
     case 'mixtape': return <MixtapeVisual story={story} />;
-    case 'persona': return <PersonaVisual story={story} />;
+    case 'persona': return <PersonaVisual story={story} run={run} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;
@@ -275,14 +276,13 @@ function MixtapeVisual({ story }: { story: Of<'mixtape'> }) {
   </div>;
 }
 
-function PersonaVisual({ story }: { story: Of<'persona'> }) {
+function PersonaVisual({ story, run }: { story: Of<'persona'>; run: number }) {
   const { persona } = story;
-  const Icon = personaIcons[persona.key];
-  return <div className="recap-persona">
-    <PersonaBadge personaKey={persona.key} Icon={Icon} />
-    <p className="recap-persona-name recap-seq" style={seq(6)}>{persona.name}</p>
-    <p className="recap-persona-tagline recap-seq" style={seq(6.6)}>{persona.tagline}{persona.dash ? ` With a dash of ${persona.dash}.` : ''}</p>
-    <ul className="recap-chips recap-persona-evidence">{persona.evidence.map((item, i) => <li key={item} style={{ '--c': i } as CSSProperties}>{item}</li>)}</ul>
+  return <div className={`recap-persona recap-persona-${persona.key}`}>
+    <PersonaScene persona={persona} run={run} />
+    <p className="recap-persona-name recap-seq" style={seq(8)}>{persona.name}</p>
+    <p className="recap-persona-tagline recap-seq" style={seq(8.6)}>{persona.tagline}{persona.dash ? ` With a dash of ${persona.dash}.` : ''}</p>
+    <ul className="recap-chips recap-persona-evidence">{persona.evidence.slice(0, 2).map((item, i) => <li key={item} style={{ '--c': i } as CSSProperties}>{item}</li>)}</ul>
   </div>;
 }
 

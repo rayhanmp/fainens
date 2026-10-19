@@ -439,7 +439,19 @@ function arrivalSounds(story: RecapStory, enter: number, variants: SectionVarian
     play(cue[story.variant], enter + 200);
     if (story.variant === 'marquee') play('horn', enter + 700);
   }
-  if (story.id === 'persona') { play('drumroll', enter); play('cymbal', enter + 1250); play('thunk', enter + 1250); }
+  if (story.id === 'persona') {
+    // Each personality has its own entrance: a gong for the monk, a club drop for the weekend warrior.
+    play('drumroll', enter);
+    const key = story.persona.key;
+    if (key === 'monk') { play('gong', enter + 400); play('chord', enter + 1800); }
+    if (key === 'weekend') { play('arcade', enter + 300); play('horn', enter + 800); play('patter', enter + 1000); }
+    if (key === 'bigTicket') { play('shimmer', enter + 400); play('cash', enter + 1100); }
+    if (key === 'steady') { play('pour', enter + 400); for (let i = 0; i < 8; i++) play('tick', enter + 700 + i * 90); }
+    if (key === 'loyal') { for (let i = 0; i < Math.min(10, story.persona.figure); i++) play('pop', enter + 600 + i * 140); play('thunk', enter + 2100); }
+    if (key === 'devotee') { play('fanfare', enter + 500); play('cymbal', enter + 1300); }
+    if (key === 'explorer') { play('whirl', enter + 300); play('ding', enter + 1300); play('pop', enter + 2700); }
+    if (key === 'allRounder') { for (let i = 0; i < 6; i++) play('pop', enter + 400 + i * 300); }
+  }
   if (story.id === 'overview') {
     if (variants.overview === 'coins') for (let i = 0; i < 10; i++) play('coin', enter + 500 + i * 110);
     if (variants.overview === 'scale') { play('flap', enter + 600); play('thunk', enter + 2300); }

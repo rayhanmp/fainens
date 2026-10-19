@@ -141,11 +141,21 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
       { eyebrow: 'Now playing', title: f.top ? `Now playing: ${f.top.label}.` : 'Now playing: your receipts.', body: 'Thirty minutes, timed by where the money went.' },
       { eyebrow: 'The B-sides', title: 'Press play on your receipts.', body: 'Track lengths follow each category’s share of spending.' },
     ];
-    case 'persona': return [
-      { eyebrow: 'Your money personality', title: 'Meet your money personality.', body: 'Read from when and how you spent. Nothing more.' },
-      { eyebrow: 'The verdict is in', title: 'Who were you this period?', body: 'A personality built from your patterns, not your choices.' },
-      { eyebrow: 'Drumroll, please', title: 'This period, you were…', body: 'Based on the rhythm of your receipts.' },
-    ];
+    case 'persona': {
+      // Each persona speaks in its own voice; the plain introductions stay in the mix.
+      const voices: Record<string, Copy[]> = {
+        weekend: [{ eyebrow: 'Party mode: on', title: 'The weekend called. You answered.', body: 'Saturdays and Sundays set the tempo.' }, { eyebrow: 'Clubbing, financially', title: 'Weekdays rest. Weekends rave.', body: 'Your receipts came alive on the weekend.' }],
+        bigTicket: [{ eyebrow: 'Big spender energy', title: 'Go big or go home.', body: 'A few receipts did most of the talking.' }, { eyebrow: 'Luxury edition', title: 'Rare finds, big tickets.', body: 'Small receipts, then the occasional showstopper.' }],
+        steady: [{ eyebrow: 'Slow and steady', title: 'A little, every day.', body: 'Spending showed up most days, in small sips.' }, { eyebrow: 'Daily ritual', title: 'Same time tomorrow?', body: 'A steady drip of everyday receipts.' }],
+        monk: [{ eyebrow: 'Enlightenment reached', title: 'Shhh. The wallet is meditating.', body: 'Long, quiet stretches with nothing going out.' }, { eyebrow: 'Inner peace', title: 'Breathe in. Spend nothing.', body: 'The calm between the receipts.' }],
+        loyal: [{ eyebrow: 'Member since forever', title: 'Same again, please.', body: 'One favourite kept coming back.' }, { eyebrow: 'Loyalty card: full', title: 'You know what you like.', body: 'A regular, through and through.' }],
+        devotee: [{ eyebrow: 'All hail', title: 'One category to rule them all.', body: 'A single category wore the crown.' }, { eyebrow: 'Long live the king', title: 'Crowned by your receipts.', body: 'One category, all the attention.' }],
+        explorer: [{ eyebrow: 'Off the map', title: 'You went everywhere.', body: 'Spending wandered into every corner.' }, { eyebrow: 'Passport stamped', title: 'Here, there, everywhere.', body: 'So many categories, one period.' }],
+        allRounder: [{ eyebrow: 'Jack of all trades', title: 'A bit of everything.', body: 'No single habit ran the show.' }, { eyebrow: 'Perfectly balanced', title: 'Juggling it all.', body: 'Your receipts kept every ball in the air.' }],
+      };
+      return [...(lead && voices[lead] ? voices[lead] : []), ...(lead && voices[lead] ? voices[lead] : []),
+        { eyebrow: 'Drumroll, please', title: 'This period, you were…', body: 'Based on the rhythm of your receipts.' }];
+    }
     case 'closing': return [
       { eyebrow: 'The period, in one card', title: 'Same you. Fresh chapter.', body: 'What gets a little more room next period?' },
       { eyebrow: 'That’s a wrap', title: `That’s a wrap on ${f.period}.`, body: 'Share the card, or take one more look at the budget.' },

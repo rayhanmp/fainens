@@ -6,7 +6,7 @@ export type Sound =
   | 'whoosh' | 'tick' | 'thunk' | 'chime' | 'buzz' | 'pop' | 'scratch' | 'fanfare'
   | 'bloom' | 'shutter' | 'swish' | 'flap' | 'glitch' | 'thud' | 'whirl' | 'zoom' | 'rewind'
   | 'shimmer' | 'warp' | 'pour' | 'patter' | 'chord' | 'coin' | 'oink' | 'ding' | 'needle'
-  | 'riser' | 'drumroll' | 'cymbal' | 'horn' | 'jingle' | 'cash' | 'arcade';
+  | 'riser' | 'drumroll' | 'cymbal' | 'horn' | 'jingle' | 'cash' | 'arcade' | 'gong';
 export type SoundMode = 'off' | 'fx' | 'music';
 
 const STORAGE_KEY = 'fainens.recap.sound';
@@ -116,6 +116,8 @@ const library: Record<Sound, (ctx: AudioContext) => void> = {
   jingle: ctx => notes(ctx, [523, 659, 784, 1047, 1319], .075, { type: 'triangle', length: .4, gain: .06 }),
   cash: ctx => { noise(ctx, { length: .12, from: 1200, gain: .06 }); tone(ctx, { type: 'triangle', from: 2093, start: .1, length: .5, gain: .06 }); tone(ctx, { type: 'triangle', from: 2637, start: .16, length: .6, gain: .05 }); },
   arcade: ctx => notes(ctx, [523, 784, 659, 1047, 784, 1319], .07, { type: 'square', length: .09, gain: .035 }),
+  // A temple gong: a low fundamental with slightly inharmonic partials and a long tail.
+  gong: ctx => [[98, .18], [151, .09], [233, .05], [347, .03]].forEach(([f, g]) => tone(ctx, { from: f, to: f * .985, length: 3.2, gain: g, vibrato: 1.5 })),
 };
 
 const buzzPatterns: Partial<Record<Sound, number | number[]>> = {

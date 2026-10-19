@@ -59,7 +59,15 @@ export type CoverFacts = {
   purchaseCount: number; keptShare: number | null; passenger: string; seat: string;
 };
 export type PersonaKey = 'weekend' | 'bigTicket' | 'steady' | 'monk' | 'loyal' | 'devotee' | 'explorer' | 'allRounder';
-export type Persona = { key: PersonaKey; name: string; tagline: string; evidence: string[]; dash: string | null };
+export type Persona = {
+  key: PersonaKey; name: string; tagline: string; evidence: string[]; dash: string | null;
+  /** The number the persona's scene is built around, with how to print it. */
+  figure: number; figureLabel: string; figurePrefix?: string; figureSuffix?: string;
+};
+/** Each persona dresses its chapter in its own colours, whatever the run's palette. */
+export const PERSONA_THEMES: Record<PersonaKey, RecapTheme> = {
+  weekend: 'plum', bigTicket: 'noir', steady: 'cocoa', monk: 'mint', loyal: 'rose', devotee: 'electric', explorer: 'sky', allRounder: 'butter',
+};
 export type MixtapeTrack = { title: string; artist: string; length: string; share: number };
 
 type Copy = { eyebrow: string; title: string; body: string };
@@ -399,12 +407,12 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   return chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
-    const raw = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : undefined);
+    const raw = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
     const copy = { eyebrow: forYear(raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
     const equivalence = equivalences[chapter.id];
     const play = dealt.get(chapter.id);
     return {
-      ...chapter, ...copy, theme: palette[i % palette.length],
+      ...chapter, ...copy, theme: chapter.id === 'persona' && run !== 0 ? PERSONA_THEMES[chapter.persona.key] : palette[i % palette.length],
       // The piggy bank replaces the scratch card when it is dealt.
       ...(chapter.id === 'overview' && play?.kind === 'piggy' ? { reveal: 'piggy' } : {}),
       // Some runs swap the closing line for a playful equivalence.
@@ -421,7 +429,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
 function pickPersona(f: CopyFacts, random: () => number): Persona {
   const ratio = f.elapsedDays > 0 ? f.spendingDays / f.elapsedDays : 0;
   const spread = f.average !== null && f.median ? f.average / f.median : 1;
-  const candidates: Array<Omit<Persona, 'dash'> & { score: number }> = [
+  const candidates: Array<Omit<Persona, 'dash' | 'figure' | 'figureLabel' | 'figurePrefix' | 'figureSuffix'> & { score: number }> = [
     { key: 'weekend', score: f.busiestWeekday && f.weekendShare >= 40 ? f.weekendShare - 22 : 0, name: 'The Weekend Warrior', tagline: 'Saturdays and Sundays carried the receipts.',
       evidence: [`${f.weekendShare}% of spending on weekends`, ...(f.busiestWeekday ? [`${f.busiestWeekday}s led the week`] : [])] },
     { key: 'bigTicket', score: spread >= 2.4 ? (spread - 1) * 14 : 0, name: 'The Big-Ticket Hunter', tagline: 'A few big receipts, a lot of small ones.',
@@ -442,6 +450,18 @@ function pickPersona(f: CopyFacts, random: () => number): Persona {
   // Near-ties are broken by the run's dice, so a balanced period can wear a different hat on replay.
   const ranked = candidates.map(candidate => ({ ...candidate, score: candidate.score + random() * 4 })).sort((a, b) => b.score - a.score);
   const [first, second] = ranked;
-  return { key: first.key, name: first.name, tagline: first.tagline, evidence: first.evidence.slice(0, 3),
+  // The one number each persona's scene is built around: the figure that actually earned the title.
+  const quietDays = Math.max(0, f.elapsedDays - f.spendingDays);
+  const figures: Record<PersonaKey, Pick<Persona, 'figure' | 'figureLabel' | 'figurePrefix' | 'figureSuffix'>> = {
+    weekend: { figure: f.weekendShare, figureSuffix: '%', figureLabel: 'of spending on weekends' },
+    bigTicket: f.largestShare ? { figure: f.largestShare, figureSuffix: '%', figureLabel: 'of purchase spend in one receipt' } : { figure: Math.round(spread * 10) / 10, figureSuffix: '×', figureLabel: 'the typical receipt, on average' },
+    steady: { figure: f.spendingDays, figureLabel: `of ${f.elapsedDays} days had spending` },
+    monk: f.quiet >= 2 ? { figure: f.quiet, figureLabel: 'days in a row, nothing out' } : { figure: quietDays, figureLabel: 'days with nothing going out' },
+    loyal: { figure: f.repeat?.occurrences ?? 0, figurePrefix: '×', figureLabel: 'the same again' },
+    devotee: { figure: f.top?.share ?? 0, figureSuffix: '%', figureLabel: 'to a single category' },
+    explorer: { figure: f.categoryCount, figureLabel: 'categories visited' },
+    allRounder: { figure: f.purchaseCount, figureLabel: 'purchases, all sorts' },
+  };
+  return { key: first.key, name: first.name, tagline: first.tagline, evidence: first.evidence.slice(0, 3), ...figures[first.key],
     dash: second && second.key !== 'allRounder' && second.score > 20 ? second.name.replace(/^The /, '') : null };
 }
