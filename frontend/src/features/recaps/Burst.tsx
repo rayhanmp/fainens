@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
 import { seeded } from './motion';
 
 const colors = ['#ff5a5f', '#ffb400', '#00b3a4', '#7b61ff', '#2f80ff', '#ff7ac6', 'var(--recap-ink)'];
@@ -6,8 +6,9 @@ const colors = ['#ff5a5f', '#ffb400', '#00b3a4', '#7b61ff', '#2f80ff', '#ff7ac6'
 /**
  * Celebration particles. Every particle gets its own flight from a seeded roll, so a replay throws a
  * different burst. `confetti` mixes ribbons and dots, `stars` throws the brand ✳, `coins` rains gold.
+ * Memoised: the particles depend only on the props, so the viewer's other updates skip them.
  */
-export function Burst({ seed, kind, count = 46, origin = 'center', delay = 0 }: {
+export const Burst = memo(function Burst({ seed, kind, count = 46, origin = 'center', delay = 0 }: {
   seed: number; kind: 'confetti' | 'stars' | 'coins' | 'sparkle'; count?: number; origin?: 'center' | 'cannons' | 'title'; delay?: number;
 }) {
   const random = seeded(seed);
@@ -30,4 +31,4 @@ export function Burst({ seed, kind, count = 46, origin = 'center', delay = 0 }: 
       {p.shape === 'stars' || p.shape === 'sparkle' ? '✳' : p.shape === 'coins' ? 'Rp' : null}
     </i>)}
   </div>;
-}
+});

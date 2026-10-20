@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Coffee, Compass, Crown, Download, Gem, Leaf, PartyPopper, Plane, Repeat2, Shapes, type LucideIcon } from 'lucide-react';
-import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, memo, type CSSProperties, type ReactNode } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { ScratchCover } from './Interactive';
 import { PersonaScene } from './PersonaScenes';
@@ -23,7 +23,10 @@ const Money = ({ value }: { value: number }) => <AnimatedValue value={value} mon
 // keeps unnamed or uncoloured slices legible.
 const fallbackTones = [1, .72, .52, .38, .26];
 
-export function ChapterVisual({ story, periodId, onShare, variants, run, score }: { story: RecapStory; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
+// Memoised: toasts, pausing and the leaving layer re-render the viewer, but not the chapter's visual.
+export const ChapterVisual = memo(ChapterVisualFor);
+
+function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { story: RecapStory; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
   const shared = { variants, run };
   switch (story.id) {
     case 'intro': return <CoverVisual story={story} {...shared} />;

@@ -1,6 +1,6 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Link } from '@tanstack/react-router';
-import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Music, Pause, Play, RefreshCw, Rewind, Sparkles, Trophy, Volume2, VolumeX, X } from 'lucide-react';
 import { useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type SavedRecapStory } from './queries';
 import { combineYear, recapYear, yearEdition } from './year';
@@ -126,8 +126,12 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
     return item.id === 'intro' || (item.id === 'closing' && variants.finale !== 'card') ? { ...style, pattern: 'none' as const, frame: 'none' as const, sticker: null } : style;
   };
   const remix = remixOf(story);
-  const graded = Object.values(answers).filter(answer => answer.scored);
-  const score = { correct: graded.filter(answer => answer.correct).length, total: graded.length };
+  // Kept stable between renders so the memoised chapter visuals can skip them.
+  const score = useMemo(() => {
+    const graded = Object.values(answers).filter(answer => answer.scored);
+    return { correct: graded.filter(answer => answer.correct).length, total: graded.length };
+  }, [answers]);
+  const openShare = useCallback(() => setShareOpen(true), []);
 
   useEffect(() => {
     if (!leaving) return;
@@ -382,10 +386,10 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
       </div>}
       <div className="recap-stage">
         {leaving && contentKey(leaving.visit, leaving.gate) !== contentKey(nav.visit, quizOpen) && <ChapterContent key={contentKey(leaving.visit, leaving.gate)} story={leaving.story} gate={leaving.gate} remix={remixOf(leaving.story)}
-          className={`recap-leaving recap-out-${leaving.transition} recap-dir-${nav.direction}`} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={() => setShareOpen(true)} />}
+          className={`recap-leaving recap-out-${leaving.transition} recap-dir-${nav.direction}`} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={openShare} />}
         <ChapterContent key={contentKey(nav.visit, quizOpen)} story={story} live gate={quizOpen} answer={answers[story.id]} remix={remix}
           onAnswer={answer} className={`recap-arriving recap-in-${nav.visit === 0 ? 'first' : nav.transition} recap-dir-${nav.direction} recap-intro-${variants.intro}`}
-          style={{ '--enter': `${entering}ms` } as CSSProperties} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={() => setShareOpen(true)} />
+          style={{ '--enter': `${entering}ms` } as CSSProperties} periodId={recap.period.id} variants={variants} run={run} score={score} onShare={openShare} />
       </div>
       {opening && <OpeningTitles variant={opening} name={recap.period.name} paper={paper} crawl={crawl} onSkip={() => setOpening(null)} />}
       <div className="recap-bottom-actions">
@@ -567,7 +571,7 @@ function OpeningTitles({ variant, name, paper, crawl, onSkip }: { variant: Openi
 }
 
 // Each chapter gets one large, quiet motif behind the content.
-function ChapterBackdrop({ chapter, seed }: { chapter: string; seed: number }) {
+const ChapterBackdrop = memo(function ChapterBackdrop({ chapter, seed }: { chapter: string; seed: number }) {
   const motifs: Record<string, string> = {
     intro: seed % 2 === 0 ? 'portal' : 'contour', overview: 'current', budget: 'rail', categories: 'halo',
     calendar: 'orbit', weekdays: 'steps', streak: 'wave', receipts: 'receipt', habits: 'ripple', comparison: 'wave', closing: 'horizon',
@@ -576,4 +580,4 @@ function ChapterBackdrop({ chapter, seed }: { chapter: string; seed: number }) {
   return <div className={`recap-backdrop recap-backdrop-${motifs[chapter] ?? 'contour'} recap-backdrop-edition-${seed % 3}`} aria-hidden="true">
     {[0, 1, 2, 3].map(ring => <i key={ring} style={{ '--ring': ring } as CSSProperties} />)}
   </div>;
-}
+});
