@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   archiveSubscription,
+  attachSubscriptionPastPayment,
   correctSubscriptionOccurrence,
+  detachSubscriptionPastPayment,
+  listSubscriptionPastPayments,
   createSubscription,
   getSubscriptionHistory,
   listAccounts,
@@ -129,6 +132,25 @@ export function useCorrectOccurrenceMutation() {
 export function useVoidOccurrenceMutation() {
   return useSubscriptionMutation(({ subscriptionId, dueAt, reason }: { subscriptionId: number; dueAt: number; reason: string }) =>
     unwrapGenerated(voidSubscriptionOccurrence(subscriptionId, dueAt, { reason }), 201, 'Failed to void the renewal'));
+}
+
+/** Expenses already in the ledger that look like this subscription's payments. */
+export function usePastPaymentsQuery(subscriptionId: number | null) {
+  return useQuery({
+    queryKey: [...queryKeys.subscriptions.all, 'past-payments', subscriptionId],
+    queryFn: () => unwrapGenerated(listSubscriptionPastPayments(subscriptionId!), 200, 'Failed to look for past payments'),
+    enabled: subscriptionId != null,
+  });
+}
+
+export function useAttachPastPaymentMutation() {
+  return useSubscriptionMutation(({ subscriptionId, transactionId, dueAt }: { subscriptionId: number; transactionId: number; dueAt: number | null }) =>
+    unwrapGenerated(attachSubscriptionPastPayment(subscriptionId, { transactionId, dueAt }), 200, 'Failed to attach the payment'));
+}
+
+export function useDetachPastPaymentMutation() {
+  return useSubscriptionMutation(({ subscriptionId, transactionId }: { subscriptionId: number; transactionId: number }) =>
+    unwrapGenerated(detachSubscriptionPastPayment(subscriptionId, transactionId), 200, 'Failed to detach the payment'));
 }
 
 export function useUnlinkOccurrenceMutation() {

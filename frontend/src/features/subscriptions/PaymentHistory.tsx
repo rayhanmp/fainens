@@ -20,9 +20,11 @@ const STATUS_NOTE: Partial<Record<HistoryEntry['status'], string>> = {
  * The charges a subscription has made, newest first. Renewals skipped without a charge fold away;
  * tapping a charge shows what can be done with it.
  */
-export function PaymentHistory({ history, onUnlink, onFix }: {
+export function PaymentHistory({ history, onUnlink, onDetach, onFix }: {
   history: ReturnType<typeof useSubscriptionHistoryQuery>;
   onUnlink: (entry: DatedHistoryEntry) => void;
+  /** For a payment attached without a renewal: stop counting it. */
+  onDetach: (transactionId: number) => void;
   onFix: (entry: DatedHistoryEntry, kind: 'correct' | 'void') => void;
 }) {
   const navigate = useNavigate();
@@ -88,6 +90,7 @@ export function PaymentHistory({ history, onUnlink, onFix }: {
                       <Button type="button" size="sm" variant="secondary" onClick={() => void navigate({ to: '/transactions', search: { periodId: 'all', transactionId: String(tx.id) } })}>Open transaction</Button>
                       {live && dated && entry.status === 'paid' && <Button type="button" size="sm" variant="secondary" onClick={() => onFix(entry as DatedHistoryEntry, 'correct')}>Correct</Button>}
                       {live && dated && entry.status === 'linked' && <Button type="button" size="sm" variant="secondary" onClick={() => onUnlink(entry as DatedHistoryEntry)}>Unlink</Button>}
+                      {live && !dated && entry.status === 'linked' && <Button type="button" size="sm" variant="secondary" onClick={() => onDetach(tx.id)}>Detach</Button>}
                       {live && dated && (entry.status === 'paid' || entry.status === 'linked') && <Button type="button" size="sm" variant="secondary" className="text-[var(--color-danger)]" onClick={() => onFix(entry as DatedHistoryEntry, 'void')}>Void</Button>}
                     </div>
                   </div>

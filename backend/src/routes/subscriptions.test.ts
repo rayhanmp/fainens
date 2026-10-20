@@ -289,6 +289,40 @@ describe("resolving subscription renewals one by one", () => {
     expect(list.subscriptions.find((item: { id: number }) => item.id === 7).lastPayment).toEqual({ date: paidAt, amount: 35_520 });
   });
 
+  it("attaches a past manual payment to a skipped renewal, or tags it, without touching its journal", async () => {
+    const due = noonDaysFromToday(DUE_DAYS_AGO);
+    expect((await resolve([{ subscriptionId: 7, dueAt: due, action: "skip" }])).statusCode).toBe(200);
+    const expense = (date: number, description: string) => {
+      const id = state.db.insert(schema.transactions).values({ date: new Date(date), description, txType: "simple_expense", status: "posted", categoryId: 1 }).returning().all()[0].id;
+      state.db.insert(schema.transactionLines).values([
+        { transactionId: id, accountId: 2, debit: 35_520, credit: 0 },
+        { transactionId: id, accountId: 1, debit: 0, credit: 35_520 },
+      ]).run();
+      return id;
+    };
+    const late = expense(noonDaysFromToday(DUE_DAYS_AGO + 3), "Google One storage");
+    const older = expense(noonDaysFromToday(-200), "Google One storage");
+
+    const found = (await app.inject({ method: "GET", url: "/api/subscriptions/7/past-payments" })).json().candidates;
+    expect(found.find((c: { transactionId: number }) => c.transactionId === late)).toMatchObject({ reason: "both", skippedDueAt: due });
+    expect(found.find((c: { transactionId: number }) => c.transactionId === older)).toMatchObject({ skippedDueAt: null });
+
+    const filled = await app.inject({ method: "POST", url: "/api/subscriptions/7/past-payments", payload: { transactionId: late, dueAt: due } });
+    expect(filled.statusCode).toBe(200);
+    expect(state.db.select().from(schema.recurringOccurrences).all().find((row: { transactionId: number | null }) => row.transactionId === late)).toMatchObject({ status: "posted" });
+    expect((await app.inject({ method: "POST", url: "/api/subscriptions/7/past-payments", payload: { transactionId: older } })).statusCode).toBe(200);
+    expect(balance(1)).toBe(-71_040);
+
+    const history = (await app.inject({ method: "GET", url: "/api/subscriptions/7/history" })).json();
+    expect(history).toMatchObject({ paidCount: 2, totalPaid: 71_040 });
+    expect((await app.inject({ method: "POST", url: "/api/subscriptions/7/past-payments", payload: { transactionId: older } })).statusCode).toBe(409);
+
+    const detached = await app.inject({ method: "POST", url: `/api/subscriptions/7/past-payments/${older}/detach` });
+    expect(detached.statusCode).toBe(200);
+    expect(state.db.select().from(schema.transactions).where(eq(schema.transactions.id, older)).all()[0].subscriptionId).toBeNull();
+    expect((await app.inject({ method: "POST", url: `/api/subscriptions/7/past-payments/${late}/detach` })).statusCode).toBe(409);
+  });
+
   it("won't move the schedule back onto a renewal already recorded", async () => {
     const due = noonDaysFromToday(DUE_DAYS_AGO);
     expect((await resolve([{ subscriptionId: 7, dueAt: due, action: "skip" }])).statusCode).toBe(200);

@@ -11552,6 +11552,91 @@ export type UnlinkSubscriptionOccurrence409 = {
   [key: string]: unknown;
 };
 
+export type ListSubscriptionPastPayments200CandidatesItemReason = typeof ListSubscriptionPastPayments200CandidatesItemReason[keyof typeof ListSubscriptionPastPayments200CandidatesItemReason];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListSubscriptionPastPayments200CandidatesItemReason = {
+  name: 'name',
+  amount: 'amount',
+  both: 'both',
+} as const;
+
+export type ListSubscriptionPastPayments200CandidatesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+  date: number;
+  description: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  /** @nullable */
+  accountName: string | null;
+  reason: ListSubscriptionPastPayments200CandidatesItemReason;
+  /** @nullable */
+  skippedDueAt: number | null;
+};
+
+export type ListSubscriptionPastPayments200 = {
+  candidates: ListSubscriptionPastPayments200CandidatesItem[];
+  [key: string]: unknown;
+};
+
+export type ListSubscriptionPastPayments404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AttachSubscriptionPastPaymentBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  transactionId: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  dueAt?: number | null;
+  [key: string]: unknown;
+};
+
+export type AttachSubscriptionPastPayment200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+  /** @nullable */
+  filledDueAt: number | null;
+  [key: string]: unknown;
+};
+
+export type AttachSubscriptionPastPayment409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DetachSubscriptionPastPayment200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+  [key: string]: unknown;
+};
+
+export type DetachSubscriptionPastPayment409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type GetSubscription200BillingCycle = typeof GetSubscription200BillingCycle[keyof typeof GetSubscription200BillingCycle];
 
 
@@ -25900,6 +25985,130 @@ export const unlinkSubscriptionOccurrence = async (id: number,
     dueAt: number, options?: RequestInit): Promise<unlinkSubscriptionOccurrenceResponse> => {
   
   return generatedFetch<unlinkSubscriptionOccurrenceResponse>(getUnlinkSubscriptionOccurrenceUrl(id,dueAt),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type listSubscriptionPastPaymentsResponse200 = {
+  data: ListSubscriptionPastPayments200
+  status: 200
+}
+
+export type listSubscriptionPastPaymentsResponse404 = {
+  data: ListSubscriptionPastPayments404
+  status: 404
+}
+    
+export type listSubscriptionPastPaymentsResponseSuccess = (listSubscriptionPastPaymentsResponse200) & {
+  headers: Headers;
+};
+export type listSubscriptionPastPaymentsResponseError = (listSubscriptionPastPaymentsResponse404) & {
+  headers: Headers;
+};
+
+export type listSubscriptionPastPaymentsResponse = (listSubscriptionPastPaymentsResponseSuccess | listSubscriptionPastPaymentsResponseError)
+
+export const getListSubscriptionPastPaymentsUrl = (id: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/past-payments`
+}
+
+export const listSubscriptionPastPayments = async (id: number, options?: RequestInit): Promise<listSubscriptionPastPaymentsResponse> => {
+  
+  return generatedFetch<listSubscriptionPastPaymentsResponse>(getListSubscriptionPastPaymentsUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type attachSubscriptionPastPaymentResponse200 = {
+  data: AttachSubscriptionPastPayment200
+  status: 200
+}
+
+export type attachSubscriptionPastPaymentResponse409 = {
+  data: AttachSubscriptionPastPayment409
+  status: 409
+}
+    
+export type attachSubscriptionPastPaymentResponseSuccess = (attachSubscriptionPastPaymentResponse200) & {
+  headers: Headers;
+};
+export type attachSubscriptionPastPaymentResponseError = (attachSubscriptionPastPaymentResponse409) & {
+  headers: Headers;
+};
+
+export type attachSubscriptionPastPaymentResponse = (attachSubscriptionPastPaymentResponseSuccess | attachSubscriptionPastPaymentResponseError)
+
+export const getAttachSubscriptionPastPaymentUrl = (id: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/past-payments`
+}
+
+export const attachSubscriptionPastPayment = async (id: number,
+    attachSubscriptionPastPaymentBody: AttachSubscriptionPastPaymentBody, options?: RequestInit): Promise<attachSubscriptionPastPaymentResponse> => {
+  
+  return generatedFetch<attachSubscriptionPastPaymentResponse>(getAttachSubscriptionPastPaymentUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      attachSubscriptionPastPaymentBody,)
+  }
+);}
+
+
+
+export type detachSubscriptionPastPaymentResponse200 = {
+  data: DetachSubscriptionPastPayment200
+  status: 200
+}
+
+export type detachSubscriptionPastPaymentResponse409 = {
+  data: DetachSubscriptionPastPayment409
+  status: 409
+}
+    
+export type detachSubscriptionPastPaymentResponseSuccess = (detachSubscriptionPastPaymentResponse200) & {
+  headers: Headers;
+};
+export type detachSubscriptionPastPaymentResponseError = (detachSubscriptionPastPaymentResponse409) & {
+  headers: Headers;
+};
+
+export type detachSubscriptionPastPaymentResponse = (detachSubscriptionPastPaymentResponseSuccess | detachSubscriptionPastPaymentResponseError)
+
+export const getDetachSubscriptionPastPaymentUrl = (id: number,
+    transactionId: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/past-payments/${transactionId}/detach`
+}
+
+export const detachSubscriptionPastPayment = async (id: number,
+    transactionId: number, options?: RequestInit): Promise<detachSubscriptionPastPaymentResponse> => {
+  
+  return generatedFetch<detachSubscriptionPastPaymentResponse>(getDetachSubscriptionPastPaymentUrl(id,transactionId),
   {      
     ...options,
     method: 'POST'

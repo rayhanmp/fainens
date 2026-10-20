@@ -4,12 +4,14 @@ import { Modal } from '../../components/ui/Modal';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { Dropdown, SettingsRow } from '../settings/controls';
 import { PaymentHistory, type DatedHistoryEntry } from './PaymentHistory';
+import { FindPaymentsDialog } from './FindPaymentsDialog';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn, formatDate, parseIdNominalToInt } from '../../lib/utils';
 import { cycleLabel, cycleSuffix, daysFromToday, displayStatus, formatForeign, fromDateInput, nextRenewal, relativeDue, renews, STATUS_LABELS, toDateInput, type DisplayStatus } from './schedule';
 import {
   useCorrectOccurrenceMutation,
   useDeleteSubscriptionMutation,
+  useDetachPastPaymentMutation,
   useSubscriptionHistoryQuery,
   useUnlinkOccurrenceMutation,
   useUpdateSubscriptionMutation,
@@ -173,6 +175,22 @@ export function SubscriptionDetail({ subscription, overdue, accounts, accountNam
   const [dialog, setDialog] = useState<null | 'resume' | 'cancel'>(null);
   const [openedAt] = useState(() => Date.now());
   const [fixing, setFixing] = useState<{ entry: DatedHistoryEntry; kind: 'correct' | 'void' } | null>(null);
+  const [finding, setFinding] = useState(false);
+  const detach = useDetachPastPaymentMutation();
+  const detachIt = async (transactionId: number) => {
+    const ok = await confirm({
+      title: 'Detach this payment?',
+      message: `It stays in your transactions but stops counting as a ${subscription.name} payment.`,
+      confirmLabel: 'Detach',
+    });
+    if (!ok) return;
+    try {
+      await detach.mutateAsync({ subscriptionId: subscription.id, transactionId });
+      onMessage('Payment detached.');
+    } catch (err) {
+      onMessage(err instanceof Error ? err.message : 'Could not detach', 'error');
+    }
+  };
   const status = displayStatus(subscription, overdueIds);
   const category = categories.find((item) => item.id === subscription.categoryId);
   const canPay = renews(subscription) && !overdueIds.has(subscription.id);
@@ -322,11 +340,14 @@ export function SubscriptionDetail({ subscription, overdue, accounts, accountNam
           {subscription.notes && <p className="whitespace-pre-wrap rounded-xl bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm text-[var(--ref-on-surface-variant)]">{subscription.notes}</p>}
 
           <section>
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <h3 className="text-sm font-semibold text-[var(--ref-on-surface)]">Payments</h3>
-              {history.data && history.data.paidCount > 0 && <p className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatAmount(history.data.totalPaid)} across {history.data.paidCount} payment{history.data.paidCount === 1 ? '' : 's'}</p>}
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[var(--ref-on-surface)]">Payments</h3>
+                {history.data && history.data.paidCount > 0 && <p className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatAmount(history.data.totalPaid)} across {history.data.paidCount} payment{history.data.paidCount === 1 ? '' : 's'}</p>}
+              </div>
+              <Button type="button" size="sm" variant="secondary" onClick={() => setFinding(true)}>Find missing payments</Button>
             </div>
-            <PaymentHistory history={history} onUnlink={(entry) => void unlinkIt(entry)} onFix={(entry, kind) => setFixing({ entry, kind })} />
+            <PaymentHistory history={history} onUnlink={(entry) => void unlinkIt(entry)} onDetach={(transactionId) => void detachIt(transactionId)} onFix={(entry, kind) => setFixing({ entry, kind })} />
           </section>
 
           <section className="settings-compact">
@@ -377,6 +398,7 @@ export function SubscriptionDetail({ subscription, overdue, accounts, accountNam
           onConfirm={(value) => void patch({ status: 'cancelled', endsAt: fromDateInput(value) }, `${subscription.name} cancelled from ${formatDate(fromDateInput(value))}.`)}
         />
       )}
+      {finding && <FindPaymentsDialog subscription={subscription} onClose={() => setFinding(false)} onMessage={onMessage} />}
       {fixing && (
         <FixDialog
           subscription={subscription}

@@ -7,7 +7,10 @@ import { subscriptions, accounts, categories } from "../db/schema";
 import { auditCreate, auditUpdate } from "../services/audit";
 import {
   applySubscriptionOccurrences,
+  attachPastPayment,
   correctSubscriptionOccurrence,
+  detachPastPayment,
+  findPastPaymentCandidates,
   findOccurrenceCandidates,
   getSubscriptionHistory,
   lastPaymentsBySubscription,
@@ -164,6 +167,14 @@ const subscriptionCorrectionResponseSchema = z.object({ reversalTransactionId: z
 const subscriptionVoidBodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).passthrough();
 const subscriptionVoidResponseSchema = z.object({ reversalTransactionId: z.number().int() }).passthrough();
 const subscriptionUnlinkResponseSchema = z.object({ transactionId: z.number().int() }).passthrough();
+const pastPaymentsResponseSchema = z.object({
+  candidates: z.array(z.object({
+    transactionId: z.number().int(), date: z.number(), description: z.string(), amount: z.number().int(), accountName: z.string().nullable(),
+    reason: z.enum(["name", "amount", "both"]), skippedDueAt: z.number().nullable(),
+  })),
+}).passthrough();
+const attachPastPaymentBodySchema = z.object({ transactionId: z.number().int().positive(), dueAt: z.number().int().nonnegative().nullable().optional() }).passthrough();
+const attachPastPaymentResponseSchema = z.object({ transactionId: z.number().int(), filledDueAt: z.number().nullable() }).passthrough();
 
 type SubscriptionBody = z.infer<typeof subscriptionUpdateBodySchema>;
 
@@ -306,6 +317,40 @@ export default async function (fastify: FastifyInstance) {
       return await unlinkSubscriptionOccurrence({ subscriptionId: id, dueAt });
     } catch (error) {
       return sendError(reply, 409, error, "Failed to unlink renewal");
+    }
+  });
+
+  /** Expenses already in the ledger that look like this subscription but pay none of its renewals. */
+  fastify.get("/api/subscriptions/:id/past-payments", {
+    schema: { operationId: "listSubscriptionPastPayments", tags: ["subscriptions"], params: subscriptionIdParamsSchema, response: { 200: pastPaymentsResponseSchema, 404: subscriptionErrorSchema } },
+  }, async (request, reply) => {
+    try {
+      return { candidates: await findPastPaymentCandidates((request.params as { id: number }).id) };
+    } catch (error) {
+      return sendError(reply, 404, error, "Subscription not found");
+    }
+  });
+
+  /** Attach one of those expenses: it fills a skipped renewal when one is given, else is tagged. */
+  fastify.post("/api/subscriptions/:id/past-payments", {
+    schema: { operationId: "attachSubscriptionPastPayment", tags: ["subscriptions"], params: subscriptionIdParamsSchema, body: attachPastPaymentBodySchema, response: { 200: attachPastPaymentResponseSchema, 409: subscriptionErrorSchema } },
+  }, async (request, reply) => {
+    const body = request.body as { transactionId: number; dueAt?: number | null };
+    try {
+      return await attachPastPayment({ subscriptionId: (request.params as { id: number }).id, transactionId: body.transactionId, dueAt: body.dueAt });
+    } catch (error) {
+      return sendError(reply, 409, error, "Failed to attach the payment");
+    }
+  });
+
+  fastify.post("/api/subscriptions/:id/past-payments/:transactionId/detach", {
+    schema: { operationId: "detachSubscriptionPastPayment", tags: ["subscriptions"], params: subscriptionIdParamsSchema.extend({ transactionId: z.coerce.number().int().positive() }), response: { 200: subscriptionUnlinkResponseSchema, 409: subscriptionErrorSchema } },
+  }, async (request, reply) => {
+    const { id, transactionId } = request.params as { id: number; transactionId: number };
+    try {
+      return await detachPastPayment({ subscriptionId: id, transactionId });
+    } catch (error) {
+      return sendError(reply, 409, error, "Failed to detach the payment");
     }
   });
 

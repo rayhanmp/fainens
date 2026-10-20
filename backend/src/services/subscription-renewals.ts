@@ -6,6 +6,7 @@ import {
   accounts,
   auditLogs,
   recurringOccurrences,
+  reimbursementClaimSources,
   subscriptions,
   transactionLines,
   transactions,
@@ -779,4 +780,152 @@ export async function unlinkSubscriptionOccurrence(input: { subscriptionId: numb
   });
   await invalidateOnTransactionMutation({ transactionId: linked.id, affectedAccountIds: [], affectedPeriodIds: [], revisionBumped: true });
   return { transactionId: linked.id };
+}
+
+/** Words too common in subscription names to say two charges are the same service. */
+const NAME_STOPWORDS = new Set(["com", "one", "the", "and", "for", "plus", "pro", "premium", "personal", "storage", "subscription", "monthly", "yearly", "annual", "plan", "gmail", "100gb", "200gb", "2tb"]);
+
+function nameWords(name: string): string[] {
+  return name.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 3 && !NAME_STOPWORDS.has(word));
+}
+
+export interface PastPaymentCandidate {
+  transactionId: number;
+  date: number;
+  description: string;
+  amount: number;
+  accountName: string | null;
+  /** Why it was suggested: its description names the service, or it costs exactly the price. */
+  reason: "name" | "amount" | "both";
+  /** The skipped renewal it would fill, when one fell within five weeks of it. */
+  skippedDueAt: number | null;
+}
+
+/**
+ * Expenses from the last 13 months that look like this subscription but pay no renewal: their
+ * description names the service, or they cost exactly its price. Anything already linked, claimed
+ * by a renewal, or part of a reimbursement claim is left out.
+ */
+export async function findPastPaymentCandidates(subscriptionId: number, now = Date.now()): Promise<PastPaymentCandidate[]> {
+  const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.id, subscriptionId)).limit(1);
+  if (!subscription) throw new Error("Subscription not found");
+  const since = new Date(new Date(now).getFullYear(), new Date(now).getMonth() - 12, 1);
+  const rows = await db.select({ id: transactions.id, date: transactions.date, description: transactions.description, txType: transactions.txType })
+    .from(transactions)
+    .where(and(eq(transactions.status, "posted"), isNull(transactions.subscriptionId), isNull(transactions.reversalOfTxId), gte(transactions.date, since)));
+  const open = rows.filter((row) => !LINKABLE_EXCLUDED_TYPES.includes(row.txType ?? "") && !(row.txType ?? "").startsWith("reimbursement"));
+  if (open.length === 0) return [];
+  const ids = open.map((row) => row.id);
+  const claimed = new Set((await db.select({ transactionId: recurringOccurrences.transactionId }).from(recurringOccurrences)
+    .where(inArray(recurringOccurrences.transactionId, ids))).map((row) => row.transactionId));
+  const reimbursed = new Set((await db.select({ id: reimbursementClaimSources.sourceTransactionId }).from(reimbursementClaimSources)
+    .where(inArray(reimbursementClaimSources.sourceTransactionId, ids))).map((row) => row.id));
+  const unclaimed = open.filter((row) => !claimed.has(row.id) && !reimbursed.has(row.id));
+  const amounts = await journalAmounts(unclaimed.map((row) => row.id));
+  const words = nameWords(subscription.name);
+  const skipped = (await db.select({ occurrenceDate: recurringOccurrences.occurrenceDate }).from(recurringOccurrences).where(and(
+    eq(recurringOccurrences.jobType, "subscription"),
+    eq(recurringOccurrences.scheduleId, subscriptionId),
+    eq(recurringOccurrences.status, "skipped"),
+  ))).map((row) => ts(row.occurrenceDate));
+  return unclaimed
+    .map((row): PastPaymentCandidate | null => {
+      const journal = amounts.get(row.id);
+      const amount = journal?.amount ?? 0;
+      const text = row.description.toLowerCase();
+      const named = words.some((word) => text.includes(word));
+      const priced = amount === subscription.amount;
+      if ((!named && !priced) || !journal?.paymentAccountName) return null;
+      const date = ts(row.date);
+      // The nearest skipped renewal up to a week before or five weeks after it was paid.
+      const slot = skipped
+        .filter((dueAt) => date >= dueAt - 7 * DAY_MS && date <= dueAt + 35 * DAY_MS)
+        .sort((a, b) => Math.abs(a - date) - Math.abs(b - date))[0] ?? null;
+      return { transactionId: row.id, date, description: row.description, amount, accountName: journal.paymentAccountName, reason: named && priced ? "both" as const : named ? "name" as const : "amount" as const, skippedDueAt: slot };
+    })
+    .filter((item): item is PastPaymentCandidate => item != null)
+    .sort((a, b) => b.date - a.date);
+}
+
+/**
+ * Attach a payment already in the ledger to a subscription. With `dueAt`, it fills that skipped
+ * renewal (the renewal becomes paid by it); without, it is tagged to the subscription as one of its
+ * payments. The transaction's journal is not touched.
+ */
+export async function attachPastPayment(input: { subscriptionId: number; transactionId: number; dueAt?: number | null }): Promise<{ transactionId: number; filledDueAt: number | null }> {
+  const [subscription] = await db.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1);
+  if (!subscription) throw new Error("Subscription not found");
+  const [row] = await db.select().from(transactions).where(eq(transactions.id, input.transactionId)).limit(1);
+  if (!row || row.status !== "posted" || row.reversalOfTxId != null || LINKABLE_EXCLUDED_TYPES.includes(row.txType ?? "")) {
+    throw new Error("Only a posted expense can be attached");
+  }
+  if (row.subscriptionId != null) throw new Error("That transaction already belongs to a subscription");
+  const [claimed] = await db.select({ id: recurringOccurrences.id }).from(recurringOccurrences).where(eq(recurringOccurrences.transactionId, row.id)).limit(1);
+  if (claimed) throw new Error("That transaction already pays a renewal");
+  const [reimbursed] = await db.select({ id: reimbursementClaimSources.id }).from(reimbursementClaimSources).where(eq(reimbursementClaimSources.sourceTransactionId, row.id)).limit(1);
+  if (reimbursed) throw new Error("That transaction is part of a reimbursement claim");
+
+  const filledDueAt = input.dueAt ?? null;
+  const occurrence = filledDueAt == null ? null : (await db.select().from(recurringOccurrences).where(and(
+    eq(recurringOccurrences.jobType, "subscription"),
+    eq(recurringOccurrences.scheduleId, input.subscriptionId),
+    eq(recurringOccurrences.occurrenceDate, new Date(filledDueAt)),
+  )).limit(1))[0];
+  if (filledDueAt != null && occurrence?.status !== "skipped") throw new Error("Only a skipped renewal can be filled by a past payment");
+
+  db.transaction((tx) => {
+    const current = tx.select({ subscriptionId: transactions.subscriptionId, status: transactions.status }).from(transactions).where(eq(transactions.id, row.id)).limit(1).all()[0];
+    if (!current || current.status !== "posted" || current.subscriptionId != null) throw new Error("That transaction changed; reload and retry");
+    tx.update(transactions).set({ subscriptionId: input.subscriptionId }).where(eq(transactions.id, row.id)).run();
+    if (occurrence) {
+      const now = tx.select().from(recurringOccurrences).where(eq(recurringOccurrences.id, occurrence.id)).limit(1).all()[0];
+      if (!now || now.status !== "skipped") throw new Error("That renewal changed; reload and retry");
+      const after = tx.update(recurringOccurrences)
+        .set({ status: "posted", transactionId: row.id, lastError: `Paid by existing transaction ${row.id} (was skipped)`, updatedAt: new Date() })
+        .where(eq(recurringOccurrences.id, occurrence.id)).returning().all()[0];
+      tx.insert(auditLogs).values({
+        entityType: "recurring_occurrence",
+        entityId: occurrence.id,
+        action: "link",
+        beforeSnapshot: Buffer.from(JSON.stringify(now)),
+        afterSnapshot: Buffer.from(JSON.stringify(after)),
+      }).run();
+    } else {
+      tx.insert(auditLogs).values({
+        entityType: "transaction",
+        entityId: row.id,
+        action: "update",
+        beforeSnapshot: Buffer.from(JSON.stringify({ subscriptionId: null })),
+        afterSnapshot: Buffer.from(JSON.stringify({ subscriptionId: input.subscriptionId, reason: "Attached as a past subscription payment" })),
+      }).run();
+    }
+    bumpFinancialRevisionSync(tx);
+  });
+  await invalidateOnTransactionMutation({ transactionId: row.id, affectedAccountIds: [], affectedPeriodIds: [], revisionBumped: true });
+  return { transactionId: row.id, filledDueAt };
+}
+
+/**
+ * Undo `attachPastPayment` for a payment tagged without a renewal: the transaction stops belonging
+ * to the subscription. One that pays a renewal is unlinked through that renewal instead.
+ */
+export async function detachPastPayment(input: { subscriptionId: number; transactionId: number }): Promise<{ transactionId: number }> {
+  const [row] = await db.select({ id: transactions.id, subscriptionId: transactions.subscriptionId, txType: transactions.txType }).from(transactions).where(eq(transactions.id, input.transactionId)).limit(1);
+  if (!row || row.subscriptionId !== input.subscriptionId) throw new Error("That transaction isn't attached to this subscription");
+  if (row.txType === "subscription_renewal" || row.txType === "subscription_correction") throw new Error("Renewals the subscription posted are voided or corrected instead");
+  const [claimed] = await db.select({ id: recurringOccurrences.id }).from(recurringOccurrences).where(eq(recurringOccurrences.transactionId, row.id)).limit(1);
+  if (claimed) throw new Error("It pays a renewal; unlink it from that renewal instead");
+  db.transaction((tx) => {
+    tx.update(transactions).set({ subscriptionId: null }).where(eq(transactions.id, row.id)).run();
+    tx.insert(auditLogs).values({
+      entityType: "transaction",
+      entityId: row.id,
+      action: "update",
+      beforeSnapshot: Buffer.from(JSON.stringify({ subscriptionId: input.subscriptionId })),
+      afterSnapshot: Buffer.from(JSON.stringify({ subscriptionId: null, reason: "Detached from the subscription" })),
+    }).run();
+    bumpFinancialRevisionSync(tx);
+  });
+  await invalidateOnTransactionMutation({ transactionId: row.id, affectedAccountIds: [], affectedPeriodIds: [], revisionBumped: true });
+  return { transactionId: row.id };
 }
