@@ -18,6 +18,7 @@ import { ImportFlowDemo } from './ImportVisuals';
 import { ClaimPipelineDemo } from './ClaimVisuals';
 import { CorrectionDemo } from './TransactionVisuals';
 import { LoanRepaymentDemo } from './LoanVisuals';
+import { AgentFlow, DataModelDiagram, SaveTransactionFlow } from './TechVisuals';
 import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
@@ -953,6 +954,9 @@ export const DOCS: DocPage[] = [
         ['Records', 'audit_log (before and after of every change), attachment, database_backup_settings'],
         ['Plumbing', 'financial_state (a revision number), cache_invalidation_outbox, storage_deletion_outbox, background_task'],
       ] },
+      { type: 'h2', id: 'relations', text: 'How the ledger tables relate' },
+      { type: 'p', text: 'Everything hangs off transaction. Its lines carry the money between accounts; categories and tags label it; its period decides whether it can still change. Feature tables (loans, pay later, reimbursements, subscriptions, attachments, reconciliations) are linked to the transactions they created rather than keeping money of their own.' },
+      { type: 'visual', node: <DataModelDiagram />, wide: true },
 
       { type: 'h2', id: 'ledger', text: 'The ledger model' },
       { type: 'p', text: 'Fainens is double-entry. A transaction is a journal entry with two or more lines, and every line is either a debit or a credit. Amounts are whole rupiah stored as integers; some columns are named “cents” for historical reasons, but fractional rupiah are rejected.' },
@@ -974,6 +978,7 @@ export const DOCS: DocPage[] = [
         'Lists page with limit and offset (transactions: 50 by default, 100 at most). Request bodies can be up to 15 MB.',
         'Agent replies stream as server-sent events.',
       ] },
+      { type: 'visual', node: <SaveTransactionFlow />, wide: true },
 
       { type: 'h2', id: 'security', text: 'Sign-in and security' },
       { type: 'steps', items: [
@@ -1011,7 +1016,8 @@ export const DOCS: DocPage[] = [
         ['OpenRouter', 'Agent, receipt reading for split bills, transaction parsing, tag suggestions and recap stories. Models and API keys are set in Settings → Agent'],
         ['Puppeteer', 'Reading product pages for the wishlist'],
       ] },
-      { type: 'p', text: 'Agent works through a fixed set of tools. Most only read (balances, transactions, cash flow, budgets, loans, pay later, reimbursements, exchange rates, calculations). The ones that would change data only prepare a draft that waits for your approval.' },
+      { type: 'p', text: 'Agent works through a fixed set of tools. Most only read (balances, transactions, cash flow, budgets, loans, pay later, recurring charges, exchange rates, calculations). The ones that would change money only prepare a draft that waits for your approval; notes, tags and pending imports can be edited directly when you ask.' },
+      { type: 'visual', node: <AgentFlow />, wide: true },
 
       { type: 'h2', id: 'backups', text: 'Backups and exports' },
       { type: 'list', items: [
