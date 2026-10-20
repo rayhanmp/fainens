@@ -129,7 +129,8 @@ export function chapterStyle(run: number, key: string): ChapterStyle {
     // Kept small: a wide headline tilted further would dip its corner into the block below.
     tilt: random() < .3 ? Math.round((random() - .5) * 30) / 10 : 0,
     mark: Math.floor(random() * 6),
-    sticker: random() < .22 ? { text: pickFrom(['NEW!', 'WOW', 'FRESH', 'HOT', 'LIVE', 'OMG', 'YAY', 'NICE', '✳✳✳'], random), corner: pickFrom(['tl', 'tr', 'br'] as const, random), spin: Math.round((random() - .5) * 40) } : null,
+    // Retired: in the top corners stickers hit the header, and anywhere lower they land on the chart.
+    sticker: null,
     tempo: roll([.8, 1, 1.25] as const, [1, 2, 1]),
     blob: { x: Math.round(random() * 100), y: Math.round(random() * 100) },
   };

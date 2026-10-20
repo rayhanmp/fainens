@@ -29,17 +29,17 @@
 .recap-glove { position: absolute; top: 20cqw; width: 20cqw; height: 16cqw; border-radius: 45% 55% 50% 50%; background: #d6333f; box-shadow: inset -2cqw -2cqw 0 #0002; }
 .recap-glove::after { content: ''; position: absolute; bottom: -4cqw; left: 25%; width: 50%; height: 5cqw; border-radius: 1cqw; background: #f2f2f2; }
 .recap-glove.is-left { left: 6cqw; animation: recap-jab 1s cubic-bezier(.5, 0, .2, 1.4) both; animation-delay: calc(var(--enter) + 700ms); }
-.recap-glove.is-right { right: 6cqw; background: var(--recap-ink); scale: -1 1; animation: recap-reel .6s ease-out both; animation-delay: calc(var(--enter) + 1200ms); }
+.recap-glove.is-right { right: 6cqw; background: var(--recap-ink); scale: -1 1; animation: recap-glove-reel .6s ease-out both; animation-delay: calc(var(--enter) + 1200ms); }
 .recap-pow { position: absolute; left: 50%; top: 16cqw; display: grid; place-items: center; width: 34cqw; height: 24cqw; margin-left: -17cqw; background: #ffcc33; color: #2a1d00; font-size: 8cqw; font-weight: 900; font-style: italic;
   clip-path: polygon(50% 0, 60% 22%, 84% 8%, 76% 34%, 100% 40%, 78% 56%, 92% 82%, 64% 70%, 54% 100%, 44% 74%, 16% 90%, 24% 62%, 0 52%, 22% 38%, 10% 12%, 38% 24%);
   animation: recap-pow .8s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 1150ms); }
 .recap-ring-meter { position: absolute; left: 4cqw; right: 4cqw; bottom: 4cqw; display: grid; gap: 1.2cqw; }
-.recap-ring-meter > span { font-size: 2.6cqw; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.recap-ring-meter > span { font-size: max(2.6cqw, 10.5px); font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
 .recap-ring-meter > i { height: 4cqw; border: .6cqw solid var(--recap-ink); border-radius: 1cqw; overflow: hidden; }
 .recap-ring-meter > i b { display: block; height: 100%; background: #3ecf6e; transform-origin: left; animation: recap-boss-drain .4s both; animation-delay: calc(var(--enter) + 1200ms); }
 .recap-ring-meter small { font-size: 2.8cqw; font-weight: 700; opacity: .8; }
 @keyframes recap-jab { 0% { opacity: 0; translate: -30cqw 0; } 40% { opacity: 1; translate: 0 0; } 60% { translate: 26cqw -2cqw; } 100% { translate: 8cqw 0; } }
-@keyframes recap-reel { 0% { rotate: 0deg; } 40% { rotate: -18deg; translate: 4cqw 0; } 100% { rotate: -6deg; translate: 2cqw 0; } }
+@keyframes recap-glove-reel { 0% { rotate: 0deg; } 40% { rotate: -18deg; translate: 4cqw 0; } 100% { rotate: -6deg; translate: 2cqw 0; } }
 @keyframes recap-pow { 0% { opacity: 0; scale: .2; rotate: -20deg; } 60% { opacity: 1; scale: 1.2; } 100% { opacity: 1; scale: 1; rotate: -8deg; } }
 
 /* Suspects: wanted posters. */
@@ -51,7 +51,7 @@
 .recap-wanted-photo { display: grid; place-items: center; width: 22cqw; height: 22cqw; border: .6cqw solid #3b2a16; background: repeating-linear-gradient(0deg, #e2cfa4 0 1cqw, #ead9b3 1cqw 2cqw); font-size: 12cqw; font-weight: 900; }
 .recap-wanted-name { max-width: 100%; overflow: hidden; font-size: 3.6cqw; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
 .recap-wanted-reward { padding: .6cqw 2cqw; border: .5cqw solid #3b2a16; font-size: 3.4cqw; font-weight: 900; }
-.recap-wanted-poster small { font-size: 2.6cqw; opacity: .75; }
+.recap-wanted-poster small { font-size: max(2.6cqw, 10.5px); opacity: .75; }
 @keyframes recap-poster-pin { from { opacity: 0; translate: 0 -20cqw; rotate: calc(var(--r) * -4); } }
 
 /* Milestone: odometer. */
@@ -84,7 +84,7 @@
 .recap-sequel-beam.is-right { right: 14%; animation-direction: alternate-reverse; }
 .recap-sequel-poster { position: relative; display: grid; justify-items: center; gap: 1.4cqw; width: 66cqw; max-width: 100%; padding: 5cqw 4cqw; border-radius: 1.4cqw; background: linear-gradient(to bottom, var(--recap-ink), color-mix(in srgb, var(--recap-ink) 70%, var(--recap-accent)));
   color: var(--recap-paper); text-align: center; box-shadow: 0 2cqw 6cqw #0005; animation: recap-poster-up .9s cubic-bezier(.2, 1.1, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
-.recap-sequel-poster > small { max-width: 100%; font-size: 2.2cqw; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.recap-sequel-poster > small { max-width: 100%; font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
 .recap-sequel-icon { font-size: 14cqw; color: var(--recap-accent); animation: recap-badge-in .9s both; animation-delay: calc(var(--enter) + 700ms); }
 .recap-sequel-poster > b { max-width: 100%; font-family: Georgia, serif; font-size: 6.4cqw; font-weight: 900; line-height: 1.05; text-transform: uppercase; }
 .recap-sequel-tag { font-size: 3.6cqw; font-style: italic; }

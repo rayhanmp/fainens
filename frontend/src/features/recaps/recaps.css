@@ -45,16 +45,16 @@
 .recap-progress button.is-running .recap-progress-fill { animation-play-state: running; }
 .recap-story-brand { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; position: relative; z-index: 4; margin-top: 1.5cqw; }
 .recap-story-brand > span:first-child { font-size: 5cqw; letter-spacing: -.08em; font-weight: 800; }
-.recap-story-brand > span:last-child { font-size: 1.9cqw; letter-spacing: .12em; font-weight: 750; text-transform: uppercase; opacity: .75; }
-.recap-brand-dot { display: inline-block; font-size: 2.5cqw; margin-left: 3px; vertical-align: top; animation: recap-turn 16s linear infinite; }
+.recap-story-brand > span:last-child { font-size: max(1.9cqw, 10.5px); letter-spacing: .12em; font-weight: 750; text-transform: uppercase; opacity: .75; }
+.recap-brand-dot { display: inline-block; font-size: max(2.5cqw, 10.5px); margin-left: 3px; vertical-align: top; animation: recap-turn 16s linear infinite; }
 .recap-bottom-actions { display: flex; gap: 1.5cqw; align-items: center; justify-content: space-between; flex-shrink: 0; position: relative; z-index: 5; }
-.recap-bottom-actions > span { font-size: 2.2cqw; letter-spacing: .12em; font-weight: 700; margin-right: auto; margin-left: 2cqw; font-variant-numeric: tabular-nums; }
+.recap-bottom-actions > span { font-size: max(2.2cqw, 10.5px); letter-spacing: .12em; font-weight: 700; margin-right: auto; margin-left: 2cqw; font-variant-numeric: tabular-nums; }
 .recap-info { position: relative; }
 .recap-info > summary { list-style: none; height: 9cqw; min-height: 30px; display: grid; place-items: center; width: 8cqw; min-width: 28px; cursor: pointer; opacity: .65; }
 .recap-info > summary::-webkit-details-marker { display: none; }
-.recap-info > div { position: absolute; bottom: calc(100% + 10px); right: -12cqw; width: 78cqw; padding: 5cqw; background: var(--recap-paper); border: 1px solid var(--recap-line); box-shadow: 0 8px 40px #0002; border-radius: 16px; font-size: 2.7cqw; line-height: 1.6; animation: recap-rise .35s cubic-bezier(.16,1,.3,1) both; }
+.recap-info > div { position: absolute; bottom: calc(100% + 10px); right: -12cqw; width: 78cqw; padding: 5cqw; background: var(--recap-paper); border: 1px solid var(--recap-line); box-shadow: 0 8px 40px #0002; border-radius: 16px; font-size: max(2.7cqw, 10.5px); line-height: 1.6; animation: recap-rise .35s cubic-bezier(.16,1,.3,1) both; }
 .recap-info p + p { margin-top: 8px; }
-.recap-inline-error { position: absolute; top: 16cqw; left: 5cqw; right: 5cqw; z-index: 6; padding: 3cqw; border-radius: 12px; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.7cqw; }
+.recap-inline-error { position: absolute; top: 16cqw; left: 5cqw; right: 5cqw; z-index: 6; padding: 3cqw; border-radius: 12px; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.7cqw, 10.5px); }
 
 /* Chapter content and its choreography: eyebrow, then the headline word by word, then the figure,
    its visual and the closing line. Every element waits its turn via --seq, after --enter: the time the
@@ -70,7 +70,7 @@
 .recap-story-content[data-fit] > :not(.recap-burst):not(.recap-verdict) { zoom: var(--fit); }
 .recap-dir-next { --dir: 1; }
 .recap-dir-prev { --dir: -1; }
-.recap-story-eyebrow { display: flex; align-items: center; gap: 2cqw; text-transform: uppercase; font-size: 2.2cqw; line-height: 1.5; font-weight: 800; letter-spacing: .14em; margin-bottom: 3cqw; animation: recap-fade .5s calc(var(--enter) - 70ms) both; }
+.recap-story-eyebrow { display: flex; align-items: center; gap: 2cqw; text-transform: uppercase; font-size: max(2.2cqw, 10.5px); line-height: 1.5; font-weight: 800; letter-spacing: .14em; margin-bottom: 3cqw; animation: recap-fade .5s calc(var(--enter) - 70ms) both; }
 .recap-story-eyebrow::before { content: ''; width: 5cqw; height: 2px; border-radius: 2px; background: currentColor; transform-origin: left; animation: recap-grow-x .6s var(--enter) cubic-bezier(.16,1,.3,1) both; }
 .recap-story h2 { font-size: 9cqw; font-weight: 800; letter-spacing: -.055em; line-height: 1.04; overflow-wrap: anywhere; text-wrap: balance; }
 .recap-story h2.recap-title-long { font-size: 7.6cqw; }
@@ -96,7 +96,8 @@
 .recap-story .recap-title-caps h2.recap-title-long { font-size: 6.3cqw; }
 .recap-word-alt > span { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: 600; }
 /* The marker swipes in behind one word once the headline has landed. */
-.recap-mark > span { background: linear-gradient(transparent 56%, color-mix(in srgb, var(--recap-accent) 72%, transparent) 56% 94%, transparent 94%) no-repeat 0 0 / 0% 100%;
+/* A marker stroke under the word, not a block behind its letters. */
+.recap-mark > span { background: linear-gradient(transparent 80%, color-mix(in srgb, var(--recap-accent) 85%, transparent) 80% 95%, transparent 95%) no-repeat 0 0 / 0% 100%;
   animation: recap-word .85s cubic-bezier(.16, 1, .3, 1) both, recap-marker .7s cubic-bezier(.6, 0, .2, 1) both;
   animation-delay: calc(var(--enter) + var(--word) * 45ms * var(--tempo, 1)), calc(var(--enter) + 900ms * var(--tempo, 1)); }
 .recap-sticker { position: absolute; z-index: 5; display: grid; place-items: center; min-width: 15cqw; height: 15cqw; padding: 0 3cqw; border-radius: 99px; background: #ff5a5f; color: #fff; font-size: 3.4cqw; font-weight: 900; letter-spacing: .04em; rotate: var(--spin); box-shadow: 0 1.5cqw 3cqw -1.5cqw #0007;
@@ -121,7 +122,7 @@
   background-repeat: no-repeat; }
 .recap-big-stat { display: flex; flex-direction: column; margin-top: 4.5cqw; font-size: 15cqw; font-weight: 800; letter-spacing: -.065em; line-height: .95; font-variant-numeric: tabular-nums; }
 .recap-big-stat > span:last-child:not(:first-child) { font-size: 2.8cqw; font-weight: 600; letter-spacing: 0; line-height: 1.35; margin-top: 1.8cqw; opacity: .78; }
-.recap-fact { font-size: 2.7cqw; line-height: 1.5; font-weight: 600; margin-top: 3cqw; }
+.recap-fact { font-size: max(2.7cqw, 10.5px); line-height: 1.5; font-weight: 600; margin-top: 3cqw; }
 .recap-fact strong { font-weight: 800; }
 .recap-animated-value { font-variant-numeric: tabular-nums; }
 
@@ -141,7 +142,7 @@
 .recap-mag-masthead { display: flex; align-items: flex-start; margin: 0 -1.2cqw; font-size: 23.5cqw; font-weight: 800; letter-spacing: -.085em; line-height: .8; }
 .recap-mag-masthead > span { display: inline-block; animation: recap-mast-drop .75s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(var(--enter) + var(--l) * 55ms); }
 .recap-mag-masthead > b { margin: .06em 0 0 .06em; font-size: .3em; animation: recap-badge-in .9s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 420ms) both, recap-turn 10s linear calc(var(--enter) + 1.3s) infinite; }
-.recap-mag-rule { display: flex; justify-content: space-between; gap: 2cqw; margin-top: 2.4cqw; padding: 1.5cqw 0; border-top: 2px solid currentColor; border-bottom: 1px solid var(--recap-line); font-size: 2cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+.recap-mag-rule { display: flex; justify-content: space-between; gap: 2cqw; margin-top: 2.4cqw; padding: 1.5cqw 0; border-top: 2px solid currentColor; border-bottom: 1px solid var(--recap-line); font-size: max(2cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
   animation: recap-reveal-x .8s cubic-bezier(.7, 0, .2, 1) calc(var(--enter) + 380ms) both; }
 .recap-mag-bigword { position: absolute; z-index: -1; right: -7cqw; top: 22cqw; writing-mode: vertical-rl; rotate: 180deg; font-size: 40cqw; font-weight: 800; letter-spacing: -.08em; line-height: .8; text-transform: uppercase; color: color-mix(in srgb, var(--recap-ink) 9%, transparent);
   animation: recap-fade 1.2s calc(var(--enter) + 200ms) both; }
@@ -151,19 +152,19 @@
 .recap-mag-lines b { color: var(--recap-accent); font-weight: 900; }
 .recap-mag-sticker { display: grid; justify-items: center; align-content: center; width: 30cqw; height: 30cqw; border-radius: 50%; background: #ff5a5f; color: #fff; rotate: 12deg; text-align: center; box-shadow: 0 0 0 1cqw color-mix(in srgb, #ff5a5f 30%, transparent), 0 2cqw 4cqw -2cqw #0008;
   animation: recap-sticker .8s cubic-bezier(.2, 1.5, .4, 1) calc(var(--enter) + 850ms) both, recap-wobble 3s calc(var(--enter) + 2s) ease-in-out infinite; }
-.recap-mag-sticker strong { font-size: 11cqw; font-weight: 800; letter-spacing: -.06em; line-height: .9; }
-.recap-mag-sticker small { font-size: 2cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.recap-mag-sticker strong { margin: .6cqw 0; font-size: 11cqw; font-weight: 800; letter-spacing: -.06em; line-height: .9; }
+.recap-mag-sticker small { font-size: max(2cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .recap-cover-magazine .recap-cover-headline { margin-top: 3cqw; }
-.recap-mag-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 3cqw; margin-top: 2.2cqw; font-size: 2.2cqw; font-weight: 700; animation: recap-fade .6s calc(var(--enter) + 1.1s) both; }
+.recap-mag-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 3cqw; margin-top: 2.2cqw; font-size: max(2.2cqw, 10.5px); font-weight: 700; animation: recap-fade .6s calc(var(--enter) + 1.1s) both; }
 
 /* Swiss poster: the month set huge down the side, the year outlined, a red circle and a grid. */
 .recap-poster-grid { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .recap-poster-grid > i { position: absolute; top: 0; bottom: 0; left: calc(var(--g) * 20%); width: 1px; background: var(--recap-line); transform-origin: top; animation: recap-draw-y .9s cubic-bezier(.7, 0, .2, 1) both; animation-delay: calc(var(--enter) + var(--g) * 70ms); }
 .recap-poster-month { position: absolute; left: -2cqw; top: 0; bottom: 34cqw; display: flex; align-items: center; writing-mode: vertical-rl; rotate: 180deg; font-size: min(30cqw, calc(150cqw / var(--n))); font-weight: 800; letter-spacing: -.05em; line-height: .78; text-transform: uppercase; }
 .recap-poster-month > span { display: inline-block; animation: recap-poster-letter .8s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + var(--l) * 60ms); }
-.recap-poster-year { position: absolute; right: -1cqw; top: 0; font-size: 19cqw; font-weight: 800; letter-spacing: -.06em; line-height: .85; color: transparent; -webkit-text-stroke: 1.5px var(--recap-ink); animation: recap-mast-drop .9s cubic-bezier(.3, 1.4, .5, 1) calc(var(--enter) + 300ms) both; }
+.recap-poster-year { position: absolute; right: -1cqw; top: 3cqw; font-size: 19cqw; font-weight: 800; letter-spacing: -.06em; line-height: .85; color: transparent; -webkit-text-stroke: 1.5px var(--recap-ink); animation: recap-mast-drop .9s cubic-bezier(.3, 1.4, .5, 1) calc(var(--enter) + 300ms) both; }
 .recap-poster-dot { position: absolute; right: 7cqw; top: 26cqw; width: 30cqw; height: 30cqw; border-radius: 50%; background: #ff5a5f; animation: recap-ring-in .9s cubic-bezier(.2, 1.5, .4, 1) calc(var(--enter) + 550ms) both, recap-pulse 3.2s calc(var(--enter) + 1.6s) ease-in-out infinite; }
-.recap-poster-meta { position: absolute; right: 0; top: 62cqw; display: grid; gap: 1.2cqw; text-align: right; font-size: 2.3cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; animation: recap-fade .6s calc(var(--enter) + 900ms) both; }
+.recap-poster-meta { position: absolute; right: 0; top: 62cqw; display: grid; gap: 1.2cqw; text-align: right; font-size: max(2.3cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; animation: recap-fade .6s calc(var(--enter) + 900ms) both; }
 .recap-poster-copy { margin-top: auto; margin-left: 30cqw; }
 .recap-poster-copy .recap-cover-headline { font-size: 8.2cqw; }
 .recap-poster-copy p { margin-top: 2cqw; font-size: 2.8cqw; line-height: 1.5; opacity: .82; animation: recap-fade .7s calc(var(--enter) + 1s) both; }
@@ -173,26 +174,27 @@
 .recap-vinyl-sleeve { position: absolute; z-index: 1; left: 0; top: 0; width: 62cqw; height: 62cqw; padding: 4cqw; overflow: hidden; border-radius: 1.4cqw; background: radial-gradient(circle at 80% 15%, color-mix(in srgb, var(--recap-accent) 55%, transparent), transparent 55%), var(--recap-ink); color: var(--recap-paper); box-shadow: 0 3cqw 6cqw -2cqw #0008;
   animation: recap-sleeve-in .9s cubic-bezier(.2, 1.2, .35, 1) var(--enter) both; }
 .recap-sleeve-art { position: absolute; left: -2cqw; bottom: -5cqw; font-size: 24cqw; font-weight: 800; letter-spacing: -.08em; line-height: .8; text-transform: uppercase; white-space: nowrap; }
-.recap-sleeve-artist { position: relative; font-size: 2.4cqw; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+/* Kept to the left half so the parental-advisory box in the top-right corner never covers it. */
+.recap-sleeve-artist { position: relative; display: block; max-width: 36%; font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
 .recap-advisory { position: absolute; right: 3cqw; top: 3cqw; display: grid; padding: .6cqw 1.4cqw; border: .5cqw solid #fff; background: #000; color: #fff; text-align: center; text-transform: uppercase; line-height: 1.05; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.3s) both; }
-.recap-advisory b { font-size: 1.7cqw; font-weight: 800; letter-spacing: .06em; }
-.recap-advisory small { font-size: 2.5cqw; font-weight: 900; }
+.recap-advisory b { font-size: max(1.7cqw, 10.5px); font-weight: 800; letter-spacing: .06em; }
+.recap-advisory small { font-size: max(2.5cqw, 10.5px); font-weight: 900; }
 .recap-vinyl-disc { position: absolute; left: 2cqw; top: 2cqw; width: 58cqw; height: 58cqw; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, transparent 0 30%, #0000 30%), repeating-radial-gradient(circle, #121212 0 .55cqw, #262626 .55cqw .85cqw); box-shadow: 0 2cqw 4cqw -1cqw #0009;
   animation: recap-disc-out 1s cubic-bezier(.3, 1.1, .4, 1) calc(var(--enter) + 550ms) both, recap-turn 2.2s linear calc(var(--enter) + 1.5s) infinite; }
 .recap-vinyl-disc::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 20deg, transparent 0 15%, #ffffff22 20%, transparent 26% 65%, #ffffff18 70%, transparent 76%); }
 .recap-vinyl-label { display: grid; justify-items: center; align-content: center; width: 20cqw; height: 20cqw; border-radius: 50%; background: #ff5a5f; color: #fff; text-align: center; }
 .recap-vinyl-label b { font-size: 6cqw; line-height: 1; }
-.recap-vinyl-label small { max-width: 16cqw; overflow: hidden; font-size: 1.7cqw; font-weight: 800; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.recap-vinyl-kicker { margin-top: 2cqw; font-size: 2.2cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .75; animation: recap-fade .6s calc(var(--enter) + 900ms) both; }
+.recap-vinyl-label small { max-width: 16cqw; overflow: hidden; font-size: max(1.7cqw, 10.5px); font-weight: 800; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.recap-vinyl-kicker { margin-top: 2cqw; font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .75; animation: recap-fade .6s calc(var(--enter) + 900ms) both; }
 .recap-cover-vinyl .recap-cover-headline { margin-top: 2cqw; }
 
 /* Boarding pass: from the first day to the last, with a plane on the route and a stamp. */
 .recap-cover-boarding { justify-content: center; }
 .recap-cover-boarding .recap-cover-headline { margin-bottom: 4cqw; }
 .recap-pass { position: relative; overflow: hidden; border-radius: 4cqw; background: #fbfaf5; color: #1d211c; rotate: -2deg; box-shadow: 0 3cqw 6cqw -3cqw #0007; animation: recap-pass-in .9s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 300ms) both; }
-.recap-pass-head { display: flex; justify-content: space-between; padding: 2.8cqw 4cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.3cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.recap-pass-head { display: flex; justify-content: space-between; padding: 2.8cqw 4cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.3cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .recap-pass-route { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3cqw; padding: 4cqw 4cqw 3cqw; }
-.recap-pass-route small, .recap-pass-grid small { display: block; font-size: 1.9cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .55; }
+.recap-pass-route small, .recap-pass-grid small { display: block; font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .55; }
 .recap-pass-route strong { font-size: 7.2cqw; font-weight: 800; letter-spacing: -.04em; white-space: nowrap; }
 .recap-pass-route > div:last-child { text-align: right; }
 .recap-pass-path { position: relative; height: 2px; background: repeating-linear-gradient(90deg, #1d211c66 0 1.2cqw, transparent 1.2cqw 2.2cqw); }
@@ -200,10 +202,11 @@
 .recap-plane svg { width: 6cqw; height: 6cqw; rotate: 45deg; fill: currentColor; }
 .recap-pass-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2cqw; padding: 0 4cqw 3.6cqw; }
 .recap-pass-grid b { display: block; margin-top: .6cqw; overflow: hidden; font-size: 3.6cqw; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-.recap-pass-stub { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 3cqw; padding: 3.4cqw 4cqw; border-top: .5cqw dashed #1d211c44; font-size: 2.2cqw; font-weight: 700; }
+.recap-pass-stub { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 3cqw; padding: 3.4cqw 4cqw; border-top: .5cqw dashed #1d211c44; font-size: max(2.2cqw, 10.5px); font-weight: 700; }
 .recap-pass-stub::before, .recap-pass-stub::after { content: ''; position: absolute; top: -2.8cqw; width: 5cqw; height: 5cqw; border-radius: 50%; background: var(--recap-paper); }
 .recap-pass-stub::before { left: -2.5cqw; }
 .recap-pass-stub::after { right: -2.5cqw; }
+/* Sits where a gate number would be; the pass prints no gate, so it covers nothing. */
 .recap-pass-stamp { position: absolute; right: 4cqw; bottom: 13cqw; padding: 1.2cqw 2.6cqw; border: .7cqw solid #e0393e; border-radius: 2cqw; color: #e0393e; font-size: 4cqw; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; rotate: -14deg; opacity: .88; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.5s) both; }
 .recap-cover-boarding .recap-cover-body { margin-top: 4cqw; }
 
@@ -212,33 +215,36 @@
 /* Money in, money out */
 .recap-flow { display: grid; gap: 3.5cqw; margin-top: 5cqw; }
 .recap-flow-head { display: flex; align-items: baseline; justify-content: space-between; gap: 3cqw; margin-bottom: 1.6cqw; }
-.recap-flow-head > span { font-size: 2.6cqw; font-weight: 700; opacity: .75; }
+.recap-flow-head > span { font-size: max(2.6cqw, 10.5px); font-weight: 700; opacity: .75; }
 .recap-flow-head > strong { font-size: 4.6cqw; font-weight: 800; letter-spacing: -.035em; }
 .recap-flow-track { position: relative; height: 4.5cqw; border-radius: 1.6cqw; background: var(--recap-soft); overflow: hidden; }
 .recap-flow-track > i { animation-delay: calc(var(--enter) + var(--seq) * 100ms + 180ms); }
 .recap-flow-out .recap-flow-track > i { background: repeating-linear-gradient(-45deg, var(--recap-ink) 0 1.2cqw, color-mix(in srgb, var(--recap-ink) 70%, transparent) 1.2cqw 2.4cqw); }
 .recap-flow-net { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: .5cqw 3cqw; margin-top: 1.5cqw; padding: 4cqw; border-radius: 4cqw; background: var(--recap-ink); color: var(--recap-paper); }
-.recap-flow-net > span { grid-column: 1 / -1; font-size: 2.3cqw; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; opacity: .8; }
+.recap-flow-net > span { grid-column: 1 / -1; font-size: max(2.3cqw, 10.5px); font-weight: 800; text-transform: uppercase; letter-spacing: .12em; opacity: .8; }
 .recap-flow-net > strong { font-size: 8.5cqw; font-weight: 800; letter-spacing: -.055em; line-height: 1.05; overflow-wrap: anywhere; }
-.recap-flow-net > em { font-style: normal; font-size: 2.5cqw; font-weight: 750; padding: 1.2cqw 2.4cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-paper) 18%, transparent); white-space: nowrap; }
+.recap-flow-net > em { font-style: normal; font-size: max(2.5cqw, 10.5px); font-weight: 750; padding: 1.2cqw 2.4cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-paper) 18%, transparent); white-space: nowrap; }
 
 /* Budget */
-.recap-meter { position: relative; height: 3.4cqw; margin-top: 4.5cqw; border-radius: 99px; background: var(--recap-soft); }
+/* Room above the bar for the "Today" pill, so it never meets the line above. */
+.recap-meter { position: relative; height: 3.4cqw; margin-top: 10cqw; border-radius: 99px; background: var(--recap-soft); }
 .recap-meter > i { animation-delay: calc(var(--enter) + 430ms); }
 .recap-meter.is-over > i { background: repeating-linear-gradient(-45deg, var(--recap-ink) 0 1.2cqw, var(--recap-accent) 1.2cqw 2.4cqw); }
 .recap-meter > b { position: absolute; top: -1.6cqw; bottom: -1.6cqw; width: 2px; margin-left: -1px; background: var(--recap-ink); border-radius: 2px; transform-origin: bottom; animation: recap-marker-drop .7s calc(var(--enter) + 1.05s) cubic-bezier(.3, 1.6, .5, 1) both; }
+.recap-meter > b.is-end > span { translate: calc(-100% + 1.6cqw) 0; }
+.recap-meter > b.is-start > span { translate: -1.6cqw 0; }
 .recap-meter.is-over { animation: recap-shake .45s calc(var(--enter) + 1.5s) both; }
-.recap-meter > b > span { position: absolute; bottom: calc(100% + 1cqw); left: 50%; translate: -50% 0; font-size: 1.9cqw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.recap-meter > b > span { position: absolute; bottom: calc(100% + 1cqw); left: 50%; translate: -50% 0; padding: .6cqw 1.8cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.6cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 .recap-pair, .recap-trio { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3cqw; margin-top: 4cqw; }
 .recap-trio { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2cqw; }
 .recap-pair > div, .recap-trio > div { padding-top: 2.4cqw; border-top: 1px solid var(--recap-line); min-width: 0; }
-.recap-pair dt, .recap-trio dt { font-size: 2.3cqw; font-weight: 700; opacity: .72; }
+.recap-pair dt, .recap-trio dt { font-size: max(2.3cqw, 10.5px); font-weight: 700; opacity: .72; }
 .recap-pair dd { margin-top: .8cqw; font-size: 4.8cqw; font-weight: 800; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .recap-trio dd { margin-top: .8cqw; font-size: 3.7cqw; font-weight: 800; letter-spacing: -.03em; overflow-wrap: anywhere; }
 .recap-chips { display: flex; flex-wrap: wrap; gap: 1.6cqw; margin-top: 3.5cqw; }
-.recap-chips li { display: inline-flex; gap: 1.6cqw; align-items: baseline; padding: 1.4cqw 2.6cqw; border-radius: 99px; background: var(--recap-soft); font-size: 2.4cqw; font-weight: 650; }
+.recap-chips li { display: inline-flex; gap: 1.6cqw; align-items: baseline; padding: 1.4cqw 2.6cqw; border-radius: 99px; background: var(--recap-soft); font-size: max(2.4cqw, 10.5px); font-weight: 650; }
 .recap-chips strong { font-weight: 800; }
-.recap-text-link { display: inline-flex; align-items: center; gap: 1.5cqw; align-self: flex-start; margin-top: 4cqw; font-size: 2.7cqw; font-weight: 750; text-decoration: underline; text-underline-offset: .3em; text-decoration-thickness: 1px; }
+.recap-text-link { display: inline-flex; align-items: center; gap: 1.5cqw; align-self: flex-start; margin-top: 4cqw; font-size: max(2.7cqw, 10.5px); font-weight: 750; text-decoration: underline; text-underline-offset: .3em; text-decoration-thickness: 1px; }
 .recap-text-link:hover svg { translate: 2px 0; }
 .recap-text-link svg { transition: translate .2s; }
 
@@ -254,7 +260,7 @@
 .recap-category-list li:last-child { border-bottom: 0; }
 .recap-category-icon { display: grid; place-items: center; width: 6.6cqw; height: 6.6cqw; border-radius: 2cqw; font-size: 3.6cqw; color: var(--recap-ink); background: color-mix(in srgb, var(--tone) 30%, var(--recap-paper)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 55%, transparent); }
 .recap-category-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recap-category-share { font-size: 2.4cqw; font-weight: 750; opacity: .65; font-variant-numeric: tabular-nums; }
+.recap-category-share { font-size: max(2.4cqw, 10.5px); font-weight: 750; opacity: .65; font-variant-numeric: tabular-nums; }
 .recap-category-list strong { font-weight: 800; font-variant-numeric: tabular-nums; }
 
 /* Calendar */
@@ -262,12 +268,12 @@
 .recap-chapter-calendar .recap-big-stat { flex-direction: row; align-items: baseline; gap: 2.4cqw; font-size: 11cqw; margin-top: 3.5cqw; }
 .recap-chapter-calendar .recap-big-stat > span:last-child:not(:first-child) { margin-top: 0; }
 .recap-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1cqw; margin-top: 3.5cqw; }
-.recap-calendar-weekday { text-align: center; font-size: 1.9cqw; font-weight: 800; opacity: .55; padding-bottom: .4cqw; }
+.recap-calendar-weekday { text-align: center; font-size: max(1.9cqw, 10.5px); font-weight: 800; opacity: .55; padding-bottom: .4cqw; }
 .recap-day { position: relative; aspect-ratio: 1.45; border-radius: 1.6cqw; display: grid; place-items: center; background: color-mix(in srgb, var(--recap-ink) calc(var(--level) * 100%), transparent); box-shadow: inset 0 0 0 1px var(--recap-line);
   animation: recap-pop .5s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--enter) + var(--cell-delay) + 330ms); }
 .recap-calendar-ripple .recap-day { animation-name: recap-ripple; animation-duration: .65s; }
 .recap-calendar-scatter .recap-day { animation-name: recap-sparkle-in; }
-.recap-day > small { font-size: 1.85cqw; font-weight: 700; opacity: .7; font-variant-numeric: tabular-nums; }
+.recap-day > small { font-size: max(1.85cqw, 10.5px); font-weight: 700; opacity: .7; font-variant-numeric: tabular-nums; }
 .recap-day.is-dark { color: var(--recap-paper); box-shadow: none; }
 .recap-day.is-dark > small { opacity: .9; }
 .recap-day.is-future { background: transparent; box-shadow: none; outline: 1px dashed var(--recap-line); outline-offset: -1px; opacity: .55; }
@@ -275,7 +281,7 @@
 /* Once the days have landed, the busiest one takes a bow. */
 .recap-day.is-peak > small { animation: recap-bow .8s cubic-bezier(.3, 1.6, .5, 1) calc(var(--enter) + 1.5s) both; display: inline-block; }
 .recap-day.is-peak::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid var(--recap-ink); animation: recap-ping 2.2s calc(var(--enter) + 1.4s) cubic-bezier(0, 0, .2, 1) infinite; }
-.recap-calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 1cqw; margin-top: 2.4cqw; font-size: 1.9cqw; font-weight: 700; opacity: .7; }
+.recap-calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 1cqw; margin-top: 2.4cqw; font-size: max(1.9cqw, 10.5px); font-weight: 700; opacity: .7; }
 .recap-calendar-legend > i { width: 2.6cqw; height: 2.6cqw; border-radius: .8cqw; background: color-mix(in srgb, var(--recap-ink) calc(var(--level) * 100%), transparent); box-shadow: inset 0 0 0 1px var(--recap-line); }
 
 /* The standout receipts: a printed slip with a torn edge. */
@@ -290,14 +296,14 @@
 .recap-receipt-print .recap-receipt-line { animation-delay: calc(var(--enter) + 450ms + var(--line) * 260ms); }
 .recap-receipt-toss .recap-receipt { animation: recap-toss .9s cubic-bezier(.2, 1.1, .35, 1) calc(var(--enter) + 200ms) both; }
 .recap-receipt::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 1.6cqw; background: linear-gradient(-45deg, transparent 50%, var(--slip) 50%) 0 0 / 3.2cqw 100%, linear-gradient(45deg, transparent 50%, var(--slip) 50%) 0 0 / 3.2cqw 100%; }
-.recap-receipt-head, .recap-receipt-foot { display: flex; justify-content: space-between; gap: 3cqw; font-size: 2.1cqw; text-transform: uppercase; letter-spacing: .1em; opacity: .7; }
+.recap-receipt-head, .recap-receipt-foot { display: flex; justify-content: space-between; gap: 3cqw; font-size: max(2.1cqw, 10.5px); text-transform: uppercase; letter-spacing: .1em; opacity: .7; }
 .recap-receipt-head { padding-bottom: 2.4cqw; border-bottom: 1px dashed #24261f55; }
 .recap-receipt ol { display: grid; }
 .recap-receipt li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2.4cqw; align-items: start; padding: 2.6cqw 0; border-bottom: 1px dashed #24261f33; }
-.recap-receipt-rank { font-size: 2.2cqw; opacity: .5; padding-top: .3cqw; }
+.recap-receipt-rank { font-size: max(2.2cqw, 10.5px); opacity: .5; padding-top: .3cqw; }
 .recap-receipt-item { display: grid; gap: .6cqw; min-width: 0; }
 .recap-receipt-item > span { font-size: 2.9cqw; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recap-receipt-item > small { font-size: 2cqw; opacity: .6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recap-receipt-item > small { font-size: max(2cqw, 10.5px); opacity: .6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recap-receipt li > strong { font-size: 3cqw; font-weight: 700; white-space: nowrap; }
 .recap-receipt-foot { padding-top: 2.4cqw; opacity: 1; }
 .recap-receipt-foot > span { opacity: .6; }
@@ -306,7 +312,7 @@
 .recap-repeat { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3cqw; margin-top: 4cqw; padding: 3cqw 3.5cqw; border-radius: 3.5cqw; background: var(--recap-ink); color: var(--recap-paper); }
 .recap-repeat > span { display: grid; gap: .6cqw; min-width: 0; }
 .recap-repeat > span > span { font-size: 3cqw; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recap-repeat small { font-size: 2.2cqw; opacity: .75; }
+.recap-repeat small { font-size: max(2.2cqw, 10.5px); opacity: .75; }
 .recap-repeat > b { font-size: 6cqw; font-weight: 800; letter-spacing: -.04em; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1s) both; }
 
 /* Then and now */
@@ -315,7 +321,7 @@
 .recap-compare-bars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5cqw; align-items: end; height: 42cqw; margin-top: 5cqw; }
 .recap-compare-bars > div { display: grid; grid-template-rows: auto 1fr auto; height: 100%; gap: 1.6cqw; text-align: center; }
 .recap-compare-bars strong { font-size: 3.6cqw; font-weight: 800; letter-spacing: -.03em; }
-.recap-compare-bars > div > span { font-size: 2.4cqw; font-weight: 700; opacity: .72; }
+.recap-compare-bars > div > span { font-size: max(2.4cqw, 10.5px); font-weight: 700; opacity: .72; }
 .recap-compare-bars i { align-self: end; height: calc(var(--fill) * 100%); min-height: 2cqw; border-radius: 3cqw 3cqw 1cqw 1cqw; background: var(--recap-soft); box-shadow: inset 0 0 0 1px var(--recap-line); animation: recap-reveal-y 1.1s cubic-bezier(.16,1,.3,1) both; animation-delay: calc(var(--enter) + var(--i) * 160ms + 430ms); }
 .recap-compare-now i { background: var(--recap-ink); box-shadow: none; }
 /* Race: both bars sprint up, overshoot and settle, the current one a beat later. */
@@ -329,9 +335,9 @@
 .recap-closing-deal .recap-wrap-card > div { animation: recap-deal .8s cubic-bezier(.2, 1.15, .35, 1) both; animation-delay: calc(var(--enter) + 250ms + var(--t) * 150ms); }
 .recap-closing-flip .recap-wrap-card { perspective: 120cqw; }
 .recap-closing-flip .recap-wrap-card > div { transform-origin: top center; animation: recap-fold .75s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 250ms + var(--t) * 150ms); }
-.recap-wrap-card dt { font-size: 2.1cqw; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; opacity: .7; }
+.recap-wrap-card dt { font-size: max(2.1cqw, 10.5px); font-weight: 800; text-transform: uppercase; letter-spacing: .1em; opacity: .7; }
 .recap-wrap-card dd { font-size: 4.4cqw; font-weight: 800; letter-spacing: -.035em; line-height: 1.15; overflow-wrap: anywhere; }
-.recap-wrap-card small { font-size: 2.2cqw; font-weight: 600; opacity: .72; }
+.recap-wrap-card small { font-size: max(2.2cqw, 10.5px); font-weight: 600; opacity: .72; }
 .recap-closing-actions { display: flex; gap: 2cqw; margin-top: 5cqw; }
 .recap-solid-button, .recap-ghost-button { display: inline-flex; align-items: center; justify-content: center; gap: 1.8cqw; min-height: 10cqw; padding: 0 4cqw; border-radius: 99px; font-size: 2.8cqw; font-weight: 750; cursor: pointer; transition: scale .15s, background-color .2s; }
 .recap-solid-button { flex: 1; background: var(--recap-ink); color: var(--recap-paper); }
@@ -441,7 +447,7 @@
 .recap-opening-strip:nth-child(even) { --strip-to: 100%; }
 .recap-opening-title { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 2cqw; text-align: center; padding: 8cqw; animation: recap-open-title 1.1s cubic-bezier(.16, 1, .3, 1) both; }
 .recap-opening-title > b { font-size: 16cqw; line-height: 1; animation: recap-turn 1.4s cubic-bezier(.3, 0, .2, 1) both; }
-.recap-opening-title > span { font-size: 2.4cqw; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
+.recap-opening-title > span { font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
 .recap-opening-title > strong { font-size: 10cqw; font-weight: 800; letter-spacing: -.055em; line-height: 1.02; }
 
 /* The opening crawl: a blue line in the dark, then yellow text rolling away into the stars. Tap skips it. */
@@ -455,7 +461,7 @@
 .recap-crawl-roll p { margin: 0 0 4cqw; }
 .recap-crawl-roll .recap-crawl-episode { margin: 0; font-size: 4.2cqw; text-align: center; text-transform: uppercase; letter-spacing: .06em; }
 .recap-crawl-roll .recap-crawl-title { margin-bottom: 6cqw; font-size: 8cqw; font-weight: 800; line-height: 1.1; text-align: center; text-transform: uppercase; letter-spacing: .04em; }
-.recap-crawl-skip { position: absolute; left: 0; right: 0; bottom: 4cqw; color: #fff; font-size: 2.4cqw; font-weight: 700; letter-spacing: .2em; text-align: center; text-transform: uppercase; opacity: .45; }
+.recap-crawl-skip { position: absolute; left: 0; right: 0; bottom: 4cqw; color: #fff; font-size: max(2.4cqw, 10.5px); font-weight: 700; letter-spacing: .2em; text-align: center; text-transform: uppercase; opacity: .45; }
 @keyframes recap-crawl-intro { from, to { opacity: 0; } 18%, 78% { opacity: 1; } }
 @keyframes recap-crawl-roll { from { transform: rotateX(28deg) translateY(0); } to { transform: rotateX(28deg) translateY(calc(-100% - 230cqw)); } }
 @keyframes recap-crawl-out { to { opacity: 0; } }
@@ -467,9 +473,9 @@
 .recap-toast-icon { display: grid; flex: none; place-items: center; width: 9cqw; height: 9cqw; border-radius: 1cqw; background: #ffcc33; color: #14151c; box-shadow: inset 0 -1cqw 0 #c8901a; }
 .recap-toast-icon svg { width: 5.4cqw; height: 5.4cqw; }
 .recap-toast > span:last-child { display: grid; gap: .5cqw; min-width: 0; }
-.recap-toast b { color: #ffd84a; font-size: 2.5cqw; letter-spacing: .08em; text-transform: uppercase; }
+.recap-toast b { color: #ffd84a; font-size: max(2.5cqw, 10.5px); letter-spacing: .08em; text-transform: uppercase; }
 .recap-toast > span:last-child > span { overflow: hidden; font-size: 3.8cqw; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.recap-toast small { overflow: hidden; font-size: 2.7cqw; opacity: .72; text-overflow: ellipsis; white-space: nowrap; }
+.recap-toast small { overflow: hidden; font-size: max(2.7cqw, 10.5px); opacity: .72; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes recap-toast { from { translate: 0 -160%; opacity: 0; } 9%, 88% { translate: 0 0; opacity: 1; } to { translate: 0 -160%; opacity: 0; } }
 
 /* Slot-machine digits. */
@@ -500,12 +506,12 @@
 .recap-week-bars i { align-self: end; height: calc(var(--fill) * 100%); min-height: 1.4cqw; border-radius: 2cqw 2cqw .8cqw .8cqw; background: color-mix(in srgb, var(--recap-ink) 28%, transparent); transform-origin: bottom; animation: recap-race .9s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(var(--enter) + var(--i) * 70ms + 400ms); }
 .recap-week-bars .is-weekend i { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--recap-ink) 40%, transparent) 0 1cqw, color-mix(in srgb, var(--recap-ink) 22%, transparent) 1cqw 2cqw); }
 .recap-week-bars .is-top i { background: var(--recap-ink); }
-.recap-week-bars span { font-size: 2.3cqw; font-weight: 800; opacity: .7; }
+.recap-week-bars span { font-size: max(2.3cqw, 10.5px); font-weight: 800; opacity: .7; }
 .recap-week-bars .is-top span { opacity: 1; }
 /* The weekday strip folded under the calendar on paired runs. */
 .recap-week-bars.is-mini { gap: 1.4cqw; height: 15cqw; margin-top: 3cqw; }
 .recap-week-bars.is-mini i { border-radius: 1cqw 1cqw .4cqw .4cqw; }
-.recap-week-bars.is-mini span { font-size: 2cqw; }
+.recap-week-bars.is-mini span { font-size: max(2cqw, 10.5px); }
 
 /* Streaks: every elapsed day as a tick, the record run lighting up in order. */
 .recap-streak-strip { display: flex; gap: .6cqw; height: 12cqw; margin-top: 5cqw; }
@@ -524,8 +530,8 @@
 .recap-quiz-option:hover { background: var(--recap-soft); border-color: var(--recap-ink); }
 .recap-quiz-option:active { scale: .97; }
 .recap-quiz-key { display: grid; place-items: center; flex-shrink: 0; width: 7cqw; height: 7cqw; border-radius: 2cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.8cqw; font-weight: 800; }
-.recap-quiz-skip { align-self: flex-start; margin-top: 4cqw; font-size: 2.6cqw; font-weight: 700; text-decoration: underline; text-underline-offset: .3em; opacity: .7; cursor: pointer; animation: recap-fade .5s calc(var(--enter) + 900ms) both; }
-.recap-verdict { position: absolute; z-index: 5; top: -1cqw; right: 0; padding: 1.6cqw 3.2cqw; border-radius: 99px; font-size: 2.6cqw; font-weight: 800; rotate: 4deg; box-shadow: 0 1.5cqw 3cqw -1.5cqw #0006; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 150ms) both; }
+.recap-quiz-skip { align-self: flex-start; margin-top: 4cqw; font-size: max(2.6cqw, 10.5px); font-weight: 700; text-decoration: underline; text-underline-offset: .3em; opacity: .7; cursor: pointer; animation: recap-fade .5s calc(var(--enter) + 900ms) both; }
+.recap-verdict { position: absolute; z-index: 5; top: -1cqw; right: 0; padding: 1.6cqw 3.2cqw; border-radius: 99px; font-size: max(2.6cqw, 10.5px); font-weight: 800; rotate: 4deg; box-shadow: 0 1.5cqw 3cqw -1.5cqw #0006; animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 150ms) both; }
 .recap-verdict.is-right { background: #1fbf75; color: #fff; }
 .recap-verdict.is-wrong { background: #ff5a5f; color: #fff; rotate: -4deg; }
 
@@ -553,29 +559,29 @@
   animation: recap-cassette-in 1s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 250ms) both; }
 .recap-cassette-label { display: flex; justify-content: space-between; align-items: baseline; gap: 2cqw; padding: 1.6cqw 2.6cqw; border-radius: 2cqw; background: var(--recap-paper); color: var(--recap-ink); }
 .recap-cassette-label > span { font-family: Georgia, serif; font-style: italic; font-size: 3.2cqw; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recap-cassette-label small { font-size: 2cqw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.recap-cassette-label small { font-size: max(2cqw, 10.5px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
 .recap-cassette-window { position: relative; display: flex; justify-content: space-between; align-items: center; height: 14cqw; margin: 2.4cqw 7cqw 0; padding: 0 3cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-paper) 22%, transparent); }
 .recap-cassette-window > b { position: absolute; left: 13cqw; right: 13cqw; top: 50%; height: 4.6cqw; translate: 0 -50%; border-radius: 1cqw; background: color-mix(in srgb, #2a1a12 70%, var(--recap-ink)); }
 .recap-reel { position: relative; z-index: 1; width: 10cqw; height: 10cqw; border-radius: 50%; background: repeating-conic-gradient(var(--recap-paper) 0 20deg, color-mix(in srgb, var(--recap-paper) 40%, transparent) 20deg 60deg); box-shadow: 0 0 0 1cqw var(--recap-ink); animation: recap-turn 2.4s linear infinite; }
 .recap-tracklist { display: grid; margin-top: 3cqw; }
 .recap-tracklist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 3cqw; align-items: center; padding: 1.3cqw 0; border-bottom: 1px dashed var(--recap-line); font-variant-numeric: tabular-nums; }
 .recap-tracklist li:last-child { border-bottom: 0; }
-.recap-track-no { font-size: 2.2cqw; font-weight: 800; opacity: .55; }
+.recap-track-no { font-size: max(2.2cqw, 10.5px); font-weight: 800; opacity: .55; }
 .recap-track-name { display: grid; min-width: 0; }
 .recap-track-name > span { font-size: 3cqw; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recap-track-name > small { font-size: 2.1cqw; opacity: .65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recap-track-name > small { font-size: max(2.1cqw, 10.5px); opacity: .65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recap-track-length { font-size: 2.8cqw; font-weight: 750; }
 
 .recap-month-bars { gap: 1.2cqw; }
-.recap-month-bars span { font-size: 1.9cqw; }
+.recap-month-bars span { font-size: max(1.9cqw, 10.5px); }
 
 .recap-closing-extras { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2.4cqw; align-items: center; margin-top: 2.4cqw; padding: 2.4cqw 3cqw; border-radius: 3.6cqw; border: 1px dashed var(--recap-line); }
 .recap-closing-persona { display: flex; align-items: center; gap: 2.4cqw; min-width: 0; font-size: 3cqw; font-weight: 800; }
 .recap-closing-persona > span:last-child { display: grid; min-width: 0; }
-.recap-closing-persona small, .recap-closing-score small { font-size: 1.9cqw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .65; }
+.recap-closing-persona small, .recap-closing-score small { font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .65; }
 .recap-closing-score { display: grid; justify-items: end; gap: .2cqw; text-align: right; }
 .recap-closing-score > span { font-size: 4cqw; letter-spacing: .1em; color: #f2b705; text-shadow: 0 1px 0 #0003; }
-.recap-closing-score em { font-style: normal; font-size: 2.1cqw; font-weight: 700; opacity: .75; }
+.recap-closing-score em { font-style: normal; font-size: max(2.1cqw, 10.5px); font-weight: 700; opacity: .75; }
 
 .recap-ask:hover svg { animation: recap-turn 1.2s linear infinite; }
 
@@ -595,7 +601,7 @@
 .recap-scene { position: relative; justify-self: stretch; height: 62cqw; margin: 2cqw -5cqw 0; overflow: hidden; }
 .recap-scene-figure { position: absolute; z-index: 3; left: 0; right: 0; bottom: 1cqw; display: grid; justify-items: center; text-align: center; animation: recap-rise .8s cubic-bezier(.16, 1, .3, 1) calc(var(--enter) + 900ms) both; }
 .recap-scene-figure strong { font-size: 12cqw; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
-.recap-scene-figure small { font-size: 2.3cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+.recap-scene-figure small { font-size: max(2.3cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
 .recap-scene-burst { position: absolute; inset: 0; pointer-events: none; }
 .recap-persona .recap-persona-name { margin-top: 2.4cqw; }
 
@@ -644,7 +650,7 @@
 
 /* The Loyal Regular: a loyalty card punched hole by hole, then stamped. */
 .recap-punch-card { position: absolute; left: 7cqw; right: 7cqw; top: 3cqw; padding: 4cqw; border-radius: 3cqw; background: #fffaf2; color: #5a1730; box-shadow: 0 3cqw 6cqw -3cqw #0006; rotate: -3deg; animation: recap-cert-in .8s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 200ms) both; }
-.recap-punch-card > p { font-size: 2.5cqw; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.recap-punch-card > p { font-size: max(2.5cqw, 10.5px); font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
 .recap-punch-card > div { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2.4cqw; margin-top: 3cqw; }
 .recap-punch-card i { aspect-ratio: 1; border: .5cqw dashed #5a173055; border-radius: 50%; }
 .recap-punch-card i.is-punched { border-color: transparent; background: radial-gradient(circle, var(--recap-paper) 52%, #5a1730 54%); animation: recap-punch .35s cubic-bezier(.3, 1.6, .5, 1) both; animation-delay: calc(var(--enter) + 600ms + var(--i) * 140ms); }
@@ -705,7 +711,7 @@
 
 /* ---------- Money in, money out: five ways to draw it. ---------- */
 .recap-flow-scale, .recap-flow-coins, .recap-flow-donut, .recap-flow-bucket { display: grid; margin-top: 3cqw; }
-.recap-flow-chip { display: flex; align-items: baseline; justify-content: center; gap: 2cqw; margin-top: 3cqw; padding: 2.6cqw 4cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.6cqw; font-weight: 700; }
+.recap-flow-chip { display: flex; align-items: baseline; justify-content: center; gap: 2cqw; margin-top: 3cqw; padding: 2.6cqw 4cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.6cqw, 10.5px); font-weight: 700; }
 .recap-flow-chip strong { font-size: 4.6cqw; font-weight: 800; letter-spacing: -.03em; }
 .recap-flow-chip em { font-style: normal; opacity: .75; }
 
@@ -721,13 +727,13 @@
   background: linear-gradient(to bottom left, transparent calc(50% - 1px), var(--recap-ink) 0 calc(50% + 1px), transparent 0) left / 50% 100% no-repeat,
     linear-gradient(to bottom right, transparent calc(50% - 1px), var(--recap-ink) 0 calc(50% + 1px), transparent 0) right / 50% 100% no-repeat; }
 .recap-scale-pan b { width: 26cqw; height: 4.4cqw; border-radius: 0 0 13cqw 13cqw; background: var(--recap-ink); }
-.recap-scale-pan small { margin-top: -3.6cqw; font-size: 2.2cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--recap-paper); }
+.recap-scale-pan small { margin-top: -3.6cqw; font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--recap-paper); }
 
 /* Coin stacks: income in gold, spending in silver, the left-over coins glowing. */
 .recap-coin-towers { display: flex; justify-content: center; align-items: flex-end; gap: 16cqw; height: 50cqw; }
 .recap-coin-tower { display: grid; justify-items: center; gap: 2cqw; }
 .recap-coin-tower > div { display: flex; flex-direction: column-reverse; gap: .3cqw; }
-.recap-coin-tower > span { font-size: 2.3cqw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.recap-coin-tower > span { font-size: max(2.3cqw, 10.5px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
 .recap-coin-tower i { width: 22cqw; height: 3.2cqw; border-radius: 50%; background: linear-gradient(#f7d04a, #c28e00); box-shadow: inset 0 -.6cqw 0 #8c6400, 0 .4cqw 0 #0003;
   animation: recap-coin-drop .55s cubic-bezier(.5, 0, .6, 1.4) both; animation-delay: calc(var(--enter) + 300ms + var(--c) * 90ms + var(--t) * 45ms); }
 .recap-coin-out i { background: linear-gradient(#eef0f3, #9aa1ab); box-shadow: inset 0 -.6cqw 0 #6b7280, 0 .4cqw 0 #0003; }
@@ -741,7 +747,7 @@
 .recap-donut-spent { stroke: var(--recap-ink); stroke-dasharray: var(--arc) var(--dash); animation: recap-donut-draw 1.5s cubic-bezier(.3, .8, .3, 1) calc(var(--enter) + 300ms) both; }
 .recap-donut > span { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; }
 .recap-donut strong { font-size: 11cqw; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
-.recap-donut small { font-size: 2.4cqw; font-weight: 700; opacity: .75; }
+.recap-donut small { font-size: max(2.4cqw, 10.5px); font-weight: 700; opacity: .75; }
 
 /* Bucket: income pours in to the brim, then drains to what was left. */
 .recap-glass.recap-bucket { height: 50cqw; margin: 0 auto; }
@@ -759,9 +765,10 @@
   animation: recap-needle 1.8s cubic-bezier(.3, 1.5, .5, 1) calc(var(--enter) + 300ms) both; }
 .recap-gauge-needle::after { content: ''; position: absolute; left: 50%; bottom: -2.4cqw; width: 5cqw; height: 5cqw; translate: -50% 0; border-radius: 50%; background: var(--recap-ink); }
 .recap-gauge-today { position: absolute; left: 50%; top: 76.8%; width: 2px; height: 30cqw; margin-left: -1px; translate: 0 -100%; transform-origin: 50% 100%; rotate: var(--today); background: linear-gradient(to top, transparent 80%, var(--recap-ink) 0); animation: recap-fade .5s calc(var(--enter) + 1.4s) both; }
-.recap-gauge-today span { position: absolute; top: -4.2cqw; left: 50%; translate: -50% 0; rotate: calc(var(--today) * -1); font-size: 1.8cqw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-.recap-gauge-value { position: absolute; top: 86%; left: 0; right: 0; display: grid; justify-items: center; font-size: 9.5cqw; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
-.recap-gauge-value small { font-size: 2.4cqw; font-weight: 700; letter-spacing: 0; opacity: .75; }
+/* Inside the dial, just under the tick, so it never reaches the headline above the gauge. */
+.recap-gauge-today span { position: absolute; top: 8.4cqw; left: 50%; translate: -50% 0; rotate: calc(var(--today) * -1); padding: .5cqw 1.6cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.recap-gauge-value { position: absolute; top: 84%; left: 0; right: 0; display: grid; justify-items: center; gap: 1.2cqw; font-size: 9.5cqw; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+.recap-gauge-value small { font-size: max(2.4cqw, 10.5px); font-weight: 700; letter-spacing: 0; opacity: .75; }
 
 /* Fight-night versus card */
 .recap-versus { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3cqw; margin-top: 6cqw; }
@@ -769,9 +776,9 @@
   animation: recap-versus-in .75s cubic-bezier(.2, 1.3, .4, 1) calc(var(--enter) + 300ms) both; }
 .recap-versus-now { background: var(--recap-ink); color: var(--recap-paper); }
 .recap-versus-card.is-bigger { scale: 1.05; }
-.recap-versus-card > small { font-size: 2.1cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.recap-versus-card > small { font-size: max(2.1cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
 .recap-versus-card > strong { font-size: 6.4cqw; font-weight: 800; letter-spacing: -.04em; overflow-wrap: anywhere; }
-.recap-versus-card > span { font-size: 2.3cqw; opacity: .7; }
+.recap-versus-card > span { font-size: max(2.3cqw, 10.5px); opacity: .7; }
 .recap-versus-badge { position: absolute; left: 50%; top: 24cqw; display: grid; place-items: center; width: 16cqw; height: 16cqw; translate: -50% -50%; border-radius: 50%; background: #ffb400; color: #2b1d00; font-size: 6cqw; font-style: italic; font-weight: 900; box-shadow: 0 0 0 1.4cqw var(--recap-paper);
   animation: recap-stamp .55s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 900ms) both, recap-pulse 1.4s calc(var(--enter) + 1.6s) ease-in-out infinite; }
 .recap-versus-result { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 1.6cqw; margin-top: 3cqw; font-size: 4.6cqw; font-weight: 800; }
@@ -787,11 +794,11 @@
 /* Receipt */
 .recap-finale-receipt .recap-receipt-stage { margin-top: 0; }
 .recap-finale-slip { padding: 3.2cqw 4.5cqw 2.8cqw; }
-.recap-slip-head, .recap-slip-foot { display: grid; justify-items: center; gap: .5cqw; font-size: 2.1cqw; letter-spacing: .1em; text-transform: uppercase; }
+.recap-slip-head, .recap-slip-foot { display: grid; justify-items: center; gap: .5cqw; font-size: max(2.1cqw, 10.5px); letter-spacing: .1em; text-transform: uppercase; }
 .recap-slip-head { padding-bottom: 2cqw; border-bottom: 1px dashed #24261f55; }
 .recap-slip-head b { font-size: 3.6cqw; letter-spacing: .2em; }
 .recap-finale-slip ul { display: grid; padding: 1.4cqw 0; }
-.recap-finale-slip li { display: flex; align-items: baseline; gap: 1.6cqw; padding: .9cqw 0; font-size: 2.7cqw; }
+.recap-finale-slip li { display: flex; align-items: baseline; gap: 1.6cqw; padding: .9cqw 0; font-size: max(2.7cqw, 10.5px); }
 .recap-finale-slip li > i { flex: 1; min-width: 3cqw; border-bottom: 1px dotted #24261f77; translate: 0 -.6cqw; }
 .recap-finale-slip li strong { font-weight: 700; white-space: nowrap; }
 .recap-finale-slip li.has-rule { margin-top: .8cqw; padding-top: 1.8cqw; border-top: 1px dashed #24261f55; }
@@ -804,27 +811,27 @@
 .recap-credits { position: relative; flex: 1; min-height: 0; overflow: hidden; mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); }
 .recap-credits-roll { display: grid; justify-items: center; gap: 2.4cqw; padding: 3cqw 0; text-align: center; animation: recap-roll-credits 4.4s cubic-bezier(.25, .6, .3, 1) calc(var(--enter) + 200ms) both; }
 .recap-credits-roll p { display: grid; gap: .5cqw; }
-.recap-credits-roll p small { font-size: 1.9cqw; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; opacity: .6; }
+.recap-credits-roll p small { font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .24em; text-transform: uppercase; opacity: .6; }
 .recap-credits-roll p span { font-size: 4.2cqw; font-weight: 800; letter-spacing: -.02em; }
 .recap-credits-roll .recap-credits-end { margin-top: 2cqw; font-family: Georgia, serif; font-size: 11cqw; font-style: italic; font-weight: 700; line-height: 1; }
-.recap-credits-fine { font-size: 1.9cqw; opacity: .55; }
+.recap-credits-fine { font-size: max(1.9cqw, 10.5px); opacity: .55; }
 
 /* Certificate */
 .recap-cert { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 1.1cqw; padding: 6cqw 6cqw 5cqw; text-align: center; border-radius: 1.5cqw; background: #fbf7ea; color: #3a2c12;
   box-shadow: inset 0 0 0 1.2cqw #fbf7ea, inset 0 0 0 1.5cqw #b08a3e, inset 0 0 0 2.3cqw #fbf7ea, inset 0 0 0 2.6cqw #b08a3e, 0 3cqw 6cqw -3cqw #0007;
   animation: recap-cert-in .9s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 150ms) both; }
 .recap-cert > * { animation: recap-fade .6s calc(var(--enter) + 600ms) both; }
-.recap-cert-academy { font-size: 1.9cqw; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; opacity: .7; }
+.recap-cert-academy { font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .22em; text-transform: uppercase; opacity: .7; }
 .recap-story .recap-cert h3 { font-family: Georgia, serif; font-size: 10cqw; font-weight: 700; letter-spacing: .02em; line-height: 1; }
 .recap-cert p { font-size: 2.8cqw; }
 .recap-cert .recap-cert-of { margin-top: -.6cqw; font-family: Georgia, serif; font-size: 3.6cqw; font-style: italic; }
 .recap-cert .recap-cert-who { padding: 0 5cqw .6cqw; border-bottom: 1px solid #b08a3e; font-family: Georgia, serif; font-size: 7cqw; font-style: italic; }
 .recap-cert .recap-cert-title { margin-top: .6cqw; font-size: 6.4cqw; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; color: #8a5a00; }
-.recap-cert .recap-cert-reason { max-width: 70cqw; font-size: 2.5cqw; opacity: .75; }
+.recap-cert .recap-cert-reason { max-width: 70cqw; font-size: max(2.5cqw, 10.5px); opacity: .75; }
 .recap-cert-foot { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 3cqw; }
 .recap-cert-sign { display: grid; text-align: left; }
 .recap-cert-sign b { padding-right: 6cqw; border-bottom: 1px solid currentColor; font-family: Georgia, serif; font-size: 4.4cqw; font-style: italic; }
-.recap-cert-sign small { margin-top: .6cqw; font-size: 1.7cqw; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+.recap-cert-sign small { margin-top: .6cqw; font-size: max(1.7cqw, 10.5px); letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
 .recap-cert-seal { position: relative; display: grid; place-items: center; width: 16cqw; height: 16cqw; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #e85a5a, #a51d1d 70%); color: #ffe3c4; box-shadow: 0 0 0 .8cqw #c23232, 0 0 0 1.2cqw #a51d1d55;
   animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.2s) both; }
 .recap-cert-seal b { position: relative; z-index: 1; font-size: 8cqw; line-height: 1; }
@@ -843,7 +850,7 @@
 .recap-arcade li:first-child > span:first-child { color: #ffd400; }
 .recap-arcade li strong { max-width: 38cqw; overflow: hidden; color: #3dff9c; font-weight: 700; text-overflow: ellipsis; text-shadow: 0 0 1.4cqw #3dff9c88; white-space: nowrap; }
 .recap-arcade-press { margin-top: auto; text-align: center; font-size: 3cqw; color: #7fd3ff; animation: recap-blink .9s steps(1) calc(var(--enter) + 2.2s) infinite; }
-.recap-arcade-credit { display: flex; justify-content: space-between; margin-top: 2.4cqw; font-size: 2cqw; opacity: .6; }
+.recap-arcade-credit { display: flex; justify-content: space-between; margin-top: 2.4cqw; font-size: max(2cqw, 10.5px); opacity: .6; }
 
 /* ---------- Mini-games ---------- */
 .recap-game { display: flex; flex-direction: column; }
@@ -868,7 +875,7 @@
 .recap-slider-track input::-moz-range-thumb { width: 7cqw; height: 7cqw; border-radius: 50%; background: var(--recap-paper); border: 1cqw solid var(--recap-ink); }
 .recap-slider-answer { position: absolute; top: -9cqw; left: calc(var(--a) * 1%); translate: -50% 0; display: grid; justify-items: center; animation: recap-answer-drop .7s cubic-bezier(.3, 1.6, .5, 1) both; }
 .recap-slider-answer::after { content: ''; width: 2px; height: 11cqw; background: #ff5a5f; }
-.recap-slider-answer b { padding: 1cqw 2.2cqw; border-radius: 99px; background: #ff5a5f; color: #fff; font-size: 2.6cqw; font-weight: 800; }
+.recap-slider-answer b { padding: 1cqw 2.2cqw; border-radius: 99px; background: #ff5a5f; color: #fff; font-size: max(2.6cqw, 10.5px); font-weight: 800; }
 
 /* Slot machine */
 .recap-reels { display: grid; margin-top: 5cqw; animation: recap-option-in .6s cubic-bezier(.2, 1.3, .4, 1) calc(var(--enter) + 400ms) both; }
@@ -935,7 +942,7 @@
 .recap-orbit { display: grid; place-items: center; }
 .recap-orbit-sun { position: relative; z-index: 2; display: grid; place-items: center; align-content: center; gap: 1cqw; width: 30cqw; height: 30cqw; border-radius: 50%; background: var(--recap-ink); color: var(--recap-paper); font-size: 11cqw; box-shadow: 0 0 0 2.4cqw color-mix(in srgb, var(--recap-ink) 15%, transparent), 0 0 12cqw 2cqw color-mix(in srgb, var(--recap-accent) 50%, transparent);
   animation: recap-badge-in 1s cubic-bezier(.2, 1.3, .35, 1) var(--enter) both; }
-.recap-orbit-sun > span { font-size: 2.6cqw; font-weight: 800; max-width: 24cqw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recap-orbit-sun > span { font-size: max(2.6cqw, 10.5px); font-weight: 800; max-width: 24cqw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recap-orbit-ring { position: absolute; left: 50%; top: 50%; width: calc(42cqw + var(--o) * 13cqw); height: calc(42cqw + var(--o) * 13cqw); margin: calc((42cqw + var(--o) * 13cqw) / -2); border-radius: 50%; border: 1px dashed var(--recap-line);
   animation: recap-ring-in .9s cubic-bezier(.2, 1.3, .4, 1) calc(var(--enter) + 300ms + var(--o) * 120ms) both, recap-turn calc(7s + var(--o) * 3.5s) linear calc(var(--o) * -1.3s) infinite; }
 .recap-orbit-ring:nth-child(even) { animation-direction: normal, reverse; }
@@ -945,6 +952,7 @@
 .recap-tunnel > i { position: absolute; left: 50%; top: 50%; width: 30cqw; height: 30cqw; margin: -15cqw; border-radius: 6cqw; border: 1px solid var(--recap-ink); animation: recap-tunnel 4s cubic-bezier(.5, 0, 1, .6) infinite; animation-delay: calc(var(--t) * -.45s); }
 .recap-tunnel > i:nth-child(odd) { border-radius: 50%; }
 .recap-tunnel-core { position: relative; z-index: 1; display: grid; justify-items: center; font-size: 17cqw; font-weight: 800; letter-spacing: -.06em; line-height: 1; animation: recap-badge-in 1s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 200ms) both, recap-pulse 1.35s calc(var(--enter) + 1.2s) ease-in-out infinite; }
+.recap-tunnel-core, .recap-rain-count { gap: 2cqw; }
 .recap-tunnel-core > span:last-child { font-size: 3cqw; letter-spacing: .2em; text-transform: uppercase; }
 
 .recap-liquid { display: grid; place-items: center; }
@@ -961,18 +969,20 @@
 .recap-rain-count small { font-size: 3cqw; letter-spacing: .2em; text-transform: uppercase; }
 
 /* Ejected: a starfield, categories drifting off one at a time, then the culprit. Each step is 1.7s. */
-.recap-ejected { --step: 1.7s; overflow: hidden; isolation: isolate; border-radius: 4cqw; background: #05060d; color: #f5f5f0; }
+/* Full screen: the chapter wears the noir theme, so the whole card is space; the stars live on the card itself. */
+.recap-interlude.recap-ejected { --step: 1.7s; overflow: visible; color: #f5f5f0; }
+.recap-story:has(> .recap-stage > .recap-arriving .recap-ejected)::before { content: ''; position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: calc(100% + 126cqw); pointer-events: none; will-change: translate;
+  background: radial-gradient(#fff 1px, transparent 1.3px) 0 0 / 9cqw 9cqw, radial-gradient(#ffffffaa 1px, transparent 1.3px) 4cqw 6cqw / 14cqw 14cqw;
+  animation: recap-fade .8s both, recap-starfield-pan 42s linear infinite; }
+@keyframes recap-starfield-pan { to { translate: -126cqw 0; } }
 /* Two star layers slide at different speeds. They move with translate, which the GPU handles without
  * repainting; each slides exactly a whole number of tiles, so the loop is seamless. */
-.recap-ejected::before, .recap-ejected::after { content: ''; position: absolute; z-index: -1; top: 0; bottom: 0; left: 0; pointer-events: none; will-change: translate; }
-.recap-ejected::before { width: calc(100% + 90cqw); background: radial-gradient(#fff 1px, transparent 1.3px) 0 0 / 9cqw 9cqw; animation: recap-starfield-near 30s linear infinite; }
-.recap-ejected::after { width: calc(100% + 56cqw); background: radial-gradient(#ffffffaa 1px, transparent 1.3px) 4cqw 6cqw / 14cqw 14cqw; animation: recap-starfield-far 28s linear infinite; }
 .recap-eject-body { position: absolute; left: 0; top: 18%; display: grid; place-items: center; width: 14cqw; height: 14cqw; border-radius: 3.6cqw; background: var(--recap-accent); color: #fff; font-size: 8cqw;
   animation: recap-eject-drift var(--step) linear both; animation-delay: calc(var(--enter) + var(--k) * var(--step)); }
 .recap-eject-line { position: absolute; left: 6cqw; right: 6cqw; top: 58%; display: grid; justify-items: center; gap: 2cqw; text-align: center; opacity: 0;
   animation: recap-eject-show var(--step) both; animation-delay: calc(var(--enter) + var(--k) * var(--step)); }
 .recap-eject-type { font-size: 4.6cqw; font-weight: 700; line-height: 1.3; animation: recap-eject-type 1s steps(26) both; animation-delay: calc(var(--enter) + var(--k) * var(--step) + 200ms); }
-.recap-eject-line small { font-size: 2.6cqw; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .6; }
+.recap-eject-line small { font-size: max(2.6cqw, 10.5px); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .6; }
 .recap-eject-final { animation-name: recap-eject-stay; }
 .recap-eject-final .recap-eject-type { color: #ff5a5f; font-size: 5.4cqw; }
 .recap-eject-culprit { position: absolute; left: 50%; top: 14%; display: grid; place-items: center; width: 22cqw; height: 22cqw; margin-left: -11cqw; border-radius: 5cqw; background: #ff5a5f; color: #fff; font-size: 12cqw; box-shadow: 0 0 0 2cqw #ff5a5f33, 0 0 10cqw #ff5a5f88;
@@ -993,7 +1003,7 @@
 .recap-payday-bars > i { flex: 1; min-width: 0; height: max(.6cqw, calc(var(--h) * 100%)); border-radius: .8cqw .8cqw 0 0; background: color-mix(in srgb, var(--recap-ink) 22%, transparent); transform-origin: bottom;
   animation: recap-grow-y .6s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 22ms * var(--tempo, 1)); }
 .recap-payday-bars > i.is-rush { background: var(--recap-accent); animation: recap-grow-y .7s cubic-bezier(.2, 1.5, .4, 1) both, recap-rush-glow 1.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 300ms + var(--i) * 120ms), calc(var(--enter) + 1.4s); }
-.recap-payday-flag { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 1.2cqw; padding: 1cqw 2.2cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.6cqw; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+.recap-payday-flag { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 1.2cqw; padding: 1cqw 2.2cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.6cqw, 10.5px); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
   animation: recap-stamp .7s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 150ms); }
 .recap-payday-flag svg { width: 3.4cqw; height: 3.4cqw; }
 .recap-payday-share { display: flex; align-items: baseline; gap: 2.4cqw; margin-top: 3cqw; font-size: 15cqw; font-weight: 800; letter-spacing: -.05em; line-height: 1; animation: recap-rise .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 900ms); }
@@ -1016,11 +1026,11 @@
 .recap-boss-hit small { font-size: 3cqw; opacity: .8; }
 .recap-boss-weapon { display: grid; flex: none; place-items: center; width: 10cqw; height: 10cqw; border-radius: 1.6cqw; background: #ff5a5f; color: #fff; }
 .recap-boss-weapon svg { width: 6cqw; height: 6cqw; }
-.recap-boss-log { font-size: 2.6cqw; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .65; animation: recap-fade .6s both; animation-delay: calc(var(--enter) + 2200ms); }
+.recap-boss-log { font-size: max(2.6cqw, 10.5px); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .65; animation: recap-fade .6s both; animation-delay: calc(var(--enter) + 2200ms); }
 
 /* The usual suspects: a lineup wall, two figures sized by their visits, a camera flash. */
 .recap-lineup { height: 66cqw; overflow: hidden; border-radius: 3cqw; background: color-mix(in srgb, var(--recap-ink) 7%, transparent); }
-.recap-lineup-wall { position: absolute; inset: 0; display: grid; grid-template-rows: repeat(4, 1fr); padding-left: 2cqw; background: repeating-linear-gradient(to bottom, var(--recap-line) 0 1px, transparent 1px 3.3cqw); font-size: 2.2cqw; font-weight: 800; opacity: .8; }
+.recap-lineup-wall { position: absolute; inset: 0; display: grid; grid-template-rows: repeat(4, 1fr); padding-left: 2cqw; background: repeating-linear-gradient(to bottom, var(--recap-line) 0 1px, transparent 1px 3.3cqw); font-size: max(2.2cqw, 10.5px); font-weight: 800; opacity: .8; }
 .recap-lineup-wall > span { border-top: 1.5px solid color-mix(in srgb, var(--recap-ink) 40%, transparent); }
 .recap-lineup-row { position: absolute; inset: 6cqw 6cqw 0 10cqw; display: flex; align-items: flex-end; justify-content: space-around; }
 .recap-suspect { display: grid; justify-items: center; width: 40%; height: calc(var(--tall) * 100%); animation: recap-suspect-in .8s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 350ms); }
@@ -1032,7 +1042,7 @@
 .recap-suspect-plate { display: grid; justify-items: center; gap: .3cqw; width: 100%; padding: 1.6cqw 1cqw; background: var(--recap-paper); border: .5cqw solid var(--recap-ink); text-align: center; }
 .recap-suspect-plate b { max-width: 100%; overflow: hidden; font-size: 3.2cqw; text-overflow: ellipsis; white-space: nowrap; }
 .recap-suspect-plate > span { font-size: 5cqw; font-weight: 900; line-height: 1; }
-.recap-suspect-plate small { font-size: 2.4cqw; opacity: .75; }
+.recap-suspect-plate small { font-size: max(2.4cqw, 10.5px); opacity: .75; }
 .recap-lineup-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: recap-flash-pop .5s ease-out 2 both; animation-delay: calc(var(--enter) + 1000ms); }
 
 /* Milestone: a medal whose ring fills, and a pin on the period's line. */
@@ -1045,8 +1055,8 @@
 .recap-milestone-medal svg circle { fill: none; stroke-width: 7; }
 .recap-milestone-track { stroke: color-mix(in srgb, var(--recap-ink) 15%, transparent); fill: var(--recap-paper) !important; }
 .recap-milestone-fill { stroke: var(--recap-accent); stroke-linecap: round; stroke-dasharray: 1; animation: recap-gauge-fill 1.6s cubic-bezier(.3, 0, .2, 1) both; animation-delay: calc(var(--enter) + 300ms); }
-.recap-milestone-medal > span { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; font-size: 12cqw; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
-.recap-milestone-medal small { font-size: 2.6cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+.recap-milestone-medal > span { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 1.6cqw; font-size: 12cqw; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
+.recap-milestone-medal small { font-size: max(2.6cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
 .recap-milestone-line { position: relative; width: 100%; height: 12cqw; margin-top: 4cqw; border-top: 1.5px solid var(--recap-line); animation: recap-grow-x .9s cubic-bezier(.16, 1, .3, 1) both; transform-origin: left; animation-delay: calc(var(--enter) + 700ms); }
 .recap-milestone-line > i { position: absolute; top: -2cqw; left: calc(var(--at) * 100%); width: 4cqw; height: 4cqw; margin-left: -2cqw; border-radius: 50%; background: var(--recap-accent); box-shadow: 0 0 0 1.4cqw color-mix(in srgb, var(--recap-accent) 25%, transparent);
   animation: recap-pop .5s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 1500ms); }
@@ -1087,8 +1097,6 @@
 @keyframes recap-flash-pop { 0%, 100% { opacity: 0; } 15% { opacity: .9; } }
 @keyframes recap-climb { from { translate: 0 calc((var(--from) - var(--to)) * var(--row)); } }
 @keyframes recap-roll-credits { from { translate: 0 100%; } }
-@keyframes recap-starfield-near { to { translate: -90cqw 0; } }
-@keyframes recap-starfield-far { to { translate: -56cqw 0; } }
 @keyframes recap-eject-drift { from { translate: -20cqw 24cqw; rotate: 0deg; } to { translate: 105cqw -8cqw; rotate: 560deg; } }
 @keyframes recap-eject-show { 0% { opacity: 0; } 12%, 86% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes recap-eject-stay { from { opacity: 0; } to { opacity: 1; } }
@@ -1228,8 +1236,7 @@
 /* Y2K: bubbly italic type, eyebrows in pills, sparkles in the corners. */
 .recap-ed-y2k { --font-heading: 'Trebuchet MS', Verdana, system-ui, sans-serif; font-family: 'Trebuchet MS', Verdana, system-ui, sans-serif; }
 .recap-ed-y2k h2 { font-style: italic; font-weight: 900; letter-spacing: -.035em; }
-.recap-ed-y2k .recap-story-eyebrow { width: fit-content; padding: .8cqw 2.6cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); }
-.recap-ed-y2k .recap-story-eyebrow::before { content: '✦'; }
+.recap-ed-y2k .recap-story-eyebrow::before { content: '✦'; width: auto; height: auto; background: none; animation: none; }
 .recap-ed-y2k::after { background: radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--recap-accent) 35%, transparent) 0 3cqw, transparent 3.2cqw), radial-gradient(circle at 6% 94%, color-mix(in srgb, var(--recap-accent) 25%, transparent) 0 5cqw, transparent 5.2cqw);
   box-shadow: inset 0 0 0 .8cqw color-mix(in srgb, var(--recap-ink) 12%, transparent); }
 /* Zine: headline words cut out and pasted, a strip of tape, photocopy grain. */
@@ -1244,7 +1251,6 @@
 /* Brutalist: mono type, black bars, a hard frame. */
 .recap-ed-brutalist { --font-heading: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; }
 .recap-ed-brutalist h2 { font-weight: 900; letter-spacing: -.05em; text-transform: uppercase; }
-.recap-ed-brutalist .recap-story-eyebrow { width: fit-content; padding: .8cqw 1.8cqw; background: var(--recap-ink); color: var(--recap-paper); }
 .recap-ed-brutalist::after { border: 1.4cqw solid var(--recap-ink); }
 
 /* ---------- More openings: a VHS tape, a needle drop, a news bulletin, a title screen. Tap to skip. ---------- */

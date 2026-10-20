@@ -88,6 +88,7 @@ function Memory({ play, seed, onDone }: { play: Of<'memory'>; seed: number } & G
     else later(() => { sfx('thunk'); setOpen([]); }, 800);
   };
   return <div className={`recap-memory${done ? ' is-done' : ''}`}>
+    <p className="recap-memory-how">Tap two cards to turn them over. Find the three matching pairs: they’re your top three categories.</p>
     <div className="recap-memory-grid">
       {cards.map((card, i) => {
         const up = open.includes(i) || matched.has(card.name);
@@ -98,7 +99,7 @@ function Memory({ play, seed, onDone }: { play: Of<'memory'>; seed: number } & G
         </button>;
       })}
     </div>
-    <p className="recap-fact">{done ? 'Your top three, all matched.' : `Flips: ${flips}`}</p>
+    <p className="recap-fact" role="status">{done ? 'Your top three, all matched.' : `Pairs found: ${matched.size} of ${play.cards.length} · tries: ${flips}`}</p>
     {done && <div className="recap-game-burst" style={vars({ '--enter': '0ms' })}><Burst seed={seed} kind="stars" count={30} origin="center" /></div>}
   </div>;
 }

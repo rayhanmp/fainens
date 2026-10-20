@@ -114,7 +114,8 @@ function CoverVisual({ story, variants, run }: { story: Of<'intro'> } & Shared) 
         </div>
         <div className="recap-pass-grid">
           <div><small>Passenger</small><b>{cover.passenger}</b></div><div><small>Flight</small><b>FN {cover.issue}</b></div>
-          <div><small>Seat</small><b>{cover.seat}</b></div><div><small>Gate</small><b>✳</b></div>
+          {/* The fourth column is left for the LANDED stamp, so it never prints over a value. */}
+          <div><small>Seat</small><b>{cover.seat}</b></div><div aria-hidden="true" />
         </div>
         <div className="recap-pass-stub"><span className="recap-barcode" aria-hidden="true" /><span>{cover.chapterCount} stops · {cover.purchaseCount} receipts</span></div>
         <span className="recap-pass-stamp" aria-hidden="true">{story.isPartial ? 'In flight' : 'Landed'}</span>
@@ -345,7 +346,7 @@ function BudgetVisual({ story, periodId, gauge }: { story: Of<'budget'>; periodI
       </div>
       <div className={`recap-meter recap-seq${over ? ' is-over' : ''}`} style={seq(4)} aria-hidden="true">
         <i style={{ '--fill': Math.min(1, Math.max(0, (used ?? 0) / 100)) } as CSSProperties} />
-        {story.elapsedShare !== null && <b style={{ left: `${story.elapsedShare}%` }}><span>Today</span></b>}
+        {story.elapsedShare !== null && <b style={{ left: `${story.elapsedShare}%` }} className={story.elapsedShare > 85 ? 'is-end' : story.elapsedShare < 15 ? 'is-start' : undefined}><span>Today</span></b>}
       </div>
     </>}
     {story.elapsedShare !== null && used !== null && <p className="recap-fact recap-seq" style={seq(5)}>{used}% of the plan used, {story.elapsedShare}% of the period gone.</p>}

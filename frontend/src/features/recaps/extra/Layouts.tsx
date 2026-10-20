@@ -158,8 +158,8 @@ export function MixtapeAlt({ story, variant }: { story: Of<'mixtape'>; variant: 
     </li>)}
   </ol>;
   if (variant === 'vinyl') return <div className="recap-mixtape recap-mixtape-vinyl">
-    <div className="recap-sleeve" aria-hidden="true">
-      <span className="recap-sleeve-art"><b>{story.tapeName}</b><small>LP · 33⅓</small></span>
+    <div className="recap-lp-sleeve" aria-hidden="true">
+      <span className="recap-lp-sleeve-art"><b>{story.tapeName}</b><small>LP · 33⅓</small></span>
       <span className="recap-lp"><i /></span>
     </div>
     {list('A')}

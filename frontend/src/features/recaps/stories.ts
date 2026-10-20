@@ -313,7 +313,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     if (id === 'habits' && /transfer fee:/i.test(source.body)) return null;
     const title = compact(source.title);
     // Older editions could open a body with an interpolated lower-case insight ("income rose…").
-    const body = compact(source.body).replace(/^\p{Ll}/u, letter => letter.toUpperCase());
+    // Like the generated copy, a saved body is shown only when it carries a figure; the rest
+    // ("…side by side. The rest of the story is in the receipts.") only describes the chart.
+    const written = compact(source.body).replace(/^\p{Ll}/u, letter => letter.toUpperCase());
+    const body = /\d/.test(written) ? written : '';
     const titleFits = title.length <= 56 && !/(?:\b(?:and|with|at|dan|dengan|di)|[,;:]|…|\.\.\.)\s*$/i.test(title);
     if (!titleFits || body.length > 160) return null;
     return { eyebrow: shortDisplayLabel(source.eyebrow, 40), title, body };
@@ -598,7 +601,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     const equivalence = equivalences[chapter.id];
     const play = dealt.get(chapter.id);
     return {
-      ...chapter, ...copy, theme: chapter.id === 'persona' && run !== 0 ? PERSONA_THEMES[chapter.persona.key] : palette[i % palette.length],
+      // The ejection is set in space: the whole card goes dark.
+      ...chapter, ...copy, theme: chapter.id === 'persona' && run !== 0 ? PERSONA_THEMES[chapter.persona.key] : chapter.id === 'interlude' && chapter.variant === 'ejected' ? 'noir' : palette[i % palette.length],
       // The piggy bank replaces the scratch card when it is dealt.
       ...(chapter.id === 'overview' && play?.kind === 'piggy' ? { reveal: 'piggy' } : {}),
       // Some runs swap the closing line for a playful equivalence.

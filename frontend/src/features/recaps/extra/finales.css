@@ -11,15 +11,21 @@
 .recap-polaroid-photo.is-3 { background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); }
 .recap-polaroid-photo b { font-size: 11cqw; font-weight: 900; letter-spacing: -.04em; }
 .recap-polaroid figcaption { display: grid; gap: .4cqw; margin-top: 2cqw; font-family: Georgia, serif; font-size: 3.8cqw; font-style: italic; line-height: 1.1; }
-.recap-polaroid figcaption small { font-family: inherit; font-size: 2.6cqw; opacity: .65; }
+.recap-polaroid figcaption small { font-family: inherit; font-size: max(2.6cqw, 10.5px); opacity: .65; }
 .recap-polaroid-net { position: absolute; left: 0; right: 0; bottom: 0; font-size: 3.2cqw; font-weight: 800; text-align: center; animation: recap-fade .6s both; animation-delay: calc(var(--enter) + 1900ms); }
 @keyframes recap-polaroid-drop { from { opacity: 0; translate: 0 -40cqw; rotate: calc(var(--r) * -3); scale: 1.2; } }
 @keyframes recap-develop { from { filter: brightness(2.2) saturate(0); } }
 
 /* Trading card: it flips over from its back, then the foil shimmers. */
-.recap-tcard-stage { display: grid; place-items: center; flex: 1; perspective: 160cqw; margin-top: 2cqw; }
-.recap-tcard { position: relative; width: 66cqw; aspect-ratio: 5 / 7; transform-style: preserve-3d; animation: recap-card-flip 1.2s cubic-bezier(.3, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 300ms); }
-.recap-tcard-face, .recap-tcard-back { position: absolute; inset: 0; border-radius: 3.4cqw; backface-visibility: hidden; }
+.recap-tcard-stage { display: grid; place-items: center; flex: 1; margin-top: 2cqw; }
+/* A flat flip: the back shows, squashes away, and the face springs out (3D flips flatten under blur filters). */
+.recap-tcard { position: relative; width: 66cqw; aspect-ratio: 5 / 7; animation: recap-card-deal .5s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 200ms); }
+.recap-tcard-face, .recap-tcard-back { position: absolute; inset: 0; border-radius: 3.4cqw; }
+.recap-tcard-back { animation: recap-tcard-back-out .25s ease-in both; animation-delay: calc(var(--enter) + 800ms); }
+.recap-tcard-face { animation: recap-tcard-face-in .3s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 1050ms); }
+@keyframes recap-card-deal { from { opacity: 0; translate: 0 30cqw; rotate: -10deg; scale: .7; } }
+@keyframes recap-tcard-back-out { to { scale: 0 1; } }
+@keyframes recap-tcard-face-in { from { scale: 0 1; } }
 .recap-tcard-face { display: grid; grid-template-rows: auto 1fr auto auto auto auto; gap: 1.6cqw; padding: 3.6cqw; border: 1.6cqw solid #ffcc33; background: var(--recap-paper); color: var(--recap-ink); box-shadow: 0 3cqw 8cqw #0004; }
 .recap-tcard-back { display: grid; place-items: center; background: repeating-conic-gradient(var(--recap-ink) 0 15deg, var(--recap-accent) 15deg 30deg); color: var(--recap-paper); font-size: 20cqw; transform: rotateY(180deg); border: 1.6cqw solid #ffcc33; }
 .recap-tcard-head { display: flex; justify-content: space-between; align-items: baseline; gap: 2cqw; margin: 0; }
@@ -28,11 +34,11 @@
 .recap-tcard-art { position: relative; display: grid; place-items: center; overflow: hidden; border: .6cqw solid var(--recap-ink); border-radius: 1.4cqw; background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); color: var(--recap-paper); }
 .recap-tcard-art svg { width: 22cqw; height: 22cqw; animation: recap-pulse 2s ease-in-out infinite; }
 .recap-tcard-foil { position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 40%, #ffffff66 48%, #b8f0ff55 52%, transparent 60%); animation: recap-foil 2.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 1.5s); }
-.recap-tcard-type { margin: 0; font-size: 2.4cqw; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
+.recap-tcard-type { margin: 0; font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
 .recap-tcard-moves { display: grid; gap: 1cqw; margin: 0; padding: 0; list-style: none; font-size: 3cqw; font-weight: 700; }
 .recap-tcard-moves li { display: flex; gap: 1.6cqw; padding-bottom: 1cqw; border-bottom: 1px solid var(--recap-line); animation: recap-rise .5s both; animation-delay: calc(var(--enter) + 1400ms + var(--i) * 150ms); }
 .recap-tcard-flavour { margin: 0; font-family: Georgia, serif; font-size: 2.8cqw; font-style: italic; opacity: .8; }
-.recap-tcard-foot { display: flex; justify-content: space-between; margin: 0; font-size: 2.6cqw; font-weight: 800; }
+.recap-tcard-foot { display: flex; justify-content: space-between; margin: 0; font-size: max(2.6cqw, 10.5px); font-weight: 800; }
 .recap-tcard-foot span:first-child { color: #c9961a; letter-spacing: .1em; }
 @keyframes recap-card-flip { from { transform: rotateY(180deg) scale(.6); opacity: 0; } 40% { opacity: 1; } to { transform: rotateY(0deg) scale(1); } }
 @keyframes recap-foil { from { translate: -40% 0; } to { translate: 40% 0; } }
@@ -42,7 +48,7 @@
 .recap-frontpage { width: 100%; padding: 4cqw 4cqw 5cqw; background: #f4f0e6; color: #1d1c19; font-family: Georgia, 'Times New Roman', serif; box-shadow: 0 2cqw 6cqw #0004;
   animation: recap-paper-spin 1.3s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
 .recap-frontpage-mast { margin: 0; padding-bottom: 1.4cqw; border-bottom: .6cqw double #1d1c19; font-size: 8cqw; font-weight: 900; letter-spacing: -.01em; text-align: center; }
-.recap-frontpage-dateline { display: flex; justify-content: space-between; margin: 0 0 3cqw; padding: 1cqw 0; border-bottom: 1px solid #1d1c19; font-family: system-ui, sans-serif; font-size: 2.2cqw; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.recap-frontpage-dateline { display: flex; justify-content: space-between; margin: 0 0 3cqw; padding: 1cqw 0; border-bottom: 1px solid #1d1c19; font-family: system-ui, sans-serif; font-size: max(2.2cqw, 10.5px); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .recap-frontpage h3 { margin: 0; font-size: 8.4cqw; font-weight: 900; line-height: 1.02; letter-spacing: -.02em; }
 .recap-frontpage-deck { margin: 2cqw 0 3cqw; font-size: 3.6cqw; font-style: italic; }
 .recap-frontpage-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3cqw; padding-top: 2.4cqw; border-top: 1px solid #1d1c19; }

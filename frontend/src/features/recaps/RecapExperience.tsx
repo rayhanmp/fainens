@@ -447,7 +447,8 @@ function ChapterContent({ story, className: baseClass, style: baseStyle, live = 
   const root = useRef<HTMLDivElement>(null);
   // The cover, and every finale except the summary card, are full-bleed designs that set their own type.
   const fullBleed = !gate && (story.id === 'intro' || (story.id === 'closing' && variants.finale !== 'card'));
-  useFitContent(root, !fullBleed);
+  // The cover is sized to fit by design; the full-bleed finales (receipt, credits…) still need the safety net.
+  useFitContent(root, !fullBleed || story.id === 'closing');
   if (gate && story.play) {
     return <div ref={root} className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
       <PlayGate play={story.play} eyebrow={story.eyebrow} seed={run} onDone={result => onAnswer?.(result)} />
@@ -473,7 +474,8 @@ function ChapterContent({ story, className: baseClass, style: baseStyle, live = 
       })}</span>)}
     </h2>
     <div className="recap-visual"><ChapterVisual story={story} periodId={periodId} onShare={onShare} variants={variants} run={run} score={score} /></div>
-    <p className="recap-story-body">{story.body}</p>
+    {/* A body line appears only when it says something the visual doesn't. */}
+    {story.body && <p className="recap-story-body">{story.body}</p>}
   </div>;
 }
 

@@ -53,7 +53,7 @@ export function AltPersonaScene({ persona, run }: { persona: Persona; run: numbe
       <div className="recap-ticket">
         <p>Order #{String(Math.min(999, persona.figure * 7)).padStart(3, '0')}</p>
         <b>The usual</b>
-        <ol>{Array.from({ length: Math.min(6, Math.max(2, persona.figure)) }, (_, i) => <li key={i} style={vars({ '--i': i })}>1 × the usual</li>)}</ol>
+        <ol>{Array.from({ length: Math.min(3, Math.max(2, persona.figure)) }, (_, i) => <li key={i} style={vars({ '--i': i })}>1 × the usual</li>)}</ol>
         <span className="recap-ticket-stamp">Regular</span>
       </div>
       {number}
@@ -69,12 +69,12 @@ export function AltPersonaScene({ persona, run }: { persona: Persona; run: numbe
       <div className="recap-passport">
         {['ARRIVED', 'VISITED', 'EXPLORED', 'NEW!'].map((text, i) => <span key={text} className="recap-visa" style={vars({ '--i': i, '--r': `${(i % 2 ? 1 : -1) * (6 + i * 3)}deg`, '--x': `${[8, 52, 14, 58][i]}%`, '--y': `${[10, 6, 48, 46][i]}%` })}>{text}</span>)}
       </div>
-      <span className="recap-plane"><Plane /></span>
+      <span className="recap-flyby"><Plane /></span>
       {number}
     </div>;
     case 'allRounder': return <div className="recap-scene recap-alt-allRounder" aria-hidden="true">
       {/* Spinning plates on sticks, each wobbling at its own pace, none falling. */}
-      <div className="recap-plates">{[0, 1, 2, 3].map(i => <span key={i} className="recap-plate" style={vars({ '--i': i, '--w': `${1.4 + random() * .8}s` })}><i /></span>)}</div>
+      <div className="recap-plates">{[0, 1, 2, 3].map(i => <span key={i} className="recap-plate" style={vars({ '--i': i, '--h': `${26 + (i % 2) * 6}cqw`, '--w': `${1.4 + random() * .8}s` })}><i /></span>)}</div>
       {number}
     </div>;
   }
