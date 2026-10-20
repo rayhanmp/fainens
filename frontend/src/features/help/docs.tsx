@@ -17,6 +17,7 @@ import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
 import { ComposerDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
+import { SalaryAndRenewalDemo } from './SalaryVisuals';
 import { RecapStoryDemo, ReportsDemo } from './InsightVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
@@ -27,7 +28,6 @@ import {
   GlossaryCardDemo,
   LoanRepaymentDemo,
   MismatchDemo,
-  SalaryAndRenewalDemo,
   SavingsFanDemo,
   ShortcutsDemo,
   WhatsNewDemo,

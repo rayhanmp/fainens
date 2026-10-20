@@ -58,56 +58,6 @@ export function LoanRepaymentDemo() {
   );
 }
 
-// ── Subscriptions and salary ─────────────────────────────────────────
-
-/** Gross pay splitting into tax, BPJS and take-home, beside a renewal waiting for a decision. */
-export function SalaryAndRenewalDemo() {
-  const { ref, step, replay } = useSequence(3, 1000);
-  const gross = 15_000_000;
-  const parts = [
-    { name: 'PPh 21 (estimate)', value: 1_050_000, className: 'bg-[var(--color-warning)]/70' },
-    { name: 'BPJS', value: 525_000, className: 'bg-[var(--color-accent)]/45' },
-    { name: 'Take-home', value: 13_425_000, className: 'bg-[var(--color-success)]' },
-  ];
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Example figures. Fainens estimates yours from your salary profile, and asks before posting anything.">
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-        <div className={card}>
-          <div className="flex items-baseline justify-between"><span className={label}>Gross pay</span><span className="font-mono text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{rupiah(gross)}</span></div>
-          <div className="mt-3 flex h-4 overflow-hidden rounded-full bg-[var(--ref-surface-container)]">
-            {parts.map((part) => <span key={part.name} className={cn('h-full transition-[width] duration-700 ease-out', part.className)} style={{ width: step >= 1 ? `${(part.value / gross) * 100}%` : '0%' }} />)}
-          </div>
-          <ul className="mt-3 space-y-1.5">
-            {parts.map((part) => (
-              <li key={part.name} className={cn('flex items-center justify-between text-xs', shown(step >= 1))}>
-                <span className="flex items-center gap-2 text-[var(--ref-on-surface-variant)]"><span className={cn('h-2.5 w-2.5 rounded-sm', part.className)} />{part.name}</span>
-                <span className={cn('font-mono tabular-nums', part.name === 'Take-home' ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>{rupiah(part.value)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className={cn('mt-3 rounded-lg bg-[var(--color-success)]/10 px-3 py-2 text-xs text-[var(--ref-on-surface)]', shown(step >= 2))}>Payday: post <strong>{rupiah(13_425_000)}</strong> into BCA</p>
-        </div>
-        <div className={card}>
-          <p className={label}>Renewal due today</p>
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-sm font-semibold text-[var(--ref-on-surface)]">Netflix</span>
-            <span className="font-mono text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{rupiah(186_000)}</span>
-          </div>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">Entertainment · from BCA · monthly</p>
-          {step >= 3 ? (
-            <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--color-success)]/12 px-2.5 py-1.5 text-xs font-semibold text-[var(--color-success)]"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />Posted as an expense</p>
-          ) : (
-            <div className="mt-3 flex gap-2">
-              <span className={cn('flex-1 rounded-lg bg-[var(--color-accent)] py-1.5 text-center text-xs font-semibold text-white transition-shadow', step >= 2 && 'ring-4 ring-[var(--color-accent)]/25')}>Post</span>
-              <span className="flex-1 rounded-lg py-1.5 text-center text-xs font-semibold text-[var(--ref-on-surface-variant)] ring-1 ring-[var(--color-border)]">Skip</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </VisualFrame>
-  );
-}
-
 // ── Savings ──────────────────────────────────────────────────────────
 
 /** A Monte Carlo projection: the middle line, the 10–90% range around it, and the goal. */
