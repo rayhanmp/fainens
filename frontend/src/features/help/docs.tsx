@@ -2,9 +2,7 @@ import type { ReactNode } from 'react';
 import type { LinkProps } from '@tanstack/react-router';
 import {
   ArchitectureDiagram,
-  ClaimPipelineDemo,
   CorrectionDemo,
-  ImportFlowDemo,
   InstallmentDemo,
   LedgerFlow,
   PeriodTimeline,
@@ -18,6 +16,8 @@ import { ComposerDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
 import { SalaryAndRenewalDemo } from './SalaryVisuals';
 import { MismatchDemo, ReconcileDemo } from './ReconcileVisuals';
+import { ImportFlowDemo } from './ImportVisuals';
+import { ClaimPipelineDemo } from './ClaimVisuals';
 import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
@@ -278,7 +278,7 @@ export const DOCS: DocPage[] = [
     lead: 'Three ways to get transactions in without typing them, and all of them let you check before anything posts.',
     blocks: [
       { type: 'h2', id: 'gmail', text: 'Bank emails from Gmail' },
-      { type: 'visual', node: <ImportFlowDemo />, wide: true },
+      { type: 'visual', node: <ImportFlowDemo /> },
       { type: 'steps', items: ['In Transactions, choose Connect Gmail and allow read-only access.', 'Fainens checks for new emails every 15 minutes, or when you press Sync now.', 'Open Review pending to approve, edit or reject each one.'] },
       { type: 'callout', tone: 'warning', title: 'Only wondr by BNI for now', text: 'Fainens reads “Transaction successful” emails from wondr by BNI. Other banks and e-wallets need CSV for now.' },
       { type: 'h2', id: 'csv', text: 'CSV files' },
