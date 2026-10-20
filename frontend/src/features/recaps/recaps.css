@@ -97,6 +97,28 @@
 /* ---------- Style remix: rolled per chapter per run, over each chapter's own design. ---------- */
 .recap-story-content h2 { rotate: var(--tilt, 0deg); transform-origin: left center; }
 .recap-align-center .recap-story-eyebrow { justify-content: center; }
+/* A flavoured eyebrow trades its dash for a small prop that moves like its subject. */
+.recap-story-eyebrow.has-mark::before { display: none; }
+.recap-flavour-mark { position: relative; display: grid; flex: none; place-items: center; width: 5.6cqw; height: 5.6cqw; animation: recap-pop .5s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-flavour-mark > svg { width: 4.6cqw; height: 4.6cqw; stroke-width: 2.4; }
+.recap-flavour-mark.is-bob > svg { animation: recap-flavour-bob 1.8s ease-in-out infinite; }
+.recap-flavour-mark.is-pulse > svg { animation: recap-flavour-pulse 1.2s ease-in-out infinite; }
+.recap-flavour-mark.is-spin > svg { animation: recap-turn 6s linear infinite; }
+.recap-flavour-mark.is-twinkle > svg { animation: recap-flavour-twinkle 2.2s ease-in-out infinite; }
+.recap-flavour-mark.is-drive > svg { animation: recap-flavour-drive 1.6s ease-in-out infinite; }
+.recap-flavour-steam { position: absolute; left: 50%; bottom: 82%; display: flex; gap: .7cqw; translate: -50% 0; }
+.recap-flavour-steam i { width: .5cqw; height: 2.2cqw; border-radius: 99px; background: currentColor; opacity: 0; animation: recap-flavour-steam 1.8s ease-out infinite; }
+.recap-flavour-steam i:nth-child(2) { animation-delay: .6s; }
+.recap-flavour-steam i:nth-child(3) { animation-delay: 1.2s; }
+.recap-flavour-road { position: absolute; left: -10%; right: -10%; bottom: -.4cqw; height: .4cqw; overflow: hidden; }
+.recap-flavour-road i { position: absolute; top: 0; width: 1.6cqw; height: 100%; border-radius: 99px; background: currentColor; opacity: .6; animation: recap-flavour-road .9s linear infinite; }
+.recap-flavour-road i + i { animation-delay: -.45s; }
+@keyframes recap-flavour-bob { 50% { translate: 0 -.5cqw; } }
+@keyframes recap-flavour-pulse { 0%, 100% { scale: 1; } 15% { scale: 1.22; } 30% { scale: 1; } 45% { scale: 1.12; } }
+@keyframes recap-flavour-twinkle { 0%, 100% { rotate: 0deg; scale: 1; } 50% { rotate: 12deg; scale: 1.15; } }
+@keyframes recap-flavour-drive { 0%, 100% { translate: -.3cqw 0; } 50% { translate: .3cqw -.2cqw; } }
+@keyframes recap-flavour-steam { 0% { opacity: 0; translate: 0 .6cqw; scale: 1 .6; } 30% { opacity: .7; } 100% { opacity: 0; translate: .4cqw -1.6cqw; scale: 1 1; } }
+@keyframes recap-flavour-road { from { left: 110%; } to { left: -30%; } }
 .recap-align-center h2, .recap-align-center .recap-story-body, .recap-align-center > .recap-visual > * > .recap-big-stat { text-align: center; }
 .recap-align-center > .recap-visual > * > .recap-big-stat { align-items: center; }
 .recap-align-center h2 { transform-origin: center; }

@@ -2,6 +2,7 @@ import type { PeriodRecap, SavedRecapStory } from './queries';
 import { recapDisplayCopy, shortDisplayLabel } from './display-copy';
 import { pickFrom, runVariants, seeded } from './motion';
 import { bonusCopy, chapterCopy, chapterEyebrows, type CopyFacts } from './variations';
+import { categoryFlavour, type Flavour } from './flavour';
 import { formatRecapCurrency } from './currency';
 import { DAY_MS, formatRecapDay, periodDateRange, recapDay, recapDayKey, recapWeekday } from './dates';
 
@@ -87,12 +88,12 @@ export type Bonus =
 export type BonusKind = Bonus['kind'];
 const MILESTONES = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
 
-type Copy = { eyebrow: string; title: string; body: string };
+type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour };
 // Every chapter can carry a mini-game, a fun comparison line, a question to hand to Fainens Agent,
 // and its own autoplay length.
 /** A pixel-game toast a chapter can unlock when it arrives. */
 export type Achievement = { title: string; detail: string };
-type Extras = { play?: Play; equivalence?: string; ask: string; duration?: number; achievement?: Achievement };
+type Extras = { play?: Play; flavour?: Flavour; equivalence?: string; ask: string; duration?: number; achievement?: Achievement };
 export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'intro'; dateRange: string; isPartial: boolean; elapsedDays: number; totalDays: number; monthWord: string; cover: CoverFacts }
   | { id: 'overview'; lead: 'left' | 'ratio'; income: number; expenses: number; net: number; keptShare: number | null; spentPer100: number | null; reveal: 'scratch' | 'piggy' | 'none' }
@@ -288,11 +289,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     period: recap.period.name, isPartial: recap.isPartial, net: recap.net, income: recap.income, expenses: recap.expenses, keptShare, spentPer100,
     budgetUsed: budget?.percentUsed ?? null, elapsedShare: recap.isPartial ? Math.round(elapsedDays / totalDays * 100) : null,
     remaining: budget?.remaining ?? null, overCategory: budget?.overBudgetCategories[0] ? labels.budgetCategory1 ?? budget.overBudgetCategories[0].name : null,
-    top: top ? { label: top.label, share: top.share } : null, top3Share, categoryCount: positiveCategories.length,
+    top: top ? { label: top.label, share: top.share, flavour: categoryFlavour(top.name) } : null, top3Share, categoryCount: positiveCategories.length,
     spendingDays: recap.spendingDays, elapsedDays, peak: peak ? { label: dayLabel(peak.date), weekday: WEEKDAYS[recapWeekday(peak.date)], amount: peak.amount, purchaseCount: peak.purchaseCount } : null,
     busiestWeekday: hasWeek ? WEEKDAYS[busiestWeekday] : null, weekendShare,
     quiet: quiet?.length ?? 0, busy: busy?.length ?? 0,
-    receipt: receiptItems[0] ? { label: receiptItems[0].label, amount: receiptItems[0].amount, count: receiptItems.length } : null, largestShare, topShare,
+    receipt: receiptItems[0] ? { label: receiptItems[0].label, amount: receiptItems[0].amount, count: receiptItems.length, flavour: categoryFlavour(receiptItems[0].category) } : null, largestShare, topShare,
     purchaseCount: recap.purchaseCount, median: profile?.medianAmount ?? null, average, perDay,
     repeat: repeatRow ? { label: labels.repeatPurchase1 && !isSystemDescription(labels.repeatPurchase1) ? labels.repeatPurchase1 : shortDisplayLabel(repeatRow.description), occurrences: repeatRow.occurrences } : null,
     change: averageChange ?? (recap.comparison ? Math.round(recap.comparison.changePercent) : null), changeMode: averageChange !== null ? 'average' : 'total',
@@ -321,16 +322,23 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     if (!titleFits || body.length > 160) return null;
     return { eyebrow: shortDisplayLabel(source.eyebrow, 40), title, body };
   };
+  // Flavoured lines talk about this period's own subject (its top category, its busiest day), so when a
+  // chapter has some they lead half the time instead of being one voice among many.
+  const pickCopy = (pool: Copy[]): Copy => {
+    const flavoured = pool.filter(line => line.flavour);
+    return flavoured.length && random() < .5 ? pickFrom(flavoured, random) : pickFrom(pool, random);
+  };
   const copyFor = (id: RecapStoryId, lead?: string): Copy => {
     const pool = chapterCopy(id, lead, facts);
     const saved = savedCopy(id);
     // Without a run (the share card, first paint) the saved edition's copy leads; otherwise it is one
     // voice among the generated ones.
     if (saved && (run === 0 || random() < .2)) return { ...saved, eyebrow: pool[0]?.eyebrow ?? saved.eyebrow };
-    const copy = pool.length ? pickFrom(pool, random) : saved ?? { eyebrow: '', title: recap.period.name, body: '' };
+    const copy = pool.length ? pickCopy(pool) : saved ?? { eyebrow: '', title: recap.period.name, body: '' };
     // Half the time the eyebrow comes from the chapter's own pool, so labels and headlines mix freely.
+    // A flavoured line keeps its own: its eyebrow is part of the joke.
     const eyebrows = chapterEyebrows(id);
-    return run !== 0 && eyebrows.length && random() < .5 ? { ...copy, eyebrow: pickFrom(eyebrows, random) } : copy;
+    return run !== 0 && !copy.flavour && eyebrows.length && random() < .5 ? { ...copy, eyebrow: pickFrom(eyebrows, random) } : copy;
   };
 
   const persona = pickPersona(facts, random);
@@ -596,9 +604,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   const built = chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
-    const raw = chapter.id === 'bonus' ? pickFrom(bonusCopy(chapter.bonus, facts), random)
+    const raw = chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts))
       : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
-    const copy = { eyebrow: forYear(chapter.id === 'persona' && chapter.early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
+    const early = chapter.id === 'persona' && chapter.early;
+    const copy = { eyebrow: forYear(early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body), flavour: early ? undefined : raw.flavour };
     const equivalence = equivalences[chapter.id];
     const play = dealt.get(chapter.id);
     return {

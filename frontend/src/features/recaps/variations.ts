@@ -1,18 +1,20 @@
 import { formatRecapCurrency as money } from './currency';
+import { BANKS, categoryFlavour, DAY_BANKS, dayFlavour, type CategoryFlavour, type Flavour } from './flavour';
 import type { Bonus, RecapStoryId } from './stories';
 
 export type CopyFacts = {
   period: string; isPartial: boolean; net: number; income: number; expenses: number; keptShare: number | null; spentPer100: number | null;
   budgetUsed: number | null; elapsedShare: number | null; remaining: number | null; overCategory: string | null;
-  top: { label: string; share: number } | null; top3Share: number; categoryCount: number;
+  top: { label: string; share: number; flavour: CategoryFlavour | null } | null; top3Share: number; categoryCount: number;
   spendingDays: number; elapsedDays: number; peak: { label: string; weekday: string; amount: number; purchaseCount: number } | null;
   busiestWeekday: string | null; weekendShare: number; quiet: number; busy: number;
-  receipt: { label: string; amount: number; count: number } | null; largestShare: number | null; topShare: number | null;
+  receipt: { label: string; amount: number; count: number; flavour: CategoryFlavour | null } | null; largestShare: number | null; topShare: number | null;
   purchaseCount: number; median: number | null; average: number | null; perDay: number;
   repeat: { label: string; occurrences: number } | null; change: number | null; changeMode: 'average' | 'total';
   busiestMonth: string | null;
 };
-type Copy = { eyebrow: string; title: string; body: string };
+/** A flavoured line carries its flavour, so the chapter can show the matching mark beside its eyebrow. */
+export type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour };
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 /** No body line: the visual says it, and a line that only describes the chart is noise. */
@@ -26,6 +28,54 @@ const NONE = '';
  * the saved edition's copy is used.
  */
 export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Copy[] {
+  return [...plainCopy(id, lead, f), ...flavouredCopy(id, lead, f)];
+}
+
+const tag = (flavour: Flavour, lines: Copy[]): Copy[] => lines.map(line => ({ ...line, flavour }));
+
+/** Lines in the voice of what the chapter is about: the top category's family, the busiest weekday. */
+function flavouredCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Copy[] {
+  const top = f.top?.flavour ? { ...f.top, flavour: f.top.flavour, bank: BANKS[f.top.flavour] } : null;
+  const eyebrow = (eyebrows: string[], i: number) => eyebrows[i % eyebrows.length];
+  switch (id) {
+    case 'intro': return top ? tag(top.flavour, [
+      { eyebrow: 'Previously on your finances', title: 'Roll the highlights.', body: top.bank.star[0](top.label) },
+      { eyebrow: 'The period edit', title: `${f.period}, the highlights.`, body: top.bank.star[1](top.label) },
+    ]) : [];
+    case 'categories': return top && (lead === 'top' || lead === undefined) ? tag(top.flavour, top.bank.lead.map((line, i) => ({
+      eyebrow: eyebrow(top.bank.eyebrows, i), title: line(top.label, top.share), body: i === 1 ? `The top three together: ${f.top3Share}%.` : NONE,
+    }))) : [];
+    case 'mixtape': return top ? tag(top.flavour, [
+      { eyebrow: 'Side A', title: `${top.label} topped the ${top.bank.playlist}.`, body: NONE },
+      { eyebrow: eyebrow(top.bank.eyebrows, 0), title: `Now playing: the ${top.bank.playlist}.`, body: `Track one: ${top.label}, ${top.share}% of the side.` },
+    ]) : [];
+    case 'receipts': {
+      const flavour = f.receipt?.flavour;
+      if (!f.receipt || !flavour) return [];
+      const { thing, eyebrows } = BANKS[flavour];
+      return tag(flavour, [
+        { eyebrow: eyebrow(eyebrows, 0), title: `${f.receipt.label}: the priciest ${thing}.`, body: NONE },
+        { eyebrow: 'The standout receipts', title: `The big ${thing}: ${f.receipt.label}.`, body: f.largestShare !== null ? `On its own, ${f.largestShare}% of purchase spend.` : NONE },
+      ]);
+    }
+    case 'weekdays': {
+      if (lead === 'weekend') return tag('weekend', [{ eyebrow: 'Weekend mode', title: `Weekend mode: ${f.weekendShare}% of spending.`, body: NONE }]);
+      const day = dayFlavour(f.busiestWeekday);
+      if (!day || !f.busiestWeekday) return [];
+      const bank = DAY_BANKS[day];
+      return tag(day, bank.week.map((line, i) => ({ eyebrow: eyebrow(bank.eyebrows, i), title: line(f.busiestWeekday!), body: i === 0 ? `Weekends took ${f.weekendShare}%.` : NONE })));
+    }
+    case 'calendar': {
+      const day = lead === 'peak' && f.peak ? dayFlavour(f.peak.weekday) : null;
+      if (!day || !f.peak) return [];
+      const peak = f.peak;
+      return tag(day, DAY_BANKS[day].peak.map((line, i) => ({ eyebrow: eyebrow(DAY_BANKS[day].eyebrows, i), title: line(peak.label), body: `${money(peak.amount)} went out that day.` })));
+    }
+    default: return [];
+  }
+}
+
+function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Copy[] {
   const soFar = f.isPartial ? ' so far' : '';
   switch (id) {
     case 'intro': return [
@@ -331,6 +381,26 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
 /** Copy for the bonus slides, each written from the figures that earned it. Both looks of every bonus
  * already draw its share, names, counts and date, so a body only carries a figure they don't. */
 export function bonusCopy(b: Bonus, f: CopyFacts): Copy[] {
+  return [...plainBonusCopy(b, f), ...flavouredBonusCopy(b)];
+}
+
+function flavouredBonusCopy(b: Bonus): Copy[] {
+  const flavour = categoryFlavour(b.kind === 'boss' ? b.category : b.kind === 'takeover' || b.kind === 'comeback' ? b.name : null);
+  if (!flavour) return [];
+  const bank = BANKS[flavour];
+  switch (b.kind) {
+    case 'boss': return tag(flavour, [
+      { eyebrow: 'Bonus: boss fight', title: `${b.label}: the priciest ${bank.thing}.`, body: `${money(b.amount)} in one go.` },
+    ]);
+    case 'takeover': return tag(flavour, bank.lead.slice(0, 2).map((line, i) => ({ eyebrow: `Bonus: ${bank.eyebrows[i % bank.eyebrows.length]}`, title: line(b.label, b.share), body: NONE })));
+    case 'comeback': return tag(flavour, [
+      { eyebrow: `Bonus: ${bank.eyebrows[0]}`, title: `Encore: ${b.label}.`, body: `Now #${b.rank}, with ${b.share}% of spending.` },
+    ]);
+    default: return [];
+  }
+}
+
+function plainBonusCopy(b: Bonus, f: CopyFacts): Copy[] {
   switch (b.kind) {
     case 'payday': return [
       { eyebrow: 'Bonus: payday rush', title: `${b.share}% went in the first three days.`, body: `${money(b.amount)} out of the gate.` },

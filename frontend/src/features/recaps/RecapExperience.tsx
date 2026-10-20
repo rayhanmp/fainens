@@ -9,6 +9,7 @@ import { preloadParts } from './parts';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
+import { FlavourMark } from './FlavourMark';
 import { play, playTicks, setSoundMode, silence, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
 import { chapterStyle, enterDelay, lowEndDevice, nextTransition, OPENING_DURATIONS, OVERLAY_TRANSITIONS, prefersReducedMotion, runParts, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
@@ -463,7 +464,7 @@ function ChapterContent({ story, className: baseClass, style: baseStyle, live = 
   }
   return <div ref={root} className={`recap-story-content ${className}`} style={style} aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined} aria-hidden={live ? undefined : true} inert={!live || undefined}>
     {answer?.verdict ? <GameVerdict verdict={answer.verdict} /> : sticker}
-    <p className="recap-story-eyebrow">{story.eyebrow}</p>
+    <p className={`recap-story-eyebrow${story.flavour ? ' has-mark' : ''}`}>{story.flavour ? <FlavourMark flavour={story.flavour} /> : null}{story.eyebrow}</p>
     <h2 className={story.title.length > 40 ? 'recap-title-long' : undefined} aria-label={story.title}>
       {lines.map((words, lineIndex) => <span className="recap-title-line" aria-hidden="true" key={lineIndex}>{words.map((word, i) => {
         const n = lineIndex * 5 + i;

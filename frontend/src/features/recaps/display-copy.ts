@@ -10,7 +10,8 @@ export function shortDisplayLabel(value: string, limit = 28): string {
     if (`${result}${result ? ' ' : ''}${word}`.length > limit) break;
     result += `${result ? ' ' : ''}${word}`;
   }
-  return result.replace(/\s+(?:and|dan|with|dengan|at|di)$/i, '') || 'This item';
+  // Cutting at a word can leave a dangling separator ("Kodak Portra 400 (36 Exp) -"): drop it.
+  return result.replace(/\s+(?:and|dan|with|dengan|at|di)$/i, '').replace(/[\s\-–—:/|·,.]+$/, '') || 'This item';
 }
 
 export function recapDisplayCopy(recap: PeriodRecap, edition?: SavedRecapStory) {
