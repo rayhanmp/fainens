@@ -1,0 +1,56 @@
+/* Dashboard entry: a compact, animated invitation. Kept apart from recaps.css so the dashboard
+ * doesn't load the whole story's styles until a recap is opened. */
+.dashboard-recap { border-radius: 22px; overflow: hidden; position: relative; }
+.dashboard-recap-0 { background: #d9f18c; color: #203b2d; }
+.dashboard-recap-1 { background: #dcd2f5; color: #3a2d51; }
+.dashboard-recap-2 { background: #f7d4bd; color: #573223; }
+.dashboard-recap-3 { background: #bfe8df; color: #173d3a; }
+.dashboard-recap-4 { background: #f1e5a5; color: #4b3d19; }
+.dashboard-recap-5 { background: #c5ddfa; color: #18344f; }
+.dashboard-recap-6 { background: #f0c6cf; color: #542839; }
+.dashboard-recap-7 { background: #d4e7cf; color: #2c432d; }
+.dashboard-recap-control { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 100px; background: var(--ref-surface-container-lowest); color: var(--ref-on-surface); font-size: 12px; font-weight: 700; box-shadow: 0 1px 2px #0000000d; transition: background .18s, transform .18s; white-space: nowrap; }
+.dashboard-recap-control:hover { background: var(--ref-surface-container-low); transform: translateY(-1px); }
+.dashboard-recap-control:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: 2px; }
+.dashboard-recap-control:disabled { opacity: .5; cursor: not-allowed; }
+.dashboard-recap-open { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: 24px 28px; text-align: left; position: relative; overflow: hidden; cursor: pointer; isolation: isolate; }
+.dashboard-recap-label { display: flex; align-items: center; gap: 8px; font-size: 9px; font-weight: 800; letter-spacing: .12em; grid-column: 1 / -1; position: relative; }
+.dashboard-recap-label > span { margin-left: auto; margin-right: 34px; font-size: 10px; letter-spacing: .02em; font-weight: 600; }
+.dashboard-recap-copy { display: grid; gap: 7px; max-width: 600px; margin-top: 16px; position: relative; }
+.dashboard-recap-copy strong { font-size: clamp(20px, 2.2vw, 28px); font-weight: 800; line-height: 1.15; letter-spacing: -.045em; }
+.dashboard-recap-copy > span { font-size: 12px; opacity: .8; }
+.dashboard-recap-cta { display: flex; align-items: end; gap: 30px; padding-left: 20px; position: relative; }
+.dashboard-recap-cta > span { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid currentColor; padding-bottom: 5px; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.dashboard-recap-art { position: absolute; right: 80px; top: -140px; width: 380px; height: 380px; opacity: .16; z-index: -1; pointer-events: none; }
+.dashboard-recap-art i { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; animation: dashboard-recap-drift 18s ease-in-out infinite alternate; }
+.dashboard-recap-art i:nth-child(2) { inset: 30px; animation-delay: -5s; }
+.dashboard-recap-art i:nth-child(3) { inset: 60px; animation-delay: -10s; }
+.dashboard-recap-art b { position: absolute; bottom: 10px; left: 5px; font-size: 130px; animation: dashboard-recap-turn 28s linear infinite; }
+.dashboard-recap-open:hover .dashboard-recap-cta > svg { transform: translate(3px, -3px); }
+.dashboard-recap-cta > svg { transition: transform .2s; }
+.dashboard-recap-open:focus-visible { outline: 3px solid currentColor; outline-offset: -6px; border-radius: inherit; }
+.dashboard-recap-dismiss { position: absolute; top: 11px; right: 12px; z-index: 2; display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid currentColor; border-radius: 50%; background: color-mix(in srgb, currentColor 8%, transparent); opacity: .75; cursor: pointer; }
+.dashboard-recap-dismiss:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+.dashboard-recap-dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.dashboard-recap-error { position: absolute; right: 12px; bottom: 8px; z-index: 3; padding: 4px 8px; border-radius: 8px; background: #fff; color: #832b2b; font-size: 11px; box-shadow: 0 2px 8px #0002; }
+
+/* The modal shell paints before the story's chunk arrives. */
+.finance-modal-panel.brutalist-card.recap-modal { width: fit-content; max-width: none; max-height: none; padding: 0; border: 0; border-radius: 24px; background: transparent; box-shadow: 0 24px 100px #0006; }
+.recap-modal-overlay { padding: 12px; }
+.recap-modal-content { padding: 0; overflow: visible; flex: none; }
+.recap-modal-loading { display: grid; place-items: center; width: min(440px, calc((100dvh - 32px) * .5625), calc(100vw - 24px)); aspect-ratio: 9 / 16; border-radius: 24px; background: #1f3a31; color: #e2f5bd; }
+.recap-modal-loading svg { animation: dashboard-recap-turn 1.4s linear infinite; }
+
+@keyframes dashboard-recap-turn { to { rotate: 360deg; } }
+@keyframes dashboard-recap-drift { from { translate: 0 -6px; rotate: -5deg; } to { translate: 0 6px; rotate: 5deg; } }
+@media (max-width: 700px) {
+  .dashboard-recap-open { padding: 21px; grid-template-columns: 1fr; }
+  .dashboard-recap-copy { margin-top: 13px; max-width: 450px; }
+  .dashboard-recap-cta { padding: 0; margin-top: 18px; justify-content: space-between; align-items: center; }
+  .dashboard-recap-art { right: -110px; opacity: .14; }
+  .dashboard-recap-label > span { overflow-wrap: anywhere; margin-right: 30px; }
+  .dashboard-recap-dismiss { top: 10px; right: 10px; width: 25px; height: 25px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-recap *, .recap-modal-loading svg { animation: none !important; transition: none !important; }
+}

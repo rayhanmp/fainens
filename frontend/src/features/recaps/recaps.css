@@ -1,44 +1,6 @@
-/* Dashboard entry: a compact, animated invitation. */
-.dashboard-recap { border-radius: 22px; overflow: hidden; position: relative; }
-.dashboard-recap-0 { background: #d9f18c; color: #203b2d; }
-.dashboard-recap-1 { background: #dcd2f5; color: #3a2d51; }
-.dashboard-recap-2 { background: #f7d4bd; color: #573223; }
-.dashboard-recap-3 { background: #bfe8df; color: #173d3a; }
-.dashboard-recap-4 { background: #f1e5a5; color: #4b3d19; }
-.dashboard-recap-5 { background: #c5ddfa; color: #18344f; }
-.dashboard-recap-6 { background: #f0c6cf; color: #542839; }
-.dashboard-recap-7 { background: #d4e7cf; color: #2c432d; }
-.dashboard-recap-control { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 100px; background: var(--ref-surface-container-lowest); color: var(--ref-on-surface); font-size: 12px; font-weight: 700; box-shadow: 0 1px 2px #0000000d; transition: background .18s, transform .18s; white-space: nowrap; }
-.dashboard-recap-control:hover { background: var(--ref-surface-container-low); transform: translateY(-1px); }
-.dashboard-recap-control:focus-visible { outline: 2px solid var(--ref-primary); outline-offset: 2px; }
-.dashboard-recap-control:disabled { opacity: .5; cursor: not-allowed; }
-.dashboard-recap-open { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: 24px 28px; text-align: left; position: relative; overflow: hidden; cursor: pointer; isolation: isolate; }
-.dashboard-recap-label { display: flex; align-items: center; gap: 8px; font-size: 9px; font-weight: 800; letter-spacing: .12em; grid-column: 1 / -1; position: relative; }
-.dashboard-recap-label > span { margin-left: auto; margin-right: 34px; font-size: 10px; letter-spacing: .02em; font-weight: 600; }
-.dashboard-recap-copy { display: grid; gap: 7px; max-width: 600px; margin-top: 16px; position: relative; }
-.dashboard-recap-copy strong { font-size: clamp(20px, 2.2vw, 28px); font-weight: 800; line-height: 1.15; letter-spacing: -.045em; }
-.dashboard-recap-copy > span { font-size: 12px; opacity: .8; }
-.dashboard-recap-cta { display: flex; align-items: end; gap: 30px; padding-left: 20px; position: relative; }
-.dashboard-recap-cta > span { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid currentColor; padding-bottom: 5px; font-size: 11px; font-weight: 750; white-space: nowrap; }
-.dashboard-recap-art { position: absolute; right: 80px; top: -140px; width: 380px; height: 380px; opacity: .16; z-index: -1; pointer-events: none; }
-.dashboard-recap-art i { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; animation: recap-drift 18s ease-in-out infinite alternate; }
-.dashboard-recap-art i:nth-child(2) { inset: 30px; animation-delay: -5s; }
-.dashboard-recap-art i:nth-child(3) { inset: 60px; animation-delay: -10s; }
-.dashboard-recap-art b { position: absolute; bottom: 10px; left: 5px; font-size: 130px; animation: recap-turn 28s linear infinite; }
-.dashboard-recap-open:hover .dashboard-recap-cta > svg { transform: translate(3px, -3px); }
-.dashboard-recap-cta > svg { transition: transform .2s; }
-.dashboard-recap-open:focus-visible { outline: 3px solid currentColor; outline-offset: -6px; border-radius: inherit; }
-.dashboard-recap-dismiss { position: absolute; top: 11px; right: 12px; z-index: 2; display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid currentColor; border-radius: 50%; background: color-mix(in srgb, currentColor 8%, transparent); opacity: .75; cursor: pointer; }
-.dashboard-recap-dismiss:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
-.dashboard-recap-dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.dashboard-recap-error { position: absolute; right: 12px; bottom: 8px; z-index: 3; padding: 4px 8px; border-radius: 8px; background: #fff; color: #832b2b; font-size: 11px; box-shadow: 0 2px 8px #0002; }
-
 /* ---------- The story: one viewport-sized portrait canvas. Content never sets its size. ---------- */
 .recaps-page { display: grid; place-items: center; padding: 8px 0; }
 .recap-experience { --recap-width: min(440px, calc((100dvh - 32px) * .5625), calc(100vw - 24px)); width: var(--recap-width); height: calc(var(--recap-width) * 16 / 9); margin: auto; container-type: size; }
-.finance-modal-panel.brutalist-card.recap-modal { width: fit-content; max-width: none; max-height: none; padding: 0; border: 0; border-radius: 24px; background: transparent; box-shadow: 0 24px 100px #0006; }
-.recap-modal-overlay { padding: 12px; }
-.recap-modal-content { padding: 0; overflow: visible; flex: none; }
 .recap-viewer { width: 100%; height: 100%; }
 
 .recap-theme-lime { --recap-paper: #d5f478; --recap-ink: #183529; --recap-accent: #2f6a3f; }
@@ -995,9 +957,12 @@
 .recap-rain-count small { font-size: 3cqw; letter-spacing: .2em; text-transform: uppercase; }
 
 /* Ejected: a starfield, categories drifting off one at a time, then the culprit. Each step is 1.7s. */
-.recap-ejected { --step: 1.7s; border-radius: 4cqw; background: #05060d; color: #f5f5f0;
-  background-image: radial-gradient(#fff 1px, transparent 1.3px), radial-gradient(#ffffffaa 1px, transparent 1.3px); background-size: 9cqw 9cqw, 14cqw 14cqw; background-position: 0 0, 4cqw 6cqw;
-  animation: recap-starfield 30s linear infinite; }
+.recap-ejected { --step: 1.7s; overflow: hidden; isolation: isolate; border-radius: 4cqw; background: #05060d; color: #f5f5f0; }
+/* Two star layers slide at different speeds. They move with translate, which the GPU handles without
+ * repainting; each slides exactly a whole number of tiles, so the loop is seamless. */
+.recap-ejected::before, .recap-ejected::after { content: ''; position: absolute; z-index: -1; top: 0; bottom: 0; left: 0; pointer-events: none; will-change: translate; }
+.recap-ejected::before { width: calc(100% + 90cqw); background: radial-gradient(#fff 1px, transparent 1.3px) 0 0 / 9cqw 9cqw; animation: recap-starfield-near 30s linear infinite; }
+.recap-ejected::after { width: calc(100% + 56cqw); background: radial-gradient(#ffffffaa 1px, transparent 1.3px) 4cqw 6cqw / 14cqw 14cqw; animation: recap-starfield-far 28s linear infinite; }
 .recap-eject-body { position: absolute; left: 0; top: 18%; display: grid; place-items: center; width: 14cqw; height: 14cqw; border-radius: 3.6cqw; background: var(--recap-accent); color: #fff; font-size: 8cqw;
   animation: recap-eject-drift var(--step) linear both; animation-delay: calc(var(--enter) + var(--k) * var(--step)); }
 .recap-eject-line { position: absolute; left: 6cqw; right: 6cqw; top: 58%; display: grid; justify-items: center; gap: 2cqw; text-align: center; opacity: 0;
@@ -1016,7 +981,8 @@
 .recap-kaleido > b { position: relative; font-size: 20cqw; color: var(--recap-paper); mix-blend-mode: difference; animation: recap-pulse 1.6s ease-in-out infinite, recap-turn 6s linear infinite; }
 
 @keyframes recap-roll-credits { from { translate: 0 100%; } }
-@keyframes recap-starfield { to { background-position: -90cqw 0, -60cqw 6cqw; } }
+@keyframes recap-starfield-near { to { translate: -90cqw 0; } }
+@keyframes recap-starfield-far { to { translate: -56cqw 0; } }
 @keyframes recap-eject-drift { from { translate: -20cqw 24cqw; rotate: 0deg; } to { translate: 105cqw -8cqw; rotate: 560deg; } }
 @keyframes recap-eject-show { 0% { opacity: 0; } 12%, 86% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes recap-eject-stay { from { opacity: 0; } to { opacity: 1; } }
@@ -1136,17 +1102,8 @@
 @keyframes recap-turn { to { rotate: 360deg; } }
 @keyframes recap-drift { from { translate: 0 -6px; rotate: -5deg; } to { translate: 0 6px; rotate: 5deg; } }
 @keyframes recap-story-progress-fill { to { transform: scaleX(1); } }
-@media (max-width: 700px) {
-  .dashboard-recap-open { padding: 21px; grid-template-columns: 1fr; }
-  .dashboard-recap-copy { margin-top: 13px; max-width: 450px; }
-  .dashboard-recap-cta { padding: 0; margin-top: 18px; justify-content: space-between; align-items: center; }
-  .dashboard-recap-art { right: -110px; opacity: .14; }
-  .dashboard-recap-label > span { overflow-wrap: anywhere; }
-  .dashboard-recap-label > span { margin-right: 30px; }
-  .dashboard-recap-dismiss { top: 10px; right: 10px; width: 25px; height: 25px; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-recap *, .recap-experience *, .recap-share-dialog, .recap-share-dialog * { animation: none !important; transition: none !important; }
+  .recap-experience *, .recap-share-dialog, .recap-share-dialog * { animation: none !important; transition: none !important; }
   .recap-story { transition: none; }
   .recap-wipe, .recap-opening, .recap-burst, .recap-leaving, .recap-printer, .recap-party, .recap-toast { display: none; }
   .recap-backdrop, .recap-big-stat, .recap-persona-badge, .recap-cassette, .recap-receipt-stage,

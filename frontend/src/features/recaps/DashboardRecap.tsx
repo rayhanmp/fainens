@@ -1,10 +1,15 @@
+import { lazy, Suspense } from 'react';
 import { ArrowUpRight, Play, Sparkles, X } from 'lucide-react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Modal } from '../../components/ui/Modal';
 import { useMarkRecapHighlightSeen, useRecapArchive, useRecapHighlightState, useRecapPreview } from './queries';
-import { periodDateRange } from './stories';
-import { RecapExperience } from './RecapExperience';
-import './recaps.css';
+import { periodDateRange } from './dates';
+import './dashboard-recap.css';
+
+// The story, its styles and its sounds load only once someone reaches for it; hovering a way in warms it up.
+const loadRecap = () => import('./RecapExperience');
+const RecapExperience = lazy(() => loadRecap().then(module => ({ default: module.RecapExperience })));
+const warmUp = () => { void loadRecap(); };
 
 export function DashboardRecapControl({ periodId, onOpen }: { periodId?: number; onOpen: (periodId: number) => void }) {
   const archive = useRecapArchive();
@@ -15,6 +20,7 @@ export function DashboardRecapControl({ periodId, onOpen }: { periodId?: number;
     className="dashboard-recap-control"
     disabled={!period}
     aria-label={period ? `Open ${period.name} recap` : 'Open period recap'}
+    onPointerEnter={warmUp} onFocus={warmUp}
     onClick={() => { if (!period) return; markSeen.mutate(); onOpen(period.id); }}
   ><Sparkles size={15} /><span>Recap</span></button>;
 }
@@ -33,7 +39,7 @@ export function DashboardRecap({ periodId, now, onOpen }: { periodId?: number; n
   const variant = (saved?.seed ?? period.id) % 8;
   const dismiss = () => markSeen.mutate();
   return <section className={`dashboard-recap dashboard-recap-${variant}`} aria-label="New period recap highlight">
-      <button className="dashboard-recap-open" onClick={() => { markSeen.mutate(); onOpen(period.id); }} aria-label={`Open your ${period.name} recap`}>
+      <button className="dashboard-recap-open" onPointerEnter={warmUp} onFocus={warmUp} onClick={() => { markSeen.mutate(); onOpen(period.id); }} aria-label={`Open your ${period.name} recap`}>
         <span className="dashboard-recap-art" aria-hidden="true"><i /><i /><i /><b>✳</b></span>
         <span className="dashboard-recap-label"><Sparkles size={13} /> THE PERIOD EDIT <span>{period.name} · {periodDateRange(period)}</span></span>
         <span className="dashboard-recap-copy"><strong>{maskAmounts(saved?.copy.headline ?? 'A little rewind. A fresh perspective.')}</strong><span>{maskAmounts(saved?.copy.deck ?? `Your ${period.name} story is ready when you are.`)}</span></span>
@@ -56,6 +62,8 @@ export function DashboardRecapModal({ periodId, onClose }: { periodId: number; o
   const period = archive.data?.find(item => item.id === periodId);
   if (!period) return null;
   return <Modal isOpen onClose={onClose} title="Your period, in money" hideHeader overlayClassName="recap-modal-overlay" className="recap-modal" contentClassName="recap-modal-content">
-    <RecapExperience key={period.id} initialPeriodId={period.id} onClose={onClose} />
+    <Suspense fallback={<div className="recap-modal-loading" role="status" aria-label="Loading your recap"><Sparkles size={28} /></div>}>
+      <RecapExperience key={period.id} initialPeriodId={period.id} onClose={onClose} />
+    </Suspense>
   </Modal>;
 }

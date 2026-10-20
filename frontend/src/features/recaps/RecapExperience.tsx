@@ -1,17 +1,19 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Link } from '@tanstack/react-router';
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Music, Pause, Play, RefreshCw, Rewind, Sparkles, Trophy, Volume2, VolumeX, X } from 'lucide-react';
 import { useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type SavedRecapStory } from './queries';
 import { combineYear, recapYear, yearEdition } from './year';
 import { buildStories, crawlText, periodDateRange, themeColors, type Achievement, type RecapStory } from './stories';
-import { ShareRecap } from './ShareRecap';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
 import { play, playTicks, setSoundMode, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
 import { chapterStyle, enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
+
+// The share card and the video recorder are only needed once someone shares.
+const ShareRecap = lazy(() => import('./ShareRecap').then(module => ({ default: module.ShareRecap })));
 
 type ExperienceProps = { initialPeriodId?: number; onPeriodChange?: (periodId: number) => void; onClose?: () => void };
 const CHAPTER_MS = 9_000;
@@ -222,16 +224,23 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
     const element = slideRef.current;
     if (!element || reducedMotion) return;
     let frame = 0;
+    // Every write restyles the whole slide, and a phone's sensor reports ~60 times a second even when
+    // it rests on a table, so small wobbles are dropped.
+    let last = { x: 0, y: 0 };
     const tilt = (x: number, y: number) => {
+      if (Math.abs(x - last.x) < .03 && Math.abs(y - last.y) < .03) return;
+      last = { x, y };
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => { element.style.setProperty('--px', x.toFixed(3)); element.style.setProperty('--py', y.toFixed(3)); });
+      frame = requestAnimationFrame(() => { element.style.setProperty('--px', x.toFixed(2)); element.style.setProperty('--py', y.toFixed(2)); });
     };
+    // Measured once per visit of the pointer, not on every move.
+    let bounds: DOMRect | null = null;
     const onPointer = (event: globalThis.PointerEvent) => {
       if (event.pointerType !== 'mouse') return;
-      const bounds = element.getBoundingClientRect();
+      bounds ??= element.getBoundingClientRect();
       tilt((event.clientX - bounds.left) / bounds.width * 2 - 1, (event.clientY - bounds.top) / bounds.height * 2 - 1);
     };
-    const onLeave = () => tilt(0, 0);
+    const onLeave = () => { bounds = null; tilt(0, 0); };
     const onOrientation = (event: DeviceOrientationEvent) => {
       if (event.gamma == null || event.beta == null) return;
       tilt(Math.max(-1, Math.min(1, event.gamma / 35)), Math.max(-1, Math.min(1, (event.beta - 45) / 35)));
@@ -388,8 +397,8 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
         <button className="recap-icon-pill" onClick={event => last ? replay() : go(index + 1, { origin: originOf(event) })} aria-label={last ? 'Replay recap' : 'Next chapter'}>{last ? <RefreshCw size={16} /> : <ArrowRight size={16} />}</button>
       </div>
     </div>
-    {shareOpen && <ShareRecap recap={recap} theme={stories[0].theme} themes={stories.map(item => item.theme)}
-      persona={stories.find(item => item.id === 'closing')?.persona ?? null} onClose={() => setShareOpen(false)} />}
+    {shareOpen && <Suspense fallback={null}><ShareRecap recap={recap} theme={stories[0].theme} themes={stories.map(item => item.theme)}
+      persona={stories.find(item => item.id === 'closing')?.persona ?? null} onClose={() => setShareOpen(false)} /></Suspense>}
   </section>;
 }
 
