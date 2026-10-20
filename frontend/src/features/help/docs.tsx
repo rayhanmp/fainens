@@ -17,6 +17,7 @@ import { MismatchDemo, ReconcileDemo } from './ReconcileVisuals';
 import { ImportFlowDemo } from './ImportVisuals';
 import { ClaimPipelineDemo } from './ClaimVisuals';
 import { CorrectionDemo } from './TransactionVisuals';
+import { LoanRepaymentDemo } from './LoanVisuals';
 import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
@@ -26,7 +27,6 @@ import {
   AgentContextDemo,
   CanISummaryDemo,
   GlossaryCardDemo,
-  LoanRepaymentDemo,
   SavingsFanDemo,
   ShortcutsDemo,
   WhatsNewDemo,
