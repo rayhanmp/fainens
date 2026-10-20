@@ -170,7 +170,8 @@ export function playTicks(count: number, durationMs: number, delayMs = 0) {
  * the music moves with the slides without lurching. */
 const progressions = [[130.8, 110, 87.3, 98], [110, 87.3, 130.8, 98], [146.8, 116.5, 87.3, 130.8], [98, 130.8, 110, 87.3]];
 
-export type GroovePack = 'groove' | 'lofi' | 'chip' | 'orchestral' | 'koplo' | 'synthwave' | 'bossa' | 'trap' | 'gamelan' | 'jazz' | 'disco';
+export type GroovePack = 'groove' | 'lofi' | 'chip' | 'orchestral' | 'koplo' | 'synthwave' | 'bossa' | 'trap' | 'gamelan' | 'jazz' | 'disco'
+  | 'reggaeton' | 'amapiano' | 'citypop' | 'funk' | 'reggae' | 'dnb' | 'musicbox' | 'kroncong';
 /** 0: keys alone (suspense, outros). 1: with bass and drums. 2: the full groove. 3: plus a lead on top. */
 export type GrooveEnergy = 0 | 1 | 2 | 3;
 export type GrooveScene = { energy: GrooveEnergy; mood: 'bright' | 'dark'; pack?: GroovePack };
@@ -267,6 +268,61 @@ const packs: Record<GroovePack, Pack> = {
     drums: b => { if (b.step % 4 === 0) kick(b.ctx, b.at, .14); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .03); },
     hats: b => { if (b.step % 4 === 2) hat(b.ctx, b.at, .014, .12); else if (b.step % 2 === 1) hat(b.ctx, b.at, .006); },
     lead: b => { if (b.step >= 12) tone(b.ctx, { type: 'sawtooth', from: b.root * 4 * [1, b.third, 1.5, 2][b.step - 12], length: b.sixteenth * .9, gain: .007 }, b.at); } },
+  // Reggaeton: the dembow (boom, ch-boom, chick) under plucked chord stabs and a synth hook.
+  reggaeton: { bpm: seed => 92 + (seed % 3) * 3,
+    keys: b => { if (b.step === 2 || b.step === 10) chord(b, 2, triad(b.third), { type: 'triangle', length: b.sixteenth * 1.2, gain: .012 }); },
+    bass: b => { if ([0, 6, 8, 14].includes(b.step)) tone(b.ctx, { from: b.root, length: b.sixteenth * 2.5, gain: .06 }, b.at); },
+    drums: b => { if (b.step % 4 === 0) kick(b.ctx, b.at, .13); if ([3, 6, 11, 14].includes(b.step)) snare(b.ctx, b.at, .03, .08); },
+    hats: b => { if (b.step % 2 === 0) hat(b.ctx, b.at, .009); },
+    lead: b => { if (b.step === 4 || b.step === 12 || b.step === 13) tone(b.ctx, { type: 'square', from: b.root * 4 * pentatonic(b.third)[(b.bar + b.step) % 5], length: b.sixteenth * .9, gain: .008 }, b.at); } },
+  // Amapiano: the log drum's bending boom, a shaker, jazzy pads and a marimba.
+  amapiano: { bpm: seed => 112 + (seed % 3) * 2,
+    keys: b => { if (b.step === 0) chord(b, 2, [1, b.third, 1.5, 1.89], { length: b.sixteenth * 15, gain: .007 }); },
+    bass: b => { if ([0, 3, 7, 10].includes(b.step)) tone(b.ctx, { from: b.root * 2, to: b.root, length: b.sixteenth * 2.5, gain: .09 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 8) kick(b.ctx, b.at, .1); if (b.step === 8) noise(b.ctx, { length: .1, from: 1500, gain: .025 }, b.at); },
+    hats: b => noise(b.ctx, { length: .03, from: 7000, gain: b.step % 4 === 2 ? .012 : .006, filter: 'highpass' }, b.at),
+    lead: b => { if (b.step === 6 || b.step === 14 || b.step === 15) tone(b.ctx, { type: 'triangle', from: b.root * 4 * pentatonic(b.third)[(b.step + b.bar) % 5], length: .14, gain: .016 }, b.at); } },
+  // City pop: Tokyo after dark. Rhodes chords with a major seventh, a slap-ish bass and a bright hook.
+  citypop: { bpm: seed => 104 + (seed % 3) * 3,
+    keys: b => { if (b.step === 0 || b.step === 7) chord(b, 2, [1, b.third, 1.5, 1.89], { length: b.sixteenth * 5, gain: .01, vibrato: 2 }); },
+    bass: b => { if ([0, 3, 6, 10, 13].includes(b.step)) tone(b.ctx, { type: 'triangle', from: b.root * (b.step === 6 || b.step === 13 ? 2 : 1), length: b.sixteenth * 1.4, gain: .05 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 10) kick(b.ctx, b.at, .12); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .03); },
+    hats: b => hat(b.ctx, b.at, b.step === 14 ? .014 : .007, b.step === 14 ? .12 : .025),
+    lead: b => { if (b.step === 2 || b.step === 5 || b.step === 8) tone(b.ctx, { type: 'triangle', from: b.root * 8 * pentatonic(b.third)[(b.step + b.bar * 2) % 5], length: b.sixteenth * 2, gain: .011 }, b.at); } },
+  // Funk: a syncopated bass, ghost notes on the snare, clavinet stabs and a horn hit.
+  funk: { bpm: seed => 100 + (seed % 3) * 3,
+    keys: b => { if ([2, 6, 10, 14].includes(b.step)) chord(b, 4, triad(b.third), { type: 'square', length: .05, gain: .006 }); },
+    bass: b => { if ([0, 2, 3, 6, 8, 11, 14].includes(b.step)) tone(b.ctx, { type: 'triangle', from: b.root * [1, 2, 1.5, 1, 1, 2, 1.5][[0, 2, 3, 6, 8, 11, 14].indexOf(b.step)], length: b.sixteenth * .9, gain: .055 }, b.at); },
+    drums: b => { if ([0, 3, 10].includes(b.step)) kick(b.ctx, b.at, .13); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .035); if (b.step === 7 || b.step === 9) snare(b.ctx, b.at, .008, .05); },
+    hats: b => hat(b.ctx, b.at, b.step % 2 ? .006 : .01),
+    lead: b => { if (b.step === 12 || b.step === 13) chord(b, 4, [1, b.third, 1.5], { type: 'sawtooth', length: b.sixteenth * .8, gain: .006 }); } },
+  // Reggae: the one drop (kick and rim together on three), an offbeat skank, a deep bass and a melodica.
+  reggae: { bpm: seed => 72 + (seed % 3) * 2,
+    keys: b => { if (b.step === 4 || b.step === 12) chord(b, 2, triad(b.third), { type: 'triangle', length: .08, gain: .014 }); if (b.step % 4 === 2) chord(b, 2, triad(b.third), { length: .06, gain: .004 }); },
+    bass: b => { if ([0, 5, 6, 10].includes(b.step)) tone(b.ctx, { from: b.root * [1, 1.5, 1, b.third][[0, 5, 6, 10].indexOf(b.step)], length: b.sixteenth * 2.2, gain: .07 }, b.at); },
+    drums: b => { if (b.step === 8) { kick(b.ctx, b.at, .14); tone(b.ctx, { type: 'square', from: 900, length: .03, gain: .02 }, b.at); } },
+    hats: b => { if (b.step % 2 === 0) hat(b.ctx, b.at + (b.step % 4 ? b.sixteenth * .25 : 0), .008); },
+    lead: b => { if (b.step === 0 || b.step === 11) tone(b.ctx, { type: 'sawtooth', from: b.root * 4 * pentatonic(b.third)[(b.bar + b.step) % 5], length: b.sixteenth * 3, gain: .006, vibrato: 4 }, b.at); } },
+  // Drum and bass: a fast two-step break, a long reese bass, a pad and a high arpeggio.
+  dnb: { bpm: seed => 168 + (seed % 3) * 3,
+    keys: b => { if (b.step === 0 && b.bar % 2 === 0) chord(b, 4, triad(b.third), { length: b.sixteenth * 30, gain: .006 }); },
+    bass: b => { if (b.step === 0 || b.step === 8) { tone(b.ctx, { type: 'sawtooth', from: b.root / 2, length: b.sixteenth * 7, gain: .016 }, b.at); tone(b.ctx, { type: 'sawtooth', from: b.root / 2 * 1.008, length: b.sixteenth * 7, gain: .016 }, b.at); } },
+    drums: b => { if (b.step === 0 || b.step === 10) kick(b.ctx, b.at, .13); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .04, .1); },
+    hats: b => { if (b.step % 2 === 0) hat(b.ctx, b.at, .009); },
+    lead: b => { if (b.step % 2 === 1) tone(b.ctx, { from: b.root * 8 * [1, b.third, 1.5, 2][(b.step - 1) / 2 % 4], length: b.sixteenth * .8, gain: .006 }, b.at); } },
+  // Music box: a celesta lullaby turning over a soft bass, the mechanism ticking underneath.
+  musicbox: { bpm: seed => 78 + (seed % 3) * 3,
+    keys: b => { if (b.step % 2 === 0) { const f = b.root * 8 * [1, 1.5, b.third * 2, 1.5][(b.step / 2) % 4]; tone(b.ctx, { from: f, length: .7, gain: .014 }, b.at); tone(b.ctx, { from: f * 3, length: .25, gain: .003 }, b.at); } },
+    bass: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { from: b.root * 2, length: b.sixteenth * 7, gain: .025 }, b.at); },
+    drums: b => { if (b.step % 4 === 0) tone(b.ctx, { type: 'square', from: 2400, length: .012, gain: .006 }, b.at); },
+    lead: b => { if (b.step === 3 || b.step === 11) tone(b.ctx, { from: b.root * 16 * pentatonic(b.third)[(b.bar + b.step) % 5], length: .5, gain: .007 }, b.at); } },
+  // Kroncong: the cak and cuk ukuleles trading offbeats, a plucked cello walking, a flute over the top.
+  kroncong: { bpm: seed => 96 + (seed % 3) * 4,
+    keys: b => { if (b.step === 4 || b.step === 12) chord(b, 4, triad(b.third), { type: 'triangle', length: .07, gain: .009 }); },
+    bass: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { type: 'triangle', from: b.root, length: b.sixteenth * 3, gain: .05 }, b.at); },
+    drums: b => { if ([1, 3, 5, 9, 11, 13].includes(b.step)) tone(b.ctx, { from: b.root * [1.5, 2, b.third * 2, 1.5, 2, 1.5][[1, 3, 5, 9, 11, 13].indexOf(b.step)], length: .16, gain: .035 }, b.at); },
+    hats: b => { if (b.step % 4 === 2) chord(b, 8, triad(b.third), { type: 'triangle', length: .04, gain: .005 }); },
+    lead: b => { if (b.step === 0 || b.step === 6 || b.step === 10) tone(b.ctx, { from: b.root * 4 * pentatonic(b.third)[(b.bar * 2 + b.step) % 5], length: b.sixteenth * 3.5, gain: .016, vibrato: 5 }, b.at); } },
 };
 
 type Groove = { timer: number; next: number; step: number; seed: number; base: GroovePack; pack: GroovePack; sixteenth: number; scene: GrooveScene; target: GrooveScene | null };

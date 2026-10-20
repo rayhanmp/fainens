@@ -52,7 +52,8 @@ export type Edition = typeof EDITIONS[number];
 export const CUTS = ['standard', 'standard', 'standard', 'directors', 'speedrun'] as const;
 export type Cut = typeof CUTS[number];
 /** The music mode's groove, per run. The 8-bit edition always brings chiptune. */
-export const SOUND_PACKS = ['groove', 'lofi', 'chip', 'orchestral', 'koplo', 'synthwave', 'bossa', 'trap', 'gamelan', 'jazz', 'disco'] as const;
+export const SOUND_PACKS = ['groove', 'lofi', 'chip', 'orchestral', 'koplo', 'synthwave', 'bossa', 'trap', 'gamelan', 'jazz', 'disco',
+  'reggaeton', 'amapiano', 'citypop', 'funk', 'reggae', 'dnb', 'musicbox', 'kroncong'] as const;
 export type SoundPack = typeof SOUND_PACKS[number];
 
 /** Each money personality has a theme tune the music switches to when it is revealed. */
