@@ -541,6 +541,20 @@ function ThemeSwitch({ value, onChange }: { value: ThemeChoice; onChange: (next:
   );
 }
 
+/** Known OpenAI-compatible providers; picking one fills in its base URL. */
+const MODEL_PROVIDERS = [
+  { value: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+  { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+];
+
+/** The sharing dialog lists the profile details in the same groups Profile shows them in. */
+const AGENT_CONTEXT_GROUPS: Array<{ title: string; keys: Array<keyof PersonalProfile['agentContext']> }> = [
+  { title: 'About you', keys: ['fullName', 'preferredName', 'pronouns', 'age'] },
+  { title: 'Region and language', keys: ['country', 'timezone', 'language', 'currency'] },
+  { title: 'Your finances', keys: ['incomePattern', 'primaryGoal'] },
+  { title: 'Response style', keys: ['agentTone', 'agentVerbosity'] },
+];
+
 // `keywords` lets search find a section by the settings inside it, not only by its name.
 const TABS: { id: TabType; label: string; icon: React.ElementType; summary: string; keywords: string }[] = [
   { id: 'profile', label: 'Profile', icon: User, summary: 'Your name, region, goals, and account', keywords: 'name preferred pronouns birthday date of birth country region timezone language currency income goal email account google sign out logout' },
@@ -1341,31 +1355,19 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                         ))}
                       </div>
                     )}
-                    {!showAgentModelForm && <Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm()}><Plus className="h-4 w-4" aria-hidden /> Add model</Button>}
-                    {showAgentModelForm && (
-                      <div className={INLINE_FORM}>
-                        <p className="mb-3 text-sm font-semibold">{editingAgentModelId == null ? 'Add model' : 'Edit model'}</p>
-                        <div className="grid gap-3 sm:grid-cols-2"><Input label="Name" value={agentModelDraft.name} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="e.g. Fast daily model" maxLength={120} /><Input label="Model ID" value={agentModelDraft.model} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, model: event.target.value }))} placeholder="e.g. z-ai/glm-5.3-flash" maxLength={200} /><div className="sm:col-span-2"><Input label="Base URL" value={agentModelDraft.baseUrl} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, baseUrl: event.target.value }))} placeholder="https://openrouter.ai/api/v1" maxLength={500} /></div><div className="sm:col-span-2 space-y-1"><label htmlFor="agent-model-api-key" className="block text-sm font-medium text-[var(--color-text-secondary)]">API key (optional)</label><input id="agent-model-api-key" type="password" value={agentModelDraft.apiKey} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, apiKey: event.target.value }))} placeholder={editingAgentModelId == null ? 'Blank uses the server’s key' : 'Blank keeps the saved key'} autoComplete="new-password" className="brutalist-input" /></div></div>
-                        <div className="mt-4 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => void saveAgentModel()} disabled={agentProviderBusy || !agentModelDraft.name.trim() || !agentModelDraft.model.trim() || !agentModelDraft.baseUrl.trim()}>{agentProviderBusy ? 'Saving…' : editingAgentModelId == null ? 'Add model' : 'Save changes'}</Button><Button type="button" size="sm" variant="secondary" onClick={resetAgentModelDraft}>Cancel</Button></div>
-                      </div>
-                    )}
-                    <Notice notice={agentProviderNotice} />
+                    <Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm()}><Plus className="h-4 w-4" aria-hidden /> Add model</Button>
+                    {!showAgentModelForm && <Notice notice={agentProviderNotice} />}
                 </div>
               </SettingsGroup>
 
               <SettingsGroup title="Memory" summary={memories.length === 0 ? 'Nothing saved yet' : `${memories.length} saved ${memories.length === 1 ? 'memory' : 'memories'}`}>
                     <div className="space-y-3">
                     <p className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Lasting preferences or background Agent brings into future chats. Memories are context only, never proof of a transaction or permission to change your data.</p>
-                    {!showMemoryForm && <Button type="button" size="sm" variant="secondary" onClick={openMemoryForm} disabled={memories.length >= memoryLimits.maxItems}><Plus className="h-4 w-4" aria-hidden /> Add memory</Button>}
-                    {showMemoryForm && (
-                      <form className={cn(INLINE_FORM, 'grid gap-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]')} onSubmit={(event) => void saveMemory(event)}>
-                        <Input label="Memory name" value={memoryLabel} onChange={(event) => setMemoryLabel(event.target.value)} placeholder="e.g. Financial goal" maxLength={memoryLimits.maxLabelLength} required />
-                        <div className="space-y-1"><label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should Agent remember?</label><textarea id="agent-memory-content" value={memoryContent} onChange={(event) => setMemoryContent(event.target.value)} placeholder="e.g. I am saving for a down payment and prefer conservative suggestions." maxLength={memoryLimits.maxContentLength} required rows={3} className="brutalist-input min-h-24 w-full resize-y" /><p className="text-xs text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p></div>
-                        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" size="sm" isLoading={isSavingMemory}>{editingMemoryId == null ? 'Add memory' : 'Save changes'}</Button><Button type="button" size="sm" variant="secondary" onClick={resetMemoryForm} disabled={isSavingMemory}>Cancel</Button></div>
-                      </form>
-                    )}
-                    {memories.length >= memoryLimits.maxItems && !showMemoryForm && <p className="text-xs text-[var(--color-warning)]">You have reached the {memoryLimits.maxItems}-memory limit.</p>}
-                    {memoryError && <p role="alert" className="text-sm text-[var(--color-danger)]">{memoryError}</p>}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <Button type="button" size="sm" variant="secondary" onClick={openMemoryForm} disabled={memories.length >= memoryLimits.maxItems}><Plus className="h-4 w-4" aria-hidden /> Add memory</Button>
+                      {memories.length >= memoryLimits.maxItems && <p className="text-xs text-[var(--color-warning)]">You have reached the {memoryLimits.maxItems}-memory limit.</p>}
+                    </div>
+                    {memoryError && !showMemoryForm && <p role="alert" className="text-sm text-[var(--color-danger)]">{memoryError}</p>}
                     {isLoadingMemories ? (
                       <p className={cn(EMPTY, 'flex items-center gap-2')}><RefreshCw className="h-4 w-4 animate-spin" aria-hidden /> Loading memories…</p>
                     ) : memories.length === 0 ? (
@@ -1375,7 +1377,13 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                         {memories.map((memory) => (
                           <div key={memory.id} className="group/memory flex items-start gap-3 py-3">
                             <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{memory.label}</p><p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{memory.content}</p></div>
-                            <div className="flex shrink-0 gap-1"><Button type="button" size="sm" variant="secondary" className="px-2" onClick={() => editMemory(memory)} disabled={isSavingMemory} aria-label={'Edit ' + memory.label}><Pencil className="h-3.5 w-3.5" aria-hidden /></Button><Button type="button" size="sm" variant="secondary" className={cn('px-2', QUIET_DANGER)} onClick={() => void deleteMemory(memory)} disabled={isSavingMemory} aria-label={'Delete ' + memory.label}><Trash2 className="h-3.5 w-3.5" aria-hidden /></Button></div>
+                            <RowActions
+                              title={memory.label}
+                              actions={[
+                                { key: 'edit', label: 'Edit memory', icon: Pencil, disabled: isSavingMemory, onSelect: () => editMemory(memory) },
+                                { key: 'delete', label: 'Delete memory', icon: Trash2, tone: 'danger' as const, disabled: isSavingMemory, onSelect: () => void deleteMemory(memory) },
+                              ]}
+                            />
                           </div>
                         ))}
                       </div>
@@ -1551,55 +1559,121 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
 
             </div>
 
-        {/* Clear Cache Modal */}
-        <Modal
-          isOpen={contextDraft !== null}
-          onClose={() => { if (!contextBusy) setContextDraft(null); }}
-          title="What Agent can see"
-          overlayClassName="!z-[60]"
-          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" disabled={contextBusy} onClick={() => setContextDraft(null)}>Cancel</Button><Button type="button" size="sm" disabled={contextBusy} onClick={() => void saveAgentContext()}>{contextBusy ? 'Saving…' : 'Save'}</Button></div>}
-        >
-          {/* Small dialogs don't render a subtitle, so the intro sits at the top of the body. */}
-          <p className="mb-2 text-sm text-[var(--ref-on-surface-variant)]">Choose which profile details Agent may use.</p>
-          <div className="divide-y divide-[var(--color-border)]">
-            {AGENT_CONTEXT_OPTIONS.map((option) => (
-              <div key={option.key} className="flex items-center justify-between gap-4 py-3">
-                <span className="min-w-0"><span className="block text-sm font-medium">{option.label}</span><span className="mt-0.5 block text-xs text-[var(--ref-on-surface-variant)]">{option.description}</span></span>
-                <Toggle label={option.label} checked={contextDraft?.[option.key] ?? false} disabled={contextBusy} onChange={(checked) => setContextDraft((current) => current ? { ...current, [option.key]: checked } : current)} />
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 text-xs leading-relaxed text-[var(--color-muted)]">Changes apply once saved. Other parts of Fainens still use your profile; chats and memories are managed separately.</p>
-          {contextError && <p role="alert" className="mt-3 text-sm text-[var(--color-danger)]">{contextError}</p>}
-        </Modal>
-
-        <Modal
-          isOpen={showClearCacheModal}
-          onClose={() => setShowClearCacheModal(false)}
-          title="Clear local cache?"
-          overlayClassName="!z-[60]"
-          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowClearCacheModal(false)}>Cancel</Button><Button type="button" size="sm" onClick={handleClearCache}>Clear cache</Button></div>}
-        >
-          <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Fainens will reload your data from the server. You won’t lose any transactions or accounts.</p>
-        </Modal>
-
-        {/* Delete Data Modal */}
-        <Modal
-          isOpen={showDeleteDataModal}
-          onClose={() => setShowDeleteDataModal(false)}
-          title="Clear this browser and sign out?"
-          overlayClassName="!z-[60]"
-          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={handleDeleteAllData}>Clear and sign out</Button></div>}
-        >
-          <div className="space-y-3">
-            <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Everything Fainens keeps in this browser is removed, including the settings on this page, and you are signed out. Your transactions, accounts, and budgets stay safe on the server.</p>
-            <p className="flex items-center gap-2 rounded-xl bg-[var(--color-danger)]/8 px-3.5 py-3 text-sm font-medium text-[var(--color-danger)]">
-              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-              Browser-only settings can’t be recovered.
-            </p>
-          </div>
-        </Modal>
           </main>
+        </div>
+      </Modal>
+
+      {/* Dialogs opened from Settings sit beside it, not inside it: the Settings panel is transformed
+          (its open animation), which would trap a fixed-position dialog inside its box and clip it. */}
+      <Modal
+        isOpen={contextDraft !== null}
+        onClose={() => { if (!contextBusy) setContextDraft(null); }}
+        title="What Agent can see"
+        overlayClassName="!z-[60]"
+        contentClassName="!pt-3"
+        footer={<div className="flex items-center justify-between gap-3"><span className="text-xs text-[var(--ref-on-surface-variant)]">{contextDraft ? `${Object.values(contextDraft).filter(Boolean).length} of ${AGENT_CONTEXT_OPTIONS.length} shared` : ''}</span><div className="flex gap-2"><Button type="button" size="sm" variant="secondary" disabled={contextBusy} onClick={() => setContextDraft(null)}>Cancel</Button><Button type="button" size="sm" disabled={contextBusy} onClick={() => void saveAgentContext()}>{contextBusy ? 'Saving…' : 'Save'}</Button></div></div>}
+      >
+        {/* Small dialogs don't render a subtitle, so the intro sits at the top of the body. */}
+        <p className="text-sm text-[var(--ref-on-surface-variant)]">Choose which profile details Agent may use. Your date of birth itself is never sent.</p>
+        {AGENT_CONTEXT_GROUPS.map((group) => (
+          <section key={group.title} className="mt-4">
+            <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">{group.title}</h3>
+            <div className="divide-y divide-[var(--color-border)]">
+              {group.keys.map((key) => {
+                const option = AGENT_CONTEXT_OPTIONS.find((item) => item.key === key)!;
+                return (
+                  <div key={key} className="flex items-center justify-between gap-4 py-2.5">
+                    <span className="min-w-0"><span className="block text-sm font-medium text-[var(--ref-on-surface)]">{option.label}</span><span className="mt-0.5 block text-xs text-[var(--ref-on-surface-variant)]">{option.description}</span></span>
+                    <Toggle label={option.label} checked={contextDraft?.[key] ?? false} disabled={contextBusy} onChange={(checked) => setContextDraft((current) => current ? { ...current, [key]: checked } : current)} />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+        <p className="mt-4 text-xs leading-relaxed text-[var(--color-muted)]">Changes apply once saved. Other parts of Fainens still use your profile; chats and memories are managed separately.</p>
+        {contextError && <p role="alert" className="mt-3 text-sm text-[var(--color-danger)]">{contextError}</p>}
+      </Modal>
+
+      <Modal
+        isOpen={showAgentModelForm}
+        onClose={() => { if (!agentProviderBusy) resetAgentModelDraft(); }}
+        title={editingAgentModelId == null ? 'Add model' : 'Edit model'}
+        overlayClassName="!z-[60]"
+        footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" disabled={agentProviderBusy} onClick={resetAgentModelDraft}>Cancel</Button><Button type="button" size="sm" onClick={() => void saveAgentModel()} disabled={agentProviderBusy || !agentModelDraft.name.trim() || !agentModelDraft.model.trim() || !agentModelDraft.baseUrl.trim()}>{agentProviderBusy ? 'Saving…' : editingAgentModelId == null ? 'Add model' : 'Save changes'}</Button></div>}
+      >
+        <div className="settings-compact space-y-4">
+          <Dropdown
+            label="Provider"
+            value={MODEL_PROVIDERS.find((provider) => provider.baseUrl === agentModelDraft.baseUrl.trim())?.value ?? 'custom'}
+            onChange={(value) => {
+              const preset = MODEL_PROVIDERS.find((provider) => provider.value === value);
+              setAgentModelDraft((draft) => ({ ...draft, baseUrl: preset?.baseUrl ?? (MODEL_PROVIDERS.some((provider) => provider.baseUrl === draft.baseUrl.trim()) ? '' : draft.baseUrl) }));
+            }}
+            options={[...MODEL_PROVIDERS.map(({ value, label }) => ({ value, label })), { value: 'custom', label: 'Other OpenAI-compatible…' }]}
+          />
+          {!MODEL_PROVIDERS.some((provider) => provider.baseUrl === agentModelDraft.baseUrl.trim()) && (
+            <Input label="Base URL" value={agentModelDraft.baseUrl} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, baseUrl: event.target.value }))} placeholder="https://example.com/v1" maxLength={500} />
+          )}
+          <div className="space-y-1">
+            <Input label="Model ID" value={agentModelDraft.model} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, model: event.target.value, name: draft.name === draft.model ? event.target.value : draft.name }))} placeholder="e.g. z-ai/glm-5.3-flash" maxLength={200} />
+            <p className="text-xs text-[var(--color-muted)]">Exactly as your provider lists it.</p>
+          </div>
+          <div className="space-y-1">
+            <Input label="Name" value={agentModelDraft.name} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="e.g. Fast daily model" maxLength={120} />
+            <p className="text-xs text-[var(--color-muted)]">What you’ll see in Fainens.</p>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="agent-model-api-key" className="block text-sm font-medium text-[var(--color-text-secondary)]">API key <span className="font-normal text-[var(--color-muted)]">(optional)</span></label>
+            <input id="agent-model-api-key" type="password" value={agentModelDraft.apiKey} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, apiKey: event.target.value }))} placeholder={editingAgentModelId == null ? 'Leave blank to use the server’s key' : 'Leave blank to keep the saved key'} autoComplete="new-password" className="brutalist-input" />
+            <p className="text-xs text-[var(--color-muted)]">Encrypted when saved and never shown again.</p>
+          </div>
+          {agentProviderNotice?.tone === 'error' && <Notice notice={agentProviderNotice} />}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showMemoryForm}
+        onClose={() => { if (!isSavingMemory) resetMemoryForm(); }}
+        title={editingMemoryId == null ? 'Add memory' : 'Edit memory'}
+        overlayClassName="!z-[60]"
+        footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" disabled={isSavingMemory} onClick={resetMemoryForm}>Cancel</Button><Button type="submit" form="agent-memory-form" size="sm" isLoading={isSavingMemory} disabled={!memoryLabel.trim() || !memoryContent.trim()}>{editingMemoryId == null ? 'Add memory' : 'Save changes'}</Button></div>}
+      >
+        <form id="agent-memory-form" className="settings-compact space-y-4" onSubmit={(event) => void saveMemory(event)}>
+          <p className="text-sm text-[var(--ref-on-surface-variant)]">Something Agent should keep in mind in every chat, like a goal, a habit, or how you like advice.</p>
+          <Input label="Name" value={memoryLabel} onChange={(event) => setMemoryLabel(event.target.value)} placeholder="e.g. Saving for a house" maxLength={memoryLimits.maxLabelLength} />
+          <div className="space-y-1">
+            <label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should Agent remember?</label>
+            <textarea id="agent-memory-content" value={memoryContent} onChange={(event) => setMemoryContent(event.target.value)} placeholder="e.g. I’m saving for a down payment by 2028 and prefer conservative suggestions." maxLength={memoryLimits.maxContentLength} rows={5} className="brutalist-input min-h-28 w-full resize-y" />
+            <p className="text-right text-xs tabular-nums text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p>
+          </div>
+          {memoryError && <p role="alert" className="text-sm text-[var(--color-danger)]">{memoryError}</p>}
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={showClearCacheModal}
+        onClose={() => setShowClearCacheModal(false)}
+        title="Clear local cache?"
+        overlayClassName="!z-[60]"
+        footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowClearCacheModal(false)}>Cancel</Button><Button type="button" size="sm" onClick={handleClearCache}>Clear cache</Button></div>}
+      >
+        <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Fainens will reload your data from the server. You won’t lose any transactions or accounts.</p>
+      </Modal>
+
+      <Modal
+        isOpen={showDeleteDataModal}
+        onClose={() => setShowDeleteDataModal(false)}
+        title="Clear this browser and sign out?"
+        overlayClassName="!z-[60]"
+        footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={handleDeleteAllData}>Clear and sign out</Button></div>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Everything Fainens keeps in this browser is removed, including the settings on this page, and you are signed out. Your transactions, accounts, and budgets stay safe on the server.</p>
+          <p className="flex items-center gap-2 rounded-xl bg-[var(--color-danger)]/8 px-3.5 py-3 text-sm font-medium text-[var(--color-danger)]">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+            Browser-only settings can’t be recovered.
+          </p>
         </div>
       </Modal>
     </RequireAuth>

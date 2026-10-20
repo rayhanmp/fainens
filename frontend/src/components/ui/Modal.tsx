@@ -5,6 +5,8 @@ import { useEffect, useId, useState, useRef } from 'react';
 
 const MODAL_STACK_KEY = '__fainensModalStack';
 let modalSequence = 0;
+/** Tokens of the modals open right now, oldest first. */
+const openModalStack: string[] = [];
 
 interface ModalProps {
   isOpen: boolean;
@@ -121,11 +123,24 @@ export function Modal({
     }
   }, [isOpen]);
 
+  // Track open modals in opening order, so keys only reach the one on top.
+  useEffect(() => {
+    if (!isOpen) return;
+    openModalStack.push(historyToken);
+    return () => {
+      const index = openModalStack.lastIndexOf(historyToken);
+      if (index >= 0) openModalStack.splice(index, 1);
+    };
+  }, [isOpen, historyToken]);
+
   // Handle escape key and focus trap
   useEffect(() => {
     if (!isOpen || !shouldRender) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // With a dialog opened over another, Escape and Tab belong to the top one only;
+      // otherwise one Escape would close every open dialog at once.
+      if (openModalStack.at(-1) !== historyToken) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -149,7 +164,7 @@ export function Modal({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, shouldRender, onClose]);
+  }, [isOpen, shouldRender, onClose, historyToken]);
 
   // Focus the most useful control when the modal opens, not the close button.
   useEffect(() => {
