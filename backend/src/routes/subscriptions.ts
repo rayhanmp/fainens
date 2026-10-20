@@ -16,6 +16,7 @@ import {
   resolveSubscriptionOccurrences,
   subscriptionChargesByMonth,
   subscriptionPaymentAccountProblem,
+  unpaidRenewalsByMonth,
   unlinkSubscriptionOccurrence,
   voidSubscriptionOccurrence,
   type OccurrenceResolution,
@@ -98,7 +99,12 @@ const monthlyChargesSchema = z.array(z.object({
   total: z.number().int(),
   items: z.array(z.object({ subscriptionId: z.number().int(), amount: z.number().int() })),
 }));
-const subscriptionsListResponseSchema = z.object({ subscriptions: z.array(subscriptionSchema), renewalPreview: renewalPreviewSchema, monthlyCharges: monthlyChargesSchema }).passthrough();
+const unpaidRenewalsSchema = z.array(z.object({
+  subscriptionId: z.number().int(),
+  dueAt: z.number(),
+  kind: z.enum(["skipped", "voided"]),
+}));
+const subscriptionsListResponseSchema = z.object({ subscriptions: z.array(subscriptionSchema), renewalPreview: renewalPreviewSchema, monthlyCharges: monthlyChargesSchema, unpaidRenewals: unpaidRenewalsSchema }).passthrough();
 const subscriptionCreateBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
   linkedAccountId: z.number().int().positive(),
@@ -198,6 +204,7 @@ export default async function (fastify: FastifyInstance) {
       subscriptions: await serializeSubscriptions(includeArchived === "true" ? rows : rows.filter((row) => row.status !== "archived")),
       renewalPreview: await previewDueSubscriptionRenewals(),
       monthlyCharges: await subscriptionChargesByMonth(),
+      unpaidRenewals: await unpaidRenewalsByMonth(),
     };
   });
 

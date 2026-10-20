@@ -10856,10 +10856,30 @@ export type ListSubscriptions200MonthlyChargesItem = {
   items: ListSubscriptions200MonthlyChargesItemItemsItem[];
 };
 
+export type ListSubscriptions200UnpaidRenewalsItemKind = typeof ListSubscriptions200UnpaidRenewalsItemKind[keyof typeof ListSubscriptions200UnpaidRenewalsItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListSubscriptions200UnpaidRenewalsItemKind = {
+  skipped: 'skipped',
+  voided: 'voided',
+} as const;
+
+export type ListSubscriptions200UnpaidRenewalsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  subscriptionId: number;
+  dueAt: number;
+  kind: ListSubscriptions200UnpaidRenewalsItemKind;
+};
+
 export type ListSubscriptions200 = {
   subscriptions: ListSubscriptions200SubscriptionsItem[];
   renewalPreview: ListSubscriptions200RenewalPreview;
   monthlyCharges: ListSubscriptions200MonthlyChargesItem[];
+  unpaidRenewals: ListSubscriptions200UnpaidRenewalsItem[];
   [key: string]: unknown;
 };
 

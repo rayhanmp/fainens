@@ -550,6 +550,33 @@ export async function subscriptionChargesByMonth(months = 12, now = Date.now()):
   }));
 }
 
+/**
+ * Renewals in the last `months` calendar months that charged nothing: skipped, or posted and then
+ * voided. Paid ones come from `subscriptionChargesByMonth`.
+ */
+export async function unpaidRenewalsByMonth(months = 12, now = Date.now()): Promise<Array<{
+  subscriptionId: number;
+  dueAt: number;
+  kind: "skipped" | "voided";
+}>> {
+  const today = new Date(now);
+  const start = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1);
+  const rows = await db.select({ scheduleId: recurringOccurrences.scheduleId, occurrenceDate: recurringOccurrences.occurrenceDate, lastError: recurringOccurrences.lastError })
+    .from(recurringOccurrences)
+    .where(and(
+      eq(recurringOccurrences.jobType, "subscription"),
+      eq(recurringOccurrences.status, "skipped"),
+      gte(recurringOccurrences.occurrenceDate, start),
+    ));
+  return rows
+    .map((row) => ({
+      subscriptionId: row.scheduleId,
+      dueAt: ts(row.occurrenceDate),
+      kind: row.lastError?.startsWith("Voided") ? "voided" as const : "skipped" as const,
+    }))
+    .sort((a, b) => a.dueAt - b.dueAt);
+}
+
 /** The latest renewal already resolved; the schedule can't be moved back onto or before it. */
 export async function lastResolvedDueAt(subscriptionId: number): Promise<number | null> {
   const [row] = await db.select({ occurrenceDate: recurringOccurrences.occurrenceDate }).from(recurringOccurrences)

@@ -24261,12 +24261,42 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "unpaidRenewals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "subscriptionId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "dueAt": {
+                            "type": "number"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skipped",
+                              "voided"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "subscriptionId",
+                          "dueAt",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "subscriptions",
                     "renewalPreview",
-                    "monthlyCharges"
+                    "monthlyCharges",
+                    "unpaidRenewals"
                   ],
                   "additionalProperties": {}
                 }

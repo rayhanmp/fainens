@@ -34,6 +34,8 @@ export type SubscriptionsPageData = {
   renewalPreview: { occurrences: RenewalOccurrence[]; truncated: boolean };
   /** What subscriptions charged in each of the last twelve months, oldest first. */
   monthlyCharges: Array<{ month: string; total: number; items: Array<{ subscriptionId: number; amount: number }> }>;
+  /** Renewals in the same twelve months that charged nothing: skipped, or posted and voided. */
+  unpaidRenewals: Array<{ subscriptionId: number; dueAt: number; kind: 'skipped' | 'voided' }>;
   /** Accounts that can pay a subscription: active wallets, banks and cards, with their balances. */
   accounts: PaymentAccount[];
   /** Every account by id, for naming an account a subscription still points at. */
@@ -55,6 +57,7 @@ export function useSubscriptionsQuery() {
         subscriptions: subscriptionData.subscriptions,
         renewalPreview: subscriptionData.renewalPreview,
         monthlyCharges: subscriptionData.monthlyCharges,
+        unpaidRenewals: subscriptionData.unpaidRenewals,
         accounts: accounts.filter(isPaymentAccount).map((account) => ({
           id: account.id,
           name: account.name,
