@@ -1,6 +1,6 @@
 import type { PeriodRecap, SavedRecapStory } from './queries';
 import { recapDisplayCopy, shortDisplayLabel } from './display-copy';
-import { pickFrom, seeded } from './motion';
+import { pickFrom, runVariants, seeded } from './motion';
 import { bonusCopy, chapterCopy, chapterEyebrows, type CopyFacts } from './variations';
 import { formatRecapCurrency } from './currency';
 import { DAY_MS, formatRecapDay, periodDateRange, recapDay, recapDayKey, recapWeekday } from './dates';
@@ -33,7 +33,13 @@ export type Play =
   | { kind: 'reels'; prompt: string; symbols: Array<{ categoryId: number | null; name: string; label: string }>; winner: string }
   | { kind: 'hold'; prompt: string }
   | { kind: 'gift'; prompt: string }
-  | { kind: 'piggy'; prompt: string };
+  | { kind: 'piggy'; prompt: string }
+  // The games below live in a lazily loaded group (extra/GamesExtra).
+  | { kind: 'higherLower'; anchor: { label: string; amount: number }; challenger: { label: string; amount: number }; answer: 'Higher' | 'Lower' }
+  | { kind: 'memory'; cards: Array<{ name: string; label: string }> }
+  | { kind: 'wheel'; slices: Array<{ name: string; label: string; share: number }>; winner: string }
+  | { kind: 'truefalse'; statement: string; answer: boolean; reveal: string };
+export const EXTRA_GAMES = new Set<Play['kind']>(['higherLower', 'memory', 'wheel', 'truefalse']);
 export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido' | 'ejected';
 /** How the ejection reads each verdict; `{x}` is the category and `{n}` the suspects still standing. */
 export type EjectVerdicts = { innocent: string; guilty: string; remain: string };
@@ -93,7 +99,9 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'interlude'; variant: InterludeVariant; words: string[]; orbit: CategoryShare[]; value: number; share: number | null; slot: number; verdicts: EjectVerdicts }
   | { id: 'budget'; planned: number; spent: number; remaining: number; percentUsed: number | null; elapsedShare: number | null; over: Array<{ name: string; over: number }>; unbudgeted: number }
   | { id: 'categories'; lead: 'top' | 'top3' | 'count'; total: number; rows: CategoryShare[]; others: { count: number; amount: number; share: number } | null; count: number; top3Share: number }
-  | { id: 'calendar'; lead: 'days' | 'peak'; days: RecapDayCell[] | null; spendingDays: number; elapsedDays: number; peak: { date: number; amount: number; purchaseCount: number } | null }
+  | { id: 'calendar'; lead: 'days' | 'peak'; days: RecapDayCell[] | null; spendingDays: number; elapsedDays: number; peak: { date: number; amount: number; purchaseCount: number } | null;
+    /** Some runs fold the weekday chapter into the calendar as a strip under the grid. */
+    week?: { totals: number[]; busiest: number; weekendShare: number } }
   | { id: 'weekdays'; lead: 'weekday' | 'weekend'; totals: number[]; busiest: number; weekendShare: number }
   | { id: 'streak'; lead: 'quiet' | 'busy'; days: RecapDayCell[]; quiet: Streak; busy: Streak }
   | { id: 'receipts'; items: ReceiptItem[]; largestShare: number | null; topShare: number | null; purchaseCount: number }
@@ -101,7 +109,7 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'comparison'; mode: 'average' | 'total'; now: number; before: number; change: number; beforeLabel: string; matchedElapsed: boolean }
   | { id: 'months'; months: Array<{ label: string; amount: number }>; busiest: number }
   | { id: 'mixtape'; tracks: MixtapeTrack[]; tapeName: string }
-  | { id: 'persona'; persona: Persona }
+  | { id: 'persona'; persona: Persona; early?: boolean }
   | { id: 'bonus'; bonus: Bonus }
   | { id: 'closing'; tiles: ClosingTile[]; persona: Persona; finale: FinaleFacts }
 );
@@ -257,11 +265,16 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   const months = [...monthTotals.values()];
   const busiestMonth = months.reduce((best, month, i) => month.amount > months[best].amount ? i : best, 0);
 
+  // How long this run is: the director's cut shows every optional chapter, a speedrun keeps a short lap.
+  const cut = run === 0 ? 'standard' : runVariants(run).cut;
+  const optional = (p: number) => cut === 'directors' || (cut === 'standard' && chance(p));
   // Bonus chapters appear in some runs; when one is left out its fact can lead another chapter instead.
   const hasWeek = elapsed.length >= 7 && recap.spendingDays >= 4 && weekTotal > 0;
-  const showWeekdays = hasWeek && chance(.65);
-  const showStreak = !longView && elapsed.length >= 7 && Boolean((quiet && quiet.length >= 2) || (busy && busy.length >= 3)) && chance(.6);
-  const showMixtape = positiveCategories.length >= 3 && chance(.5);
+  const showWeekdays = hasWeek && optional(.65);
+  const showStreak = !longView && elapsed.length >= 7 && Boolean((quiet && quiet.length >= 2) || (busy && busy.length >= 3)) && optional(.6);
+  const showMixtape = positiveCategories.length >= 3 && optional(.5);
+  // Now and then the weekday chapter folds into the calendar, as a strip under the grid.
+  const pairWeek = showWeekdays && !longView && Boolean(recap.daily) && chance(.3);
   const leads = {
     overview: spentPer100 !== null && chance(.45) ? 'ratio' as const : 'left' as const,
     categories: run === 0 ? 'top' as const : pickFrom(positiveCategories.length >= 4 ? ['top', 'top3', 'count'] as const : ['top'] as const, random),
@@ -336,10 +349,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
 
   const middle: Array<ChapterData | null> = [
     top ? { id: 'categories', lead: leads.categories, total: categoryTotal, rows: topRows, others: rest.length ? { count: rest.length, amount: restAmount, share: share(restAmount) } : null, count: positiveCategories.length, top3Share } : null,
-    recap.purchaseCount > 0 && !longView ? { id: 'calendar', lead: leads.calendar, days, spendingDays: recap.spendingDays, elapsedDays, peak } : null,
+    recap.purchaseCount > 0 && !longView ? { id: 'calendar', lead: leads.calendar, days, spendingDays: recap.spendingDays, elapsedDays, peak,
+      week: pairWeek ? { totals: weekdayTotals, busiest: busiestWeekday, weekendShare } : undefined } : null,
     longView && months.length > 1 ? { id: 'months', months, busiest: busiestMonth } : null,
     showMixtape ? { id: 'mixtape', tracks, tapeName: `${recap.period.name} mixtape` } : null,
-    showWeekdays ? { id: 'weekdays', lead: leads.weekdays, totals: weekdayTotals, busiest: busiestWeekday, weekendShare } : null,
+    showWeekdays && !pairWeek ? { id: 'weekdays', lead: leads.weekdays, totals: weekdayTotals, busiest: busiestWeekday, weekendShare } : null,
     showStreak ? { id: 'streak', lead: leads.streak, days: elapsed, quiet, busy } : null,
     receiptItems.length ? { id: 'receipts', items: receiptItems, largestShare, topShare, purchaseCount: recap.purchaseCount } : null,
     recap.purchaseCount > 1 ? { id: 'habits', lead: leads.habits, purchaseCount: recap.purchaseCount, median: profile?.medianAmount ?? null, average, perDay, spendingDays: recap.spendingDays, repeat: facts.repeat && repeatRow ? { ...facts.repeat, fullLabel: repeatRow.description, total: repeatRow.totalAmount } : null } : null,
@@ -350,9 +364,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   // Shuffle the middle chapters for a run, keeping the calendar ahead of the chapters built from it.
   // Now and then a regular chapter sits a run out, so no two viewings have the same lineup.
   const order: ChapterData[] = middle.filter(chapter => chapter !== null)
-    .filter(chapter => run === 0 || (chapter.id !== 'receipts' && chapter.id !== 'habits') || random() >= .2);
+    .filter(chapter => run === 0 || cut === 'directors' || (chapter.id !== 'receipts' && chapter.id !== 'habits') || random() >= .2);
   if (run !== 0) {
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    // A speedrun keeps three middle chapters.
+    if (cut === 'speedrun') order.splice(3);
     const calendarAt = order.findIndex(chapter => chapter.id === 'calendar');
     const firstDerived = order.findIndex(chapter => chapter.id === 'weekdays' || chapter.id === 'streak');
     if (calendarAt > firstDerived && firstDerived >= 0) [order[calendarAt], order[firstDerived]] = [order[firstDerived], order[calendarAt]];
@@ -400,7 +416,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       if (back) earned.push({ score: 1.25, bonus: { kind: 'comeback', categoryId: back.row.categoryId, name: back.row.name, label: back.row.label, rank: back.rank, share: back.row.share,
         previousRank: back.was < 0 ? null : back.was + 1, previousPeriod: previous!.period.name } });
     }
-    const bonuses = earned.sort((a, b) => b.score - a.score).slice(0, 2).map(entry => entry.bonus);
+    const bonuses = earned.sort((a, b) => b.score - a.score).slice(0, cut === 'speedrun' ? 1 : 2).map(entry => entry.bonus);
     // Dropped into the middle at distinct slots; splicing the later slot first keeps them apart.
     const bonusSlots = shuffled(Array.from({ length: Math.max(1, order.length) }, (_, i) => i + 1)).slice(0, bonuses.length).sort((a, b) => b - a);
     bonuses.forEach((bonus, i) => order.splice(bonusSlots[i], 0, { id: 'bonus', bonus }));
@@ -411,7 +427,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       ...(keptShare !== null || budget?.percentUsed != null ? ['liquid' as const] : []), ...(recap.purchaseCount >= 3 ? ['rain' as const] : []),
       // Three suspects and a culprit; it is drawn twice as often as the others.
       ...(topRows.length >= 4 ? ['ejected' as const, 'ejected' as const] : [])];
-    const picks = [...new Set(shuffled(available))].slice(0, random() < .45 ? 2 : 1);
+    // The director's cut always gets two showpieces; a speedrun skips them.
+    const picks = [...new Set(shuffled(available))].slice(0, cut === 'directors' ? 2 : cut === 'speedrun' ? 0 : random() < .45 ? 2 : 1);
     const slots = shuffled(Array.from({ length: Math.max(1, order.length - 1) }, (_, i) => i + 1)).slice(0, picks.length).sort((a, b) => b - a);
     const verdicts = pickFrom(EJECT_VERDICTS, random);
     picks.forEach((variant, i) => {
@@ -427,10 +444,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
         endLabel: formatRecapDay(recap.period.endDate, { day: 'numeric', month: 'short' }), teasers: [], chapterCount: 0, purchaseCount: recap.purchaseCount, keptShare,
         passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 14), seat: `${(seed % 30) + 1}${'ABCDEF'[seed % 6]}` } },
     { id: 'overview', lead: leads.overview, income: recap.income, expenses: recap.expenses, net: recap.net, keptShare, spentPer100, reveal: leads.overview === 'left' && recap.net > 0 ? 'scratch' : 'none' },
-    ...(budget ? [{ id: 'budget' as const, planned: budget.planned, spent: budget.spent, remaining: budget.remaining, percentUsed: budget.percentUsed,
+    ...(budget && cut !== 'speedrun' ? [{ id: 'budget' as const, planned: budget.planned, spent: budget.spent, remaining: budget.remaining, percentUsed: budget.percentUsed,
       elapsedShare: facts.elapsedShare, over: budget.overBudgetCategories.map(row => ({ name: row.name, over: row.over })), unbudgeted: budget.unbudgetedExpenses }] : []),
     ...order,
-    ...(averageChange !== null ? [{ id: 'comparison' as const, mode: 'average' as const, now: Math.round(average!), before: Math.round(priorAverage!), change: averageChange,
+    ...(cut === 'speedrun' ? [] : averageChange !== null ? [{ id: 'comparison' as const, mode: 'average' as const, now: Math.round(average!), before: Math.round(priorAverage!), change: averageChange,
       beforeLabel: baseline!.periodCount === 1 ? 'Previous period' : `Avg of ${baseline!.periodCount} periods`, matchedElapsed: Boolean(baseline?.matchedElapsed) }]
       : recap.comparison ? [{ id: 'comparison' as const, mode: 'total' as const, now: recap.expenses, before: recap.comparison.previousExpenses, change: Math.round(recap.comparison.changePercent),
         beforeLabel: shortDisplayLabel(recap.comparison.periodName, 24), matchedElapsed: false }] : []),
@@ -441,6 +458,12 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       purchaseCount: recap.purchaseCount, spendingDays: recap.spendingDays, passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 18),
     } },
   ];
+  // Spoiler first: now and then the personality opens the story and the evidence follows.
+  const personaAt = chapters.findIndex(chapter => chapter.id === 'persona');
+  if (run !== 0 && cut !== 'speedrun' && personaAt > 0 && random() < .18) {
+    const [early] = chapters.splice(personaAt, 1);
+    if (early.id === 'persona') chapters.splice(1, 0, { ...early, early: true });
+  }
 
   // Mini-games: every eligible (chapter, game) pair goes in a hat, and a run deals two or three of
   // them with no chapter and no kind of game twice, so the quiz is one game among several.
@@ -471,6 +494,28 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     }
     if (averageChange !== null && averageChange !== 0) { const answer = averageChange > 0 ? 'Higher' : 'Lower'; candidates.push({ id: 'comparison', play: quiz('Was the average receipt higher or lower than before?', answer, ['Higher', 'Lower']) }); }
     if (leads.overview === 'left' && recap.net > 0) candidates.push({ id: 'overview', play: { kind: 'piggy', prompt: 'Tap the piggy bank to crack it open' } });
+    // Higher or lower: one big receipt against another.
+    if (receiptItems.length >= 2) {
+      const [a, b] = shuffled(receiptItems.slice(0, 3)).slice(0, 2);
+      if (a.amount !== b.amount) candidates.push({ id: 'receipts', play: { kind: 'higherLower', anchor: { label: a.label, amount: a.amount }, challenger: { label: b.label, amount: b.amount }, answer: b.amount > a.amount ? 'Higher' : 'Lower' } });
+    }
+    if (topRows.length >= 3) {
+      candidates.push({ id: 'categories', play: { kind: 'memory', cards: topRows.slice(0, 3).map(row => ({ name: row.name, label: row.label })) } });
+      candidates.push({ id: 'categories', play: { kind: 'wheel', winner: topRows[0].name, slices: [...topRows.map(row => ({ name: row.name, label: row.label, share: row.share })),
+        ...(rest.length ? [{ name: 'Other', label: 'Everything else', share: share(restAmount) }] : [])] } });
+    }
+    // True or false, with a threshold rolled so the answer isn't always the same.
+    if (hasWeek) {
+      const line = pickFrom([20, 33, 50], random);
+      candidates.push({ id: 'weekdays', play: { kind: 'truefalse', statement: `More than ${line === 33 ? 'a third' : line === 50 ? 'half' : 'a fifth'} of spending landed on weekends.`, answer: weekendShare > line, reveal: `Weekends took ${weekendShare}%.` } });
+    }
+    if (keptShare !== null) {
+      const line = pickFrom([10, 25, 50], random);
+      candidates.push({ id: 'overview', play: { kind: 'truefalse', statement: `More than ${line === 50 ? 'half' : line === 25 ? 'a quarter' : 'a tenth'} of what came in was left over.`, answer: keptShare > line, reveal: `${keptShare}% was left.` } });
+    }
+    if (elapsedDays >= 7) {
+      candidates.push({ id: 'habits', play: { kind: 'truefalse', statement: 'Most days of the period had some spending.', answer: recap.spendingDays > elapsedDays / 2, reveal: `${recap.spendingDays} of ${elapsedDays} days did.` } });
+    }
   }
   const dealt = new Map<RecapStoryId, Play>();
   const kindsUsed = new Set<Play['kind']>();
@@ -539,15 +584,17 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     habits: 'How you really buy', comparison: 'Then vs. now', persona: 'Your money personality, unmasked',
     mixtape: 'Side A of your period mixtape', months: 'Every month, ranked', bonus: 'A bonus round your figures unlocked',
   };
-  const gameTeaser: Record<Play['kind'], string> = { quiz: 'a pop quiz', slider: 'a guessing game', reels: 'a jackpot round', hold: 'a drumroll', gift: 'a surprise gift', piggy: 'a piggy bank to smash' };
+  const gameTeaser: Record<Play['kind'], string> = { quiz: 'a pop quiz', slider: 'a guessing game', reels: 'a jackpot round', hold: 'a drumroll', gift: 'a surprise gift', piggy: 'a piggy bank to smash',
+    higherLower: 'a game of higher or lower', memory: 'a memory match', wheel: 'a spin of the wheel', truefalse: 'a true-or-false round' };
   const games = [...dealt.values()].map(item => gameTeaser[item.kind]);
-  const teasers = [...shuffled(chapters.map(chapter => teaserFor[chapter.id]).filter((line): line is string => Boolean(line))).slice(0, 3),
+  const cutLine = cut === 'directors' ? 'The director’s cut: every chapter' : cut === 'speedrun' ? 'Speedrun edition: the quick lap' : null;
+  const teasers = [...(cutLine ? [cutLine] : []), ...shuffled(chapters.map(chapter => teaserFor[chapter.id]).filter((line): line is string => Boolean(line))).slice(0, cutLine ? 2 : 3),
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   return chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
     const raw = chapter.id === 'bonus' ? pickFrom(bonusCopy(chapter.bonus, facts), random)
       : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
-    const copy = { eyebrow: forYear(raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
+    const copy = { eyebrow: forYear(chapter.id === 'persona' && chapter.early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
     const equivalence = equivalences[chapter.id];
     const play = dealt.get(chapter.id);
     return {
@@ -558,7 +605,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       body: equivalence && run !== 0 && random() < .55 ? equivalence : copy.body,
       play: play?.kind === 'quiz' ? { ...play, quiz: { ...play.quiz, question: forYear(play.quiz.question) } } : play, equivalence,
       // Interludes are showpieces: they move on sooner, except the ejection, which needs its full sequence.
-      duration: chapter.id === 'interlude' ? (chapter.variant === 'ejected' ? 9_000 : 6_500) : undefined,
+      // A speedrun moves every chapter along faster.
+      duration: chapter.id === 'interlude' ? (chapter.variant === 'ejected' ? 9_000 : 6_500) : cut === 'speedrun' ? 6_000 : undefined,
       achievement: run !== 0 && shown.has(chapter.id) && achievements[chapter.id] ?{ ...achievements[chapter.id]!, detail: forYear(achievements[chapter.id]!.detail) } : undefined,
       ask: asks[chapter.id] ?? `Tell me more about this from my ${period} recap: ${copy.title}`,
     } as RecapStory;

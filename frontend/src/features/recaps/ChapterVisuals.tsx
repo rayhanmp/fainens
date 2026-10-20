@@ -9,6 +9,7 @@ import { useCategoriesQuery } from '../categories/queries';
 import { AnimatedValue, RollingValue } from './AnimatedValue';
 import { Burst } from './Burst';
 import { BonusVisual } from './BonusVisuals';
+import { useLoadedPart } from './parts';
 import { seeded, type SectionVariants } from './motion';
 import { formatRecapDay, recapWeekday, WEEKDAYS, type PersonaKey, type RecapDayCell, type RecapStory } from './stories';
 
@@ -29,21 +30,28 @@ export const ChapterVisual = memo(ChapterVisualFor);
 
 function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { story: RecapStory; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
   const shared = { variants, run };
+  // Second looks come from lazily loaded groups; each is used only if it arrived before this chapter
+  // mounted, otherwise the house layout plays (see parts.ts).
+  const alt = (id: RecapStory['id']) => ({ weekdays: variants.weekdays !== 'bars', streak: variants.streak !== 'strip', habits: variants.habits !== 'trio',
+    mixtape: variants.mixtape !== 'cassette', months: variants.months !== 'bars' } as Partial<Record<RecapStory['id'], boolean>>)[id] ?? false;
+  const layouts = useLoadedPart('layouts', alt(story.id));
+  const personaExtra = useLoadedPart('persona', story.id === 'persona' && variants.persona === 'alt');
+  const bonusExtra = useLoadedPart('bonus', story.id === 'bonus' && variants.bonus === 'alt');
   switch (story.id) {
     case 'intro': return <CoverVisual story={story} {...shared} />;
     case 'overview': return <FlowVisual story={story} {...shared} />;
-    case 'months': return <MonthsVisual story={story} />;
+    case 'months': return layouts ? <layouts.MonthsAlt story={story} variant={variants.months} /> : <MonthsVisual story={story} />;
     case 'interlude': return <InterludeVisual story={story} run={run} />;
-    case 'mixtape': return <MixtapeVisual story={story} />;
-    case 'persona': return <PersonaVisual story={story} run={run} />;
-    case 'bonus': return <BonusVisual story={story} />;
+    case 'mixtape': return layouts ? <layouts.MixtapeAlt story={story} variant={variants.mixtape} /> : <MixtapeVisual story={story} />;
+    case 'persona': return <PersonaVisual story={story} run={run} scene={personaExtra ? <personaExtra.AltPersonaScene persona={story.persona} run={run} /> : undefined} />;
+    case 'bonus': return bonusExtra ? <bonusExtra.AltBonusVisual story={story} /> : <BonusVisual story={story} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;
-    case 'weekdays': return <WeekdaysVisual story={story} />;
-    case 'streak': return <StreakVisual story={story} />;
+    case 'weekdays': return layouts ? <layouts.WeekdaysAlt story={story} variant={variants.weekdays} /> : <WeekdaysVisual story={story} />;
+    case 'streak': return layouts ? <layouts.StreakAlt story={story} variant={variants.streak} /> : <StreakVisual story={story} />;
     case 'receipts': return <ReceiptVisual story={story} {...shared} />;
-    case 'habits': return <HabitsVisual story={story} />;
+    case 'habits': return layouts ? <layouts.HabitsAlt story={story} variant={variants.habits} /> : <HabitsVisual story={story} />;
     case 'comparison': return <ComparisonVisual story={story} {...shared} />;
     case 'closing': return <ClosingVisual story={story} periodId={periodId} onShare={onShare} score={score} {...shared} />;
   }
@@ -294,10 +302,10 @@ function MixtapeVisual({ story }: { story: Of<'mixtape'> }) {
   </div>;
 }
 
-function PersonaVisual({ story, run }: { story: Of<'persona'>; run: number }) {
+function PersonaVisual({ story, run, scene }: { story: Of<'persona'>; run: number; scene?: ReactNode }) {
   const { persona } = story;
   return <div className={`recap-persona recap-persona-${persona.key}`}>
-    <PersonaScene persona={persona} run={run} />
+    {scene ?? <PersonaScene persona={persona} run={run} />}
     <p className="recap-persona-name recap-seq" style={seq(8)}>{persona.name}</p>
     <p className="recap-persona-tagline recap-seq" style={seq(8.6)}>{persona.tagline}{persona.dash ? ` With a dash of ${persona.dash}.` : ''}</p>
     <ul className="recap-chips recap-persona-evidence">{persona.evidence.slice(0, 2).map((item, i) => <li key={item} style={{ '--c': i } as CSSProperties}>{item}</li>)}</ul>
@@ -424,8 +432,19 @@ function CalendarVisual({ story, variants, run }: { story: Of<'calendar'> } & Sh
       {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
       {story.days.map((day, i) => <DayCell key={day.key} day={day} intensity={day.amount / max} delay={delayOf(i)} />)}
     </div>
-    <div className="recap-calendar-legend recap-seq" style={seq(5)} aria-hidden="true"><span>Less</span>{[.08, .3, .55, .8, 1].map(level => <i key={level} style={{ '--level': level } as CSSProperties} />)}<span>More</span></div>
+    {story.week ? <WeekStrip week={story.week} /> : <div className="recap-calendar-legend recap-seq" style={seq(5)} aria-hidden="true"><span>Less</span>{[.08, .3, .55, .8, 1].map(level => <i key={level} style={{ '--level': level } as CSSProperties} />)}<span>More</span></div>}
     {story.lead !== 'peak' && peakLine}
+  </div>;
+}
+
+/** The weekday chapter folded into the calendar: the same week, summed, as a short strip of bars. */
+function WeekStrip({ week }: { week: NonNullable<Of<'calendar'>['week']> }) {
+  const max = Math.max(1, ...week.totals);
+  return <div className="recap-week-bars is-mini recap-seq" style={seq(5)} role="img" aria-label={`By weekday: highest on ${WEEKDAYS[week.busiest]}, weekends ${week.weekendShare}%`}>
+    {week.totals.map((total, i) => <div key={i} className={[i === week.busiest && 'is-top', i >= 5 && 'is-weekend'].filter(Boolean).join(' ')}>
+      <i style={{ '--fill': total / max, '--i': i } as CSSProperties} />
+      <span>{WEEKDAYS[i].slice(0, 2)}</span>
+    </div>)}
   </div>;
 }
 
@@ -543,6 +562,8 @@ function ComparisonVisual({ story, variants }: { story: Of<'comparison'> } & Sha
 
 function ClosingVisual({ story, periodId, onShare, variants, run, score }: { story: Of<'closing'>; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
   const random = seeded(run + 41);
+  const extraFinale = ['polaroid', 'trading', 'frontpage', 'post'].includes(variants.finale);
+  const finales = useLoadedPart('finales', extraFinale);
   const stars = score.total ? Math.round(score.correct / score.total * 3) : 0;
   const verdict = !score.total ? null : score.correct === score.total ? 'You know your money.' : score.correct === 0 ? 'The receipts had secrets.' : 'Pretty sharp.';
   const actions = <div className="recap-closing-actions recap-seq" style={seq(9)}>
@@ -553,14 +574,18 @@ function ClosingVisual({ story, periodId, onShare, variants, run, score }: { sto
   const { finale, persona } = story;
   const games = score.total ? `${score.correct}/${score.total} ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : null;
   if (variants.finale !== 'card') {
+    // The newer finales come from a lazily loaded group; the receipt stands in if it hasn't arrived.
+    const form = extraFinale && !finales ? 'receipt' : variants.finale;
     // The eyebrow belongs to the form the finale takes, not the copy pool's.
-    const eyebrow = { receipt: 'Your receipt, please', credits: 'Roll credits', certificate: 'Graduation day', scoreboard: 'Game over' }[variants.finale];
-    return <div className={`recap-finale recap-finale-${variants.finale}`}>
+    const eyebrow = { receipt: 'Your receipt, please', credits: 'Roll credits', certificate: 'Graduation day', scoreboard: 'Game over',
+      polaroid: 'Snapshots', trading: 'Collector’s edition', frontpage: 'Extra! Extra!', post: 'Posted' }[form];
+    return <div className={`recap-finale recap-finale-${form}`}>
       <p className="recap-story-eyebrow">{eyebrow}</p>
-      {variants.finale === 'receipt' && <FinaleReceipt story={story} games={games} />}
-      {variants.finale === 'credits' && <FinaleCredits story={story} games={games} />}
-      {variants.finale === 'certificate' && <FinaleCertificate story={story} />}
-      {variants.finale === 'scoreboard' && <FinaleScoreboard story={story} games={games} />}
+      {form === 'receipt' && <FinaleReceipt story={story} games={games} />}
+      {form === 'credits' && <FinaleCredits story={story} games={games} />}
+      {form === 'certificate' && <FinaleCertificate story={story} />}
+      {form === 'scoreboard' && <FinaleScoreboard story={story} games={games} />}
+      {finales && extraFinale && <finales.ExtraFinale story={story} form={variants.finale as 'polaroid' | 'trading' | 'frontpage' | 'post'} games={games} run={run} />}
       {burst}
       {actions}
       <span className="sr-only">{finale.period}: {persona.name}</span>

@@ -1,0 +1,76 @@
+/* The newer finales (lazily loaded). They sit inside .recap-finale, full bleed. */
+
+/* Polaroid wall: four photos dropped onto the table with tape. */
+.recap-polaroids { position: relative; flex: 1; min-height: 100cqw; margin-top: 3cqw; }
+.recap-polaroid { position: absolute; left: var(--x); top: var(--y); width: 42cqw; margin: 0; padding: 2.4cqw 2.4cqw 3cqw; background: #fbfaf5; color: #24261f; rotate: var(--r); box-shadow: 0 1.4cqw 3cqw #0003;
+  animation: recap-polaroid-drop .8s cubic-bezier(.3, 1.3, .5, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 350ms); }
+.recap-polaroid-tape { position: absolute; left: 50%; top: -2cqw; width: 14cqw; height: 4cqw; margin-left: -7cqw; background: color-mix(in srgb, #fff 55%, transparent); rotate: -4deg; }
+.recap-polaroid-photo { display: grid; place-items: center; aspect-ratio: 1; background: var(--recap-accent); color: var(--recap-paper); animation: recap-develop 2.4s ease-out both; animation-delay: calc(var(--enter) + 500ms + var(--i) * 350ms); }
+.recap-polaroid-photo.is-1 { background: var(--recap-ink); }
+.recap-polaroid-photo.is-2 { background: color-mix(in srgb, var(--recap-accent) 60%, var(--recap-ink)); }
+.recap-polaroid-photo.is-3 { background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); }
+.recap-polaroid-photo b { font-size: 11cqw; font-weight: 900; letter-spacing: -.04em; }
+.recap-polaroid figcaption { display: grid; gap: .4cqw; margin-top: 2cqw; font-family: Georgia, serif; font-size: 3.8cqw; font-style: italic; line-height: 1.1; }
+.recap-polaroid figcaption small { font-family: inherit; font-size: 2.6cqw; opacity: .65; }
+.recap-polaroid-net { position: absolute; left: 0; right: 0; bottom: 0; font-size: 3.2cqw; font-weight: 800; text-align: center; animation: recap-fade .6s both; animation-delay: calc(var(--enter) + 1900ms); }
+@keyframes recap-polaroid-drop { from { opacity: 0; translate: 0 -40cqw; rotate: calc(var(--r) * -3); scale: 1.2; } }
+@keyframes recap-develop { from { filter: brightness(2.2) saturate(0); } }
+
+/* Trading card: it flips over from its back, then the foil shimmers. */
+.recap-tcard-stage { display: grid; place-items: center; flex: 1; perspective: 160cqw; margin-top: 2cqw; }
+.recap-tcard { position: relative; width: 66cqw; aspect-ratio: 5 / 7; transform-style: preserve-3d; animation: recap-card-flip 1.2s cubic-bezier(.3, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 300ms); }
+.recap-tcard-face, .recap-tcard-back { position: absolute; inset: 0; border-radius: 3.4cqw; backface-visibility: hidden; }
+.recap-tcard-face { display: grid; grid-template-rows: auto 1fr auto auto auto auto; gap: 1.6cqw; padding: 3.6cqw; border: 1.6cqw solid #ffcc33; background: var(--recap-paper); color: var(--recap-ink); box-shadow: 0 3cqw 8cqw #0004; }
+.recap-tcard-back { display: grid; place-items: center; background: repeating-conic-gradient(var(--recap-ink) 0 15deg, var(--recap-accent) 15deg 30deg); color: var(--recap-paper); font-size: 20cqw; transform: rotateY(180deg); border: 1.6cqw solid #ffcc33; }
+.recap-tcard-head { display: flex; justify-content: space-between; align-items: baseline; gap: 2cqw; margin: 0; }
+.recap-tcard-head b { overflow: hidden; font-size: 4.6cqw; text-overflow: ellipsis; white-space: nowrap; }
+.recap-tcard-head span { flex: none; color: #d6333f; font-size: 3.4cqw; font-weight: 900; }
+.recap-tcard-art { position: relative; display: grid; place-items: center; overflow: hidden; border: .6cqw solid var(--recap-ink); border-radius: 1.4cqw; background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); color: var(--recap-paper); }
+.recap-tcard-art svg { width: 22cqw; height: 22cqw; animation: recap-pulse 2s ease-in-out infinite; }
+.recap-tcard-foil { position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 40%, #ffffff66 48%, #b8f0ff55 52%, transparent 60%); animation: recap-foil 2.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 1.5s); }
+.recap-tcard-type { margin: 0; font-size: 2.4cqw; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
+.recap-tcard-moves { display: grid; gap: 1cqw; margin: 0; padding: 0; list-style: none; font-size: 3cqw; font-weight: 700; }
+.recap-tcard-moves li { display: flex; gap: 1.6cqw; padding-bottom: 1cqw; border-bottom: 1px solid var(--recap-line); animation: recap-rise .5s both; animation-delay: calc(var(--enter) + 1400ms + var(--i) * 150ms); }
+.recap-tcard-flavour { margin: 0; font-family: Georgia, serif; font-size: 2.8cqw; font-style: italic; opacity: .8; }
+.recap-tcard-foot { display: flex; justify-content: space-between; margin: 0; font-size: 2.6cqw; font-weight: 800; }
+.recap-tcard-foot span:first-child { color: #c9961a; letter-spacing: .1em; }
+@keyframes recap-card-flip { from { transform: rotateY(180deg) scale(.6); opacity: 0; } 40% { opacity: 1; } to { transform: rotateY(0deg) scale(1); } }
+@keyframes recap-foil { from { translate: -40% 0; } to { translate: 40% 0; } }
+
+/* Front page: the classic spinning newspaper. */
+.recap-paper-stage { display: grid; place-items: center; flex: 1; margin-top: 2cqw; }
+.recap-frontpage { width: 100%; padding: 4cqw 4cqw 5cqw; background: #f4f0e6; color: #1d1c19; font-family: Georgia, 'Times New Roman', serif; box-shadow: 0 2cqw 6cqw #0004;
+  animation: recap-paper-spin 1.3s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
+.recap-frontpage-mast { margin: 0; padding-bottom: 1.4cqw; border-bottom: .6cqw double #1d1c19; font-size: 8cqw; font-weight: 900; letter-spacing: -.01em; text-align: center; }
+.recap-frontpage-dateline { display: flex; justify-content: space-between; margin: 0 0 3cqw; padding: 1cqw 0; border-bottom: 1px solid #1d1c19; font-family: system-ui, sans-serif; font-size: 2.2cqw; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.recap-frontpage h3 { margin: 0; font-size: 8.4cqw; font-weight: 900; line-height: 1.02; letter-spacing: -.02em; }
+.recap-frontpage-deck { margin: 2cqw 0 3cqw; font-size: 3.6cqw; font-style: italic; }
+.recap-frontpage-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3cqw; padding-top: 2.4cqw; border-top: 1px solid #1d1c19; }
+.recap-frontpage-cols p { margin: 0; font-size: 2.8cqw; line-height: 1.35; hyphens: auto; }
+.recap-frontpage-cols p + p { padding-left: 3cqw; border-left: 1px solid #1d1c1955; }
+@keyframes recap-paper-spin { from { opacity: 0; transform: rotate(-720deg) scale(.05); } 70% { opacity: 1; } to { transform: rotate(-2deg) scale(1); } }
+
+/* Social post: counters tick up, hearts float. */
+.recap-post { position: relative; display: grid; gap: 3cqw; margin-top: 3cqw; padding: 4.5cqw; border-radius: 4cqw; background: var(--recap-paper); color: var(--recap-ink); border: 1px solid var(--recap-line); box-shadow: 0 2cqw 6cqw #0002; overflow: hidden;
+  animation: recap-rise .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
+.recap-post-head { display: flex; align-items: center; gap: 3cqw; }
+.recap-post-head > span:last-child { display: grid; gap: .4cqw; }
+.recap-post-head b { font-size: 4cqw; }
+.recap-post-head small { font-size: 2.8cqw; opacity: .6; }
+.recap-post-avatar { display: grid; place-items: center; width: 11cqw; height: 11cqw; border-radius: 50%; background: var(--recap-accent); color: var(--recap-paper); font-size: 5cqw; font-weight: 900; }
+.recap-post-text { margin: 0; font-size: 4.4cqw; line-height: 1.35; }
+.recap-post-chips { display: flex; flex-wrap: wrap; gap: 1.6cqw; }
+.recap-post-chips span { padding: 1cqw 2.6cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-ink) 9%, transparent); font-size: 2.8cqw; font-weight: 800; animation: recap-pop .4s both; animation-delay: calc(var(--enter) + 900ms + var(--i) * 120ms); }
+.recap-post-actions { display: flex; justify-content: space-between; padding-top: 2.4cqw; border-top: 1px solid var(--recap-line); }
+.recap-post-actions span { display: inline-flex; align-items: center; gap: 1.4cqw; font-size: 3.2cqw; font-weight: 800; opacity: .75; }
+.recap-post-actions svg { width: 4.4cqw; height: 4.4cqw; }
+.recap-post-actions .is-liked { color: #e0245e; opacity: 1; }
+.recap-post-actions .is-liked svg { fill: currentColor; animation: recap-like 1s cubic-bezier(.2, 1.8, .4, 1) both; animation-delay: calc(var(--enter) + 1300ms); }
+.recap-post-heart { position: absolute; bottom: 6cqw; left: var(--x); width: 4cqw; height: 4cqw; color: #e0245e; fill: currentColor; opacity: 0; animation: recap-heart-float 2.2s ease-out infinite; animation-delay: calc(var(--enter) + 1500ms + var(--i) * 340ms); }
+@keyframes recap-like { 0% { scale: 1; } 30% { scale: 1.6; } 100% { scale: 1; } }
+@keyframes recap-heart-float { 0% { opacity: 0; translate: 0 0; } 15% { opacity: .9; } 100% { opacity: 0; translate: calc((var(--i) - 3) * 2cqw) -40cqw; scale: 1.4; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .recap-polaroids *, .recap-tcard-stage *, .recap-paper-stage *, .recap-post * { animation: none !important; }
+  .recap-post-heart { display: none; }
+}

@@ -17,20 +17,41 @@ export const pickFrom = <T,>(items: readonly T[], random: () => number) => items
 const hash = (value: string) => [...value].reduce((sum, char) => Math.imul(sum ^ char.charCodeAt(0), 16777619) >>> 0, 2166136261);
 
 export const TRANSITIONS = ['slide', 'drop', 'zoom', 'flip', 'spin', 'glitch', 'iris', 'blinds', 'curtain'] as const;
-export type Transition = typeof TRANSITIONS[number] | 'rewind';
+/** Set pieces between chapters: a train passing, lift doors, a chomper. Rare, and never on low-end phones. */
+export const ELABORATE_TRANSITIONS = ['train', 'elevator', 'chomp'] as const;
+export type Transition = typeof TRANSITIONS[number] | typeof ELABORATE_TRANSITIONS[number] | 'rewind';
 /** These paint the next chapter's colour over the card first, so the new content waits for them. */
-export const OVERLAY_TRANSITIONS = new Set<Transition>(['iris', 'blinds', 'curtain', 'rewind']);
-export const enterDelay = (transition: Transition) => OVERLAY_TRANSITIONS.has(transition) ? 420 : transition === 'flip' ? 260 : 120;
+export const OVERLAY_TRANSITIONS = new Set<Transition>(['iris', 'blinds', 'curtain', 'rewind', ...ELABORATE_TRANSITIONS]);
+const ENTER_DELAYS: Partial<Record<Transition, number>> = { flip: 260, train: 1250, elevator: 1150, chomp: 1050 };
+export const enterDelay = (transition: Transition) => ENTER_DELAYS[transition] ?? (OVERLAY_TRANSITIONS.has(transition) ? 420 : 120);
 
-export function nextTransition(run: number, visit: number, previous: Transition): Transition {
+/** Phones with little memory or few cores get the same recap with lighter dice: no set-piece transitions. */
+export const lowEndDevice = () => typeof navigator !== 'undefined'
+  && (((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4);
+
+export function nextTransition(run: number, visit: number, previous: Transition, lite = false): Transition {
   const random = seeded(run + visit * 7919);
+  // About one move in twelve becomes a set piece, never two in a row.
+  if (!lite && visit > 1 && !(ELABORATE_TRANSITIONS as readonly string[]).includes(previous) && random() < .085) return pickFrom(ELABORATE_TRANSITIONS, random);
   let choice: Transition = pickFrom(TRANSITIONS, random);
   if (choice === previous) choice = pickFrom(TRANSITIONS, random);
   return choice;
 }
 
-export const OPENINGS = ['split', 'zoom', 'shutter', 'spin', 'crawl'] as const;
+export const OPENINGS = ['split', 'zoom', 'shutter', 'spin', 'crawl', 'vhs', 'needle', 'news', 'start'] as const;
 export type Opening = typeof OPENINGS[number];
+/** How long each opening holds the cover back; a tap skips the long ones. */
+export const OPENING_DURATIONS: Partial<Record<Opening, number>> = { crawl: 10_500, vhs: 2_300, needle: 2_400, news: 2_600, start: 2_400 };
+
+/** Whole-run editions restyle every chapter the same way: type, rules, texture. `none` is the house style. */
+export const EDITIONS = ['none', 'none', 'newspaper', 'bits', 'y2k', 'zine', 'brutalist'] as const;
+export type Edition = typeof EDITIONS[number];
+/** How long the run is: every chapter, the usual, or a quick lap. */
+export const CUTS = ['standard', 'standard', 'standard', 'directors', 'speedrun'] as const;
+export type Cut = typeof CUTS[number];
+/** The music mode's groove, per run. The 8-bit edition always brings chiptune. */
+export const SOUND_PACKS = ['groove', 'lofi', 'chip', 'orchestral', 'koplo'] as const;
+export type SoundPack = typeof SOUND_PACKS[number];
 
 const sectionVariants = {
   intro: ['magazine', 'poster', 'vinyl', 'boarding'],
@@ -42,15 +63,36 @@ const sectionVariants = {
   budget: ['meter', 'gauge'],
   versus: ['bars', 'versus'],
   closing: ['deal', 'flip'],
-  finale: ['card', 'receipt', 'credits', 'certificate', 'scoreboard'],
+  finale: ['card', 'receipt', 'credits', 'certificate', 'scoreboard', 'polaroid', 'trading', 'frontpage', 'post'],
   burst: ['confetti', 'stars', 'coins'],
+  // Second (and third) looks for chapters that had one layout. The first option is the house layout.
+  weekdays: ['bars', 'clock', 'podium', 'planner'],
+  streak: ['strip', 'chain', 'domino', 'combo'],
+  habits: ['trio', 'pile', 'cart', 'tally'],
+  mixtape: ['cassette', 'vinyl', 'cd', 'nowplaying'],
+  months: ['bars', 'wheel', 'skyline', 'heat'],
+  persona: ['scene', 'scene', 'alt'],
+  bonus: ['classic', 'alt'],
 } as const satisfies Partial<Record<RecapStoryId | 'burst' | 'finale' | 'versus', readonly string[]>>;
 export type SectionVariants = { [Key in keyof typeof sectionVariants]: typeof sectionVariants[Key][number] };
+export type RunVariants = SectionVariants & { opening: Opening; edition: Edition; cut: Cut; pack: SoundPack; lite: boolean };
 
-export function runVariants(run: number): SectionVariants & { opening: Opening } {
+export function runVariants(run: number, lite = false): RunVariants {
   const roll = (key: string) => seeded(run ^ hash(key));
   const entries = Object.entries(sectionVariants).map(([key, options]) => [key, pickFrom(options, roll(key))]);
-  return { ...Object.fromEntries(entries) as SectionVariants, opening: pickFrom(OPENINGS, roll('opening')) };
+  const edition = pickFrom(EDITIONS, roll('edition'));
+  return { ...Object.fromEntries(entries) as SectionVariants, opening: pickFrom(OPENINGS, roll('opening')), edition, cut: pickFrom(CUTS, roll('cut')),
+    pack: edition === 'bits' ? 'chip' : pickFrom(SOUND_PACKS, roll('pack')), lite };
+}
+
+/** The lazily loaded groups a run needs, so they can load during the opening. See parts.ts. */
+export function runParts(variants: RunVariants) {
+  const parts = new Set<'layouts' | 'persona' | 'bonus' | 'games' | 'finales'>();
+  if (variants.weekdays !== 'bars' || variants.streak !== 'strip' || variants.habits !== 'trio' || variants.mixtape !== 'cassette' || variants.months !== 'bars') parts.add('layouts');
+  if (variants.persona === 'alt') parts.add('persona');
+  if (variants.bonus === 'alt') parts.add('bonus');
+  if (['polaroid', 'trading', 'frontpage', 'post'].includes(variants.finale)) parts.add('finales');
+  return parts;
 }
 
 /**

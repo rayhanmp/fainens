@@ -1,30 +1,38 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useLater } from './useLater';
 import { Gift, PiggyBank } from 'lucide-react';
 import { CategoryIcon } from '../categories/CategoryIcon';
 import { Burst } from './Burst';
 import { seeded } from './motion';
+import { loadPart } from './parts';
 import { play as sfx, playTicks } from './sfx';
-import type { Play } from './stories';
+import { EXTRA_GAMES, type Play } from './stories';
 
 export type Verdict = { text: string; tone: 'good' | 'bad' | 'party' };
 export type PlayResult = { choice: string | null; correct: boolean; scored: boolean; verdict: Verdict | null };
-type GateProps = { onDone: (result: PlayResult) => void };
+export type GateProps = { onDone: (result: PlayResult) => void };
 const skipped: PlayResult = { choice: null, correct: false, scored: false, verdict: null };
 
-/** The mini-game a chapter plays before it reveals: a quiz, a slider guess, reels, a hold, a gift or a piggy bank. */
+// The newer games load with their own group the first time a run deals one.
+const ExtraGame = lazy(() => loadPart('games').then(module => ({ default: module.ExtraGame })));
+
+/** The mini-game a chapter plays before it reveals: a quiz, a slider guess, reels, a hold, a gift, a piggy bank, and more. */
 export function PlayGate({ play, eyebrow, seed, onDone }: { play: Play; eyebrow: string; seed: number } & GateProps) {
-  const headline = { quiz: play.kind === 'quiz' ? play.quiz.question : '', slider: play.kind === 'slider' ? play.question : '', reels: 'Spin for your top category.',
-    hold: 'Ready for the big reveal?', gift: 'A little something for you.', piggy: 'Break the bank.' }[play.kind];
-  const label = { quiz: 'Quick quiz', slider: 'Take a guess', reels: 'Jackpot round', hold: 'Drumroll', gift: 'Surprise', piggy: 'Smash time' }[play.kind];
+  const headline: Record<Play['kind'], string> = { quiz: play.kind === 'quiz' ? play.quiz.question : '', slider: play.kind === 'slider' ? play.question : '', reels: 'Spin for your top category.',
+    hold: 'Ready for the big reveal?', gift: 'A little something for you.', piggy: 'Break the bank.',
+    higherLower: 'Higher or lower?', memory: 'Match your top categories.', wheel: 'Spin the wheel.', truefalse: 'True or false?' };
+  const label: Record<Play['kind'], string> = { quiz: 'Quick quiz', slider: 'Take a guess', reels: 'Jackpot round', hold: 'Drumroll', gift: 'Surprise', piggy: 'Smash time',
+    higherLower: 'Higher or lower', memory: 'Memory match', wheel: 'Wheel of spending', truefalse: 'True or false' };
   return <div className={`recap-game recap-game-${play.kind}`}>
-    <p className="recap-story-eyebrow">{label} · {eyebrow}</p>
-    <h2 aria-label={headline}>{headline.split(' ').map((word, i) => <span key={i}><span className="recap-word-mask"><span style={{ '--word': i } as CSSProperties}>{word}</span></span>{' '}</span>)}</h2>
+    <p className="recap-story-eyebrow">{label[play.kind]} · {eyebrow}</p>
+    <h2 aria-label={headline[play.kind]}>{headline[play.kind].split(' ').map((word, i) => <span key={i}><span className="recap-word-mask"><span style={{ '--word': i } as CSSProperties}>{word}</span></span>{' '}</span>)}</h2>
     {play.kind === 'quiz' && <QuizGame play={play} onDone={onDone} />}
     {play.kind === 'slider' && <SliderGame play={play} onDone={onDone} />}
     {play.kind === 'reels' && <ReelsGame play={play} seed={seed} onDone={onDone} />}
     {play.kind === 'hold' && <HoldGame prompt={play.prompt} onDone={onDone} />}
     {play.kind === 'gift' && <GiftGame prompt={play.prompt} seed={seed} onDone={onDone} />}
     {play.kind === 'piggy' && <PiggyGame prompt={play.prompt} seed={seed} onDone={onDone} />}
+    {EXTRA_GAMES.has(play.kind) && <Suspense fallback={<p className="recap-fact" role="status">Setting up the game…</p>}><ExtraGame play={play} seed={seed} onDone={onDone} /></Suspense>}
     <button type="button" className="recap-quiz-skip" onClick={() => onDone(skipped)}>Just show me</button>
   </div>;
 }
@@ -43,12 +51,6 @@ function QuizGame({ play, onDone }: { play: Extract<Play, { kind: 'quiz' }> } & 
   </div>;
 }
 
-/** A timeout that is called off if the game closes before it fires. */
-function useLater() {
-  const timers = useRef<number[]>([]);
-  useEffect(() => () => timers.current.forEach(timer => window.clearTimeout(timer)), []);
-  return useCallback((run: () => void, ms: number) => { timers.current.push(window.setTimeout(run, ms)); }, []);
-}
 
 /** Drag to guess a share; locking in slides the real answer onto the track next to yours. */
 function SliderGame({ play, onDone }: { play: Extract<Play, { kind: 'slider' }> } & GateProps) {

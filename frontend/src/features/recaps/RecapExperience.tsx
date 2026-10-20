@@ -4,12 +4,13 @@ import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect
 import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Music, Pause, Play, RefreshCw, Rewind, Sparkles, Trophy, Volume2, VolumeX, X } from 'lucide-react';
 import { usePeriodRecap, useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type PeriodRecap, type SavedRecapStory } from './queries';
 import { combineYear, recapYear, yearEdition } from './year';
-import { buildStories, crawlText, periodDateRange, themeColors, type Achievement, type RecapStory } from './stories';
+import { buildStories, crawlText, EXTRA_GAMES, periodDateRange, themeColors, type Achievement, type RecapStory } from './stories';
+import { preloadParts } from './parts';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
 import { play, playTicks, setSoundMode, silence, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
-import { chapterStyle, enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
+import { chapterStyle, enterDelay, lowEndDevice, nextTransition, OPENING_DURATIONS, OVERLAY_TRANSITIONS, prefersReducedMotion, runParts, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
 
 // The share card and the video recorder are only needed once someone shares.
@@ -18,9 +19,8 @@ const ShareRecap = lazy(() => import('./ShareRecap').then(module => ({ default: 
 type ExperienceProps = { initialPeriodId?: number; onPeriodChange?: (periodId: number) => void; onClose?: () => void };
 const CHAPTER_MS = 9_000;
 const EXIT_MS = 700;
+// The short openings; the long ones (the crawl, the tape, the news…) set their own in OPENING_DURATIONS.
 const OPENING_MS = 1_500;
-// The crawl opening runs long; a tap skips it.
-const CRAWL_MS = 10_500;
 const EJECT_STEP_MS = 1_700;
 const newRun = () => 1 + Math.floor(Math.random() * 2_000_000_000);
 
@@ -95,8 +95,16 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const reducedMotion = useMemo(() => prefersReducedMotion(), []);
   // Each viewing rolls its own dice: copy, lead facts, bonus chapters, order, colours and motion.
   const [run, setRun] = useState(newRun);
-  const variants = useMemo(() => runVariants(run), [run]);
+  // Low-end phones get the same recap with lighter dice (no set-piece transitions).
+  const lite = useMemo(() => lowEndDevice(), []);
+  const variants = useMemo(() => runVariants(run, lite), [run, lite]);
   const stories = useMemo(() => buildStories(recap, edition, run, previousAtOpen).map(story => ({ ...story, title: maskAmounts(story.title), body: maskAmounts(story.body) })), [recap, edition, run, previousAtOpen, maskAmounts]);
+  // The run's rolled variations load during the opening, so they're ready by the time their chapter comes.
+  useEffect(() => {
+    const parts = runParts(variants);
+    if (stories.some(item => item.play && EXTRA_GAMES.has(item.play.kind))) parts.add('games');
+    preloadParts(parts);
+  }, [variants, stories]);
   const [nav, setNav] = useState<Nav>({ index: 0, visit: 0, direction: 'next', transition: 'slide', origin: { x: 50, y: 55 } });
   const [leaving, setLeaving] = useState<Leaving | null>(null);
   const [opening, setOpening] = useState<Opening | null>(() => reducedMotion ? null : variants.opening);
@@ -113,9 +121,9 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const [sound, setSound] = useState<SoundMode>(soundMode);
   // Music mode runs a groove under the whole recap; its tempo and chords follow the run.
   useEffect(() => {
-    if (sound === 'music') startGroove(run);
+    if (sound === 'music') startGroove(run, variants.pack);
     return () => stopGroove();
-  }, [sound, run]);
+  }, [sound, run, variants.pack]);
   // Closing the recap calls off any sounds still queued for its chapters.
   useEffect(() => () => silence(), []);
   const [party, setParty] = useState(0);
@@ -148,7 +156,7 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   }, [leaving]);
   useEffect(() => {
     if (!opening) return;
-    const timer = setTimeout(() => setOpening(null), opening === 'crawl' ? CRAWL_MS : OPENING_MS);
+    const timer = setTimeout(() => setOpening(null), OPENING_DURATIONS[opening] ?? OPENING_MS);
     return () => clearTimeout(timer);
   }, [opening]);
   // Achievement toasts: each unlocks once per run, a moment after its chapter has landed.
@@ -174,7 +182,7 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   }, [toast]);
   useEffect(() => () => toastTimers.current.forEach(({ timer }) => clearTimeout(timer)), []);
   // The cover waits for the opening; if the crawl is skipped, its entrance moves up at once.
-  const openingEnter = opening === 'crawl' ? CRAWL_MS - 450 : opening ? 1050 : 120;
+  const openingEnter = opening ? (OPENING_DURATIONS[opening] ?? OPENING_MS) - 450 : 120;
   const crawl = useMemo(() => {
     const text = crawlText(recap, run);
     return { ...text, paragraphs: text.paragraphs.map(maskAmounts) };
@@ -183,10 +191,14 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const go = (target: number, options: { origin?: Nav['origin']; transition?: Transition } = {}) => {
     const next = Math.max(0, Math.min(stories.length - 1, target));
     if (next === index && !options.transition) return;
-    const transition = reducedMotion ? 'slide' : options.transition ?? nextTransition(run, nav.visit + 1, nav.transition);
+    const transition = reducedMotion ? 'slide' : options.transition ?? nextTransition(run, nav.visit + 1, nav.transition, variants.lite);
     if (!reducedMotion) setLeaving({ story, visit: nav.visit, direction: nav.direction, transition, gate: quizOpen });
     setNav({ index: next, visit: nav.visit + 1, direction: next >= index ? 'next' : 'prev', transition, origin: options.origin ?? { x: next >= index ? 82 : 18, y: 92 } });
     play(transitionSounds[transition]);
+    // The set pieces have their own cues on top.
+    if (transition === 'train') { play('horn', 200); play('patter', 450); }
+    if (transition === 'elevator') { play('thunk', 420); play('ding', 620); play('swish', 830); }
+    if (transition === 'chomp') { for (let i = 0; i < 6; i++) play('pop', 120 + i * 130); }
     cancelToasts();
     if (!gateOf(stories[next])) {
       arrivalSounds(stories[next], enterDelay(transition), variants);
@@ -339,7 +351,8 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const paper = themeColors[story.theme].paper;
   const entering = nav.visit === 0 ? openingEnter : enterDelay(nav.transition);
   return <section className="recap-viewer" aria-label={`${recap.period.name} recap`}>
-    <div ref={slideRef} className={`recap-story recap-theme-${story.theme} recap-chapter-${story.id}${opening ? ' is-opening' : ''}${party ? ' is-party' : ''}`} tabIndex={0} aria-label="Period story. Arrow keys move between chapters, space pauses, R re-rolls."
+    <div ref={slideRef} className={`recap-story recap-theme-${story.theme} recap-chapter-${story.id} recap-ed-${variants.edition}${opening ? ' is-opening' : ''}${party ? ' is-party' : ''}`} tabIndex={0}
+      data-idle={shareOpen || infoOpen || pageHidden ? '' : undefined} aria-label="Period story. Arrow keys move between chapters, space pauses, R re-rolls."
       style={{ '--ox': `${nav.origin.x}%`, '--oy': `${nav.origin.y}%` } as CSSProperties}
       onKeyDown={event => {
         if (event.target !== event.currentTarget) return;
@@ -391,6 +404,16 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
       {overlay && <div key={`wipe-${nav.visit}`} className={`recap-wipe recap-wipe-${nav.transition} recap-dir-${nav.direction}`} style={{ '--wipe': paper } as CSSProperties} aria-hidden="true">
         {nav.transition === 'blinds' && Array.from({ length: 7 }, (_, i) => <i key={i} style={{ '--b': i } as CSSProperties} />)}
         {nav.transition === 'rewind' && <Rewind className="recap-rewind-icon" />}
+        {nav.transition === 'train' && <>
+          <div className="recap-train">{[0, 1, 2].map(i => <i key={i} className="recap-train-car" />)}<i className="recap-train-car recap-train-loco"><b className="recap-train-smoke" /></i></div>
+          <i className="recap-train-rails" />
+        </>}
+        {nav.transition === 'elevator' && <>
+          <i /><i />
+          {/* The lift's floor indicator ticks from the chapter you left to the one you're going to. */}
+          <span className="recap-floor">{nav.direction === 'next' ? '▲' : '▼'}<b><span><span>{nav.direction === 'next' ? index : index + 2}</span><span>{index + 1}</span></span></b></span>
+        </>}
+        {nav.transition === 'chomp' && <><i className="recap-chomp-fill" /><i className="recap-chomp-dots" /><i className="recap-chomper" /></>}
       </div>}
       <div className="recap-stage">
         {leaving && contentKey(leaving.visit, leaving.gate) !== contentKey(nav.visit, quizOpen) && <ChapterContent key={contentKey(leaving.visit, leaving.gate)} story={leaving.story} gate={leaving.gate} remix={remixOf(leaving.story)}
@@ -494,6 +517,7 @@ const nextSoundMode: Record<SoundMode, SoundMode> = { off: 'fx', fx: 'music', mu
 const soundLabels: Record<SoundMode, string> = { off: 'Sound off. Turn on effects and haptics', fx: 'Effects on. Add music', music: 'Effects and music on. Turn sound off' };
 const transitionSounds: Record<Transition, Sound> = {
   slide: 'whoosh', drop: 'thud', zoom: 'zoom', flip: 'flap', spin: 'whirl', glitch: 'glitch', iris: 'bloom', blinds: 'shutter', curtain: 'swish', rewind: 'rewind',
+  train: 'whoosh', elevator: 'swish', chomp: 'arcade',
 };
 
 /** Sounds timed to a chapter's choreography: slot-machine ticks, stamps landing, the finale. */
@@ -562,6 +586,29 @@ function arrivalSounds(story: RecapStory, enter: number, variants: SectionVarian
 
 /** The title sequence before the cover: the brand, the period, then the card opens on the story. */
 function OpeningTitles({ variant, name, paper, crawl, onSkip }: { variant: Opening; name: string; paper: string; crawl: ReturnType<typeof crawlText>; onSkip: () => void }) {
+  // The longer openings are a tap away from skipping, like the crawl.
+  const tape = (children: ReactNode) => <div className={`recap-opening recap-opening-tape recap-opening-${variant}`} role="button" tabIndex={0} aria-label="Skip the opening"
+    style={{ '--wipe': paper, '--open': `${OPENING_DURATIONS[variant] ?? OPENING_MS}ms` } as CSSProperties}
+    onClick={event => { event.stopPropagation(); onSkip(); }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSkip(); } }}>{children}</div>;
+  if (variant === 'vhs') return tape(<>
+    <i className="recap-vhs-noise" aria-hidden="true" /><i className="recap-vhs-band" aria-hidden="true" />
+    <p className="recap-vhs-osd" aria-hidden="true"><b>PLAY ▶</b><span>SP 0:00:01</span></p>
+    <div className="recap-vhs-title"><span>fainens presents</span><strong>{name}</strong></div>
+  </>);
+  if (variant === 'needle') return tape(<>
+    <span className="recap-needle-record" aria-hidden="true"><span className="recap-needle-label">{name}</span></span>
+    <i className="recap-needle-arm" aria-hidden="true" />
+  </>);
+  if (variant === 'news') return tape(<>
+    <i className="recap-news-globe" aria-hidden="true" />
+    <span className="recap-news-bug"><i aria-hidden="true" />Live</span>
+    <div className="recap-news-lower"><b>Breaking</b><strong>{name}: the recap</strong></div>
+    <p className="recap-news-ticker"><span>{crawl.paragraphs.join('  ✳  ')}</span></p>
+  </>);
+  if (variant === 'start') return tape(<>
+    <div className="recap-start-logo"><strong>FAINENS</strong><span>{name}</span><b className="recap-start-press">Press start</b></div>
+    <i className="recap-start-flash" aria-hidden="true" />
+  </>);
   if (variant === 'crawl') {
     // A long time ago, then the crawl rolls away into the stars. A tap skips it.
     return <div className="recap-opening recap-opening-crawl" role="button" tabIndex={0} aria-label="Skip the opening crawl"

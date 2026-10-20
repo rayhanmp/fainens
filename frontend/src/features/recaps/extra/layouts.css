@@ -1,0 +1,172 @@
+/* Second and third looks for the weekday, streak, habits, mixtape and months chapters (lazily loaded). */
+
+/* Polar chart: the weekday clock and the year wheel. */
+.recap-polar { width: min(72cqw, 100%); margin: 2cqw auto 0; }
+.recap-polar svg { width: 100%; overflow: visible; }
+.recap-polar-ring { fill: none; stroke: var(--recap-line); stroke-width: .3; }
+.recap-polar-wedge { fill: color-mix(in srgb, var(--recap-ink) 30%, transparent); transform-box: view-box; transform-origin: 50px 50px; animation: recap-polar-in .8s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 70ms); }
+.recap-polar-wedge.is-top { fill: var(--recap-accent); }
+.recap-polar-label { fill: var(--recap-ink); font-size: 4px; font-weight: 800; text-anchor: middle; opacity: .55; }
+.recap-polar-label.is-top { opacity: 1; }
+.recap-polar-hand { transform-box: view-box; transform-origin: 50px 50px; rotate: var(--hand); animation: recap-hand-sweep 1.6s cubic-bezier(.3, 0, .2, 1) both; animation-delay: calc(var(--enter) + 900ms); }
+.recap-polar-hand line { stroke: var(--recap-ink); stroke-width: 1.2; stroke-linecap: round; }
+.recap-polar-hand circle { fill: var(--recap-ink); }
+@keyframes recap-polar-in { from { scale: 0; opacity: 0; } }
+@keyframes recap-hand-sweep { from { rotate: calc(var(--hand) - 360deg); } }
+
+/* Podium: three blocks rise, medals drop onto them. */
+.recap-podium { display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; gap: 1.6cqw; height: 52cqw; margin-top: 4cqw; }
+.recap-podium-step { position: relative; display: grid; align-content: start; justify-items: center; gap: 1cqw; height: calc(var(--h) * 78%); padding-top: 4cqw; border-radius: 2cqw 2cqw 0 0; background: color-mix(in srgb, var(--recap-ink) 14%, transparent);
+  transform-origin: bottom; animation: recap-grow-y .8s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--slot) * 220ms); }
+.recap-podium-step.is-gold { background: var(--recap-accent); color: var(--recap-paper); }
+.recap-podium-step b { font-size: 6cqw; font-weight: 900; letter-spacing: -.03em; }
+.recap-podium-step small { font-size: 2.6cqw; font-weight: 700; opacity: .8; }
+.recap-podium-medal { position: absolute; top: -12cqw; display: grid; place-items: center; width: 10cqw; height: 10cqw; border-radius: 50%; background: #c9ccd3; color: #2a2d33; font-size: 4.4cqw; font-weight: 900;
+  box-shadow: inset 0 -.8cqw 0 #0002; animation: recap-medal-drop .7s cubic-bezier(.3, 1.6, .5, 1) both; animation-delay: calc(var(--enter) + 900ms + var(--slot) * 220ms); }
+.is-gold .recap-podium-medal { background: #ffcc33; color: #5a3d00; }
+.is-bronze .recap-podium-medal { background: #d99a63; color: #4a2508; }
+@keyframes recap-medal-drop { from { opacity: 0; translate: 0 -30cqw; rotate: -40deg; } }
+
+/* Planner: ruled lines, a highlighter stroke per day, a sticker on the big day. */
+.recap-planner { display: grid; gap: 0; margin: 3cqw 0 0; padding: 0; list-style: none; }
+.recap-planner li { position: relative; display: flex; align-items: center; gap: 3cqw; height: 7.4cqw; border-bottom: 1px solid var(--recap-line); }
+.recap-planner li > span { flex: none; width: 22cqw; font-size: 3cqw; font-weight: 700; }
+.recap-planner li.is-weekend > span { font-style: italic; }
+.recap-planner li > i { height: 3.6cqw; width: calc(var(--w) * (100% - 28cqw)); min-width: 1cqw; border-radius: .8cqw; background: color-mix(in srgb, var(--recap-accent) 45%, transparent); transform-origin: left; rotate: -.6deg;
+  animation: recap-grow-x .6s cubic-bezier(.3, 0, .2, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 110ms); }
+.recap-planner li.is-top > i { background: var(--recap-accent); }
+.recap-planner-sticker { position: absolute; right: 0; display: inline-flex; align-items: center; gap: .8cqw; padding: .8cqw 2cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.4cqw; text-transform: uppercase;
+  rotate: 6deg; animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 1300ms); }
+.recap-planner-sticker svg { width: 2.8cqw; height: 2.8cqw; }
+
+/* Chain: one link per day; gaps break it. The run lights up link by link. */
+.recap-chain { display: flex; flex-wrap: wrap; gap: .4cqw 0; margin-top: 5cqw; }
+.recap-chain > i { width: 5.2cqw; height: 3.4cqw; margin-right: -1cqw; border: .8cqw solid color-mix(in srgb, var(--recap-ink) 40%, transparent); border-radius: 99px; animation: recap-pop .35s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 24ms); }
+.recap-chain > i:nth-child(even) { height: 2.2cqw; margin-top: .6cqw; }
+.recap-chain > i.is-gap { border-style: dashed; opacity: .35; }
+.recap-chain > i.in-run { border-color: var(--recap-accent); animation: recap-pop .35s cubic-bezier(.2, 1.6, .4, 1) both, recap-link-glow 1.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 900ms + var(--r) * 90ms), calc(var(--enter) + 2s); }
+.is-quiet .recap-chain > i.in-run { opacity: 1; }
+@keyframes recap-link-glow { 50% { scale: 1.15; } }
+
+/* Dominoes: everything stands; the streak topples in sequence. */
+.recap-dominoes { display: flex; align-items: flex-end; gap: .8cqw; height: 22cqw; margin-top: 6cqw; padding-bottom: 1cqw; border-bottom: 1.5px solid var(--recap-line); overflow: hidden; }
+.recap-dominoes > i { display: grid; flex: 1; min-width: 0; height: 16cqw; border-radius: .8cqw; background: color-mix(in srgb, var(--recap-ink) 22%, transparent); transform-origin: right bottom;
+  animation: recap-grow-y .5s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 20ms); }
+.recap-dominoes > i.has-spend { background: color-mix(in srgb, var(--recap-ink) 55%, transparent); }
+.recap-dominoes > i b { margin: auto; width: 1cqw; height: 1cqw; border-radius: 50%; background: var(--recap-paper); opacity: .8; }
+.recap-dominoes > i.in-run { background: var(--recap-accent); animation: recap-grow-y .5s cubic-bezier(.2, 1.3, .4, 1) both, recap-topple .45s cubic-bezier(.6, 0, .9, .4) both;
+  animation-delay: calc(var(--enter) + 200ms + var(--i) * 20ms), calc(var(--enter) + 1300ms + var(--r) * 110ms); }
+@keyframes recap-topple { to { rotate: 62deg; } }
+
+/* Combo meter. */
+.recap-combo { display: grid; justify-items: center; gap: 1cqw; margin-top: 4cqw; padding: 5cqw 4cqw 4cqw; border-radius: 3cqw; background: var(--recap-ink); color: var(--recap-paper); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
+.recap-combo-count { display: flex; align-items: baseline; gap: 1cqw; font-size: 20cqw; font-weight: 900; line-height: .9; letter-spacing: -.04em; animation: recap-combo-hit .5s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 1400ms); }
+/* Inside the ink panel everything is paper-toned: the accent isn't guaranteed to read on ink in every palette. */
+.recap-combo-x { font-size: 9cqw; opacity: .6; }
+.recap-combo-word { font-size: 3.4cqw; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; opacity: .75; }
+.recap-combo-meter { display: grid; grid-template-columns: repeat(20, 1fr); gap: .5cqw; width: 100%; margin-top: 2cqw; }
+.recap-combo-meter > i { height: 3cqw; border-radius: .4cqw; background: color-mix(in srgb, var(--recap-paper) 18%, transparent); }
+.recap-combo-meter > i.is-lit { background: var(--recap-paper); animation: recap-pop .25s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 400ms + var(--i) * 50ms); }
+.recap-combo-pips { display: flex; gap: .5cqw; margin-top: 3cqw; }
+.recap-combo-pips > i { flex: 1; height: 1.6cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-ink) 14%, transparent); }
+.recap-combo-pips > i.has-spend { background: color-mix(in srgb, var(--recap-ink) 45%, transparent); }
+.recap-combo-pips > i.in-run { background: var(--recap-accent); }
+@keyframes recap-combo-hit { 0% { scale: 1.6; opacity: 0; } 60% { scale: .92; opacity: 1; } 100% { scale: 1; } }
+
+/* Receipt pile. */
+.recap-pile { position: relative; height: 40cqw; margin-top: 4cqw; }
+.recap-pile > i { position: absolute; left: calc(50% + var(--x) * .5); bottom: calc(var(--lift) * 2cqw); width: 16cqw; height: 11cqw; margin-left: -8cqw; border-radius: .6cqw; background: #fbfaf5;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 1.6cqw, #24261f22 1.6cqw 1.9cqw); box-shadow: 0 .4cqw 1cqw #0002; rotate: var(--rot);
+  animation: recap-slip-drop .55s cubic-bezier(.3, 1.3, .5, 1) both; animation-delay: calc(var(--enter) + 250ms + var(--i) * 55ms); }
+@keyframes recap-slip-drop { from { opacity: 0; translate: 0 -40cqw; rotate: calc(var(--rot) * -2); } }
+.recap-habit-tags { justify-content: center; margin-top: 3cqw; }
+
+/* Shopping cart with items dropping in and a counter on top. */
+.recap-cart-stage { position: relative; height: 52cqw; margin-top: 2cqw; }
+.recap-cart-icon { position: absolute; left: 50%; bottom: 0; width: 46cqw; height: 46cqw; margin-left: -23cqw; stroke-width: 1.4; animation: recap-cart-roll .9s cubic-bezier(.2, 1.1, .4, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-cart-items { position: absolute; left: 50%; bottom: 20cqw; width: 26cqw; height: 16cqw; margin-left: -11cqw; }
+.recap-cart-items > i { position: absolute; left: var(--x); bottom: calc(var(--row) * 4cqw); width: 5cqw; height: 5cqw; border-radius: 1cqw; background: var(--recap-accent); rotate: calc(var(--i) * 17deg);
+  animation: recap-item-drop .5s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(var(--enter) + 900ms + var(--i) * 90ms); }
+.recap-cart-items > i:nth-child(3n) { background: var(--recap-ink); border-radius: 50%; }
+.recap-cart-display { position: absolute; z-index: 1; left: 50%; top: 0; translate: -50% 0; display: flex; align-items: baseline; gap: 1.4cqw; padding: 1.4cqw 3.4cqw; border-radius: 1.6cqw; background: var(--recap-ink); color: var(--recap-paper);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8cqw; font-weight: 900; animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 600ms); }
+.recap-cart-display small { font-size: 2.6cqw; font-weight: 700; opacity: .7; }
+@keyframes recap-cart-roll { from { opacity: 0; translate: -70cqw 0; rotate: -6deg; } 70% { translate: 3cqw 0; rotate: 2deg; } }
+@keyframes recap-item-drop { from { opacity: 0; translate: 0 -34cqw; } }
+
+/* Tally marks scratched onto a wall, five to a bundle. */
+.recap-tally { display: flex; flex-wrap: wrap; align-items: center; gap: 2.6cqw 4cqw; margin-top: 5cqw; }
+.recap-tally-bundle { position: relative; display: flex; gap: 1.3cqw; height: 9cqw; }
+.recap-tally-bundle > i { width: .9cqw; height: 100%; border-radius: 99px; background: var(--recap-ink); rotate: 4deg; transform-origin: top; animation: recap-grow-y .16s ease-out both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 45ms); }
+.recap-tally-bundle > i.is-slash { position: absolute; left: -1cqw; top: 50%; width: calc(100% + 2cqw); height: .9cqw; background: var(--recap-accent); rotate: -28deg; transform-origin: left; animation-name: recap-grow-x; }
+.recap-tally > b { font-size: 5cqw; font-weight: 900; }
+
+/* Vinyl: the sleeve slides in, the record slides out and spins. */
+.recap-sleeve { position: relative; height: 40cqw; margin: 2cqw 0 3cqw; }
+.recap-sleeve-art { position: absolute; z-index: 1; left: 0; top: 0; display: grid; align-content: end; gap: 1cqw; width: 40cqw; height: 40cqw; padding: 3.5cqw; border-radius: 1cqw; background: var(--recap-accent); color: var(--recap-paper);
+  background-image: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--recap-paper) 30%, transparent) 0 18%, transparent 19%); animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-sleeve-art { overflow: hidden; }
+.recap-sleeve-art b, .recap-jewel-insert b { font-size: 4cqw; line-height: 1.05; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.recap-sleeve-art small { font-size: 2.4cqw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.recap-lp { position: absolute; left: 4cqw; top: 2cqw; display: grid; place-items: center; width: 36cqw; height: 36cqw; border-radius: 50%; background: repeating-radial-gradient(circle, #151515 0 .5cqw, #222 .5cqw 1cqw);
+  animation: recap-lp-out 1s cubic-bezier(.3, 1.1, .4, 1) both, recap-turn 3s linear infinite; animation-delay: calc(var(--enter) + 600ms), calc(var(--enter) + 1.6s); }
+.recap-lp i { width: 12cqw; height: 12cqw; border-radius: 50%; background: var(--recap-paper); box-shadow: inset 0 0 0 4.6cqw var(--recap-accent), inset 0 0 0 5.4cqw var(--recap-paper); }
+@keyframes recap-lp-out { from { translate: 0 0; } to { translate: 34cqw 0; } }
+.recap-lp { translate: 34cqw 0; }
+
+/* CD: the jewel case opens and the disc spins with a rainbow sheen. */
+.recap-jewel { position: relative; height: 40cqw; margin: 2cqw 0 3cqw; }
+.recap-jewel-insert { position: absolute; z-index: 1; left: 0; top: 0; display: grid; align-content: end; gap: 1cqw; width: 40cqw; height: 40cqw; padding: 3.5cqw; border: 1.2cqw solid color-mix(in srgb, var(--recap-ink) 25%, transparent);
+  border-radius: 1cqw; background: var(--recap-ink); color: var(--recap-paper); animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-jewel-insert b { font-size: 4.6cqw; line-height: 1.05; }
+.recap-jewel-insert small { font-size: 2.2cqw; font-weight: 700; opacity: .7; }
+.recap-cd { position: absolute; left: 4cqw; top: 2cqw; display: grid; place-items: center; width: 36cqw; height: 36cqw; border-radius: 50%; translate: 34cqw 0;
+  background: conic-gradient(from 0deg, #e8e8f0, #b8f0ff, #ffd6f5, #fff4b8, #c8ffd8, #e8e8f0); animation: recap-lp-out 1s cubic-bezier(.3, 1.1, .4, 1) both, recap-turn 2.2s linear infinite; animation-delay: calc(var(--enter) + 600ms), calc(var(--enter) + 1.6s); }
+.recap-cd i { width: 10cqw; height: 10cqw; border-radius: 50%; background: var(--recap-paper); box-shadow: 0 0 0 2cqw #ffffff99; }
+
+/* Now playing: album art, a progress bar that moves, controls. */
+/* A compact player: the art beside the track, the progress bar and controls underneath. */
+.recap-now { display: grid; grid-template-columns: 32cqw minmax(0, 1fr); align-items: center; gap: 2.4cqw 4cqw; margin-top: 2cqw; padding: 4cqw; border-radius: 4cqw; background: color-mix(in srgb, var(--recap-ink) 10%, transparent);
+  animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-now > .recap-now-bar, .recap-now > .recap-now-time, .recap-now > .recap-now-controls { grid-column: 1 / -1; }
+.recap-now-art { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 3cqw; background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); color: var(--recap-paper); overflow: hidden; }
+.recap-now-art svg { width: 18cqw; height: 18cqw; opacity: .35; animation: recap-turn 6s linear infinite; }
+.recap-now-art b { position: absolute; left: 2.4cqw; bottom: 2cqw; right: 2.4cqw; font-size: 3cqw; line-height: 1.05; }
+.recap-now-meta { display: grid; gap: .6cqw; }
+.recap-now-meta b { font-size: 5cqw; }
+.recap-now-meta small { font-size: 3cqw; opacity: .7; }
+.recap-now-bar { height: 1.2cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-ink) 18%, transparent); overflow: hidden; }
+.recap-now-bar i { display: block; height: 100%; background: var(--recap-ink); transform-origin: left; animation: recap-now-progress 9s linear both; animation-delay: calc(var(--enter) + 400ms); }
+.recap-now-time { display: flex; justify-content: space-between; font-size: 2.4cqw; font-weight: 700; opacity: .6; }
+.recap-now-controls { display: flex; align-items: center; justify-content: center; gap: 8cqw; }
+.recap-now-controls svg { width: 5cqw; height: 5cqw; }
+.recap-now-controls > span { display: grid; place-items: center; width: 11cqw; height: 11cqw; border-radius: 50%; background: var(--recap-ink); color: var(--recap-paper); }
+.recap-now-next { display: grid; gap: 1.4cqw; margin: 3cqw 0 0; padding: 0; list-style: none; }
+.recap-now-next li { display: flex; justify-content: space-between; font-size: 3cqw; font-weight: 700; opacity: .75; animation: recap-rise .5s both; animation-delay: calc(var(--enter) + 900ms + var(--i) * 120ms); }
+@keyframes recap-now-progress { from { scale: 0 1; } to { scale: .35 1; } }
+
+/* Skyline: buildings rise, windows flicker on, the tallest gets a blinking antenna. */
+.recap-skyline { display: grid; grid-template-columns: repeat(12, 1fr); align-items: end; gap: 1cqw; height: 50cqw; margin-top: 4cqw; border-bottom: 1.5px solid var(--recap-line); }
+.recap-skyline > div { display: grid; height: 100%; grid-template-rows: 1fr auto; justify-items: stretch; }
+.recap-building { position: relative; align-self: end; height: calc(max(.06, var(--h)) * 100%); border-radius: .6cqw .6cqw 0 0; background: color-mix(in srgb, var(--recap-ink) 70%, transparent);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 1.4cqw, color-mix(in srgb, var(--recap-paper) 70%, transparent) 1.4cqw 2.4cqw), repeating-linear-gradient(to right, var(--recap-ink) 0 .8cqw, transparent .8cqw 2.4cqw);
+  background-blend-mode: multiply; transform-origin: bottom; animation: recap-grow-y .8s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 70ms); }
+.is-top .recap-building { background-color: var(--recap-accent); }
+.is-top .recap-building::after { content: ''; position: absolute; left: 50%; bottom: 100%; width: .5cqw; height: 6cqw; margin-left: -.25cqw; background: var(--recap-ink); }
+.is-top .recap-building::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 6cqw); width: 1.6cqw; height: 1.6cqw; margin-left: -.8cqw; border-radius: 50%; background: #ff5a5f; animation: recap-blink 1s steps(1) infinite; animation-delay: calc(var(--enter) + 1.4s); }
+.recap-skyline span { padding-top: 1cqw; font-size: 2.4cqw; font-weight: 800; text-align: center; opacity: .6; }
+@keyframes recap-blink { 50% { opacity: 0; } }
+
+/* Heat strip: twelve cells, darker for bigger months. */
+.recap-heatstrip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1.6cqw; margin-top: 4cqw; }
+.recap-heatstrip > div { display: grid; gap: 1cqw; justify-items: center; }
+.recap-heatstrip i { width: 100%; aspect-ratio: 1; border-radius: 2cqw; background: color-mix(in srgb, var(--recap-accent) calc(var(--level) * 100%), color-mix(in srgb, var(--recap-ink) 8%, transparent));
+  animation: recap-pop .4s cubic-bezier(.2, 1.5, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 60ms); }
+.recap-heatstrip .is-top i { outline: .7cqw solid var(--recap-ink); outline-offset: .5cqw; }
+.recap-heatstrip span { font-size: 2.6cqw; font-weight: 800; opacity: .7; }
+
+@media (prefers-reduced-motion: reduce) {
+  .recap-polar *, .recap-podium *, .recap-planner *, .recap-chain *, .recap-dominoes *, .recap-combo *, .recap-combo-pips *, .recap-pile *, .recap-cart-stage *, .recap-tally *,
+  .recap-sleeve *, .recap-jewel *, .recap-now *, .recap-now-next *, .recap-skyline *, .recap-heatstrip * { animation: none !important; }
+}

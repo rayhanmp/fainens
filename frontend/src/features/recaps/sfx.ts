@@ -167,24 +167,66 @@ export function playTicks(count: number, durationMs: number, delayMs = 0) {
 let groove: { timer: number; next: number; step: number } | null = null;
 const progressions = [[130.8, 110, 87.3, 98], [110, 87.3, 130.8, 98], [146.8, 116.5, 87.3, 130.8], [98, 130.8, 110, 87.3]];
 
+export type GroovePack = 'groove' | 'lofi' | 'chip' | 'orchestral' | 'koplo';
+type Beat = { ctx: AudioContext; at: number; step: number; root: number; sixteenth: number; seed: number };
+/** One sixteenth of each pack's pattern. Every sound is synthesised, so a pack costs a few lines, not a file. */
+const packs: Record<GroovePack, { bpm: (seed: number) => number; play: (beat: Beat) => void }> = {
+  // The house groove: kick, clap, hats, a triangle bass and a soft pad.
+  groove: { bpm: seed => 88 + (seed % 5) * 5, play: ({ ctx, at, step, root, sixteenth }) => {
+    if (step === 0 || step === 8 || step === 10) tone(ctx, { from: 120, to: 42, length: .18, gain: .14 }, at);
+    if (step === 4 || step === 12) noise(ctx, { length: .12, from: 1800, gain: .025 }, at);
+    if (step % 2 === 0) noise(ctx, { length: .025, from: 8000, gain: .012, filter: 'highpass' }, at);
+    if (step === 0 || step === 7) tone(ctx, { type: 'triangle', from: root, length: sixteenth * 6, gain: .045 }, at);
+    if (step === 0) [2, 2.52, 3].forEach(ratio => tone(ctx, { type: 'sine', from: root * ratio * 2, length: sixteenth * 15, gain: .008 }, at));
+  } },
+  // Lo-fi: slow, swung hats, a wobbly electric-piano chord and a little vinyl crackle.
+  lofi: { bpm: seed => 72 + (seed % 4) * 3, play: ({ ctx, at, step, root, sixteenth }) => {
+    const swing = step % 2 ? sixteenth * .28 : 0;
+    if (step === 0 || step === 10) tone(ctx, { from: 90, to: 40, length: .22, gain: .12 }, at);
+    if (step === 4 || step === 12) noise(ctx, { length: .16, from: 1400, gain: .02 }, at);
+    if (step % 2 === 0 || step === 7) noise(ctx, { length: .03, from: 6500, gain: .008, filter: 'highpass' }, at + swing);
+    if (step === 0 || step === 8) [1, 1.26, 1.5, 1.89].forEach(ratio => tone(ctx, { type: 'sine', from: root * 2 * ratio, length: sixteenth * 7, gain: .012, vibrato: 3 }, at));
+    if (step === 3) noise(ctx, { length: .01, from: 3000, gain: .01, filter: 'highpass' }, at);
+  } },
+  // Chiptune: square-wave arpeggios over a pulse bass, a noise snare.
+  chip: { bpm: seed => 124 + (seed % 4) * 4, play: ({ ctx, at, step, root, sixteenth }) => {
+    tone(ctx, { type: 'square', from: root * 4 * [1, 1.26, 1.5, 2][step % 4], length: sixteenth * .9, gain: .016 }, at);
+    if (step % 4 === 0) tone(ctx, { type: 'square', from: root, length: sixteenth * 1.8, gain: .03 }, at);
+    if (step % 4 === 2) tone(ctx, { type: 'square', from: root * 1.5, length: sixteenth * .9, gain: .02 }, at);
+    if (step === 4 || step === 12) noise(ctx, { length: .07, from: 5000, gain: .03, filter: 'highpass' }, at);
+    if (step === 0 || step === 8) tone(ctx, { type: 'triangle', from: 160, to: 50, length: .12, gain: .12 }, at);
+  } },
+  // Orchestral: a held string chord each bar, timpani on the downbeat, pizzicato eighths.
+  orchestral: { bpm: seed => 76 + (seed % 3) * 6, play: ({ ctx, at, step, root, sixteenth }) => {
+    if (step === 0) [1, 1.26, 1.5, 2].forEach(ratio => tone(ctx, { type: 'sawtooth', from: root * 2 * ratio, length: sixteenth * 16, gain: .006, vibrato: 4 }, at));
+    if (step === 0 || step === 8) tone(ctx, { from: root, to: root * .82, length: .6, gain: .14 }, at);
+    if (step % 2 === 0) tone(ctx, { type: 'triangle', from: root * 4 * [1, 1.5, 1.26, 2][(step / 2) % 4], length: .09, gain: .02 }, at);
+  } },
+  // Dangdut koplo: the kendang's "dhut" and "tak" on the classic koplo pattern, a bass and a suling line.
+  koplo: { bpm: seed => 128 + (seed % 3) * 6, play: ({ ctx, at, step, root, sixteenth, seed }) => {
+    if ([0, 6, 8, 14].includes(step)) tone(ctx, { from: 170, to: 85, length: .22, gain: .16 }, at);
+    if ([3, 4, 11, 12].includes(step)) tone(ctx, { from: 520, to: 380, length: .06, gain: .06 }, at);
+    if (step === 10) tone(ctx, { from: 320, to: 230, length: .12, gain: .07 }, at);
+    if (step % 2 === 0) noise(ctx, { length: .02, from: 7000, gain: .01, filter: 'highpass' }, at);
+    if (step === 0 || step === 8) tone(ctx, { type: 'triangle', from: root, length: sixteenth * 3, gain: .05 }, at);
+    if (step % 4 === 2) tone(ctx, { type: 'sine', from: root * 4 * [1, 1.122, 1.189, 1.335, 1.498][(step + seed) % 5], length: sixteenth * 2, gain: .018, vibrato: 6 }, at);
+  } },
+};
+
 /** Start the loop, with tempo and chords picked by the run, so each viewing has its own groove. */
-export function startGroove(seed: number) {
+export function startGroove(seed: number, pack: GroovePack = 'groove') {
   const ctx = audio();
   if (!ctx || mode !== 'music' || groove) return;
   if (ctx.state === 'suspended') void ctx.resume();
-  const bpm = 88 + (seed % 5) * 5;
-  const sixteenth = 60 / bpm / 4;
+  const style = packs[pack];
+  const sixteenth = 60 / style.bpm(seed) / 4;
   const chords = progressions[seed % progressions.length];
   groove = { timer: 0, next: ctx.currentTime + .1, step: 0 };
   const schedule = () => {
     if (!groove || mode !== 'music') return;
     while (groove.next < ctx.currentTime + .25) {
-      const at = groove.next; const step = groove.step % 16; const bar = Math.floor(groove.step / 16) % chords.length;
-      if (step === 0 || step === 8 || step === 10) tone(ctx, { from: 120, to: 42, length: .18, gain: .14 }, at);
-      if (step === 4 || step === 12) noise(ctx, { length: .12, from: 1800, gain: .025 }, at);
-      if (step % 2 === 0) noise(ctx, { length: .025, from: 8000, gain: .012, filter: 'highpass' }, at);
-      if (step === 0 || step === 7) tone(ctx, { type: 'triangle', from: chords[bar], length: sixteenth * 6, gain: .045 }, at);
-      if (step === 0) [2, 2.52, 3].forEach(ratio => tone(ctx, { type: 'sine', from: chords[bar] * ratio * 2, length: sixteenth * 15, gain: .008 }, at));
+      const bar = Math.floor(groove.step / 16) % chords.length;
+      style.play({ ctx, at: groove.next, step: groove.step % 16, root: chords[bar], sixteenth, seed });
       groove.next += sixteenth;
       groove.step += 1;
     }
