@@ -2,7 +2,7 @@ import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { Link } from '@tanstack/react-router';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Music, Pause, Play, RefreshCw, Rewind, Sparkles, Trophy, Volume2, VolumeX, X } from 'lucide-react';
-import { useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type SavedRecapStory } from './queries';
+import { usePeriodRecap, useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type PeriodRecap, type SavedRecapStory } from './queries';
 import { combineYear, recapYear, yearEdition } from './year';
 import { buildStories, crawlText, periodDateRange, themeColors, type Achievement, type RecapStory } from './stories';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
@@ -31,6 +31,10 @@ export function RecapExperience({ initialPeriodId, onPeriodChange, onClose }: Ex
   const periodId = selected ?? archive.data?.[0]?.id;
   const period = archive.data?.find(item => item.id === periodId);
   const edition = useRecapStory(year === null ? periodId : undefined);
+  // The period before, for bonus slides that compare (the archive is newest first). It loads alongside
+  // this one; if it fails, those slides simply sit this viewing out.
+  const periodIndex = archive.data?.findIndex(item => item.id === periodId) ?? -1;
+  const previous = usePeriodRecap(year === null && periodIndex >= 0 ? archive.data?.[periodIndex + 1]?.id : undefined);
   // A year in review is on offer once a calendar year has at least two periods.
   const years = [...new Set((archive.data ?? []).map(recapYear))].filter(value => (archive.data ?? []).filter(item => recapYear(item) === value).length >= 2).sort((a, b) => b - a);
   const controls = <>
@@ -52,11 +56,11 @@ export function RecapExperience({ initialPeriodId, onPeriodChange, onClose }: Ex
     return <div className="recap-experience"><YearRecap key={year} year={year} periodIds={(archive.data ?? []).filter(item => recapYear(item) === year).map(item => item.id)} controls={controls} fallbackControls={fallbackControls} /></div>;
   }
   return <div className="recap-experience">
-    {archive.isPending || (periodId && edition.isPending) ? <div className="recap-writing" role="status">{fallbackControls}<div className="recap-writing-orbit" aria-hidden="true"><i /><i /><i /><Sparkles size={30} /></div><h3>Rewinding your period.</h3><p>Putting your edition together.</p></div>
+    {archive.isPending || (periodId && edition.isPending) || previous.isLoading ? <div className="recap-writing" role="status">{fallbackControls}<div className="recap-writing-orbit" aria-hidden="true"><i /><i /><i /><Sparkles size={30} /></div><h3>Rewinding your period.</h3><p>Putting your edition together.</p></div>
       : archive.isError || edition.isError ? <div className="recap-empty" role="alert">{fallbackControls}<h2>Your story couldn’t load.</h2><p>{edition.error?.message ?? 'Please try again in a moment.'}</p><button className="recap-primary" onClick={() => { void archive.refetch(); if (periodId) void edition.refetch(); }}><RefreshCw size={16} />Try again</button></div>
       : !periodId || !edition.data ? <div className="recap-empty">{fallbackControls}<Sparkles size={34} /><h2>Your next chapter starts here.</h2><p>Record income or expenses to bring your period story to life.</p><Link to="/transactions" className="recap-primary">Review transactions <ArrowRight size={16} /></Link></div>
       : edition.data.snapshot.activityCount === 0 ? <EmptyRecapEdition periodId={periodId} controls={fallbackControls} />
-      : <RecapViewer key={`${periodId}:${edition.data.savedAt}`} edition={edition.data} controls={controls} />}
+      : <RecapViewer key={`${periodId}:${edition.data.savedAt}`} edition={edition.data} previous={previous.data ?? null} controls={controls} />}
   </div>;
 }
 
@@ -83,14 +87,16 @@ type Answer = PlayResult;
 /** A chapter's content element is kept by key while it leaves, so it exits without re-animating. */
 const contentKey = (visit: number, gate: boolean) => `c${visit}${gate ? 'q' : ''}`;
 
-function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRecapStory; controls: ReactNode; yearMode?: boolean }) {
+function RecapViewer({ edition, previous = null, controls, yearMode = false }: { edition: SavedRecapStory; previous?: PeriodRecap | null; controls: ReactNode; yearMode?: boolean }) {
   const { maskAmounts } = useBalanceVisibility();
   const recap = edition.snapshot;
+  // Held as it was at open: a background refetch of the previous period must not reshuffle the deck.
+  const [previousAtOpen] = useState(previous);
   const reducedMotion = useMemo(() => prefersReducedMotion(), []);
   // Each viewing rolls its own dice: copy, lead facts, bonus chapters, order, colours and motion.
   const [run, setRun] = useState(newRun);
   const variants = useMemo(() => runVariants(run), [run]);
-  const stories = useMemo(() => buildStories(recap, edition, run).map(story => ({ ...story, title: maskAmounts(story.title), body: maskAmounts(story.body) })), [recap, edition, run, maskAmounts]);
+  const stories = useMemo(() => buildStories(recap, edition, run, previousAtOpen).map(story => ({ ...story, title: maskAmounts(story.title), body: maskAmounts(story.body) })), [recap, edition, run, previousAtOpen, maskAmounts]);
   const [nav, setNav] = useState<Nav>({ index: 0, visit: 0, direction: 'next', transition: 'slide', origin: { x: 50, y: 55 } });
   const [leaving, setLeaving] = useState<Leaving | null>(null);
   const [opening, setOpening] = useState<Opening | null>(() => reducedMotion ? null : variants.opening);
@@ -122,8 +128,10 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
   const chapterMs = story.duration ?? CHAPTER_MS;
   // The cover and full-bleed finales keep their own art direction; every other chapter gets remixed.
   const remixOf = (item: RecapStory) => {
-    const style = chapterStyle(run, `${item.id}:${item.id === 'interlude' ? item.slot : ''}`);
-    return item.id === 'intro' || (item.id === 'closing' && variants.finale !== 'card') ? { ...style, pattern: 'none' as const, frame: 'none' as const, sticker: null } : style;
+    const style = chapterStyle(run, `${item.id}:${item.id === 'interlude' ? item.slot : item.id === 'bonus' ? item.bonus.kind : ''}`);
+    return item.id === 'intro' || (item.id === 'closing' && variants.finale !== 'card') ? { ...style, pattern: 'none' as const, frame: 'none' as const, sticker: null }
+      // Bonus slides carry their own set pieces, so they skip the background pattern and stickers.
+      : item.id === 'bonus' ? { ...style, pattern: 'none' as const, sticker: null } : style;
   };
   const remix = remixOf(story);
   // Kept stable between renders so the memoised chapter visuals can skip them.
@@ -500,6 +508,16 @@ function arrivalSounds(story: RecapStory, enter: number, variants: SectionVarian
       play('thud', enter + suspects * EJECT_STEP_MS + 200);
     }
     if (story.variant === 'marquee') play('horn', enter + 700);
+  }
+  if (story.id === 'bonus') {
+    // Each bonus slide has its own cue, timed to its choreography in recaps.css.
+    const kind = story.bonus.kind;
+    if (kind === 'payday') { play('cash', enter + 300); for (let i = 0; i < 3; i++) play('coin', enter + 700 + i * 160); }
+    if (kind === 'boss') { play('arcade', enter + 200); play('whoosh', enter + 1100); play('thud', enter + 1400); playTicks(10, 900, enter + 1500); }
+    if (kind === 'suspects') { play('drumroll', enter + 100); play('shutter', enter + 1000); play('shutter', enter + 1500); }
+    if (kind === 'milestone') { playTicks(18, 1400, enter + 300); play('fanfare', enter + 1800); }
+    if (kind === 'takeover') { playTicks(16, 1500, enter + 300); play('horn', enter + 1900); play('cymbal', enter + 2100); }
+    if (kind === 'comeback') { play('rewind', enter + 200); play('riser', enter + 700); play('chord', enter + 1600); }
   }
   if (story.id === 'persona') {
     // Each personality has its own entrance: a gong for the monk, a club drop for the weekend warrior.

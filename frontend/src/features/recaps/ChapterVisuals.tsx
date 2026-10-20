@@ -8,6 +8,7 @@ import { CategoryIcon } from '../categories/CategoryIcon';
 import { useCategoriesQuery } from '../categories/queries';
 import { AnimatedValue, RollingValue } from './AnimatedValue';
 import { Burst } from './Burst';
+import { BonusVisual } from './BonusVisuals';
 import { seeded, type SectionVariants } from './motion';
 import { formatRecapDay, recapWeekday, WEEKDAYS, type PersonaKey, type RecapDayCell, type RecapStory } from './stories';
 
@@ -35,6 +36,7 @@ function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { 
     case 'interlude': return <InterludeVisual story={story} run={run} />;
     case 'mixtape': return <MixtapeVisual story={story} />;
     case 'persona': return <PersonaVisual story={story} run={run} />;
+    case 'bonus': return <BonusVisual story={story} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;

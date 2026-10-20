@@ -938,9 +938,9 @@
 .recap-orbit-planet { position: absolute; left: 50%; top: 0; display: grid; place-items: center; width: 9cqw; height: 9cqw; margin: -4.5cqw; border-radius: 50%; background: var(--recap-paper); color: var(--recap-ink); font-size: 4.6cqw; box-shadow: 0 0 0 1px var(--recap-line), 0 1.5cqw 3cqw -1.5cqw #0007; }
 
 .recap-tunnel { display: grid; place-items: center; perspective: 60cqw; }
-.recap-tunnel > i { position: absolute; left: 50%; top: 50%; width: 30cqw; height: 30cqw; margin: -15cqw; border-radius: 6cqw; border: 1.6px solid var(--recap-ink); animation: recap-tunnel 2.7s cubic-bezier(.5, 0, 1, .6) infinite; animation-delay: calc(var(--t) * -.3s); }
+.recap-tunnel > i { position: absolute; left: 50%; top: 50%; width: 30cqw; height: 30cqw; margin: -15cqw; border-radius: 6cqw; border: 1px solid var(--recap-ink); animation: recap-tunnel 4s cubic-bezier(.5, 0, 1, .6) infinite; animation-delay: calc(var(--t) * -.45s); }
 .recap-tunnel > i:nth-child(odd) { border-radius: 50%; }
-.recap-tunnel-core { position: relative; display: grid; justify-items: center; font-size: 17cqw; font-weight: 800; letter-spacing: -.06em; line-height: 1; animation: recap-badge-in 1s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 200ms) both, recap-pulse 1.35s calc(var(--enter) + 1.2s) ease-in-out infinite; }
+.recap-tunnel-core { position: relative; z-index: 1; display: grid; justify-items: center; font-size: 17cqw; font-weight: 800; letter-spacing: -.06em; line-height: 1; animation: recap-badge-in 1s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 200ms) both, recap-pulse 1.35s calc(var(--enter) + 1.2s) ease-in-out infinite; }
 .recap-tunnel-core > span:last-child { font-size: 3cqw; letter-spacing: .2em; text-transform: uppercase; }
 
 .recap-liquid { display: grid; place-items: center; }
@@ -980,6 +980,109 @@
 .recap-kaleido > i:nth-child(3) { height: min(46%, 40cqw); background: repeating-conic-gradient(var(--recap-ink) 0 45deg, var(--recap-paper) 45deg 90deg); animation-duration: 1.2s, 5s; }
 .recap-kaleido > b { position: relative; font-size: 20cqw; color: var(--recap-paper); mix-blend-mode: difference; animation: recap-pulse 1.6s ease-in-out infinite, recap-turn 6s linear infinite; }
 
+/* ---------- Bonus slides: earned by the figures. Each is a compact set piece under its headline. ---------- */
+.recap-bonus { position: relative; width: 100%; margin-top: 4cqw; }
+.recap-bonus .recap-animated-value { font-variant-numeric: tabular-nums; }
+
+/* Payday rush: every day as a bar, the first three lit. */
+.recap-payday-bars { position: relative; display: flex; align-items: flex-end; gap: .5cqw; height: 42cqw; padding-top: 9cqw; border-bottom: 1.5px solid var(--recap-line); }
+.recap-payday-bars > i { flex: 1; min-width: 0; height: max(.6cqw, calc(var(--h) * 100%)); border-radius: .8cqw .8cqw 0 0; background: color-mix(in srgb, var(--recap-ink) 22%, transparent); transform-origin: bottom;
+  animation: recap-grow-y .6s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 22ms * var(--tempo, 1)); }
+.recap-payday-bars > i.is-rush { background: var(--recap-accent); animation: recap-grow-y .7s cubic-bezier(.2, 1.5, .4, 1) both, recap-rush-glow 1.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 300ms + var(--i) * 120ms), calc(var(--enter) + 1.4s); }
+.recap-payday-flag { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 1.2cqw; padding: 1cqw 2.2cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: 2.6cqw; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  animation: recap-stamp .7s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-payday-flag svg { width: 3.4cqw; height: 3.4cqw; }
+.recap-payday-share { display: flex; align-items: baseline; gap: 2.4cqw; margin-top: 3cqw; font-size: 15cqw; font-weight: 800; letter-spacing: -.05em; line-height: 1; animation: recap-rise .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 900ms); }
+.recap-payday-share small { font-size: 3cqw; font-weight: 700; letter-spacing: 0; opacity: .7; }
+
+/* Boss fight: a game HUD whose health bar one receipt drains. */
+.recap-boss { display: grid; gap: 5cqw; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.recap-boss-hud { position: relative; display: grid; gap: 2cqw; padding: 4cqw; border: .8cqw solid var(--recap-ink); border-radius: 2cqw; background: color-mix(in srgb, var(--recap-ink) 8%, transparent);
+  animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both, recap-shake .45s 1 both; animation-delay: calc(var(--enter) + 150ms), calc(var(--enter) + 1400ms); }
+.recap-boss-name { display: flex; justify-content: space-between; font-size: 2.8cqw; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.recap-boss-name > span:first-child { color: #ff5a5f; }
+.recap-boss-bar { position: relative; height: 5cqw; overflow: hidden; border: .6cqw solid var(--recap-ink); border-radius: 1cqw; background: color-mix(in srgb, var(--recap-ink) 12%, transparent); }
+.recap-boss-bar > i { position: absolute; inset: 0; transform-origin: left; }
+.recap-boss-ghost { background: #ffcc33; animation: recap-boss-drain .9s 1 both; animation-delay: calc(var(--enter) + 2000ms); }
+.recap-boss-hp { background: #3ecf6e; animation: recap-boss-drain .35s 1 both; animation-delay: calc(var(--enter) + 1400ms); }
+.recap-boss-damage { position: absolute; right: 5.5cqw; top: 8.6cqw; color: #ff5a5f; font-size: 6cqw; font-weight: 900; text-shadow: .5cqw .5cqw 0 var(--recap-paper);
+  animation: recap-boss-pop 1.4s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 1400ms); }
+.recap-boss-hit { display: flex; align-items: center; gap: 3cqw; padding: 3cqw 4cqw; border-radius: 2cqw; background: var(--recap-ink); color: var(--recap-paper);
+  animation: recap-boss-strike 1s cubic-bezier(.5, 0, .3, 1.4) both; animation-delay: calc(var(--enter) + 600ms); }
+.recap-boss-hit > span:last-child { display: grid; gap: .6cqw; min-width: 0; }
+.recap-boss-hit b { overflow: hidden; font-size: 4.2cqw; text-overflow: ellipsis; white-space: nowrap; }
+.recap-boss-hit small { font-size: 3cqw; opacity: .8; }
+.recap-boss-weapon { display: grid; flex: none; place-items: center; width: 10cqw; height: 10cqw; border-radius: 1.6cqw; background: #ff5a5f; color: #fff; }
+.recap-boss-weapon svg { width: 6cqw; height: 6cqw; }
+.recap-boss-log { font-size: 2.6cqw; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .65; animation: recap-fade .6s both; animation-delay: calc(var(--enter) + 2200ms); }
+
+/* The usual suspects: a lineup wall, two figures sized by their visits, a camera flash. */
+.recap-lineup { height: 66cqw; overflow: hidden; border-radius: 3cqw; background: color-mix(in srgb, var(--recap-ink) 7%, transparent); }
+.recap-lineup-wall { position: absolute; inset: 0; display: grid; grid-template-rows: repeat(4, 1fr); padding-left: 2cqw; background: repeating-linear-gradient(to bottom, var(--recap-line) 0 1px, transparent 1px 3.3cqw); font-size: 2.2cqw; font-weight: 800; opacity: .8; }
+.recap-lineup-wall > span { border-top: 1.5px solid color-mix(in srgb, var(--recap-ink) 40%, transparent); }
+.recap-lineup-row { position: absolute; inset: 6cqw 6cqw 0 10cqw; display: flex; align-items: flex-end; justify-content: space-around; }
+.recap-suspect { display: grid; justify-items: center; width: 40%; height: calc(var(--tall) * 100%); animation: recap-suspect-in .8s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 350ms); }
+.recap-suspect-figure { position: relative; width: 70%; flex: 1; align-self: stretch; justify-self: center; }
+.recap-suspect-figure::before { content: ''; position: absolute; left: 50%; top: 0; width: 46%; aspect-ratio: 1; translate: -50% 0; border-radius: 50%; background: var(--recap-ink); }
+.recap-suspect-figure::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; top: 34%; border-radius: 40% 40% 0 0; background: var(--recap-ink); }
+.recap-suspect-figure b { position: absolute; z-index: 1; left: 50%; top: 52%; translate: -50% 0; color: var(--recap-paper); font-size: 5cqw; }
+.recap-suspect { grid-template-rows: 1fr auto; }
+.recap-suspect-plate { display: grid; justify-items: center; gap: .3cqw; width: 100%; padding: 1.6cqw 1cqw; background: var(--recap-paper); border: .5cqw solid var(--recap-ink); text-align: center; }
+.recap-suspect-plate b { max-width: 100%; overflow: hidden; font-size: 3.2cqw; text-overflow: ellipsis; white-space: nowrap; }
+.recap-suspect-plate > span { font-size: 5cqw; font-weight: 900; line-height: 1; }
+.recap-suspect-plate small { font-size: 2.4cqw; opacity: .75; }
+.recap-lineup-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: recap-flash .5s ease-out 2 both; animation-delay: calc(var(--enter) + 1000ms); }
+
+/* Milestone: a medal whose ring fills, and a pin on the period's line. */
+.recap-milestone { display: grid; justify-items: center; gap: 6cqw; }
+.recap-milestone-medal { position: relative; width: 46cqw; aspect-ratio: 1; animation: recap-badge-in 1s cubic-bezier(.2, 1.3, .35, 1) both; animation-delay: calc(var(--enter) + 200ms); }
+.recap-milestone-medal::before, .recap-milestone-medal::after { content: ''; position: absolute; z-index: -1; bottom: -9cqw; width: 11cqw; height: 18cqw; background: var(--recap-accent); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); }
+.recap-milestone-medal::before { left: 26%; rotate: 14deg; }
+.recap-milestone-medal::after { right: 26%; rotate: -14deg; }
+.recap-milestone-medal svg { position: absolute; inset: 0; width: 100%; height: 100%; rotate: -90deg; }
+.recap-milestone-medal svg circle { fill: none; stroke-width: 7; }
+.recap-milestone-track { stroke: color-mix(in srgb, var(--recap-ink) 15%, transparent); fill: var(--recap-paper) !important; }
+.recap-milestone-fill { stroke: var(--recap-accent); stroke-linecap: round; stroke-dasharray: 1; animation: recap-gauge-fill 1.6s cubic-bezier(.3, 0, .2, 1) both; animation-delay: calc(var(--enter) + 300ms); }
+.recap-milestone-medal > span { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; font-size: 12cqw; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
+.recap-milestone-medal small { font-size: 2.6cqw; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+.recap-milestone-line { position: relative; width: 100%; height: 12cqw; margin-top: 4cqw; border-top: 1.5px solid var(--recap-line); animation: recap-grow-x .9s cubic-bezier(.16, 1, .3, 1) both; transform-origin: left; animation-delay: calc(var(--enter) + 700ms); }
+.recap-milestone-line > i { position: absolute; top: -2cqw; left: calc(var(--at) * 100%); width: 4cqw; height: 4cqw; margin-left: -2cqw; border-radius: 50%; background: var(--recap-accent); box-shadow: 0 0 0 1.4cqw color-mix(in srgb, var(--recap-accent) 25%, transparent);
+  animation: recap-pop .5s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 1500ms); }
+.recap-milestone-line > span { position: absolute; top: 3.4cqw; left: clamp(0%, calc(var(--at) * 100% - 12cqw), calc(100% - 24cqw)); width: 24cqw; font-size: 2.8cqw; font-weight: 800; text-align: center; animation: recap-fade .5s both; animation-delay: calc(var(--enter) + 1600ms); }
+
+/* Hostile takeover: a hemicycle of 100 seats; the top category's seats fill first. */
+.recap-takeover { display: grid; justify-items: center; }
+.recap-chamber { width: 100%; overflow: visible; }
+.recap-chamber circle { fill: color-mix(in srgb, var(--recap-ink) 18%, transparent); transform-box: fill-box; transform-origin: center; animation: recap-pop .35s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 14ms * var(--tempo, 1)); }
+.recap-chamber circle.is-held { fill: var(--recap-accent); }
+.recap-takeover-count { margin-top: -15cqw; font-size: 13cqw; font-weight: 900; letter-spacing: -.05em; line-height: 1; animation: recap-badge-in .9s cubic-bezier(.2, 1.3, .35, 1) both; animation-delay: calc(var(--enter) + 1500ms); }
+.recap-takeover-tally { display: flex; align-items: center; gap: 2cqw; margin-top: 4cqw; animation: recap-rise .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 1800ms); }
+.recap-takeover-icon { display: grid; place-items: center; width: 8cqw; height: 8cqw; border-radius: 50%; background: var(--recap-ink); color: var(--recap-paper); font-size: 4.2cqw; }
+.recap-takeover-tally > span:not(.recap-takeover-icon) { font-size: 3.8cqw; font-weight: 800; }
+.recap-takeover-tally small { font-size: 2.8cqw; font-weight: 700; opacity: .7; }
+
+/* Comeback: a rank chart; the category climbs from the bottom row to its place now. */
+.recap-comeback { --row: 9.5cqw; }
+.recap-comeback-chart { position: relative; display: grid; grid-auto-rows: var(--row); }
+.recap-comeback-chart > span:not(.recap-comeback-mover) { display: flex; align-items: center; padding-left: 2cqw; border-top: 1px solid var(--recap-line); font-size: 3cqw; font-weight: 800; opacity: .45; animation: recap-fade .5s both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-comeback-chart > span.is-now { opacity: 1; }
+.recap-comeback-chart > span.is-was { border-top-style: dashed; }
+.recap-comeback-trail { position: absolute; left: 30cqw; width: 1.2cqw; margin-left: -.6cqw; top: calc(var(--to) * var(--row) + var(--row) / 2); height: calc((var(--from) - var(--to)) * var(--row)); border-radius: 99px; background: linear-gradient(var(--recap-accent), transparent);
+  transform-origin: bottom; animation: recap-grow-y 1.1s cubic-bezier(.5, 0, .2, 1) both; animation-delay: calc(var(--enter) + 700ms); }
+.recap-comeback-mover { position: absolute; left: 22cqw; right: 2cqw; top: calc(var(--to) * var(--row) + .8cqw); height: calc(var(--row) - 1.6cqw); display: flex; align-items: center; gap: 2.4cqw; padding: 0 3cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: 4.6cqw;
+  animation: recap-climb 1.1s cubic-bezier(.5, 0, .2, 1.15) both; animation-delay: calc(var(--enter) + 700ms); }
+.recap-comeback-mover b { flex: 1; min-width: 0; overflow: hidden; font-size: 3.6cqw; text-overflow: ellipsis; white-space: nowrap; }
+.recap-comeback-mover > svg:last-child { width: 4.4cqw; height: 4.4cqw; color: var(--recap-accent); }
+.recap-comeback-tag { display: flex; justify-content: space-between; margin-top: 3cqw; font-size: 2.8cqw; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .7; animation: recap-fade .5s both; animation-delay: calc(var(--enter) + 1800ms); }
+
+@keyframes recap-grow-y { from { scale: 1 0; } }
+@keyframes recap-rush-glow { 50% { filter: brightness(1.25); } }
+@keyframes recap-boss-drain { to { scale: calc(1 - var(--dmg)) 1; } }
+@keyframes recap-boss-pop { 0% { opacity: 0; scale: .4; translate: 0 2cqw; } 25% { opacity: 1; scale: 1.2; } 40% { scale: 1; } 75% { opacity: 1; translate: 0 -2cqw; } 100% { opacity: 1; translate: 0 -2cqw; } }
+@keyframes recap-boss-strike { 0% { opacity: 0; translate: -70cqw 0; rotate: -8deg; } 70% { opacity: 1; translate: 3cqw -2cqw; rotate: 3deg; } 85% { translate: -1cqw 0; } 100% { opacity: 1; translate: 0 0; rotate: 0deg; } }
+@keyframes recap-suspect-in { from { opacity: 0; translate: 0 30cqw; } }
+@keyframes recap-flash { 0% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes recap-climb { from { translate: 0 calc((var(--from) - var(--to)) * var(--row)); } }
 @keyframes recap-roll-credits { from { translate: 0 100%; } }
 @keyframes recap-starfield-near { to { translate: -90cqw 0; } }
 @keyframes recap-starfield-far { to { translate: -56cqw 0; } }
@@ -1012,7 +1115,8 @@
 @keyframes recap-smash { 0% { scale: 1; } 35% { scale: 1.25; rotate: -8deg; } 100% { scale: 0; rotate: 40deg; opacity: 0; } }
 @keyframes recap-marquee { to { translate: -50% 0; } }
 @keyframes recap-ring-in { from { opacity: 0; scale: 0; } }
-@keyframes recap-tunnel { 0% { transform: scale(.05); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(4.2); opacity: 0; } }
+/* Rings surface just outside the number and stay faint, so the count leads and the tunnel backs it. */
+@keyframes recap-tunnel { 0% { transform: scale(.7); opacity: 0; } 25% { opacity: .35; } 100% { transform: scale(3.8); opacity: 0; } }
 @keyframes recap-pulse { 50% { scale: 1.08; } }
 @keyframes recap-pour { from { height: 0; } }
 @keyframes recap-wave { to { translate: -50% 0; } }

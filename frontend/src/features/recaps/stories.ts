@@ -1,7 +1,7 @@
 import type { PeriodRecap, SavedRecapStory } from './queries';
 import { recapDisplayCopy, shortDisplayLabel } from './display-copy';
 import { pickFrom, seeded } from './motion';
-import { chapterCopy, chapterEyebrows, type CopyFacts } from './variations';
+import { bonusCopy, chapterCopy, chapterEyebrows, type CopyFacts } from './variations';
 import { formatRecapCurrency } from './currency';
 import { DAY_MS, formatRecapDay, periodDateRange, recapDay, recapDayKey, recapWeekday } from './dates';
 
@@ -67,6 +67,19 @@ export const PERSONA_THEMES: Record<PersonaKey, RecapTheme> = {
   weekend: 'plum', bigTicket: 'noir', steady: 'cocoa', monk: 'mint', loyal: 'rose', devotee: 'electric', explorer: 'sky', allRounder: 'butter',
 };
 export type MixtapeTrack = { title: string; artist: string; length: string; share: number };
+/**
+ * Bonus slides are earned, not dealt: each appears only when the period's figures meet its trigger.
+ * When several qualify, the two furthest past their thresholds make the cut.
+ */
+export type Bonus =
+  | { kind: 'payday'; days: Array<{ amount: number; rush: boolean }>; share: number; amount: number }
+  | { kind: 'boss'; label: string; fullLabel: string; amount: number; share: number; date: number; category: string }
+  | { kind: 'suspects'; items: Array<{ label: string; fullLabel: string; occurrences: number; total: number }> }
+  | { kind: 'milestone'; count: number; date: number; dayIndex: number; totalDays: number }
+  | { kind: 'takeover'; categoryId: number | null; name: string; label: string; share: number }
+  | { kind: 'comeback'; categoryId: number | null; name: string; label: string; rank: number; share: number; previousRank: number | null; previousPeriod: string };
+export type BonusKind = Bonus['kind'];
+const MILESTONES = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
 
 type Copy = { eyebrow: string; title: string; body: string };
 // Every chapter can carry a mini-game, a fun comparison line, a question to hand to Fainens Agent,
@@ -89,6 +102,7 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'months'; months: Array<{ label: string; amount: number }>; busiest: number }
   | { id: 'mixtape'; tracks: MixtapeTrack[]; tapeName: string }
   | { id: 'persona'; persona: Persona }
+  | { id: 'bonus'; bonus: Bonus }
   | { id: 'closing'; tiles: ClosingTile[]; persona: Persona; finale: FinaleFacts }
 );
 export type RecapStoryId = RecapStory['id'];
@@ -176,7 +190,7 @@ function longestRun(days: RecapDayCell[], test: (day: RecapDayCell) => boolean):
  * copy it uses (the saved edition's copy is one of the options), the bonus chapters, their order and the
  * colours. The same run always builds the same chapters, so stepping back shows what you saw.
  */
-export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run = 0): RecapStory[] {
+export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run = 0, previous?: PeriodRecap | null): RecapStory[] {
   const { labels, compact } = recapDisplayCopy(recap, edition);
   const seed = edition?.seed ?? recap.period.id;
   const random = seeded(seed * 31 + run);
@@ -342,6 +356,47 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     const calendarAt = order.findIndex(chapter => chapter.id === 'calendar');
     const firstDerived = order.findIndex(chapter => chapter.id === 'weekdays' || chapter.id === 'streak');
     if (calendarAt > firstDerived && firstDerived >= 0) [order[calendarAt], order[firstDerived]] = [order[firstDerived], order[calendarAt]];
+
+    // Bonus slides: earned by the figures, scored by how far past the trigger they are, two at most.
+    const earned: Array<{ bonus: Bonus; score: number }> = [];
+    const elapsedTotal = elapsed.reduce((sum, day) => sum + day.amount, 0);
+    if (!longView && elapsed.length >= 14 && elapsedTotal > 0) {
+      const rush = elapsed.slice(0, 3).reduce((sum, day) => sum + day.amount, 0);
+      const rushShare = Math.round(rush / elapsedTotal * 100);
+      if (rushShare >= 35) earned.push({ score: rushShare / 35, bonus: { kind: 'payday', share: rushShare, amount: rush, days: elapsed.map((day, i) => ({ amount: day.amount, rush: i < 3 })) } });
+    }
+    if (largestShare !== null && largestShare >= 25 && receiptItems[0]) {
+      const item = receiptItems[0];
+      earned.push({ score: largestShare / 25, bonus: { kind: 'boss', label: item.label, fullLabel: item.fullLabel, amount: item.amount, share: largestShare, date: item.date, category: item.category } });
+    }
+    const repeats = (recap.highlights?.repeatPurchases ?? []).filter(row => !isSystemDescription(row.description));
+    if (repeats.length >= 2 && repeats.every(row => row.occurrences >= 3)) {
+      earned.push({ score: Math.min(...repeats.map(row => row.occurrences)) / 3, bonus: { kind: 'suspects', items: repeats.slice(0, 2).map((row, i) => {
+        const saved = labels[`repeatPurchase${i + 1}`];
+        return { label: saved && !isSystemDescription(saved) ? saved : shortDisplayLabel(row.description), fullLabel: row.description, occurrences: row.occurrences, total: row.totalAmount };
+      }) } });
+    }
+    if (days && recap.purchaseCount >= MILESTONES[0]) {
+      let running = 0;
+      const counted = days.map(day => (running += day.purchaseCount));
+      const milestone = [...MILESTONES].reverse().find(count => count <= running);
+      const dayIndex = milestone ? counted.findIndex(total => total >= milestone) : -1;
+      if (milestone && dayIndex >= 0) earned.push({ score: 1.1 + milestone / 1000, bonus: { kind: 'milestone', count: milestone, date: days[dayIndex].date, dayIndex, totalDays: days.length } });
+    }
+    if (top && top.share >= 50) earned.push({ score: top.share / 50, bonus: { kind: 'takeover', categoryId: top.categoryId, name: top.name, label: top.label, share: top.share } });
+    // A comeback: one of this period's top three was nowhere near the top five last period.
+    const before = !longView && previous ? previous.categories.filter(row => row.amount > 0).sort((a, b) => b.amount - a.amount) : [];
+    if (before.length >= 3) {
+      const rankBefore = (row: CategoryShare) => before.findIndex(old => row.categoryId != null && old.categoryId != null ? old.categoryId === row.categoryId : old.name === row.name);
+      const back = topRows.slice(0, 3).map((row, i) => ({ row, rank: i + 1, was: rankBefore(row) })).find(entry => entry.row.share >= 8 && (entry.was < 0 || entry.was >= 5));
+      if (back) earned.push({ score: 1.25, bonus: { kind: 'comeback', categoryId: back.row.categoryId, name: back.row.name, label: back.row.label, rank: back.rank, share: back.row.share,
+        previousRank: back.was < 0 ? null : back.was + 1, previousPeriod: previous!.period.name } });
+    }
+    const bonuses = earned.sort((a, b) => b.score - a.score).slice(0, 2).map(entry => entry.bonus);
+    // Dropped into the middle at distinct slots; splicing the later slot first keeps them apart.
+    const bonusSlots = shuffled(Array.from({ length: Math.max(1, order.length) }, (_, i) => i + 1)).slice(0, bonuses.length).sort((a, b) => b - a);
+    bonuses.forEach((bonus, i) => order.splice(bonusSlots[i], 0, { id: 'bonus', bonus }));
+
     // Motion interludes: one or two showpieces dropped between chapters, never side by side.
     const marqueeWords = [recap.period.name, top?.label, `${recap.purchaseCount} receipts`, peak ? dayLabel(peak.date) : null, persona.name.replace(/^The /, '')].filter((word): word is string => Boolean(word));
     const available: InterludeVariant[] = ['marquee', 'kaleido', ...(topRows.length >= 3 ? ['orbit' as const] : []), ...(recap.purchaseCount > 0 ? ['tunnel' as const] : []),
@@ -474,7 +529,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     budget: 'The plan vs. reality', categories: 'Where the money really went', calendar: 'The day that turned up the volume',
     weekdays: 'Which weekday ran the show?', streak: 'The longest streak, revealed', receipts: 'The receipts that stole the show',
     habits: 'How you really buy', comparison: 'Then vs. now', persona: 'Your money personality, unmasked',
-    mixtape: 'Side A of your period mixtape', months: 'Every month, ranked',
+    mixtape: 'Side A of your period mixtape', months: 'Every month, ranked', bonus: 'A bonus round your figures unlocked',
   };
   const gameTeaser: Record<Play['kind'], string> = { quiz: 'a pop quiz', slider: 'a guessing game', reels: 'a jackpot round', hold: 'a drumroll', gift: 'a surprise gift', piggy: 'a piggy bank to smash' };
   const games = [...dealt.values()].map(item => gameTeaser[item.kind]);
@@ -482,7 +537,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   return chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
-    const raw = copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
+    const raw = chapter.id === 'bonus' ? pickFrom(bonusCopy(chapter.bonus, facts), random)
+      : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
     const copy = { eyebrow: forYear(raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body) };
     const equivalence = equivalences[chapter.id];
     const play = dealt.get(chapter.id);
