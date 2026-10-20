@@ -3,7 +3,6 @@ import type { LinkProps } from '@tanstack/react-router';
 import {
   ArchitectureDiagram,
   ClaimPipelineDemo,
-  ComposerDemo,
   CorrectionDemo,
   ImportFlowDemo,
   InstallmentDemo,
@@ -11,12 +10,12 @@ import {
   PeriodTimeline,
   ReconcileDemo,
   SplitBillDemo,
-  TransferDemo,
   YourSetup,
 } from './visuals';
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
+import { ComposerDemo, TransferDemo } from './ComposerVisuals';
 import { RecapStoryDemo, ReportsDemo } from './InsightVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';

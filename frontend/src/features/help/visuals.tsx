@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { ArrowRight, Check, CheckCircle2, Clock, Inbox, Lock, Mail, RotateCcw, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, Clock, Inbox, Lock, Mail, RotateCcw } from 'lucide-react';
 import { cn, formatDayMonth } from '../../lib/utils';
 import { shown, useSequence } from './motion';
 import { exampleAccounts, useHelpPersonal } from './personal';
@@ -62,56 +62,7 @@ export function LedgerFlow() {
   );
 }
 
-/** The composer turning shorthand into an entry: amount, suggested category, read-back. */
-export function ComposerDemo() {
-  const { ref, step, replay } = useSequence(4, 900);
-  const { second } = exampleAccounts(useHelpPersonal());
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Type 25k and a name; Fainens fills in the rest for you to check.">
-      <div className="mx-auto max-w-md rounded-2xl bg-[var(--color-surface)] p-4 shadow-sm ring-1 ring-[var(--color-border)]">
-        <div className="grid grid-cols-4 gap-1 rounded-lg bg-[var(--ref-surface-container)] p-1 text-center text-[11px] font-semibold">
-          {['Expense', 'Income', 'Transfer', 'Settle PayLater'].map((type, index) => <span key={type} className={cn('rounded-md py-1', index === 0 ? 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] shadow-sm' : 'text-[var(--ref-on-surface-variant)]')}>{type}</span>)}
-        </div>
-        <div className="mt-3 flex items-baseline justify-between rounded-lg border border-[var(--color-border)] px-3 py-2">
-          <span className="text-xs text-[var(--ref-on-surface-variant)]">Amount</span>
-          <span className="font-mono text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">{step >= 1 ? <>Rp25.000 <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">from “25k”</span></> : <span className="text-[var(--color-muted)]">25k|</span>}</span>
-        </div>
-        <div className="mt-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--ref-on-surface)]">{step >= 2 ? 'Kopi susu' : <span className="text-[var(--color-muted)]">Name</span>}</div>
-        <div className={cn('mt-2 flex items-center justify-between rounded-lg bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-3 py-2 text-xs', shown(step >= 3))}>
-          <span className="flex items-center gap-1.5 text-[var(--ref-on-surface)]"><Sparkles className="h-3.5 w-3.5 text-[var(--color-accent)]" aria-hidden />Looks like <strong>Food & dining</strong></span>
-          <span className="font-semibold text-[var(--color-accent)]">Use it</span>
-        </div>
-        <p className={cn('mt-3 rounded-lg bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]', shown(step >= 4))}>“You spent <strong className="text-[var(--ref-on-surface)]">Rp25.000</strong> on <strong className="text-[var(--ref-on-surface)]">Kopi susu</strong> (Food & dining) from <strong className="text-[var(--ref-on-surface)]">{second}</strong> today.”</p>
-      </div>
-    </VisualFrame>
-  );
-}
-
 const rupiah = (value: number) => `Rp${value.toLocaleString('id-ID')}`;
-
-/** A transfer: money slides from one account to the other, and spending stays at zero. */
-export function TransferDemo() {
-  const { ref, step, replay } = useSequence(2, 1100);
-  const { first, second } = exampleAccounts(useHelpPersonal());
-  const moved = step >= 2;
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Both balances change; income, spending and budgets don’t. (Your account names, example amounts.)">
-      <div className="relative grid grid-cols-2 gap-6 sm:gap-16">
-        {[{ name: first, before: 1_500_000, after: 1_400_000 }, { name: second, before: 50_000, after: 150_000 }].map((account) => (
-          <div key={account.name} className="rounded-xl bg-[var(--color-surface)] p-3 shadow-sm ring-1 ring-[var(--color-border)] sm:p-4">
-            <p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">{account.name}</p>
-            <p className="mt-1 font-mono text-base font-semibold tabular-nums text-[var(--ref-on-surface)] transition-colors sm:text-lg">{rupiah(moved ? account.after : account.before)}</p>
-          </div>
-        ))}
-        <span className={cn('absolute top-1/2 -translate-y-1/2 rounded-full bg-[var(--color-accent)] px-2.5 py-1 font-mono text-xs font-semibold text-white shadow-md transition-all duration-1000 ease-in-out', step === 0 ? 'left-[20%] opacity-0' : moved ? 'left-[62%] opacity-0' : 'left-[38%] opacity-100')} aria-hidden>Rp100.000</span>
-      </div>
-      <div className="mt-4 flex items-center justify-between rounded-lg bg-[var(--color-surface)] px-3 py-2 text-sm ring-1 ring-[var(--color-border)]">
-        <span className="text-[var(--ref-on-surface-variant)]">Spending this period</span>
-        <span className="font-mono font-semibold tabular-nums text-[var(--ref-on-surface)]">Rp0 <span className={cn('ml-1 inline-flex align-middle', shown(moved))}><Chip className="bg-[var(--color-success)]/12 text-[var(--color-success)]"><Check className="h-3 w-3" aria-hidden />unchanged</Chip></span></span>
-      </div>
-    </VisualFrame>
-  );
-}
 
 /** A correction: the original stays, an opposite entry cancels it, a replacement takes its place. */
 export function CorrectionDemo() {
