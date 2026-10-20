@@ -206,51 +206,6 @@ export function AgentContextDemo() {
   );
 }
 
-// ── Settings ─────────────────────────────────────────────────────────
-
-const ACCENTS = [['Blue', '#0056d2'], ['Violet', '#6d28d9'], ['Teal', '#0f766e'], ['Rose', '#be123c'], ['Orange', '#c2410c'], ['Graphite', '#334155']] as const;
-
-/** A small preview that responds to theme, accent, text size and compact rows, without touching your real settings. */
-export function SettingsPreviewDemo() {
-  const [dark, setDark] = useState(false);
-  const [accent, setAccent] = useState<string>(ACCENTS[0][1]);
-  const [large, setLarge] = useState(false);
-  const [compact, setCompact] = useState(false);
-  const palette = dark
-    ? { bg: '#11131a', surface: '#1b1e27', text: '#e6e8f0', muted: '#9aa0b4', border: '#2c303c' }
-    : { bg: '#f4f5fb', surface: '#ffffff', text: '#191b23', muted: '#5b6070', border: '#e1e2ec' };
-  const rows = [['Kopi susu', 'Food & dining', 25_000], ['Grab to office', 'Transport', 32_000], ['Netflix', 'Entertainment', 186_000]] as const;
-  const segment = (on: boolean) => cn('rounded-md px-2.5 py-1 text-xs font-semibold transition-colors', on ? 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] shadow-sm' : 'text-[var(--ref-on-surface-variant)]');
-
-  return (
-    <VisualFrame caption="A preview only: nothing here changes your settings.">
-      <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr] lg:items-center">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3"><span className="text-xs font-medium text-[var(--ref-on-surface)]">Theme</span><span className="flex rounded-lg bg-[var(--ref-surface-container)] p-0.5"><button type="button" className={segment(!dark)} onClick={() => setDark(false)}>Light</button><button type="button" className={segment(dark)} onClick={() => setDark(true)}>Dark</button></span></div>
-          <div className="flex items-center justify-between gap-3"><span className="text-xs font-medium text-[var(--ref-on-surface)]">Accent colour</span><span className="flex gap-1.5">{ACCENTS.map(([name, color]) => <button key={name} type="button" aria-label={name} aria-pressed={accent === color} onClick={() => setAccent(color)} className={cn('h-6 w-6 rounded-full ring-offset-2 ring-offset-[var(--ref-surface-container-low)] transition-shadow', accent === color && 'ring-2 ring-[var(--ref-on-surface)]')} style={{ background: color }} />)}</span></div>
-          <div className="flex items-center justify-between gap-3"><span className="text-xs font-medium text-[var(--ref-on-surface)]">Text size</span><span className="flex rounded-lg bg-[var(--ref-surface-container)] p-0.5"><button type="button" className={segment(!large)} onClick={() => setLarge(false)}>Default</button><button type="button" className={segment(large)} onClick={() => setLarge(true)}>Large</button></span></div>
-          <div className="flex items-center justify-between gap-3"><span className="text-xs font-medium text-[var(--ref-on-surface)]">Compact rows</span><button type="button" role="switch" aria-checked={compact} onClick={() => setCompact((value) => !value)} className={cn('h-5 w-9 rounded-full p-0.5 transition-colors', compact ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-border-strong)]')}><span className={cn('block h-4 w-4 rounded-full bg-white shadow transition-transform', compact && 'translate-x-4')} /></button></div>
-        </div>
-        <div className="rounded-2xl p-4 transition-colors duration-300" style={{ background: palette.bg, color: palette.text, fontSize: large ? '15px' : '13px' }}>
-          <div className="flex items-center justify-between">
-            <span className="font-bold" style={{ fontSize: '1.15em' }}>Transactions</span>
-            <span className="rounded-lg px-2.5 py-1 font-semibold text-white" style={{ background: accent, fontSize: '0.85em' }}>+ Add</span>
-          </div>
-          <ul className="mt-3 overflow-hidden rounded-xl" style={{ background: palette.surface, border: `1px solid ${palette.border}` }}>
-            {rows.map(([name, category, amount]) => (
-              <li key={name} className={cn('flex items-center justify-between transition-all', compact ? 'px-3 py-1.5' : 'px-3 py-3')} style={{ borderTop: name === rows[0][0] ? 'none' : `1px solid ${palette.border}` }}>
-                <span><span className="block font-medium">{name}</span>{!compact && <span className="block" style={{ color: palette.muted, fontSize: '0.85em' }}>{category}</span>}</span>
-                <span className="font-mono tabular-nums">−{rupiah(amount)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2" style={{ color: accent, fontSize: '0.85em', fontWeight: 600 }}>View all transactions →</p>
-        </div>
-      </div>
-    </VisualFrame>
-  );
-}
-
 // ── Troubleshooting ──────────────────────────────────────────────────
 
 /** Tracking down a balance that doesn’t match the bank. */

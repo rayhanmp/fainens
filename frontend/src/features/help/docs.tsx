@@ -16,6 +16,7 @@ import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
 import { ComposerDemo, TransferDemo } from './ComposerVisuals';
+import { SettingsPreviewDemo } from './SettingsVisuals';
 import { RecapStoryDemo, ReportsDemo } from './InsightVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
@@ -28,7 +29,6 @@ import {
   MismatchDemo,
   SalaryAndRenewalDemo,
   SavingsFanDemo,
-  SettingsPreviewDemo,
   ShortcutsDemo,
   WhatsNewDemo,
 } from './PageVisuals';
