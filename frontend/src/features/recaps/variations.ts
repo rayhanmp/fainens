@@ -1,6 +1,6 @@
 import { formatRecapCurrency as money } from './currency';
 import { BANKS, categoryFlavour, DAY_BANKS, dayFlavour, type CategoryFlavour, type Flavour } from './flavour';
-import type { Bonus, RecapStoryId } from './stories';
+import type { Bonus, RecapStoryId, YearInsight } from './stories';
 
 export type CopyFacts = {
   period: string; isPartial: boolean; net: number; income: number; expenses: number; keptShare: number | null; spentPer100: number | null;
@@ -363,7 +363,7 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
         { eyebrow: 'The verdict', title: 'Your money personality is in.', body: NONE }];
     }
     // Bonus slides write their own copy from the figures that earned them; see bonusCopy.
-    case 'bonus': return [];
+    case 'bonus': case 'year': return [];
     case 'closing': return [
       { eyebrow: 'The period, in one card', title: 'Same you. Fresh chapter.', body: NONE },
       { eyebrow: 'That’s a wrap', title: `That’s a wrap on ${f.period}.`, body: NONE },
@@ -397,6 +397,57 @@ function flavouredBonusCopy(b: Bonus): Copy[] {
       { eyebrow: `Bonus: ${bank.eyebrows[0]}`, title: `Encore: ${b.label}.`, body: `Now #${b.rank}, with ${b.share}% of spending.` },
     ]);
     default: return [];
+  }
+}
+
+/** Copy for a year's own insights. Each visual lays the months out, so bodies add a figure it leaves implicit. */
+export function yearCopy(insight: YearInsight): Copy[] {
+  switch (insight.kind) {
+    case 'headliners': {
+      const { leader, distinct } = insight;
+      const months = insight.months.filter(month => month.category).length;
+      if (leader.count === 1) return [
+        { eyebrow: 'Month by month', title: 'A different headliner every month.', body: `${distinct} categories took a turn on top.` },
+        { eyebrow: 'The headliners', title: `${distinct} months, ${distinct} headliners.`, body: NONE },
+      ];
+      // A tie at the top is said as a tie: no "most" when another category matched it.
+      const most = leader.tied ? `${leader.label} shared the top spot: ${leader.count} months each.` : `${leader.label} topped the bill most: ${leader.count} times.`;
+      return [
+        { eyebrow: 'Month by month', title: `${leader.label} headlined ${leader.count} of ${months} months.`, body: distinct > 1 ? `${plural(distinct, 'different headliner')} in all.` : NONE },
+        { eyebrow: 'The headliners', title: distinct === 1 ? `${leader.label}, top of the bill every month.` : `${plural(distinct, 'headliner')}, one year.`, body: distinct > 1 ? most : NONE },
+        ...(leader.count * 2 > months ? [{ eyebrow: 'Top of the bill', title: `Most months, ${leader.label} led.`, body: `${leader.count} of ${months}.` }] : []),
+      ];
+    }
+    case 'green': {
+      const total = insight.months.length;
+      const best = insight.best ? `Best: ${insight.best.name}, ${insight.best.kept}% kept.` : NONE;
+      return [
+        { eyebrow: 'In the green', title: `${insight.green} of ${total} months kept something back.`, body: best },
+        { eyebrow: 'Month by month', title: insight.green === total ? 'Every month stayed in the green.' : insight.green === 0 ? 'Expenses led every month.' : `${plural(total - insight.green, 'month')} ran past income.`, body: best },
+        { eyebrow: 'The scorecard', title: `In the green: ${insight.green} out of ${total}.`, body: best },
+      ];
+    }
+    case 'personas': {
+      const name = insight.leader.name.replace(/^The /, 'the ');
+      const months = insight.months.length;
+      return [
+        { eyebrow: 'Your year, in personas', title: `${plural(insight.leader.count, 'month')} as ${name}.`, body: insight.distinct > 1 ? `${plural(insight.distinct, 'personality', 'personalities')} across ${months} months.` : NONE },
+        { eyebrow: 'Many sides of you', title: insight.distinct === 1 ? `${insight.leader.name}, all year long.` : `${plural(insight.distinct, 'money personality', 'money personalities')}, one year.`, body: insight.distinct > 1 ? (insight.leader.tied ? `${insight.leader.name} tied for most: ${insight.leader.count} months.` : `Most often: ${name}, ${insight.leader.count} times.`) : NONE },
+      ];
+    }
+    case 'regulars': {
+      const { regulars, cameos, regularCount, cameoCount } = insight;
+      const once = cameos.length ? `Just once: ${cameos.slice(0, 2).map(cameo => `${cameo.label} (${cameo.month})`).join(', ')}.` : NONE;
+      return [
+        ...(regularCount ? [
+          { eyebrow: 'The regulars', title: regularCount === 1 ? `${regulars[0].label} never missed a month.` : `${regularCount} categories never missed a month.`, body: once },
+          { eyebrow: 'Every month, without fail', title: regularCount === 1 ? `Every month: ${regulars[0].label}.` : `${plural(regularCount, 'regular')}, ${insight.periods} months.`, body: once },
+        ] : []),
+        ...(cameoCount ? [
+          { eyebrow: 'Cameos', title: cameoCount === 1 ? `${cameos[0].label} showed up once.` : `${cameoCount} categories showed up just once.`, body: regularCount ? `And ${plural(regularCount, 'regular')} every month.` : NONE },
+        ] : []),
+      ];
+    }
   }
 }
 

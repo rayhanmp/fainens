@@ -12,6 +12,7 @@ const loaders = {
   bonus: () => import('./extra/BonusExtra'),
   games: () => import('./extra/GamesExtra'),
   finales: () => import('./extra/Finales'),
+  year: () => import('./extra/YearExtra'),
 };
 export type PartName = keyof typeof loaders;
 type PartModule<Name extends PartName> = Awaited<ReturnType<(typeof loaders)[Name]>>;

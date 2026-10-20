@@ -161,6 +161,7 @@
 .recap-animated-value { font-variant-numeric: tabular-nums; }
 /* A visual's own `span` rules must never restyle the digits inside its figure. */
 .recap-animated-value > span[aria-hidden], .recap-roll > span[aria-hidden] { font: inherit; letter-spacing: inherit; }
+.recap-story span.recap-animated-value, .recap-story span.recap-roll { font-size: inherit; font-weight: inherit; line-height: inherit; letter-spacing: inherit; color: inherit; opacity: 1; }
 
 /* ---------- The cover: a full-bleed object, printed differently each run. ---------- */
 .recap-chapter-intro .recap-story-content { justify-content: stretch; padding: 2cqw 0 0; }

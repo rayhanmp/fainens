@@ -8994,7 +8994,7 @@ export type GetSavedRecapStory200StorySnapshotHighlights = {
   averagePurchaseAmount: number | null;
   /** @nullable */
   peakSpendingDay: GetSavedRecapStory200StorySnapshotHighlightsPeakSpendingDay;
-  /** @maxItems 3 */
+  /** @maxItems 5 */
   topPurchases?: GetSavedRecapStory200StorySnapshotHighlightsTopPurchasesItem[];
   /** @maxItems 2 */
   repeatPurchases?: GetSavedRecapStory200StorySnapshotHighlightsRepeatPurchasesItem[];
@@ -9343,7 +9343,7 @@ export type WriteRecapStory200SnapshotHighlights = {
   averagePurchaseAmount: number | null;
   /** @nullable */
   peakSpendingDay: WriteRecapStory200SnapshotHighlightsPeakSpendingDay;
-  /** @maxItems 3 */
+  /** @maxItems 5 */
   topPurchases?: WriteRecapStory200SnapshotHighlightsTopPurchasesItem[];
   /** @maxItems 2 */
   repeatPurchases?: WriteRecapStory200SnapshotHighlightsRepeatPurchasesItem[];
@@ -9685,7 +9685,7 @@ export type GetPeriodRecap200Highlights = {
   averagePurchaseAmount: number | null;
   /** @nullable */
   peakSpendingDay: GetPeriodRecap200HighlightsPeakSpendingDay;
-  /** @maxItems 3 */
+  /** @maxItems 5 */
   topPurchases?: GetPeriodRecap200HighlightsTopPurchasesItem[];
   /** @maxItems 2 */
   repeatPurchases?: GetPeriodRecap200HighlightsRepeatPurchasesItem[];

@@ -20218,7 +20218,7 @@
                                   "additionalProperties": false
                                 },
                                 "topPurchases": {
-                                  "maxItems": 3,
+                                  "maxItems": 5,
                                   "type": "array",
                                   "items": {
                                     "type": "object",
@@ -20875,7 +20875,7 @@
                               "additionalProperties": false
                             },
                             "topPurchases": {
-                              "maxItems": 3,
+                              "maxItems": 5,
                               "type": "array",
                               "items": {
                                 "type": "object",
@@ -21576,7 +21576,7 @@
                           "additionalProperties": false
                         },
                         "topPurchases": {
-                          "maxItems": 3,
+                          "maxItems": 5,
                           "type": "array",
                           "items": {
                             "type": "object",

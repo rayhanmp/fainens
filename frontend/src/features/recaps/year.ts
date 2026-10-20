@@ -3,12 +3,15 @@ import { recapDay } from './stories';
 
 export const recapYear = (period: { startDate: number }) => recapDay(period.startDate).getUTCFullYear();
 
+/** A year recap keeps its periods' own recaps alongside the sums, for the insights only a year can show. */
+export type YearRecap = PeriodRecap & { yearPeriods?: PeriodRecap[] };
+
 /**
  * One recap for a calendar year, combined from its salary periods' recaps. Sums and merges stay exact;
  * figures that cannot be combined exactly (the median receipt, historical baselines) are left out
  * rather than approximated, and the chapters that need them simply sit the year out.
  */
-export function combineYear(recaps: PeriodRecap[], year: number): PeriodRecap {
+export function combineYear(recaps: PeriodRecap[], year: number): YearRecap {
   const sorted = [...recaps].sort((a, b) => a.startMs - b.startMs);
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
@@ -47,7 +50,7 @@ export function combineYear(recaps: PeriodRecap[], year: number): PeriodRecap {
     highlights: {
       averagePurchaseAmount: purchaseTotal !== null && purchaseCount > 0 ? Math.round(purchaseTotal / purchaseCount) : null,
       peakSpendingDay: peaks.sort((a, b) => b.amount - a.amount)[0] ?? null,
-      topPurchases: sorted.flatMap(recap => recap.highlights?.topPurchases ?? []).sort((a, b) => b.amount - a.amount).slice(0, 3),
+      topPurchases: sorted.flatMap(recap => recap.highlights?.topPurchases ?? []).sort((a, b) => b.amount - a.amount).slice(0, 5),
       repeatPurchases: [...repeats.values()].sort((a, b) => b.occurrences - a.occurrences || b.totalAmount - a.totalAmount).slice(0, 2),
     },
     daily: sorted.every(recap => recap.daily) ? sorted.flatMap(recap => recap.daily ?? []) : undefined,
@@ -62,6 +65,7 @@ export function combineYear(recaps: PeriodRecap[], year: number): PeriodRecap {
     } : null,
     largestPurchase: largest,
     comparison: null,
+    yearPeriods: sorted,
   };
 }
 

@@ -1,7 +1,8 @@
 import type { PeriodRecap, SavedRecapStory } from './queries';
+import type { YearRecap } from './year';
 import { recapDisplayCopy, shortDisplayLabel } from './display-copy';
 import { pickFrom, runVariants, seeded } from './motion';
-import { bonusCopy, chapterCopy, chapterEyebrows, type CopyFacts } from './variations';
+import { bonusCopy, chapterCopy, chapterEyebrows, yearCopy, type CopyFacts } from './variations';
 import { categoryFlavour, type Flavour } from './flavour';
 import { formatRecapCurrency } from './currency';
 import { DAY_MS, formatRecapDay, periodDateRange, recapDay, recapDayKey, recapWeekday } from './dates';
@@ -86,6 +87,19 @@ export type Bonus =
   | { kind: 'takeover'; categoryId: number | null; name: string; label: string; share: number }
   | { kind: 'comeback'; categoryId: number | null; name: string; label: string; rank: number; share: number; previousRank: number | null; previousPeriod: string };
 export type BonusKind = Bonus['kind'];
+
+/** Insights only a year can show, read from its periods' own recaps rather than the year's sums. */
+export type YearMonth = { label: string; name: string };
+export type YearInsight =
+  // Each period's top category, in order: who headlined which month.
+  | { kind: 'headliners'; months: Array<YearMonth & { category: string | null; categoryLabel: string | null; share: number }>; leader: { name: string; label: string; count: number; tied: boolean }; distinct: number }
+  // Income against expenses, period by period, and how many kept something back.
+  | { kind: 'green'; months: Array<YearMonth & { income: number; expenses: number; kept: number | null }>; green: number; best: (YearMonth & { kept: number }) | null }
+  // The money personality each period earned.
+  | { kind: 'personas'; months: Array<YearMonth & { key: PersonaKey; persona: string }>; leader: { key: PersonaKey; name: string; count: number; tied: boolean }; distinct: number }
+  // Categories that showed up in every period, and ones that appeared in just one.
+  | { kind: 'regulars'; regulars: Array<{ name: string; label: string }>; cameos: Array<{ name: string; label: string; month: string }>; regularCount: number; cameoCount: number; periods: number };
+export type YearInsightKind = YearInsight['kind'];
 const MILESTONES = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
 
 type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour };
@@ -112,6 +126,7 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'mixtape'; tracks: MixtapeTrack[]; tapeName: string }
   | { id: 'persona'; persona: Persona; early?: boolean }
   | { id: 'bonus'; bonus: Bonus }
+  | { id: 'year'; insight: YearInsight }
   | { id: 'closing'; tiles: ClosingTile[]; persona: Persona; finale: FinaleFacts }
 );
 export type RecapStoryId = RecapStory['id'];
@@ -245,7 +260,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   const quiet = longestRun(elapsed, day => day.amount === 0);
   const busy = longestRun(elapsed, day => day.amount > 0);
 
-  const purchases = recap.highlights?.topPurchases ?? [];
+  // A period shows its top three receipts; a year, its top five.
+  const purchases = (recap.highlights?.topPurchases ?? []).slice(0, (recap as YearRecap).yearPeriods ? 5 : 3);
   const receiptItems: ReceiptItem[] = purchases.map((row, i) => ({
     label: labels[`purchase${i + 1}`] ?? shortDisplayLabel(row.description), fullLabel: row.description, category: row.category, date: row.date, amount: row.amount,
   }));
@@ -263,8 +279,14 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     month.amount += day.amount;
     monthTotals.set(key, month);
   }
-  const months = [...monthTotals.values()];
+  // A year's periods, each named for the month it ends in (salary periods run across two months).
+  const yearPeriods = (recap as YearRecap).yearPeriods?.filter(period => period.activityCount > 0) ?? [];
+  const monthOf = (period: PeriodRecap): YearMonth => ({ label: formatRecapDay(period.period.endDate, { month: 'short' }), name: formatRecapDay(period.period.endDate, { month: 'long' }) });
+  // Without daily figures for every period the year's months come from the periods' own totals.
+  const months = monthTotals.size > 1 || yearPeriods.length < 2 ? [...monthTotals.values()]
+    : yearPeriods.map(period => ({ ...monthOf(period), amount: Math.max(0, period.expenses) }));
   const busiestMonth = months.reduce((best, month, i) => month.amount > months[best].amount ? i : best, 0);
+  const yearInsights = yearPeriods.length >= 3 ? readYear(yearPeriods, monthOf) : [];
 
   // How long this run is: the director's cut shows every optional chapter, a speedrun keeps a short lap.
   const cut = run === 0 ? 'standard' : runVariants(run).cut;
@@ -431,6 +453,10 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     // Dropped into the middle at distinct slots; splicing the later slot first keeps them apart.
     const bonusSlots = shuffled(Array.from({ length: Math.max(1, order.length) }, (_, i) => i + 1)).slice(0, bonuses.length).sort((a, b) => b - a);
     bonuses.forEach((bonus, i) => order.splice(bonusSlots[i], 0, { id: 'bonus', bonus }));
+    // A year's own insights: every one in the director's cut, one in a speedrun, up to three otherwise.
+    const insights = shuffled(yearInsights).slice(0, cut === 'directors' ? yearInsights.length : cut === 'speedrun' ? 1 : 3);
+    const insightSlots = shuffled(Array.from({ length: order.length }, (_, i) => i + 1)).slice(0, insights.length).sort((a, b) => b - a);
+    insights.forEach((insight, i) => order.splice(insightSlots[i], 0, { id: 'year', insight }));
 
     // Motion interludes: one or two showpieces dropped between chapters, never side by side.
     const marqueeWords = [recap.period.name, top?.label, `${recap.purchaseCount} receipts`, peak ? dayLabel(peak.date) : null, persona.name.replace(/^The /, '')].filter((word): word is string => Boolean(word));
@@ -604,7 +630,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   const built = chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
-    const raw = chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts))
+    const raw = chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts)) : chapter.id === 'year' ? pickCopy(yearCopy(chapter.insight))
       : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
     const early = chapter.id === 'persona' && chapter.early;
     const copy = { eyebrow: forYear(early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body), flavour: early ? undefined : raw.flavour };
@@ -635,6 +661,63 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     if (swap) built[j] = { ...built[j], theme: swap };
   }
   return built;
+}
+
+/** The most frequent value and how often it came up; ties go to the one that came first, and say so. */
+function mostFrequent<T>(values: T[]): { value: T; count: number; tied: boolean } | null {
+  const counts = new Map<T, number>();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  let best: { value: T; count: number } | null = null;
+  for (const [value, count] of counts) if (!best || count > best.count) best = { value, count };
+  return best ? { ...best, tied: [...counts.values()].filter(count => count === best.count).length > 1 } : null;
+}
+
+/**
+ * What a year's periods say that its sums can't: who headlined each month, which months kept something
+ * back, the personality each period earned, and the categories that never missed a month. Each insight
+ * is offered only when there is enough behind it.
+ */
+function readYear(periods: PeriodRecap[], monthOf: (period: PeriodRecap) => YearMonth): YearInsight[] {
+  const insights: YearInsight[] = [];
+  const label = (name: string) => shortDisplayLabel(name, 18);
+
+  const headliners = periods.map(period => {
+    const spent = period.categories.filter(row => row.amount > 0);
+    const total = spent.reduce((sum, row) => sum + row.amount, 0);
+    const top = spent.sort((a, b) => b.amount - a.amount)[0];
+    return { ...monthOf(period), category: top?.name ?? null, categoryLabel: top ? label(top.name) : null, share: top && total > 0 ? Math.round(top.amount / total * 100) : 0 };
+  });
+  const leader = mostFrequent(headliners.flatMap(month => month.category ? [month.category] : []));
+  if (leader && headliners.filter(month => month.category).length >= 3) {
+    insights.push({ kind: 'headliners', months: headliners, leader: { name: leader.value, label: label(leader.value), count: leader.count, tied: leader.tied },
+      distinct: new Set(headliners.flatMap(month => month.category ? [month.category] : [])).size });
+  }
+
+  const earning = periods.filter(period => period.income > 0);
+  if (earning.length >= 3) {
+    const months = periods.map(period => ({ ...monthOf(period), income: Math.max(0, period.income), expenses: Math.max(0, period.expenses),
+      kept: period.income > 0 ? Math.round(period.net / period.income * 100) : null }));
+    const best = months.filter(month => month.kept !== null && month.kept > 0).sort((a, b) => b.kept! - a.kept!)[0];
+    insights.push({ kind: 'green', months, green: months.filter(month => month.income > 0 && month.income >= month.expenses).length, best: best ? { label: best.label, name: best.name, kept: best.kept! } : null });
+  }
+
+  // Each period's personality as its own recap reads it, without a run's dice.
+  const personas = periods.filter(period => period.purchaseCount > 2).map(period => {
+    const closing = buildStories(period).find(story => story.id === 'closing');
+    return closing?.id === 'closing' ? { ...monthOf(period), key: closing.persona.key, persona: closing.persona.name } : null;
+  }).filter(month => month !== null);
+  const topPersona = mostFrequent(personas.map(month => month.key));
+  if (topPersona && personas.length >= 3) {
+    insights.push({ kind: 'personas', months: personas, leader: { key: topPersona.value, name: personas.find(month => month.key === topPersona.value)!.persona, count: topPersona.count, tied: topPersona.tied },
+      distinct: new Set(personas.map(month => month.key)).size });
+  }
+
+  const seen = new Map<string, string[]>();
+  for (const period of periods) for (const row of period.categories) if (row.amount > 0) seen.set(row.name, [...(seen.get(row.name) ?? []), monthOf(period).label]);
+  const regulars = [...seen].filter(([, months]) => months.length === periods.length).map(([name]) => ({ name, label: label(name) }));
+  const cameos = [...seen].filter(([, months]) => months.length === 1).map(([name, months]) => ({ name, label: label(name), month: months[0] }));
+  if (regulars.length || cameos.length) insights.push({ kind: 'regulars', regulars: regulars.slice(0, 10), cameos: cameos.slice(0, 6), regularCount: regulars.length, cameoCount: cameos.length, periods: periods.length });
+  return insights;
 }
 
 /** The period's money personality: the pattern that stands out most, with a dash of the runner-up. */

@@ -104,6 +104,7 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   useEffect(() => {
     const parts = runParts(variants);
     if (stories.some(item => item.play && EXTRA_GAMES.has(item.play.kind))) parts.add('games');
+    if (stories.some(item => item.id === 'year')) parts.add('year');
     preloadParts(parts);
   }, [variants, stories]);
   const [nav, setNav] = useState<Nav>({ index: 0, visit: 0, direction: 'next', transition: 'slide', origin: { x: 50, y: 55 } });
@@ -137,10 +138,10 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const chapterMs = story.duration ?? CHAPTER_MS;
   // The cover and full-bleed finales keep their own art direction; every other chapter gets remixed.
   const remixOf = (item: RecapStory) => {
-    const style = chapterStyle(run, `${item.id}:${item.id === 'interlude' ? item.slot : item.id === 'bonus' ? item.bonus.kind : ''}`);
+    const style = chapterStyle(run, `${item.id}:${item.id === 'interlude' ? item.slot : item.id === 'bonus' ? item.bonus.kind : item.id === 'year' ? item.insight.kind : ''}`);
     return item.id === 'intro' || (item.id === 'closing' && variants.finale !== 'card') ? { ...style, pattern: 'none' as const, frame: 'none' as const, sticker: null }
-      // Bonus slides carry their own set pieces, so they skip the background pattern and stickers.
-      : item.id === 'bonus' ? { ...style, pattern: 'none' as const, sticker: null } : style;
+      // Bonus slides and a year's insights carry their own set pieces, so they skip the background pattern.
+      : item.id === 'bonus' || item.id === 'year' ? { ...style, pattern: 'none' as const, sticker: null } : style;
   };
   const remix = remixOf(story);
   // Kept stable between renders so the memoised chapter visuals can skip them.
@@ -545,6 +546,13 @@ function arrivalSounds(story: RecapStory, enter: number, variants: SectionVarian
     if (kind === 'milestone') { playTicks(18, 1400, enter + 300); play('fanfare', enter + 1800); }
     if (kind === 'takeover') { playTicks(16, 1500, enter + 300); play('horn', enter + 1900); play('cymbal', enter + 2100); }
     if (kind === 'comeback') { play('rewind', enter + 200); play('riser', enter + 700); play('chord', enter + 1600); }
+  }
+  if (story.id === 'year') {
+    // A year's insights deal their months out: a tick per month, then a cue for the reveal.
+    const kind = story.insight.kind;
+    const months = kind === 'regulars' ? story.insight.regulars.length + story.insight.cameos.length : story.insight.months.length;
+    playTicks(months, months * 70, enter + 250);
+    play(kind === 'headliners' ? 'cymbal' : kind === 'green' ? 'cash' : kind === 'personas' ? 'chord' : 'pop', enter + 300 + months * 80);
   }
   if (story.id === 'persona') {
     // Each personality has its own entrance: a gong for the monk, a club drop for the weekend warrior.

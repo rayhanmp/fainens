@@ -5,6 +5,8 @@
 .recap-hilo-card { position: relative; display: grid; gap: 1cqw; min-width: 0; padding: 4cqw 3.5cqw; border-radius: 3cqw; background: var(--recap-ink); color: var(--recap-paper); text-align: center;
   animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: 200ms; }
 .recap-hilo-card small, .recap-hilo-face small, .recap-hilo-back small { font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
+/* On the pop-coloured mystery card the label stays at full strength: on-pop only clears 4.5:1 solid. */
+.recap-hilo-face small { opacity: 1; }
 .recap-hilo-card b { overflow: hidden; font-size: 3.6cqw; text-overflow: ellipsis; white-space: nowrap; }
 .recap-hilo-card strong { font-size: 5cqw; font-weight: 900; letter-spacing: -.03em; }
 .recap-hilo-card.is-mystery { padding: 0; background: none; animation-delay: 380ms; }

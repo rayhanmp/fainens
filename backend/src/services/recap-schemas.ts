@@ -11,7 +11,7 @@ export const recapSchema = z.object({
   highlights: z.object({
     averagePurchaseAmount: z.number().nonnegative().nullable(),
     peakSpendingDay: z.object({ date: z.number(), amount: z.number().positive(), purchaseCount: z.number().int().nonnegative() }).nullable(),
-    topPurchases: z.array(z.object({ description: z.string(), amount: z.number().positive(), date: z.number(), category: z.string() })).max(3).optional(),
+    topPurchases: z.array(z.object({ description: z.string(), amount: z.number().positive(), date: z.number(), category: z.string() })).max(5).optional(),
     repeatPurchases: z.array(z.object({ description: z.string(), occurrences: z.number().int().positive(), totalAmount: z.number().positive(), category: z.string() })).max(2).optional(),
   }).optional(),
   // Optional so editions saved before these fields existed still parse.

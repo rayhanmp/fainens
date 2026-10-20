@@ -40,6 +40,8 @@ function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { 
   const layouts = useLoadedPart('layouts', alt(story.id));
   const personaExtra = useLoadedPart('persona', story.id === 'persona' && variants.persona === 'alt');
   const bonusExtra = useLoadedPart('bonus', story.id === 'bonus' && variants.bonus === 'alt');
+  // The year's insights have no house layout; the group loads when a year opens, long before they come up.
+  const yearExtra = useLoadedPart('year', story.id === 'year');
   switch (story.id) {
     case 'intro': return <CoverVisual story={story} {...shared} />;
     case 'overview': return <FlowVisual story={story} {...shared} />;
@@ -48,6 +50,7 @@ function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { 
     case 'mixtape': return layouts ? <layouts.MixtapeAlt story={story} variant={variants.mixtape} /> : <MixtapeVisual story={story} />;
     case 'persona': return <PersonaVisual story={story} run={run} scene={personaExtra ? <personaExtra.AltPersonaScene persona={story.persona} run={run} /> : undefined} />;
     case 'bonus': return bonusExtra ? <bonusExtra.AltBonusVisual story={story} /> : <BonusVisual story={story} />;
+    case 'year': return yearExtra ? <yearExtra.YearVisual story={story} /> : null;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;

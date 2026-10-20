@@ -1,4 +1,5 @@
 import type { RecapStoryId } from './stories';
+import type { PartName } from './parts';
 
 /** A small seeded generator: one run of the recap rolls its dice once, so a chapter looks the same
  * when you step back to it, while the next open or replay rolls new ones. */
@@ -87,7 +88,7 @@ export function runVariants(run: number, lite = false): RunVariants {
 
 /** The lazily loaded groups a run needs, so they can load during the opening. See parts.ts. */
 export function runParts(variants: RunVariants) {
-  const parts = new Set<'layouts' | 'persona' | 'bonus' | 'games' | 'finales'>();
+  const parts = new Set<PartName>();
   if (variants.weekdays !== 'bars' || variants.streak !== 'strip' || variants.habits !== 'trio' || variants.mixtape !== 'cassette' || variants.months !== 'bars') parts.add('layouts');
   if (variants.persona === 'alt') parts.add('persona');
   if (variants.bonus === 'alt') parts.add('bonus');

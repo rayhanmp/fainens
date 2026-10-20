@@ -24,7 +24,8 @@ export function summarizeRecap(facts: FinancialFacts) {
   const middle = Math.floor(amounts.length / 2);
   const topPurchases = [...expenses]
     .sort((a, b) => b.expenseCents - a.expenseCents || a.date - b.date || a.id - b.id)
-    .slice(0, 3)
+    // Five, so a year in review can rank its top receipts exactly from its periods; a period shows three.
+    .slice(0, 5)
     .map(row => ({ description: row.description || "A recorded purchase", amount: row.expenseCents,
       date: row.date, category: row.category ?? "Unallocated" }));
   const repeatedPurchases = new Map<string, { description: string; occurrences: number; totalAmount: number; category: string }>();

@@ -47,7 +47,8 @@ function getRecapPersonalization(ownerEmail: string) {
 /** The user authorised period data to the configured LLM. Send a bounded summary,
  * never credentials, account identifiers, attachments, or the full transaction list. */
 export function recapWritingContext(snapshot: Snapshot, seed = 0, language: 'en' | 'id' = 'en') {
-  const topPurchases = snapshot.highlights?.topPurchases ?? [];
+  // The copy speaks of three receipts, the ones a period shows.
+  const topPurchases = (snapshot.highlights?.topPurchases ?? []).slice(0, 3);
   const repeatPurchases = snapshot.highlights?.repeatPurchases ?? [];
   return { period: { name: "{period}" },
     isPartial: snapshot.isPartial, coverageComplete: snapshot.coverageComplete,
