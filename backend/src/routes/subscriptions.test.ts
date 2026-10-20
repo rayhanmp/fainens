@@ -274,6 +274,21 @@ describe("resolving subscription renewals one by one", () => {
     expect((await resolve([{ subscriptionId: 7, dueAt: noonDaysFromToday(DUE_DAYS_AGO), action: "post" }])).statusCode).toBe(409);
   });
 
+  it("counts renewals posted before they carried a subscription id, by their reference", async () => {
+    const paidAt = noonDaysFromToday(-40);
+    const legacyId = state.db.insert(schema.transactions).values({
+      date: new Date(paidAt), description: "Subscription: Google One", txType: "subscription_renewal", status: "posted", reference: `sub:7:${paidAt}`,
+    }).returning().all()[0].id;
+    state.db.insert(schema.transactionLines).values([
+      { transactionId: legacyId, accountId: 2, debit: 35_520, credit: 0 },
+      { transactionId: legacyId, accountId: 1, debit: 0, credit: 35_520 },
+    ]).run();
+    const list = (await app.inject({ method: "GET", url: "/api/subscriptions" })).json();
+    const month = list.monthlyCharges.find((item: { items: Array<{ subscriptionId: number }> }) => item.items.some((entry) => entry.subscriptionId === 7));
+    expect(month).toMatchObject({ total: 35_520, items: [{ subscriptionId: 7, amount: 35_520 }] });
+    expect(list.subscriptions.find((item: { id: number }) => item.id === 7).lastPayment).toEqual({ date: paidAt, amount: 35_520 });
+  });
+
   it("won't move the schedule back onto a renewal already recorded", async () => {
     const due = noonDaysFromToday(DUE_DAYS_AGO);
     expect((await resolve([{ subscriptionId: 7, dueAt: due, action: "skip" }])).statusCode).toBe(200);

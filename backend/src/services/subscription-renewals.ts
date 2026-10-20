@@ -500,18 +500,35 @@ export async function getSubscriptionHistory(subscriptionId: number): Promise<{
   };
 }
 
+/**
+ * The subscription a charge belongs to. Renewals posted before transactions carried a
+ * subscription id name it only in their "sub:<id>:<due>" reference.
+ */
+function chargeSubscriptionId(row: { subscriptionId: number | null; reference: string | null; txType: string | null }): number | null {
+  if (row.subscriptionId != null) return row.subscriptionId;
+  if (row.txType !== "subscription_renewal") return null;
+  const legacy = /^sub:(\d+):\d+$/.exec(row.reference ?? "")?.[1];
+  return legacy ? Number(legacy) : null;
+}
+
 /** The most recent charge of each subscription, for the list view. */
 export async function lastPaymentsBySubscription(subscriptionIds: number[]): Promise<Map<number, { date: number; amount: number }>> {
   const result = new Map<number, { date: number; amount: number }>();
   if (subscriptionIds.length === 0) return result;
-  const rows = await db.select({ id: transactions.id, subscriptionId: transactions.subscriptionId, date: transactions.date, txType: transactions.txType })
+  const rows = await db.select({ id: transactions.id, subscriptionId: transactions.subscriptionId, reference: transactions.reference, date: transactions.date, txType: transactions.txType })
     .from(transactions)
-    .where(and(inArray(transactions.subscriptionId, subscriptionIds), eq(transactions.status, "posted"), isNull(transactions.reversalOfTxId)))
+    .where(and(
+      or(inArray(transactions.subscriptionId, subscriptionIds), like(transactions.reference, "sub:%")),
+      eq(transactions.status, "posted"),
+      isNull(transactions.reversalOfTxId),
+    ))
     .orderBy(desc(transactions.date));
+  const wanted = new Set(subscriptionIds);
   const latest = new Map<number, { id: number; date: number }>();
   for (const row of rows) {
-    if (row.subscriptionId == null || row.txType === "domain_reversal" || latest.has(row.subscriptionId)) continue;
-    latest.set(row.subscriptionId, { id: row.id, date: ts(row.date) });
+    const subscriptionId = chargeSubscriptionId(row);
+    if (subscriptionId == null || !wanted.has(subscriptionId) || row.txType === "domain_reversal" || latest.has(subscriptionId)) continue;
+    latest.set(subscriptionId, { id: row.id, date: ts(row.date) });
   }
   const amounts = await journalAmounts([...latest.values()].map((row) => row.id));
   for (const [subscriptionId, row] of latest) result.set(subscriptionId, { date: row.date, amount: amounts.get(row.id)?.amount ?? 0 });
@@ -529,10 +546,13 @@ export async function subscriptionChargesByMonth(months = 12, now = Date.now()):
 }>> {
   const today = new Date(now);
   const start = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1).getTime();
-  const rows = await db.select({ id: transactions.id, subscriptionId: transactions.subscriptionId, date: transactions.date, txType: transactions.txType })
+  const rows = await db.select({ id: transactions.id, subscriptionId: transactions.subscriptionId, reference: transactions.reference, date: transactions.date, txType: transactions.txType })
     .from(transactions)
     .where(and(eq(transactions.status, "posted"), isNull(transactions.reversalOfTxId), gte(transactions.date, new Date(start))));
-  const charges = rows.filter((row) => row.subscriptionId != null && row.txType !== "domain_reversal");
+  const charges = rows
+    .filter((row) => row.txType !== "domain_reversal")
+    .map((row) => ({ ...row, subscriptionId: chargeSubscriptionId(row) }))
+    .filter((row) => row.subscriptionId != null);
   const amounts = await journalAmounts(charges.map((row) => row.id));
   const byMonth = new Map<string, Map<number, number>>();
   for (let index = 0; index < months; index += 1) {
