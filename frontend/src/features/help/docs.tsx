@@ -18,7 +18,7 @@ import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisu
 import { ComposerDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
 import { SalaryAndRenewalDemo } from './SalaryVisuals';
-import { RecapStoryDemo } from './InsightVisuals';
+import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
@@ -387,7 +387,7 @@ export const DOCS: DocPage[] = [
     summary: 'Your period told as a short, playful story',
     lead: 'A recap replays a salary period as a story in chapters: what came in, where it went, your busiest days, your habits, and a money personality to finish.',
     blocks: [
-      { type: 'visual', node: <RecapStoryDemo />, wide: true },
+      { type: 'visual', node: <RecapPlayerDemo />, wide: true },
       { type: 'h2', id: 'open', text: 'Opening a recap' },
       { type: 'list', items: [
         'On the Dashboard, choose Recap for the period you’re viewing.',
