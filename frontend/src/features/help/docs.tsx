@@ -2,9 +2,7 @@ import type { ReactNode } from 'react';
 import type { LinkProps } from '@tanstack/react-router';
 import {
   ArchitectureDiagram,
-  BudgetBarsDemo,
   ClaimPipelineDemo,
-  ClosedPeriodDemo,
   ComposerDemo,
   CorrectionDemo,
   HiddenBalanceDemo,
@@ -20,7 +18,8 @@ import {
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
-import { BudgetForecastDemo, CategoryMapDemo, DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { CategoryMapDemo, DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { BudgetForecastDemo, BudgetRowsDemo, ClosedBudgetDemo } from './BudgetVisuals';
 import {
   AgentContextDemo,
   CanISummaryDemo,
@@ -467,11 +466,11 @@ export const DOCS: DocPage[] = [
       ] },
       { type: 'p', text: 'Set it with Review coverage on a period, with a reason. Fainens uses it to be honest about numbers: partial periods are labelled across the Dashboard, Reports and Recaps, and their totals aren’t treated as the whole story.' },
       { type: 'h2', id: 'budget', text: 'Plan a budget' },
-      { type: 'visual', node: <BudgetBarsDemo /> },
+      { type: 'visual', node: <BudgetRowsDemo /> },
       { type: 'steps', items: ['Open Budget and choose Manage budget (Modify budget once a plan exists).', 'Copy the previous period, start from a preset, or start from scratch.', 'Give each category an amount, with a note if you like. Categories with subscriptions due get a suggested amount.', 'Optionally set a savings target, as an amount or a share of income.', 'Read Plan checks and the Allocation audit before you save, for example if one category takes too large a share.'] },
       { type: 'p', text: 'Use Manage presets to preview, apply or delete saved plans. Add a note to the period’s plan (up to 2,000 characters) to remember what you were aiming for.' },
       { type: 'h2', id: 'track', text: 'Track it' },
-      { type: 'p', text: 'Each category shows over, near limit, on track or not started. Edit amounts inline, move a line to another open period, compare with another period, and save your plan as a preset for next time.' },
+      { type: 'p', text: 'Sorted by urgency, categories are grouped as Over budget, Needs a look, On track and Not started, and a chip flags Over, Near limit or Ahead of pace (spending faster than the period is passing). Edit amounts inline, move a line to another open period, compare with another period, and save your plan as a preset for next time.' },
       { type: 'list', items: [
         'The overview shows spent and remaining, and how income is planned: spending, saving rate, savings target and anything still unassigned.',
         'Search categories, sort by urgency, name, % used, spent or variance, and filter by status.',
@@ -482,7 +481,7 @@ export const DOCS: DocPage[] = [
       { type: 'callout', tone: 'note', text: 'Only real spending counts: transfers, loans and splits don’t use up a budget. Where each category is likely to finish is shown on the Dashboard (see The Dashboard).' },
       { type: 'open', link: { to: '/budget', label: 'Open Budget' } },
       { type: 'h2', id: 'close', text: 'Close a period' },
-      { type: 'visual', node: <ClosedPeriodDemo /> },
+      { type: 'visual', node: <ClosedBudgetDemo /> },
       { type: 'steps', items: ['Post or delete any drafts left in the period.', 'Reconcile your accounts so closing balances are right.', 'In Salary periods, choose Close period.'] },
       { type: 'p', text: 'A closed period’s transactions and budget are locked (its budget becomes read-only). Reopen it if you need to correct something, and archive old periods once they’re closed.' },
       { type: 'h2', id: 'break', text: 'After a break' },
