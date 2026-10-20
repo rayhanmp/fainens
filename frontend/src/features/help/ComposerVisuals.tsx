@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { Calculator, FolderOpen, Landmark, MapPin, Pencil, Save, Sparkles, Wallet, X } from 'lucide-react';
-import { ComboBox, DateTimeField, EntryTypeSwitch, Field, fieldControl, type PickerOption } from '../../components/transactions/EntryPickers';
+import { CalendarClock, Calculator, FolderOpen, Landmark, MapPin, Pencil, Save, Sparkles, Wallet, X } from 'lucide-react';
+import { ComboBox, DateTimeField, EntryTypeSwitch, Field, fieldControl, fieldLabel, type PickerOption } from '../../components/transactions/EntryPickers';
 import { entryAccent } from '../../components/transactions/entry-types';
 import { Button } from '../../components/ui/Button';
 import { CurrencyInput } from '../../components/ui/CurrencyInput';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
+import { cn, formatDate } from '../../lib/utils';
 import { useSequence } from './motion';
 import { exampleAccounts, useHelpPersonal } from './personal';
 import { VisualFrame } from './visuals';
@@ -86,6 +87,65 @@ export function ComposerDemo() {
               <input type="text" readOnly placeholder="e.g. Starbucks, Indomaret, Online" className={fieldControl} />
             </Field>
           </div>
+        </div>
+      </ComposerShell>
+    </VisualFrame>
+  );
+}
+
+/** A pay-later purchase: the composer’s Installment plan section, with its schedule preview. */
+export function InstallmentDemo() {
+  const { ref, step, replay } = useSequence(3, 1000);
+  const { formatAmount } = useBalanceVisibility();
+  const { payLater } = exampleAccounts(useHelpPersonal());
+  const [when, setWhen] = useState(localNow);
+  const [term, setTerm] = useState<string | null>(null);
+  const months = term ?? (step >= 2 ? '3' : '1');
+  const [firstDue] = useState(() => { const date = new Date(); date.setMonth(date.getMonth() + 1, 10); return date; });
+  const dueDate = (offset: number) => { const date = new Date(firstDue); date.setMonth(date.getMonth() + offset); return date.getTime(); };
+  // Rp600.000 at 12% a year simple interest (Rp6.000 a month), with the Rp5.000 fee on the first installment.
+  const count = Number(months);
+  const schedule = Array.from({ length: count }, (_, index) => 600_000 / count + 6_000 + (index === 0 ? 5_000 : 0));
+  const segment = (selected: boolean) => cn('h-9 rounded-lg border px-3 text-[13px] font-semibold transition-colors', selected ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] hover:border-[var(--color-border-strong)]');
+
+  return (
+    <VisualFrame frameRef={ref} onReplay={replay} caption="The composer when you pay with a pay-later account: pick the term and fees, and check the schedule before saving.">
+      <ComposerShell saveLabel="Save expense" summary={<>{strong(formatAmount(600_000))} on {strong('Shopping')} from {strong(payLater)} · today</>}>
+        <div className="space-y-6">
+          <EntryTypeSwitch value="expense" onChange={() => undefined} />
+          <CurrencyInput label="Amount spent" value="600.000" onChange={() => undefined} size="md" />
+          <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+            <Field label="Name" icon={Pencil} className="sm:col-span-2"><input type="text" readOnly value="Headphones" className={fieldControl} /></Field>
+            <Field label="Category" icon={FolderOpen}><ComboBox value="Shopping" options={CATEGORY_OPTIONS} onChange={() => undefined} placeholder="Choose a category" searchPlaceholder="Search categories" /></Field>
+            <Field label="Paid from" icon={Wallet}><ComboBox value={payLater} options={[{ id: payLater, label: payLater, group: 'PayLater & credit' }]} onChange={() => undefined} placeholder="Choose an account" searchPlaceholder="Search accounts" /></Field>
+            <DateTimeField value={when} onChange={setWhen} className="sm:col-span-2" />
+          </div>
+          <section className={cn('space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 p-4 transition-opacity duration-500', step >= 1 ? 'opacity-100' : 'opacity-0')} aria-label="Installment plan">
+            <div className="flex items-start gap-3">
+              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ref-tertiary)]" aria-hidden />
+              <div><h3 className="text-sm font-bold">Installment plan</h3><p className="text-xs text-[var(--ref-on-surface-variant)]">Paid with PayLater, so this purchase is split into installments.</p></div>
+            </div>
+            <div role="radiogroup" aria-label="Installment term" className="flex flex-wrap gap-2">
+              {(['1', '3', '6', '12'] as const).map((option) => (
+                <button key={option} type="button" role="radio" aria-checked={months === option} onClick={() => setTerm(option)} className={segment(months === option)}>{option} {option === '1' ? 'month' : 'months'}</button>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block"><span className={fieldLabel}>First due date</span><input type="date" readOnly value={`${firstDue.getFullYear()}-${String(firstDue.getMonth() + 1).padStart(2, '0')}-10`} className={fieldControl} /></label>
+              <label className="block"><span className={fieldLabel}>Interest % a year</span><input type="number" readOnly value="12" className={fieldControl} /></label>
+              <label className="block"><span className={fieldLabel}>Admin fee</span><input readOnly value="5.000" className={fieldControl} /></label>
+            </div>
+            {step >= 3 && schedule.length > 0 && (
+              <div className="animate-[finance-page-header-in_300ms_ease-out] rounded-xl bg-[var(--ref-surface-container-lowest)] p-3">
+                <div className="space-y-1.5 text-sm">
+                  {schedule.map((amount, index) => (
+                    <div key={index} className="flex items-center justify-between gap-3"><span className="text-[var(--ref-on-surface-variant)]">#{index + 1} · {formatDate(dueDate(index))}</span><span className="font-semibold tabular-nums">{formatAmount(amount)}</span></div>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center justify-between border-t border-[var(--color-border)] pt-2 text-sm"><span className="font-semibold">Total</span><span className="font-bold tabular-nums text-[var(--ref-primary)]">{formatAmount(schedule.reduce((sum, amount) => sum + amount, 0))}</span></div>
+              </div>
+            )}
+          </section>
         </div>
       </ComposerShell>
     </VisualFrame>

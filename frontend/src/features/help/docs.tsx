@@ -3,7 +3,6 @@ import type { LinkProps } from '@tanstack/react-router';
 import {
   ArchitectureDiagram,
   CorrectionDemo,
-  InstallmentDemo,
   LedgerFlow,
   PeriodTimeline,
   SplitBillDemo,
@@ -12,7 +11,7 @@ import {
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
-import { ComposerDemo, TransferDemo } from './ComposerVisuals';
+import { ComposerDemo, InstallmentDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
 import { SalaryAndRenewalDemo } from './SalaryVisuals';
 import { MismatchDemo, ReconcileDemo } from './ReconcileVisuals';
