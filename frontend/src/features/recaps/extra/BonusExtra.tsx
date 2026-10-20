@@ -32,7 +32,7 @@ export function AltBonusVisual({ story }: { story: BonusStory }) {
         <span className="recap-glove is-left" aria-hidden="true" />
         <span className="recap-glove is-right" aria-hidden="true" />
         <b className="recap-pow" aria-hidden="true">POW!</b>
-        <div className="recap-ring-meter"><span>Purchases</span><i aria-hidden="true"><b /></i><small>{b.label} · {b.share}% in one hit</small></div>
+        <div className="recap-ring-meter"><span>Your purchases<em>{b.share}% in one hit</em></span><i aria-hidden="true"><b /></i></div>
       </div>;
     case 'suspects':
       // Wanted posters, pinned to the wall.

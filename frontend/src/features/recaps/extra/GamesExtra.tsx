@@ -131,7 +131,8 @@ function Wheel({ play, seed, onDone }: { play: Of<'wheel'>; seed: number } & Gat
       <svg viewBox="0 0 100 100" className="recap-wheel-disc" style={vars({ '--turn': `${target}deg` })} aria-hidden="true">
         {arcs.map(arc => <path key={arc.name} className={`recap-wheel-slice is-${arc.i % 4}`}
           d={`M50 50 L${point(arc.from)} A46 46 0 ${arc.to - arc.from > 180 ? 1 : 0} 1 ${point(arc.to)} Z`} />)}
-        {arcs.map(arc => <text key={`t${arc.name}`} x="50" y="17" className="recap-wheel-label" transform={`rotate(${(arc.from + arc.to) / 2} 50 50)`}>{arc.to - arc.from >= 26 ? arc.label.slice(0, 10) : ''}</text>)}
+        {/* Labels on the lower half turn over in place, so none rests upside down. */}
+        {arcs.map(arc => { const mid = (arc.from + arc.to) / 2; return <text key={`t${arc.name}`} x="50" y="17" className="recap-wheel-label" transform={`rotate(${mid} 50 50)${mid > 90 && mid < 270 ? ' rotate(180 50 17)' : ''}`}>{arc.to - arc.from >= 26 ? arc.label.slice(0, 10) : ''}</text>; })}
         <circle cx="50" cy="50" r="7" className="recap-wheel-hub" />
       </svg>
     </div>

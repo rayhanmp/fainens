@@ -20,7 +20,7 @@ export function ExtraFinale({ story, form, games, run }: { story: Closing; form:
       { caption: persona.name.replace(/^The /, ''), art: '♥', note: 'that’s you' },
     ].slice(0, 4);
     return <div className="recap-polaroids">
-      {shots.map((shot, i) => <figure key={shot.caption + i} className="recap-polaroid" style={vars({ '--i': i, '--r': `${[-8, 6, -3, 9][i]}deg`, '--x': `${[2, 48, 6, 50][i]}%`, '--y': `${[0, 4, 44, 48][i]}%` })}>
+      {shots.map((shot, i) => <figure key={shot.caption + i} className="recap-polaroid" style={vars({ '--i': i, '--r': `${[-8, 6, -3, 9][i]}deg`, '--x': `${[2, 48, 6, 50][i]}%`, '--y': `${[0, 3, 49, 52][i]}cqw` })}>
         <i className="recap-polaroid-tape" aria-hidden="true" />
         <span className={`recap-polaroid-photo is-${i}`}><b>{shot.art}</b></span>
         <figcaption>{shot.caption}<small>{shot.note}</small></figcaption>
@@ -34,7 +34,7 @@ export function ExtraFinale({ story, form, games, run }: { story: Closing; form:
         <div className="recap-tcard-face">
           <p className="recap-tcard-head"><b>{persona.name}</b><span>HP {finale.purchaseCount}</span></p>
           <div className="recap-tcard-art" aria-hidden="true"><Sparkles /><i className="recap-tcard-foil" /></div>
-          <p className="recap-tcard-type">{finale.period} · {finale.dateLabel}</p>
+          <p className="recap-tcard-type">Persona card · {finale.period}</p>
           <ul className="recap-tcard-moves">{persona.evidence.slice(0, 2).map((move, i) => <li key={move} style={vars({ '--i': i })}><b>{['✦', '✧'][i]}</b>{move}</li>)}</ul>
           <p className="recap-tcard-flavour">{persona.tagline}</p>
           <p className="recap-tcard-foot"><span>{'★'.repeat(Math.min(5, 2 + (run % 4)))}</span><span>#{String(finale.purchaseCount).padStart(3, '0')}</span></p>

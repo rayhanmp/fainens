@@ -20,6 +20,11 @@ const personaIcons: Record<PersonaKey, LucideIcon> = {
   weekend: PartyPopper, bigTicket: Gem, steady: Coffee, monk: Leaf, loyal: Repeat2, devotee: Crown, explorer: Compass, allRounder: Shapes,
 };
 const seq = (n: number) => ({ '--seq': n }) as CSSProperties;
+/** A glass's figure: ink over the empty glass, and a paper copy clipped to wherever the liquid has reached. */
+const glassValue = (value: ReactNode) => <>
+  <span className="recap-glass-value">{value}</span>
+  <span className="recap-glass-value is-wet" aria-hidden="true">{value}</span>
+</>;
 const Money = ({ value }: { value: number }) => <AnimatedValue value={value} money />;
 // Category colours are tuned for the app's surfaces; on the story's tinted paper a muted step of the ink
 // keeps unnamed or uncoloured slices legible.
@@ -182,7 +187,7 @@ function FlowVisual({ story, run, variants }: { story: Of<'overview'> } & Shared
         {/* Income pours in to the brim, then expenses drain it down to what was left. */}
         <div className="recap-glass recap-bucket" style={{ '--level': keep !== null ? keep / 100 : 0 } as CSSProperties} aria-hidden="true">
           <div className="recap-liquid-fill recap-bucket-fill"><svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M0 10 Q25 0 50 10 T100 10 T150 10 T200 10 V20 H0 Z" /></svg></div>
-          <span className="recap-glass-value">{keep !== null ? <AnimatedValue value={keep} suffix="%" /> : '0%'}</span>
+          {glassValue(keep !== null ? <AnimatedValue value={keep} suffix="%" /> : '0%')}
         </div>
         {legend}{leftChip}
       </div>;
@@ -242,7 +247,7 @@ function InterludeVisual({ story, run }: { story: Of<'interlude'>; run: number }
         <div className="recap-glass" style={{ '--level': (story.share ?? 0) / 100 } as CSSProperties}>
           <div className="recap-liquid-fill"><svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M0 10 Q25 0 50 10 T100 10 T150 10 T200 10 V20 H0 Z" /></svg><svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M0 10 Q25 20 50 10 T100 10 T150 10 T200 10 V20 H0 Z" /></svg></div>
           {Array.from({ length: 7 }, (_, i) => <b key={i} className="recap-bubble" style={{ '--bx': `${10 + random() * 80}%`, '--bd': `${random() * 2.5}s`, '--bs': .6 + random() * .8 } as CSSProperties} />)}
-          <span className="recap-glass-value"><AnimatedValue value={story.share ?? 0} suffix="%" /></span>
+          {glassValue(<AnimatedValue value={story.share ?? 0} suffix="%" />)}
         </div>
       </div>;
     case 'rain': {
@@ -433,7 +438,7 @@ function CalendarVisual({ story, variants, run }: { story: Of<'calendar'> } & Sh
       {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
       {story.days.map((day, i) => <DayCell key={day.key} day={day} intensity={day.amount / max} delay={delayOf(i)} />)}
     </div>
-    {story.week ? <WeekStrip week={story.week} /> : <div className="recap-calendar-legend recap-seq" style={seq(5)} aria-hidden="true"><span>Less</span>{[.08, .3, .55, .8, 1].map(level => <i key={level} style={{ '--level': level } as CSSProperties} />)}<span>More</span></div>}
+    {story.week ? <WeekStrip week={story.week} /> : <div className="recap-calendar-legend recap-seq" style={seq(5)} aria-hidden="true"><span>Less</span>{HEAT.map(level => <i key={level} style={{ '--level': level } as CSSProperties} />)}<span>More</span></div>}
     {story.lead !== 'peak' && peakLine}
   </div>;
 }
@@ -449,9 +454,13 @@ function WeekStrip({ week }: { week: NonNullable<Of<'calendar'>['week']> }) {
   </div>;
 }
 
+// Heat comes in steps that skip the middle: on a mid-tone cell neither ink nor paper numbers stay legible.
+const HEAT = [.1, .24, .8, .9, 1];
+const heatLevel = (intensity: number) => HEAT[Math.min(HEAT.length - 1, Math.floor(Math.sqrt(intensity) * HEAT.length))];
+
 function DayCell({ day, intensity, delay }: { day: RecapDayCell; intensity: number; delay: number }) {
-  const level = day.amount > 0 ? .22 + .78 * Math.sqrt(intensity) : 0;
-  return <span className={['recap-day', day.future && 'is-future', day.peak && 'is-peak', level > .55 && 'is-dark'].filter(Boolean).join(' ')}
+  const level = day.amount > 0 ? heatLevel(intensity) : 0;
+  return <span className={['recap-day', day.future && 'is-future', day.peak && 'is-peak', level > .5 && 'is-dark'].filter(Boolean).join(' ')}
     style={{ '--level': level, '--cell-delay': `${Math.round(delay)}ms` } as CSSProperties}>
     <small>{Number(day.key.slice(8))}</small>
   </span>;

@@ -555,7 +555,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   const equivalences: Partial<Record<RecapStoryId, string>> = {
     overview: recap.net > 0 && perDay > 0 ? `Left over ≈ ${Math.round(recap.net / perDay)} days of spending at this pace.` : undefined,
     categories: top && typical ? `${top.label} ≈ ${Math.round(top.amount / typical)} typical receipts.` : undefined,
-    habits: recap.spendingDays > 0 ? `That’s about ${formatRecapCurrency(Math.round(Math.max(0, recap.expenses) / recap.spendingDays))} per spending day.` : undefined,
+    // The chips already carry the money per day; this one counts receipts instead.
+    habits: recap.spendingDays > 0 && recap.purchaseCount > recap.spendingDays ? `About ${Math.round(recap.purchaseCount / recap.spendingDays * 10) / 10} receipts on each day you spent.` : undefined,
   };
   const period = recap.period.name;
   const asks: Partial<Record<RecapStoryId, string>> = {
@@ -593,7 +594,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   const cutLine = cut === 'directors' ? 'The director’s cut: every chapter' : cut === 'speedrun' ? 'Speedrun edition: the quick lap' : null;
   const teasers = [...(cutLine ? [cutLine] : []), ...shuffled(chapters.map(chapter => teaserFor[chapter.id]).filter((line): line is string => Boolean(line))).slice(0, cutLine ? 2 : 3),
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
-  return chapters.map((chapter, i) => {
+  const built = chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
     const raw = chapter.id === 'bonus' ? pickFrom(bonusCopy(chapter.bonus, facts), random)
       : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
@@ -615,6 +616,16 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       ask: asks[chapter.id] ?? `Tell me more about this from my ${period} recap: ${copy.title}`,
     } as RecapStory;
   });
+  // Colour rule: two chapters in a row never share a theme. A chapter whose colour is fixed (the
+  // personality's own theme, the ejection's space) keeps it; its neighbour takes another from the run.
+  const fixed = (story: RecapStory) => (story.id === 'persona' && run !== 0) || (story.id === 'interlude' && story.variant === 'ejected');
+  for (let i = 1; i < built.length; i++) {
+    if (built[i].theme !== built[i - 1].theme) continue;
+    const j = fixed(built[i]) ? i - 1 : i;
+    const swap = palette.find(theme => theme !== built[j - 1]?.theme && theme !== built[j + 1]?.theme);
+    if (swap) built[j] = { ...built[j], theme: swap };
+  }
+  return built;
 }
 
 /** The period's money personality: the pattern that stands out most, with a dash of the runner-up. */

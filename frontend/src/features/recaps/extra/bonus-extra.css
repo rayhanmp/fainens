@@ -2,19 +2,21 @@
 
 /* Payday: hourglass. --share is the fraction gone in the first three days. */
 .recap-hourglass-stage { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 6cqw; }
-.recap-hourglass { position: relative; display: grid; justify-items: center; width: 30cqw; }
-.recap-hourglass::before, .recap-hourglass::after { content: ''; width: 34cqw; height: 1.6cqw; border-radius: 99px; background: var(--recap-ink); }
-.recap-hourglass-top, .recap-hourglass-bottom { position: relative; width: 26cqw; height: 22cqw; overflow: hidden; border: .7cqw solid var(--recap-ink); }
-.recap-hourglass-top { border-radius: 2cqw 2cqw 50% 50% / 2cqw 2cqw 100% 100%; clip-path: polygon(0 0, 100% 0, 58% 100%, 42% 100%); }
-.recap-hourglass-bottom { border-radius: 50% 50% 2cqw 2cqw / 100% 100% 2cqw 2cqw; clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%); }
+/* The glass is two clipped bulbs; the drop-shadows trace the union of bulbs and caps as one outline. */
+.recap-hourglass { position: relative; display: grid; justify-items: center; width: 32cqw;
+  filter: drop-shadow(.5cqw 0 0 var(--recap-ink)) drop-shadow(-.5cqw 0 0 var(--recap-ink)) drop-shadow(0 .5cqw 0 var(--recap-ink)) drop-shadow(0 -.5cqw 0 var(--recap-ink)); }
+.recap-hourglass::before, .recap-hourglass::after { content: ''; width: 32cqw; height: 2cqw; border-radius: 99px; background: var(--recap-ink); }
+.recap-hourglass-top, .recap-hourglass-bottom { position: relative; width: 26cqw; height: 22cqw; overflow: hidden; background: color-mix(in srgb, var(--recap-ink) 10%, var(--recap-paper)); }
+.recap-hourglass-top { clip-path: polygon(0 0, 100% 0, 56% 100%, 44% 100%); }
+.recap-hourglass-bottom { clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%); }
 .recap-hourglass-top i, .recap-hourglass-bottom i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--recap-accent); }
 .recap-hourglass-top i { top: 0; transform-origin: bottom; animation: recap-sand-drain 2.2s cubic-bezier(.2, .8, .3, 1) both; animation-delay: calc(var(--enter) + 400ms); scale: 1 calc(1 - var(--share)); }
 .recap-hourglass-bottom i { height: 100%; transform-origin: bottom; animation: recap-sand-fill 2.2s cubic-bezier(.2, .8, .3, 1) both; animation-delay: calc(var(--enter) + 400ms); scale: 1 var(--share); }
-.recap-hourglass-stream { width: 1cqw; height: 4cqw; margin: -.4cqw 0; background: var(--recap-accent); animation: recap-stream 2.2s steps(1) both; animation-delay: calc(var(--enter) + 400ms); }
+.recap-hourglass-stream { position: absolute; left: 50%; top: 20cqw; width: 1cqw; height: 8cqw; margin-left: -.5cqw; background: var(--recap-accent); animation: recap-stream 2.2s steps(1) both; animation-delay: calc(var(--enter) + 400ms); }
 .recap-hourglass-copy { display: grid; gap: 1cqw; }
 .recap-hourglass-copy b { font-size: 15cqw; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
-.recap-hourglass-copy span { font-size: 3.4cqw; font-weight: 700; }
-.recap-hourglass-copy small { font-size: 3cqw; opacity: .7; }
+.recap-hourglass-copy > span { font-size: 3.6cqw; font-weight: 700; }
+.recap-hourglass-copy > small { font-size: max(3cqw, 10.5px); opacity: .8; }
 @keyframes recap-sand-drain { from { scale: 1 1; } }
 @keyframes recap-sand-fill { from { scale: 1 0; } }
 @keyframes recap-stream { 0%, 99% { opacity: 1; } 100% { opacity: 0; } }
@@ -22,36 +24,41 @@
 /* Boss: a boxing ring. */
 .recap-ring { height: 62cqw; overflow: hidden; border-radius: 3cqw; background: color-mix(in srgb, var(--recap-ink) 9%, transparent); }
 .recap-ring-ropes { position: absolute; left: 0; right: 0; top: 10cqw; display: grid; gap: 4cqw; }
-.recap-ring-ropes i { height: 1cqw; background: #d6333f; opacity: .8; animation: recap-grow-x .6s ease-out both; transform-origin: left; animation-delay: calc(var(--enter) + 100ms); }
+.recap-ring-ropes i { height: 1cqw; background: var(--recap-pop); opacity: .8; animation: recap-grow-x .6s ease-out both; transform-origin: left; animation-delay: calc(var(--enter) + 100ms); }
 .recap-ring-ropes i:nth-child(2) { background: var(--recap-paper); }
 .recap-ring-card { position: absolute; left: 50%; top: 3cqw; padding: 1cqw 3cqw; translate: -50% 0; border-radius: 1cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: 3cqw; font-weight: 900; letter-spacing: .14em; text-transform: uppercase;
   animation: recap-stamp .5s both; animation-delay: calc(var(--enter) + 200ms); }
-.recap-glove { position: absolute; top: 20cqw; width: 20cqw; height: 16cqw; border-radius: 45% 55% 50% 50%; background: #d6333f; box-shadow: inset -2cqw -2cqw 0 #0002; }
-.recap-glove::after { content: ''; position: absolute; bottom: -4cqw; left: 25%; width: 50%; height: 5cqw; border-radius: 1cqw; background: #f2f2f2; }
-.recap-glove.is-left { left: 6cqw; animation: recap-jab 1s cubic-bezier(.5, 0, .2, 1.4) both; animation-delay: calc(var(--enter) + 700ms); }
-.recap-glove.is-right { right: 6cqw; background: var(--recap-ink); scale: -1 1; animation: recap-glove-reel .6s ease-out both; animation-delay: calc(var(--enter) + 1200ms); }
-.recap-pow { position: absolute; left: 50%; top: 16cqw; display: grid; place-items: center; width: 34cqw; height: 24cqw; margin-left: -17cqw; background: #ffcc33; color: #2a1d00; font-size: 8cqw; font-weight: 900; font-style: italic;
+/* A glove facing the middle: a padded fist, a thumb tucked over it, a striped cuff behind. The receipt's
+   glove wears the pop colour; yours wears the accent, the same as your purchases meter below. */
+.recap-glove { --glove: var(--recap-pop); --crease: color-mix(in srgb, var(--recap-ink) 24%, transparent); position: absolute; top: 21cqw; width: 19cqw; height: 15cqw; border-radius: 40% 60% 55% 45% / 50% 55% 45% 50%; background: var(--glove); box-shadow: inset -1.6cqw -1.6cqw 0 var(--crease); }
+.recap-glove::before { content: ''; position: absolute; top: -1.4cqw; left: 24%; width: 9cqw; height: 6cqw; border-radius: 55% 50% 40% 45%; background: var(--glove); box-shadow: inset 0 -.8cqw 0 var(--crease); }
+.recap-glove::after { content: ''; position: absolute; top: 20%; left: -5.5cqw; width: 6.5cqw; height: 60%; border-radius: 1.4cqw 0 0 1.4cqw; border: .5cqw solid var(--glove); border-right: 0;
+  background: repeating-linear-gradient(90deg, var(--recap-paper) 0 1.4cqw, color-mix(in srgb, var(--glove) 45%, var(--recap-paper)) 0 2.8cqw); }
+.recap-glove.is-left { left: 7cqw; animation: recap-jab 1s cubic-bezier(.5, 0, .2, 1.4) both; animation-delay: calc(var(--enter) + 700ms); }
+.recap-glove.is-right { --glove: var(--recap-accent); right: 7cqw; scale: -1 1; animation: recap-glove-reel .6s ease-out both; animation-delay: calc(var(--enter) + 1200ms); }
+.recap-pow { position: absolute; left: 50%; top: 16cqw; display: grid; place-items: center; width: 34cqw; height: 24cqw; margin-left: -17cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: 8cqw; font-weight: 900; font-style: italic;
   clip-path: polygon(50% 0, 60% 22%, 84% 8%, 76% 34%, 100% 40%, 78% 56%, 92% 82%, 64% 70%, 54% 100%, 44% 74%, 16% 90%, 24% 62%, 0 52%, 22% 38%, 10% 12%, 38% 24%);
   animation: recap-pow .8s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 1150ms); }
 .recap-ring-meter { position: absolute; left: 4cqw; right: 4cqw; bottom: 4cqw; display: grid; gap: 1.2cqw; }
 .recap-ring-meter > span { font-size: max(2.6cqw, 10.5px); font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
 .recap-ring-meter > i { height: 4cqw; border: .6cqw solid var(--recap-ink); border-radius: 1cqw; overflow: hidden; }
-.recap-ring-meter > i b { display: block; height: 100%; background: #3ecf6e; transform-origin: left; animation: recap-boss-drain .4s both; animation-delay: calc(var(--enter) + 1200ms); }
-.recap-ring-meter small { font-size: 2.8cqw; font-weight: 700; opacity: .8; }
+.recap-ring-meter > i b { display: block; height: 100%; background: var(--recap-accent); transform-origin: left; animation: recap-boss-drain .4s both; animation-delay: calc(var(--enter) + 1200ms); }
+.recap-ring-meter > span { display: flex; justify-content: space-between; gap: 2cqw; }
+.recap-ring-meter em { font-style: normal; letter-spacing: .04em; }
 @keyframes recap-jab { 0% { opacity: 0; translate: -30cqw 0; } 40% { opacity: 1; translate: 0 0; } 60% { translate: 26cqw -2cqw; } 100% { translate: 8cqw 0; } }
 @keyframes recap-glove-reel { 0% { rotate: 0deg; } 40% { rotate: -18deg; translate: 4cqw 0; } 100% { rotate: -6deg; translate: 2cqw 0; } }
 @keyframes recap-pow { 0% { opacity: 0; scale: .2; rotate: -20deg; } 60% { opacity: 1; scale: 1.2; } 100% { opacity: 1; scale: 1; rotate: -8deg; } }
 
-/* Suspects: wanted posters. */
+/* Suspects: wanted posters. A physical object: parchment and brown print whatever the theme, tinted toward it. */
 .recap-wanted { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; padding: 2cqw 0; }
-.recap-wanted-poster { position: relative; display: grid; justify-items: center; gap: 1cqw; padding: 5cqw 3cqw 4cqw; background: #f1e3c2; color: #3b2a16; text-align: center; rotate: var(--r); box-shadow: 0 1cqw 2cqw #0003;
+.recap-wanted-poster { position: relative; display: grid; justify-items: center; gap: 1cqw; padding: 5cqw 3cqw 4cqw; --recap-ink: #3a2814; background: color-mix(in srgb, var(--recap-paper) 16%, #f1e3bf); color: var(--recap-ink); text-align: center; rotate: var(--r); box-shadow: 0 1cqw 2cqw #0003;
   animation: recap-poster-pin .7s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 300ms); }
-.recap-wanted-pin { position: absolute; top: 1.4cqw; width: 3cqw; height: 3cqw; border-radius: 50%; background: #d6333f; box-shadow: inset -.6cqw -.6cqw 0 #0003; }
+.recap-wanted-pin { position: absolute; top: 1.4cqw; width: 3cqw; height: 3cqw; border-radius: 50%; background: var(--recap-pop); box-shadow: inset -.6cqw -.6cqw 0 #0003; }
 .recap-wanted-head { font-family: Georgia, serif; font-size: 7cqw; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
-.recap-wanted-photo { display: grid; place-items: center; width: 22cqw; height: 22cqw; border: .6cqw solid #3b2a16; background: repeating-linear-gradient(0deg, #e2cfa4 0 1cqw, #ead9b3 1cqw 2cqw); font-size: 12cqw; font-weight: 900; }
-.recap-wanted-name { max-width: 100%; overflow: hidden; font-size: 3.6cqw; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
-.recap-wanted-reward { padding: .6cqw 2cqw; border: .5cqw solid #3b2a16; font-size: 3.4cqw; font-weight: 900; }
-.recap-wanted-poster small { font-size: max(2.6cqw, 10.5px); opacity: .75; }
+.recap-wanted-photo { display: grid; place-items: center; width: 22cqw; height: 22cqw; border: .6cqw solid var(--recap-ink); background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--recap-ink) 10%, transparent) 0 1cqw, color-mix(in srgb, var(--recap-ink) 4%, transparent) 1cqw 2cqw); font-size: 12cqw; font-weight: 900; }
+.recap-wanted-name { display: -webkit-box; max-width: 100%; overflow: hidden; font-size: 3.6cqw; line-height: 1.15; text-transform: uppercase; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.recap-wanted-reward { padding: .6cqw 2cqw; border: .5cqw solid var(--recap-ink); font-size: 3.4cqw; font-weight: 900; }
+.recap-wanted-poster small { font-size: max(2.6cqw, 10.5px); opacity: .8; }
 @keyframes recap-poster-pin { from { opacity: 0; translate: 0 -20cqw; rotate: calc(var(--r) * -4); } }
 
 /* Milestone: odometer. */
@@ -60,7 +67,7 @@
 .recap-odometer-col { display: block; width: 13cqw; height: var(--row); overflow: hidden; border-radius: 1.2cqw; background: var(--recap-paper); color: var(--recap-ink); }
 .recap-odometer-col > span { display: grid; translate: 0 calc((10 + var(--to)) * var(--row) * -1); animation: recap-odo-roll 2.2s cubic-bezier(.15, .9, .2, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 180ms); }
 .recap-odometer-col b { display: grid; place-items: center; height: var(--row); font-size: 13cqw; font-weight: 900; font-variant-numeric: tabular-nums; }
-.recap-odometer-trophy { display: grid; place-items: center; width: 16cqw; height: 16cqw; border-radius: 50%; background: #ffcc33; color: #5a3d00; animation: recap-badge-in .9s cubic-bezier(.2, 1.3, .35, 1) both; animation-delay: calc(var(--enter) + 2400ms); }
+.recap-odometer-trophy { display: grid; place-items: center; width: 16cqw; height: 16cqw; border-radius: 50%; background: var(--recap-pop); color: var(--recap-on-pop); animation: recap-badge-in .9s cubic-bezier(.2, 1.3, .35, 1) both; animation-delay: calc(var(--enter) + 2400ms); }
 .recap-odometer-trophy svg { width: 9cqw; height: 9cqw; }
 .recap-odometer-day { font-size: 3cqw; font-weight: 800; animation: recap-fade .5s both; animation-delay: calc(var(--enter) + 2600ms); }
 @keyframes recap-odo-roll { from { translate: 0 0; } }
@@ -84,11 +91,11 @@
 .recap-sequel-beam.is-right { right: 14%; animation-direction: alternate-reverse; }
 .recap-sequel-poster { position: relative; display: grid; justify-items: center; gap: 1.4cqw; width: 66cqw; max-width: 100%; padding: 5cqw 4cqw; border-radius: 1.4cqw; background: linear-gradient(to bottom, var(--recap-ink), color-mix(in srgb, var(--recap-ink) 70%, var(--recap-accent)));
   color: var(--recap-paper); text-align: center; box-shadow: 0 2cqw 6cqw #0005; animation: recap-poster-up .9s cubic-bezier(.2, 1.1, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
-.recap-sequel-poster > small { max-width: 100%; font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
-.recap-sequel-icon { font-size: 14cqw; color: var(--recap-accent); animation: recap-badge-in .9s both; animation-delay: calc(var(--enter) + 700ms); }
+.recap-sequel-poster > small { max-width: 100%; font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .85; text-wrap: balance; }
+.recap-sequel-icon { font-size: 14cqw; color: var(--recap-paper); animation: recap-badge-in .9s both; animation-delay: calc(var(--enter) + 700ms); }
 .recap-sequel-poster > b { max-width: 100%; font-family: Georgia, serif; font-size: 6.4cqw; font-weight: 900; line-height: 1.05; text-transform: uppercase; }
 .recap-sequel-tag { font-size: 3.6cqw; font-style: italic; }
-.recap-sequel-stars { color: #ffcc33; font-size: 4cqw; letter-spacing: .3em; animation: recap-fade .5s both; animation-delay: calc(var(--enter) + 1300ms); }
+.recap-sequel-stars { color: var(--recap-paper); font-size: 4cqw; letter-spacing: .3em; animation: recap-fade .5s both; animation-delay: calc(var(--enter) + 1300ms); }
 @keyframes recap-searchlight { from { rotate: -22deg; } to { rotate: 22deg; } }
 @keyframes recap-poster-up { from { opacity: 0; translate: 0 30cqw; } }
 

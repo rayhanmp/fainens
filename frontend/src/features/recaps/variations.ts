@@ -1,5 +1,4 @@
 import { formatRecapCurrency as money } from './currency';
-import { formatRecapDay } from './dates';
 import type { Bonus, RecapStoryId } from './stories';
 
 export type CopyFacts = {
@@ -179,18 +178,18 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
         { eyebrow: 'Daily meter', title: `The meter ran ${money(f.perDay)} a day.`, body: `Over ${plural(f.elapsedDays, 'day')}${soFar}.` },
       ];
       return [
-        { eyebrow: 'How you bought', title: `${plural(f.purchaseCount, 'purchase')}, ${plural(f.spendingDays, 'day')}.`, body: f.median !== null ? `A typical receipt: ${money(f.median)}.` : NONE },
-        { eyebrow: 'Checkout count', title: `${plural(f.purchaseCount, 'checkout')}.`, body: `Spread over ${plural(f.spendingDays, 'spending day')}.` },
+        { eyebrow: 'How you bought', title: `${plural(f.purchaseCount, 'purchase')}, ${plural(f.spendingDays, 'day')}.`, body: NONE },
+        { eyebrow: 'Checkout count', title: `${plural(f.purchaseCount, 'checkout')}.`, body: NONE },
         ...(f.repeat ? [
           { eyebrow: 'Encore', title: `${f.repeat.label} came back ${f.repeat.occurrences} times.`, body: `Out of ${plural(f.purchaseCount, 'purchase')}.` },
-          { eyebrow: 'On repeat', title: `${f.repeat.label}, ×${f.repeat.occurrences}.`, body: `${plural(f.purchaseCount, 'purchase')} in all.` },
+          { eyebrow: 'On repeat', title: `${f.repeat.label}, ×${f.repeat.occurrences}.`, body: NONE },
           { eyebrow: 'Familiar face', title: `${f.repeat.label} again. And again.`, body: `${f.repeat.occurrences} times this period.` },
         ] : []),
       ];
     // These bodies name the measure being compared, which the chart alone doesn't say.
     case 'comparison': return f.change !== null ? [
       { eyebrow: 'Then and now', title: f.change === 0 ? 'Right where it was.' : `${Math.abs(f.change)}% ${f.change > 0 ? 'higher' : 'lower'} than before.`, body: f.changeMode === 'average' ? 'Average purchase size, against your previous periods.' : 'Total expenses, against the previous period.' },
-      { eyebrow: 'Plot twist', title: f.changeMode === 'average' ? `The average receipt got ${f.change > 0 ? 'bigger' : 'smaller'}.` : `The expense total went ${f.change > 0 ? 'up' : 'down'}.`, body: `By ${Math.abs(f.change)}%.` },
+      { eyebrow: 'Plot twist', title: f.changeMode === 'average' ? `The average receipt got ${f.change > 0 ? 'bigger' : 'smaller'}.` : `The expense total went ${f.change > 0 ? 'up' : 'down'}.`, body: NONE },
       { eyebrow: 'Before and after', title: f.change === 0 ? 'No change. None.' : `${f.change > 0 ? 'Up' : 'Down'} ${Math.abs(f.change)}%.`, body: f.changeMode === 'average' ? 'The average receipt, compared with earlier periods.' : 'Total expenses, compared with last period.' },
       { eyebrow: 'The sequel', title: f.change === 0 ? 'Same as the original.' : `The sequel ran ${Math.abs(f.change)}% ${f.change > 0 ? 'bigger' : 'smaller'}.`, body: f.changeMode === 'average' ? 'Measured by average purchase size.' : 'Measured by total expenses.' },
       { eyebrow: 'Side by side', title: 'This period, meet the last.', body: `${f.changeMode === 'average' ? 'Average receipt' : 'Total expenses'}: ${f.change > 0 ? '+' : f.change < 0 ? '−' : '±'}${Math.abs(f.change)}%.` },
@@ -329,42 +328,42 @@ export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyF
   }
 }
 
-/** Copy for the bonus slides, each written from the figures that earned it. */
+/** Copy for the bonus slides, each written from the figures that earned it. Both looks of every bonus
+ * already draw its share, names, counts and date, so a body only carries a figure they don't. */
 export function bonusCopy(b: Bonus, f: CopyFacts): Copy[] {
-  const day = (ms: number) => formatRecapDay(ms, { weekday: 'short', day: 'numeric', month: 'short' });
   switch (b.kind) {
     case 'payday': return [
       { eyebrow: 'Bonus: payday rush', title: `${b.share}% went in the first three days.`, body: `${money(b.amount)} out of the gate.` },
-      { eyebrow: 'Bonus: off the blocks', title: 'Payday, then a sprint.', body: `Days one to three took ${b.share}% of the period’s spending.` },
+      { eyebrow: 'Bonus: off the blocks', title: 'Payday, then a sprint.', body: NONE },
       { eyebrow: 'Bonus: day one energy', title: `Three days, ${b.share}% of the spend.`, body: `${money(b.amount)} in the first three days.` },
-      { eyebrow: 'Bonus: fresh salary', title: 'The salary landed. So did the receipts.', body: `The first three days: ${money(b.amount)}, ${b.share}% of the total.` },
+      { eyebrow: 'Bonus: fresh salary', title: 'The salary landed. So did the receipts.', body: `${money(b.amount)} by day three.` },
     ];
     case 'boss': return [
-      { eyebrow: 'Bonus: boss fight', title: `${b.label} dealt ${b.share}% damage.`, body: `One receipt, ${money(b.amount)}, on ${day(b.date)}.` },
-      { eyebrow: 'Bonus: critical hit', title: `One hit: ${b.share}%.`, body: `${b.label} took ${b.share}% of purchase spending on its own.` },
-      { eyebrow: 'Bonus: final boss', title: `A wild ${b.label} appeared.`, body: `${money(b.amount)} in one go. ${b.share}% of the period’s purchases.` },
-      { eyebrow: 'Bonus: one-hit wonder', title: `${b.label}, the heavyweight.`, body: `A single receipt carried ${b.share}% of purchase spend.` },
+      { eyebrow: 'Bonus: boss fight', title: `${b.label} dealt ${b.share}% damage.`, body: `One receipt, ${money(b.amount)}.` },
+      { eyebrow: 'Bonus: critical hit', title: `One hit: ${b.share}%.`, body: `${b.label}, ${money(b.amount)} in one go.` },
+      { eyebrow: 'Bonus: final boss', title: `A wild ${b.label} appeared.`, body: `${money(b.amount)} in one go.` },
+      { eyebrow: 'Bonus: one-hit wonder', title: `${b.label}, the heavyweight.`, body: `${money(b.amount)} on a single receipt.` },
     ];
     case 'suspects': {
       const [a, c] = b.items;
       return [
-        { eyebrow: 'Bonus: the usual suspects', title: `${a.label} and ${c.label}.`, body: `${a.occurrences} and ${c.occurrences} visits.` },
-        { eyebrow: 'Bonus: lineup', title: 'Two regulars, one lineup.', body: `${a.label} ×${a.occurrences}, ${c.label} ×${c.occurrences}.` },
-        { eyebrow: 'Bonus: repeat offenders', title: `${a.occurrences + c.occurrences} visits between them.`, body: `${a.label} and ${c.label}.` },
-        { eyebrow: 'Bonus: rivalry', title: `${a.label} vs ${c.label}.`, body: `${a.occurrences} to ${c.occurrences}.` },
+        { eyebrow: 'Bonus: the usual suspects', title: `${a.label} and ${c.label}.`, body: `${money(a.total + c.total)} between them.` },
+        { eyebrow: 'Bonus: lineup', title: 'Two regulars, one lineup.', body: `${money(a.total + c.total)} between them.` },
+        { eyebrow: 'Bonus: repeat offenders', title: `${a.occurrences + c.occurrences} visits between them.`, body: NONE },
+        { eyebrow: 'Bonus: rivalry', title: `${a.label} vs ${c.label}.`, body: NONE },
       ];
     }
     case 'milestone': return [
-      { eyebrow: 'Bonus: milestone', title: `Receipt #${b.count} landed on ${day(b.date)}.`, body: `Day ${b.dayIndex + 1} of ${b.totalDays}. ${f.purchaseCount} receipts in all.` },
-      { eyebrow: 'Bonus: level up', title: `${b.count} receipts reached.`, body: `The ${b.count}th came on ${day(b.date)}.` },
-      { eyebrow: 'Bonus: round number', title: `#${b.count}. Ding.`, body: `It arrived on day ${b.dayIndex + 1}, ${day(b.date)}.` },
-      { eyebrow: 'Bonus: counting up', title: `Receipt number ${b.count}.`, body: `Logged on ${day(b.date)}, and the count kept going to ${f.purchaseCount}.` },
+      { eyebrow: 'Bonus: milestone', title: `Receipt #${b.count}.`, body: `${f.purchaseCount} receipts in all.` },
+      { eyebrow: 'Bonus: level up', title: `${b.count} receipts reached.`, body: `The count finished at ${f.purchaseCount}.` },
+      { eyebrow: 'Bonus: round number', title: `#${b.count}. Ding.`, body: NONE },
+      { eyebrow: 'Bonus: counting up', title: `Receipt number ${b.count}.`, body: `The count kept going, to ${f.purchaseCount}.` },
     ];
     case 'takeover': return [
-      { eyebrow: 'Bonus: hostile takeover', title: `${b.label} holds the majority.`, body: `${b.share}% of spending.` },
-      { eyebrow: 'Bonus: landslide', title: `${b.label} wins in a landslide.`, body: `${b.share}% of the vote.` },
-      { eyebrow: 'Bonus: majority rule', title: `More than half: ${b.label}.`, body: `${b.share}% of spending sat in one category.` },
-      { eyebrow: 'Bonus: the chamber', title: `${b.share} seats out of 100.`, body: `${b.label} controls the house.` },
+      { eyebrow: 'Bonus: hostile takeover', title: `${b.label} holds the majority.`, body: NONE },
+      { eyebrow: 'Bonus: landslide', title: `${b.label} wins in a landslide.`, body: NONE },
+      { eyebrow: 'Bonus: majority rule', title: `More than half: ${b.label}.`, body: NONE },
+      { eyebrow: 'Bonus: the chamber', title: `${b.share} seats out of 100.`, body: NONE },
     ];
     case 'comeback': {
       const was = b.previousRank ? `#${b.previousRank} in ${b.previousPeriod}` : `off the chart in ${b.previousPeriod}`;

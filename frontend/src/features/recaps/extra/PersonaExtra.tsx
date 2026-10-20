@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { Bell, Gavel, Plane } from 'lucide-react';
+import { Bell, Bus, Coffee, Gamepad2, Gavel, HeartPulse, House, Plane, Repeat2, Shirt, ShoppingBag, Utensils, Zap } from 'lucide-react';
 import { AnimatedValue } from '../AnimatedValue';
 import { Burst } from '../Burst';
 import { seeded } from '../motion';
@@ -7,6 +7,7 @@ import type { Persona } from '../stories';
 import './persona-extra.css';
 
 const vars = (values: Record<string, string | number>) => values as CSSProperties;
+const EVERYTHING = [Coffee, Bus, ShoppingBag, House, Utensils, Gamepad2, Shirt, HeartPulse, Zap];
 
 /** A second set piece for each money personality, built around the same number as the first. */
 export function AltPersonaScene({ persona, run }: { persona: Persona; run: number }) {
@@ -27,7 +28,7 @@ export function AltPersonaScene({ persona, run }: { persona: Persona; run: numbe
       {/* A desk calendar flips through the week and lands on Saturday. */}
       <div className="recap-flipcal">
         {['MON', 'TUE', 'WED', 'THU', 'FRI'].map((day, i) => <span key={day} className="recap-flipcal-page" style={vars({ '--i': i })}>{day}</span>)}
-        <span className="recap-flipcal-page is-final">SAT</span>
+        <span className="recap-flipcal-page is-final">SAT<small>&amp; SUN</small></span>
       </div>
       <b className="recap-tgif">TGIF</b>
       <div className="recap-scene-burst" style={vars({ '--enter': '0ms' })}><Burst seed={run} kind="confetti" count={26} origin="center" delay={1500} /></div>
@@ -49,12 +50,15 @@ export function AltPersonaScene({ persona, run }: { persona: Persona; run: numbe
       {number}
     </div>;
     case 'loyal': return <div className="recap-scene recap-alt-loyal" aria-hidden="true">
-      {/* The order ticket for the usual, printed again, and again. */}
-      <div className="recap-ticket">
-        <p>Order #{String(Math.min(999, persona.figure * 7)).padStart(3, '0')}</p>
-        <b>The usual</b>
-        <ol>{Array.from({ length: Math.min(3, Math.max(2, persona.figure)) }, (_, i) => <li key={i} style={vars({ '--i': i })}>1 × the usual</li>)}</ol>
-        <span className="recap-ticket-stamp">Regular</span>
+      {/* On repeat: a ring of lettering turns around a repeat button while echoes pulse out of it. */}
+      <div className="recap-repeat-disc">
+        {[0, 1, 2].map(i => <i key={i} className="recap-repeat-echo" style={vars({ '--i': i })} />)}
+        <svg viewBox="0 0 100 100" className="recap-repeat-ring">
+          <defs><path id={`repeat-${run}`} d="M50,50 m-39,0 a39,39 0 1,1 78,0 a39,39 0 1,1 -78,0" /></defs>
+          <circle cx="50" cy="50" r="47" />
+          <text><textPath href={`#repeat-${run}`} textLength="244" lengthAdjust="spacing">SAME AGAIN ✳ SAME AGAIN ✳ SAME AGAIN ✳ </textPath></text>
+        </svg>
+        <span className="recap-repeat-core"><Repeat2 /></span>
       </div>
       {number}
     </div>;
@@ -73,8 +77,8 @@ export function AltPersonaScene({ persona, run }: { persona: Persona; run: numbe
       {number}
     </div>;
     case 'allRounder': return <div className="recap-scene recap-alt-allRounder" aria-hidden="true">
-      {/* Spinning plates on sticks, each wobbling at its own pace, none falling. */}
-      <div className="recap-plates">{[0, 1, 2, 3].map(i => <span key={i} className="recap-plate" style={vars({ '--i': i, '--h': `${26 + (i % 2) * 6}cqw`, '--w': `${1.4 + random() * .8}s` })}><i /></span>)}</div>
+      {/* A bit of everything: nine everyday things, none bigger than the others, dealt onto a grid. */}
+      <div className="recap-everything">{EVERYTHING.map((Icon, i) => <span key={i} className={`is-${i % 3}`} style={vars({ '--i': i, '--b': `${2.4 + random() * 1.4}s` })}><Icon /></span>)}</div>
       {number}
     </div>;
   }

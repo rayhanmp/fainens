@@ -50,7 +50,6 @@ export function PersonaScene({ persona, run }: { persona: Persona; run: number }
       <div className="recap-punch-card">
         <p>Fainens loyalty club ✳</p>
         <div>{Array.from({ length: 10 }, (_, i) => <i key={i} className={i < Math.min(10, persona.figure) ? 'is-punched' : undefined} style={{ '--i': i } as CSSProperties} />)}</div>
-        <span className="recap-punch-stamp">Regular</span>
       </div>
       {number}
     </div>;
@@ -71,8 +70,9 @@ export function PersonaScene({ persona, run }: { persona: Persona; run: number }
       {number}
     </div>;
     case 'allRounder': return <div className="recap-scene recap-scene-allRounder" aria-hidden="true">
-      <div className="recap-juggle">{['circle', 'square', 'triangle'].map((shape, i) => <i key={shape} className={`recap-juggle-${shape}`} style={{ '--i': i } as CSSProperties} />)}</div>
-      <span className="recap-seesaw"><i /></span>
+      {/* Perfectly balanced: a donut of equal slices turning slowly over a spirit level, bubble dead centre. */}
+      <span className="recap-even-donut"><i /></span>
+      <span className="recap-level"><i /></span>
       {number}
     </div>;
   }

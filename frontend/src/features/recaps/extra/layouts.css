@@ -6,7 +6,7 @@
 .recap-polar-ring { fill: none; stroke: var(--recap-line); stroke-width: .3; }
 .recap-polar-wedge { fill: color-mix(in srgb, var(--recap-ink) 30%, transparent); transform-box: view-box; transform-origin: 50px 50px; animation: recap-polar-in .8s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 70ms); }
 .recap-polar-wedge.is-top { fill: var(--recap-accent); }
-.recap-polar-label { fill: var(--recap-ink); font-size: 4.8px; font-weight: 800; text-anchor: middle; opacity: .55; }
+.recap-polar-label { fill: var(--recap-ink); font-size: 4.8px; font-weight: 800; text-anchor: middle; opacity: .8; }
 .recap-polar-label.is-top { opacity: 1; }
 .recap-polar-hand { transform-box: view-box; transform-origin: 50px 50px; rotate: var(--hand); animation: recap-hand-sweep 1.6s cubic-bezier(.3, 0, .2, 1) both; animation-delay: calc(var(--enter) + 900ms); }
 .recap-polar-hand line { stroke: var(--recap-ink); stroke-width: 1.2; stroke-linecap: round; }
@@ -18,7 +18,7 @@
 .recap-podium { display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; gap: 1.6cqw; height: 52cqw; margin-top: 4cqw; }
 .recap-podium-step { position: relative; display: grid; align-content: start; justify-items: center; gap: 1cqw; height: calc(var(--h) * 78%); padding-top: 4cqw; border-radius: 2cqw 2cqw 0 0; background: color-mix(in srgb, var(--recap-ink) 14%, transparent);
   transform-origin: bottom; animation: recap-grow-y .8s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--slot) * 220ms); }
-.recap-podium-step.is-gold { background: var(--recap-accent); color: var(--recap-paper); }
+.recap-podium-step.is-gold { background: var(--recap-ink); color: var(--recap-paper); }
 .recap-podium-step b { font-size: 6cqw; font-weight: 900; letter-spacing: -.03em; }
 .recap-podium-step small { font-size: max(2.6cqw, 10.5px); font-weight: 700; opacity: .8; }
 .recap-podium-medal { position: absolute; top: -12cqw; display: grid; place-items: center; width: 10cqw; height: 10cqw; border-radius: 50%; background: #c9ccd3; color: #2a2d33; font-size: 4.4cqw; font-weight: 900;
@@ -40,9 +40,10 @@
 .recap-planner-sticker svg { width: 2.8cqw; height: 2.8cqw; }
 
 /* Chain: one link per day; gaps break it. The run lights up link by link. */
-.recap-chain { display: flex; flex-wrap: wrap; gap: .4cqw 0; margin-top: 5cqw; }
-.recap-chain > i { width: 5.2cqw; height: 3.4cqw; margin-right: -1cqw; border: .8cqw solid color-mix(in srgb, var(--recap-ink) 40%, transparent); border-radius: 99px; animation: recap-pop .35s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 24ms); }
-.recap-chain > i:nth-child(even) { height: 2.2cqw; margin-top: .6cqw; }
+/* Rows of eight interlocking links: each link overlaps its neighbours, the odd ones seen edge-on. */
+.recap-chain { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); align-items: center; row-gap: 3.4cqw; margin-top: 6cqw; padding: 0 1.4cqw; }
+.recap-chain > i { width: calc(100% + 2.8cqw); height: 6.4cqw; margin-left: -1.4cqw; border: 1.2cqw solid color-mix(in srgb, var(--recap-ink) 40%, transparent); border-radius: 99px; animation: recap-pop .35s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 24ms); }
+.recap-chain > i:nth-child(even) { height: 3.6cqw; }
 .recap-chain > i.is-gap { border-style: dashed; opacity: .35; }
 .recap-chain > i.in-run { border-color: var(--recap-accent); animation: recap-pop .35s cubic-bezier(.2, 1.6, .4, 1) both, recap-link-glow 1.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 900ms + var(--r) * 90ms), calc(var(--enter) + 2s); }
 .is-quiet .recap-chain > i.in-run { opacity: 1; }
@@ -63,8 +64,8 @@
   animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 200ms); }
 .recap-combo-count { display: flex; align-items: baseline; gap: 1cqw; font-size: 20cqw; font-weight: 900; line-height: .9; letter-spacing: -.04em; animation: recap-combo-hit .5s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 1400ms); }
 /* Inside the ink panel everything is paper-toned: the accent isn't guaranteed to read on ink in every palette. */
-.recap-combo-x { font-size: 9cqw; opacity: .6; }
-.recap-combo-word { font-size: 3.4cqw; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; opacity: .75; }
+.recap-combo-x { font-size: 9cqw; opacity: .8; }
+.recap-combo-word { font-size: 3.4cqw; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; opacity: .8; }
 .recap-combo-meter { display: grid; grid-template-columns: repeat(20, 1fr); gap: .5cqw; width: 100%; margin-top: 2cqw; }
 .recap-combo-meter > i { height: 3cqw; border-radius: .4cqw; background: color-mix(in srgb, var(--recap-paper) 18%, transparent); }
 .recap-combo-meter > i.is-lit { background: var(--recap-paper); animation: recap-pop .25s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: calc(var(--enter) + 400ms + var(--i) * 50ms); }
@@ -76,7 +77,7 @@
 
 /* Receipt pile. */
 .recap-pile { position: relative; height: 40cqw; margin-top: 4cqw; }
-.recap-pile > i { position: absolute; left: calc(50% + var(--x) * .5); bottom: calc(var(--lift) * 2cqw); width: 16cqw; height: 11cqw; margin-left: -8cqw; border-radius: .6cqw; background: #fbfaf5;
+.recap-pile > i { position: absolute; left: calc(50% + var(--x) * .5); bottom: calc(var(--lift) * 2cqw); width: 16cqw; height: 11cqw; margin-left: -8cqw; border-radius: .6cqw; background: color-mix(in srgb, var(--recap-paper) 18%, #fbfaf5);
   background-image: repeating-linear-gradient(to bottom, transparent 0 1.6cqw, #24261f22 1.6cqw 1.9cqw); box-shadow: 0 .4cqw 1cqw #0002; rotate: var(--rot);
   animation: recap-slip-drop .55s cubic-bezier(.3, 1.3, .5, 1) both; animation-delay: calc(var(--enter) + 250ms + var(--i) * 55ms); }
 @keyframes recap-slip-drop { from { opacity: 0; translate: 0 -40cqw; rotate: calc(var(--rot) * -2); } }
@@ -91,7 +92,7 @@
 .recap-cart-items > i:nth-child(3n) { background: var(--recap-ink); border-radius: 50%; }
 .recap-cart-display { position: absolute; z-index: 1; left: 50%; top: 0; translate: -50% 0; display: flex; align-items: baseline; gap: 1.4cqw; padding: 1.4cqw 3.4cqw; border-radius: 1.6cqw; background: var(--recap-ink); color: var(--recap-paper);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 8cqw; font-weight: 900; animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 600ms); }
-.recap-cart-display small { font-size: max(2.6cqw, 10.5px); font-weight: 700; opacity: .7; }
+.recap-cart-display small { font-size: max(2.6cqw, 10.5px); font-weight: 700; opacity: .8; }
 @keyframes recap-cart-roll { from { opacity: 0; translate: -70cqw 0; rotate: -6deg; } 70% { translate: 3cqw 0; rotate: 2deg; } }
 @keyframes recap-item-drop { from { opacity: 0; translate: 0 -34cqw; } }
 
@@ -105,8 +106,8 @@
 /* Vinyl: the sleeve slides in, the record slides out and spins. */
 /* Named lp-sleeve: the vinyl cover design already owns .recap-sleeve. */
 .recap-lp-sleeve { position: relative; height: 40cqw; margin: 2cqw 0 3cqw; }
-.recap-lp-sleeve-art { position: absolute; z-index: 1; left: 0; top: 0; display: grid; align-content: end; gap: 1cqw; width: 40cqw; height: 40cqw; padding: 3.5cqw; border-radius: 1cqw; background: var(--recap-accent); color: var(--recap-paper);
-  background-image: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--recap-paper) 30%, transparent) 0 18%, transparent 19%); animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
+.recap-lp-sleeve-art { position: absolute; z-index: 1; left: 0; top: 0; display: grid; align-content: end; gap: 1cqw; width: 40cqw; height: 40cqw; padding: 3.5cqw; border-radius: 1cqw; background: var(--recap-ink); color: var(--recap-paper);
+  background-image: radial-gradient(circle at 30% 30%, var(--recap-paper) 0 12%, transparent 12.5%), radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--recap-paper) 22%, transparent) 0 24%, transparent 24.5%); animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
 .recap-lp-sleeve-art { overflow: hidden; }
 .recap-lp-sleeve-art b, .recap-jewel-insert b { font-size: 4cqw; line-height: 1.05; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .recap-lp-sleeve-art small { font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
@@ -121,7 +122,7 @@
 .recap-jewel-insert { position: absolute; z-index: 1; left: 0; top: 0; display: grid; align-content: end; gap: 1cqw; width: 40cqw; height: 40cqw; padding: 3.5cqw; border: 1.2cqw solid color-mix(in srgb, var(--recap-ink) 25%, transparent);
   border-radius: 1cqw; background: var(--recap-ink); color: var(--recap-paper); animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
 .recap-jewel-insert b { font-size: 4.6cqw; line-height: 1.05; }
-.recap-jewel-insert small { font-size: max(2.2cqw, 10.5px); font-weight: 700; opacity: .7; }
+.recap-jewel-insert small { font-size: max(2.2cqw, 10.5px); font-weight: 700; opacity: .8; }
 .recap-cd { position: absolute; left: 4cqw; top: 2cqw; display: grid; place-items: center; width: 36cqw; height: 36cqw; border-radius: 50%; translate: 34cqw 0;
   background: conic-gradient(from 0deg, #e8e8f0, #b8f0ff, #ffd6f5, #fff4b8, #c8ffd8, #e8e8f0); animation: recap-lp-out 1s cubic-bezier(.3, 1.1, .4, 1) both, recap-turn 2.2s linear infinite; animation-delay: calc(var(--enter) + 600ms), calc(var(--enter) + 1.6s); }
 .recap-cd i { width: 10cqw; height: 10cqw; border-radius: 50%; background: var(--recap-paper); box-shadow: 0 0 0 2cqw #ffffff99; }
@@ -131,20 +132,20 @@
 .recap-now { display: grid; grid-template-columns: 32cqw minmax(0, 1fr); align-items: center; gap: 2.4cqw 4cqw; margin-top: 2cqw; padding: 4cqw; border-radius: 4cqw; background: color-mix(in srgb, var(--recap-ink) 10%, transparent);
   animation: recap-rise .7s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--enter) + 150ms); }
 .recap-now > .recap-now-bar, .recap-now > .recap-now-time, .recap-now > .recap-now-controls { grid-column: 1 / -1; }
-.recap-now-art { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 3cqw; background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); color: var(--recap-paper); overflow: hidden; }
+.recap-now-art { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 3cqw; background: linear-gradient(to bottom, var(--recap-accent), var(--recap-ink) 62%); color: var(--recap-paper); overflow: hidden; }
 .recap-now-art svg { width: 18cqw; height: 18cqw; opacity: .35; animation: recap-turn 6s linear infinite; }
 .recap-now-art b { position: absolute; left: 2.4cqw; bottom: 2cqw; right: 2.4cqw; font-size: 3cqw; line-height: 1.05; }
 .recap-now-meta { display: grid; gap: .6cqw; }
 .recap-now-meta b { font-size: 5cqw; }
-.recap-now-meta small { font-size: 3cqw; opacity: .7; }
+.recap-now-meta small { font-size: 3cqw; opacity: .8; }
 .recap-now-bar { height: 1.2cqw; border-radius: 99px; background: color-mix(in srgb, var(--recap-ink) 18%, transparent); overflow: hidden; }
 .recap-now-bar i { display: block; height: 100%; background: var(--recap-ink); transform-origin: left; animation: recap-now-progress 9s linear both; animation-delay: calc(var(--enter) + 400ms); }
-.recap-now-time { display: flex; justify-content: space-between; font-size: max(2.4cqw, 10.5px); font-weight: 700; opacity: .6; }
+.recap-now-time { display: flex; justify-content: space-between; font-size: max(2.4cqw, 10.5px); font-weight: 700; opacity: .8; }
 .recap-now-controls { display: flex; align-items: center; justify-content: center; gap: 8cqw; }
 .recap-now-controls svg { width: 5cqw; height: 5cqw; }
 .recap-now-controls > span { display: grid; place-items: center; width: 11cqw; height: 11cqw; border-radius: 50%; background: var(--recap-ink); color: var(--recap-paper); }
 .recap-now-next { display: grid; gap: 1.4cqw; margin: 3cqw 0 0; padding: 0; list-style: none; }
-.recap-now-next li { display: flex; justify-content: space-between; font-size: 3cqw; font-weight: 700; opacity: .75; animation: recap-rise .5s both; animation-delay: calc(var(--enter) + 900ms + var(--i) * 120ms); }
+.recap-now-next li { display: flex; justify-content: space-between; font-size: 3cqw; font-weight: 700; opacity: .8; animation: recap-rise .5s both; animation-delay: calc(var(--enter) + 900ms + var(--i) * 120ms); }
 @keyframes recap-now-progress { from { scale: 0 1; } to { scale: .35 1; } }
 
 /* Skyline: buildings rise, windows flicker on, the tallest gets a blinking antenna. */
@@ -155,8 +156,8 @@
   background-blend-mode: multiply; transform-origin: bottom; animation: recap-grow-y .8s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 70ms); }
 .is-top .recap-building { background-color: var(--recap-accent); }
 .is-top .recap-building::after { content: ''; position: absolute; left: 50%; bottom: 100%; width: .5cqw; height: 6cqw; margin-left: -.25cqw; background: var(--recap-ink); }
-.is-top .recap-building::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 6cqw); width: 1.6cqw; height: 1.6cqw; margin-left: -.8cqw; border-radius: 50%; background: #ff5a5f; animation: recap-blink 1s steps(1) infinite; animation-delay: calc(var(--enter) + 1.4s); }
-.recap-skyline span { padding-top: 1cqw; font-size: max(2.4cqw, 10.5px); font-weight: 800; text-align: center; opacity: .6; }
+.is-top .recap-building::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 6cqw); width: 1.6cqw; height: 1.6cqw; margin-left: -.8cqw; border-radius: 50%; background: var(--recap-pop); animation: recap-blink 1s steps(1) infinite; animation-delay: calc(var(--enter) + 1.4s); }
+.recap-skyline span { padding-top: 1cqw; font-size: max(2.4cqw, 10.5px); font-weight: 800; text-align: center; opacity: .8; }
 
 /* Heat strip: twelve cells, darker for bigger months. */
 .recap-heatstrip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1.6cqw; margin-top: 4cqw; }
@@ -164,7 +165,7 @@
 .recap-heatstrip i { width: 100%; aspect-ratio: 1; border-radius: 2cqw; background: color-mix(in srgb, var(--recap-accent) calc(var(--level) * 100%), color-mix(in srgb, var(--recap-ink) 8%, transparent));
   animation: recap-pop .4s cubic-bezier(.2, 1.5, .4, 1) both; animation-delay: calc(var(--enter) + 300ms + var(--i) * 60ms); }
 .recap-heatstrip .is-top i { outline: .7cqw solid var(--recap-ink); outline-offset: .5cqw; }
-.recap-heatstrip span { font-size: max(2.6cqw, 10.5px); font-weight: 800; opacity: .7; }
+.recap-heatstrip span { font-size: max(2.6cqw, 10.5px); font-weight: 800; opacity: .8; }
 
 @media (prefers-reduced-motion: reduce) {
   .recap-polar *, .recap-podium *, .recap-planner *, .recap-chain *, .recap-dominoes *, .recap-combo *, .recap-combo-pips *, .recap-pile *, .recap-cart-stage *, .recap-tally *,
