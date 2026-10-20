@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, Info, Layers, Lightbulb, Minus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PageHeader } from '../../components/ui/PageHeader';
@@ -87,11 +87,15 @@ const GLOSSARY_MEANING = new Map(GLOSSARY.map(([term, meaning]) => [term, meanin
 
 /** A glossary word in running text: dotted underline, meaning on hover, focus or tap. */
 function Term({ text, meaning }: { text: string; meaning: string }) {
+  // A word near the right edge opens its hint leftwards, so the hint isn't cut off.
+  const [alignRight, setAlignRight] = useState(false);
+  const place = (element: HTMLElement) => setAlignRight(element.getBoundingClientRect().left + 256 > window.innerWidth - 16);
   return (
-    <span tabIndex={0} className="group/term relative cursor-help rounded-sm underline decoration-[var(--color-muted)] decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40">
+    <span tabIndex={0} onMouseEnter={(event) => place(event.currentTarget)} onFocus={(event) => place(event.currentTarget)} className="group/term relative cursor-help rounded-sm underline decoration-[var(--color-muted)] decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40">
       {text}
-      {/* animate-none!: the app's tooltip pop-in animation would otherwise hold this at full opacity. */}
-      <span role="tooltip" className="animate-none! pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline opacity-0 shadow-lg transition-opacity duration-150 group-hover/term:opacity-100 group-focus/term:opacity-100">
+      {/* Hidden (invisible, not just transparent) until hovered or focused. animate-none!: the app's
+          tooltip pop-in animation would otherwise hold this at full opacity. */}
+      <span role="tooltip" className={cn('animate-none! pointer-events-none absolute bottom-full z-30', alignRight ? 'right-0' : 'left-0', ' mb-2 w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline invisible opacity-0 shadow-lg transition-[opacity,visibility] duration-150 group-hover/term:visible group-hover/term:opacity-100 group-focus/term:visible group-focus/term:opacity-100')}>
         {meaning}
       </span>
     </span>
@@ -351,15 +355,14 @@ export function DocArticle({ page }: { page: DocPage }) {
 
   return (
     <article className="min-w-0">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <PageHeader subtext={page.group} title={page.title} description={page.lead} />
-        <TopicsMenu activeSlug={page.slug} />
-      </div>
-      {headings.length > 2 && <OnThisPage headings={headings} />}
+      {/* The same "Back to …" link the app's other sub-pages have. */}
+      <Link to="/help" className="mb-5 inline-flex items-center gap-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]"><ArrowLeft className="h-4 w-4" aria-hidden />Back to help</Link>
+      <PageHeader subtext={page.group} title={page.title} description={page.lead} />
+      <PageGuide headings={headings.length > 2 ? headings : []} activeSlug={page.slug} />
 
       <div className="max-w-3xl">
       {headings.length > 2 && (
-        <nav aria-label="Sections" className="mt-6 flex flex-wrap items-center gap-2 border-y border-[var(--color-border)] py-3 lg:hidden">
+        <nav aria-label="Sections" className="mt-6 flex flex-wrap items-center gap-2 border-y border-[var(--color-border)] py-3 xl:hidden">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">On this page</span>
           {headings.map((heading) => (
             <a key={heading.id} href={`#${heading.id}`} onClick={(event) => { event.preventDefault(); document.getElementById(heading.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="rounded-full bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-medium text-[var(--ref-on-surface)] hover:text-[var(--color-accent)]">{heading.text.replace(/^\d+\.\s*/, '')}</a>
@@ -404,56 +407,12 @@ export function DocArticle({ page }: { page: DocPage }) {
   );
 }
 
-/** "All topics": the drill-down topic list in a menu beside the page title. */
-function TopicsMenu({ activeSlug }: { activeSlug: string }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePointer);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePointer);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative shrink-0">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-haspopup="true"
-        className={cn('inline-flex h-11 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] pl-4 pr-3 text-xs font-bold text-[var(--ref-on-surface)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)]', open && 'bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]')}
-      >
-        <BookOpen className="h-4 w-4" aria-hidden />All topics<ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} aria-hidden />
-      </button>
-      {open && (
-        <div className="ui-popover period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-[min(32rem,70vh)] w-[min(17rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-2xl lg:left-auto lg:right-0">
-          <DocsSidebar activeSlug={activeSlug} onNavigate={() => setOpen(false)} />
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
- * The page's sections as a slim strip pinned to the right edge, one dash per section with the one
- * you're reading highlighted. Hovering (or tabbing into) it opens the full list.
+ * A slim strip pinned to the right edge: one dash per section, with the one you're reading
+ * highlighted, and a book for the other topics. Hovering (or tabbing into) it opens the panel with
+ * this page's sections and every help topic.
  */
-function OnThisPage({ headings }: { headings: Array<{ id: string; text: string }> }) {
+function PageGuide({ headings, activeSlug }: { headings: Array<{ id: string; text: string }>; activeSlug: string }) {
   const [active, setActive] = useState(headings[0]?.id);
 
   useEffect(() => {
@@ -480,15 +439,18 @@ function OnThisPage({ headings }: { headings: Array<{ id: string; text: string }
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   return (
-    <nav aria-label="On this page" className="group/toc fixed right-5 top-1/2 z-30 hidden -translate-y-1/2 lg:block">
-      <ul aria-hidden className="flex flex-col items-end gap-3 py-4 pl-8 pr-1 transition-opacity duration-150 group-focus-within/toc:opacity-0 group-hover/toc:opacity-0">
+    <nav aria-label="Page guide" className="group/toc fixed right-5 top-1/2 z-30 hidden -translate-y-1/2 xl:block">
+      <div aria-hidden className="flex flex-col items-end gap-3 py-4 pl-8 pr-1 transition-opacity duration-150 group-focus-within/toc:opacity-0 group-hover/toc:opacity-0">
         {headings.map((heading) => (
-          <li key={heading.id}><span className={cn('block h-[3px] rounded-full transition-all duration-300', heading.id === active ? 'w-6 bg-[var(--color-accent)]' : 'w-3.5 bg-[var(--color-border-strong)]')} /></li>
+          <span key={heading.id} className={cn('block h-[3px] rounded-full transition-all duration-300', heading.id === active ? 'w-6 bg-[var(--color-accent)]' : 'w-3.5 bg-[var(--color-border-strong)]')} />
         ))}
-      </ul>
-      <div className="pointer-events-none absolute right-0 top-1/2 w-64 -translate-y-1/2 translate-x-2 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 opacity-0 shadow-2xl transition duration-150 ease-out group-focus-within/toc:pointer-events-auto group-focus-within/toc:translate-x-0 group-focus-within/toc:opacity-100 group-hover/toc:pointer-events-auto group-hover/toc:translate-x-0 group-hover/toc:opacity-100">
+        <BookOpen className={cn('h-4 w-4 text-[var(--color-muted)]', headings.length > 0 && 'mt-2')} />
+      </div>
+      <div className="period-picker-scroll pointer-events-none absolute right-0 top-1/2 max-h-[80vh] w-72 -translate-y-1/2 translate-x-2 overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 opacity-0 shadow-2xl transition duration-150 ease-out group-focus-within/toc:pointer-events-auto group-focus-within/toc:translate-x-0 group-focus-within/toc:opacity-100 group-hover/toc:pointer-events-auto group-hover/toc:translate-x-0 group-hover/toc:opacity-100">
+        {headings.length > 0 && (
+          <>
         <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">On this page</p>
-        <ul>
+        <ul className="mb-2 border-b border-[var(--color-border)] pb-2">
           {headings.map((heading) => (
             <li key={heading.id}>
               <a
@@ -502,6 +464,10 @@ function OnThisPage({ headings }: { headings: Array<{ id: string; text: string }
             </li>
           ))}
         </ul>
+          </>
+        )}
+        <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Topics</p>
+        <DocsSidebar activeSlug={activeSlug} />
       </div>
     </nav>
   );
