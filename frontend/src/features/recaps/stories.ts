@@ -360,12 +360,17 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     // Bonus slides: earned by the figures, scored by how far past the trigger they are, two at most.
     const earned: Array<{ bonus: Bonus; score: number }> = [];
     const elapsedTotal = elapsed.reduce((sum, day) => sum + day.amount, 0);
-    if (!longView && elapsed.length >= 14 && elapsedTotal > 0) {
+    // Share-based triggers only count when the total behind the share is a fair one: most of the period
+    // has passed, and spending wasn't unusually small. Otherwise fixed costs (rent, utilities, bills paid
+    // early) take a big share without anything about them changing.
+    const sharesMeaningful = (!recap.isPartial || elapsedDays / totalDays >= .7)
+      && (!baseline || baseline.expenses <= 0 || recap.expenses >= baseline.expenses * .6);
+    if (!longView && sharesMeaningful && elapsed.length >= 14 && elapsedTotal > 0) {
       const rush = elapsed.slice(0, 3).reduce((sum, day) => sum + day.amount, 0);
       const rushShare = Math.round(rush / elapsedTotal * 100);
       if (rushShare >= 35) earned.push({ score: rushShare / 35, bonus: { kind: 'payday', share: rushShare, amount: rush, days: elapsed.map((day, i) => ({ amount: day.amount, rush: i < 3 })) } });
     }
-    if (largestShare !== null && largestShare >= 25 && receiptItems[0]) {
+    if (sharesMeaningful && largestShare !== null && largestShare >= 25 && receiptItems[0]) {
       const item = receiptItems[0];
       earned.push({ score: largestShare / 25, bonus: { kind: 'boss', label: item.label, fullLabel: item.fullLabel, amount: item.amount, share: largestShare, date: item.date, category: item.category } });
     }
@@ -383,12 +388,15 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       const dayIndex = milestone ? counted.findIndex(total => total >= milestone) : -1;
       if (milestone && dayIndex >= 0) earned.push({ score: 1.1 + milestone / 1000, bonus: { kind: 'milestone', count: milestone, date: days[dayIndex].date, dayIndex, totalDays: days.length } });
     }
-    if (top && top.share >= 50) earned.push({ score: top.share / 50, bonus: { kind: 'takeover', categoryId: top.categoryId, name: top.name, label: top.label, share: top.share } });
-    // A comeback: one of this period's top three was nowhere near the top five last period.
+    if (sharesMeaningful && top && top.share >= 50) earned.push({ score: top.share / 50, bonus: { kind: 'takeover', categoryId: top.categoryId, name: top.name, label: top.label, share: top.share } });
+    // A comeback: one of this period's top three was nowhere near the top five last period, and its
+    // spending at least doubled. Rank alone isn't enough: a fixed cost climbs the ranks whenever the rest
+    // of the period is quiet, without anything about it changing.
     const before = !longView && previous ? previous.categories.filter(row => row.amount > 0).sort((a, b) => b.amount - a.amount) : [];
     if (before.length >= 3) {
       const rankBefore = (row: CategoryShare) => before.findIndex(old => row.categoryId != null && old.categoryId != null ? old.categoryId === row.categoryId : old.name === row.name);
-      const back = topRows.slice(0, 3).map((row, i) => ({ row, rank: i + 1, was: rankBefore(row) })).find(entry => entry.row.share >= 8 && (entry.was < 0 || entry.was >= 5));
+      const back = topRows.slice(0, 3).map((row, i) => ({ row, rank: i + 1, was: rankBefore(row) }))
+        .find(entry => entry.row.share >= 8 && (entry.was < 0 || entry.was >= 5) && entry.row.amount >= 2 * (entry.was < 0 ? 0 : before[entry.was].amount));
       if (back) earned.push({ score: 1.25, bonus: { kind: 'comeback', categoryId: back.row.categoryId, name: back.row.name, label: back.row.label, rank: back.rank, share: back.row.share,
         previousRank: back.was < 0 ? null : back.was + 1, previousPeriod: previous!.period.name } });
     }
