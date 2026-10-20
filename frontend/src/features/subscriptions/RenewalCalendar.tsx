@@ -64,6 +64,8 @@ export function RenewalCalendar({ subscriptions, overdue, truncated, now, busy, 
   const [picked, setPicked] = useState<{ offset: number; day: number } | null>(null);
   const swipeFrom = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [slidePosition, setSlidePosition] = useState({ set: '', index: 0 });
   // A picked day lets go on Escape or a click anywhere outside the calendar.
   useEffect(() => {
     if (!picked) return undefined;
@@ -112,6 +114,13 @@ export function RenewalCalendar({ subscriptions, overdue, truncated, now, busy, 
   const selectedDay = picked?.offset === offset ? picked.day : showPastDue ? null : nextDueDay;
   const selected = selectedDay != null ? byDay.get(selectedDay) ?? [] : [];
 
+  // A new set of slides starts at its first one.
+  const slideSet = `${offset}:${showPastDue}:${selectedDay}`;
+  const slide = slidePosition.set === slideSet ? slidePosition.index : 0;
+  useEffect(() => {
+    trackRef.current?.scrollTo({ left: 0 });
+  }, [slideSet]);
+
   const step = (delta: number) => {
     setOffset((value) => Math.max(-MONTHS_EACH_WAY, Math.min(MONTHS_EACH_WAY, value + delta)));
     setPicked(null);
@@ -127,10 +136,58 @@ export function RenewalCalendar({ subscriptions, overdue, truncated, now, busy, 
       <span className="shrink-0 text-[11px] text-white/70">After the {formatDayMonth(firstDue.get(subscriptionId) ?? dueAt)} one</span>
     );
 
+  type Slide = { key: string; dot: RenewalState | null; title: string; detail: string; action: React.ReactNode };
+  const slides: Slide[] = showPastDue
+    ? [
+        ...overdue.map((item) => ({
+          key: `${item.subscriptionId}-${item.dueAt}`,
+          dot: 'late' as const,
+          title: item.subscriptionName,
+          detail: `${formatDate(item.dueAt)} · ${relativeDue(item.dueAt, now)} · ${formatAmount(item.amount)}`,
+          action: lateActions(item.subscriptionId, item.dueAt, byId.has(item.subscriptionId) ? item : undefined),
+        })),
+        // Several past due: the last slide settles them all at once.
+        ...(overdue.length > 1 ? [{
+          key: 'all',
+          dot: null,
+          title: `All ${overdue.length}${truncated ? '+' : ''} past due`,
+          detail: `${formatAmount(overdue.reduce((sum, item) => sum + item.amount, 0))} at their usual price and date`,
+          action: (
+            <span className="flex shrink-0 gap-1.5">
+              <button type="button" disabled={busy} onClick={() => onResolveAll('skip')} className={pillQuiet}>Skip all</button>
+              <button type="button" disabled={busy} onClick={() => onResolveAll('post')} className={pillStrong}>Record all</button>
+            </span>
+          ),
+        }] : []),
+      ]
+    : selected.map((item) => {
+        const occurrence = overdue.find((entry) => entry.subscriptionId === item.subscription.id && entry.dueAt === item.dueAt);
+        const payable = item.state === 'due' && item.dueAt === item.subscription.nextRenewalAt;
+        return {
+          key: `${item.subscription.id}-${item.dueAt}`,
+          dot: item.state,
+          title: item.subscription.name,
+          detail: `${formatDate(item.dueAt)} · ${item.state === 'done' ? 'Done' : relativeDue(item.dueAt, now)} · ${formatAmount(item.subscription.amount)}`,
+          action: item.state === 'late' ? lateActions(item.subscription.id, item.dueAt, occurrence) : payable ? (
+            <button type="button" onClick={() => onRecord({ subscriptionId: item.subscription.id, dueAt: item.dueAt })} className={pillQuiet}>
+              {item.subscription.paymentMode === 'manual' ? 'Pay now' : 'Record'}
+            </button>
+          ) : null,
+        };
+      });
+  const heading = showPastDue ? 'Past due · not recorded'
+    : picked?.offset === offset ? `${picked.day} ${month.toLocaleDateString('en-US', { month: 'long' })}`
+    : 'Next';
+  const goTo = (index: number) => {
+    const track = trackRef.current;
+    if (track) track.scrollTo({ left: index * track.clientWidth, behavior: 'smooth' });
+  };
+
   return (
     <div
       ref={rootRef}
-      onPointerDown={(event) => { if (event.pointerType !== 'mouse') swipeFrom.current = event.clientX; }}
+      // Month swipes start on the calendar; the renewal slides below scroll on their own.
+      onPointerDown={(event) => { if (event.pointerType !== 'mouse' && !(event.target as Element).closest('[data-slides]')) swipeFrom.current = event.clientX; }}
       onPointerUp={(event) => {
         if (swipeFrom.current == null) return;
         const distance = event.clientX - swipeFrom.current;
@@ -203,67 +260,41 @@ export function RenewalCalendar({ subscriptions, overdue, truncated, now, busy, 
         })}
       </div>
 
-      {/* One fixed height for every state of this panel, so choosing a day never moves the page. */}
-      <div className="mt-4 h-[8.5rem] overflow-y-auto border-t border-white/15 pt-4 xl:mt-auto" aria-live="polite">
-        {showPastDue ? (
-          <>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#ffd59a]">Past due · not recorded yet</p>
-              {overdue.length > 1 && (
-                <span className="flex gap-1.5">
-                  <button type="button" disabled={busy} onClick={() => onResolveAll('skip')} className={pillQuiet}>Skip all</button>
-                  <button type="button" disabled={busy} onClick={() => onResolveAll('post')} className={pillStrong}>Record all</button>
-                </span>
-              )}
+      {/* A heading row and one renewal row, whatever is shown: more renewals are slides beside it. */}
+      <div className="mt-4 border-t border-white/15 pt-3 xl:mt-auto" aria-live="polite">
+        <div className="flex h-7 items-center justify-between gap-2">
+          <p className={cn('min-w-0 truncate text-[10px] font-bold uppercase tracking-widest', showPastDue ? 'text-[#ffd59a]' : 'text-white/70')}>
+            {heading}{slides.length > 1 && <span className="font-semibold normal-case tracking-normal text-white/70"> · {Math.min(slide, slides.length - 1) + 1} of {slides.length}</span>}
+          </p>
+          <span className="flex shrink-0 items-center gap-1">
+            {slides.length > 1 && (
+              <>
+                <button type="button" aria-label="Previous" disabled={slide === 0} onClick={() => goTo(slide - 1)} className="grid h-6 w-6 place-items-center rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" aria-hidden /></button>
+                <button type="button" aria-label="Next" disabled={slide >= slides.length - 1} onClick={() => goTo(slide + 1)} className="grid h-6 w-6 place-items-center rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-40"><ChevronRight className="h-3.5 w-3.5" aria-hidden /></button>
+              </>
+            )}
+            {picked?.offset === offset && <button type="button" onClick={() => setPicked(null)} className={cn(pillQuiet, 'ml-1 py-1')}>{overdue.length > 0 ? 'Back to past due' : 'Back'}</button>}
+          </span>
+        </div>
+        <div
+          ref={trackRef}
+          data-slides
+          onScroll={(event) => setSlidePosition({ set: slideSet, index: Math.round(event.currentTarget.scrollLeft / Math.max(1, event.currentTarget.clientWidth)) })}
+          className="mt-1 flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {slides.length === 0 ? (
+            <p className="flex h-12 w-full shrink-0 items-center text-sm text-white/75">{selectedDay == null ? 'Nothing else renews this month.' : 'Nothing renews on this day.'}</p>
+          ) : slides.map((item) => (
+            <div key={item.key} className="flex h-12 w-full shrink-0 snap-start items-center gap-3">
+              {item.dot ? <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT[item.dot])} aria-hidden /> : null}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{item.title}</p>
+                <p className="truncate text-xs text-white/75">{item.detail}</p>
+              </div>
+              {item.action}
             </div>
-            <ul className="space-y-2">
-              {overdue.map((item) => (
-                <li key={`${item.subscriptionId}-${item.dueAt}`} className="flex items-center gap-3">
-                  <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT.late)} aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{item.subscriptionName}</p>
-                    <p className="text-xs text-white/75">{formatDate(item.dueAt)} · {relativeDue(item.dueAt, now)} · {formatAmount(item.amount)}</p>
-                  </div>
-                  {lateActions(item.subscriptionId, item.dueAt, byId.has(item.subscriptionId) ? item : undefined)}
-                </li>
-              ))}
-            </ul>
-            {truncated && <p className="mt-2 text-[11px] text-white/70">More are waiting; record or skip these and the rest follow.</p>}
-          </>
-        ) : (
-          <>
-          {picked?.offset === offset && (
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{picked.day} {month.toLocaleDateString('en-US', { month: 'long' })}</p>
-              <button type="button" onClick={() => setPicked(null)} className={pillQuiet}>{overdue.length > 0 ? 'Back to past due' : 'Back'}</button>
-            </div>
-          )}
-          {selectedDay == null || selected.length === 0 ? (
-          <p className="text-sm text-white/75">{selectedDay == null ? 'Nothing else renews this month.' : 'Nothing renews on this day.'}</p>
-        ) : (
-          <ul className="space-y-2">
-            {selected.map((item) => {
-              const occurrence = overdue.find((entry) => entry.subscriptionId === item.subscription.id && entry.dueAt === item.dueAt);
-              const payable = item.state === 'due' && item.dueAt === item.subscription.nextRenewalAt;
-              return (
-                <li key={`${item.subscription.id}-${item.dueAt}`} className="flex items-center gap-3">
-                  <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT[item.state])} aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{item.subscription.name}</p>
-                    <p className="text-xs text-white/75">{formatDate(item.dueAt)} · {item.state === 'done' ? 'Done' : relativeDue(item.dueAt, now)} · {formatAmount(item.subscription.amount)}</p>
-                  </div>
-                  {item.state === 'late' ? lateActions(item.subscription.id, item.dueAt, occurrence) : payable ? (
-                    <button type="button" onClick={() => onRecord({ subscriptionId: item.subscription.id, dueAt: item.dueAt })} className={pillQuiet}>
-                      {item.subscription.paymentMode === 'manual' ? 'Pay now' : 'Record'}
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          )}
-          </>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   );
