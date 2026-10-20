@@ -4,7 +4,6 @@ import {
   ArchitectureDiagram,
   LedgerFlow,
   PeriodTimeline,
-  SplitBillDemo,
   YourSetup,
 } from './visuals';
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
@@ -611,10 +610,9 @@ export const DOCS: DocPage[] = [
     summary: 'Share a receipt with friends',
     lead: 'Paid for the group? Split the receipt, share it, and track what each person owes you.',
     blocks: [
-      { type: 'visual', node: <SplitBillDemo /> },
-      { type: 'steps', items: ['Open Agent, type /split and attach the receipt (or use Transactions → More tools → Split a receipt).', 'Check the items, add people and assign items to them.', 'Choose equal, proportional, or paid by one person.', 'Save it as an image or copy the summary to share.', 'Choose Create linked loans so what friends owe shows up in Loans.'] },
-      { type: 'h2', id: 'try', text: 'Try the card' },
       { type: 'visual', node: <PracticeSplitBill /> },
+      { type: 'h2', id: 'how', text: 'Split a receipt' },
+      { type: 'steps', items: ['Open Agent, type /split and attach the receipt (or use Transactions → More tools → Split a receipt).', 'Check the items, add people and assign items to them.', 'Choose equal, proportional, or paid by one person.', 'Save it as an image or copy the summary to share.', 'Choose Create linked loans so what friends owe shows up in Loans.'] },
       { type: 'under-hood', entries: [
         { title: 'Rp300.000 dinner paid from {cash}, split equally with Ani and Budi', lines: [{ account: 'Expense (Auto)', note: 'Your share', debit: '100.000' }, { account: 'Loans Receivable', note: 'Ani owes you', debit: '100.000' }, { account: 'Loans Receivable', note: 'Budi owes you', debit: '100.000' }, { account: '{cash}', credit: '300.000' }], explain: 'Only your share is spending. Each friend’s share becomes a loan they owe you, tagged with the bill so you can find it. When they pay you back, it’s recorded like any loan repayment.' },
       ] },

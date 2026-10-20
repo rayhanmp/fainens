@@ -1,13 +1,14 @@
 import { type ReactNode } from 'react';
-import { ArrowRight, Check, CheckCircle2, Clock, Inbox, Lock, Mail, RotateCcw } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, Clock, RotateCcw } from 'lucide-react';
 import { cn, formatDayMonth } from '../../lib/utils';
 import { shown, useSequence } from './motion';
 import { exampleAccounts, useHelpPersonal } from './personal';
 
 /**
- * Illustrations for the help docs, drawn with the app's own tokens so they look like Fainens.
- * Animated ones play once when scrolled into view (and on Replay). Reduced motion — the device
- * setting or Settings → Accessibility — makes their transitions instant.
+ * The frame every help illustration sits in, and the illustrations of ideas that have no screen of
+ * their own (the ledger, a pay period, the architecture). Pictures of real screens live in the
+ * *Visuals files beside this one and are built from the app’s own components. Animated ones play
+ * when scrolled into view (and on Replay); reduced motion makes their transitions instant.
  */
 
 /** The panel every illustration sits in, with an optional caption and Replay. */
@@ -25,10 +26,6 @@ export function VisualFrame({ children, caption, onReplay, frameRef }: { childre
       {caption && <figcaption className="mt-2 text-center text-xs text-[var(--ref-on-surface-variant)]">{caption}</figcaption>}
     </figure>
   );
-}
-
-function Chip({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', className)}>{children}</span>;
 }
 
 /** One record feeding every view: transaction → ledger → balances, budget, reports. */
@@ -58,88 +55,6 @@ export function LedgerFlow() {
           ))}
         </ul>
       </div>
-    </VisualFrame>
-  );
-}
-
-const rupiah = (value: number) => `Rp${value.toLocaleString('id-ID')}`;
-
-/** A correction: the original stays, an opposite entry cancels it, a replacement takes its place. */
-export function CorrectionDemo() {
-  const { ref, step, replay } = useSequence(3, 1000);
-  const rows = [
-    { label: 'Original (typed 50k by mistake)', amount: '−Rp50.000', className: step >= 2 ? 'text-[var(--color-muted)] line-through decoration-1' : 'text-[var(--ref-on-surface)]' },
-    { label: 'Correction (cancels the original)', amount: '+Rp50.000', className: 'text-[var(--ref-on-surface)]' },
-    { label: 'Replacement (what really happened)', amount: '−Rp45.000', className: 'text-[var(--ref-on-surface)]' },
-  ];
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Nothing is erased: all three entries stay in the history.">
-      <div className="mx-auto max-w-md divide-y divide-[var(--color-border)] rounded-xl bg-[var(--color-surface)] ring-1 ring-[var(--color-border)]">
-        {rows.map((row, index) => (
-          <div key={row.label} className={cn('flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm', index === 0 ? '' : shown(step >= index + 1))}>
-            <span className={cn('transition-colors', row.className)}>{row.label}</span>
-            <span className={cn('font-mono tabular-nums', row.className)}>{row.amount}</span>
-          </div>
-        ))}
-        <div className={cn('flex items-center justify-between bg-[var(--ref-surface-container-low)] px-3.5 py-2.5 text-sm font-semibold', shown(step >= 3))}>
-          <span className="text-[var(--ref-on-surface)]">Counts as spending</span>
-          <span className="font-mono tabular-nums text-[var(--ref-on-surface)]">Rp45.000</span>
-        </div>
-      </div>
-    </VisualFrame>
-  );
-}
-
-/** Reconciling: Fainens and the bank side by side, the gap measured, then recorded openly. */
-export function ReconcileDemo() {
-  const { ref, step, replay } = useSequence(3, 900);
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="The difference becomes a balance adjustment, never income or spending.">
-      <div className="mx-auto max-w-lg space-y-3">
-        {[{ label: 'Fainens says', value: 1_200_000, width: 100 }, { label: 'Your bank says', value: 1_180_000, width: 98.3 }].map((bar, index) => (
-          <div key={bar.label}>
-            <div className="mb-1 flex justify-between text-xs"><span className="text-[var(--ref-on-surface-variant)]">{bar.label}</span><span className="font-mono tabular-nums text-[var(--ref-on-surface)]">{rupiah(bar.value)}</span></div>
-            <div className="h-3 rounded-full bg-[var(--color-surface)] ring-1 ring-[var(--color-border)]">
-              <div className={cn('h-full rounded-full transition-all duration-700 ease-out', index === 0 ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-success)]')} style={{ width: step >= 1 ? `${bar.width}%` : '0%' }} />
-            </div>
-          </div>
-        ))}
-        <div className={cn('flex items-center justify-between rounded-lg bg-[var(--color-warning)]/10 px-3 py-2 text-sm', shown(step >= 2))}>
-          <span className="text-[var(--ref-on-surface)]">Difference — check for a missing or doubled transaction first</span>
-          <span className="font-mono font-semibold tabular-nums text-[var(--color-warning)]">Rp20.000</span>
-        </div>
-        <div className={cn('flex items-center justify-between rounded-lg bg-[var(--color-surface)] px-3 py-2 text-sm ring-1 ring-[var(--color-border)]', shown(step >= 3))}>
-          <span className="flex items-center gap-1.5 text-[var(--ref-on-surface)]"><CheckCircle2 className="h-4 w-4 text-[var(--color-success)]" aria-hidden />Balance adjustment recorded</span>
-          <span className="font-mono tabular-nums text-[var(--ref-on-surface-variant)]">−Rp20.000</span>
-        </div>
-      </div>
-    </VisualFrame>
-  );
-}
-
-/** Imported items: an email becomes a pending item, you approve it, and only then it posts. */
-export function ImportFlowDemo() {
-  const { ref, step, replay } = useSequence(4, 850);
-  const stages = [
-    { icon: Mail, title: 'Bank email', body: 'wondr by BNI: Transaction successful' },
-    { icon: Inbox, title: 'Pending', body: 'Waiting in Review pending' },
-    { icon: Check, title: 'You approve', body: 'Edit if needed, or reject' },
-    { icon: CheckCircle2, title: 'Posted', body: 'Counts in balances and budget' },
-  ];
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Nothing reaches your ledger until you approve it.">
-      <ol className="grid gap-3 sm:grid-cols-4">
-        {stages.map(({ icon: Icon, title, body }, index) => {
-          const reached = step > index;
-          return (
-            <li key={title} className={cn('rounded-xl p-3 ring-1 transition-all duration-500', reached ? 'bg-[var(--color-surface)] shadow-sm ring-[var(--color-accent)]/40' : 'bg-[var(--color-surface)]/50 ring-[var(--color-border)]')}>
-              <span className={cn('grid h-8 w-8 place-items-center rounded-full transition-colors duration-500', reached ? (index === 3 ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-accent)] text-white') : 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)]')}><Icon className="h-4 w-4" aria-hidden /></span>
-              <p className="mt-2 text-sm font-semibold text-[var(--ref-on-surface)]">{title}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{body}</p>
-            </li>
-          );
-        })}
-      </ol>
     </VisualFrame>
   );
 }
@@ -244,136 +159,6 @@ function FullPeriodStrip({ start, end, current }: { start: Date; end: Date; curr
   );
 }
 
-/** Budget categories filling up, with the status each one shows. */
-export function BudgetBarsDemo() {
-  const { ref, step, replay } = useSequence(1, 300);
-  const rows = [
-    { name: 'Food & dining', spent: 1_150_000, plan: 1_500_000, status: 'On track', tone: 'success' },
-    { name: 'Transport', spent: 540_000, plan: 600_000, status: 'Near limit', tone: 'warning' },
-    { name: 'Shopping', spent: 820_000, plan: 700_000, status: 'Over', tone: 'danger' },
-    { name: 'Health', spent: 0, plan: 300_000, status: 'Not started', tone: 'muted' },
-  ] as const;
-  const toneBar = { success: 'bg-[var(--color-success)]', warning: 'bg-[var(--color-warning)]', danger: 'bg-[var(--color-danger)]', muted: 'bg-[var(--color-muted)]' };
-  const toneChip = { success: 'bg-[var(--color-success)]/12 text-[var(--color-success)]', warning: 'bg-[var(--color-warning)]/14 text-[var(--color-warning)]', danger: 'bg-[var(--color-danger)]/12 text-[var(--color-danger)]', muted: 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)]' };
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Each category shows how much of its plan is used, and a status.">
-      <div className="mx-auto max-w-lg space-y-3.5">
-        {rows.map((row, index) => (
-          <div key={row.name}>
-            <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-              <span className="font-medium text-[var(--ref-on-surface)]">{row.name}</span>
-              <span className="flex items-center gap-2"><span className="font-mono text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{rupiah(row.spent)} / {rupiah(row.plan)}</span><Chip className={toneChip[row.tone]}>{row.status}</Chip></span>
-            </div>
-            <div className="h-2 rounded-full bg-[var(--color-surface)] ring-1 ring-[var(--color-border)]">
-              <div className={cn('h-full rounded-full transition-all duration-1000 ease-out', toneBar[row.tone])} style={{ width: step >= 1 ? `${Math.min(100, (row.spent / row.plan) * 100)}%` : '0%', transitionDelay: `${index * 120}ms` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </VisualFrame>
-  );
-}
-
-/** Closing a period: the lock clicks shut on its history. */
-export function ClosedPeriodDemo() {
-  const { ref, step, replay } = useSequence(1, 400);
-  const closed = step >= 1;
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="A closed period can’t change until you reopen it.">
-      <div className="mx-auto flex max-w-md items-center gap-4 rounded-xl bg-[var(--color-surface)] p-4 shadow-sm ring-1 ring-[var(--color-border)]">
-        <span className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl transition-colors duration-500', closed ? 'bg-[var(--ref-on-surface)] text-[var(--color-surface)]' : 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)]')}><Lock className={cn('h-5 w-5 transition-transform duration-500', closed ? 'scale-100' : 'scale-75')} aria-hidden /></span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-[var(--ref-on-surface)]">September period</p>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">25 Aug – 24 Sep · 84 transactions</p>
-        </div>
-        <Chip className={closed ? 'bg-[var(--ref-on-surface)] text-[var(--color-surface)]' : 'bg-[var(--color-success)]/12 text-[var(--color-success)]'}>{closed ? 'Closed' : 'Open'}</Chip>
-      </div>
-    </VisualFrame>
-  );
-}
-
-/** Pay later: one purchase becomes monthly installments with due dates. */
-export function InstallmentDemo() {
-  const { ref, step, replay } = useSequence(3, 500);
-  const { payLater } = exampleAccounts(useHelpPersonal());
-  const today = new Date();
-  const months = [1, 2, 3].map((offset) => formatDayMonth(new Date(today.getFullYear(), today.getMonth() + offset, 10).getTime()));
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="A Rp600.000 purchase over 3 months, with no interest or fee.">
-      <div className="mx-auto flex max-w-xl flex-col items-center gap-3 sm:flex-row">
-        <div className="w-full rounded-xl bg-[var(--color-surface)] p-3 text-center shadow-sm ring-1 ring-[var(--color-border)] sm:w-44">
-          <p className="truncate text-xs text-[var(--ref-on-surface-variant)]">Headphones · {payLater}</p>
-          <p className="font-mono text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">Rp600.000</p>
-        </div>
-        <ArrowRight className="h-5 w-5 shrink-0 text-[var(--color-accent)] max-sm:rotate-90" aria-hidden />
-        <ol className="grid w-full flex-1 grid-cols-3 gap-2">
-          {months.map((month, index) => (
-            <li key={month} className={cn('rounded-xl bg-[var(--color-surface)] p-2.5 text-center ring-1 ring-[var(--color-border)]', shown(step > index))}>
-              <p className="flex items-center justify-center gap-1 text-[11px] text-[var(--ref-on-surface-variant)]"><Clock className="h-3 w-3" aria-hidden />{month}</p>
-              <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">Rp200.000</p>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </VisualFrame>
-  );
-}
-
-/** Split bill: a receipt divided between people; your share is spending, theirs is owed to you. */
-export function SplitBillDemo() {
-  const { ref, step, replay } = useSequence(3, 650);
-  const people = [
-    { name: 'You', note: 'your expense', initials: 'RA', tone: 'bg-[var(--color-accent)] text-white' },
-    { name: 'Ani', note: 'owes you', initials: 'AN', tone: 'bg-[#ec4899] text-white' },
-    { name: 'Budi', note: 'owes you', initials: 'BU', tone: 'bg-[#14b8a6] text-white' },
-  ];
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Split equally: only your share counts as spending; the rest becomes money owed to you in Loans.">
-      <div className="mx-auto flex max-w-xl flex-col items-center gap-3 sm:flex-row">
-        <div className="w-full rounded-xl bg-[var(--color-surface)] p-3 shadow-sm ring-1 ring-[var(--color-border)] sm:w-44">
-          <p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">Receipt · Sushi dinner</p>
-          <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">Rp300.000</p>
-          <p className="text-[11px] text-[var(--ref-on-surface-variant)]">Paid by you</p>
-        </div>
-        <ArrowRight className="h-5 w-5 shrink-0 text-[var(--color-accent)] max-sm:rotate-90" aria-hidden />
-        <ul className="w-full flex-1 space-y-2">
-          {people.map((person, index) => (
-            <li key={person.name} className={cn('flex items-center gap-2.5 rounded-xl bg-[var(--color-surface)] px-3 py-2 ring-1 ring-[var(--color-border)]', shown(step > index))}>
-              <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold', person.tone)}>{person.initials}</span>
-              <span className="min-w-0 flex-1 text-sm text-[var(--ref-on-surface)]">{person.name} <span className="text-xs text-[var(--ref-on-surface-variant)]">· {person.note}</span></span>
-              <span className="font-mono text-sm tabular-nums text-[var(--ref-on-surface)]">Rp100.000</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </VisualFrame>
-  );
-}
-
-/** A reimbursement claim moving through its statuses. */
-export function ClaimPipelineDemo() {
-  const { ref, step, replay } = useSequence(5, 700);
-  const stages = ['Draft', 'Submitted', 'Approved', 'Paid', 'Settled'];
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Move a claim along as it happens; Record payment when the money arrives.">
-      <ol className="mx-auto flex max-w-xl items-center">
-        {stages.map((stage, index) => {
-          const reached = step > index;
-          return (
-            <li key={stage} className="flex flex-1 items-center last:flex-none">
-              <div className="flex flex-col items-center gap-1.5">
-                <span className={cn('grid h-8 w-8 place-items-center rounded-full text-xs font-bold transition-colors duration-500', reached ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-surface)] text-[var(--ref-on-surface-variant)] ring-1 ring-[var(--color-border)]')}>{reached ? <Check className="h-4 w-4" aria-hidden /> : index + 1}</span>
-                <span className={cn('text-[11px] font-semibold transition-colors', reached ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]')}>{stage}</span>
-              </div>
-              {index < stages.length - 1 && <span className="mx-1 mb-5 h-0.5 flex-1 rounded-full bg-[var(--color-border)]"><span className="block h-full rounded-full bg-[var(--color-accent)] transition-all duration-500" style={{ width: step > index + 1 ? '100%' : '0%' }} /></span>}
-            </li>
-          );
-        })}
-      </ol>
-    </VisualFrame>
-  );
-}
-
 /** Where the reader is with the quick start, from their own data. */
 export function YourSetup() {
   const personal = useHelpPersonal();
@@ -394,24 +179,6 @@ export function YourSetup() {
         ))}
       </ul>
     </div>
-  );
-}
-
-/** Hidden balances: amounts turn into dots everywhere. */
-export function HiddenBalanceDemo() {
-  const { ref, step, replay } = useSequence(1, 600);
-  const hidden = step >= 1;
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="One tap hides every amount; on the Dashboard, press and hold to peek.">
-      <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
-        {[['Available cash', 'Rp4.250.000'], ['Net worth', 'Rp38.900.000']].map(([label, value]) => (
-          <div key={label} className="rounded-xl bg-[var(--color-surface)] p-3 ring-1 ring-[var(--color-border)]">
-            <p className="text-xs text-[var(--ref-on-surface-variant)]">{label}</p>
-            <p className="mt-1 font-mono text-base font-semibold tabular-nums text-[var(--ref-on-surface)]">{hidden ? '••••••' : value}</p>
-          </div>
-        ))}
-      </div>
-    </VisualFrame>
   );
 }
 

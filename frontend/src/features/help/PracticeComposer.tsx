@@ -53,7 +53,8 @@ export function PracticeSplitBill() {
     <figure className="not-prose my-6">
       <div className="rounded-2xl border border-dashed border-[var(--color-accent)]/40 bg-[color-mix(in_srgb,var(--color-accent)_5%,transparent)] p-3 sm:p-5">
         <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-[var(--ref-on-surface-variant)]"><MousePointerClick className="h-3.5 w-3.5 text-[var(--color-accent)]" aria-hidden />The real card from Agent, with a sample receipt. Try changing who had what, or the split mode.</p>
-        <SplitBillCard visualization={SAMPLE_SPLIT} currentUserName="You" />
+        {/* .agent-viz-card sets its own margin outside the utility layer, so centring happens here. */}
+        <div className="mx-auto w-full max-w-xl"><SplitBillCard visualization={SAMPLE_SPLIT} currentUserName="You" /></div>
       </div>
       <figcaption className="mt-2 text-center text-xs text-[var(--ref-on-surface-variant)]">Nothing here is saved. Amounts follow your hide-balances setting.</figcaption>
     </figure>
