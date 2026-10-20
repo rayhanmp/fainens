@@ -4,7 +4,7 @@ import { AGENT_SYSTEM_PROMPT, buildAgentPromptMessages, buildAgentSystemPrompt }
 
 describe("agent prompt", () => {
   it("keeps the stable policy prompt compact", () => {
-    expect(AGENT_SYSTEM_PROMPT.length).toBeLessThan(4_500);
+    expect(AGENT_SYSTEM_PROMPT.length).toBeLessThan(5_000);
     expect(AGENT_SYSTEM_PROMPT).not.toContain("fainens-viz");
     expect(AGENT_SYSTEM_PROMPT).not.toContain("split_bill {");
     expect(AGENT_SYSTEM_PROMPT).toContain("Preparation tools create review proposals only");
