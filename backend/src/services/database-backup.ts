@@ -142,10 +142,20 @@ async function settingsRow(ownerEmail: string) {
     .where(eq(databaseBackupSettings.ownerEmail, normalizedOwnerEmail(ownerEmail))).limit(1))[0];
 }
 
+/**
+ * The newer of the owner's recorded backup and the newest snapshot in storage. Storage is shared,
+ * so a snapshot taken by another account or a script still counts as the latest backup.
+ */
+export function latestBackupTime(recorded: number | null, newestInStorage: number | null): number | null {
+  if (recorded == null) return newestInStorage;
+  if (newestInStorage == null) return recorded;
+  return Math.max(recorded, newestInStorage);
+}
+
 export async function getDatabaseBackupSettings(ownerEmail: string, page = 1, pageSize = 10): Promise<DatabaseBackupSettingsView> {
   const [row, backupPage] = await Promise.all([settingsRow(ownerEmail), listDatabaseBackups(page, pageSize)]);
   const frequency = isBackupFrequency(row?.frequency) ? row.frequency : "weekly";
-  const lastBackupAt = row?.lastBackupAt?.getTime() ?? backupPage.latestCreatedAt;
+  const lastBackupAt = latestBackupTime(row?.lastBackupAt?.getTime() ?? null, backupPage.latestCreatedAt);
   return {
     enabled: row?.enabled ?? env.DATABASE_BACKUP_ENABLED,
     frequency,

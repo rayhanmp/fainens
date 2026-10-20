@@ -3,6 +3,9 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { MenuSelect, type MenuSelectOption } from '../components/ui/MenuSelect';
 import { Modal } from '../components/ui/Modal';
+import { Skeleton } from '../components/ui/Skeleton';
+import { ActionSheet, type SheetAction } from '../components/ui/ActionSheet';
+import { usePhoneSheets } from '../hooks/usePhoneSheets';
 import { RequireAuth } from '../lib/auth';
 import { useEffect, useId, useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -30,7 +33,6 @@ import {
   User,
   Settings2,
   Download,
-  Upload,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -41,6 +43,8 @@ import {
   Search,
   CloudUpload,
   X,
+  MoreHorizontal,
+  KeyRound,
   Monitor,
   Sun,
   Moon,
@@ -157,9 +161,9 @@ interface SettingsRowProps {
 
 function SettingsRow({ label, description, action, inline = false, wideControl = false }: SettingsRowProps) {
   return (
-    <div className={cn('flex gap-3 border-b border-[var(--color-border)] py-3 first:pt-0 last:border-b-0 last:pb-0', inline ? 'items-center justify-between gap-4' : 'flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-6')}>
+    <div data-setting className={cn('flex gap-3 border-b border-[var(--color-border)] py-3 first:pt-0 last:border-b-0 last:pb-0', inline ? 'items-center justify-between gap-4' : 'flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-6')}>
       <div className="min-w-0">
-        <p className="text-sm font-medium text-[var(--ref-on-surface)]">{label}</p>
+        <p data-setting-label className="text-sm font-medium text-[var(--ref-on-surface)]">{label}</p>
         {description && <p className="mt-0.5 max-w-md text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{description}</p>}
       </div>
       {/* One width for every field beside a label. `.brutalist-input` fills its parent, so fields are sized here. */}
@@ -204,6 +208,136 @@ function SuffixInput({ suffix, children }: { suffix: string; children: React.Rea
     <div className="relative">
       {children}
       <span className="pointer-events-none absolute bottom-px right-3 py-[0.4375rem] text-sm leading-[1.125rem] text-[var(--color-muted)]" aria-hidden>{suffix}</span>
+    </div>
+  );
+}
+
+/**
+ * A row's "⋯" actions, the same way Accounts does them: a bottom sheet on phones, a small anchored
+ * menu elsewhere. Danger actions sit last and read in red.
+ */
+function RowActions({ title, actions }: { title: string; actions: SheetAction[] }) {
+  const asSheet = usePhoneSheets();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      const menu = menuRef.current;
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+    };
+    // Escape closes just this menu, not the Settings dialog around it, wherever focus is. A capturing
+    // listener on window runs before the dialog's own document listener.
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const menu = menuRef.current;
+      if (event.key !== 'Escape' || !menu?.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      menu.open = false;
+      menu.querySelector('summary')?.focus();
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    window.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      window.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, []);
+  const trigger = 'grid h-[34px] w-[34px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]';
+  if (asSheet) {
+    return (
+      <>
+        <button type="button" className={trigger} aria-label={`Actions for ${title}`} aria-haspopup="menu" onClick={() => setSheetOpen(true)}><MoreHorizontal className="h-4 w-4" aria-hidden /></button>
+        <ActionSheet isOpen={sheetOpen} onClose={() => setSheetOpen(false)} title={title} actions={actions} />
+      </>
+    );
+  }
+  return (
+    <details ref={menuRef} className="group/menu relative">
+      <summary className={cn(trigger, 'cursor-pointer list-none group-open/menu:bg-[var(--ref-surface-container-low)] [&::-webkit-details-marker]:hidden')} aria-label={`Actions for ${title}`}><MoreHorizontal className="h-4 w-4" aria-hidden /></summary>
+      <div className="ui-popover absolute right-0 top-[calc(100%+4px)] z-20 w-44 rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-1 shadow-lg" role="menu">
+        {actions.map(({ key, label, icon: Icon, tone, disabled, onSelect }) => (
+          <button
+            key={key}
+            type="button"
+            role="menuitem"
+            disabled={disabled}
+            onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onSelect(); }}
+            className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-[var(--ref-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-50', tone === 'danger' ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface)]')}
+          >
+            {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+            {label}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** Placeholder rows shaped like a settings group, shown inside the dialog while settings load. */
+function SettingsSkeleton() {
+  return (
+    <div className="max-w-2xl space-y-1 pt-4" aria-busy="true" aria-label="Loading settings">
+      <Skeleton className="mb-4 h-3 w-24" />
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex items-center justify-between gap-6 border-b border-[var(--color-border)] py-3 last:border-b-0">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3 w-56 max-w-full" />
+          </div>
+          <Skeleton className="h-[34px] w-48 shrink-0 max-sm:hidden" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A number setting that only saves values in range. While you type something out of range it says
+ * so under the field; leaving the field puts back the last saved value.
+ */
+function NumberSetting({ value, onCommit, min, max, step, integer = false, suffix, suffixPadding, ariaLabel, rangeHint }: {
+  value: number;
+  onCommit: (next: number) => void;
+  min: number;
+  max: number;
+  step?: string;
+  integer?: boolean;
+  suffix: string;
+  /** Right padding that leaves room for the suffix, e.g. `pr-28!`. */
+  suffixPadding: string;
+  ariaLabel: string;
+  rangeHint: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const hintId = useId();
+  const text = draft ?? String(value);
+  const parsed = Number(text);
+  const valid = text.trim() !== '' && Number.isFinite(parsed) && parsed >= min && parsed <= max && (!integer || Number.isInteger(parsed));
+  return (
+    <div>
+      <SuffixInput suffix={suffix}>
+        <Input
+          label=""
+          aria-label={ariaLabel}
+          aria-invalid={!valid || undefined}
+          aria-describedby={!valid ? hintId : undefined}
+          className={cn(NO_SPIN, suffixPadding, !valid && 'border-[var(--color-danger)]! focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-danger)_20%,transparent)]!')}
+          type="number"
+          inputMode={integer ? 'numeric' : 'decimal'}
+          value={text}
+          min={min}
+          max={max}
+          step={step}
+          onFocus={() => setDraft(String(value))}
+          onBlur={() => setDraft(null)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            const next = Number(event.target.value);
+            if (event.target.value.trim() !== '' && Number.isFinite(next) && next >= min && next <= max && (!integer || Number.isInteger(next))) onCommit(next);
+          }}
+        />
+      </SuffixInput>
+      {!valid && <p id={hintId} className="mt-1 text-left text-[11px] font-medium text-[var(--color-danger)]">{rangeHint}</p>}
     </div>
   );
 }
@@ -357,8 +491,16 @@ const TABS: { id: TabType; label: string; icon: React.ElementType; summary: stri
   { id: 'agent', label: 'Agent', icon: Brain, summary: 'Style, privacy, models, and memory', keywords: 'ai assistant tone detail response style model provider api key openrouter memory memories context sharing privacy' },
   { id: 'backups', label: 'Backups', icon: CloudUpload, summary: 'Cloud snapshots of your ledger', keywords: 'cloud database backup snapshot automatic frequency schedule' },
   { id: 'reports', label: 'PDF reports', icon: LockKeyhole, summary: 'Password protection', keywords: 'pdf report password encryption protect birthday security' },
-  { id: 'data', label: 'Data', icon: Database, summary: 'Export, this device, and tools', keywords: 'export import json download data quality image storage gallery security audit log cache delete' },
+  { id: 'data', label: 'Data', icon: Database, summary: 'Export, this device, and tools', keywords: 'export json download data quality image storage gallery security audit log cache delete' },
 ];
+
+/** The fields of a profile the user edits here (email and age are derived; Agent sharing saves on its own). */
+function editableProfile({ email, age, agentContext, ...input }: PersonalProfile) {
+  void email;
+  void age;
+  void agentContext;
+  return input;
+}
 
 function matchingTabs(query: string) {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -409,7 +551,6 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     agentVerbosity: 'concise',
     agentContext: DEFAULT_AGENT_CONTEXT,
   });
-  const [profileBusy, setProfileBusy] = useState(false);
   const [contextDraft, setContextDraft] = useState<PersonalProfile['agentContext'] | null>(null);
   const [contextBusy, setContextBusy] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
@@ -453,6 +594,32 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const visibleTabs = matchingTabs(settingsSearch);
   const activeTabInfo = TABS.find((tab) => tab.id === activeTab) ?? TABS[0]!;
   const sharedContextCount = Object.values(profile.agentContext).filter(Boolean).length;
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Once a search leads to a section, open the group holding the best-matching setting, bring it
+  // into view and flash it, so "salary" lands on Salary day rather than just the General page.
+  useEffect(() => {
+    const terms = settingsSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return undefined;
+    const timer = setTimeout(() => {
+      const root = contentRef.current;
+      if (!root || !root.offsetParent) return; // The section is hidden (phones, before one is opened).
+      const labels = Array.from(root.querySelectorAll<HTMLElement>('[data-setting-label], label, summary'));
+      const match = labels.find((element) => {
+        const text = (element.textContent ?? '').toLowerCase();
+        return terms.every((term) => text.includes(term));
+      });
+      if (!match) return;
+      const group = match.closest('details');
+      if (group && !group.open) group.open = true;
+      const target = match.closest<HTMLElement>('[data-setting]') ?? (match.tagName === 'SUMMARY' ? match : match.parentElement) ?? match;
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.classList.remove('settings-highlight');
+      void target.offsetWidth; // Restart the animation when the same setting matches again.
+      target.classList.add('settings-highlight');
+      setTimeout(() => target.classList.remove('settings-highlight'), 1700);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [settingsSearch, activeTab, phoneSectionOpen]);
   const searchSettings = (query: string) => {
     setSettingsSearch(query);
     // Wider screens show the open section beside the list: follow the search to the first match.
@@ -474,14 +641,18 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // What was last loaded or written, so opening Settings does not "save" (and flash Saved) unchanged values.
   const savedSettingsRef = useRef<string | null>(null);
+  // The profile as the server last had it; null until it has loaded, so nothing saves over it before then.
+  const savedProfileRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadSettings();
     void api.profile.get().then((savedProfile) => {
+      savedProfileRef.current = JSON.stringify(editableProfile(savedProfile));
       setProfile({ ...savedProfile, agentContext: { ...DEFAULT_AGENT_CONTEXT, ...(savedProfile.agentContext ?? {}) } });
       if (!savedProfile.dateOfBirth && legacyBirthDate) {
         void api.profile.update({ dateOfBirth: legacyBirthDate })
           .then((migratedProfile) => {
+            savedProfileRef.current = JSON.stringify(editableProfile(migratedProfile));
             setProfile({ ...migratedProfile, agentContext: { ...DEFAULT_AGENT_CONTEXT, ...(migratedProfile.agentContext ?? {}) } });
             setLegacyBirthDate('');
           })
@@ -497,24 +668,30 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     void api.databaseBackup.get({ page: backupPage, pageSize: 10 }).then(setDatabaseBackup).catch(() => setDatabaseBackupNotice({ tone: 'error', text: 'Could not load database backup settings.' }));
   }, [backupPage]);
 
-  const saveProfile = async () => {
-    setProfileBusy(true);
-    setProfileNotice(null);
-    try {
-      const { email, age, agentContext, ...input } = profile;
-      void email;
-      void age;
-      void agentContext;
-      const saved = await api.profile.update(input);
-      setProfile({ ...saved, agentContext: { ...DEFAULT_AGENT_CONTEXT, ...(saved.agentContext ?? {}) } });
-      queryClient.setQueryData(queryKeys.agent.profile, { nickname: saved.preferredName });
-      setProfileNotice({ tone: 'success', text: 'Profile saved.' });
-    } catch (error) {
-      setProfileNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not save your profile.' });
-    } finally {
-      setProfileBusy(false);
-    }
-  };
+  // Profile and response style save themselves shortly after an edit, like the rest of Settings.
+  // The draft is not replaced by the server's reply, so typing during a save is never undone.
+  useEffect(() => {
+    if (savedProfileRef.current == null) return;
+    const input = editableProfile(profile);
+    const serialized = JSON.stringify(input);
+    if (serialized === savedProfileRef.current) return;
+    setSaveStatus('saving');
+    const timer = setTimeout(() => {
+      setProfileNotice(null);
+      api.profile.update(input)
+        .then((saved) => {
+          savedProfileRef.current = serialized;
+          queryClient.setQueryData(queryKeys.agent.profile, { nickname: saved.preferredName });
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        })
+        .catch((error: unknown) => {
+          setSaveStatus('idle');
+          setProfileNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not save your profile.' });
+        });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [profile, queryClient]);
 
   const saveAgentContext = async () => {
     if (!contextDraft) return;
@@ -798,25 +975,6 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     }
   }, [exportOptions, settings, exportDataMutation]);
 
-  const handleImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      console.log('Import data preview:', Object.keys(data));
-      
-      // TODO: Implement import logic
-      toast.info('Import is not available yet', 'The file was read but nothing was changed.');
-    } catch (err) {
-      toast.error('Could not read the backup file', errorMessage(err));
-    }
-    
-    // Reset input
-    event.target.value = '';
-  }, []);
-
   const handleClearCache = () => {
     localStorage.removeItem('fainens-cache');
     sessionStorage.clear();
@@ -830,16 +988,6 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     sessionStorage.clear();
     window.location.href = '/login';
   };
-
-  if (isLoading) {
-    return (
-      <RequireAuth>
-        <div className="flex items-center justify-center h-64">
-          <p>Loading settings...</p>
-        </div>
-      </RequireAuth>
-    );
-  }
 
   return (
     <RequireAuth>
@@ -925,7 +1073,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
-              <div>
+              {isLoading && <SettingsSkeleton />}
+              <div ref={contentRef} className={cn(isLoading && 'hidden')}>
           {/* Profile Tab */}
           {activeTab === 'profile' && (
             <SettingsPanel>
@@ -952,9 +1101,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                 </div>
               </SettingsGroup>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
-                <Button type="button" size="sm" onClick={() => void saveProfile()} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save profile'}</Button>
+                <span className="min-w-0 truncate text-xs text-[var(--color-muted)]">Signed in as {profile.email || user?.email || 'your account'} · changes save automatically</span>
                 <Notice notice={profileNotice} />
-                <span className="ml-auto min-w-0 truncate text-xs text-[var(--color-muted)]">Signed in as {profile.email || user?.email || 'your account'}</span>
               </div>
             </SettingsPanel>
           )}
@@ -979,12 +1127,12 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                 <SettingsRow
                   label="Salary day"
                   description="The day of the month your salary arrives. Budget periods start on this day."
-                  action={<SuffixInput suffix="of the month"><Input label="" aria-label="Salary day of month" className={cn(NO_SPIN, 'pr-28!')} type="number" inputMode="numeric" value={settings.salaryDay.toString()} onChange={(event) => setSettings({ ...settings, salaryDay: parseInt(event.target.value) || 1 })} min="1" max="31" /></SuffixInput>}
+                  action={<NumberSetting ariaLabel="Salary day of month" value={settings.salaryDay} onCommit={(salaryDay) => setSettings((current) => ({ ...current, salaryDay }))} min={1} max={31} integer suffix="of the month" suffixPadding="pr-28!" rangeHint="Use a day from 1 to 31." />}
                 />
                 <SettingsRow
                   label="Opportunity cost yield"
                   description="Yearly money market rate, used to show what idle money could have earned."
-                  action={<SuffixInput suffix="% a year"><Input label="" aria-label="Opportunity cost yield, percent a year" className={cn(NO_SPIN, 'pr-20!')} type="number" inputMode="decimal" value={settings.opportunityCostYield.toString()} onChange={(event) => setSettings({ ...settings, opportunityCostYield: parseFloat(event.target.value) || 0 })} step="0.1" min="0" max="20" /></SuffixInput>}
+                  action={<NumberSetting ariaLabel="Opportunity cost yield, percent a year" value={settings.opportunityCostYield} onCommit={(opportunityCostYield) => setSettings((current) => ({ ...current, opportunityCostYield }))} min={0} max={20} step="0.1" suffix="% a year" suffixPadding="pr-20!" rangeHint="Use a rate from 0 to 20%." />}
                 />
               </SettingsGroup>
             </SettingsPanel>
@@ -1037,10 +1185,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     <Dropdown<PersonalProfile['agentTone']> label="Tone" value={profile.agentTone} onChange={(agentTone) => setProfile((current) => ({ ...current, agentTone }))} options={[{ value: 'warm', label: 'Warm and friendly' }, { value: 'direct', label: 'Direct and practical' }, { value: 'encouraging', label: 'Encouraging and supportive' }]} />
                     <Dropdown<PersonalProfile['agentVerbosity']> label="Detail" value={profile.agentVerbosity} onChange={(agentVerbosity) => setProfile((current) => ({ ...current, agentVerbosity }))} options={[{ value: 'concise', label: 'Concise' }, { value: 'balanced', label: 'Balanced' }, { value: 'detailed', label: 'Detailed' }]} />
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <Button type="button" size="sm" onClick={() => void saveProfile()} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save response style'}</Button>
-                    <Notice notice={profileNotice} />
-                  </div>
+                  <Notice notice={profileNotice} />
                 </div>
               </SettingsGroup>
 
@@ -1061,17 +1206,22 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     ) : (
                       <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
                         {agentModels.map((model) => (
-                          <div key={model.id} className="flex flex-col gap-2.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div key={model.id} className="flex items-center justify-between gap-3 py-3">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold">{model.name}</p>{model.isDefault && <span className="rounded-full bg-[var(--ref-primary)]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--ref-primary)]">Default</span>}</div>
                               <p className="mt-0.5 truncate font-mono text-xs text-[var(--ref-on-surface-variant)]">{model.model}</p>
                               <p className="truncate text-xs text-[var(--color-muted)]">{model.baseUrl.replace(/^https?:\/\//, '')} · {model.apiKeySource === 'database' ? 'saved key' : model.apiKeySource === 'environment' ? 'server key' : 'no key'}</p>
                             </div>
-                            <div className="flex shrink-0 flex-wrap gap-1.5">
+                            <div className="flex shrink-0 items-center gap-1">
                               {!model.isDefault && <Button type="button" size="sm" variant="secondary" onClick={() => void makeAgentModelDefault(model.id)} disabled={agentProviderBusy}>Make default</Button>}
-                              <Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm(model)}>Edit</Button>
-                              {model.apiKeySource === 'database' && <Button type="button" size="sm" variant="secondary" onClick={() => void clearAgentModelKey(model.id)} disabled={agentProviderBusy}>Clear key</Button>}
-                              <Button type="button" size="sm" variant="secondary" className={cn('px-2', QUIET_DANGER)} onClick={() => void removeAgentModel(model.id)} disabled={agentProviderBusy} aria-label={`Delete ${model.name}`}><Trash2 className="h-3.5 w-3.5" aria-hidden /></Button>
+                              <RowActions
+                                title={model.name}
+                                actions={[
+                                  { key: 'edit', label: 'Edit model', icon: Pencil, onSelect: () => openAgentModelForm(model) },
+                                  ...(model.apiKeySource === 'database' ? [{ key: 'clear-key', label: 'Clear saved key', icon: KeyRound, disabled: agentProviderBusy, onSelect: () => void clearAgentModelKey(model.id) }] : []),
+                                  { key: 'delete', label: 'Delete model', icon: Trash2, tone: 'danger' as const, disabled: agentProviderBusy, onSelect: () => void removeAgentModel(model.id) },
+                                ]}
+                              />
                             </div>
                           </div>
                         ))}
@@ -1212,8 +1362,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
           {/* Data tools and import/export */}
           {activeTab === 'data' && (
             <SettingsPanel>
-              <SettingsGroup fixed title="Export and import" summary="A copy of your data as a JSON file">
+              <SettingsGroup fixed title="Export">
                 <div className="space-y-4">
+                  <p className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Download a copy of your data as a JSON file.</p>
                   <fieldset>
                     <legend className="sr-only">Include in export</legend>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
@@ -1247,14 +1398,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                       <Download className="mr-1.5 h-4 w-4" aria-hidden />
                       Download JSON
                     </Button>
-                    <label className="brutalist-button brutalist-button--secondary inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-sm text-[var(--color-text-primary)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--ref-primary)]/40">
-                      <Upload className="h-4 w-4" aria-hidden />
-                      Import…
-                      <input type="file" accept=".json" onChange={handleImport} className="sr-only" />
-                    </label>
+                    {/* Import stays hidden until restoring from a file actually works. */}
                     {showExportSuccess && <Notice notice={{ tone: 'success', text: 'Export downloaded.' }} />}
                   </div>
-                  <p className="text-xs leading-relaxed text-[var(--color-muted)]">Restoring from a file isn’t available yet. Import only checks that a file can be read; nothing in your data changes.</p>
                 </div>
               </SettingsGroup>
               <SettingsGroup fixed title="This device" summary="Data Fainens keeps in this browser">
@@ -1266,9 +1412,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                 />
                 <SettingsRow
                   inline
-                  label="Delete all data"
-                  description="Clears what this browser stores and signs you out."
-                  action={<Button size="sm" variant="secondary" className={QUIET_DANGER} onClick={() => setShowDeleteDataModal(true)}>Delete…</Button>}
+                  label="Clear this browser and sign out"
+                  description="Removes everything Fainens keeps in this browser. Your ledger on the server is not touched."
+                  action={<Button size="sm" variant="secondary" className={QUIET_DANGER} onClick={() => setShowDeleteDataModal(true)}>Clear…</Button>}
                 />
               </SettingsGroup>
               <SettingsGroup fixed title="Tools" summary="Related pages">
@@ -1299,6 +1445,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
           overlayClassName="!z-[60]"
           footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" disabled={contextBusy} onClick={() => setContextDraft(null)}>Cancel</Button><Button type="button" size="sm" disabled={contextBusy} onClick={() => void saveAgentContext()}>{contextBusy ? 'Saving…' : 'Save'}</Button></div>}
         >
+          {/* Small dialogs don't render a subtitle, so the intro sits at the top of the body. */}
+          <p className="mb-2 text-sm text-[var(--ref-on-surface-variant)]">Choose which profile details Agent may use.</p>
           <div className="divide-y divide-[var(--color-border)]">
             {AGENT_CONTEXT_OPTIONS.map((option) => (
               <div key={option.key} className="flex items-center justify-between gap-4 py-3">
@@ -1325,16 +1473,16 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         <Modal
           isOpen={showDeleteDataModal}
           onClose={() => setShowDeleteDataModal(false)}
-          title="Delete all data?"
+          title="Clear this browser and sign out?"
           overlayClassName="!z-[60]"
-          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={handleDeleteAllData}>Delete and sign out</Button></div>}
+          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={handleDeleteAllData}>Clear and sign out</Button></div>}
         >
           <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Everything Fainens keeps in this browser is removed, including the settings on this page, and you are signed out. Your transactions, accounts, and budgets stay safe on the server.</p>
             <p className="flex items-center gap-2 rounded-xl bg-[var(--color-danger)]/8 px-3.5 py-3 text-sm font-medium text-[var(--color-danger)]">
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-              This can’t be undone.
+              Browser-only settings can’t be recovered.
             </p>
-            <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Everything Fainens stores in this browser is cleared, including these settings, and you are signed out.</p>
           </div>
         </Modal>
           </main>
