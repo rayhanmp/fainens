@@ -32,7 +32,7 @@ export const LIMITS: Array<[string, string]> = [
   ['Salary day', 'Day 1–31; short months use their last day'],
   ['Bulk delete', '100 drafts at a time'],
   ['Catching up', '120 missed salaries or renewals at a time'],
-  ['Report trends', 'Up to 24 periods'],
+  ['Report trends', 'The last 6 periods'],
   ['Sign-in session', '7 days'],
 ];
 
@@ -61,6 +61,8 @@ export const GLOSSARY: Array<[string, string]> = [
   ['Period', 'From one salary day to the day before the next; budgets and reports use it.'],
   ['Closed period', 'A period whose history is locked until you reopen it.'],
   ['Reconcile', 'Match an account to its real balance and record any difference.'],
+  ['Coverage', 'How fully a period is tracked: complete, partial, or skipped during a break.'],
+  ['Reallocation', 'Money that came back and went out again, linked so it counts as neither income nor spending.'],
   ['Balance adjustment', 'A recorded correction to a balance that isn’t income or spending.'],
   ['Asset / liability', 'What you own (cash, savings, money owed to you) versus what you owe.'],
   ['Net worth', 'Everything you own minus everything you owe.'],

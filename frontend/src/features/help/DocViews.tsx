@@ -81,8 +81,10 @@ const GLOSSARY_FORMS: Array<[RegExp, string]> = [
   [/^reconcil(e|es|ed|ing|iation)$/i, 'Reconcile'],
   [/^drafts?$/i, 'Draft'],
   [/^corrections?$/i, 'Correction'],
+  [/^coverage$/i, 'Coverage'],
+  [/^reallocations?$/i, 'Reallocation'],
 ];
-const GLOSSARY_PATTERN = /\b(closed periods?|balance adjustments?|pending items?|net worth|cash runway|opportunity cost|budget variance|audit log|ledger|reconcil(?:e|es|ed|ing|iation)|drafts?|corrections?)\b/gi;
+const GLOSSARY_PATTERN = /\b(closed periods?|balance adjustments?|pending items?|net worth|cash runway|opportunity cost|budget variance|audit log|ledger|reconcil(?:e|es|ed|ing|iation)|drafts?|corrections?|coverage|reallocations?)\b/gi;
 const GLOSSARY_MEANING = new Map(GLOSSARY.map(([term, meaning]) => [term, meaning]));
 
 /** A glossary word in running text: dotted underline, meaning on hover, focus or tap. */
