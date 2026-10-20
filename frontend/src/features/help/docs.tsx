@@ -58,15 +58,25 @@ export type DocPage = {
   related?: string[];
 };
 
-export const DOC_GROUPS = ['Getting started', 'Everyday money', 'Planning', 'Debts and sharing', 'Agent', 'Your data', 'Reference'] as const;
+export const DOC_GROUPS = ['Getting started', 'Everyday money', 'Planning', 'Debts and sharing', 'Agent and your data', 'Reference'] as const;
+
+/** Pages that were merged into another, so old links (and bookmarks) still land somewhere. */
+export const DOC_REDIRECTS: Record<string, { slug: string; hash?: string }> = {
+  welcome: { slug: 'how-it-works' },
+  'key-ideas': { slug: 'how-it-works', hash: 'balances' },
+  transfers: { slug: 'recording', hash: 'transfers' },
+  periods: { slug: 'periods-budgets' },
+  budgets: { slug: 'periods-budgets', hash: 'budget' },
+  limits: { slug: 'can-i', hash: 'limits' },
+};
 
 export const DOCS: DocPage[] = [
   // ── Getting started ───────────────────────────────────────────────
   {
-    slug: 'welcome',
+    slug: 'how-it-works',
     group: 'Getting started',
-    title: 'Welcome to Fainens',
-    summary: 'What Fainens is and how it thinks about money',
+    title: 'How Fainens works',
+    summary: 'One ledger, pay periods, and what counts as spending',
     lead: 'Fainens is a private finance app built around one ledger. You record money once; balances, budgets, reports and recaps are all read from that same record.',
     blocks: [
       { type: 'visual', node: <LedgerFlow /> },
@@ -74,9 +84,19 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'Every rupiah that moves is written down as a transaction, and every number you see is a view of those transactions. When something looks off, you can always trace it back to the entries behind it.' },
       { type: 'h2', id: 'what-you-can-do', text: 'What you can do with it' },
       { type: 'list', items: ['Record spending, income and transfers in seconds, or let bank emails and Agent draft them for you.', 'Plan a budget for each salary period and watch it fill in.', 'Track loans, pay later, split bills, subscriptions and reimbursements without them counting as spending.', 'Reconcile accounts against your bank so balances stay right.', 'Ask Agent about your own money, and replay each period as a recap.'] },
+      { type: 'h2', id: 'balances', text: 'Every entry balances' },
+      { type: 'p', text: 'Money always comes from somewhere and goes somewhere. A Rp45.000 lunch paid from BCA records Rp45.000 of spending (tagged Food & dining) and takes Rp45.000 out of BCA. Fainens keeps every amount in whole rupiah.' },
+      { type: 'h2', id: 'posted', text: 'Posted, draft and pending' },
+      { type: 'table', head: ['State', 'What it means'], rows: [['Posted', 'Counts in balances, budgets and reports. Kept permanently; corrected, never erased.'], ['Draft', 'Doesn’t count yet. Edit or delete freely, then post (for example in Backfill).'], ['Pending', 'Imported (for example from a bank email) and waiting for your approval.']] },
+      { type: 'h2', id: 'periods', text: 'Periods follow your pay' },
+      { type: 'visual', node: <PeriodTimeline /> },
+      { type: 'h2', id: 'not-spending', text: 'Not everything is spending' },
+      { type: 'p', text: 'Transfers between your own accounts, money you lend, loan repayments, other people’s share of a split bill, and expenses waiting to be reimbursed all move money, but none of them is spending.' },
+      { type: 'h2', id: 'you-confirm', text: 'Nothing posts without you' },
+      { type: 'p', text: 'Bank emails wait as pending items, salary and subscription renewals ask first, and Agent’s drafts need your approval.' },
       { type: 'callout', tone: 'note', title: 'Private by design', text: 'Fainens is a single-user app: only its owner’s Google account can sign in.' },
     ],
-    related: ['quick-start', 'key-ideas'],
+    related: ['quick-start', 'a-month', 'glossary'],
   },
   {
     slug: 'quick-start',
@@ -101,27 +121,7 @@ export const DOCS: DocPage[] = [
       { type: 'open', link: { to: '/budget', label: 'Open Budget' } },
       { type: 'callout', tone: 'tip', title: 'Then, once a week', text: 'Glance at the Dashboard’s Needs attention strip, approve pending items in Transactions, and reconcile your main accounts.' },
     ],
-    related: ['a-month', 'recording', 'budgets'],
-  },
-  {
-    slug: 'key-ideas',
-    group: 'Getting started',
-    title: 'Key ideas',
-    summary: 'Ledger, periods, posted and drafts',
-    lead: 'A handful of ideas explain almost everything Fainens does, including the moments it says no.',
-    blocks: [
-      { type: 'h2', id: 'balances', text: 'Every entry balances' },
-      { type: 'p', text: 'Money always comes from somewhere and goes somewhere. A Rp45.000 lunch paid from BCA records Rp45.000 of spending (tagged Food & dining) and takes Rp45.000 out of BCA. Fainens keeps every amount in whole rupiah.' },
-      { type: 'h2', id: 'posted', text: 'Posted, draft and pending' },
-      { type: 'table', head: ['State', 'What it means'], rows: [['Posted', 'Counts in balances, budgets and reports. Kept permanently; corrected, never erased.'], ['Draft', 'Doesn’t count yet. Edit or delete freely, then post (for example in Backfill).'], ['Pending', 'Imported (for example from a bank email) and waiting for your approval.']] },
-      { type: 'h2', id: 'periods', text: 'Periods follow your pay' },
-      { type: 'visual', node: <PeriodTimeline /> },
-      { type: 'h2', id: 'not-spending', text: 'Not everything is spending' },
-      { type: 'p', text: 'Transfers between your own accounts, money you lend, loan repayments, other people’s share of a split bill, and expenses waiting to be reimbursed all move money, but none of them is spending.' },
-      { type: 'h2', id: 'you-confirm', text: 'Nothing posts without you' },
-      { type: 'p', text: 'Bank emails wait as pending items, salary and subscription renewals ask first, and Agent’s drafts need your approval.' },
-    ],
-    related: ['a-month', 'fixing-mistakes', 'glossary'],
+    related: ['a-month', 'recording', 'periods-budgets'],
   },
   {
     slug: 'a-month',
@@ -149,8 +149,8 @@ export const DOCS: DocPage[] = [
   {
     slug: 'recording',
     group: 'Everyday money',
-    title: 'Recording transactions',
-    summary: 'Expenses, income, receipts and rides',
+    title: 'Recording and transfers',
+    summary: 'Expenses, income, transfers, receipts and rides',
     lead: 'The composer handles everyday entries in a few taps, and switches to a full journal when you need it.',
     blocks: [
       { type: 'visual', node: <ComposerDemo /> },
@@ -166,34 +166,22 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'Choose a transport category and a trip section appears: set pickup and drop-off on a map, the provider and the service. Save a route you take often and reuse it next time.' },
       { type: 'h2', id: 'tags', text: 'Tags, notes and places' },
       { type: 'p', text: 'Add tags (Fainens suggests some), a note, or a place. These can always be changed later, even after posting.' },
-      { type: 'under-hood', entries: [
-        { title: 'Rp45.000 lunch paid from {cash}, category Food & dining', lines: [{ account: 'Expense (Auto)', note: 'Category: Food & dining', debit: '45.000' }, { account: '{cash}', credit: '45.000' }], explain: 'The spending is counted once, in the built-in Expense (Auto) account, labelled with its category. That label is what budgets and reports group by.' },
-        { title: 'Rp1.000.000 income into {cash}', lines: [{ account: '{cash}', debit: '1.000.000' }, { account: 'Income (Auto)', credit: '1.000.000' }], explain: 'Income always lands in the built-in Income (Auto) account. CSV imports, Agent drafts and approved bank emails post exactly the same lines.' },
-      ] },
-      { type: 'open', link: { to: '/transactions', label: 'Open Transactions' } },
-    ],
-    related: ['transfers', 'fixing-mistakes', 'importing'],
-  },
-  {
-    slug: 'transfers',
-    group: 'Everyday money',
-    title: 'Transfers and fees',
-    summary: 'Moving money between your own accounts',
-    lead: 'A transfer moves money between two of your accounts. Both balances change, but nothing is income or spending.',
-    blocks: [
+      { type: 'h2', id: 'transfers', text: 'Transfers between your accounts' },
+      { type: 'p', text: 'A transfer moves money between two of your accounts. Both balances change, but nothing is income or spending.' },
       { type: 'visual', node: <TransferDemo /> },
-      { type: 'h2', id: 'how', text: 'Record a transfer' },
       { type: 'steps', items: ['Press N and choose Transfer.', 'Pick the account the money leaves and the one it arrives in. Use swap to flip them.', 'If there was a fee, enter it and choose who paid it: sender or recipient.', 'Save.'] },
-      { type: 'visual', node: <PracticeComposer label="Try a transfer" /> },
-      { type: 'h2', id: 'fees', text: 'Fees you pay every time' },
+      { type: 'h2', id: 'fees', text: 'Transfer fees you pay every time' },
       { type: 'p', text: 'If moving money between two accounts always costs the same, set it once in Settings → Accounts → Transfer fees and it’s added automatically.' },
       { type: 'callout', tone: 'note', text: 'Transfers move money between your asset accounts, like bank to e-wallet. Pay-later installments are paid from Pay later, or with Settle PayLater in the composer.' },
       { type: 'under-hood', entries: [
+        { title: 'Rp45.000 lunch paid from {cash}, category Food & dining', lines: [{ account: 'Expense (Auto)', note: 'Category: Food & dining', debit: '45.000' }, { account: '{cash}', credit: '45.000' }], explain: 'The spending is counted once, in the built-in Expense (Auto) account, labelled with its category. That label is what budgets and reports group by.' },
+        { title: 'Rp1.000.000 income into {cash}', lines: [{ account: '{cash}', debit: '1.000.000' }, { account: 'Income (Auto)', credit: '1.000.000' }], explain: 'Income always lands in the built-in Income (Auto) account. CSV imports, Agent drafts and approved bank emails post exactly the same lines.' },
         { title: 'Rp100.000 from {cash} to {cash2}', lines: [{ account: '{cash2}', debit: '100.000' }, { account: '{cash}', credit: '100.000' }], explain: 'No income or expense account is touched, which is why a transfer never counts as spending.' },
         { title: '…with a Rp2.500 fee paid by the sender', lines: [{ account: 'Expense (Auto)', note: 'Category: Bank & Transfer Fees', debit: '2.500' }, { account: '{cash}', credit: '2.500' }], explain: 'The fee is a separate, linked expense from the account that paid it. Altogether {cash} goes down Rp102.500 and {cash2} up Rp100.000. If the recipient pays the fee instead, it comes out of {cash2}, which then goes up Rp97.500.' },
       ] },
+      { type: 'open', link: { to: '/transactions', label: 'Open Transactions' } },
     ],
-    related: ['recording', 'pay-later'],
+    related: ['fixing-mistakes', 'importing', 'pay-later'],
   },
   {
     slug: 'fixing-mistakes',
@@ -218,7 +206,7 @@ export const DOCS: DocPage[] = [
       ] },
       { type: 'callout', tone: 'tip', text: 'Not sure what changed? Security audit lists important changes and when they happened.' },
     ],
-    related: ['periods', 'accounts', 'troubleshooting'],
+    related: ['periods-budgets', 'accounts', 'troubleshooting'],
   },
   {
     slug: 'accounts',
@@ -240,7 +228,7 @@ export const DOCS: DocPage[] = [
       ] },
       { type: 'open', link: { to: '/accounts', label: 'Open Accounts' } },
     ],
-    related: ['periods', 'fixing-mistakes'],
+    related: ['periods-budgets', 'fixing-mistakes'],
   },
   {
     slug: 'importing',
@@ -266,40 +254,31 @@ export const DOCS: DocPage[] = [
 
   // ── Planning ──────────────────────────────────────────────────────
   {
-    slug: 'periods',
+    slug: 'periods-budgets',
     group: 'Planning',
-    title: 'Salary periods',
-    summary: 'Paydays, closing periods, and catching up',
-    lead: 'Everything in Fainens is grouped into periods that run from one payday to the next.',
+    title: 'Periods and budgets',
+    summary: 'Paydays, budgets per category, and closing a period',
+    lead: 'Everything in Fainens is grouped into periods that run from one payday to the next, and each period gets its own budget.',
     blocks: [
+      { type: 'h2', id: 'periods', text: 'Salary periods' },
       { type: 'visual', node: <PeriodTimeline /> },
       { type: 'p', text: 'Set your salary day in Settings → General. In months without that day, the last day of the month is used. Periods never overlap.' },
+      { type: 'h2', id: 'budget', text: 'Plan a budget' },
+      { type: 'visual', node: <BudgetBarsDemo /> },
+      { type: 'steps', items: ['Open Budget and choose Manage budget.', 'Copy the previous period, start from a preset, or start from scratch.', 'Give each category an amount, with a note if you like.', 'Optionally set a savings target, as an amount or a share of income.', 'Read the checks before you save.'] },
+      { type: 'h2', id: 'track', text: 'Track it' },
+      { type: 'p', text: 'Each category shows over, near limit, on track or not started. Edit amounts inline, move a line to another open period, compare with another period, and save your plan as a preset for next time.' },
+      { type: 'callout', tone: 'note', text: 'Only real spending counts: transfers, loans and splits don’t use up a budget.' },
+      { type: 'open', link: { to: '/budget', label: 'Open Budget' } },
       { type: 'h2', id: 'close', text: 'Close a period' },
       { type: 'visual', node: <ClosedPeriodDemo /> },
       { type: 'steps', items: ['Post or delete any drafts left in the period.', 'Reconcile your accounts so closing balances are right.', 'In Salary periods, choose Close period.'] },
-      { type: 'p', text: 'A closed period’s transactions and budget are locked. Reopen it if you need to correct something, and archive old periods once they’re closed.' },
+      { type: 'p', text: 'A closed period’s transactions and budget are locked (its budget becomes read-only). Reopen it if you need to correct something, and archive old periods once they’re closed.' },
       { type: 'h2', id: 'break', text: 'After a break' },
       { type: 'p', text: 'Choose Resume tracking and enter the day you came back. The gap is marked skipped, so nothing is made up. Then reconcile your accounts from today.' },
       { type: 'open', link: { to: '/periods', label: 'Open Salary periods' } },
     ],
-    related: ['budgets', 'accounts'],
-  },
-  {
-    slug: 'budgets',
-    group: 'Planning',
-    title: 'Budgets',
-    summary: 'Plan spending per category each period',
-    lead: 'A budget gives each category a limit for the period, so you can see what’s left before you spend.',
-    blocks: [
-      { type: 'visual', node: <BudgetBarsDemo /> },
-      { type: 'h2', id: 'build', text: 'Build a plan' },
-      { type: 'steps', items: ['Open Budget and choose Manage budget.', 'Copy the previous period, start from a preset, or start from scratch.', 'Give each category an amount, with a note if you like.', 'Optionally set a savings target, as an amount or a share of income.', 'Read the checks before you save.'] },
-      { type: 'h2', id: 'track', text: 'Track it' },
-      { type: 'p', text: 'Each category shows over, near limit, on track or not started. Edit amounts inline, move a line to another open period, compare with another period, and save your plan as a preset for next time.' },
-      { type: 'callout', tone: 'note', text: 'Budgets in closed periods are read-only. Only real spending counts: transfers, loans and splits don’t use up a budget.' },
-      { type: 'open', link: { to: '/budget', label: 'Open Budget' } },
-    ],
-    related: ['periods', 'subscriptions-salary'],
+    related: ['subscriptions-salary', 'accounts', 'a-month'],
   },
   {
     slug: 'subscriptions-salary',
@@ -322,7 +301,7 @@ export const DOCS: DocPage[] = [
       ] },
       { type: 'open', link: { to: '/salary-income', label: 'Open Income & salary' } },
     ],
-    related: ['budgets', 'periods'],
+    related: ['periods-budgets'],
   },
   {
     slug: 'savings-wishlist',
@@ -338,7 +317,7 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'Paste a product link from Tokopedia, Shopee, Bukalapak, Lazada or Blibli and the picture and details fill in; other shops are tried too. Set a priority and a target period. When you buy it, mark it fulfilled to record the purchase.' },
       { type: 'open', link: { to: '/wishlist', label: 'Open Wishlist' } },
     ],
-    related: ['budgets'],
+    related: ['periods-budgets'],
   },
 
   // ── Debts and sharing ─────────────────────────────────────────────
@@ -420,10 +399,10 @@ export const DOCS: DocPage[] = [
     related: ['recording', 'loans'],
   },
 
-  // ── Agent ─────────────────────────────────────────────────────────
+  // ── Agent and your data ───────────────────────────────────────────
   {
     slug: 'agent',
-    group: 'Agent',
+    group: 'Agent and your data',
     title: 'Using Agent',
     summary: 'Ask about your money; approve what it drafts',
     lead: 'Agent is an assistant that can read your recorded money and answer with charts, tables and plain words.',
@@ -443,11 +422,9 @@ export const DOCS: DocPage[] = [
     ],
     related: ['split-bills', 'data-privacy'],
   },
-
-  // ── Your data ─────────────────────────────────────────────────────
   {
     slug: 'data-privacy',
-    group: 'Your data',
+    group: 'Agent and your data',
     title: 'Backups, exports and privacy',
     summary: 'Keep your data safe and private',
     lead: 'Your ledger is yours. Here’s how to keep a copy, protect reports and keep amounts out of sight.',
@@ -473,20 +450,15 @@ export const DOCS: DocPage[] = [
   {
     slug: 'can-i',
     group: 'Reference',
-    title: 'Can I…?',
-    summary: 'What’s supported, and what isn’t yet',
-    lead: 'The quick answer to what Fainens can do, partly does, and doesn’t do yet.',
-    blocks: [{ type: 'special', name: 'can-i' }],
-    related: ['limits', 'importing'],
-  },
-  {
-    slug: 'limits',
-    group: 'Reference',
-    title: 'Limits',
-    summary: 'Sizes, counts and ranges',
-    lead: 'The numbers worth knowing before you hit them.',
-    blocks: [{ type: 'special', name: 'limits' }],
-    related: ['can-i'],
+    title: 'Can I…? and limits',
+    summary: 'What’s supported, what isn’t yet, and the numbers to know',
+    lead: 'The quick answer to what Fainens can do, partly does, and doesn’t do yet, plus the limits worth knowing before you hit them.',
+    blocks: [
+      { type: 'special', name: 'can-i' },
+      { type: 'h2', id: 'limits', text: 'Limits' },
+      { type: 'special', name: 'limits' },
+    ],
+    related: ['importing', 'troubleshooting'],
   },
   {
     slug: 'shortcuts',

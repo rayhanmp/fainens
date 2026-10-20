@@ -7,29 +7,60 @@ import { DOC_GROUPS, DOCS, type DocBlock, type DocPage, type LedgerEntry } from 
 import { exampleAccounts, useHelpPersonal } from './personal';
 
 /** The docs' left rail: every page, grouped, with the open one highlighted like the app sidebar. */
+/**
+ * Topics as drill-down groups: only one is open at a time, starting with the one holding the page
+ * you're on, so the sidebar stays short.
+ */
 export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {
+  const activeGroup = DOCS.find((doc) => doc.slug === activeSlug)?.group ?? DOC_GROUPS[0];
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroup);
+  // Moving to a page in another group (a related link, Next) opens that group.
+  const [shownGroup, setShownGroup] = useState(activeGroup);
+  if (shownGroup !== activeGroup) {
+    setShownGroup(activeGroup);
+    setOpenGroup(activeGroup);
+  }
+
   return (
-    <nav aria-label="Help topics" className="space-y-5">
-      <Link to="/help" className={cn('block rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors', !activeSlug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)]' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>Help home</Link>
-      {DOC_GROUPS.map((group) => (
-        <div key={group}>
-          <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">{group}</p>
-          <ul className="space-y-0.5">
-            {DOCS.filter((doc) => doc.group === group).map((doc) => (
-              <li key={doc.slug}>
-                <Link
-                  to="/help/$slug"
-                  params={{ slug: doc.slug }}
-                  aria-current={activeSlug === doc.slug ? 'page' : undefined}
-                  className={cn('block rounded-lg px-3 py-1.5 text-sm transition-colors', activeSlug === doc.slug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] font-semibold text-[var(--color-accent)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]')}
-                >
-                  {doc.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <nav aria-label="Help topics" className="space-y-1">
+      <Link to="/help" className={cn('mb-3 block rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors', !activeSlug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)]' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>Help home</Link>
+      {DOC_GROUPS.map((group) => {
+        const pages = DOCS.filter((doc) => doc.group === group);
+        const open = openGroup === group;
+        const holdsActive = pages.some((doc) => doc.slug === activeSlug);
+        const listId = `help-group-${group.replace(/\W+/g, '-').toLowerCase()}`;
+        return (
+          <div key={group}>
+            <button
+              type="button"
+              onClick={() => setOpenGroup(open ? null : group)}
+              aria-expanded={open}
+              aria-controls={listId}
+              className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--ref-surface-container-low)]', open || holdsActive ? 'font-semibold text-[var(--ref-on-surface)]' : 'font-medium text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]')}
+            >
+              <span className="min-w-0 flex-1 truncate">{group}</span>
+              {!open && <span className="text-xs font-normal tabular-nums text-[var(--color-muted)]">{pages.length}</span>}
+              <ChevronDown className={cn('h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform duration-200', open && 'rotate-180')} aria-hidden />
+            </button>
+            <div id={listId} inert={!open} className={cn('grid transition-[grid-template-rows] duration-200 ease-out', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+              <ul className="ml-3 space-y-0.5 overflow-hidden border-l border-[var(--color-border)] pl-2">
+                {pages.map((doc, index) => (
+                  <li key={doc.slug} className={cn(index === 0 && 'mt-0.5', index === pages.length - 1 && 'mb-2')}>
+                    <Link
+                      to="/help/$slug"
+                      params={{ slug: doc.slug }}
+                      aria-current={activeSlug === doc.slug ? 'page' : undefined}
+                      className={cn('block rounded-lg px-3 py-1.5 text-sm transition-colors', activeSlug === doc.slug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] font-semibold text-[var(--color-accent)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]')}
+                    >
+                      {doc.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
     </nav>
   );
 }

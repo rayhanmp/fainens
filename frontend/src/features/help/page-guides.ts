@@ -1,9 +1,9 @@
 /** Which help page explains each app page, for the "Guide" link in page headers. */
 export const GUIDE_FOR_PATH: Record<string, { slug: string; title: string }> = {
-  '/transactions': { slug: 'recording', title: 'Recording transactions' },
+  '/transactions': { slug: 'recording', title: 'Recording and transfers' },
   '/accounts': { slug: 'accounts', title: 'Accounts and reconciling' },
-  '/budget': { slug: 'budgets', title: 'Budgets' },
-  '/periods': { slug: 'periods', title: 'Salary periods' },
+  '/budget': { slug: 'periods-budgets', title: 'Periods and budgets' },
+  '/periods': { slug: 'periods-budgets', title: 'Periods and budgets' },
   '/salary-income': { slug: 'subscriptions-salary', title: 'Subscriptions and salary' },
   '/subscriptions': { slug: 'subscriptions-salary', title: 'Subscriptions and salary' },
   '/loans': { slug: 'loans', title: 'Loans and contacts' },
@@ -16,5 +16,5 @@ export const GUIDE_FOR_PATH: Record<string, { slug: string; title: string }> = {
   '/audit-log': { slug: 'data-privacy', title: 'Backups, exports and privacy' },
   '/gallery': { slug: 'data-privacy', title: 'Backups, exports and privacy' },
   '/anomalies': { slug: 'troubleshooting', title: 'Troubleshooting' },
-  '/categories': { slug: 'recording', title: 'Recording transactions' },
+  '/categories': { slug: 'recording', title: 'Recording and transfers' },
 };

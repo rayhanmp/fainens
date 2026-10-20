@@ -9,8 +9,8 @@ export const Route = createFileRoute('/help/')({
   component: HelpHome,
 });
 
-const POPULAR = ['fixing-mistakes', 'accounts', 'transfers', 'split-bills', 'pay-later', 'agent'];
-const START_HERE = ['welcome', 'quick-start', 'key-ideas'];
+const POPULAR = ['fixing-mistakes', 'accounts', 'periods-budgets', 'split-bills', 'pay-later', 'agent'];
+const START_HERE = ['how-it-works', 'quick-start', 'a-month'];
 
 /** The sentence of a page that best matches the search, shown under the result. */
 function snippet(page: DocPage, terms: string[]): string {
