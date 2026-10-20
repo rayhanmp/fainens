@@ -494,57 +494,51 @@ export function RetirementPlanner() {
           )}
 
           <Section title="What old age needs">
-            <dl className="divide-y divide-[var(--color-border)] text-sm">
-              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
-                <dt className="font-semibold text-[var(--ref-on-surface)]">How much to aim for</dt>
-                <dd className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  Financial planners aim for <Term href={SOURCES.dplk.href} meaning={SOURCES.dplk.label}>70–80% of your last income</Term>; the <Term href={SOURCES.dplk.href} meaning={`ILO Convention 102, as cited by ${SOURCES.dplk.label}`}>ILO’s minimum is 40%</Term>. Today Indonesian pension programs replace only about <Term href={SOURCES.ojk.href} meaning={SOURCES.ojk.label}>10–15% of income</Term>, so your own savings carry the rest. The 80% of today button above is a good start.
-                </dd>
+            {/* Health cover first: the one part here you can add to your plan. */}
+            <div className="settings-compact px-4 py-4 sm:px-5">
+              <p className="text-sm font-semibold text-[var(--ref-on-surface)]">Add health cover to what you want to spend</p>
+              <p className="mt-0.5 text-xs text-[var(--ref-on-surface-variant)]">
+                Your employer stops paying <Term meaning="The national health insurance. Everyone must be a member; after work you pay for yourself and your family, by class.">BPJS Kesehatan</Term> when you leave work. From then it’s <Term href={SOURCES.bpjsKesehatan.href} meaning={SOURCES.bpjsKesehatan.label}>Rp35.000–150.000 a person a month</Term>.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                <Field label="BPJS class">
+                  <Segmented ariaLabel="BPJS Kesehatan class" value={healthClass} onChange={setHealthClass} options={[{ value: 'none', label: 'None' }, { value: '3', label: 'Kelas 3' }, { value: '2', label: 'Kelas 2' }, { value: '1', label: 'Kelas 1' }]} />
+                </Field>
+                <Field label="People">
+                  <Segmented ariaLabel="People covered" value={healthPeople} onChange={setHealthPeople} options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]} />
+                </Field>
+                <Field label="Private insurance" htmlFor="ret-private-premium" info="A month, in today’s prices. BPJS doesn’t pay for everything. Private premiums depend on the insurer, benefits and your health, and rise with age; senior policies generally take new members only up to about 65 (Kontan), so buy before you retire.">
+                  <MoneyField id="ret-private-premium" value={privatePremium} onChange={setPrivatePremium} placeholder="0 a month" />
+                </Field>
               </div>
-              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
-                <dt className="font-semibold text-[var(--ref-on-surface)]">Health cover after work</dt>
-                <dd className="space-y-2 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  <p>
-                    While employed, your employer pays most of <Term meaning="The national health insurance. Everyone must be a member; after work you pay for yourself and your family.">BPJS Kesehatan</Term>. After you stop, you pay it yourself (<Term meaning="Self-paying member: you pay the premium for everyone in your family card, by class.">mandiri</Term>) for everyone you cover: <Term href={SOURCES.bpjsKesehatan.href} meaning={SOURCES.bpjsKesehatan.label}>Kelas 1 Rp150.000, Kelas 2 Rp100.000, Kelas 3 Rp35.000</Term> a person a month in 2026.
-                  </p>
-                  <div className="settings-compact grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
-                    <Segmented ariaLabel="BPJS Kesehatan class" value={healthClass} onChange={setHealthClass} options={[{ value: 'none', label: 'Not added' }, { value: '3', label: 'Kelas 3' }, { value: '2', label: 'Kelas 2' }, { value: '1', label: 'Kelas 1' }]} />
-                    <Segmented ariaLabel="People covered" value={healthPeople} onChange={setHealthPeople} options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]} />
-                  </div>
-                  <p className="pt-1">
-                    BPJS doesn’t pay for everything, so many add private health insurance. Premiums depend on the insurer, the benefits and your health, and rise with age; <Term href={SOURCES.seniorInsurance.href} meaning={SOURCES.seniorInsurance.label}>senior policies generally take new members only up to about 65</Term>, so buy before you retire.
-                  </p>
-                  <div className="settings-compact grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                    <MoneyField id="ret-private-premium" ariaLabel="Private health insurance a month" value={privatePremium} onChange={setPrivatePremium} placeholder="Private premium a month" />
-                    <span className="whitespace-nowrap">a month, today’s prices</span>
-                  </div>
-                  <p>{healthCost > 0 ? `Adds ${formatAmount(healthCost)} a month to what you want to spend${bpjsCost > 0 ? `: BPJS for ${healthPeople} ${healthPeople === '1' ? 'person' : 'people'}` : ''}${bpjsCost > 0 && privatePremium > 0 ? ' and ' : bpjsCost > 0 ? '' : ': '}${privatePremium > 0 ? 'private insurance' : ''}.` : 'Pick a BPJS class and how many people, or enter a private premium, to add them to what you want to spend.'}</p>
-                </dd>
-              </div>
-              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
-                <dt className="font-semibold text-[var(--ref-on-surface)]">Medical costs rise faster</dt>
-                <dd className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  Medical costs in Indonesia are projected to rise <Term href={SOURCES.medical.href} meaning={SOURCES.medical.label}>17.8% in 2026, against about 2.5% for prices in general</Term>. A hospital stay decades from now will cost far more than inflation suggests. Keep a separate health fund (a goal in the Savings plan works) or private cover, rather than relying on this monthly budget.
-                </dd>
-              </div>
-              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
-                <dt className="font-semibold text-[var(--ref-on-surface)]">How long it must last</dt>
-                <dd className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  Life expectancy at birth in Indonesia is <Term href={SOURCES.lifeBirth.href} meaning={SOURCES.lifeBirth.label}>about 72 years</Term>, but that average includes people who die young: a <Term href={SOURCES.lifeAt60.href} meaning={SOURCES.lifeAt60.label}>60-year-old woman can expect about 19 more years</Term>, and many live longer. Planning to 90 means a long life doesn’t outlast the money; JP keeps paying either way.
-                </dd>
-              </div>
-              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
-                <dt className="font-semibold text-[var(--ref-on-surface)]">Where to keep it</dt>
-                <dd className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  Money you’ll live on should be safe and easy to reach. <Term meaning="Government bonds sold to individuals (ORI, SR, SBR, ST), from Rp1 juta, backed by the state.">SBN ritel</Term> like <Term href={SOURCES.ori030.href} meaning={SOURCES.ori030.label}>ORI030 paid 6.9–7% a year</Term>, with the coupon <Term href={SOURCES.couponTax.href} meaning={SOURCES.couponTax.label}>taxed at 10%, less than deposit interest</Term>. Spread the lump sum over several series so some always matures soon.
-                </dd>
-              </div>
-              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4 sm:px-5">
-                <dt className="font-semibold text-[var(--ref-on-surface)]">Taking JHT early</dt>
-                <dd className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">
-                  After <Term href={SOURCES.jhtPartial.href} meaning={SOURCES.jhtPartial.label}>10 years of membership you can take up to 30% of JHT for a home, or 10% for other needs</Term>, while still working. Whatever you take now isn’t there, or growing, at 56.
-                </dd>
-              </div>
+              {healthCost > 0 && (
+                <p className="mt-2 text-xs text-[var(--ref-on-surface-variant)]">
+                  Adds <span className="font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(healthCost)}</span> a month to what you want to spend, in today’s prices.
+                </p>
+              )}
+            </div>
+
+            {/* The facts: one number each, what it means, and what to do about it. */}
+            <dl className="grid grid-cols-1 gap-px border-t border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-2 2xl:grid-cols-3">
+              {[
+                { key: 'aim', stat: <Term href={SOURCES.dplk.href} meaning={SOURCES.dplk.label}>70–80%</Term>, unit: 'of your last income', title: 'What to aim for', body: <>What planners suggest you live on. The <Term href={SOURCES.dplk.href} meaning={`ILO Convention 102, as cited by ${SOURCES.dplk.label}`}>ILO’s minimum is 40%</Term>.</> },
+                { key: 'gap', stat: <Term href={SOURCES.ojk.href} meaning={SOURCES.ojk.label}>10–15%</Term>, unit: 'what pensions replace today', title: 'Most of it is on you', body: 'BPJS and pension funds cover little, so your own savings carry the rest.' },
+                { key: 'medical', stat: <Term href={SOURCES.medical.href} meaning={SOURCES.medical.label}>17,8%</Term>, unit: 'medical costs, 2026', title: 'Health costs rise fastest', body: 'Against about 2.5% for prices in general. Keep a separate health fund or private cover.' },
+                { key: 'long', stat: <Term href={SOURCES.lifeAt60.href} meaning={SOURCES.lifeAt60.label}>19 yrs</Term>, unit: 'more, on average, at 60', title: 'It has to last', body: <>And many live longer, so plan to 90. JP keeps paying either way. <Term href={SOURCES.lifeBirth.href} meaning={SOURCES.lifeBirth.label}>Why not 72?</Term></> },
+                { key: 'keep', stat: <Term href={SOURCES.ori030.href} meaning={SOURCES.ori030.label}>7%</Term>, unit: 'ORI030, before 10% tax', title: 'Keep it safe and near', body: <><Term meaning="Government bonds sold to individuals (ORI, SR, SBR, ST), from Rp1 juta, backed by the state.">SBN ritel</Term> pays more than deposits, <Term href={SOURCES.couponTax.href} meaning={SOURCES.couponTax.label}>taxed less</Term>. Spread it over several series.</> },
+                { key: 'jht', stat: <Term href={SOURCES.jhtPartial.href} meaning={SOURCES.jhtPartial.label}>30%</Term>, unit: 'of JHT, early, for a home', title: 'Taking JHT early', body: 'After 10 years of membership; 10% for other needs. What you take now won’t grow until 56.' },
+              ].map((fact) => (
+                <div key={fact.key} className="bg-[var(--color-surface)] px-4 py-4 sm:px-5">
+                  <dt>
+                    <span className="block font-headline text-2xl font-black tabular-nums tracking-tight text-[var(--ref-on-surface)]">{fact.stat}</span>
+                    <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{fact.unit}</span>
+                  </dt>
+                  <dd className="mt-2">
+                    <span className="block text-sm font-semibold text-[var(--ref-on-surface)]">{fact.title}</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{fact.body}</span>
+                  </dd>
+                </div>
+              ))}
             </dl>
             <p className="border-t border-[var(--color-border)] px-4 py-3 text-xs leading-relaxed text-[var(--ref-on-surface-variant)] sm:px-5">
               Underlined figures show their source; tap one to open it. Figures change, so check before you rely on them.
