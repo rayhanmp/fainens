@@ -18,7 +18,8 @@ import {
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
-import { CategoryMapDemo, DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
 import { BudgetForecastDemo, BudgetRowsDemo, ClosedBudgetDemo } from './BudgetVisuals';
 import {
   AgentContextDemo,
@@ -330,6 +331,7 @@ export const DOCS: DocPage[] = [
       { type: 'visual', node: <BudgetForecastDemo /> },
       { type: 'callout', tone: 'note', text: 'The forecast is an estimate. It never changes your budget or your ledger.' },
       { type: 'h2', id: 'charts', text: 'Charts and panels' },
+      { type: 'visual', node: <LiveDashboardCharts />, wide: true },
       { type: 'list', items: [
         'Net worth trend for this period, 7 days, 30 days, 3, 6 or 12 months. Your choice is remembered.',
         'Spending activity for the last 30 days or this period, as a calendar heatmap, weekly bars or a cumulative line (pick in its gear menu).',
@@ -428,7 +430,7 @@ export const DOCS: DocPage[] = [
     lead: 'The Categories page is both a map of your spending and the place to manage the categories and tags you label it with.',
     blocks: [
       { type: 'h2', id: 'charts', text: 'Spending views' },
-      { type: 'visual', node: <CategoryMapDemo />, wide: true },
+      { type: 'visual', node: <LiveCategoryViews />, wide: true },
       { type: 'list', items: [
         'Where the money goes: a map of categories sized by spending, for the last 30 days, this year or all time, by amount or by number of entries.',
         'Spending habits: each category placed by how often you spend on it and how much a purchase usually costs.',
