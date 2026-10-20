@@ -612,6 +612,8 @@ export const subscriptions = sqliteTable("subscription", {
   /** Price in that currency, in minor units (cents). */
   foreignAmount: integer("foreign_amount"),
   notes: text("notes"),
+  /** What kind of service it is (ai, video, cloud, hosting...); null lets the app guess from the name. */
+  serviceType: text("service_type"),
   /** UI icon key: car | film | music | signal | sparkles | default */
   iconKey: text("icon_key").notNull().default("default"),
   sortOrder: integer("sort_order").notNull().default(0),

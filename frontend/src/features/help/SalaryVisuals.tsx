@@ -30,7 +30,7 @@ function exampleSubscription(id: number, name: string, amount: number, days: num
     monthlyEquivalent: Math.round(billingCycle === 'annual' ? amount / 12 : amount),
     nextRenewalAt: next.getTime(), billingDay: next.getDate(), status: 'active', paymentMode: 'auto',
     linkedAccountId: 0, linkedAccountName: accountName, linkedAccountType: 'asset', categoryId: null,
-    trialEndsAt: null, endsAt: null, currency: null, foreignAmount: null, notes: null, lastPayment: null,
+    trialEndsAt: null, endsAt: null, currency: null, foreignAmount: null, notes: null, serviceType: null, lastPayment: null,
     iconKey: 'default', sortOrder: 0, createdAt: now - 400 * 86_400_000, updatedAt: now,
   };
 }

@@ -10709,6 +10709,27 @@ export const ListSubscriptions200SubscriptionsItemPaymentMode = {
 /**
  * @nullable
  */
+export type ListSubscriptions200SubscriptionsItemServiceType = typeof ListSubscriptions200SubscriptionsItemServiceType[keyof typeof ListSubscriptions200SubscriptionsItemServiceType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListSubscriptions200SubscriptionsItemServiceType = {
+  ai: 'ai',
+  video: 'video',
+  music: 'music',
+  cloud: 'cloud',
+  hosting: 'hosting',
+  software: 'software',
+  mobile: 'mobile',
+  news: 'news',
+  fitness: 'fitness',
+  gaming: 'gaming',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
 export type ListSubscriptions200SubscriptionsItemLastPayment = {
   date: number;
   /**
@@ -10778,6 +10799,8 @@ export type ListSubscriptions200SubscriptionsItem = {
   foreignAmount: number | null;
   /** @nullable */
   notes: string | null;
+  /** @nullable */
+  serviceType: ListSubscriptions200SubscriptionsItemServiceType;
   /** @nullable */
   lastPayment: ListSubscriptions200SubscriptionsItemLastPayment;
   iconKey: string;
@@ -10913,6 +10936,27 @@ export const CreateSubscriptionBodyPaymentMode = {
   manual: 'manual',
 } as const;
 
+/**
+ * @nullable
+ */
+export type CreateSubscriptionBodyServiceType = typeof CreateSubscriptionBodyServiceType[keyof typeof CreateSubscriptionBodyServiceType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateSubscriptionBodyServiceType = {
+  ai: 'ai',
+  video: 'video',
+  music: 'music',
+  cloud: 'cloud',
+  hosting: 'hosting',
+  software: 'software',
+  mobile: 'mobile',
+  news: 'news',
+  fitness: 'fitness',
+  gaming: 'gaming',
+  other: 'other',
+} as const;
+
 export type CreateSubscriptionBodyIconKey = typeof CreateSubscriptionBodyIconKey[keyof typeof CreateSubscriptionBodyIconKey];
 
 
@@ -10989,6 +11033,8 @@ export type CreateSubscriptionBody = {
    * @nullable
    */
   notes?: string | null;
+  /** @nullable */
+  serviceType?: CreateSubscriptionBodyServiceType;
   iconKey?: CreateSubscriptionBodyIconKey;
   /**
    * @minimum -9007199254740991
@@ -11016,6 +11062,27 @@ export type CreateSubscription201PaymentMode = typeof CreateSubscription201Payme
 export const CreateSubscription201PaymentMode = {
   auto: 'auto',
   manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CreateSubscription201ServiceType = typeof CreateSubscription201ServiceType[keyof typeof CreateSubscription201ServiceType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateSubscription201ServiceType = {
+  ai: 'ai',
+  video: 'video',
+  music: 'music',
+  cloud: 'cloud',
+  hosting: 'hosting',
+  software: 'software',
+  mobile: 'mobile',
+  news: 'news',
+  fitness: 'fitness',
+  gaming: 'gaming',
+  other: 'other',
 } as const;
 
 /**
@@ -11090,6 +11157,8 @@ export type CreateSubscription201 = {
   foreignAmount: number | null;
   /** @nullable */
   notes: string | null;
+  /** @nullable */
+  serviceType: CreateSubscription201ServiceType;
   /** @nullable */
   lastPayment: CreateSubscription201LastPayment;
   iconKey: string;
@@ -11506,6 +11575,27 @@ export const GetSubscription200PaymentMode = {
 /**
  * @nullable
  */
+export type GetSubscription200ServiceType = typeof GetSubscription200ServiceType[keyof typeof GetSubscription200ServiceType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetSubscription200ServiceType = {
+  ai: 'ai',
+  video: 'video',
+  music: 'music',
+  cloud: 'cloud',
+  hosting: 'hosting',
+  software: 'software',
+  mobile: 'mobile',
+  news: 'news',
+  fitness: 'fitness',
+  gaming: 'gaming',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
 export type GetSubscription200LastPayment = {
   date: number;
   /**
@@ -11576,6 +11666,8 @@ export type GetSubscription200 = {
   /** @nullable */
   notes: string | null;
   /** @nullable */
+  serviceType: GetSubscription200ServiceType;
+  /** @nullable */
   lastPayment: GetSubscription200LastPayment;
   iconKey: string;
   /**
@@ -11622,6 +11714,27 @@ export type UpdateSubscriptionBodyPaymentMode = typeof UpdateSubscriptionBodyPay
 export const UpdateSubscriptionBodyPaymentMode = {
   auto: 'auto',
   manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateSubscriptionBodyServiceType = typeof UpdateSubscriptionBodyServiceType[keyof typeof UpdateSubscriptionBodyServiceType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateSubscriptionBodyServiceType = {
+  ai: 'ai',
+  video: 'video',
+  music: 'music',
+  cloud: 'cloud',
+  hosting: 'hosting',
+  software: 'software',
+  mobile: 'mobile',
+  news: 'news',
+  fitness: 'fitness',
+  gaming: 'gaming',
+  other: 'other',
 } as const;
 
 export type UpdateSubscriptionBodyIconKey = typeof UpdateSubscriptionBodyIconKey[keyof typeof UpdateSubscriptionBodyIconKey];
@@ -11700,6 +11813,8 @@ export type UpdateSubscriptionBody = {
    * @nullable
    */
   notes?: string | null;
+  /** @nullable */
+  serviceType?: UpdateSubscriptionBodyServiceType;
   iconKey?: UpdateSubscriptionBodyIconKey;
   /**
    * @minimum -9007199254740991
@@ -11727,6 +11842,27 @@ export type UpdateSubscription200PaymentMode = typeof UpdateSubscription200Payme
 export const UpdateSubscription200PaymentMode = {
   auto: 'auto',
   manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateSubscription200ServiceType = typeof UpdateSubscription200ServiceType[keyof typeof UpdateSubscription200ServiceType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateSubscription200ServiceType = {
+  ai: 'ai',
+  video: 'video',
+  music: 'music',
+  cloud: 'cloud',
+  hosting: 'hosting',
+  software: 'software',
+  mobile: 'mobile',
+  news: 'news',
+  fitness: 'fitness',
+  gaming: 'gaming',
+  other: 'other',
 } as const;
 
 /**
@@ -11801,6 +11937,8 @@ export type UpdateSubscription200 = {
   foreignAmount: number | null;
   /** @nullable */
   notes: string | null;
+  /** @nullable */
+  serviceType: UpdateSubscription200ServiceType;
   /** @nullable */
   lastPayment: UpdateSubscription200LastPayment;
   iconKey: string;

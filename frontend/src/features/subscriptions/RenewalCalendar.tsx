@@ -2,33 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn, formatDate, formatDayMonth, weekdayIndex, weekdayLabels } from '../../lib/utils';
-import { nextRenewal, previousRenewal, relativeDue, startOfDay, withinEnd } from './schedule';
+import { relativeDue, renewalsBetween, type RenewalState } from './schedule';
 import type { RenewalOccurrence, Subscription } from './queries';
 
-type RenewalState = 'done' | 'late' | 'due';
 type Renewal = { subscription: Subscription; dueAt: number; state: RenewalState };
 
 const MONTHS_EACH_WAY = 12;
 
-/**
- * Renewals of `subscription` in [monthStart, monthEnd]. Those before its next renewal were already
- * recorded or skipped; from the next one on they are due, and past-due ones wait for a decision.
- */
+/** Renewals of `subscription` in [monthStart, monthEnd], each with how it stands. */
 function renewalsIn(subscription: Subscription, monthStart: number, monthEnd: number, now: number, hasLate: boolean): Renewal[] {
-  const found: Renewal[] = [];
-  const created = startOfDay(subscription.createdAt);
-  let before = previousRenewal(subscription.nextRenewalAt, subscription);
-  for (let guard = 0; guard < 400 && before >= monthStart && before >= created; guard += 1) {
-    if (before <= monthEnd) found.push({ subscription, dueAt: before, state: 'done' });
-    before = previousRenewal(before, subscription);
-  }
-  let dueAt = subscription.nextRenewalAt;
-  for (let guard = 0; guard < 400 && dueAt <= monthEnd; guard += 1) {
-    if (!withinEnd(subscription, dueAt)) break;
-    if (dueAt >= monthStart) found.push({ subscription, dueAt, state: hasLate && dueAt <= now ? 'late' : 'due' });
-    dueAt = nextRenewal(dueAt, subscription);
-  }
-  return found;
+  return renewalsBetween(subscription, monthStart, monthEnd, now, hasLate).map((renewal) => ({ subscription, ...renewal }));
 }
 
 const DOT: Record<RenewalState, string> = {

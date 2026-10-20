@@ -56,6 +56,7 @@ async function serializeSubscriptions(rows: SubRow[]) {
       currency: row.currency ?? null,
       foreignAmount: row.foreignAmount ?? null,
       notes: row.notes ?? null,
+      serviceType: row.serviceType ?? null,
       lastPayment: lastPayments.get(row.id) ?? null,
       iconKey: row.iconKey,
       sortOrder: row.sortOrder,
@@ -78,12 +79,14 @@ const subscriptionStatusSchema = z.enum(["active", "paused", "cancelled"]);
 const subscriptionIconSchema = z.enum(ICON_KEYS);
 const subscriptionBillingCycleSchema = z.enum(BILLING_CYCLES);
 const subscriptionPaymentModeSchema = z.enum(["auto", "manual"]);
+/** The kinds of service a subscription can be, for the by-type view; unset means guessed from its name. */
+const subscriptionServiceTypeSchema = z.enum(["ai", "video", "music", "cloud", "hosting", "software", "mobile", "news", "fitness", "gaming", "other"]);
 const timestampSchema = z.number().int().nonnegative();
 const subscriptionSchema = z.object({
   id: z.number().int(), name: z.string(), linkedAccountId: z.number().int(), linkedAccountName: z.string(), linkedAccountType: z.string().nullable(),
   categoryId: z.number().int().nullable(), amount: z.number().int(), billingCycle: subscriptionBillingCycleSchema, intervalCount: z.number().int(),
   monthlyEquivalent: z.number().int(), nextRenewalAt: z.number(), billingDay: z.number().int().nullable(), status: z.string(), paymentMode: subscriptionPaymentModeSchema,
-  trialEndsAt: z.number().nullable(), endsAt: z.number().nullable(), currency: z.string().nullable(), foreignAmount: z.number().int().nullable(), notes: z.string().nullable(),
+  trialEndsAt: z.number().nullable(), endsAt: z.number().nullable(), currency: z.string().nullable(), foreignAmount: z.number().int().nullable(), notes: z.string().nullable(), serviceType: subscriptionServiceTypeSchema.nullable(),
   lastPayment: z.object({ date: z.number(), amount: z.number().int() }).nullable(),
   iconKey: z.string(), sortOrder: z.number().int(), createdAt: z.number(), updatedAt: z.number(),
 }).passthrough();
@@ -120,6 +123,7 @@ const subscriptionCreateBodySchema = z.object({
   currency: z.string().trim().regex(/^[A-Za-z]{3}$/).nullable().optional(),
   foreignAmount: z.number().int().positive().nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
+  serviceType: subscriptionServiceTypeSchema.nullable().optional(),
   iconKey: subscriptionIconSchema.optional(),
   sortOrder: z.number().int().optional(),
 }).passthrough();
@@ -352,6 +356,7 @@ export default async function (fastify: FastifyInstance) {
         endsAt: endsAt == null ? null : new Date(endsAt),
         ...currency,
         notes: body.notes?.trim() || null,
+        serviceType: body.serviceType ?? null,
         iconKey: body.iconKey ?? "default",
         sortOrder: body.sortOrder ?? 0,
       })
@@ -391,6 +396,7 @@ export default async function (fastify: FastifyInstance) {
     if (body.trialEndsAt !== undefined) patch.trialEndsAt = body.trialEndsAt == null ? null : new Date(body.trialEndsAt);
     if (body.endsAt !== undefined) patch.endsAt = body.endsAt == null ? null : new Date(body.endsAt);
     if (body.notes !== undefined) patch.notes = body.notes?.trim() || null;
+    if (body.serviceType !== undefined) patch.serviceType = body.serviceType;
     if (body.iconKey !== undefined) patch.iconKey = body.iconKey;
     if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder;
     if (body.status !== undefined) {

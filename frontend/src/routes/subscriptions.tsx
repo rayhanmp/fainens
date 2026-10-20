@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AlertCircle, CalendarClock, Plus, Search } from 'lucide-react';
+import { AlertCircle, CalendarClock, Plus, Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { RequireAuth } from '../lib/auth';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
@@ -20,6 +20,8 @@ import { ListSkeleton, Section, SubscriptionIcon } from '../features/subscriptio
 import type { PaymentAccount } from '../features/subscriptions/accounts';
 import { PaymentTimeline } from '../features/subscriptions/PaymentTimeline';
 import { AccountLoad } from '../features/subscriptions/AccountLoad';
+import { ServiceMix } from '../features/subscriptions/ServiceMix';
+import { serviceTypeLabel, serviceTypeOf, type ServiceType } from '../features/subscriptions/service-types';
 
 export const Route = createFileRoute('/subscriptions')({
   component: SubscriptionsPage,
@@ -55,6 +57,7 @@ function SubscriptionsPage() {
   const [filter, setFilter] = useState<Filter>('active');
   const [sort, setSort] = useState<Sort>('next');
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<ServiceType | null>(null);
   const [editing, setEditing] = useState<Subscription | 'new' | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [paying, setPaying] = useState<{ subscriptionId: number; dueAt: number } | null>(null);
@@ -89,10 +92,11 @@ function SubscriptionsPage() {
     return subscriptions
       .filter((subscription) => matcher(statusOf.get(subscription.id)!))
       .filter((subscription) => !needle || subscription.name.toLowerCase().includes(needle) || (subscription.notes ?? '').toLowerCase().includes(needle))
+      .filter((subscription) => !typeFilter || serviceTypeOf(subscription) === typeFilter)
       .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name)
         : sort === 'cost' ? b.monthlyEquivalent - a.monthlyEquivalent
         : a.nextRenewalAt - b.nextRenewalAt);
-  }, [subscriptions, statusOf, filter, search, sort]);
+  }, [subscriptions, statusOf, filter, search, sort, typeFilter]);
 
 
   const resolveAll = async (action: 'post' | 'skip') => {
@@ -166,7 +170,7 @@ function SubscriptionsPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] lg:items-start">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
           <Section
             title="Your subscriptions"
             aside={
@@ -187,6 +191,14 @@ function SubscriptionsPage() {
                   <input type="search" aria-label="Search subscriptions" className="brutalist-input !pl-9" placeholder="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
                 </div>
                 <MenuSelect ariaLabel="Sort by" variant="field" className="w-40 shrink-0" value={sort} options={SORTS} onChange={setSort} />
+              </div>
+            )}
+            {typeFilter && (
+              <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-4 py-2 text-xs text-[var(--ref-on-surface-variant)] sm:px-5">
+                Type:
+                <button type="button" onClick={() => setTypeFilter(null)} className="inline-flex items-center gap-1 rounded-full bg-[var(--ref-primary)]/12 px-2.5 py-0.5 font-semibold text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/20" aria-label={`Clear the ${serviceTypeLabel(typeFilter)} filter`}>
+                  {serviceTypeLabel(typeFilter)} <X className="h-3 w-3" aria-hidden />
+                </button>
               </div>
             )}
             {loading ? <ListSkeleton /> : subscriptions.length === 0 ? (
@@ -216,7 +228,7 @@ function SubscriptionsPage() {
                   // A row says two things: what it costs, and what happens next.
                   return (
                     <li key={subscription.id}>
-                      <button type="button" onClick={() => setDetailId(subscription.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-5">
+                      <button type="button" onClick={() => setDetailId(subscription.id)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-5">
                         <SubscriptionIcon iconKey={subscription.iconKey} />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
@@ -239,11 +251,16 @@ function SubscriptionsPage() {
             )}
           </Section>
 
-          <Section title="Paid from" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Due in {UPCOMING_DAYS} days against each balance</span>}>
-            {loading ? <ListSkeleton rows={2} /> : (
-              <AccountLoad accounts={accounts} accountNames={accountNames} renewing={renewing} upcoming={upcoming} overdue={occurrences} windowDays={UPCOMING_DAYS} />
-            )}
-          </Section>
+          <div className="grid gap-6">
+            <Section title="Paid from" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Due in {UPCOMING_DAYS} days against each balance</span>}>
+              {loading ? <ListSkeleton rows={2} /> : (
+                <AccountLoad accounts={accounts} accountNames={accountNames} renewing={renewing} upcoming={upcoming} overdue={occurrences} windowDays={UPCOMING_DAYS} />
+              )}
+            </Section>
+            <Section title="What kind of services" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Share of the monthly cost</span>}>
+              {loading ? <ListSkeleton rows={2} /> : <ServiceMix renewing={renewing} selected={typeFilter} onSelect={setTypeFilter} />}
+            </Section>
+          </div>
         </div>
 
         {/* Analysis sits last: the lists above are what needs doing. */}

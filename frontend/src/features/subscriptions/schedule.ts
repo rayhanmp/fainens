@@ -183,6 +183,30 @@ export function displayStatus(subscription: SubscriptionLike, overdueIds: Readon
   return 'active';
 }
 
+export type RenewalState = 'done' | 'late' | 'due';
+
+/**
+ * Every renewal of `subscription` in [from, until]: those before its next renewal were already
+ * recorded or skipped ('done'); from the next one on they are due, and past-due ones ('late') wait
+ * for a decision when the subscription has renewals in review.
+ */
+export function renewalsBetween(subscription: SubscriptionLike & { createdAt: number }, from: number, until: number, now: number, hasLate: boolean): Array<{ dueAt: number; state: RenewalState }> {
+  const found: Array<{ dueAt: number; state: RenewalState }> = [];
+  const created = startOfDay(subscription.createdAt);
+  let before = previousRenewal(subscription.nextRenewalAt, subscription);
+  for (let guard = 0; guard < 400 && before >= from && before >= created; guard += 1) {
+    if (before <= until) found.push({ dueAt: before, state: 'done' });
+    before = previousRenewal(before, subscription);
+  }
+  let dueAt = subscription.nextRenewalAt;
+  for (let guard = 0; guard < 400 && dueAt <= until; guard += 1) {
+    if (!withinEnd(subscription, dueAt)) break;
+    if (dueAt >= from) found.push({ dueAt, state: hasLate && dueAt <= now ? 'late' : 'due' });
+    dueAt = nextRenewal(dueAt, subscription);
+  }
+  return found.sort((a, b) => a.dueAt - b.dueAt);
+}
+
 /** Renewals still to come from `from` up to `until`, ignoring the overdue ones already in review. */
 export function upcomingRenewals(subscription: SubscriptionLike, from: number, until: number): number[] {
   if (!renews(subscription)) return [];

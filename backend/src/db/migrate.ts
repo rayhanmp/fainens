@@ -575,7 +575,7 @@ export function ensureSubscriptionBillingDay(): void {
   }
 }
 
-/** Custom intervals, manual payment, trials, end dates, foreign prices and notes on subscriptions. */
+/** Custom intervals, manual payment, trials, end dates, foreign prices, notes and service types on subscriptions. */
 export function ensureSubscriptionScheduleColumns(): void {
   const columns: Array<[string, string]> = [
     ["interval_count", "integer NOT NULL DEFAULT 1"],
@@ -585,6 +585,7 @@ export function ensureSubscriptionScheduleColumns(): void {
     ["currency", "text"],
     ["foreign_amount", "integer"],
     ["notes", "text"],
+    ["service_type", "text"],
   ];
   for (const [column, definition] of columns) {
     if (!columnExists("subscription", column)) {
@@ -667,7 +668,7 @@ function assertRequiredSchema(): void {
     salary_period: ["id", "start_date", "end_date", "status", "closed_at", "reopened_at", "is_active", "archived_at", "coverage_status", "coverage_reason", "budget_note", "savings_target_amount", "savings_target_mode", "savings_target_rate"],
     budget_plan: ["id", "period_id", "category_id", "planned_amount", "note"],
     recurring_occurrence: ["job_type", "schedule_id", "occurrence_date", "status"],
-    subscription: ["billing_day", "interval_count", "payment_mode", "trial_ends_at", "ends_at", "currency", "foreign_amount", "notes"],
+    subscription: ["billing_day", "interval_count", "payment_mode", "trial_ends_at", "ends_at", "currency", "foreign_amount", "notes", "service_type"],
     loan_payment: ["loan_id", "transaction_id", "status", "reversal_transaction_id", "reversed_at", "reversal_reason"],
     paylater_settlement_allocation: ["settlement_tx_id", "installment_id", "amount_cents"],
     financial_state: ["id", "revision", "updated_at"],

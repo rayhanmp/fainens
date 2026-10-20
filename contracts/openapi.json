@@ -24078,6 +24078,23 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "serviceType": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "ai",
+                              "video",
+                              "music",
+                              "cloud",
+                              "hosting",
+                              "software",
+                              "mobile",
+                              "news",
+                              "fitness",
+                              "gaming",
+                              "other"
+                            ]
+                          },
                           "lastPayment": {
                             "nullable": true,
                             "type": "object",
@@ -24132,6 +24149,7 @@
                           "currency",
                           "foreignAmount",
                           "notes",
+                          "serviceType",
                           "lastPayment",
                           "iconKey",
                           "sortOrder",
@@ -24400,6 +24418,23 @@
                     "type": "string",
                     "maxLength": 1000
                   },
+                  "serviceType": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "ai",
+                      "video",
+                      "music",
+                      "cloud",
+                      "hosting",
+                      "software",
+                      "mobile",
+                      "news",
+                      "fitness",
+                      "gaming",
+                      "other"
+                    ]
+                  },
                   "iconKey": {
                     "type": "string",
                     "enum": [
@@ -24527,6 +24562,23 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "serviceType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "video",
+                        "music",
+                        "cloud",
+                        "hosting",
+                        "software",
+                        "mobile",
+                        "news",
+                        "fitness",
+                        "gaming",
+                        "other"
+                      ]
+                    },
                     "lastPayment": {
                       "nullable": true,
                       "type": "object",
@@ -24581,6 +24633,7 @@
                     "currency",
                     "foreignAmount",
                     "notes",
+                    "serviceType",
                     "lastPayment",
                     "iconKey",
                     "sortOrder",
@@ -25612,6 +25665,23 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "serviceType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "video",
+                        "music",
+                        "cloud",
+                        "hosting",
+                        "software",
+                        "mobile",
+                        "news",
+                        "fitness",
+                        "gaming",
+                        "other"
+                      ]
+                    },
                     "lastPayment": {
                       "nullable": true,
                       "type": "object",
@@ -25666,6 +25736,7 @@
                     "currency",
                     "foreignAmount",
                     "notes",
+                    "serviceType",
                     "lastPayment",
                     "iconKey",
                     "sortOrder",
@@ -25793,6 +25864,23 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 1000
+                  },
+                  "serviceType": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "ai",
+                      "video",
+                      "music",
+                      "cloud",
+                      "hosting",
+                      "software",
+                      "mobile",
+                      "news",
+                      "fitness",
+                      "gaming",
+                      "other"
+                    ]
                   },
                   "iconKey": {
                     "type": "string",
@@ -25927,6 +26015,23 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "serviceType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "ai",
+                        "video",
+                        "music",
+                        "cloud",
+                        "hosting",
+                        "software",
+                        "mobile",
+                        "news",
+                        "fitness",
+                        "gaming",
+                        "other"
+                      ]
+                    },
                     "lastPayment": {
                       "nullable": true,
                       "type": "object",
@@ -25981,6 +26086,7 @@
                     "currency",
                     "foreignAmount",
                     "notes",
+                    "serviceType",
                     "lastPayment",
                     "iconKey",
                     "sortOrder",

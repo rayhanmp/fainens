@@ -8,6 +8,7 @@ import { useCreateSubscriptionMutation, useUpdateSubscriptionMutation, type Subs
 import type { PaymentAccount } from './accounts';
 import type { CreateSubscriptionBody } from '../../generated/client';
 import { ICON_LABELS, ICON_MAP } from './icons';
+import { guessServiceType, SERVICE_TYPES, serviceTypeLabel, type ServiceType } from './service-types';
 
 const CURRENCIES = ['USD', 'EUR', 'SGD', 'GBP', 'AUD', 'JPY', 'MYR', 'CNY'] as const;
 
@@ -35,6 +36,8 @@ type Draft = {
   trialEndsDate: string;
   notes: string;
   iconKey: string;
+  /** '' means guessed from the name. */
+  serviceType: ServiceType | '';
 };
 
 const groupDigits = (value: string) => {
@@ -50,7 +53,7 @@ function initialDraft(subscription: Subscription | null, accounts: PaymentAccoun
       name: '', amount: '', cycle: 'monthly-1', customCount: '2', customUnit: 'monthly',
       nextRenewalDate: toDateInput(nextMonth.getTime()), linkedAccountId: accounts[0] ? String(accounts[0].id) : '',
       categoryId: '', paymentMode: 'auto', foreign: false, currency: 'USD', foreignAmount: '',
-      trial: false, trialEndsDate: '', notes: '', iconKey: 'default',
+      trial: false, trialEndsDate: '', notes: '', iconKey: 'default', serviceType: '',
     };
   }
   const preset = CYCLE_PRESETS.find((option) => option.billingCycle === subscription.billingCycle && option.intervalCount === subscription.intervalCount);
@@ -70,6 +73,7 @@ function initialDraft(subscription: Subscription | null, accounts: PaymentAccoun
     trial: subscription.trialEndsAt != null,
     trialEndsDate: subscription.trialEndsAt != null ? toDateInput(subscription.trialEndsAt) : '',
     notes: subscription.notes ?? '',
+    serviceType: (SERVICE_TYPES.find((item) => item.value === subscription.serviceType)?.value ?? '') as ServiceType | '',
     iconKey: ICON_MAP[subscription.iconKey] ? subscription.iconKey : 'default',
   };
 }
@@ -140,6 +144,7 @@ export function SubscriptionEditor({ subscription, accounts, categories, account
       foreignAmount: draft.foreign ? foreignMinor : null,
       trialEndsAt: draft.trial ? fromDateInput(draft.trialEndsDate) : null,
       notes: draft.notes.trim() || null,
+      serviceType: draft.serviceType || null,
       iconKey: draft.iconKey as CreateSubscriptionBody['iconKey'],
     };
     try {
@@ -235,6 +240,18 @@ export function SubscriptionEditor({ subscription, accounts, categories, account
             <Dropdown ariaLabel="Category" value={draft.categoryId} options={[{ value: '', label: 'None' }, ...categories.map((category) => ({ value: String(category.id), label: category.name }))]} onChange={(value) => set('categoryId', value)} />
           </Field>
         </div>
+
+        <Field label="Type of service" hint="Groups subscriptions on the page by what they're for.">
+          <Dropdown
+            ariaLabel="Type of service"
+            value={draft.serviceType}
+            options={[
+              { value: '' as const, label: `Guess from the name (${serviceTypeLabel(guessServiceType(draft.name))})` },
+              ...SERVICE_TYPES.map((item) => ({ value: item.value, label: item.label })),
+            ]}
+            onChange={(value) => set('serviceType', value)}
+          />
+        </Field>
 
         <Field label="How it's paid" hint={draft.paymentMode === 'auto' ? 'The provider charges the account on each renewal; you confirm the charge here.' : 'You pay it yourself each time, so record the payment when you make it — early is fine.'}>
           <div role="radiogroup" aria-label="How it's paid" className="ui-segmented ui-segmented--2 grid grid-cols-2 gap-1 rounded-lg bg-[var(--ref-surface-container)] p-1" data-segment-index={draft.paymentMode === 'auto' ? 0 : 1}>
