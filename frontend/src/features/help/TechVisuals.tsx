@@ -1,91 +1,12 @@
-import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAutoplay } from './motion';
 import { VisualFrame } from './visuals';
 
 /**
- * Diagrams for the technical documentation: the ledger’s tables and their relations, the path a
- * new transaction takes, and how Agent turns a question into an approved entry. Taken from
- * backend/src/db/schema.ts and the routes and services they describe.
+ * Flow diagrams for the technical documentation: the path a new transaction takes, and how Agent
+ * turns a question into an approved entry. Taken from the routes and services they describe. The
+ * database diagram is SchemaDiagram.
  */
-
-// ── Data model ───────────────────────────────────────────────────────
-
-type Table = { id: string; x: number; y: number; w?: number; note: string; group: 'core' | 'label' | 'plan' | 'feature' };
-
-const TABLES: Table[] = [
-  { id: 'transaction', x: 470, y: 230, w: 200, group: 'core', note: 'A journal entry: date, description, status (posted, draft or reversed), its salary period, and reversal_of_tx_id when it corrects another entry.' },
-  { id: 'transaction_line', x: 470, y: 70, w: 200, group: 'core', note: 'One debit or credit on one account. An entry has two or more lines, and debits must equal credits.' },
-  { id: 'account', x: 790, y: 70, group: 'core', note: 'Asset, liability, equity, revenue or expense. Built-in accounts like Expense (Auto) have a system_key; accounts can have a parent.' },
-  { id: 'salary_period', x: 470, y: 410, w: 200, group: 'plan', note: 'A payday-to-payday period: open or closed, with its coverage. SQLite triggers refuse entries in a closed period.' },
-  { id: 'budget_plan', x: 790, y: 410, group: 'plan', note: 'The planned amount for one category in one period.' },
-  { id: 'category', x: 1010, y: 230, group: 'label', note: 'A spending label, not an account. Its reporting account says which expense account it rolls up to.' },
-  { id: 'transaction_category_allocation', x: 790, y: 170, w: 210, group: 'label', note: 'How much of an entry’s spending goes to each category. An entry can be split across several.' },
-  { id: 'transaction_tag', x: 790, y: 290, group: 'label', note: 'Links entries and tags, many to many.' },
-  { id: 'tag', x: 1010, y: 330, group: 'label', note: 'A free label, grouped in tag groups.' },
-  { id: 'subscription', x: 120, y: 40, group: 'feature', note: 'A recurring charge from an account, in a category; each confirmed renewal becomes a transaction.' },
-  { id: 'loan', x: 120, y: 100, group: 'feature', note: 'Money lent to or borrowed from a contact, linked to the transaction that moved it.' },
-  { id: 'loan_payment', x: 120, y: 160, group: 'feature', note: 'A repayment of a loan, with its own transaction.' },
-  { id: 'paylater_installment', x: 120, y: 220, group: 'feature', note: 'One installment of a pay-later purchase, linked to the purchase (recognition) transaction.' },
-  { id: 'reimbursement_claim_source', x: 120, y: 280, w: 200, group: 'feature', note: 'The expense (and line, and category) a reimbursement claim is for.' },
-  { id: 'attachment', x: 120, y: 340, group: 'feature', note: 'A receipt or photo attached to a transaction, stored in R2.' },
-  { id: 'reconciliation_item', x: 120, y: 400, group: 'feature', note: 'One account’s checked balance in a reconcile, and the adjustment transaction if there was a difference.' },
-];
-
-const RELATIONS: Array<[string, string]> = [
-  ['transaction_line', 'transaction'], ['transaction_line', 'account'], ['transaction', 'salary_period'],
-  ['transaction_category_allocation', 'transaction'], ['transaction_category_allocation', 'category'],
-  ['transaction_tag', 'transaction'], ['transaction_tag', 'tag'], ['budget_plan', 'salary_period'], ['budget_plan', 'category'],
-  ['subscription', 'transaction'], ['loan', 'transaction'], ['loan_payment', 'transaction'], ['paylater_installment', 'transaction'],
-  ['reimbursement_claim_source', 'transaction'], ['attachment', 'transaction'], ['reconciliation_item', 'transaction'], ['loan_payment', 'loan'],
-];
-
-const GROUP_STYLE: Record<Table['group'], { fill: string; stroke: string }> = {
-  core: { fill: 'var(--color-accent)', stroke: 'var(--color-accent)' },
-  plan: { fill: 'var(--color-surface)', stroke: 'var(--color-accent)' },
-  label: { fill: 'var(--color-surface)', stroke: 'var(--color-border-strong)' },
-  feature: { fill: 'var(--ref-surface-container)', stroke: 'var(--color-border)' },
-};
-
-/** The ledger’s main tables and foreign keys; point at a table to see what it holds and what it links to. */
-export function DataModelDiagram() {
-  const [active, setActive] = useState('transaction');
-  const byId = new Map(TABLES.map((table) => [table.id, table]));
-  const current = byId.get(active)!;
-  const linked = new Set(RELATIONS.filter(([a, b]) => a === active || b === active).flat());
-  const width = (table: Table) => table.w ?? 170;
-
-  return (
-    <VisualFrame caption="The core ledger tables (blue), planning, labels, and the feature tables that hang off a transaction. Lines are foreign keys; point at a table.">
-      <div className="overflow-x-auto">
-        <svg viewBox="0 0 1110 450" className="min-w-[44rem] w-full" role="img" aria-label="Database tables and their relations">
-          {RELATIONS.map(([from, to]) => {
-            const a = byId.get(from)!; const b = byId.get(to)!;
-            const on = from === active || to === active;
-            return <line key={`${from}-${to}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={on ? 'var(--color-accent)' : 'var(--color-border-strong)'} strokeWidth={on ? 2 : 1} strokeDasharray={byId.get(from)!.group === 'feature' ? '4 4' : undefined} className="transition-[stroke] duration-200" />;
-          })}
-          {/* A correction points back at the entry it reverses. */}
-          <path d="M 570 222 C 640 180, 640 280, 570 238" fill="none" stroke={active === 'transaction' ? 'var(--color-accent)' : 'var(--color-border-strong)'} strokeWidth={1.5} markerEnd="url(#erd-arrow)" />
-          <text x="636" y="232" fontSize="10" fill="var(--color-muted)">reversal_of</text>
-          <defs><marker id="erd-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--color-border-strong)" /></marker></defs>
-          {TABLES.map((table) => {
-            const style = GROUP_STYLE[table.group];
-            const on = table.id === active;
-            const dim = !on && !linked.has(table.id);
-            const w = width(table);
-            return (
-              <g key={table.id} onMouseEnter={() => setActive(table.id)} onFocus={() => setActive(table.id)} tabIndex={0} className={cn('cursor-pointer outline-none transition-opacity duration-200', dim && 'opacity-45')}>
-                <rect x={table.x - w / 2} y={table.y - 17} width={w} height={34} rx={9} fill={style.fill} stroke={on ? 'var(--ref-on-surface)' : style.stroke} strokeWidth={on ? 2 : 1} />
-                <text x={table.x} y={table.y + 4} fontSize="12" fontFamily="var(--font-mono, monospace)" textAnchor="middle" fill={table.group === 'core' ? '#fff' : 'var(--ref-on-surface)'} fontWeight={600}>{table.id}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-      <p key={active} className="mt-3 min-h-10 animate-[finance-page-header-in_250ms_ease-out] text-sm text-[var(--ref-on-surface)]"><code className="rounded bg-[var(--color-surface)] px-1.5 py-0.5 text-xs font-semibold ring-1 ring-[var(--color-border)]">{current.id}</code> {current.note}</p>
-    </VisualFrame>
-  );
-}
 
 // ── Flows ────────────────────────────────────────────────────────────
 

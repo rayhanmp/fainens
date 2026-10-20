@@ -18,7 +18,8 @@ import { ImportFlowDemo } from './ImportVisuals';
 import { ClaimPipelineDemo } from './ClaimVisuals';
 import { CorrectionDemo } from './TransactionVisuals';
 import { LoanRepaymentDemo } from './LoanVisuals';
-import { AgentFlow, DataModelDiagram, SaveTransactionFlow } from './TechVisuals';
+import { AgentFlow, SaveTransactionFlow } from './TechVisuals';
+import { SchemaDiagram } from './SchemaDiagram';
 import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
@@ -956,7 +957,7 @@ export const DOCS: DocPage[] = [
       ] },
       { type: 'h2', id: 'relations', text: 'How the ledger tables relate' },
       { type: 'p', text: 'Everything hangs off transaction. Its lines carry the money between accounts; categories and tags label it; its period decides whether it can still change. Feature tables (loans, pay later, reimbursements, subscriptions, attachments, reconciliations) are linked to the transactions they created rather than keeping money of their own.' },
-      { type: 'visual', node: <DataModelDiagram />, wide: true },
+      { type: 'visual', node: <SchemaDiagram />, wide: true },
 
       { type: 'h2', id: 'ledger', text: 'The ledger model' },
       { type: 'p', text: 'Fainens is double-entry. A transaction is a journal entry with two or more lines, and every line is either a debit or a credit. Amounts are whole rupiah stored as integers; some columns are named “cents” for historical reasons, but fractional rupiah are rejected.' },
