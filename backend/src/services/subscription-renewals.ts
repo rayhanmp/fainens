@@ -810,7 +810,7 @@ export async function findPastPaymentCandidates(subscriptionId: number, now = Da
   const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.id, subscriptionId)).limit(1);
   if (!subscription) throw new Error("Subscription not found");
   const since = new Date(new Date(now).getFullYear(), new Date(now).getMonth() - 12, 1);
-  const rows = await db.select({ id: transactions.id, date: transactions.date, description: transactions.description, txType: transactions.txType })
+  const rows = await db.select({ id: transactions.id, date: transactions.date, description: transactions.description, txType: transactions.txType, categoryId: transactions.categoryId })
     .from(transactions)
     .where(and(eq(transactions.status, "posted"), isNull(transactions.subscriptionId), isNull(transactions.reversalOfTxId), gte(transactions.date, since)));
   const open = rows.filter((row) => !LINKABLE_EXCLUDED_TYPES.includes(row.txType ?? "") && !(row.txType ?? "").startsWith("reimbursement"));
@@ -823,18 +823,20 @@ export async function findPastPaymentCandidates(subscriptionId: number, now = Da
   const unclaimed = open.filter((row) => !claimed.has(row.id) && !reimbursed.has(row.id));
   const amounts = await journalAmounts(unclaimed.map((row) => row.id));
   const words = nameWords(subscription.name);
-  const skipped = (await db.select({ occurrenceDate: recurringOccurrences.occurrenceDate }).from(recurringOccurrences).where(and(
+  // Renewals skipped with nothing charged can take a payment; voided ones were checked and stay empty.
+  const skipped = (await db.select({ occurrenceDate: recurringOccurrences.occurrenceDate, lastError: recurringOccurrences.lastError }).from(recurringOccurrences).where(and(
     eq(recurringOccurrences.jobType, "subscription"),
     eq(recurringOccurrences.scheduleId, subscriptionId),
     eq(recurringOccurrences.status, "skipped"),
-  ))).map((row) => ts(row.occurrenceDate));
+  ))).filter((row) => !row.lastError?.startsWith("Voided")).map((row) => ts(row.occurrenceDate));
   return unclaimed
     .map((row): PastPaymentCandidate | null => {
       const journal = amounts.get(row.id);
       const amount = journal?.amount ?? 0;
-      const text = row.description.toLowerCase();
-      const named = words.some((word) => text.includes(word));
-      const priced = amount === subscription.amount;
+      const tokens = new Set(row.description.toLowerCase().split(/[^a-z0-9]+/));
+      // A name match is a whole word of the subscription's name; a price match alone also needs its category.
+      const named = words.some((word) => tokens.has(word));
+      const priced = amount === subscription.amount && (subscription.categoryId == null || row.categoryId === subscription.categoryId);
       if ((!named && !priced) || !journal?.paymentAccountName) return null;
       const date = ts(row.date);
       // The nearest skipped renewal up to a week before or five weeks after it was paid.
