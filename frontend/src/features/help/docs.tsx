@@ -581,7 +581,7 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'A plan starts from your ledger: Use as start takes your cash and investment balances, and Use as monthly takes what you’ve saved per period lately or this period’s budget target. The top of the page shows where the plan lands, drawn as a hill you climb from today, with a flag where each goal is reached.' },
       { type: 'list', items: [
         'Pots: split the plan by where the money is kept, like a savings account, SBN and an equity fund. Each pot has its own amounts, yearly raise, return and uncertainty.',
-        'Goals are paid from one pot, in order: dated goals by date, then the rest. Spend a goal (a laptop, a house down payment) and its money leaves the pot when it’s bought; keep one (an emergency fund) and the pot holds it back from later goals. Two goals never count the same money.',
+        'Goals are paid from one pot, in order: dated goals by date, then the rest. Or give a goal its own pot: it’s named after the goal and, for a dated goal, saves each month exactly what reaches it on time. Spend a goal (a laptop, a house down payment) and its money leaves the pot when it’s bought; keep one (an emergency fund) and the pot holds it back from later goals. Two goals never count the same money.',
         'Money in and out: add a yearly THR or a one-off wedding to a pot; one-offs are marked on the chart.',
         'Saved plans are kept with your data, so you can open one on any device and draw up to three on the chart to compare.',
       ] },

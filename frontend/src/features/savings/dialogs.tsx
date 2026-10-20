@@ -4,7 +4,8 @@ import { Modal } from '../../components/ui/Modal';
 import { Dropdown, Toggle } from '../settings/controls';
 import { Field, MoneyField, Segmented } from './fields';
 import { monthInputValue, parseMonthInput } from './input-format';
-import { MAX_MONTHS, monthDate, newId, planMonthOf, type PlanEvent, type PlanGoal, type PlanPot } from './plan';
+import { MAX_MONTHS, MAX_POTS, monthDate, newId, planMonthOf, type PlanEvent, type PlanGoal, type PlanPot } from './plan';
+import { OWN_POT } from './pots';
 
 /** Which pot something belongs to; hidden while the plan has a single pot. */
 function PotField({ pots, value, onChange, label }: { pots: PlanPot[]; value: string; onChange: (id: string) => void; label: string }) {
@@ -108,7 +109,22 @@ export function GoalDialog({ goal, pots, defaultPotId, onClose, onSave }: { goal
             <MonthField id="goal-month" value={month} onChange={setMonth} />
           </Field>
         )}
-        <PotField pots={pots} value={potId} onChange={setPotId} label="Paid from" />
+        <Field
+          label="Paid from"
+          hint={potId === OWN_POT
+            ? `A new pot called “${name.trim() || 'this goal'}”${dated ? ', saving each month what it needs to get there on time.' : '. Set how much goes into it under Your plan.'}`
+            : undefined}
+        >
+          <Dropdown
+            ariaLabel="Paid from"
+            value={potId}
+            options={[
+              ...pots.map((pot) => ({ value: pot.id, label: pot.name })),
+              ...(pots.length < MAX_POTS ? [{ value: OWN_POT, label: 'Its own pot' }] : []),
+            ]}
+            onChange={setPotId}
+          />
+        </Field>
         <div className="space-y-1">
           <Segmented
             ariaLabel="What happens when it’s reached"

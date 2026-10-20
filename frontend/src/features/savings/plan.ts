@@ -212,6 +212,23 @@ export function monthlyNeeded(inputs: PlanInputs, goal: PlanGoal): number | null
   return Math.ceil(high / 1_000) * 1_000;
 }
 
+/**
+ * The plan with `goal` (new or edited) saved into a pot of its own, named after it. A dated goal's
+ * pot saves each month what reaches it on time; an undated one starts at zero for you to fill.
+ */
+export function withOwnPot(inputs: PlanInputs, goal: PlanGoal, potId = newId()): PlanInputs {
+  const pot: PlanPot = { ...DEFAULT_POT, id: potId, name: goal.name };
+  const placed = { ...goal, potId };
+  const exists = inputs.goals.some((item) => item.id === goal.id);
+  const next: PlanInputs = {
+    ...inputs,
+    pots: [...inputs.pots, pot],
+    goals: exists ? inputs.goals.map((item) => (item.id === goal.id ? placed : item)) : [...inputs.goals, placed],
+  };
+  const monthly = goal.byMonth === null ? 0 : monthlyNeeded(next, placed) ?? 0;
+  return { ...next, pots: next.pots.map((item) => (item.id === potId ? { ...item, monthly } : item)) };
+}
+
 /** A small seeded generator, so the same plan always draws the same range. */
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;

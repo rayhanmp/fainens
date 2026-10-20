@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_PLAN, DEFAULT_POT, compactRupiah, durationLabel, eventsInMonth, goalOutlooks, monthlyNeeded, normalizePlan, planRange, potGoals, recentSaving, runPlan, runPot, savingInMonth } from './plan.ts';
+import { DEFAULT_PLAN, DEFAULT_POT, compactRupiah, durationLabel, eventsInMonth, goalOutlooks, monthlyNeeded, normalizePlan, planRange, potGoals, recentSaving, runPlan, runPot, savingInMonth, withOwnPot } from './plan.ts';
 
 const pot = (overrides = {}) => ({ ...DEFAULT_POT, returnRate: 0, ...overrides });
 const plan = (overrides = {}, potOverrides = {}) => ({ ...DEFAULT_PLAN, inflation: 0, pots: [pot(potOverrides)], ...overrides });
@@ -117,6 +117,25 @@ test('the monthly saving needed reaches the goal by its date, with the pot’s e
   assert.ok(reachedBy(needed));
   assert.ok(!reachedBy(needed - 2_000));
   assert.equal(monthlyNeeded(plan({ goals: [goal({ amount: 50, byMonth: 12 })] }, { start: 60 }), goal({ amount: 50, byMonth: 12 })), 0);
+});
+
+test('a goal can get a pot of its own that saves exactly what it needs', () => {
+  const inputs = plan({ goals: [goal({ id: 'fund', amount: 5_000_000 })] }, { start: 5_000_000, monthly: 1_000_000 });
+  const car = goal({ id: 'car', name: 'Car', amount: 60_000_000, byMonth: 24, spend: true });
+  const next = withOwnPot(inputs, car, 'car-pot');
+  assert.equal(next.pots.length, 2);
+  assert.deepEqual({ name: next.pots[1].name, start: next.pots[1].start }, { name: 'Car', start: 0 });
+  assert.equal(next.goals.find((item) => item.id === 'car').potId, 'car-pot');
+  // Its monthly saving reaches the car by month 24 and a little less would not; the first pot is untouched.
+  const reachWith = (monthly) => goalOutlooks({ ...next, pots: [next.pots[0], { ...next.pots[1], monthly }] }, null).find((item) => item.goal.id === 'car').reach;
+  assert.ok(next.pots[1].monthly < 2_500_000, 'the new pot earns the default return');
+  assert.ok(reachWith(next.pots[1].monthly) <= 24);
+  assert.ok(reachWith(next.pots[1].monthly - 2_000) > 24);
+  assert.deepEqual(next.pots[0], inputs.pots[0]);
+  // Moving an existing goal keeps one copy of it; an undated goal's pot starts empty.
+  const moved = withOwnPot(inputs, { ...inputs.goals[0], byMonth: null }, 'fund-pot');
+  assert.equal(moved.goals.length, 1);
+  assert.equal(moved.pots[1].monthly, 0);
 });
 
 test('the range is the same every time, brackets the plan and gives goal chances', () => {

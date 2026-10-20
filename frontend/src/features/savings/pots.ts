@@ -16,3 +16,6 @@ export const POT_TEMPLATES: ReadonlyArray<{ name: string; returnRate: number; un
 ];
 
 export type PotTemplate = (typeof POT_TEMPLATES)[number];
+
+/** A goal's pot choice meaning "make a new pot just for this goal"; never stored in a plan. */
+export const OWN_POT = '__own-pot__';

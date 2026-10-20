@@ -5,8 +5,8 @@ import { toast } from '../../components/ui/useToast';
 import { Section } from '../subscriptions/PageParts';
 import { EventDialog, GoalDialog, NameDialog } from './dialogs';
 import { GoalsPanel, type GoalSuggestion } from './GoalsPanel';
-import { DEFAULT_PLAN, DEFAULT_POT, goalOutlooks, MAX_POTS, newId, normalizePlan, planRange, runPlan, samePlan, type PlanEvent, type PlanGoal, type PlanInputs, type PlanPot } from './plan';
-import type { PotTemplate } from './pots';
+import { DEFAULT_PLAN, DEFAULT_POT, goalOutlooks, MAX_POTS, newId, normalizePlan, planRange, runPlan, samePlan, withOwnPot, type PlanEvent, type PlanGoal, type PlanInputs, type PlanPot } from './plan';
+import { OWN_POT, type PotTemplate } from './pots';
 import { PlanPanel } from './PlanPanel';
 import { ProjectionChart, type ValueMode } from './ProjectionChart';
 import { SavedPlansPanel, MAX_COMPARED } from './SavedPlansPanel';
@@ -209,8 +209,15 @@ export function SavingsPlanView() {
   };
 
   const saveGoal = (goal: PlanGoal) => {
-    const exists = inputs.goals.some((item) => item.id === goal.id);
-    change({ goals: exists ? inputs.goals.map((item) => (item.id === goal.id ? goal : item)) : [...inputs.goals, goal] });
+    if (goal.potId === OWN_POT) {
+      // A pot just for this goal, opened in the panel so its amounts are in view.
+      const potId = newId();
+      setDraft(withOwnPot(inputs, goal, potId));
+      setSelectedPotId(potId);
+    } else {
+      const exists = inputs.goals.some((item) => item.id === goal.id);
+      change({ goals: exists ? inputs.goals.map((item) => (item.id === goal.id ? goal : item)) : [...inputs.goals, goal] });
+    }
     setEditingGoal(null);
     setSelectedGoalId(goal.id);
   };
