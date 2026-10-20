@@ -22,6 +22,19 @@ import {
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { BudgetForecastDemo, CategoryMapDemo, DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import {
+  AgentContextDemo,
+  AgentLookupDemo,
+  CanISummaryDemo,
+  GlossaryCardDemo,
+  LoanRepaymentDemo,
+  MismatchDemo,
+  SalaryAndRenewalDemo,
+  SavingsFanDemo,
+  SettingsPreviewDemo,
+  ShortcutsDemo,
+  WhatsNewDemo,
+} from './PageVisuals';
 
 /**
  * The help docs: one entry per page, grouped as in the sidebar. Every fact was checked against the
@@ -487,6 +500,7 @@ export const DOCS: DocPage[] = [
     summary: 'Renewals, take-home pay and tax estimates',
     lead: 'Recurring money in and out, without it posting behind your back.',
     blocks: [
+      { type: 'visual', node: <SalaryAndRenewalDemo />, wide: true },
       { type: 'h2', id: 'subscriptions', text: 'Subscriptions' },
       { type: 'p', text: 'Add each monthly or annual subscription with the account it’s paid from. You’ll see the monthly total and what renews next. When a renewal is due, Fainens asks: post it, or skip it if you weren’t charged.' },
       { type: 'p', text: 'Subscriptions can be paused or set to end; ones about to expire are flagged. If renewals were missed while you were away, a panel lists them so you can post or skip each one. The timeline shows upcoming renewals and the account each comes from.' },
@@ -523,6 +537,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'simulator', text: 'Savings simulator' },
       { type: 'list', items: ['Projection: starting balance, monthly contribution, returns and inflation, with a Monte Carlo range.', 'Scenarios: compare plans side by side (kept in this browser).', 'Goals: start from templates like a 6-month emergency fund or a house down payment.', 'Retirement: include BPJS JHT and JP, salary growth and a lifestyle target.'] },
       { type: 'h2', id: 'reading-projection', text: 'Reading a projection' },
+      { type: 'visual', node: <SavingsFanDemo />, wide: true },
       { type: 'list', items: [
         'Switch on Monte Carlo and set a volatility to see a range instead of one line. p50 is the middle outcome; p10 and p90 mean only 1 in 10 runs did worse, or better.',
         'Figures can be shown nominal (future rupiah) or real (in today’s money, after inflation).',
@@ -546,6 +561,7 @@ export const DOCS: DocPage[] = [
     summary: 'Money you lent or borrowed',
     lead: 'Keep track of who owes whom, without loans showing up as spending or income.',
     blocks: [
+      { type: 'visual', node: <LoanRepaymentDemo /> },
       { type: 'steps', items: ['In Loans, choose New loan.', 'Pick Lend or Borrow, the person (or create a contact), the amount and the account the money moved through.', 'Add a due date if there is one.', 'Record each repayment as it comes.'] },
       { type: 'p', text: 'Loans shows what you’re owed, what you owe and the net. Switch between All loans, Contacts and Split bills, and filter by direction and by status: active, overdue, repaid, defaulted or written off.' },
       { type: 'list', items: [
@@ -685,6 +701,7 @@ export const DOCS: DocPage[] = [
     summary: 'Everything Agent can check in your money, and what it can’t yet',
     lead: 'Agent answers by reading your records through a fixed set of tools. This is what those tools cover.',
     blocks: [
+      { type: 'visual', node: <AgentLookupDemo /> },
       { type: 'table', head: ['Area', 'What Agent can check'], rows: [
         ['Accounts', 'Any account’s balance or all of them, totals by type or liquidity, how each account is treated, and its reconciliation history and differences'],
         ['Transactions', 'Search by text, account, category, amount, type or direction; totals grouped by category, account, merchant, day or month; one transaction’s full lines, note, tags and allocations; similar past transactions; your categories, tags and saved trips'],
@@ -774,6 +791,7 @@ export const DOCS: DocPage[] = [
       ] },
       { type: 'h2', id: 'profile', text: 'What Agent can see about you' },
       { type: 'p', text: 'In Settings → Agent → What Agent can see, choose which profile details are shared. Anything switched off is left out, or replaced by a neutral default.' },
+      { type: 'visual', node: <AgentContextDemo />, wide: true },
       { type: 'table', head: ['Group', 'Details (“shared” means on by default)'], rows: [
         ['About you', 'Full name, preferred name (shared), pronouns, age (your date of birth is never sent)'],
         ['Region and language', 'Country, time zone (shared), language (shared), currency (shared)'],
@@ -829,6 +847,7 @@ export const DOCS: DocPage[] = [
     summary: 'What’s supported, what isn’t yet, and the numbers to know',
     lead: 'The quick answer to what Fainens can do, partly does, and doesn’t do yet, plus the limits worth knowing before you hit them.',
     blocks: [
+      { type: 'visual', node: <CanISummaryDemo /> },
       { type: 'special', name: 'can-i' },
       { type: 'h2', id: 'limits', text: 'Limits' },
       { type: 'special', name: 'limits' },
@@ -841,7 +860,7 @@ export const DOCS: DocPage[] = [
     title: 'Keyboard shortcuts',
     summary: 'Faster with a keyboard',
     lead: 'Shortcuts work when you’re not typing in a field.',
-    blocks: [{ type: 'special', name: 'shortcuts' }],
+    blocks: [{ type: 'visual', node: <ShortcutsDemo /> }, { type: 'special', name: 'shortcuts' }],
   },
   {
     slug: 'troubleshooting',
@@ -850,6 +869,7 @@ export const DOCS: DocPage[] = [
     summary: 'When something looks wrong',
     lead: 'The most common surprises, and what to do about them.',
     blocks: [
+      { type: 'visual', node: <MismatchDemo /> },
       { type: 'qa', items: [
         { q: 'My balance doesn’t match my bank.', a: 'Reconcile the account in Accounts. Check the difference for a missing or doubled transaction first, then record what’s left as a balance adjustment.' },
         { q: 'A number on the dashboard looks wrong.', a: 'Check which period the Dashboard shows, then open Transactions for that period, filter by the account or category, and check the entries behind the number. Transfers, loans and splits don’t count as spending.' },
@@ -876,6 +896,7 @@ export const DOCS: DocPage[] = [
     summary: 'Every setting, and where to find it',
     lead: 'Open Settings from the sidebar (or More on phones). Search for any setting by name, or open a section. Changes save as you make them.',
     blocks: [
+      { type: 'visual', node: <SettingsPreviewDemo />, wide: true },
       { type: 'table', head: ['Section', 'What’s in it'], rows: [
         ['Profile', 'Your name, preferred name, pronouns, date of birth, country, time zone, language, currency, income pattern and main goal. Signing out is here too'],
         ['General', 'Display: theme (light, dark or automatic), accent colour, date format, 12- or 24-hour time, the day weeks start, compact rows. Pay cycle: your salary day. Accessibility: text size and reduce motion'],
@@ -1048,7 +1069,7 @@ export const DOCS: DocPage[] = [
     title: 'Glossary',
     summary: 'Words you’ll see in Fainens',
     lead: 'Plain-language meanings for the terms Fainens uses.',
-    blocks: [{ type: 'special', name: 'glossary' }],
+    blocks: [{ type: 'visual', node: <GlossaryCardDemo /> }, { type: 'special', name: 'glossary' }],
   },
   {
     slug: 'whats-new',
@@ -1056,7 +1077,7 @@ export const DOCS: DocPage[] = [
     title: 'What’s new',
     summary: 'Changes, month by month',
     lead: 'The highlights of each month’s updates, newest first.',
-    blocks: [{ type: 'special', name: 'changelog' }],
+    blocks: [{ type: 'visual', node: <WhatsNewDemo /> }, { type: 'special', name: 'changelog' }],
   },
 ];
 

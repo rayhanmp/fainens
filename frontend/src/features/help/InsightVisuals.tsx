@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Bell, CalendarDays, LayoutGrid, ListChecks, Receipt, SlidersHorizontal, TrendingUp, Wallet } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { shown, useSequence } from './motion';
+import { shown, useAutoplay, useSequence } from './motion';
 import { VisualFrame } from './visuals';
 
 /**
@@ -10,30 +10,6 @@ import { VisualFrame } from './visuals';
  */
 
 const rupiah = (value: number) => `Rp${Math.round(value).toLocaleString('id-ID')}`;
-
-/** Runs once the element is on screen: steps `index` through `count` every `interval` ms, unless paused. */
-function useAutoplay(count: number, interval: number) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [index, setIndex] = useState(0);
-  const [visible, setVisible] = useState(false);
-  const [paused, setPaused] = useState(false);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return undefined;
-    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting)), { threshold: 0.35 });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!visible || paused) return undefined;
-    const timer = window.setInterval(() => setIndex((value) => (value + 1) % count), interval);
-    return () => window.clearInterval(timer);
-  }, [visible, paused, count, interval]);
-
-  return { ref, index, setIndex, setPaused };
-}
 
 // ── Recaps ───────────────────────────────────────────────────────────
 
@@ -223,7 +199,7 @@ export function DashboardMapDemo() {
   const line = (width: string, strong = false) => <span className={cn('block h-1.5 rounded-full', strong ? 'bg-[var(--ref-on-surface)]/70' : 'bg-[var(--ref-surface-container)]')} style={{ width }} />;
 
   return (
-    <VisualFrame frameRef={ref} caption="Point at a part of the Dashboard to see what it does.">
+    <VisualFrame frameRef={ref} caption="Tap or point at a part of the Dashboard to see what it does.">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-center" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
         <div className="grid grid-cols-6 gap-2.5">
           {region('hero', 'col-span-4 h-24', <span className="block space-y-2 pt-1">{line('35%')}<span className="block font-mono text-sm font-bold text-[var(--ref-on-surface)]">Rp6.197.500</span><span className="block h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container)]"><span className="block h-full w-[48%] rounded-full bg-[var(--color-accent)]" /></span>{line('55%')}</span>)}
@@ -451,7 +427,7 @@ export function CategoryMapDemo() {
   const dim = (name: string) => focus !== null && focus !== name;
 
   return (
-    <VisualFrame caption="Sample data. Point at a category to find it in both views; in the app, clicking opens its transactions.">
+    <VisualFrame caption="Sample data. Tap or point at a category to find it in both views; in the app, clicking opens its transactions.">
       <div className="grid gap-6 lg:grid-cols-2" onMouseLeave={() => setFocus(null)}>
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--ref-on-surface)]">Where the money goes <span className="font-normal text-[var(--ref-on-surface-variant)]">· last 30 days</span></p>
