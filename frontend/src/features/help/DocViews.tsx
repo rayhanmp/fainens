@@ -370,7 +370,12 @@ export function DocArticle({ page }: { page: DocPage }) {
         </nav>
       )}
 
-      <div className="mt-2">{page.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} at={blockIndex} annotate={annotate} />)}</div>
+      {/* Text keeps a comfortable line length; visuals and ledger tables step out of the column on wide screens. */}
+      <div className="mt-2">{page.blocks.map((block, blockIndex) => (
+        <div key={blockIndex} className={cn((block.type === 'visual' || block.type === 'under-hood') && 'xl:-mx-16 2xl:-mx-32')}>
+          <BlockView block={block} at={blockIndex} annotate={annotate} />
+        </div>
+      ))}</div>
 
       {related.length > 0 && (
         <section className="mt-12">
