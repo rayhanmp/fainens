@@ -2,7 +2,7 @@ import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import { Calculator, Check, ClipboardCopy, Download, Pencil, Plus, ReceiptText, Trash2, UserPlus } from 'lucide-react';
-import { formatCurrency } from '../../lib/utils';
+import { displayPreferences, formatCurrency } from '../../lib/utils';
 import { Modal } from '../ui/Modal';
 
 export type SplitChargeRule = 'proportional' | 'equal' | 'payer';
@@ -210,7 +210,7 @@ function formatSplitBillDate(value: string): string {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-    ...(isDateOnly ? {} : { hour: '2-digit', minute: '2-digit', hour12: false }),
+    ...(isDateOnly ? {} : { hour: '2-digit', minute: '2-digit', hour12: displayPreferences().timeFormat === '12h' }),
   }).format(new Date(timestamp));
   return isDateOnly ? formatted : `${formatted} WIB`;
 }

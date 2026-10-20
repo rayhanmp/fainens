@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { SlidersHorizontal } from 'lucide-react';
-import { cn, formatCurrency as visibleCurrency, formatDayMonth, formatDecimal } from '../../lib/utils';
+import { cn, formatCurrency as visibleCurrency, formatDayMonth, formatDecimal, weekdayIndex } from '../../lib/utils';
 import { HIDDEN_BALANCE } from '../../lib/balance-visibility';
 import { useSpendingTrendQuery } from '../../features/analytics/queries';
 import type { GetSpendingTrend200 } from '../../generated/client';
@@ -110,7 +110,7 @@ export function SpendingTrendChart({ periodId = null, className, hideAmounts }: 
 
   const heatmapCells = useMemo<Array<Point | null>>(() => {
     if (points.length === 0) return [];
-    const leadingEmptyCells = new Date(points[0].startMs).getDay();
+    const leadingEmptyCells = weekdayIndex(new Date(points[0].startMs));
     return [...Array.from({ length: leadingEmptyCells }, () => null), ...points];
   }, [points]);
 

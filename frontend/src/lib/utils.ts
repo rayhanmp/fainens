@@ -65,24 +65,74 @@ export type DateFormatPreference = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD' | 
 /** Fired by Settings after it saves, so date helpers pick up a changed preference without a reload. */
 export const SETTINGS_CHANGED_EVENT = 'fainens:settings-changed';
 const DATE_FORMATS: readonly DateFormatPreference[] = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD', 'DD MMM YYYY'];
-let cachedDateFormat: DateFormatPreference | null = null;
+export type TimeFormatPreference = '24h' | '12h';
+/** 1 = weeks start on Monday, 0 = on Sunday (the same numbering as `Date#getDay`). */
+export type WeekStartPreference = 0 | 1;
+export type TextSizePreference = 'default' | 'large';
+
+/** Display preferences from Settings → General, read once and re-read when Settings saves. */
+export type DisplayPreferences = {
+  dateFormat: DateFormatPreference;
+  timeFormat: TimeFormatPreference;
+  weekStart: WeekStartPreference;
+  textSize: TextSizePreference;
+  reduceMotion: boolean;
+};
+
+let cachedPreferences: DisplayPreferences | null = null;
+
+export function displayPreferences(): DisplayPreferences {
+  if (cachedPreferences) return cachedPreferences;
+  let stored: Record<string, unknown> = {};
+  try {
+    stored = JSON.parse(localStorage.getItem('fainens-settings') ?? '{}') as Record<string, unknown>;
+  } catch {
+    stored = {};
+  }
+  cachedPreferences = {
+    dateFormat: DATE_FORMATS.includes(stored.dateFormat as DateFormatPreference) ? stored.dateFormat as DateFormatPreference : 'DD/MM/YYYY',
+    timeFormat: stored.timeFormat === '12h' ? '12h' : '24h',
+    weekStart: stored.weekStart === 0 ? 0 : 1,
+    textSize: stored.textSize === 'large' ? 'large' : 'default',
+    reduceMotion: stored.reduceMotion === true,
+  };
+  return cachedPreferences;
+}
 
 export function dateFormatPreference(): DateFormatPreference {
-  if (cachedDateFormat) return cachedDateFormat;
-  let stored: unknown;
-  try {
-    stored = (JSON.parse(localStorage.getItem('fainens-settings') ?? '{}') as { dateFormat?: unknown }).dateFormat;
-  } catch {
-    stored = undefined;
-  }
-  cachedDateFormat = DATE_FORMATS.includes(stored as DateFormatPreference) ? stored as DateFormatPreference : 'DD/MM/YYYY';
-  return cachedDateFormat;
+  return displayPreferences().dateFormat;
+}
+
+/** Days from the start of the week to `date`: 0 for the first day, 6 for the last. */
+export function weekdayIndex(date: Date): number {
+  return (date.getDay() - displayPreferences().weekStart + 7) % 7;
+}
+
+/** Short weekday names in the order the user's week runs: Mon…Sun, or Sun…Sat. */
+export function weekdayLabels(): string[] {
+  const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const start = displayPreferences().weekStart;
+  return [...labels.slice(start), ...labels.slice(0, start)];
+}
+
+/** Text size and reduced motion are page-wide: they live as attributes on <html>, read by index.css. */
+export function applyDisplayPreferences(): void {
+  if (typeof document === 'undefined') return;
+  const { textSize, reduceMotion } = displayPreferences();
+  const root = document.documentElement;
+  if (textSize === 'large') root.dataset.textSize = 'large';
+  else delete root.dataset.textSize;
+  if (reduceMotion) root.dataset.reduceMotion = 'true';
+  else delete root.dataset.reduceMotion;
 }
 
 if (typeof window !== 'undefined') {
-  const forget = () => { cachedDateFormat = null; };
-  window.addEventListener('storage', forget);
-  window.addEventListener(SETTINGS_CHANGED_EVENT, forget);
+  const refresh = () => {
+    cachedPreferences = null;
+    applyDisplayPreferences();
+  };
+  window.addEventListener('storage', refresh);
+  window.addEventListener(SETTINGS_CHANGED_EVENT, refresh);
 }
 
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -119,10 +169,15 @@ export function formatWeekdayDate(timestamp: number): string {
     : `${weekdayName(date)}, ${date.getDate()} ${monthName(date)} ${date.getFullYear()}`;
 }
 
-/** 24-hour clock time, "17:04". */
-export function formatTime(timestamp: number): string {
+/** Clock time in the user's format: "17:04", or "5:04 PM" for the 12-hour clock. */
+export function formatTime(timestamp: number, { withSeconds = false }: { withSeconds?: boolean } = {}): string {
   const date = new Date(timestamp);
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const minutesAndSeconds = `${pad(date.getMinutes())}${withSeconds ? `:${pad(date.getSeconds())}` : ''}`;
+  if (displayPreferences().timeFormat === '12h') {
+    const hours = date.getHours();
+    return `${hours % 12 || 12}:${minutesAndSeconds} ${hours < 12 ? 'AM' : 'PM'}`;
+  }
+  return `${pad(date.getHours())}:${minutesAndSeconds}`;
 }
 
 export type PeriodDateRange = { startDate: number; endDate: number };
@@ -154,8 +209,7 @@ export function findCurrentPeriod<T extends PeriodDateRange>(periods: readonly T
 
 /** Date and time in the user's date format, e.g. "18/10/2026, 17:04". Audit views pass `withSeconds`. */
 export function formatDateTime(timestamp: number, { withSeconds = false }: { withSeconds?: boolean } = {}): string {
-  const seconds = withSeconds ? `:${pad(new Date(timestamp).getSeconds())}` : '';
-  return `${formatDate(timestamp)}, ${formatTime(timestamp)}${seconds}`;
+  return `${formatDate(timestamp)}, ${formatTime(timestamp, { withSeconds })}`;
 }
 
 /** A local calendar date suitable for a native `<input type="date">`. */

@@ -18,7 +18,7 @@ import {
   ShoppingCart,
   Wallet,
 } from 'lucide-react';
-import { cn, formatDate } from '../lib/utils';
+import { cn, formatDate, weekdayIndex, weekdayLabels } from '../lib/utils';
 
 export const Route = createFileRoute('/paylater')({
   component: PaylaterPage,
@@ -31,10 +31,10 @@ type ExposureRow = Awaited<ReturnType<typeof api.paylater.obligations>>['provide
 function monthGrid(year: number, month: number): (number | null)[] {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
-  const startWeekdayMon0 = (first.getDay() + 6) % 7;
+  const leadingEmptyCells = weekdayIndex(first);
   const daysInMonth = last.getDate();
   const cells: (number | null)[] = [];
-  for (let i = 0; i < startWeekdayMon0; i++) cells.push(null);
+  for (let i = 0; i < leadingEmptyCells; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
@@ -213,7 +213,7 @@ function PaylaterPage() {
                 </div>
 
                 <div className="grid grid-cols-7 gap-1 text-center">
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+                  {weekdayLabels().map((d) => (
                     <div
                       key={d}
                       className="text-[9px] font-bold text-[var(--ref-outline)] uppercase tracking-wide pb-1"

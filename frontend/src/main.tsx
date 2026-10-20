@@ -6,6 +6,7 @@ import './index.css';
 // Import the generated route tree
 import { routeTree } from './routeTree.gen';
 import { App } from './App';
+import { applyDisplayPreferences } from './lib/utils';
 
 /**
  * Like JSON.parse, but numeric text stays a string. Route validators expect ids as strings,
@@ -48,6 +49,9 @@ declare module '@tanstack/react-router' {
     router: typeof router;
   }
 }
+
+// Text size and reduced motion apply before the first paint, so nothing jumps after load.
+applyDisplayPreferences();
 
 // Render the app
 const rootElement = document.getElementById('root')!;

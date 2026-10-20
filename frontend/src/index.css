@@ -4,6 +4,17 @@
    not the OS setting, so a light app on a dark OS never gets dark-mode colours. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Settings → Accessibility. Sizes are in rem, so a larger root size scales text and spacing together. */
+html[data-text-size="large"] { font-size: 112.5%; }
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* Design tokens + Stitch reference (design-reference/stitch-localized-dashboard/localized-dashboard.html) */
 :root {
   --color-background: #faf8ff;

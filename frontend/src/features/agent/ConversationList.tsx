@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
 import { Archive, ArchiveRestore, CalendarDays, Check, ChevronDown, MoreHorizontal, Pencil, Pin, PinOff, Trash2, X } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
-import { cn, formatDate } from '../../lib/utils';
+import { cn, formatDate, weekdayIndex } from '../../lib/utils';
 import type { Conversation, Period } from './types';
 
 type AgentUsageSummary = NonNullable<Conversation['usage']>;
@@ -33,7 +33,7 @@ function conversationGroup(updatedAt: number, nowMs = Date.now()): string {
   const dayDifference = Math.floor((today - day) / 86_400_000);
   if (dayDifference <= 0) return 'Today';
   if (dayDifference === 1) return 'Yesterday';
-  const weekStart = today - ((now.getDay() + 6) % 7) * 86_400_000;
+  const weekStart = today - weekdayIndex(now) * 86_400_000;
   if (day >= weekStart) return 'Earlier this week';
   return 'Older';
 }

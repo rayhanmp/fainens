@@ -15,7 +15,8 @@ import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useAgentMemoriesQuery } from '../features/agent/queries';
 import { agentCommands } from '../features/agent/commands';
 import { queryKeys } from '../features/core/query-keys';
-import { cn, formatDate, formatDateTime, SETTINGS_CHANGED_EVENT } from '../lib/utils';
+import { useUiStore } from '../stores/ui-store';
+import { cn, formatDate, formatDateTime, SETTINGS_CHANGED_EVENT, type TextSizePreference, type TimeFormatPreference, type WeekStartPreference } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type PdfPasswordFormat } from '../lib/reportSecurity';
 import { useConfirm } from '../components/ui/ConfirmDialog';
@@ -43,6 +44,7 @@ import {
   Search,
   CloudUpload,
   X,
+  LogOut,
   MoreHorizontal,
   KeyRound,
   Monitor,
@@ -65,6 +67,10 @@ interface AppSettings {
   transferFeeRules: TransferFeeRule[];
   pdfPasswordEnabled: boolean;
   pdfPasswordFormat: PdfPasswordFormat;
+  timeFormat: TimeFormatPreference;
+  weekStart: WeekStartPreference;
+  textSize: TextSizePreference;
+  reduceMotion: boolean;
 }
 
 interface ExportOptions {
@@ -376,6 +382,11 @@ const CURRENCIES = [
   { value: 'MYR', label: 'RM (MYR - Malaysian Ringgit)', symbol: 'RM' },
 ];
 
+const TIME_FORMATS: Array<MenuSelectOption<TimeFormatPreference>> = [
+  { value: '24h', label: '24-hour (17:30)' },
+  { value: '12h', label: '12-hour (5:30 PM)' },
+];
+
 const DATE_FORMATS = [
   { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
   { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
@@ -485,8 +496,8 @@ function ThemeSwitch({ value, onChange }: { value: ThemeChoice; onChange: (next:
 
 // `keywords` lets search find a section by the settings inside it, not only by its name.
 const TABS: { id: TabType; label: string; icon: React.ElementType; summary: string; keywords: string }[] = [
-  { id: 'profile', label: 'Profile', icon: User, summary: 'Your name, region, and goals', keywords: 'name preferred pronouns birthday date of birth country region timezone language currency income goal email' },
-  { id: 'general', label: 'General', icon: Settings2, summary: 'Theme, dates, and your pay cycle', keywords: 'appearance theme dark light mode system colour color display date format opportunity cost yield interest rate salary day payday budget period' },
+  { id: 'profile', label: 'Profile', icon: User, summary: 'Your name, region, goals, and account', keywords: 'name preferred pronouns birthday date of birth country region timezone language currency income goal email account google sign out logout' },
+  { id: 'general', label: 'General', icon: Settings2, summary: 'Display, pay cycle, and accessibility', keywords: 'appearance theme dark light mode system colour color display date format time 12-hour 24-hour clock week starts monday sunday compact rows density opportunity cost yield interest rate salary day payday budget period accessibility text size font large reduce motion animation' },
   { id: 'accounts', label: 'Accounts', icon: CreditCard, summary: 'Defaults and transfer fees', keywords: 'default bank expense income account transfer fee' },
   { id: 'agent', label: 'Agent', icon: Brain, summary: 'Style, privacy, models, and memory', keywords: 'ai assistant tone detail response style model provider api key openrouter memory memories context sharing privacy' },
   { id: 'backups', label: 'Backups', icon: CloudUpload, summary: 'Cloud snapshots of your ledger', keywords: 'cloud database backup snapshot automatic frequency schedule' },
@@ -517,7 +528,10 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const { theme, setTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  // Compact rows is the same preference as the Transactions page's own toggle.
+  const compactTables = useUiStore((state) => state.compactTables);
+  const setCompactTables = useUiStore((state) => state.setCompactTables);
   const exportDataMutation = useExportDataMutation();
   const queryClient = useQueryClient();
   const accountsQuery = useAccountsLedgerQuery();
@@ -533,6 +547,10 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     transferFeeRules: [],
     pdfPasswordEnabled: false,
     pdfPasswordFormat: 'DDMMYYYY',
+    timeFormat: '24h',
+    weekStart: 1,
+    textSize: 'default',
+    reduceMotion: false,
   });
   const [profile, setProfile] = useState<PersonalProfile>({
     email: user?.email ?? '',
@@ -842,6 +860,11 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         transferFeeRules: loadTransferFeeRules(),
         pdfPasswordEnabled: parsed.pdfPasswordEnabled === true,
         pdfPasswordFormat: parsed.pdfPasswordFormat === 'YYYYMMDD' ? 'YYYYMMDD' : 'DDMMYYYY',
+        // Same defaults as displayPreferences() in lib/utils, which the rest of the app reads.
+        timeFormat: parsed.timeFormat === '12h' ? '12h' : '24h',
+        weekStart: parsed.weekStart === 0 ? 0 : 1,
+        textSize: parsed.textSize === 'large' ? 'large' : 'default',
+        reduceMotion: parsed.reduceMotion === true,
       };
       savedSettingsRef.current = JSON.stringify(loaded);
       setSettings(loaded);
@@ -1100,17 +1123,25 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   <Dropdown label="Main financial goal" value={profile.primaryGoal ?? ''} onChange={(value) => setProfile((current) => ({ ...current, primaryGoal: (value || null) as PersonalProfile['primaryGoal'] }))} options={FINANCIAL_GOALS} />
                 </div>
               </SettingsGroup>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
-                <span className="min-w-0 truncate text-xs text-[var(--color-muted)]">Signed in as {profile.email || user?.email || 'your account'} · changes save automatically</span>
-                <Notice notice={profileNotice} />
-              </div>
+              <SettingsGroup fixed title="Account">
+                <SettingsRow
+                  inline
+                  label="Signed in with Google"
+                  description={profile.email || user?.email || 'Your account'}
+                  action={<Button type="button" size="sm" variant="secondary" onClick={async () => {
+                    if (await confirm({ title: 'Sign out', message: 'Are you sure you want to sign out?', confirmLabel: 'Sign out', variant: 'default' })) await logout();
+                  }}><LogOut className="h-4 w-4" aria-hidden /> Sign out</Button>}
+                />
+                <p className="pt-3 text-xs text-[var(--color-muted)]">Profile changes save automatically.</p>
+                <Notice notice={profileNotice} className="pt-2" />
+              </SettingsGroup>
             </SettingsPanel>
           )}
 
           {/* General Tab */}
           {activeTab === 'general' && (
             <SettingsPanel>
-              <SettingsGroup fixed title="Appearance" summary="How Fainens looks on this device">
+              <SettingsGroup fixed title="Display">
                 <SettingsRow
                   label="Theme"
                   description="Light, dark, or match your device."
@@ -1121,6 +1152,22 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   label="Date format"
                   description="How dates appear throughout Fainens."
                   action={<Dropdown ariaLabel="Date format" value={settings.dateFormat} onChange={(dateFormat) => setSettings({ ...settings, dateFormat })} options={DATE_FORMATS} />}
+                />
+                <SettingsRow
+                  label="Time format"
+                  description="How times appear, for example on transactions and backups."
+                  action={<Dropdown<TimeFormatPreference> ariaLabel="Time format" value={settings.timeFormat} onChange={(timeFormat) => setSettings({ ...settings, timeFormat })} options={TIME_FORMATS} />}
+                />
+                <SettingsRow
+                  label="Week starts on"
+                  description="The first day in calendars, the spending heatmap, and “this week”."
+                  action={<Dropdown ariaLabel="Week starts on" value={String(settings.weekStart)} onChange={(value) => setSettings({ ...settings, weekStart: value === '0' ? 0 : 1 })} options={[{ value: '1', label: 'Monday' }, { value: '0', label: 'Sunday' }]} />}
+                />
+                <SettingsRow
+                  inline
+                  label="Compact rows"
+                  description="Fit more transactions on screen with tighter rows."
+                  action={<Toggle label="Compact rows" checked={compactTables} onChange={setCompactTables} />}
                 />
               </SettingsGroup>
               <SettingsGroup fixed title="Pay cycle and returns" summary="Used by budgets and opportunity-cost figures">
@@ -1133,6 +1180,19 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   label="Opportunity cost yield"
                   description="Yearly money market rate, used to show what idle money could have earned."
                   action={<NumberSetting ariaLabel="Opportunity cost yield, percent a year" value={settings.opportunityCostYield} onCommit={(opportunityCostYield) => setSettings((current) => ({ ...current, opportunityCostYield }))} min={0} max={20} step="0.1" suffix="% a year" suffixPadding="pr-20!" rangeHint="Use a rate from 0 to 20%." />}
+                />
+              </SettingsGroup>
+              <SettingsGroup fixed title="Accessibility">
+                <SettingsRow
+                  label="Text size"
+                  description="Larger text and spacing across Fainens."
+                  action={<Dropdown<TextSizePreference> ariaLabel="Text size" value={settings.textSize} onChange={(textSize) => setSettings({ ...settings, textSize })} options={[{ value: 'default', label: 'Default' }, { value: 'large', label: 'Large' }]} />}
+                />
+                <SettingsRow
+                  inline
+                  label="Reduce motion"
+                  description="Turn off animations and smooth scrolling. Fainens already does this when your device asks."
+                  action={<Toggle label="Reduce motion" checked={settings.reduceMotion} onChange={(reduceMotion) => setSettings({ ...settings, reduceMotion })} />}
                 />
               </SettingsGroup>
             </SettingsPanel>
