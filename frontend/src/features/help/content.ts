@@ -79,6 +79,9 @@ export const CHANGELOG: ChangelogMonth[] = [
   {
     month: 'October 2026',
     highlights: [
+      { title: 'Subscriptions, rebuilt', body: 'See what they cost a month and a year, this year’s running total, a renewal calendar, which accounts can cover what’s due, and a month-by-month record of every charge, skip and pause.' },
+      { title: 'Renewals the way they really happen', body: 'Custom intervals, free trials, cancel dates and dollar prices; record a payment late or early with its real amount, choose whether the schedule moves, or link a charge you already entered.' },
+      { title: 'Find missing payments', body: 'A subscription finds the expenses you entered by hand that paid it and attaches them, one by one, without changing the transactions.' },
       { title: 'Recaps of your spending', body: 'Replay any period or your whole year as an animated story with quizzes, mini-games, music and a money personality.' },
       { title: 'Share your recap', body: 'Download a recap as a story video, or print its cover as a magazine, poster, record sleeve or boarding pass.' },
       { title: 'A dashboard you can arrange', body: 'Reorder, resize and hide dashboard panels, choose your pulse metrics, and see budget health and weekly net worth at a glance.' },

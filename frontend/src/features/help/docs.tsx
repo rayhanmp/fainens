@@ -11,7 +11,8 @@ import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
 import { ComposerDemo, InstallmentDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
-import { SalaryAndRenewalDemo } from './SalaryVisuals';
+import { SubscriptionsMoneyDemo, SubscriptionsOverviewDemo, SubscriptionsTimelineDemo } from './SubscriptionVisuals';
+import { IncomeTrendDemo, TakeHomeDemo, TaxOutlookDemo } from './IncomeVisuals';
 import { MismatchDemo, ReconcileDemo } from './ReconcileVisuals';
 import { ImportFlowDemo } from './ImportVisuals';
 import { ClaimPipelineDemo } from './ClaimVisuals';
@@ -82,6 +83,8 @@ export const DOC_REDIRECTS: Record<string, { slug: string; hash?: string }> = {
   periods: { slug: 'periods-budgets' },
   budgets: { slug: 'periods-budgets', hash: 'budget' },
   limits: { slug: 'can-i', hash: 'limits' },
+  // Subscriptions and salary were one page until each grew its own illustrations.
+  'subscriptions-salary': { slug: 'subscriptions' },
 };
 
 export const DOCS: DocPage[] = [
@@ -489,28 +492,61 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'Choose Resume tracking and enter the day you came back. The gap is marked skipped, so nothing is made up. Then reconcile your accounts from today.' },
       { type: 'open', link: { to: '/periods', label: 'Open Salary periods' } },
     ],
-    related: ['subscriptions-salary', 'accounts', 'a-month'],
+    related: ['income-salary', 'subscriptions', 'a-month'],
   },
   {
-    slug: 'subscriptions-salary',
+    slug: 'subscriptions',
     group: 'Planning',
-    title: 'Subscriptions and salary',
-    summary: 'Renewals, take-home pay and tax estimates',
-    lead: 'Recurring money in and out, without it posting behind your back.',
+    title: 'Subscriptions',
+    summary: 'Renewals, late payments and what they cost',
+    lead: 'Everything that renews, recorded as it really charged, never behind your back.',
     blocks: [
-      { type: 'visual', node: <SalaryAndRenewalDemo />, wide: true },
-      { type: 'h2', id: 'subscriptions', text: 'Subscriptions' },
-      { type: 'p', text: 'Add each subscription with its price, how often it repeats (weekly, monthly, every few months, yearly, or any number of days, weeks, months or years) and the wallet, bank or card it’s paid from. PayLater accounts can’t pay subscriptions; record those purchases on the Pay later page. The top of the page shows the cost per month and roughly per year, what share each subscription takes, and a calendar with a dot on every renewal day; step or swipe through the months and tap a day to see what renews.' },
-      { type: 'p', text: 'Nothing is posted behind your back. A renewal whose date has passed is listed as past due on the calendar card: record the payment as it happened, even late, with the amount, date and account it really had, or skip it if you weren’t charged. When you pay late, choose whether the next payment keeps its schedule or counts from the day you paid. If you already entered the charge in Transactions, link it instead so it isn’t counted twice.' },
+      { type: 'visual', node: <SubscriptionsOverviewDemo />, wide: true },
+      { type: 'h2', id: 'adding', text: 'Adding a subscription' },
+      { type: 'p', text: 'Add each subscription with its price, how often it repeats (weekly, monthly, every few months, yearly, or any number of days, weeks, months or years), the wallet, bank or card it’s paid from, and its type of service. The type is guessed from the name (ChatGPT is an AI tool, iCloud is cloud storage) and you can change it in the editor. PayLater accounts can’t pay subscriptions; record those purchases on the Pay later page.' },
+      { type: 'h2', id: 'overview', text: 'The top of the page' },
       { type: 'list', items: [
+        'What subscriptions cost a month, and what that adds up to in a year at today’s prices.',
+        'This year as a running total: what was paid since January, then what’s scheduled through December. Hover a month for its amount.',
+        'Tiles for the next 30 days, what was paid this month, and the biggest subscription’s share.',
+        'A calendar with a dot under every renewal day: past due, due, or done. Step or swipe through the months and tap a day to see what renews; tap it again, press Escape or click outside to go back.',
+      ] },
+      { type: 'h2', id: 'past-due', text: 'Past-due renewals' },
+      { type: 'p', text: 'Nothing is posted behind your back. A renewal whose date has passed waits on the calendar card: record the payment as it happened, even late, with the amount, date and account it really had, or skip it if you weren’t charged. Several past due slide sideways, with Skip all and Record all on the last slide. When you pay late, choose whether the next payment keeps its schedule or counts from the day you paid. If you already entered the charge in Transactions, choose Already in transactions to link it, so it isn’t counted twice.' },
+      { type: 'h2', id: 'list', text: 'Your subscriptions' },
+      { type: 'list', items: [
+        'Each row shows what it costs and what’s next. Filter by Active, Paused, Ended or Archived, search, and sort by next payment, cost or name.',
+        'Paid from shows each paying account’s balance with what’s due from it in the next 30 days, and how much it’s short by when it won’t cover it.',
+        'What kind of services splits the monthly cost by type as a treemap. Choose a tile to show only that type in the list.',
+      ] },
+      { type: 'visual', node: <SubscriptionsMoneyDemo /> },
+      { type: 'h2', id: 'one', text: 'One subscription' },
+      { type: 'list', items: [
+        'Open a subscription for what it costs, its next payment, and every payment it actually made. Open a payment to see its transaction, correct its amount, void a charge that never happened, or unlink or detach a transaction attached by mistake.',
+        'Find missing payments lists expenses from the last year that look like this subscription (its name, or its exact price in its category) but aren’t counted as its payments. Attach each one that is: it fills the skipped renewal it sits next to, or else counts as one of its payments. The transaction itself doesn’t change.',
         'Paid by hand? Set it to “I pay manually” and record each payment when you make it, early if you like.',
         'Billed in dollars or another currency? Store that price with a Rupiah estimate; when you record the payment you enter the Rupiah amount from your statement.',
         'Free trials show when they end, so you can cancel before the first charge.',
-        'Pause a subscription and pick the next payment date when you resume it. Cancel one with its last day; renewals after it aren’t due. Archived ones keep their history and can be restored.',
-        'Each subscription’s payments list what was actually charged. Open one to correct its amount, void a charge that never happened, or unlink a transaction you linked by mistake.',
-        'At the bottom, Payments by month gives each subscription a row across the last year and the next six months: a dot for every month it charged, bigger for bigger charges, filled when paid, a ring when scheduled and amber when past due. Gaps are months it skipped.',
+        'Under Manage: pause it and pick the next payment date when you resume; cancel it with its last day, after which nothing is due; or archive it to hide it with its history kept. A paused subscription cancels as of its pause, so the paused months never come due.',
+      ] },
+      { type: 'h2', id: 'by-month', text: 'Payments by month' },
+      { type: 'visual', node: <SubscriptionsTimelineDemo />, wide: true },
+      { type: 'p', text: 'At the bottom, every subscription is a row from its first payment to six months ahead. Paid months are chips with the amount; a past-due one is amber with “!”. A hollow ring is a renewal skipped with nothing charged, a dashed × one posted and then voided, and a hatched band a pause. What’s scheduled is one ribbon per price, labelled once, so a monthly plan reads as a strip and a yearly one as a single chip. The foot shows what was paid each month and, under the future, what’s still to pay.' },
+      { type: 'under-hood', entries: [
+        { title: 'A Rp186.000 subscription renewal from {cash}', lines: [{ account: 'Expense (Auto)', note: 'The subscription’s category', debit: '186.000' }, { account: '{cash}', credit: '186.000' }], explain: 'Each recorded renewal is an ordinary expense, dated on the day it was paid (its due date when you record it as expected). Linking or attaching a transaction you already entered adds no new entry. Voiding a renewal you weren’t charged for cancels it on its own date.' },
       ] },
       { type: 'open', link: { to: '/subscriptions', label: 'Open Subscriptions' } },
+    ],
+    related: ['income-salary', 'accounts', 'pay-later'],
+  },
+  {
+    slug: 'income-salary',
+    group: 'Planning',
+    title: 'Income and salary',
+    summary: 'Take-home pay, payday and tax estimates',
+    lead: 'What your salary really leaves you, when it lands, and what the year’s tax looks like.',
+    blocks: [
+      { type: 'visual', node: <TakeHomeDemo />, wide: true },
       { type: 'h2', id: 'income-page', text: 'The Income & salary page' },
       { type: 'list', items: [
         'Take-home pay, with where your gross pay goes (tax, BPJS) and how it’s calculated.',
@@ -520,18 +556,19 @@ export const DOCS: DocPage[] = [
         'If several salaries are due, posting catches up all the missed months at once.',
         'More actions leads to Salary periods and downloads your income as CSV.',
       ] },
+      { type: 'visual', node: <IncomeTrendDemo />, wide: true },
       { type: 'h2', id: 'salary', text: 'Salary profile' },
       { type: 'p', text: 'In Income & salary, add your gross pay, payday, PTKP status and BPJS options. Fainens estimates PPh 21, BPJS deductions and your take-home pay, and lets you post your salary when it’s due.' },
       { type: 'h2', id: 'tax', text: 'Yearly tax outlook' },
       { type: 'p', text: 'See your estimated annual tax and mark other income as taxable, final or exempt. A switch chooses whether other taxable income counts at 50% or 100%.' },
+      { type: 'visual', node: <TaxOutlookDemo /> },
       { type: 'callout', tone: 'warning', text: 'These are planning estimates, not a tax filing.' },
       { type: 'under-hood', entries: [
-        { title: 'A Rp186.000 subscription renewal from {cash}', lines: [{ account: 'Expense (Auto)', note: 'The subscription’s category', debit: '186.000' }, { account: '{cash}', credit: '186.000' }], explain: 'Each recorded renewal is an ordinary expense, dated on the day it was paid (its due date when you record it as expected). Linking a transaction you already entered adds no new entry. Voiding a renewal you weren’t charged for cancels it on its own date.' },
         { title: 'Posting your salary into {cash}', lines: [{ account: '{cash}', debit: 'Take-home' }, { account: 'Income (Auto)', credit: 'Take-home' }], explain: 'Only your take-home pay is posted. Gross pay, PTKP status and the tax and BPJS estimates are kept in the entry’s notes, not as separate lines. One salary per month, and it needs an open period that includes payday.' },
       ] },
       { type: 'open', link: { to: '/salary-income', label: 'Open Income & salary' } },
     ],
-    related: ['periods-budgets'],
+    related: ['periods-budgets', 'subscriptions'],
   },
   {
     slug: 'savings-wishlist',
