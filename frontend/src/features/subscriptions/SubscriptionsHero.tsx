@@ -1,21 +1,14 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { BalanceVisibilityToggle } from '../../components/ui/BalanceVisibilityToggle';
+import { cn } from '../../lib/utils';
 import { RenewalCalendar } from './RenewalCalendar';
 import type { RenewalOccurrence, Subscription } from './queries';
 
 type Upcoming = { subscription: Subscription; dueAt: number };
 
-const SHARE_FILLS = [
-  'var(--color-accent)',
-  'color-mix(in srgb, var(--ref-on-surface) 55%, transparent)',
-  'color-mix(in srgb, var(--ref-on-surface) 35%, transparent)',
-  'color-mix(in srgb, var(--ref-on-surface) 22%, transparent)',
-  'color-mix(in srgb, var(--ref-on-surface) 13%, transparent)',
-];
-
 /**
- * The page's headline: what subscriptions cost, said plainly, with where the month goes, beside a
- * renewal calendar. Same family as the Income page's cards (soft surface, accent card), its own
+ * The page's headline: what subscriptions cost a month, a year and a day, beside a renewal
+ * calendar. Same family as the Income page's cards (soft surface, accent card), its own
  * arrangement. Past-due renewals are recorded or skipped from the calendar card.
  */
 export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, paidThisMonth, overdue, truncated, now, busy, onRecord, onSkip, onResolveAll }: {
@@ -46,15 +39,6 @@ export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, p
   const ranked = [...renewing].sort((a, b) => b.monthlyEquivalent - a.monthlyEquivalent);
   const biggest = ranked[0];
   const biggestShare = biggest && monthlyTotal > 0 ? Math.round((biggest.monthlyEquivalent / monthlyTotal) * 100) : 0;
-  // The three largest by cost per month, then the rest together: accent for the largest, ink tints
-  // after it, the way the Income page splits gross pay.
-  const shares = (() => {
-    if (monthlyTotal <= 0) return [];
-    const top = ranked.slice(0, ranked.length > 4 ? 3 : 4).map((item, index) => ({ key: String(item.id), label: item.name, amount: item.monthlyEquivalent, fill: SHARE_FILLS[index] }));
-    const rest = ranked.slice(top.length).reduce((sum, item) => sum + item.monthlyEquivalent, 0);
-    if (rest > 0) top.push({ key: 'rest', label: `${ranked.length - top.length} others`, amount: rest, fill: SHARE_FILLS[4] });
-    return top.map((item) => ({ ...item, share: item.amount / monthlyTotal }));
-  })();
   const next30 = upcoming.reduce((sum, item) => sum + item.subscription.amount, 0);
   const monthName = new Date(now).toLocaleDateString('en-US', { month: 'short' });
 
@@ -76,38 +60,30 @@ export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, p
             <span className="font-headline text-5xl font-black tracking-tighter text-[var(--ref-on-surface)] tabular-nums sm:text-6xl">{digits}</span>
             <span className="text-base font-semibold text-[var(--ref-on-surface-variant)]">a month</span>
           </p>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">
-            {renewing.length === 0 ? 'Add the services you pay for to see what they cost over a year.' : (
-              <>
-                About <span className="font-semibold text-[var(--ref-on-surface)]">{formatAmount(Math.round((monthlyTotal * 12) / 1000) * 1000)} a year</span> across {renewing.length} subscription{renewing.length === 1 ? '' : 's'}
-                {biggest && renewing.length > 1 && <>. <span className="font-semibold text-[var(--ref-on-surface)]">{biggest.name}</span> is the biggest, {biggestShare}% of it</>}.
-              </>
-            )}
-          </p>
+          {renewing.length === 0 && <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">Add the services you pay for to see what they cost over a year.</p>}
           </div>
 
-          {shares.length > 1 && (
-            <div aria-label="Share of the monthly cost">
-              <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full" aria-hidden>
-                {shares.map((share) => <div key={share.key} className="h-full" style={{ width: `${share.share * 100}%`, background: share.fill }} />)}
-              </div>
-              <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
-                {shares.map((share) => (
-                  <span key={share.key} className="flex min-w-0 items-center gap-1.5">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: share.fill }} aria-hidden />
-                    <span className="max-w-[12rem] truncate">{share.label}</span>
-                    <span className="font-semibold tabular-nums text-[var(--ref-on-surface)]">{share.share < 0.01 ? '<1' : Math.round(share.share * 100)}%</span>
-                  </span>
-                ))}
-              </p>
-            </div>
+          {/* The year and the day are figures in their own right, not a sentence. */}
+          {renewing.length > 0 && (
+            <dl className="grid grid-cols-3 divide-x divide-[var(--color-border)]">
+              {[
+                { label: 'Per year', value: formatAmount(Math.round(monthlyTotal * 12)) },
+                { label: 'Per day', value: formatAmount(Math.round((monthlyTotal * 12) / 365)) },
+                { label: 'Renewing', value: String(renewing.length) },
+              ].map((item, index) => (
+                <div key={item.label} className={cn('min-w-0', index > 0 && 'pl-4 sm:pl-6')}>
+                  <dt className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{item.label}</dt>
+                  <dd className="mt-1 truncate text-lg font-bold tabular-nums text-[var(--ref-on-surface)] sm:text-2xl">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
           )}
 
           <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             {[
               { label: 'Next 30 days', value: formatAmount(next30), detail: `${upcoming.length} payment${upcoming.length === 1 ? '' : 's'}` },
               { label: `Paid in ${monthName}`, value: formatAmount(paidThisMonth), detail: 'From your ledger' },
-              { label: 'Per day', value: formatAmount(Math.round((monthlyTotal * 12) / 365)), detail: 'Spread evenly' },
+              ...(biggest ? [{ label: 'Biggest', value: biggest.name, detail: `${biggestShare}% of the total, ${formatAmount(biggest.monthlyEquivalent)}/mo` }] : []),
             ].map((item) => (
               // Phones: one row per figure, label left and value right; wider: three tiles.
               <div key={item.label} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 rounded-2xl bg-[var(--ref-surface-container-lowest)]/70 px-4 py-2.5 sm:block sm:py-3">

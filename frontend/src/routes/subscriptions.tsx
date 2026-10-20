@@ -12,7 +12,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast } from '../components/ui/useToast';
 import { cn, formatDate, formatDayMonth } from '../lib/utils';
 import { useResolveOccurrencesMutation, useSubscriptionsQuery, type RenewalOccurrence, type Subscription } from '../features/subscriptions/queries';
-import { cycleLabel, cycleSuffix, DAY_MS, daysFromToday, displayStatus, formatForeign, relativeDue, renews, startOfDay, upcomingRenewals, type DisplayStatus } from '../features/subscriptions/schedule';
+import { cycleLabel, cycleSuffix, DAY_MS, displayStatus, formatForeign, relativeDue, renews, startOfDay, upcomingRenewals, type DisplayStatus } from '../features/subscriptions/schedule';
 import { SubscriptionEditor } from '../features/subscriptions/SubscriptionEditor';
 import { PaymentDialog } from '../features/subscriptions/PaymentDialog';
 import { StatusBadge, SubscriptionDetail } from '../features/subscriptions/SubscriptionDetail';
@@ -79,7 +79,6 @@ function SubscriptionsPage() {
   const upcoming = useMemo(() => renewing
     .flatMap((subscription) => (overdueIds.has(subscription.id) ? [] : upcomingRenewals(subscription, startOfDay(now), upcomingUntil)).map((dueAt) => ({ subscription, dueAt })))
     .sort((a, b) => a.dueAt - b.dueAt), [renewing, overdueIds, now, upcomingUntil]);
-  const upcomingTotal = upcoming.reduce((sum, item) => sum + item.subscription.amount, 0);
   const overdueTotal = occurrences.reduce((sum, occurrence) => sum + occurrence.amount, 0);
 
   // Accounts that won't cover what's due from them in the window, overdue renewals included.
@@ -177,7 +176,6 @@ function SubscriptionsPage() {
         )}
 
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <Section
             title="Your subscriptions"
             aside={
@@ -198,6 +196,16 @@ function SubscriptionsPage() {
                   <input type="search" aria-label="Search subscriptions" className="brutalist-input !pl-9" placeholder="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
                 </div>
                 <MenuSelect ariaLabel="Sort by" variant="field" className="w-40 shrink-0" value={sort} options={SORTS} onChange={setSort} />
+              </div>
+            )}
+            {shortfalls.length > 0 && (
+              <div className="space-y-1 border-b border-[var(--color-border)] bg-[var(--color-danger)]/5 px-4 py-2.5 sm:px-5">
+                {shortfalls.map(({ account, due }) => (
+                  <p key={account.id} className="flex gap-2 text-xs text-[var(--color-danger)]">
+                    <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span><strong className="font-semibold">{account.name}</strong> holds {formatAmount(account.balance)}, but {formatAmount(due)} of subscriptions is due from it in the next {UPCOMING_DAYS} days.</span>
+                  </p>
+                ))}
               </div>
             )}
             {loading ? <ListSkeleton /> : subscriptions.length === 0 ? (
@@ -221,23 +229,39 @@ function SubscriptionsPage() {
                     : status === 'ended' ? (subscription.endsAt ? `Ended ${formatDate(subscription.endsAt)}` : 'Ended')
                     : status === 'trial' && subscription.trialEndsAt ? `Trial ends ${formatDayMonth(subscription.trialEndsAt)}`
                     : `${formatDayMonth(subscription.nextRenewalAt)} · ${relativeDue(subscription.nextRenewalAt)}`;
+                  const whenText = status === 'overdue' ? 'Renewal to review' : when;
+                  const whenTone = status === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface-variant)]';
+                  const price = subscription.currency && subscription.foreignAmount != null ? formatForeign(subscription.foreignAmount, subscription.currency) : formatAmount(subscription.amount);
                   return (
                     <li key={subscription.id}>
-                      <button type="button" onClick={() => setDetailId(subscription.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-5">
-                        <SubscriptionIcon iconKey={subscription.iconKey} />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{subscription.name}</span>
-                            {(status === 'trial' || status === 'ending') && <StatusBadge status={status} />}
+                      {/* Phones: name and price. From md: last paid and next payment get their own columns. */}
+                      <button type="button" onClick={() => setDetailId(subscription.id)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-3 text-left transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-5 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_8.5rem]">
+                        <span className="flex min-w-0 items-center gap-3">
+                          <SubscriptionIcon iconKey={subscription.iconKey} />
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{subscription.name}</span>
+                              {(status === 'trial' || status === 'ending') && <StatusBadge status={status} />}
+                            </span>
+                            <span className="block truncate text-xs text-[var(--ref-on-surface-variant)]">{meta}</span>
                           </span>
-                          <span className="block truncate text-xs text-[var(--ref-on-surface-variant)]">{meta}</span>
+                        </span>
+                        <span className="hidden min-w-0 md:block">
+                          <span className="block text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Last paid</span>
+                          <span className="block truncate text-xs text-[var(--ref-on-surface)]">{subscription.lastPayment ? `${formatDayMonth(subscription.lastPayment.date)} · ${formatAmount(subscription.lastPayment.amount)}` : 'Not yet'}</span>
+                        </span>
+                        <span className="hidden min-w-0 md:block">
+                          <span className="block text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Next</span>
+                          <span className={cn('block truncate text-xs', status === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface)]')}>{whenText}</span>
                         </span>
                         <span className="shrink-0 text-right">
                           <span className="block text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">
-                            {subscription.currency && subscription.foreignAmount != null ? formatForeign(subscription.foreignAmount, subscription.currency) : formatAmount(subscription.amount)}
-                            <span className="text-xs font-normal text-[var(--ref-on-surface-variant)]">{cycleSuffix(subscription)}</span>
+                            {price}<span className="text-xs font-normal text-[var(--ref-on-surface-variant)]">{cycleSuffix(subscription)}</span>
                           </span>
-                          <span className={cn('block text-xs', status === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface-variant)]')}>{status === 'overdue' ? 'Renewal to review' : when}</span>
+                          <span className={cn('block text-xs md:hidden', whenTone)}>{whenText}</span>
+                          {subscription.billingCycle !== 'monthly' || subscription.intervalCount !== 1 || subscription.currency ? (
+                            <span className="hidden text-xs text-[var(--ref-on-surface-variant)] md:block">{formatAmount(subscription.monthlyEquivalent)}/mo</span>
+                          ) : null}
                         </span>
                       </button>
                     </li>
@@ -246,49 +270,6 @@ function SubscriptionsPage() {
               </ul>
             )}
           </Section>
-
-          <Section className="self-start" title={`Next ${UPCOMING_DAYS} days`} aside={upcoming.length > 0 ? <span className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatAmount(upcomingTotal)}</span> : undefined}>
-              {shortfalls.length > 0 && (
-                <div className="space-y-1 border-b border-[var(--color-border)] px-4 py-3 sm:px-5">
-                  {shortfalls.map(({ account, due }) => (
-                    <p key={account.id} className="flex gap-2 text-xs text-[var(--color-danger)]">
-                      <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-                      <span><strong className="font-semibold">{account.name}</strong> holds {formatAmount(account.balance)} but {formatAmount(due)} is due from it.</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-              {loading ? <ListSkeleton rows={3} /> : upcoming.length === 0 ? (
-                <p className="px-4 py-6 text-center text-sm text-[var(--ref-on-surface-variant)] sm:px-5">Nothing renews in the next {UPCOMING_DAYS} days.</p>
-              ) : (
-                <ul className="divide-y divide-[var(--color-border)]">
-                  {upcoming.map(({ subscription, dueAt }) => {
-                    // Only the next renewal can be paid ahead of its date.
-                    const payable = dueAt === subscription.nextRenewalAt;
-                    const days = daysFromToday(dueAt);
-                    return (
-                      <li key={`${subscription.id}-${dueAt}`} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
-                        <span className={cn('w-11 shrink-0 text-center leading-tight', days <= 3 ? 'text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface-variant)]')}>
-                          <span className="block text-base font-bold tabular-nums">{new Date(dueAt).getDate()}</span>
-                          <span className="block text-[10px] font-semibold uppercase tracking-wide">{new Date(dueAt).toLocaleDateString('en-US', { month: 'short' })}</span>
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm text-[var(--ref-on-surface)]">{subscription.name}</span>
-                          <span className="block truncate text-xs text-[var(--ref-on-surface-variant)]">{relativeDue(dueAt)} · {accountNames.get(subscription.linkedAccountId) ?? subscription.linkedAccountName}</span>
-                        </span>
-                        {payable && (subscription.paymentMode === 'manual' || days <= 0) && (
-                          <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={() => setPaying({ subscriptionId: subscription.id, dueAt })}>
-                            {days <= 0 ? 'Record' : 'Pay'}
-                          </Button>
-                        )}
-                        <span className="min-w-[4.5rem] shrink-0 text-right sm:w-24 text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(subscription.amount)}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-          </Section>
-        </div>
 
         {/* Analysis sits last: the lists above are what needs doing. */}
         <Section title="Payments by month" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Paid so far, and the next 6 months</span>}>
