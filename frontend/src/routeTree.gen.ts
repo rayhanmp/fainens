@@ -34,6 +34,8 @@ import { Route as AnomaliesRouteImport } from './routes/anomalies'
 import { Route as AgentRouteImport } from './routes/agent'
 import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HelpIndexRouteImport } from './routes/help.index'
+import { Route as HelpSlugRouteImport } from './routes/help.$slug'
 
 const WishlistRoute = WishlistRouteImport.update({
   id: '/wishlist',
@@ -160,6 +162,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HelpIndexRoute = HelpIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => HelpRoute,
+} as any)
+const HelpSlugRoute = HelpSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => HelpRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -171,7 +183,7 @@ export interface FileRoutesByFullPath {
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
-  '/help': typeof HelpRoute
+  '/help': typeof HelpRouteWithChildren
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
@@ -187,6 +199,8 @@ export interface FileRoutesByFullPath {
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
+  '/help/$slug': typeof HelpSlugRoute
+  '/help/': typeof HelpIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -198,7 +212,6 @@ export interface FileRoutesByTo {
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
-  '/help': typeof HelpRoute
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
@@ -214,6 +227,8 @@ export interface FileRoutesByTo {
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
+  '/help/$slug': typeof HelpSlugRoute
+  '/help': typeof HelpIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -226,7 +241,7 @@ export interface FileRoutesById {
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
-  '/help': typeof HelpRoute
+  '/help': typeof HelpRouteWithChildren
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
@@ -242,6 +257,8 @@ export interface FileRoutesById {
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
+  '/help/$slug': typeof HelpSlugRoute
+  '/help/': typeof HelpIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -271,6 +288,8 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
+    | '/help/$slug'
+    | '/help/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -282,7 +301,6 @@ export interface FileRouteTypes {
     | '/budget'
     | '/categories'
     | '/gallery'
-    | '/help'
     | '/loans'
     | '/login'
     | '/onboarding'
@@ -298,6 +316,8 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
+    | '/help/$slug'
+    | '/help'
   id:
     | '__root__'
     | '/'
@@ -325,6 +345,8 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
+    | '/help/$slug'
+    | '/help/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -337,7 +359,7 @@ export interface RootRouteChildren {
   BudgetRoute: typeof BudgetRoute
   CategoriesRoute: typeof CategoriesRoute
   GalleryRoute: typeof GalleryRoute
-  HelpRoute: typeof HelpRoute
+  HelpRoute: typeof HelpRouteWithChildren
   LoansRoute: typeof LoansRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -532,8 +554,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/help/': {
+      id: '/help/'
+      path: '/'
+      fullPath: '/help/'
+      preLoaderRoute: typeof HelpIndexRouteImport
+      parentRoute: typeof HelpRoute
+    }
+    '/help/$slug': {
+      id: '/help/$slug'
+      path: '/$slug'
+      fullPath: '/help/$slug'
+      preLoaderRoute: typeof HelpSlugRouteImport
+      parentRoute: typeof HelpRoute
+    }
   }
 }
+
+interface HelpRouteChildren {
+  HelpSlugRoute: typeof HelpSlugRoute
+  HelpIndexRoute: typeof HelpIndexRoute
+}
+
+const HelpRouteChildren: HelpRouteChildren = {
+  HelpSlugRoute: HelpSlugRoute,
+  HelpIndexRoute: HelpIndexRoute,
+}
+
+const HelpRouteWithChildren = HelpRoute._addFileChildren(HelpRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -545,7 +593,7 @@ const rootRouteChildren: RootRouteChildren = {
   BudgetRoute: BudgetRoute,
   CategoriesRoute: CategoriesRoute,
   GalleryRoute: GalleryRoute,
-  HelpRoute: HelpRoute,
+  HelpRoute: HelpRouteWithChildren,
   LoansRoute: LoansRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
