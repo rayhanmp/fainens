@@ -26,20 +26,27 @@
 @keyframes recap-card-deal { from { opacity: 0; translate: 0 30cqw; rotate: -10deg; scale: .7; } }
 @keyframes recap-tcard-back-out { to { scale: 0 1; } }
 @keyframes recap-tcard-face-in { from { scale: 0 1; } }
-.recap-tcard-face { display: grid; grid-template-rows: auto 1fr auto auto auto auto; gap: 1.6cqw; padding: 3.6cqw; border: 1.6cqw solid var(--recap-pop); background: var(--recap-paper); color: var(--recap-ink); box-shadow: 0 3cqw 8cqw #0004; }
-.recap-tcard-back { display: grid; place-items: center; background: repeating-conic-gradient(var(--recap-ink) 0 15deg, color-mix(in srgb, var(--recap-ink) 82%, var(--recap-paper)) 15deg 30deg); color: var(--recap-paper); font-size: 20cqw; transform: rotateY(180deg); border: 1.6cqw solid var(--recap-pop); }
-.recap-tcard-head { display: flex; justify-content: space-between; align-items: baseline; gap: 2cqw; margin: 0; }
+/* An ink frame with a fine inner rule, like a printed card. The frame stays ink: a pop frame this large fights
+   the paper (blue round tangerine), and the pop is kept for small accents. */
+.recap-tcard-face { display: grid; grid-template-rows: auto 1fr auto auto auto auto; gap: 1.6cqw; padding: 3.6cqw; border: 1.4cqw solid var(--recap-ink); background: color-mix(in srgb, var(--recap-ink) 4%, var(--recap-paper)); color: var(--recap-ink);
+  box-shadow: inset 0 0 0 .7cqw var(--recap-paper), inset 0 0 0 1cqw color-mix(in srgb, var(--recap-ink) 40%, transparent), 0 3cqw 8cqw #0004; }
+.recap-tcard-back { display: grid; place-items: center; background: repeating-conic-gradient(var(--recap-ink) 0 15deg, color-mix(in srgb, var(--recap-ink) 82%, var(--recap-paper)) 15deg 30deg); color: var(--recap-paper); font-size: 20cqw; transform: rotateY(180deg); border: 1.4cqw solid var(--recap-ink); }
+.recap-tcard-head { display: flex; justify-content: space-between; align-items: center; gap: 2cqw; margin: 0; }
 .recap-tcard-head b { display: -webkit-box; overflow: hidden; font-size: 4.4cqw; line-height: 1.1; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.recap-tcard-head span { flex: none; font-size: 3.4cqw; font-weight: 900; }
-.recap-tcard-art { position: relative; display: grid; place-items: center; overflow: hidden; border: .6cqw solid var(--recap-ink); border-radius: 1.4cqw; background: linear-gradient(135deg, var(--recap-accent), var(--recap-ink)); color: var(--recap-paper); }
-.recap-tcard-art svg { width: 22cqw; height: 22cqw; animation: recap-pulse 2s ease-in-out infinite; }
-.recap-tcard-foil { position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 40%, #ffffff66 48%, #b8f0ff55 52%, transparent 60%); animation: recap-foil 2.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 1.5s); }
-.recap-tcard-type { margin: 0; font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.recap-tcard-head span { display: flex; flex: none; align-items: baseline; gap: .8cqw; padding: .6cqw 2cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: 3.6cqw; font-weight: 900; }
+.recap-tcard-head small { font-size: max(2.2cqw, 10.5px); letter-spacing: .08em; }
+/* The art window: a sunburst in tints of the ink, the persona's own icon in a halo at its centre. */
+.recap-tcard-art { position: relative; display: grid; place-items: center; overflow: hidden; border: .6cqw solid var(--recap-ink); border-radius: 1.4cqw; color: var(--recap-ink);
+  background: repeating-conic-gradient(from 0deg at 50% 50%, color-mix(in srgb, var(--recap-ink) 16%, var(--recap-paper)) 0 9deg, color-mix(in srgb, var(--recap-ink) 6%, var(--recap-paper)) 9deg 18deg); }
+.recap-tcard-halo { display: grid; place-items: center; width: 30cqw; height: 30cqw; border-radius: 50%; border: .6cqw solid var(--recap-ink); background: var(--recap-paper); box-shadow: 0 0 0 1.6cqw color-mix(in srgb, var(--recap-paper) 70%, transparent); }
+.recap-tcard-art svg { width: 17cqw; height: 17cqw; stroke-width: 1.8; animation: recap-pulse 2s ease-in-out infinite; }
+.recap-tcard-foil { position: absolute; inset: -50%; background: linear-gradient(115deg, transparent 42%, color-mix(in srgb, #fff 35%, transparent) 49%, transparent 56%); mix-blend-mode: soft-light; animation: recap-foil 2.6s ease-in-out infinite; animation-delay: calc(var(--enter) + 1.5s); }
+.recap-tcard-type { margin: 0; padding: .7cqw 2cqw; overflow: hidden; border-radius: .8cqw; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .06em; text-align: center; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .recap-tcard-moves { display: grid; gap: 1cqw; margin: 0; padding: 0; list-style: none; font-size: 3cqw; font-weight: 700; }
 .recap-tcard-moves li { display: flex; gap: 1.6cqw; padding-bottom: 1cqw; border-bottom: 1px solid var(--recap-line); animation: recap-rise .5s both; animation-delay: calc(var(--enter) + 1400ms + var(--i) * 150ms); }
 .recap-tcard-flavour { margin: 0; font-family: Georgia, serif; font-size: 2.8cqw; font-style: italic; opacity: .8; }
 .recap-tcard-foot { display: flex; justify-content: space-between; margin: 0; font-size: max(2.6cqw, 10.5px); font-weight: 800; }
-.recap-tcard-foot span:first-child { color: var(--recap-accent); letter-spacing: .1em; }
+.recap-tcard-foot span:first-child { letter-spacing: .1em; }
 @keyframes recap-card-flip { from { transform: rotateY(180deg) scale(.6); opacity: 0; } 40% { opacity: 1; } to { transform: rotateY(0deg) scale(1); } }
 @keyframes recap-foil { from { translate: -40% 0; } to { translate: 40% 0; } }
 

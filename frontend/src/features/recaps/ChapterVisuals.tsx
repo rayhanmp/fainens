@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Coffee, Compass, Crown, Download, Gem, Leaf, PartyPopper, Plane, Repeat2, Shapes, type LucideIcon } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Download, Plane, Repeat2, type LucideIcon } from 'lucide-react';
 import { Fragment, memo, type CSSProperties, type ReactNode } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { ScratchCover } from './Interactive';
@@ -11,14 +11,12 @@ import { Burst } from './Burst';
 import { BonusVisual } from './BonusVisuals';
 import { useLoadedPart } from './parts';
 import { seeded, type SectionVariants } from './motion';
-import { formatRecapDay, recapWeekday, WEEKDAYS, type PersonaKey, type RecapDayCell, type RecapStory } from './stories';
+import { formatRecapDay, recapWeekday, WEEKDAYS, type RecapDayCell, type RecapStory } from './stories';
+import { personaIcons } from './personaIcons';
 
 type Of<Id extends RecapStory['id']> = Extract<RecapStory, { id: Id }>;
 type Shared = { variants: SectionVariants; run: number };
 export type QuizScore = { correct: number; total: number };
-const personaIcons: Record<PersonaKey, LucideIcon> = {
-  weekend: PartyPopper, bigTicket: Gem, steady: Coffee, monk: Leaf, loyal: Repeat2, devotee: Crown, explorer: Compass, allRounder: Shapes,
-};
 const seq = (n: number) => ({ '--seq': n }) as CSSProperties;
 /** A glass's figure: ink over the empty glass, and a paper copy clipped to wherever the liquid has reached. */
 const glassValue = (value: ReactNode) => <>

@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react';
-import { Heart, MessageCircle, Repeat2, Sparkles } from 'lucide-react';
+import { Heart, MessageCircle, Repeat2 } from 'lucide-react';
 import { AnimatedValue } from '../AnimatedValue';
 import type { RecapStory } from '../stories';
+import { personaIcons } from '../personaIcons';
 import './finales.css';
 
 type Closing = Extract<RecapStory, { id: 'closing' }>;
@@ -29,11 +30,12 @@ export function ExtraFinale({ story, form, games, run }: { story: Closing; form:
     </div>;
   }
   if (form === 'trading') {
+    const Icon = personaIcons[persona.key];
     return <div className="recap-tcard-stage">
       <div className="recap-tcard">
         <div className="recap-tcard-face">
-          <p className="recap-tcard-head"><b>{persona.name}</b><span>HP {finale.purchaseCount}</span></p>
-          <div className="recap-tcard-art" aria-hidden="true"><Sparkles /><i className="recap-tcard-foil" /></div>
+          <p className="recap-tcard-head"><b>{persona.name}</b><span><small>HP</small>{finale.purchaseCount}</span></p>
+          <div className="recap-tcard-art" aria-hidden="true"><span className="recap-tcard-halo"><Icon /></span><i className="recap-tcard-foil" /></div>
           <p className="recap-tcard-type">Persona card · {finale.period}</p>
           <ul className="recap-tcard-moves">{persona.evidence.slice(0, 2).map((move, i) => <li key={move} style={vars({ '--i': i })}><b>{['✦', '✧'][i]}</b>{move}</li>)}</ul>
           <p className="recap-tcard-flavour">{persona.tagline}</p>

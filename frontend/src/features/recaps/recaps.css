@@ -12,6 +12,8 @@
  * Banned everywhere, because they fall under 3:1 in most themes: accent or pop on an ink fill, ink on an
  * accent fill, anything but on-pop on a pop fill, and pop beside accent as the only difference.
  * On an ink fill, draw in paper. colour-rules.test.mjs enforces all of this.
+ * The pop is for small accents (a pin, a heart, a badge, a sticker). Large frames and panels stay ink or
+ * tints: a big field of a complementary pop (blue round tangerine, green round rose) fights the paper.
  */
 .recap-theme-lime { --recap-paper: #d5f478; --recap-ink: #183529; --recap-accent: #2f6a3f; --recap-pop: #e11d48; --recap-on-pop: #fff; }
 .recap-theme-ink { --recap-paper: #1f3a31; --recap-ink: #e2f5bd; --recap-accent: #b9e86b; --recap-pop: #ffcc33; --recap-on-pop: #1d1600; }
