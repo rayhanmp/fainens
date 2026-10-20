@@ -14,7 +14,7 @@ export type HelpPersonal = {
   payLaterAccounts: string[];
   accountCount: number;
   salaryDay: number;
-  currentPeriod: { name: string; startDate: number; endDate: number } | null;
+  currentPeriod: { id: number; name: string; startDate: number; endDate: number } | null;
   periodCount: number;
   memoryCount: number;
 };

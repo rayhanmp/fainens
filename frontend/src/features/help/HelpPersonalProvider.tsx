@@ -40,7 +40,7 @@ export function HelpPersonalProvider({ children }: { children: ReactNode }) {
       payLaterAccounts,
       accountCount: accounts.length,
       salaryDay: current ? new Date(current.startDate).getDate() : storedSalaryDay(),
-      currentPeriod: current ? { name: current.name, startDate: current.startDate, endDate: current.endDate } : null,
+      currentPeriod: current ? { id: current.id, name: current.name, startDate: current.startDate, endDate: current.endDate } : null,
       periodCount: periods.length,
       memoryCount: memoriesQuery.data?.memories.length ?? 0,
     };

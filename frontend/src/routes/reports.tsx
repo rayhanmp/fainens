@@ -393,7 +393,7 @@ function SummaryCard({
   );
 }
 
-function TabButton({
+export function TabButton({
   active,
   onClick,
   icon,
@@ -422,7 +422,7 @@ function TabButton({
 }
 
 // Income Statement Report
-function IncomeStatementReport({
+export function IncomeStatementReport({
   periodId,
   onExport,
   onExportPDF,
@@ -562,7 +562,7 @@ function IncomeStatementReport({
 }
 
 // Balance Sheet Report
-function BalanceSheetReport({ 
+export function BalanceSheetReport({
   periodEndDate,
   onExport 
 }: { 
@@ -674,7 +674,7 @@ function BalanceSheetReport({
 }
 
 // Cash Flow Report
-function CashFlowReport({
+export function CashFlowReport({
   periodId,
   onExport,
 }: {
@@ -832,7 +832,7 @@ function CashFlowReport({
 }
 
 // Spending Report
-function SpendingReport({ periodId }: { periodId?: number }) {
+export function SpendingReport({ periodId }: { periodId?: number }) {
   const { formatAmount } = useBalanceVisibility();
   const query = useSpendingQuery(periodId);
   const data = query.data?.report ?? null;
@@ -962,7 +962,7 @@ function SpendingReport({ periodId }: { periodId?: number }) {
 }
 
 // Trends Report
-function TrendsReport() {
+export function TrendsReport() {
   const { formatAmount, maskAmounts } = useBalanceVisibility();
   const query = useTrendsQuery(6);
   const data = query.data ?? null;

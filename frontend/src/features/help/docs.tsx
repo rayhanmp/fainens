@@ -18,7 +18,8 @@ import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisu
 import { ComposerDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
 import { SalaryAndRenewalDemo } from './SalaryVisuals';
-import { RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { RecapStoryDemo } from './InsightVisuals';
+import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
 import { BudgetForecastDemo, BudgetRowsDemo, ClosedBudgetDemo } from './BudgetVisuals';
@@ -363,7 +364,7 @@ export const DOCS: DocPage[] = [
     summary: 'Income statement, balance sheet, cash flow, spending and trends',
     lead: 'Reports turns your ledger into proper financial statements for a period, or for everything you’ve recorded.',
     blocks: [
-      { type: 'visual', node: <ReportsDemo />, wide: true },
+      { type: 'visual', node: <LiveReports />, wide: true },
       { type: 'table', head: ['Tab', 'What it shows'], rows: [
         ['Income statement', 'Revenue, expenses and net income, with each category'],
         ['Balance sheet', 'What you own, what you owe, and your net worth at the period’s end'],
