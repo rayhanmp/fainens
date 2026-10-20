@@ -4,7 +4,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip,
 import { Card } from '../../components/ui/Card';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
-import { CAN_I, CHANGELOG, GLOSSARY, SHORTCUTS } from './content';
+import { CAN_I, CHANGELOG, GLOSSARY } from './content';
 import { shown, useAutoplay, useSequence } from './motion';
 import { VisualFrame } from './visuals';
 
@@ -235,24 +235,28 @@ export function CanISummaryDemo() {
   );
 }
 
-/** A keyboard strip: each shortcut lights up in turn with what it does. */
+/** The Dashboard’s own shortcuts card (press ? there), with each row lighting up in turn. */
 export function ShortcutsDemo() {
-  const featured = SHORTCUTS.filter((shortcut) => ['New transaction', 'Hide or show balances', 'Previous or next period', 'Close the top menu or dialog', 'All dashboard shortcuts', 'Jump to the page’s search'].includes(shortcut.action));
-  const { ref, index, setIndex, setPaused } = useAutoplay(featured.length, 1800);
-  const active = featured[index]!;
+  const rows = [
+    { keys: ['←'], label: 'Previous period' },
+    { keys: ['→'], label: 'Next period' },
+    { keys: ['N'], label: 'New transaction' },
+    { keys: ['H'], label: 'Hide or show balances' },
+    { keys: ['?'], label: 'Show this list' },
+  ];
+  const { ref, index, setIndex, setPaused } = useAutoplay(rows.length, 1600);
   return (
-    <VisualFrame frameRef={ref} caption="Tap or point at a key to see what it does.">
-      <div className="mx-auto max-w-xl" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-        <div className="flex flex-wrap justify-center gap-2">
-          {featured.map((shortcut, position) => (
-            <button key={shortcut.action} type="button" onMouseEnter={() => setIndex(position)} onFocus={() => setIndex(position)} className="flex gap-1">
-              {shortcut.keys.map((key) => (
-                <kbd key={key} className={cn('inline-flex h-11 min-w-11 items-center justify-center rounded-lg border border-b-4 px-2.5 font-sans text-sm font-semibold transition-all duration-200', position === index ? 'translate-y-0.5 border-[var(--color-accent)] border-b-2 bg-[var(--color-accent)] text-white' : 'border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--ref-on-surface)]')}>{key}</kbd>
-              ))}
-            </button>
+    <VisualFrame frameRef={ref} caption="The list the Dashboard shows when you press ?. The rest of the shortcuts are in the table below.">
+      <div className="mx-auto w-full max-w-xs rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-5 shadow-2xl" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+        <h2 className="font-headline text-base font-extrabold text-[var(--ref-on-surface)]">Keyboard shortcuts</h2>
+        <dl className="mt-4 space-y-2.5 text-sm">
+          {rows.map((row, position) => (
+            <div key={row.label} onMouseEnter={() => setIndex(position)} className={cn('-mx-2 flex items-center justify-between gap-4 rounded-lg px-2 py-0.5 transition-colors', position === index && 'bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)]')}>
+              <dt className={position === index ? 'font-semibold text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]'}>{row.label}</dt>
+              <dd className="flex gap-1">{row.keys.map((key) => <kbd key={key} className={cn('grid min-w-7 place-items-center rounded-md border px-1.5 py-0.5 font-mono text-xs font-semibold transition-colors', position === index ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface)]')}>{key}</kbd>)}</dd>
+            </div>
           ))}
-        </div>
-        <p key={active.action} className="mt-4 animate-[finance-page-header-in_250ms_ease-out] text-center text-sm text-[var(--ref-on-surface)]"><strong>{active.action}</strong> <span className="text-[var(--ref-on-surface-variant)]">· {active.where}</span></p>
+        </dl>
       </div>
     </VisualFrame>
   );
