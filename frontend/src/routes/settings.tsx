@@ -16,7 +16,7 @@ import { useAgentMemoriesQuery } from '../features/agent/queries';
 import { agentCommands } from '../features/agent/commands';
 import { queryKeys } from '../features/core/query-keys';
 import { useUiStore } from '../stores/ui-store';
-import { cn, formatDate, formatDateTime, SETTINGS_CHANGED_EVENT, type TextSizePreference, type TimeFormatPreference, type WeekStartPreference } from '../lib/utils';
+import { ACCENT_COLORS, cn, formatDate, formatDateTime, SETTINGS_CHANGED_EVENT, type AccentColorPreference, type TextSizePreference, type TimeFormatPreference, type WeekStartPreference } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type PdfPasswordFormat } from '../lib/reportSecurity';
 import { useConfirm } from '../components/ui/ConfirmDialog';
@@ -71,6 +71,7 @@ interface AppSettings {
   weekStart: WeekStartPreference;
   textSize: TextSizePreference;
   reduceMotion: boolean;
+  accentColor: AccentColorPreference;
 }
 
 interface ExportOptions {
@@ -464,6 +465,52 @@ const THEMES: Array<{ value: ThemeChoice; label: string; icon: React.ElementType
   { value: 'dark', label: 'Dark', icon: Moon },
 ];
 
+/** Swatch colours for the accent picker: the light-theme accent of each palette in index.css. */
+const ACCENT_SWATCHES: Record<AccentColorPreference, { label: string; color: string }> = {
+  blue: { label: 'Blue', color: '#0056d2' },
+  violet: { label: 'Violet', color: '#6d28d9' },
+  teal: { label: 'Teal', color: '#0f766e' },
+  rose: { label: 'Rose', color: '#be123c' },
+  orange: { label: 'Orange', color: '#c2410c' },
+  graphite: { label: 'Graphite', color: '#334155' },
+};
+
+/** A row of round swatches, one per accent palette, as tall as the fields beside it. */
+function AccentPicker({ value, onChange }: { value: AccentColorPreference; onChange: (next: AccentColorPreference) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Accent colour" className="flex h-[34px] items-center justify-between gap-1.5 sm:justify-end">
+      {ACCENT_COLORS.map((option, index) => {
+        const { label, color } = ACCENT_SWATCHES[option];
+        const selected = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            aria-label={label}
+            title={label}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChange(option)}
+            onKeyDown={(event) => {
+              const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+              if (!step) return;
+              event.preventDefault();
+              const next = (index + step + ACCENT_COLORS.length) % ACCENT_COLORS.length;
+              onChange(ACCENT_COLORS[next]!);
+              (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+            }}
+            className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-full ring-offset-2 ring-offset-[var(--color-surface)] transition-shadow', selected ? 'ring-2' : 'hover:ring-2 hover:ring-[var(--color-border-strong)]')}
+            style={{ backgroundColor: color, ...(selected ? { '--tw-ring-color': color } as React.CSSProperties : {}) }}
+          >
+            {selected && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} aria-hidden />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** System / Light / Dark as the app's sliding segmented control, as tall as the fields beside it. */
 function ThemeSwitch({ value, onChange }: { value: ThemeChoice; onChange: (next: ThemeChoice) => void }) {
   return (
@@ -551,6 +598,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     weekStart: 1,
     textSize: 'default',
     reduceMotion: false,
+    accentColor: 'blue',
   });
   const [profile, setProfile] = useState<PersonalProfile>({
     email: user?.email ?? '',
@@ -812,7 +860,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     } finally { setDatabaseBackupBusy(false); }
   };
 
-  // Auto-save with 500ms debounce
+  // Auto-save with a short debounce
   useEffect(() => {
     if (isLoading) return;
     const serialized = JSON.stringify(settings);
@@ -835,7 +883,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         console.error('Failed to save settings:', err);
         setSaveStatus('idle');
       }
-    }, 500);
+    }, 150); // Short, so accent and text size feel instant; it is only a local write.
     
     return () => {
       if (saveTimeoutRef.current) {
@@ -865,6 +913,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         weekStart: parsed.weekStart === 0 ? 0 : 1,
         textSize: parsed.textSize === 'large' ? 'large' : 'default',
         reduceMotion: parsed.reduceMotion === true,
+        accentColor: ACCENT_COLORS.includes(parsed.accentColor) ? parsed.accentColor : 'blue',
       };
       savedSettingsRef.current = JSON.stringify(loaded);
       setSettings(loaded);
@@ -1147,6 +1196,11 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   description="Light, dark, or match your device."
                   wideControl
                   action={<ThemeSwitch value={theme} onChange={setTheme} />}
+                />
+                <SettingsRow
+                  label="Accent colour"
+                  description="Buttons, links, and highlights."
+                  action={<AccentPicker value={settings.accentColor} onChange={(accentColor) => setSettings({ ...settings, accentColor })} />}
                 />
                 <SettingsRow
                   label="Date format"

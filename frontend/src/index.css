@@ -114,6 +114,20 @@ html[data-reduce-motion] *::after {
   --shadow-editorial: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
+/* Settings → Accent colour. Blue is the default above; each palette swaps only the accent tokens.
+   Light shades are dark enough for white button text; dark-theme shades match the default blue's
+   brightness. `:not(.dark)` / `.dark` keep each pair from overriding the other theme. */
+html[data-accent="violet"]:not(.dark) { --color-accent: #6d28d9; --color-accent-hover: #5b21b6; --ref-primary: #5b21b6; --ref-primary-container: #6d28d9; --ref-on-primary-container: #ede9fe; }
+html.dark[data-accent="violet"] { --color-accent: #8b5cf6; --color-accent-hover: #a78bfa; --ref-primary: #a78bfa; --ref-primary-container: #8b5cf6; --ref-on-primary-container: #4c1d95; }
+html[data-accent="teal"]:not(.dark) { --color-accent: #0f766e; --color-accent-hover: #115e59; --ref-primary: #115e59; --ref-primary-container: #0f766e; --ref-on-primary-container: #ccfbf1; }
+html.dark[data-accent="teal"] { --color-accent: #0d9488; --color-accent-hover: #2dd4bf; --ref-primary: #2dd4bf; --ref-primary-container: #0d9488; --ref-on-primary-container: #134e4a; }
+html[data-accent="rose"]:not(.dark) { --color-accent: #be123c; --color-accent-hover: #9f1239; --ref-primary: #9f1239; --ref-primary-container: #be123c; --ref-on-primary-container: #ffe4e6; }
+html.dark[data-accent="rose"] { --color-accent: #e11d48; --color-accent-hover: #fb7185; --ref-primary: #fb7185; --ref-primary-container: #e11d48; --ref-on-primary-container: #881337; }
+html[data-accent="orange"]:not(.dark) { --color-accent: #c2410c; --color-accent-hover: #9a3412; --ref-primary: #9a3412; --ref-primary-container: #c2410c; --ref-on-primary-container: #ffedd5; }
+html.dark[data-accent="orange"] { --color-accent: #ea580c; --color-accent-hover: #fb923c; --ref-primary: #fb923c; --ref-primary-container: #ea580c; --ref-on-primary-container: #7c2d12; }
+html[data-accent="graphite"]:not(.dark) { --color-accent: #334155; --color-accent-hover: #1e293b; --ref-primary: #1e293b; --ref-primary-container: #334155; --ref-on-primary-container: #e2e8f0; }
+html.dark[data-accent="graphite"] { --color-accent: #64748b; --color-accent-hover: #94a3b8; --ref-primary: #cbd5e1; --ref-primary-container: #64748b; --ref-on-primary-container: #1e293b; }
+
 @theme {
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }

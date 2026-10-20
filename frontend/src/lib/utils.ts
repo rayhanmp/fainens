@@ -69,6 +69,9 @@ export type TimeFormatPreference = '24h' | '12h';
 /** 1 = weeks start on Monday, 0 = on Sunday (the same numbering as `Date#getDay`). */
 export type WeekStartPreference = 0 | 1;
 export type TextSizePreference = 'default' | 'large';
+/** Accent palettes defined in index.css; blue is the built-in default. */
+export const ACCENT_COLORS = ['blue', 'violet', 'teal', 'rose', 'orange', 'graphite'] as const;
+export type AccentColorPreference = typeof ACCENT_COLORS[number];
 
 /** Display preferences from Settings → General, read once and re-read when Settings saves. */
 export type DisplayPreferences = {
@@ -77,6 +80,7 @@ export type DisplayPreferences = {
   weekStart: WeekStartPreference;
   textSize: TextSizePreference;
   reduceMotion: boolean;
+  accentColor: AccentColorPreference;
 };
 
 let cachedPreferences: DisplayPreferences | null = null;
@@ -95,6 +99,7 @@ export function displayPreferences(): DisplayPreferences {
     weekStart: stored.weekStart === 0 ? 0 : 1,
     textSize: stored.textSize === 'large' ? 'large' : 'default',
     reduceMotion: stored.reduceMotion === true,
+    accentColor: ACCENT_COLORS.includes(stored.accentColor as AccentColorPreference) ? stored.accentColor as AccentColorPreference : 'blue',
   };
   return cachedPreferences;
 }
@@ -115,11 +120,13 @@ export function weekdayLabels(): string[] {
   return [...labels.slice(start), ...labels.slice(0, start)];
 }
 
-/** Text size and reduced motion are page-wide: they live as attributes on <html>, read by index.css. */
+/** Accent, text size and reduced motion are page-wide: they live as attributes on <html>, read by index.css. */
 export function applyDisplayPreferences(): void {
   if (typeof document === 'undefined') return;
-  const { textSize, reduceMotion } = displayPreferences();
+  const { textSize, reduceMotion, accentColor } = displayPreferences();
   const root = document.documentElement;
+  if (accentColor === 'blue') delete root.dataset.accent;
+  else root.dataset.accent = accentColor;
   if (textSize === 'large') root.dataset.textSize = 'large';
   else delete root.dataset.textSize;
   if (reduceMotion) root.dataset.reduceMotion = 'true';
