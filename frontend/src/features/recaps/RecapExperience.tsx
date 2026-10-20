@@ -8,7 +8,7 @@ import { buildStories, crawlText, periodDateRange, themeColors, type Achievement
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
-import { play, playTicks, setSoundMode, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
+import { play, playTicks, setSoundMode, silence, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
 import { chapterStyle, enterDelay, nextTransition, OVERLAY_TRANSITIONS, prefersReducedMotion, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
 
@@ -110,6 +110,8 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
     if (sound === 'music') startGroove(run);
     return () => stopGroove();
   }, [sound, run]);
+  // Closing the recap calls off any sounds still queued for its chapters.
+  useEffect(() => () => silence(), []);
   const [party, setParty] = useState(0);
   const index = Math.min(nav.index, stories.length - 1);
   const story = stories[index];
@@ -266,15 +268,13 @@ function RecapViewer({ edition, controls, yearMode = false }: { edition: SavedRe
       window.removeEventListener('devicemotion', onMotion);
     };
   }, [reducedMotion]);
-  // The cover's own sounds, once, when the recap first opens.
-  const greeted = useRef(false);
-  useEffect(() => {
-    if (greeted.current) return;
-    greeted.current = true;
-    if (opening) play('jingle', 150);
-    arrivalSounds(stories[0], openingEnter, variants);
-  });
+  // The cover's own sounds, once per mount, when the recap first opens. Closing the recap silences
+  // them, so a remount (React's strict mode does one) greets again.
+  const greet = useRef(() => {});
+  useEffect(() => { greet.current = () => { if (opening) play('jingle', 150); arrivalSounds(stories[0], openingEnter, variants); }; });
+  useEffect(() => { greet.current(); }, []);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(pressTimer.current), []);
 
   useEffect(() => {
     const visitId = nav.visit;
@@ -469,10 +469,11 @@ function useFitContent(ref: RefObject<HTMLDivElement | null>, enabled: boolean) 
       }
     };
     fit();
-    void document.fonts?.ready.then(fit);
+    let alive = true;
+    void document.fonts?.ready.then(() => { if (alive) fit(); });
     const observer = new ResizeObserver(fit);
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => { alive = false; observer.disconnect(); };
   }, [ref, enabled]);
 }
 

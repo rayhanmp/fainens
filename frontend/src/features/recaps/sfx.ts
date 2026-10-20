@@ -124,6 +124,9 @@ const buzzPatterns: Partial<Record<Sound, number | number[]>> = {
   thunk: 28, thud: 40, chime: [14, 40, 14], buzz: [40, 30, 40], pop: 10, fanfare: [20, 50, 20, 50, 60], coin: 12, oink: [15, 30, 15], cash: [20, 30, 40], cymbal: 50, horn: [30, 40, 30],
 };
 
+// Sounds queued for later, so closing the recap can call them off.
+const pending = new Set<number>();
+
 export function play(sound: Sound, delayMs = 0) {
   if (mode === 'off') return;
   const run = () => {
@@ -137,7 +140,18 @@ export function play(sound: Sound, delayMs = 0) {
     const tapped = typeof navigator === 'undefined' || !('userActivation' in navigator) || navigator.userActivation.hasBeenActive;
     if (pattern && tapped && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(pattern);
   };
-  if (delayMs > 0) window.setTimeout(run, delayMs); else run();
+  if (delayMs <= 0) { run(); return; }
+  const timer = window.setTimeout(() => { pending.delete(timer); run(); }, delayMs);
+  pending.add(timer);
+}
+
+/** Everything stops when the recap closes: queued sounds, the groove, and the audio thread itself.
+ * The context resumes on the next sound. */
+export function silence() {
+  pending.forEach(timer => window.clearTimeout(timer));
+  pending.clear();
+  stopGroove();
+  if (context?.state === 'running') void context.suspend().catch(() => undefined);
 }
 
 /** A run of ticks easing out, for slot-machine digits landing. */

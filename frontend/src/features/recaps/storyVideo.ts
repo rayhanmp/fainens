@@ -85,7 +85,7 @@ function scenes({ recap, themes, persona, showAmounts }: VideoInput): Scene[] {
 }
 
 /** Record the reel to a video file, frame by frame, in this browser. Nothing is uploaded. */
-export async function recordStoryVideo(input: VideoInput, onProgress: (share: number) => void): Promise<{ blob: Blob; extension: string }> {
+export async function recordStoryVideo(input: VideoInput, onProgress: (share: number) => void, signal?: AbortSignal): Promise<{ blob: Blob; extension: string }> {
   if (typeof MediaRecorder === 'undefined') throw new Error('This browser cannot record video.');
   const mimeType = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
   if (!mimeType) throw new Error('This browser cannot record video.');
@@ -96,14 +96,20 @@ export async function recordStoryVideo(input: VideoInput, onProgress: (share: nu
   if (!ctx) throw new Error('This browser cannot draw the video.');
   const list = scenes(input);
   const total = list.reduce((sum, scene) => sum + scene.length, 0);
-  const recorder = new MediaRecorder(canvas.captureStream(FPS), { mimeType, videoBitsPerSecond: 6_000_000 });
+  if (signal?.aborted) throw new DOMException('Recording cancelled.', 'AbortError');
+  const stream = canvas.captureStream(FPS);
+  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
   const chunks: Blob[] = [];
   recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
   const stopped = new Promise<void>(resolve => { recorder.onstop = () => resolve(); });
   recorder.start(250);
   const started = performance.now();
+  let timer = 0;
   await new Promise<void>(resolve => {
+    // Closing the dialog stops the reel where it is.
+    signal?.addEventListener('abort', () => { window.clearTimeout(timer); resolve(); }, { once: true });
     const frame = () => {
+      if (signal?.aborted) return;
       const elapsed = (performance.now() - started) / 1000;
       let at = elapsed; let index = 0;
       while (index < list.length - 1 && at >= list[index].length) { at -= list[index].length; index++; }
@@ -120,11 +126,15 @@ export async function recordStoryVideo(input: VideoInput, onProgress: (share: nu
       ctx.globalAlpha = .6; ctx.fillStyle = colors.ink; ctx.font = text(700, 28); ctx.textAlign = 'center'; ctx.fillText('fainens · your period, in review', W / 2, H - 90);
       onProgress(Math.min(1, elapsed / total));
       // A timer, not animation frames: frames pause in a background tab, timers only slow down.
-      if (elapsed < total) setTimeout(frame, 1000 / FPS); else resolve();
+      if (elapsed < total) timer = window.setTimeout(frame, 1000 / FPS); else resolve();
     };
     frame();
   });
   recorder.stop();
   await stopped;
+  // The canvas track stays live until it is stopped, holding the canvas and the encoder.
+  stream.getTracks().forEach(track => track.stop());
+  canvas.width = 0; canvas.height = 0;
+  if (signal?.aborted) throw new DOMException('Recording cancelled.', 'AbortError');
   return { blob: new Blob(chunks, { type: mimeType.split(';')[0] }), extension: mimeType.startsWith('video/mp4') ? 'mp4' : 'webm' };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Gift, PiggyBank } from 'lucide-react';
 import { CategoryIcon } from '../categories/CategoryIcon';
 import { Burst } from './Burst';
@@ -43,17 +43,25 @@ function QuizGame({ play, onDone }: { play: Extract<Play, { kind: 'quiz' }> } & 
   </div>;
 }
 
+/** A timeout that is called off if the game closes before it fires. */
+function useLater() {
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach(timer => window.clearTimeout(timer)), []);
+  return useCallback((run: () => void, ms: number) => { timers.current.push(window.setTimeout(run, ms)); }, []);
+}
+
 /** Drag to guess a share; locking in slides the real answer onto the track next to yours. */
 function SliderGame({ play, onDone }: { play: Extract<Play, { kind: 'slider' }> } & GateProps) {
   const [guess, setGuess] = useState(50);
   const [locked, setLocked] = useState(false);
+  const later = useLater();
   const lock = () => {
     if (locked) return;
     setLocked(true);
     const off = Math.abs(guess - play.answer);
     const verdict: Verdict = off <= 3 ? { text: `🎯 Bullseye! ${play.answer}%`, tone: 'good' } : off <= 10 ? { text: `So close! It was ${play.answer}%`, tone: 'good' } : { text: `Way off, it was ${play.answer}%`, tone: 'bad' };
     sfx(off <= 10 ? 'chime' : 'buzz', 700);
-    setTimeout(() => onDone({ choice: `${guess}%`, correct: off <= 10, scored: true, verdict }), 1500);
+    later(() => onDone({ choice: `${guess}%`, correct: off <= 10, scored: true, verdict }), 1500);
   };
   return <div className="recap-slider-game">
     <output className="recap-slider-value">{guess}<small>%</small></output>
@@ -101,6 +109,7 @@ function HoldGame({ prompt, onDone }: { prompt: string } & GateProps) {
   const [progress, setProgress] = useState(0);
   const holding = useRef(false);
   const done = useRef(false);
+  const later = useLater();
   useEffect(() => {
     let frame = 0; let last = performance.now(); let tick = 0;
     const step = (now: number) => {
@@ -111,7 +120,7 @@ function HoldGame({ prompt, onDone }: { prompt: string } & GateProps) {
         if (next >= 1 && !done.current) {
           done.current = true;
           sfx('thunk'); sfx('cymbal'); sfx('chime', 120);
-          setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🥁 Ta-da!', tone: 'party' } }), 650);
+          later(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🥁 Ta-da!', tone: 'party' } }), 650);
         }
         return next;
       });
@@ -120,7 +129,7 @@ function HoldGame({ prompt, onDone }: { prompt: string } & GateProps) {
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [onDone]);
+  }, [onDone, later]);
   const press = (down: boolean) => {
     if (down && !holding.current && !done.current) sfx('riser');
     holding.current = down && !done.current;
@@ -140,10 +149,11 @@ function HoldGame({ prompt, onDone }: { prompt: string } & GateProps) {
 /** A wobbling present; one tap blows the lid off. */
 function GiftGame({ prompt, seed, onDone }: { prompt: string; seed: number } & GateProps) {
   const [open, setOpen] = useState(false);
+  const later = useLater();
   const unwrap = () => {
     if (open) return;
     setOpen(true); sfx('pop'); sfx('horn', 120); sfx('fanfare', 300);
-    setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🎁 Ta-da!', tone: 'party' } }), 1100);
+    later(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🎁 Ta-da!', tone: 'party' } }), 1100);
   };
   return <div className={`recap-gift${open ? ' is-open' : ''}`}>
     <button type="button" className="recap-gift-box" onClick={unwrap} aria-label={prompt}>
@@ -158,13 +168,14 @@ function GiftGame({ prompt, seed, onDone }: { prompt: string; seed: number } & G
 function PiggyGame({ prompt, seed, onDone }: { prompt: string; seed: number } & GateProps) {
   const [taps, setTaps] = useState(0);
   const NEEDED = 5;
+  const later = useLater();
   const tap = () => {
     if (taps >= NEEDED) return;
     const next = taps + 1;
     setTaps(next);
     if (next < NEEDED) { sfx('oink'); sfx('thunk', 60); return; }
     sfx('thud'); sfx('cash', 150); sfx('coin', 400);
-    setTimeout(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🐷 Smashed it!', tone: 'party' } }), 1000);
+    later(() => onDone({ choice: null, correct: true, scored: false, verdict: { text: '🐷 Smashed it!', tone: 'party' } }), 1000);
   };
   const cracks: ReactNode[] = ['M48 18 L42 34 L50 42 L44 58', 'M62 30 L70 44 L64 52', 'M30 46 L40 52 L36 64', 'M56 60 L60 74 L52 82'].slice(0, Math.max(0, taps - 1)).map((d, i) => <path key={i} d={d} />);
   return <div className={`recap-piggy${taps >= NEEDED ? ' is-smashed' : ''}`}>

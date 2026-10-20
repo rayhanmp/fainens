@@ -84,12 +84,20 @@ export function ShareRecap({ recap, theme, themes, persona, onClose }: { recap: 
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState<number | null>(null);
   const [error, setError] = useState('');
+  // Closing the card mid-recording stops the reel instead of downloading it later.
+  const recordingAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => recordingAbort.current?.abort(), []);
   const saveVideo = async () => {
+    const controller = new AbortController();
+    recordingAbort.current = controller;
     setRecording(0); setError('');
     try {
-      const { blob, extension } = await recordStoryVideo({ recap, themes, persona, showAmounts: includeAmounts }, setRecording);
+      const { blob, extension } = await recordStoryVideo({ recap, themes, persona, showAmounts: includeAmounts }, setRecording, controller.signal);
       download(blob, `fainens-period-${recap.period.id}.${extension}`);
-    } catch (err) { setError(err instanceof Error ? err.message : 'The video could not be made. Please try again.'); } finally { setRecording(null); }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setError(err instanceof Error ? err.message : 'The video could not be made. Please try again.');
+    } finally { if (!controller.signal.aborted) setRecording(null); }
   };
   useEffect(() => {
     const element = dialog.current;
