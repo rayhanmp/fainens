@@ -1,821 +1,336 @@
-import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute } from '@tanstack/react-router';
-import {
-  Car,
-  Film,
-  Music,
-  Signal,
-  TrendingDown,
-  Sparkles,
-  Plus,
-  CalendarClock,
-  Pencil,
-  Trash2,
-  CreditCard,
-} from 'lucide-react';
+import { AlertCircle, CalendarClock, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { RequireAuth } from '../lib/auth';
-import { useCreateSubscriptionMutation, useDeleteSubscriptionMutation, useRunRenewalsMutation, useSubscriptionsQuery, useUpdateSubscriptionMutation } from '../features/subscriptions/queries';
+import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { Button } from '../components/ui/Button';
-import { Modal } from '../components/ui/Modal';
-import { CurrencyInput } from '../components/ui/CurrencyInput';
-import { useConfirm } from '../components/ui/ConfirmDialog';
 import { PageContainer } from '../components/ui/PageContainer';
-import { cn, formatDate, parseIdNominalToInt } from '../lib/utils';
+import { PageHeader } from '../components/ui/PageHeader';
+import { SubscriptionsHero } from '../features/subscriptions/SubscriptionsHero';
+import { MenuSelect } from '../components/ui/MenuSelect';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { toast } from '../components/ui/useToast';
+import { cn, formatDate, formatDayMonth } from '../lib/utils';
+import { useResolveOccurrencesMutation, useSubscriptionsQuery, type RenewalOccurrence, type Subscription } from '../features/subscriptions/queries';
+import { cycleLabel, cycleSuffix, DAY_MS, daysFromToday, displayStatus, formatForeign, relativeDue, renews, startOfDay, upcomingRenewals, type DisplayStatus } from '../features/subscriptions/schedule';
+import { SubscriptionEditor } from '../features/subscriptions/SubscriptionEditor';
+import { PaymentDialog } from '../features/subscriptions/PaymentDialog';
+import { StatusBadge, SubscriptionDetail } from '../features/subscriptions/SubscriptionDetail';
+import { ListSkeleton, Section, SubscriptionIcon } from '../features/subscriptions/PageParts';
+import type { PaymentAccount } from '../features/subscriptions/accounts';
+import { PaymentTimeline } from '../features/subscriptions/PaymentTimeline';
 
 export const Route = createFileRoute('/subscriptions')({
   component: SubscriptionsPage,
 });
 
-type SubStatus = 'active' | 'expiring' | 'paused';
+type Filter = 'active' | 'paused' | 'ended' | 'archived';
+type Sort = 'next' | 'cost' | 'name';
 
-type ApiSubscription = {
-  id: number;
-  name: string;
-  linkedAccountId: number;
-  linkedAccountName: string;
-  categoryId: number | null;
-  amount: number;
-  billingCycle: string;
-  nextRenewalAt: number;
-  status: string;
-  iconKey: string;
-  sortOrder: number;
-  createdAt: number;
-  updatedAt: number;
-};
+const FILTERS: Array<{ value: Filter; label: string; matches: (status: DisplayStatus) => boolean }> = [
+  { value: 'active', label: 'Active', matches: (status) => ['overdue', 'due-soon', 'trial', 'active', 'ending'].includes(status) },
+  { value: 'paused', label: 'Paused', matches: (status) => status === 'paused' },
+  { value: 'ended', label: 'Ended', matches: (status) => status === 'ended' },
+  { value: 'archived', label: 'Archived', matches: (status) => status === 'archived' },
+];
 
-const ICON_OPTIONS = [
-  { value: 'default', label: 'Default' },
-  { value: 'car', label: 'Transport' },
-  { value: 'film', label: 'Video' },
-  { value: 'music', label: 'Music' },
-  { value: 'signal', label: 'Mobile / data' },
-  { value: 'sparkles', label: 'Other' },
+const SORTS = [
+  { value: 'next', label: 'Next payment' },
+  { value: 'cost', label: 'Cost per month' },
+  { value: 'name', label: 'Name' },
 ] as const;
 
-const BILLING_CYCLE_OPTIONS = [
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'annual', label: 'Annual' },
-] as const;
+const UPCOMING_DAYS = 30;
 
-const ICON_MAP: Record<string, typeof Car> = {
-  car: Car,
-  film: Film,
-  music: Music,
-  signal: Signal,
-  sparkles: Sparkles,
-  default: CalendarClock,
-};
-
-function toDateInputValue(ms: number): string {
-  const d = new Date(ms);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function fromDateInputValue(s: string): number {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0, 0).getTime();
-}
-
-function deriveDisplayStatus(row: { status: string; nextRenewalAt: number }): SubStatus {
-  if (row.status === 'paused') return 'paused';
-  const now = Date.now();
-  const week = 7 * 24 * 60 * 60 * 1000;
-  if (row.status === 'active' && row.nextRenewalAt <= now + week) return 'expiring';
-  return 'active';
-}
-
-function statusBadge(status: SubStatus) {
-  switch (status) {
-    case 'active':
-      return (
-        <span className="rounded-full bg-[var(--ref-secondary-container)]/30 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--ref-secondary)]">
-          Active
-        </span>
-      );
-    case 'expiring':
-      return (
-        <span className="rounded-full bg-[var(--ref-error)]/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--ref-error)]">
-          Due soon
-        </span>
-      );
-    case 'paused':
-      return (
-        <span className="rounded-full bg-[var(--ref-surface-container)] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--ref-on-surface-variant)]">
-          Paused
-        </span>
-      );
-  }
-}
-
-function formatShortDate(ms: number) {
-  return formatDate(ms);
-}
-
-function formatBillingCycle(cycle: string) {
-  return cycle === 'annual' ? '/yr' : '/mo';
-}
+const EMPTY_ACCOUNTS: PaymentAccount[] = [];
+const EMPTY_CATEGORIES: Array<{ id: number; name: string }> = [];
+const EMPTY_NAMES = new Map<number, string>();
 
 function SubscriptionsPage() {
   const { formatAmount } = useBalanceVisibility();
-  const subscriptionsQuery = useSubscriptionsQuery();
-  const createSubscriptionMutation = useCreateSubscriptionMutation();
-  const updateSubscriptionMutation = useUpdateSubscriptionMutation();
-  const deleteSubscriptionMutation = useDeleteSubscriptionMutation();
-  const runRenewalsMutation = useRunRenewalsMutation();
-  const rows = (subscriptionsQuery.data?.subscriptions ?? []) as ApiSubscription[];
-  const accounts = subscriptionsQuery.data?.accounts ?? [];
-  const categories = subscriptionsQuery.data?.categories ?? [];
-  const renewalPreview = subscriptionsQuery.data?.renewalPreview ?? { occurrences: [], truncated: false };
-  const loading = subscriptionsQuery.isPending && !subscriptionsQuery.data;
-  const [banner, setBanner] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
-  const [processingRenewals, setProcessingRenewals] = useState(false);
   const { confirm } = useConfirm();
+  const query = useSubscriptionsQuery();
+  const resolve = useResolveOccurrencesMutation();
+  const [filter, setFilter] = useState<Filter>('active');
+  const [sort, setSort] = useState<Sort>('next');
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<Subscription | 'new' | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [paying, setPaying] = useState<{ subscriptionId: number; dueAt: number } | null>(null);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    linkedAccountId: '',
-    categoryId: '',
-    amountDisplay: '',
-    billingCycle: 'monthly',
-    nextRenewalDate: '',
-    status: 'active',
-    iconKey: 'default',
-  });
+  const data = query.data;
+  const subscriptions = useMemo(() => data?.subscriptions ?? [], [data]);
+  const accounts = data?.accounts ?? EMPTY_ACCOUNTS;
+  const categories = data?.categories ?? EMPTY_CATEGORIES;
+  const accountNames = data?.accountNames ?? EMPTY_NAMES;
+  // The day the page opened; windows and "in N days" labels count from it.
+  const [now] = useState(() => Date.now());
+  const occurrences = useMemo(() => data?.renewalPreview.occurrences ?? [], [data]);
+  const byId = useMemo(() => new Map(subscriptions.map((subscription) => [subscription.id, subscription])), [subscriptions]);
+  const overdueIds = useMemo(() => new Set(occurrences.map((occurrence) => occurrence.subscriptionId)), [occurrences]);
+  const statusOf = useMemo(() => new Map(subscriptions.map((subscription) => [subscription.id, displayStatus(subscription, overdueIds)])), [subscriptions, overdueIds]);
 
-  const openCreate = () => {
-    setEditingId(null);
-    setForm({
-      name: '',
-      linkedAccountId: accounts.length > 0 ? String(accounts[0].id) : '',
-      categoryId: '',
-      amountDisplay: '',
-      billingCycle: 'monthly',
-      nextRenewalDate: toDateInputValue(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      status: 'active',
-      iconKey: 'default',
+  const notify = (message: string, tone: 'success' | 'error' = 'success') => (tone === 'success' ? toast.success(message) : toast.error(message));
+
+  // Totals count what is still renewing: active, trials, and cancelled ones until their last day.
+  const renewing = useMemo(() => subscriptions.filter((subscription) => subscription.status !== 'archived' && renews(subscription)), [subscriptions]);
+  const monthlyTotal = renewing.reduce((sum, subscription) => sum + subscription.monthlyEquivalent, 0);
+  const upcomingUntil = startOfDay(now) + (UPCOMING_DAYS + 1) * DAY_MS - 1;
+  const upcoming = useMemo(() => renewing
+    .flatMap((subscription) => (overdueIds.has(subscription.id) ? [] : upcomingRenewals(subscription, startOfDay(now), upcomingUntil)).map((dueAt) => ({ subscription, dueAt })))
+    .sort((a, b) => a.dueAt - b.dueAt), [renewing, overdueIds, now, upcomingUntil]);
+  const upcomingTotal = upcoming.reduce((sum, item) => sum + item.subscription.amount, 0);
+  const overdueTotal = occurrences.reduce((sum, occurrence) => sum + occurrence.amount, 0);
+
+  // Accounts that won't cover what's due from them in the window, overdue renewals included.
+  const shortfalls = useMemo(() => {
+    const due = new Map<number, number>();
+    for (const item of upcoming) due.set(item.subscription.linkedAccountId, (due.get(item.subscription.linkedAccountId) ?? 0) + item.subscription.amount);
+    for (const occurrence of occurrences) due.set(occurrence.linkedAccountId, (due.get(occurrence.linkedAccountId) ?? 0) + occurrence.amount);
+    return accounts
+      .filter((account) => account.type === 'asset' && (due.get(account.id) ?? 0) > account.balance)
+      .map((account) => ({ account, due: due.get(account.id)! }));
+  }, [upcoming, occurrences, accounts]);
+
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((option) => [option.value, subscriptions.filter((subscription) => option.matches(statusOf.get(subscription.id)!)).length])) as Record<Filter, number>, [subscriptions, statusOf]);
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const matcher = FILTERS.find((option) => option.value === filter)!.matches;
+    return subscriptions
+      .filter((subscription) => matcher(statusOf.get(subscription.id)!))
+      .filter((subscription) => !needle || subscription.name.toLowerCase().includes(needle) || (subscription.notes ?? '').toLowerCase().includes(needle))
+      .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name)
+        : sort === 'cost' ? b.monthlyEquivalent - a.monthlyEquivalent
+        : a.nextRenewalAt - b.nextRenewalAt);
+  }, [subscriptions, statusOf, filter, search, sort]);
+
+
+  const resolveAll = async (action: 'post' | 'skip') => {
+    const count = occurrences.length;
+    const ok = await confirm({
+      title: action === 'post' ? `Record ${count} renewal${count === 1 ? '' : 's'} as expected?` : `Skip ${count} renewal${count === 1 ? '' : 's'}?`,
+      message: action === 'post'
+        ? `Each is posted on its due date at its usual price and account, ${formatAmount(overdueTotal)} in all. If one was paid late, at another price, or is already in Transactions, record it on its own instead.`
+        : 'Use this when nothing was charged. No transactions are created and the schedules carry on from their next date.',
+      confirmLabel: action === 'post' ? 'Record all' : 'Skip all',
+      variant: action === 'post' ? 'default' : 'danger',
     });
-    setModalOpen(true);
-  };
-
-  const openEdit = (s: ApiSubscription) => {
-    setEditingId(s.id);
-    setForm({
-      name: s.name,
-      linkedAccountId: String(s.linkedAccountId),
-      categoryId: s.categoryId != null ? String(s.categoryId) : '',
-      amountDisplay: new Intl.NumberFormat('id-ID').format(s.amount),
-      billingCycle: s.billingCycle,
-      nextRenewalDate: toDateInputValue(s.nextRenewalAt),
-      status: s.status,
-      iconKey: ICON_OPTIONS.some((o) => o.value === s.iconKey) ? s.iconKey : 'default',
-    });
-    setModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setEditingId(null);
-  };
-
-  const submitForm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = form.name.trim();
-    if (!name) {
-      setBanner({ type: 'error', text: 'Name is required.' });
-      return;
-    }
-    if (!form.linkedAccountId) {
-      setBanner({ type: 'error', text: 'Please select a payment account.' });
-      return;
-    }
-    const amount = parseIdNominalToInt(form.amountDisplay);
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      setBanner({ type: 'error', text: 'Enter a valid amount.' });
-      return;
-    }
-    if (!form.nextRenewalDate) {
-      setBanner({ type: 'error', text: 'Pick a next renewal date.' });
-      return;
-    }
-    const nextRenewalAt = fromDateInputValue(form.nextRenewalDate);
-    const linkedAccountId = parseInt(form.linkedAccountId, 10);
-    const categoryId = form.categoryId === '' ? null : parseInt(form.categoryId, 10);
-
-    setSaving(true);
-    setBanner(null);
+    if (!ok) return;
     try {
-      if (editingId == null) {
-        await createSubscriptionMutation.mutateAsync({
-          name,
-          linkedAccountId,
-          categoryId,
-          amount,
-          billingCycle: form.billingCycle,
-          nextRenewalAt,
-          status: form.status,
-          iconKey: form.iconKey,
-        });
-        setBanner({ type: 'success', text: 'Subscription added.' });
-      } else {
-        await updateSubscriptionMutation.mutateAsync({ id: editingId, data: {
-          name,
-          linkedAccountId,
-          categoryId,
-          amount,
-          billingCycle: form.billingCycle,
-          nextRenewalAt,
-          status: form.status,
-          iconKey: form.iconKey,
-        } });
-        setBanner({ type: 'success', text: 'Subscription updated.' });
-      }
-      closeModal();
+      const result = await resolve.mutateAsync(occurrences.map((occurrence) => ({ subscriptionId: occurrence.subscriptionId, dueAt: occurrence.dueAt, action })));
+      notify(action === 'post' ? `Recorded ${result.posted} renewal${result.posted === 1 ? '' : 's'}.` : `Skipped ${result.skipped} renewal${result.skipped === 1 ? '' : 's'}.`);
     } catch (err) {
-      setBanner({ type: 'error', text: err instanceof Error ? err.message : 'Save failed' });
-    } finally {
-      setSaving(false);
+      notify(err instanceof Error ? err.message : 'Could not resolve the renewals', 'error');
     }
   };
 
-  const remove = async (id: number, label: string) => {
-    const confirmed = await confirm({
-      title: 'Remove Subscription',
-      message: `Remove "${label}" from subscriptions?`,
-      confirmLabel: 'Remove',
-      variant: 'danger',
+  const skipOne = async (occurrence: RenewalOccurrence) => {
+    const ok = await confirm({
+      title: `Skip the ${formatDate(occurrence.dueAt)} renewal?`,
+      message: `Nothing is posted for ${occurrence.subscriptionName} on this date. Use it when the renewal didn't charge you.`,
+      confirmLabel: 'Skip renewal',
     });
-    if (!confirmed) return;
-    setBanner(null);
+    if (!ok) return;
     try {
-      await deleteSubscriptionMutation.mutateAsync(id);
-      setBanner({ type: 'success', text: 'Subscription removed.' });
-    } catch (e) {
-      setBanner({ type: 'error', text: e instanceof Error ? e.message : 'Delete failed' });
+      await resolve.mutateAsync([{ subscriptionId: occurrence.subscriptionId, dueAt: occurrence.dueAt, action: 'skip' }]);
+      notify('Renewal skipped.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not skip the renewal', 'error');
     }
   };
 
-  const processRenewals = async (mode: 'post' | 'skip') => {
-    const count = renewalPreview.occurrences.length;
-    const confirmed = await confirm({
-      title: mode === 'post' ? 'Post missed renewals?' : 'Skip missed renewals?',
-      message: mode === 'post'
-        ? `Post ${count} dated renewal charge${count === 1 ? '' : 's'}? Review the dates below first.`
-        : `Skip ${count} missed occurrence${count === 1 ? '' : 's'} and resume from the next date? No transactions will be created.`,
-      confirmLabel: mode === 'post' ? 'Post charges' : 'Skip and resume',
-      variant: mode === 'post' ? 'default' : 'danger',
-    });
-    if (!confirmed) return;
-    setProcessingRenewals(true);
-    setBanner(null);
-    try {
-      const result = await runRenewalsMutation.mutateAsync({
-        mode,
-        occurrences: renewalPreview.occurrences.map((item) => ({ subscriptionId: item.subscriptionId, dueAt: item.dueAt })),
-      });
-      setBanner({
-        type: 'success',
-        text: mode === 'post'
-          ? `Posted ${result.posted} confirmed renewal charge(s).`
-          : `Skipped ${result.skipped} missed occurrence(s); no financial transactions were created.`,
-      });
-    } catch (error) {
-      setBanner({ type: 'error', text: error instanceof Error ? error.message : 'Renewal processing failed' });
-    } finally {
-      setProcessingRenewals(false);
-    }
-  };
-
-  // Calculate total monthly equivalent
-  const totalMonthly = useMemo(
-    () => rows.filter((r) => r.status === 'active').reduce((s, r) => {
-      const monthlyEquivalent = r.billingCycle === 'annual' ? r.amount / 12 : r.amount;
-      return s + monthlyEquivalent;
-    }, 0),
-    [rows],
-  );
-
-  const activeCount = useMemo(() => rows.filter((r) => r.status === 'active').length, [rows]);
-
-  const uniqueAccounts = useMemo(() => new Set(rows.map((r) => r.linkedAccountId)).size, [rows]);
-
-  const sortedByRenewal = useMemo(
-    () => [...rows].sort((a, b) => a.nextRenewalAt - b.nextRenewalAt),
-    [rows],
-  );
-
-  const now = Date.now();
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
-  const monthMs = 30 * 24 * 60 * 60 * 1000;
-
-  const renew7 = sortedByRenewal.filter(
-    (r) => r.status === 'active' && r.nextRenewalAt >= now - weekMs && r.nextRenewalAt <= now + weekMs,
-  );
-  const renew30 = sortedByRenewal.filter(
-    (r) =>
-      r.status === 'active' &&
-      r.nextRenewalAt > now + weekMs &&
-      r.nextRenewalAt <= now + monthMs,
-  );
+  const loading = query.isPending && !data;
+  const detail = detailId != null ? byId.get(detailId) ?? null : null;
+  const payingSubscription = paying ? byId.get(paying.subscriptionId) ?? null : null;
 
   return (
     <RequireAuth>
-      <PageContainer className="pt-8 pb-16 px-4 sm:px-6 lg:px-8">
-        {(banner || subscriptionsQuery.error) && (
-          <div
-            className={cn(
-              'mb-6 rounded-xl border px-4 py-3 text-sm',
-              (banner?.type ?? 'error') === 'error'
-                ? 'border-[var(--color-danger)] bg-[var(--color-danger)]/10 text-[var(--color-danger)]'
-                : 'border-[var(--ref-secondary)] bg-[var(--ref-secondary-container)]/30 text-[var(--ref-on-secondary-container)]',
-            )}
-          >
-            {banner?.text ?? (subscriptionsQuery.error instanceof Error ? subscriptionsQuery.error.message : 'Failed to load subscriptions')}
+      <PageContainer className="px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <PageHeader subtext="Recurring bills" title="Subscriptions" description="What renews, when, and what it actually charged." />
+          <Button type="button" className="rounded-full" onClick={() => setEditing('new')}>
+            <Plus className="mr-1.5 inline h-4 w-4" aria-hidden />Add subscription
+          </Button>
+        </div>
+
+        <SubscriptionsHero
+          loading={loading}
+          renewing={renewing}
+          monthlyTotal={monthlyTotal}
+          upcoming={upcoming}
+          paidThisMonth={data?.monthlyCharges.at(-1)?.total ?? 0}
+          overdue={occurrences}
+          truncated={data?.renewalPreview.truncated ?? false}
+          now={now}
+          busy={resolve.isPending}
+          onRecord={setPaying}
+          onSkip={(occurrence) => void skipOne(occurrence)}
+          onResolveAll={(action) => void resolveAll(action)}
+        />
+
+        {query.error && (
+          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/5 px-4 py-3 text-sm text-[var(--color-danger)]">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="flex-1">{query.error instanceof Error ? query.error.message : "We couldn't load your subscriptions."}</span>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void query.refetch()}>Retry</Button>
           </div>
         )}
 
-        <header className="mb-12 flex flex-col justify-between gap-6 md:mb-16 md:flex-row md:items-end">
-          <div>
-            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--ref-tertiary)]">
-              Total monthly commitment
-            </p>
-            <h1 className="font-headline text-5xl font-extrabold tracking-tighter text-[var(--ref-on-surface)] md:text-6xl lg:text-7xl">
-              {formatAmount(totalMonthly)}
-              <span className="ml-1 text-2xl font-medium text-[var(--ref-on-surface-variant)]">/mo</span>
-            </h1>
-          </div>
-          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2 rounded-full bg-[var(--ref-secondary-container)] px-4 py-2 text-sm font-semibold text-[var(--ref-on-secondary-container)]">
-              <TrendingDown className="h-4 w-4 shrink-0" aria-hidden />
-              {activeCount} active · {uniqueAccounts} payment source{uniqueAccounts === 1 ? '' : 's'}
-            </div>
-            <Button type="button" className="rounded-full shadow-md" onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add subscription
-            </Button>
-          </div>
-        </header>
 
-        {loading ? (
-          <p className="text-sm text-[var(--ref-on-surface-variant)]">Loading…</p>
-        ) : (
-          <>
-            {renewalPreview.occurrences.length > 0 && (
-              <section className="mb-8 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
-                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                  <div>
-                    <h2 className="font-headline text-lg font-bold">
-                      {renewalPreview.occurrences.length} missed renewal occurrence(s) need a decision
-                    </h2>
-                    <p className="mt-1 text-sm">
-                      Nothing was posted automatically. Confirm charges only if the subscriptions were active on these dates,
-                      or skip them to resume the schedules without changing the ledger.
-                    </p>
-                    <p className="mt-2 text-xs">
-                      {renewalPreview.occurrences.slice(0, 8).map((item) =>
-                        `${item.subscriptionName} · ${formatShortDate(item.dueAt)} · ${formatAmount(item.amount)}`
-                      ).join('  |  ')}
-                      {renewalPreview.occurrences.length > 8 ? `  |  +${renewalPreview.occurrences.length - 8} more` : ''}
-                    </p>
-                    {renewalPreview.truncated && (
-                      <p className="mt-2 font-semibold">The gap exceeds the safety limit; resolve the shown batch first.</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <Button disabled={processingRenewals} variant="secondary" onClick={() => void processRenewals('skip')}>
-                      Skip & resume
-                    </Button>
-                    <Button disabled={processingRenewals} onClick={() => void processRenewals('post')}>
-                      Review confirmed · Post
-                    </Button>
-                  </div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <Section
+            title="Your subscriptions"
+            aside={
+              <div role="tablist" aria-label="Show" className="flex flex-wrap gap-1">
+                {FILTERS.map((option) => (
+                  <button key={option.value} type="button" role="tab" aria-selected={filter === option.value} onClick={() => setFilter(option.value)}
+                    className={cn('rounded-full px-3 py-1 text-xs font-semibold transition-colors', filter === option.value ? 'bg-[var(--ref-surface-container-high)] text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]')}>
+                    {option.label}{counts[option.value] > 0 && <span className="ml-1 tabular-nums opacity-70">{counts[option.value]}</span>}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            {subscriptions.length > 0 && (
+              <div className="settings-compact flex gap-2 border-b border-[var(--color-border)] px-4 py-2.5 sm:px-5">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" aria-hidden />
+                  <input type="search" aria-label="Search subscriptions" className="brutalist-input !pl-9" placeholder="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
                 </div>
-              </section>
+                <MenuSelect ariaLabel="Sort by" variant="field" className="w-40 shrink-0" value={sort} options={SORTS} onChange={setSort} />
+              </div>
             )}
-            <div className="grid grid-cols-1 gap-8 md:grid-cols-12">
-              <section className="space-y-8 md:col-span-8">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="font-headline text-2xl font-bold text-[var(--ref-on-surface)]">
-                    Subscriptions
-                  </h2>
+            {loading ? <ListSkeleton /> : subscriptions.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+                <CalendarClock className="h-8 w-8 text-[var(--color-muted)]" aria-hidden />
+                <div>
+                  <p className="font-semibold text-[var(--ref-on-surface)]">No subscriptions yet</p>
+                  <p className="mt-1 max-w-sm text-sm text-[var(--ref-on-surface-variant)]">Add streaming, cloud storage, phone plans or memberships to see what renews when, and record each charge in your ledger.</p>
                 </div>
-                {rows.length === 0 ? (
-                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-10 text-center editorial-shadow">
-                    <p className="mb-4 text-[var(--ref-on-surface-variant)]">
-                      No subscriptions yet. Add recurring bills or streaming services to track renewals.
+                <Button type="button" size="sm" onClick={() => setEditing('new')}>Add your first subscription</Button>
+              </div>
+            ) : visible.length === 0 ? (
+              <p className="px-4 py-10 text-center text-sm text-[var(--ref-on-surface-variant)] sm:px-5">{search ? `Nothing matches “${search}”.` : `No ${FILTERS.find((option) => option.value === filter)!.label.toLowerCase()} subscriptions.`}</p>
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {visible.map((subscription) => {
+                  const status = statusOf.get(subscription.id)!;
+                  const meta = [cycleLabel(subscription), accountNames.get(subscription.linkedAccountId) ?? subscription.linkedAccountName, subscription.paymentMode === 'manual' ? 'Paid manually' : null].filter(Boolean).join(' · ');
+                  const when = status === 'paused' ? 'Paused'
+                    : status === 'archived' ? 'Archived'
+                    : status === 'ended' ? (subscription.endsAt ? `Ended ${formatDate(subscription.endsAt)}` : 'Ended')
+                    : status === 'trial' && subscription.trialEndsAt ? `Trial ends ${formatDayMonth(subscription.trialEndsAt)}`
+                    : `${formatDayMonth(subscription.nextRenewalAt)} · ${relativeDue(subscription.nextRenewalAt)}`;
+                  return (
+                    <li key={subscription.id}>
+                      <button type="button" onClick={() => setDetailId(subscription.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--ref-surface-container-low)] sm:px-5">
+                        <SubscriptionIcon iconKey={subscription.iconKey} />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium text-[var(--ref-on-surface)]">{subscription.name}</span>
+                            {(status === 'trial' || status === 'ending') && <StatusBadge status={status} />}
+                          </span>
+                          <span className="block truncate text-xs text-[var(--ref-on-surface-variant)]">{meta}</span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">
+                            {subscription.currency && subscription.foreignAmount != null ? formatForeign(subscription.foreignAmount, subscription.currency) : formatAmount(subscription.amount)}
+                            <span className="text-xs font-normal text-[var(--ref-on-surface-variant)]">{cycleSuffix(subscription)}</span>
+                          </span>
+                          <span className={cn('block text-xs', status === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface-variant)]')}>{status === 'overdue' ? 'Renewal to review' : when}</span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+
+          <Section className="self-start" title={`Next ${UPCOMING_DAYS} days`} aside={upcoming.length > 0 ? <span className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatAmount(upcomingTotal)}</span> : undefined}>
+              {shortfalls.length > 0 && (
+                <div className="space-y-1 border-b border-[var(--color-border)] px-4 py-3 sm:px-5">
+                  {shortfalls.map(({ account, due }) => (
+                    <p key={account.id} className="flex gap-2 text-xs text-[var(--color-danger)]">
+                      <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span><strong className="font-semibold">{account.name}</strong> holds {formatAmount(account.balance)} but {formatAmount(due)} is due from it.</span>
                     </p>
-                    <Button type="button" className="rounded-full" onClick={openCreate}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add your first subscription
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {rows.map((sub) => {
-                      const Icon = ICON_MAP[sub.iconKey] ?? ICON_MAP.default;
-                      const display = deriveDisplayStatus(sub);
-                      const highlight = display === 'expiring';
-                      return (
-                        <div
-                          key={sub.id}
-                          className={cn(
-                            'group rounded-xl bg-[var(--ref-surface-container-lowest)] p-6 transition-all duration-300 editorial-shadow hover:shadow-[0px_20px_40px_rgba(25,27,35,0.06)]',
-                            highlight && 'border-b-2 border-[var(--ref-primary)]',
-                          )}
-                        >
-                          <div className="mb-6 flex items-start justify-between gap-2">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--ref-surface-container-highest)]">
-                              <Icon
-                                className={cn(
-                                  'h-6 w-6',
-                                  display === 'expiring' && 'text-[var(--ref-error)]',
-                                  display === 'paused' && 'text-[var(--ref-secondary)]',
-                                  display === 'active' &&
-                                    sub.iconKey === 'signal' &&
-                                    'text-[var(--ref-primary)]',
-                                  display === 'active' &&
-                                    sub.iconKey !== 'signal' &&
-                                    'text-[var(--ref-secondary)]',
-                                )}
-                                aria-hidden
-                              />
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              {statusBadge(display)}
-                              {/* Always visible: phones have no hover to reveal them. */}
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => openEdit(sub)}
-                                  className="rounded-full p-2 text-[var(--ref-primary)] hover:bg-[var(--ref-primary)]/10 cursor-pointer"
-                                  aria-label={`Edit ${sub.name}`}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void remove(sub.id, sub.name)}
-                                  className="rounded-full p-2 text-[var(--ref-error)] hover:bg-[var(--ref-error)]/10 cursor-pointer"
-                                  aria-label={`Remove ${sub.name}`}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                          <h3 className="mb-1 font-headline text-xl font-bold text-[var(--ref-on-surface)]">
-                            {sub.name}
-                          </h3>
-                          <p className="mb-4 text-sm text-[var(--ref-on-surface-variant)]">
-                            Linked to{' '}
-                            <span className="font-semibold text-[var(--ref-on-surface)]">{sub.linkedAccountName}</span>
-                          </p>
-                          <div className="flex items-end justify-between">
-                            <div>
-                              <p className="font-mono text-xs uppercase text-[var(--ref-on-surface-variant)]/70">
-                                {sub.status === 'paused' ? 'Resume / next' : 'Next renewal'}
-                              </p>
-                              <p className="font-semibold text-[var(--ref-on-surface)]">
-                                {formatShortDate(sub.nextRenewalAt)}
-                              </p>
-                            </div>
-                            <p className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">
-                              {formatAmount(sub.amount)}{formatBillingCycle(sub.billingCycle)}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-
-              <aside className="space-y-8 md:col-span-4">
-                <div className="rounded-xl bg-[var(--ref-surface-container-low)] p-8">
-                  <h2 className="mb-6 font-headline text-xl font-bold text-[var(--ref-on-surface)]">
-                    Upcoming renewals
-                  </h2>
-                  <div className="relative space-y-6">
-                    <div
-                      className="absolute bottom-0 left-4 top-0 w-px bg-[var(--ref-outline-variant)]/30"
-                      aria-hidden
-                    />
-                    <div className="relative pl-10">
-                      <div
-                        className="absolute left-[13px] top-1.5 h-2 w-2 rounded-full border-4 border-[var(--ref-surface-container-lowest)] bg-[var(--ref-primary)] ring-2 ring-[var(--ref-primary)]"
-                        aria-hidden
-                      />
-                      <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--ref-primary)]">
-                        Next 7 days
-                      </p>
-                      {renew7.length === 0 ? (
-                        <p className="text-sm text-[var(--ref-on-surface-variant)]">None scheduled.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {renew7.map((r) => (
-                            <div key={r.id} className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-4">
-                              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                                <span className="min-w-0 break-words text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
-                                <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">
-                                  {formatAmount(r.amount)}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-[var(--ref-on-surface-variant)]">
-                                Due {formatShortDate(r.nextRenewalAt)} · {r.linkedAccountName}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="relative pl-10">
-                      <div
-                        className="absolute left-[13px] top-1.5 h-2 w-2 rounded-full border-4 border-[var(--ref-surface-container-lowest)] bg-[var(--ref-outline-variant)] ring-2 ring-[var(--ref-outline-variant)]"
-                        aria-hidden
-                      />
-                      <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--ref-on-surface-variant)]">
-                        Next 30 days (after 7d)
-                      </p>
-                      {renew30.length === 0 ? (
-                        <p className="text-sm text-[var(--ref-on-surface-variant)]">None in this window.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {renew30.map((r) => (
-                            <div key={r.id} className="rounded-xl bg-[var(--ref-surface-container-lowest)] p-4">
-                              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                                <span className="min-w-0 break-words text-sm font-semibold text-[var(--ref-on-surface)]">{r.name}</span>
-                                <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[var(--ref-on-surface)]">
-                                  {formatAmount(r.amount)}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-[var(--ref-on-surface-variant)]">
-                                Due {formatShortDate(r.nextRenewalAt)} · {r.linkedAccountName}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="group relative overflow-hidden rounded-xl bg-[var(--ref-primary)] p-8 text-white">
-                  <div
-                    className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/10 blur-3xl transition-transform duration-700 group-hover:scale-110"
-                    aria-hidden
-                  />
-                  <Sparkles className="mb-4 h-8 w-8" aria-hidden />
-                  <h2 className="mb-4 font-headline text-xl font-bold">Tips</h2>
-                  <p className="text-xs leading-relaxed text-white/80">
-                    Fainens previews renewal occurrences after their due date. You decide whether to post the dated charges or
-                    skip missed months. Viewing this page never changes your ledger.
-                  </p>
-                </div>
-              </aside>
-            </div>
-
-            <section className="mt-16">
-              <h2 className="mb-8 font-headline text-2xl font-bold text-[var(--ref-on-surface)]">
-                Linked payment accounts
-              </h2>
-              {uniqueAccounts === 0 ? (
-                <p className="text-sm text-[var(--ref-on-surface-variant)]">
-                  Accounts appear from the subscriptions you create.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-4">
-                  {[...new Set(rows.map((r) => r.linkedAccountName))].map((label) => (
-                    <div
-                      key={label}
-                      className="flex items-center gap-4 rounded-full border border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-high)] px-6 py-4"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--ref-primary)] text-[10px] font-bold text-white">
-                        {label.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold leading-none text-[var(--ref-on-surface)]">{label}</p>
-                        <p className="text-[10px] font-medium text-[var(--ref-on-surface-variant)]">
-                          Used in {rows.filter((r) => r.linkedAccountName === label).length} subscription(s)
-                        </p>
-                      </div>
-                    </div>
                   ))}
                 </div>
               )}
-            </section>
-          </>
-        )}
-
-        <Modal
-          isOpen={modalOpen}
-          onClose={closeModal}
-          title={editingId == null ? 'Add subscription' : 'Edit subscription'}
-          subtitle="When the renewal date passes, an expense is posted to Transactions (tx type: subscription_renewal). Link a wallet or card account so the charge can be recorded."
-          size="xl"
-        >
-          <form onSubmit={(e) => void submitForm(e)} className="flex flex-col gap-0">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-              <div className="lg:col-span-8 space-y-6 lg:space-y-8">
-                {/* Billing Cycle Toggle */}
-                <div className="inline-flex p-0.5 bg-[var(--ref-surface-container)] rounded-full flex-wrap gap-0.5">
-                  {BILLING_CYCLE_OPTIONS.map((cycle) => (
-                    <button
-                      key={cycle.value}
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, billingCycle: cycle.value }))}
-                      className={cn(
-                        'cursor-pointer inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full text-sm transition-all',
-                        form.billingCycle === cycle.value
-                          ? 'bg-[var(--ref-surface-container-lowest)] text-[var(--color-accent)] font-bold shadow-sm'
-                          : 'text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-accent)]',
-                      )}
-                    >
-                      {cycle.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Amount Input */}
-                <CurrencyInput
-                  label="Amount"
-                  value={form.amountDisplay}
-                  onChange={(value) =>
-                    setForm((f) => ({ ...f, amountDisplay: value }))
-                  }
-                  size="lg"
-                  required
-                />
-
-                {/* Name & Date */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Subscription name
-                    </label>
-                    <input
-                      type="text"
-                      value={form.name}
-                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                      placeholder="e.g. Netflix, Spotify, Gym membership"
-                      className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Next renewal date
-                    </label>
-                    <input
-                      type="date"
-                      value={form.nextRenewalDate}
-                      onChange={(e) => setForm((f) => ({ ...f, nextRenewalDate: e.target.value }))}
-                      className="w-full bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                      Status
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={form.status}
-                        onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                        className="w-full appearance-none bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
-                      >
-                        <option value="active">Active</option>
-                        <option value="paused">Paused</option>
-                      </select>
-                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                        ▾
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Category */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                    Category (for posted expense)
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={form.categoryId}
-                      onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-                      className="w-full appearance-none bg-[var(--ref-surface-container-low)] border-none rounded-xl px-3 py-3 focus:ring-2 focus:ring-[var(--color-accent)]/20 text-[var(--color-text-primary)] transition-all"
-                    >
-                      <option value="">None</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-muted)] text-lg">
-                      ▾
-                    </span>
-                  </div>
-                </div>
-
-                {/* Pay from Account */}
-                <div className="space-y-4">
-                  <label className="block text-sm font-semibold text-[var(--color-text-primary)]">
-                    Pay from account
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {accounts.map((a) => (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, linkedAccountId: String(a.id) }))}
-                        className={cn(
-                          'flex flex-col items-start p-4 rounded-xl transition-all text-left min-h-[96px]',
-                          form.linkedAccountId === String(a.id)
-                            ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)] shadow-sm'
-                            : 'bg-[var(--ref-surface-container-low)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
-                        )}
-                      >
-                        <CreditCard
-                          className={cn(
-                            'w-6 h-6 mb-2',
-                            form.linkedAccountId === String(a.id) ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]',
-                          )}
-                        />
-                        <span className="text-xs font-bold text-[var(--color-text-primary)] line-clamp-2">
-                          {a.name}
+              {loading ? <ListSkeleton rows={3} /> : upcoming.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-[var(--ref-on-surface-variant)] sm:px-5">Nothing renews in the next {UPCOMING_DAYS} days.</p>
+              ) : (
+                <ul className="divide-y divide-[var(--color-border)]">
+                  {upcoming.map(({ subscription, dueAt }) => {
+                    // Only the next renewal can be paid ahead of its date.
+                    const payable = dueAt === subscription.nextRenewalAt;
+                    const days = daysFromToday(dueAt);
+                    return (
+                      <li key={`${subscription.id}-${dueAt}`} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                        <span className={cn('w-11 shrink-0 text-center leading-tight', days <= 3 ? 'text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface-variant)]')}>
+                          <span className="block text-base font-bold tabular-nums">{new Date(dueAt).getDate()}</span>
+                          <span className="block text-[10px] font-semibold uppercase tracking-wide">{new Date(dueAt).toLocaleDateString('en-US', { month: 'short' })}</span>
                         </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm text-[var(--ref-on-surface)]">{subscription.name}</span>
+                          <span className="block truncate text-xs text-[var(--ref-on-surface-variant)]">{relativeDue(dueAt)} · {accountNames.get(subscription.linkedAccountId) ?? subscription.linkedAccountName}</span>
+                        </span>
+                        {payable && (subscription.paymentMode === 'manual' || days <= 0) && (
+                          <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={() => setPaying({ subscriptionId: subscription.id, dueAt })}>
+                            {days <= 0 ? 'Record' : 'Pay'}
+                          </Button>
+                        )}
+                        <span className="min-w-[4.5rem] shrink-0 text-right sm:w-24 text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(subscription.amount)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+          </Section>
+        </div>
 
-              {/* Sidebar */}
-              <div className="lg:col-span-4 space-y-6">
-                <div className="rounded-xl bg-[var(--ref-surface-container-low)] p-6">
-                  <h3 className="font-headline font-bold text-lg mb-4">Icon</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {ICON_OPTIONS.map((icon) => {
-                      const Icon = ICON_MAP[icon.value];
-                      return (
-                        <button
-                          key={icon.value}
-                          type="button"
-                          onClick={() => setForm((f) => ({ ...f, iconKey: icon.value }))}
-                          className={cn(
-                            'flex flex-col items-center justify-center p-4 rounded-xl transition-all',
-                            form.iconKey === icon.value
-                              ? 'bg-[var(--ref-surface-container-lowest)] border-2 border-[var(--ref-primary-container)] shadow-sm'
-                              : 'bg-[var(--ref-surface-container)] border-2 border-transparent hover:border-[var(--ref-surface-container-highest)]',
-                          )}
-                        >
-                          <Icon
-                            className={cn(
-                              'w-6 h-6 mb-2',
-                              form.iconKey === icon.value ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]',
-                            )}
-                          />
-                          <span className="text-[10px] font-medium text-[var(--color-text-secondary)] text-center">
-                            {icon.label}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-low)]/50 p-4 text-sm text-[var(--color-text-secondary)]">
-                  <strong className="text-[var(--color-text-primary)]">Auto-renewal:</strong> When the renewal date passes, an expense transaction is automatically posted to your Transactions page.
-                </div>
-              </div>
-            </div>
-
-            {/* Sticky Footer */}
-            <div className="sticky bottom-0 z-10 -mx-5 mt-6 flex flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-5 py-4 backdrop-blur-sm shadow-[0_-10px_30px_-12px_rgba(15,23,42,0.12)] lg:-mx-6 lg:px-6">
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-                <Button type="button" variant="secondary" onClick={closeModal} className="rounded-full py-3 sm:min-w-[120px]">
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  isLoading={saving}
-                  className="rounded-full py-3 shadow-lg sm:min-w-[200px]"
-                >
-                  <Plus className="w-5 h-5" />
-                  {editingId == null ? 'Add subscription' : 'Save changes'}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </Modal>
+        {/* Analysis sits last: the lists above are what needs doing. */}
+        <Section title="Payments by month" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">The last 12 months and the next 6</span>}>
+          {loading ? <ListSkeleton rows={4} /> : (
+            <PaymentTimeline charges={data?.monthlyCharges ?? []} subscriptions={subscriptions} overdue={occurrences} now={now} />
+          )}
+        </Section>
       </PageContainer>
+
+      {editing && (
+        <SubscriptionEditor
+          subscription={editing === 'new' ? null : editing}
+          accounts={accounts}
+          categories={categories}
+          accountNames={accountNames}
+          onClose={() => setEditing(null)}
+          onSaved={(message) => { setEditing(null); notify(message); }}
+        />
+      )}
+      {detail && (
+        <SubscriptionDetail
+          subscription={detail}
+          overdueIds={overdueIds}
+          accounts={accounts}
+          accountNames={accountNames}
+          categories={categories}
+          onClose={() => setDetailId(null)}
+          onEdit={() => setEditing(detail)}
+          onPay={() => setPaying({ subscriptionId: detail.id, dueAt: detail.nextRenewalAt })}
+          onMessage={notify}
+        />
+      )}
+      {paying && payingSubscription && (
+        <PaymentDialog
+          key={`${paying.subscriptionId}-${paying.dueAt}`}
+          subscription={payingSubscription}
+          dueAt={paying.dueAt}
+          accounts={accounts}
+          onClose={() => setPaying(null)}
+          onDone={(message) => { setPaying(null); notify(message); }}
+        />
+      )}
     </RequireAuth>
   );
 }

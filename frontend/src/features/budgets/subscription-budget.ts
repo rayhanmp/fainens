@@ -1,36 +1,12 @@
-const DAY_MS = 86_400_000;
+import { DAY_MS, nextRenewal, renews, withinEnd, type SubscriptionLike } from '../subscriptions/schedule';
 
-type SubscriptionSchedule = {
+type SubscriptionSchedule = Omit<SubscriptionLike, 'id' | 'endsAt' | 'trialEndsAt'> & {
+  id?: number;
   categoryId: number | null;
-  amount: number;
-  billingCycle: string;
-  nextRenewalAt: number;
-  status: string;
+  endsAt?: number | null;
+  trialEndsAt?: number | null;
   createdAt?: number;
 };
-
-function addMonthsClamped(timestamp: number, months: number): number {
-  const source = new Date(timestamp);
-  const day = source.getDate();
-  const target = new Date(timestamp);
-  target.setDate(1);
-  target.setMonth(target.getMonth() + months);
-  const lastDay = new Date(
-    target.getFullYear(),
-    target.getMonth() + 1,
-    0,
-    source.getHours(),
-    source.getMinutes(),
-    source.getSeconds(),
-    source.getMilliseconds(),
-  ).getDate();
-  target.setDate(Math.min(day, lastDay));
-  return target.getTime();
-}
-
-function nextOccurrence(timestamp: number, billingCycle: string): number {
-  return addMonthsClamped(timestamp, billingCycle === 'annual' ? 12 : 1);
-}
 
 /**
  * Returns the scheduled subscription payment total for each category in an
@@ -47,9 +23,10 @@ export function getSubscriptionDueByCategory(
   if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd) || periodEnd < periodStart) return totals;
 
   const endInclusive = periodEnd + DAY_MS - 1;
-  for (const subscription of subscriptions) {
+  for (const raw of subscriptions) {
+    const subscription = { id: 0, trialEndsAt: null, ...raw, endsAt: raw.endsAt ?? null };
     if (
-      subscription.status !== 'active' ||
+      !renews(subscription) ||
       subscription.categoryId == null ||
       !Number.isSafeInteger(subscription.amount) ||
       subscription.amount <= 0 ||
@@ -64,15 +41,11 @@ export function getSubscriptionDueByCategory(
     let dueAt = subscription.nextRenewalAt;
     let iterations = 0;
 
-    if (dueAt < lowerBound) {
-      while (dueAt < lowerBound && iterations++ < 2400) {
-        dueAt = nextOccurrence(dueAt, subscription.billingCycle);
-      }
-    }
+    while (dueAt < lowerBound && iterations++ < 2400) dueAt = nextRenewal(dueAt, subscription);
 
-    while (dueAt >= lowerBound && dueAt <= endInclusive && iterations++ < 2400) {
+    while (dueAt >= lowerBound && dueAt <= endInclusive && withinEnd(subscription, dueAt) && iterations++ < 2400) {
       totals.set(subscription.categoryId, (totals.get(subscription.categoryId) ?? 0) + subscription.amount);
-      dueAt = nextOccurrence(dueAt, subscription.billingCycle);
+      dueAt = nextRenewal(dueAt, subscription);
     }
   }
 

@@ -58,7 +58,7 @@ export function useDashboardPayLaterQuery() {
 export function useDashboardSubscriptionsQuery() {
   return useQuery({
     queryKey: queryKeys.dashboard.subscriptions,
-    queryFn: ({ signal }) => unwrapGenerated(listSubscriptions({ signal }), 200, 'Failed to load subscriptions'),
+    queryFn: ({ signal }) => unwrapGenerated(listSubscriptions(undefined, { signal }), 200, 'Failed to load subscriptions'),
     placeholderData: (previous) => previous,
   });
 }

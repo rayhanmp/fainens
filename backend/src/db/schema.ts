@@ -593,12 +593,25 @@ export const subscriptions = sqliteTable("subscription", {
   categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
   /** Charge amount in whole Rupiah. */
   amount: integer("amount").notNull(),
-  /** Billing cycle: monthly | annual */
+  /** Billing cycle unit: daily | weekly | monthly | annual, repeated intervalCount times. */
   billingCycle: text("billing_cycle").notNull().default("monthly"),
+  /** How many cycle units between renewals: 3 with monthly is quarterly. */
+  intervalCount: integer("interval_count").notNull().default(1),
   nextRenewalAt: integer("next_renewal_at", { mode: "timestamp_ms" }).notNull(),
   /** Day of month the subscription bills on; renewals return to it after shorter months. */
   billingDay: integer("billing_day"),
-  status: text("status").notNull().default("active"), // active | paused
+  status: text("status").notNull().default("active"), // active | paused | cancelled | archived
+  /** auto: charged to the account by the provider; manual: paid by hand each time. */
+  paymentMode: text("payment_mode").notNull().default("auto"),
+  /** End of a free trial; the first paid renewal is nextRenewalAt. */
+  trialEndsAt: integer("trial_ends_at", { mode: "timestamp_ms" }),
+  /** Last day the subscription runs; renewals after it are not due. Set when cancelled. */
+  endsAt: integer("ends_at", { mode: "timestamp_ms" }),
+  /** ISO currency the provider bills in when not IDR; `amount` is then the IDR estimate. */
+  currency: text("currency"),
+  /** Price in that currency, in minor units (cents). */
+  foreignAmount: integer("foreign_amount"),
+  notes: text("notes"),
   /** UI icon key: car | film | music | signal | sparkles | default */
   iconKey: text("icon_key").notNull().default("default"),
   sortOrder: integer("sort_order").notNull().default(0),

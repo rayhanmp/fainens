@@ -10673,14 +10673,50 @@ export type SetDefaultAgentModel400 = {
   [key: string]: unknown;
 };
 
+export type ListSubscriptionsParams = {
+includeArchived?: ListSubscriptionsIncludeArchived;
+};
+
+export type ListSubscriptionsIncludeArchived = typeof ListSubscriptionsIncludeArchived[keyof typeof ListSubscriptionsIncludeArchived];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListSubscriptionsIncludeArchived = {
+  true: 'true',
+  false: 'false',
+} as const;
+
 export type ListSubscriptions200SubscriptionsItemBillingCycle = typeof ListSubscriptions200SubscriptionsItemBillingCycle[keyof typeof ListSubscriptions200SubscriptionsItemBillingCycle];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const ListSubscriptions200SubscriptionsItemBillingCycle = {
+  daily: 'daily',
+  weekly: 'weekly',
   monthly: 'monthly',
   annual: 'annual',
 } as const;
+
+export type ListSubscriptions200SubscriptionsItemPaymentMode = typeof ListSubscriptions200SubscriptionsItemPaymentMode[keyof typeof ListSubscriptions200SubscriptionsItemPaymentMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListSubscriptions200SubscriptionsItemPaymentMode = {
+  auto: 'auto',
+  manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ListSubscriptions200SubscriptionsItemLastPayment = {
+  date: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+} | null;
 
 export type ListSubscriptions200SubscriptionsItem = {
   /**
@@ -10695,6 +10731,8 @@ export type ListSubscriptions200SubscriptionsItem = {
    */
   linkedAccountId: number;
   linkedAccountName: string;
+  /** @nullable */
+  linkedAccountType: string | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -10707,8 +10745,41 @@ export type ListSubscriptions200SubscriptionsItem = {
    */
   amount: number;
   billingCycle: ListSubscriptions200SubscriptionsItemBillingCycle;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  intervalCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  monthlyEquivalent: number;
   nextRenewalAt: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  billingDay: number | null;
   status: string;
+  paymentMode: ListSubscriptions200SubscriptionsItemPaymentMode;
+  /** @nullable */
+  trialEndsAt: number | null;
+  /** @nullable */
+  endsAt: number | null;
+  /** @nullable */
+  currency: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  foreignAmount: number | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  lastPayment: ListSubscriptions200SubscriptionsItemLastPayment;
   iconKey: string;
   /**
    * @minimum -9007199254740991
@@ -10739,6 +10810,20 @@ export type ListSubscriptions200RenewalPreviewOccurrencesItem = {
    */
   linkedAccountId: number;
   billingCycle: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  intervalCount: number;
+  paymentMode: string;
+  /** @nullable */
+  currency: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  foreignAmount: number | null;
   [key: string]: unknown;
 };
 
@@ -10748,9 +10833,33 @@ export type ListSubscriptions200RenewalPreview = {
   [key: string]: unknown;
 };
 
+export type ListSubscriptions200MonthlyChargesItemItemsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  subscriptionId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+};
+
+export type ListSubscriptions200MonthlyChargesItem = {
+  month: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  total: number;
+  items: ListSubscriptions200MonthlyChargesItemItemsItem[];
+};
+
 export type ListSubscriptions200 = {
   subscriptions: ListSubscriptions200SubscriptionsItem[];
   renewalPreview: ListSubscriptions200RenewalPreview;
+  monthlyCharges: ListSubscriptions200MonthlyChargesItem[];
   [key: string]: unknown;
 };
 
@@ -10759,6 +10868,8 @@ export type CreateSubscriptionBodyBillingCycle = typeof CreateSubscriptionBodyBi
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const CreateSubscriptionBodyBillingCycle = {
+  daily: 'daily',
+  weekly: 'weekly',
   monthly: 'monthly',
   annual: 'annual',
 } as const;
@@ -10770,6 +10881,16 @@ export type CreateSubscriptionBodyStatus = typeof CreateSubscriptionBodyStatus[k
 export const CreateSubscriptionBodyStatus = {
   active: 'active',
   paused: 'paused',
+  cancelled: 'cancelled',
+} as const;
+
+export type CreateSubscriptionBodyPaymentMode = typeof CreateSubscriptionBodyPaymentMode[keyof typeof CreateSubscriptionBodyPaymentMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateSubscriptionBodyPaymentMode = {
+  auto: 'auto',
+  manual: 'manual',
 } as const;
 
 export type CreateSubscriptionBodyIconKey = typeof CreateSubscriptionBodyIconKey[keyof typeof CreateSubscriptionBodyIconKey];
@@ -10809,11 +10930,45 @@ export type CreateSubscriptionBody = {
   amount: number;
   billingCycle?: CreateSubscriptionBodyBillingCycle;
   /**
+   * @minimum 1
+   * @maximum 366
+   */
+  intervalCount?: number;
+  /**
    * @minimum 0
    * @maximum 9007199254740991
    */
   nextRenewalAt: number;
   status?: CreateSubscriptionBodyStatus;
+  paymentMode?: CreateSubscriptionBodyPaymentMode;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  trialEndsAt?: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  endsAt?: number | null;
+  /**
+   * @nullable
+   * @pattern ^[A-Za-z]{3}$
+   */
+  currency?: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  foreignAmount?: number | null;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  notes?: string | null;
   iconKey?: CreateSubscriptionBodyIconKey;
   /**
    * @minimum -9007199254740991
@@ -10828,9 +10983,32 @@ export type CreateSubscription201BillingCycle = typeof CreateSubscription201Bill
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const CreateSubscription201BillingCycle = {
+  daily: 'daily',
+  weekly: 'weekly',
   monthly: 'monthly',
   annual: 'annual',
 } as const;
+
+export type CreateSubscription201PaymentMode = typeof CreateSubscription201PaymentMode[keyof typeof CreateSubscription201PaymentMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateSubscription201PaymentMode = {
+  auto: 'auto',
+  manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CreateSubscription201LastPayment = {
+  date: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+} | null;
 
 export type CreateSubscription201 = {
   /**
@@ -10845,6 +11023,8 @@ export type CreateSubscription201 = {
    */
   linkedAccountId: number;
   linkedAccountName: string;
+  /** @nullable */
+  linkedAccountType: string | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -10857,8 +11037,41 @@ export type CreateSubscription201 = {
    */
   amount: number;
   billingCycle: CreateSubscription201BillingCycle;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  intervalCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  monthlyEquivalent: number;
   nextRenewalAt: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  billingDay: number | null;
   status: string;
+  paymentMode: CreateSubscription201PaymentMode;
+  /** @nullable */
+  trialEndsAt: number | null;
+  /** @nullable */
+  endsAt: number | null;
+  /** @nullable */
+  currency: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  foreignAmount: number | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  lastPayment: CreateSubscription201LastPayment;
   iconKey: string;
   /**
    * @minimum -9007199254740991
@@ -10929,6 +11142,237 @@ export type ProcessSubscriptionRenewals400 = {
 };
 
 export type ProcessSubscriptionRenewals409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ResolveSubscriptionOccurrencesBodyItemsItemOneOfAction = typeof ResolveSubscriptionOccurrencesBodyItemsItemOneOfAction[keyof typeof ResolveSubscriptionOccurrencesBodyItemsItemOneOfAction];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ResolveSubscriptionOccurrencesBodyItemsItemOneOfAction = {
+  post: 'post',
+} as const;
+
+export type ResolveSubscriptionOccurrencesBodyItemsItemOneOf = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  subscriptionId: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  dueAt: number;
+  action: ResolveSubscriptionOccurrencesBodyItemsItemOneOfAction;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  amount?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  paidAt?: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  accountId?: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  reanchor?: boolean;
+};
+
+export type ResolveSubscriptionOccurrencesBodyItemsItemOneOfThreeAction = typeof ResolveSubscriptionOccurrencesBodyItemsItemOneOfThreeAction[keyof typeof ResolveSubscriptionOccurrencesBodyItemsItemOneOfThreeAction];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ResolveSubscriptionOccurrencesBodyItemsItemOneOfThreeAction = {
+  link: 'link',
+} as const;
+
+export type ResolveSubscriptionOccurrencesBodyItemsItemOneOfThree = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  subscriptionId: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  dueAt: number;
+  action: ResolveSubscriptionOccurrencesBodyItemsItemOneOfThreeAction;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  transactionId: number;
+  reanchor?: boolean;
+};
+
+export type ResolveSubscriptionOccurrencesBodyItemsItemOneOfFiveAction = typeof ResolveSubscriptionOccurrencesBodyItemsItemOneOfFiveAction[keyof typeof ResolveSubscriptionOccurrencesBodyItemsItemOneOfFiveAction];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ResolveSubscriptionOccurrencesBodyItemsItemOneOfFiveAction = {
+  skip: 'skip',
+} as const;
+
+export type ResolveSubscriptionOccurrencesBodyItemsItemOneOfFive = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  subscriptionId: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  dueAt: number;
+  action: ResolveSubscriptionOccurrencesBodyItemsItemOneOfFiveAction;
+};
+
+export type ResolveSubscriptionOccurrencesBodyItemsItem = ResolveSubscriptionOccurrencesBodyItemsItemOneOf | ResolveSubscriptionOccurrencesBodyItemsItemOneOfThree | ResolveSubscriptionOccurrencesBodyItemsItemOneOfFive;
+
+export type ResolveSubscriptionOccurrencesBody = {
+  /**
+   * @minItems 1
+   * @maxItems 120
+   */
+  items: ResolveSubscriptionOccurrencesBodyItemsItem[];
+  [key: string]: unknown;
+};
+
+export type ResolveSubscriptionOccurrences200NextRenewalsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  subscriptionId: number;
+  nextRenewalAt: number;
+};
+
+export type ResolveSubscriptionOccurrences200 = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  posted: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  linked: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  skipped: number;
+  transactionIds: number[];
+  nextRenewals: ResolveSubscriptionOccurrences200NextRenewalsItem[];
+  [key: string]: unknown;
+};
+
+export type ResolveSubscriptionOccurrences409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetSubscriptionHistory200EntriesItemStatus = typeof GetSubscriptionHistory200EntriesItemStatus[keyof typeof GetSubscriptionHistory200EntriesItemStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetSubscriptionHistory200EntriesItemStatus = {
+  paid: 'paid',
+  linked: 'linked',
+  corrected: 'corrected',
+  voided: 'voided',
+  skipped: 'skipped',
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetSubscriptionHistory200EntriesItemTransaction = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  date: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  description: string;
+  /** @nullable */
+  accountName: string | null;
+  status: string;
+  txType: string;
+} | null;
+
+export type GetSubscriptionHistory200EntriesItem = {
+  /** @nullable */
+  dueAt: number | null;
+  status: GetSubscriptionHistory200EntriesItemStatus;
+  /** @nullable */
+  note: string | null;
+  /** @nullable */
+  transaction: GetSubscriptionHistory200EntriesItemTransaction;
+};
+
+export type GetSubscriptionHistory200 = {
+  entries: GetSubscriptionHistory200EntriesItem[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  totalPaid: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  paidCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  skippedCount: number;
+  [key: string]: unknown;
+};
+
+export type ListSubscriptionOccurrenceCandidates200CandidatesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+  date: number;
+  description: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+  /** @nullable */
+  accountName: string | null;
+};
+
+export type ListSubscriptionOccurrenceCandidates200 = {
+  candidates: ListSubscriptionOccurrenceCandidates200CandidatesItem[];
+  [key: string]: unknown;
+};
+
+export type ListSubscriptionOccurrenceCandidates404 = {
   error: string;
   [key: string]: unknown;
 };
@@ -11005,14 +11449,51 @@ export type VoidSubscriptionOccurrence409 = {
   [key: string]: unknown;
 };
 
+export type UnlinkSubscriptionOccurrence200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  transactionId: number;
+  [key: string]: unknown;
+};
+
+export type UnlinkSubscriptionOccurrence409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type GetSubscription200BillingCycle = typeof GetSubscription200BillingCycle[keyof typeof GetSubscription200BillingCycle];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const GetSubscription200BillingCycle = {
+  daily: 'daily',
+  weekly: 'weekly',
   monthly: 'monthly',
   annual: 'annual',
 } as const;
+
+export type GetSubscription200PaymentMode = typeof GetSubscription200PaymentMode[keyof typeof GetSubscription200PaymentMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetSubscription200PaymentMode = {
+  auto: 'auto',
+  manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetSubscription200LastPayment = {
+  date: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+} | null;
 
 export type GetSubscription200 = {
   /**
@@ -11027,6 +11508,8 @@ export type GetSubscription200 = {
    */
   linkedAccountId: number;
   linkedAccountName: string;
+  /** @nullable */
+  linkedAccountType: string | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -11039,8 +11522,41 @@ export type GetSubscription200 = {
    */
   amount: number;
   billingCycle: GetSubscription200BillingCycle;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  intervalCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  monthlyEquivalent: number;
   nextRenewalAt: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  billingDay: number | null;
   status: string;
+  paymentMode: GetSubscription200PaymentMode;
+  /** @nullable */
+  trialEndsAt: number | null;
+  /** @nullable */
+  endsAt: number | null;
+  /** @nullable */
+  currency: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  foreignAmount: number | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  lastPayment: GetSubscription200LastPayment;
   iconKey: string;
   /**
    * @minimum -9007199254740991
@@ -11062,6 +11578,8 @@ export type UpdateSubscriptionBodyBillingCycle = typeof UpdateSubscriptionBodyBi
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const UpdateSubscriptionBodyBillingCycle = {
+  daily: 'daily',
+  weekly: 'weekly',
   monthly: 'monthly',
   annual: 'annual',
 } as const;
@@ -11073,6 +11591,17 @@ export type UpdateSubscriptionBodyStatus = typeof UpdateSubscriptionBodyStatus[k
 export const UpdateSubscriptionBodyStatus = {
   active: 'active',
   paused: 'paused',
+  cancelled: 'cancelled',
+  archived: 'archived',
+} as const;
+
+export type UpdateSubscriptionBodyPaymentMode = typeof UpdateSubscriptionBodyPaymentMode[keyof typeof UpdateSubscriptionBodyPaymentMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateSubscriptionBodyPaymentMode = {
+  auto: 'auto',
+  manual: 'manual',
 } as const;
 
 export type UpdateSubscriptionBodyIconKey = typeof UpdateSubscriptionBodyIconKey[keyof typeof UpdateSubscriptionBodyIconKey];
@@ -11112,11 +11641,45 @@ export type UpdateSubscriptionBody = {
   amount?: number;
   billingCycle?: UpdateSubscriptionBodyBillingCycle;
   /**
+   * @minimum 1
+   * @maximum 366
+   */
+  intervalCount?: number;
+  /**
    * @minimum 0
    * @maximum 9007199254740991
    */
   nextRenewalAt?: number;
   status?: UpdateSubscriptionBodyStatus;
+  paymentMode?: UpdateSubscriptionBodyPaymentMode;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  trialEndsAt?: number | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  endsAt?: number | null;
+  /**
+   * @nullable
+   * @pattern ^[A-Za-z]{3}$
+   */
+  currency?: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  foreignAmount?: number | null;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  notes?: string | null;
   iconKey?: UpdateSubscriptionBodyIconKey;
   /**
    * @minimum -9007199254740991
@@ -11131,9 +11694,32 @@ export type UpdateSubscription200BillingCycle = typeof UpdateSubscription200Bill
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const UpdateSubscription200BillingCycle = {
+  daily: 'daily',
+  weekly: 'weekly',
   monthly: 'monthly',
   annual: 'annual',
 } as const;
+
+export type UpdateSubscription200PaymentMode = typeof UpdateSubscription200PaymentMode[keyof typeof UpdateSubscription200PaymentMode];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateSubscription200PaymentMode = {
+  auto: 'auto',
+  manual: 'manual',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateSubscription200LastPayment = {
+  date: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  amount: number;
+} | null;
 
 export type UpdateSubscription200 = {
   /**
@@ -11148,6 +11734,8 @@ export type UpdateSubscription200 = {
    */
   linkedAccountId: number;
   linkedAccountName: string;
+  /** @nullable */
+  linkedAccountType: string | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -11160,8 +11748,41 @@ export type UpdateSubscription200 = {
    */
   amount: number;
   billingCycle: UpdateSubscription200BillingCycle;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  intervalCount: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  monthlyEquivalent: number;
   nextRenewalAt: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  billingDay: number | null;
   status: string;
+  paymentMode: UpdateSubscription200PaymentMode;
+  /** @nullable */
+  trialEndsAt: number | null;
+  /** @nullable */
+  endsAt: number | null;
+  /** @nullable */
+  currency: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  foreignAmount: number | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  lastPayment: UpdateSubscription200LastPayment;
   iconKey: string;
   /**
    * @minimum -9007199254740991
@@ -24770,17 +25391,24 @@ export type listSubscriptionsResponseSuccess = (listSubscriptionsResponse200) & 
 
 export type listSubscriptionsResponse = (listSubscriptionsResponseSuccess)
 
-export const getListSubscriptionsUrl = () => {
+export const getListSubscriptionsUrl = (params?: ListSubscriptionsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
-  
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/subscriptions`
+  return stringifiedParams.length > 0 ? `/api/subscriptions?${stringifiedParams}` : `/api/subscriptions`
 }
 
-export const listSubscriptions = async ( options?: RequestInit): Promise<listSubscriptionsResponse> => {
+export const listSubscriptions = async (params?: ListSubscriptionsParams, options?: RequestInit): Promise<listSubscriptionsResponse> => {
   
-  return generatedFetch<listSubscriptionsResponse>(getListSubscriptionsUrl(),
+  return generatedFetch<listSubscriptionsResponse>(getListSubscriptionsUrl(params),
   {      
     ...options,
     method: 'GET'
@@ -24878,6 +25506,122 @@ export const processSubscriptionRenewals = async (processSubscriptionRenewalsBod
 
 
 
+export type resolveSubscriptionOccurrencesResponse200 = {
+  data: ResolveSubscriptionOccurrences200
+  status: 200
+}
+
+export type resolveSubscriptionOccurrencesResponse409 = {
+  data: ResolveSubscriptionOccurrences409
+  status: 409
+}
+    
+export type resolveSubscriptionOccurrencesResponseSuccess = (resolveSubscriptionOccurrencesResponse200) & {
+  headers: Headers;
+};
+export type resolveSubscriptionOccurrencesResponseError = (resolveSubscriptionOccurrencesResponse409) & {
+  headers: Headers;
+};
+
+export type resolveSubscriptionOccurrencesResponse = (resolveSubscriptionOccurrencesResponseSuccess | resolveSubscriptionOccurrencesResponseError)
+
+export const getResolveSubscriptionOccurrencesUrl = () => {
+
+
+  
+
+  return `/api/subscriptions/occurrences/resolve`
+}
+
+export const resolveSubscriptionOccurrences = async (resolveSubscriptionOccurrencesBody: ResolveSubscriptionOccurrencesBody, options?: RequestInit): Promise<resolveSubscriptionOccurrencesResponse> => {
+  
+  return generatedFetch<resolveSubscriptionOccurrencesResponse>(getResolveSubscriptionOccurrencesUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      resolveSubscriptionOccurrencesBody,)
+  }
+);}
+
+
+
+export type getSubscriptionHistoryResponse200 = {
+  data: GetSubscriptionHistory200
+  status: 200
+}
+    
+export type getSubscriptionHistoryResponseSuccess = (getSubscriptionHistoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getSubscriptionHistoryResponse = (getSubscriptionHistoryResponseSuccess)
+
+export const getGetSubscriptionHistoryUrl = (id: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/history`
+}
+
+export const getSubscriptionHistory = async (id: number, options?: RequestInit): Promise<getSubscriptionHistoryResponse> => {
+  
+  return generatedFetch<getSubscriptionHistoryResponse>(getGetSubscriptionHistoryUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type listSubscriptionOccurrenceCandidatesResponse200 = {
+  data: ListSubscriptionOccurrenceCandidates200
+  status: 200
+}
+
+export type listSubscriptionOccurrenceCandidatesResponse404 = {
+  data: ListSubscriptionOccurrenceCandidates404
+  status: 404
+}
+    
+export type listSubscriptionOccurrenceCandidatesResponseSuccess = (listSubscriptionOccurrenceCandidatesResponse200) & {
+  headers: Headers;
+};
+export type listSubscriptionOccurrenceCandidatesResponseError = (listSubscriptionOccurrenceCandidatesResponse404) & {
+  headers: Headers;
+};
+
+export type listSubscriptionOccurrenceCandidatesResponse = (listSubscriptionOccurrenceCandidatesResponseSuccess | listSubscriptionOccurrenceCandidatesResponseError)
+
+export const getListSubscriptionOccurrenceCandidatesUrl = (id: number,
+    dueAt: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/occurrences/${dueAt}/candidates`
+}
+
+export const listSubscriptionOccurrenceCandidates = async (id: number,
+    dueAt: number, options?: RequestInit): Promise<listSubscriptionOccurrenceCandidatesResponse> => {
+  
+  return generatedFetch<listSubscriptionOccurrenceCandidatesResponse>(getListSubscriptionOccurrenceCandidatesUrl(id,dueAt),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
 export type correctSubscriptionOccurrenceResponse201 = {
   data: CorrectSubscriptionOccurrence201
   status: 201
@@ -24961,6 +25705,48 @@ export const voidSubscriptionOccurrence = async (id: number,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       voidSubscriptionOccurrenceBody,)
+  }
+);}
+
+
+
+export type unlinkSubscriptionOccurrenceResponse200 = {
+  data: UnlinkSubscriptionOccurrence200
+  status: 200
+}
+
+export type unlinkSubscriptionOccurrenceResponse409 = {
+  data: UnlinkSubscriptionOccurrence409
+  status: 409
+}
+    
+export type unlinkSubscriptionOccurrenceResponseSuccess = (unlinkSubscriptionOccurrenceResponse200) & {
+  headers: Headers;
+};
+export type unlinkSubscriptionOccurrenceResponseError = (unlinkSubscriptionOccurrenceResponse409) & {
+  headers: Headers;
+};
+
+export type unlinkSubscriptionOccurrenceResponse = (unlinkSubscriptionOccurrenceResponseSuccess | unlinkSubscriptionOccurrenceResponseError)
+
+export const getUnlinkSubscriptionOccurrenceUrl = (id: number,
+    dueAt: number,) => {
+
+
+  
+
+  return `/api/subscriptions/${id}/occurrences/${dueAt}/unlink`
+}
+
+export const unlinkSubscriptionOccurrence = async (id: number,
+    dueAt: number, options?: RequestInit): Promise<unlinkSubscriptionOccurrenceResponse> => {
+  
+  return generatedFetch<unlinkSubscriptionOccurrenceResponse>(getUnlinkSubscriptionOccurrenceUrl(id,dueAt),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
   }
 );}
 

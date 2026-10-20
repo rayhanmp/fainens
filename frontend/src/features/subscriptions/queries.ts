@@ -1,56 +1,45 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   archiveSubscription,
+  correctSubscriptionOccurrence,
   createSubscription,
+  getSubscriptionHistory,
   listAccounts,
   listCategories,
+  listSubscriptionOccurrenceCandidates,
   listSubscriptions,
   processSubscriptionRenewals,
+  resolveSubscriptionOccurrences,
+  unlinkSubscriptionOccurrence,
   updateSubscription,
+  voidSubscriptionOccurrence,
+  type CorrectSubscriptionOccurrenceBody,
   type CreateSubscriptionBody,
+  type ListSubscriptions200SubscriptionsItem,
+  type ListSubscriptions200RenewalPreviewOccurrencesItem,
   type ProcessSubscriptionRenewalsBody,
+  type ResolveSubscriptionOccurrencesBody,
   type UpdateSubscriptionBody,
 } from '../../generated/client';
 import { unwrapGenerated } from '../core/generated-response';
 import { invalidateFinancialSummaries, queryKeys } from '../core/query-keys';
+import { isPaymentAccount, type PaymentAccount } from './accounts';
+
+export type Subscription = ListSubscriptions200SubscriptionsItem;
+export type RenewalOccurrence = ListSubscriptions200RenewalPreviewOccurrencesItem;
 
 export type SubscriptionsPageData = {
-  subscriptions: Awaited<ReturnType<typeof listSubscriptions>>['data']['subscriptions'];
-  renewalPreview: Awaited<ReturnType<typeof listSubscriptions>>['data']['renewalPreview'];
-  accounts: Array<{ id: number; name: string }>;
+  /** Every subscription, archived ones included; the page filters them. */
+  subscriptions: Subscription[];
+  renewalPreview: { occurrences: RenewalOccurrence[]; truncated: boolean };
+  /** What subscriptions charged in each of the last twelve months, oldest first. */
+  monthlyCharges: Array<{ month: string; total: number; items: Array<{ subscriptionId: number; amount: number }> }>;
+  /** Accounts that can pay a subscription: active wallets, banks and cards, with their balances. */
+  accounts: PaymentAccount[];
+  /** Every account by id, for naming an account a subscription still points at. */
+  accountNames: Map<number, string>;
   categories: Array<{ id: number; name: string }>;
 };
-
-type SubscriptionDraft = Omit<CreateSubscriptionBody, 'billingCycle' | 'status' | 'iconKey'> & {
-  billingCycle?: string;
-  status?: string;
-  iconKey?: string;
-};
-type SubscriptionUpdateDraft = Omit<UpdateSubscriptionBody, 'billingCycle' | 'status' | 'iconKey'> & {
-  billingCycle?: string;
-  status?: string;
-  iconKey?: string;
-};
-
-function normalizeSubscriptionDraft(input: SubscriptionDraft): CreateSubscriptionBody {
-  return {
-    ...input,
-    billingCycle: input.billingCycle === 'annual' ? 'annual' : 'monthly',
-    status: input.status === 'paused' ? 'paused' : 'active',
-    iconKey: ['car', 'film', 'music', 'signal', 'sparkles', 'default'].includes(input.iconKey ?? '')
-      ? input.iconKey as CreateSubscriptionBody['iconKey']
-      : 'default',
-  } as CreateSubscriptionBody;
-}
-
-function normalizeSubscriptionUpdate(input: SubscriptionUpdateDraft): UpdateSubscriptionBody {
-  return {
-    ...input,
-    ...(input.billingCycle ? { billingCycle: input.billingCycle === 'annual' ? 'annual' : 'monthly' } : {}),
-    ...(input.status ? { status: input.status === 'paused' ? 'paused' : 'active' } : {}),
-    ...(input.iconKey ? { iconKey: ['car', 'film', 'music', 'signal', 'sparkles', 'default'].includes(input.iconKey) ? input.iconKey as UpdateSubscriptionBody['iconKey'] : 'default' } : {}),
-  } as UpdateSubscriptionBody;
-}
 
 /** Loads subscription records and the lookup lists used by its editor. */
 export function useSubscriptionsQuery() {
@@ -58,49 +47,88 @@ export function useSubscriptionsQuery() {
     queryKey: queryKeys.subscriptions.all,
     queryFn: async () => {
       const [subscriptionData, accounts, categories] = await Promise.all([
-        unwrapGenerated(listSubscriptions(), 200, 'Failed to load subscriptions'),
+        unwrapGenerated(listSubscriptions({ includeArchived: 'true' }), 200, 'Failed to load subscriptions'),
         unwrapGenerated(listAccounts(), 200, 'Failed to load accounts'),
         unwrapGenerated(listCategories(), 200, 'Failed to load categories'),
       ]);
       return {
         subscriptions: subscriptionData.subscriptions,
         renewalPreview: subscriptionData.renewalPreview,
-        accounts: accounts.map((account) => ({ id: account.id, name: account.name })),
-        categories: categories.map((category) => ({ id: category.id, name: category.name })),
+        monthlyCharges: subscriptionData.monthlyCharges,
+        accounts: accounts.filter(isPaymentAccount).map((account) => ({
+          id: account.id,
+          name: account.name,
+          type: account.type,
+          balance: account.balance ?? 0,
+        })),
+        accountNames: new Map(accounts.map((account) => [account.id, account.name])),
+        categories: categories
+          .filter((category) => category.isActive !== false && category.id != null)
+          .map((category) => ({ id: category.id as number, name: category.name })),
       };
     },
     placeholderData: (previous) => previous,
   });
 }
 
-export function useCreateSubscriptionMutation() {
+export function useSubscriptionHistoryQuery(subscriptionId: number | null) {
+  return useQuery({
+    queryKey: [...queryKeys.subscriptions.all, 'history', subscriptionId],
+    queryFn: () => unwrapGenerated(getSubscriptionHistory(subscriptionId!), 200, 'Failed to load the payment history'),
+    enabled: subscriptionId != null,
+  });
+}
+
+/** Expenses already entered that could be this renewal's charge. */
+export function useOccurrenceCandidatesQuery(occurrence: { subscriptionId: number; dueAt: number } | null) {
+  return useQuery({
+    queryKey: [...queryKeys.subscriptions.all, 'candidates', occurrence?.subscriptionId, occurrence?.dueAt],
+    queryFn: () => unwrapGenerated(listSubscriptionOccurrenceCandidates(occurrence!.subscriptionId, occurrence!.dueAt), 200, 'Failed to look for matching transactions'),
+    enabled: occurrence != null,
+  });
+}
+
+function useSubscriptionMutation<TInput, TResult>(mutationFn: (input: TInput) => Promise<TResult>) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: SubscriptionDraft) => unwrapGenerated(createSubscription(normalizeSubscriptionDraft(input)), 201, 'Failed to create subscription'),
+    mutationFn,
     onSuccess: () => invalidateFinancialSummaries(queryClient),
   });
+}
+
+export function useCreateSubscriptionMutation() {
+  return useSubscriptionMutation((input: CreateSubscriptionBody) => unwrapGenerated(createSubscription(input), 201, 'Failed to create subscription'));
 }
 
 export function useUpdateSubscriptionMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: SubscriptionUpdateDraft }) => unwrapGenerated(updateSubscription(id, normalizeSubscriptionUpdate(data)), 200, 'Failed to update subscription'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
-  });
+  return useSubscriptionMutation(({ id, data }: { id: number; data: UpdateSubscriptionBody }) => unwrapGenerated(updateSubscription(id, data), 200, 'Failed to update subscription'));
 }
 
 export function useDeleteSubscriptionMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => unwrapGenerated(archiveSubscription(id), 204, 'Failed to archive subscription'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
-  });
+  return useSubscriptionMutation((id: number) => unwrapGenerated(archiveSubscription(id), 204, 'Failed to archive subscription'));
 }
 
 export function useRunRenewalsMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: ProcessSubscriptionRenewalsBody) => unwrapGenerated(processSubscriptionRenewals(input), 200, 'Failed to process subscription renewals'),
-    onSuccess: () => invalidateFinancialSummaries(queryClient),
-  });
+  return useSubscriptionMutation((input: ProcessSubscriptionRenewalsBody) => unwrapGenerated(processSubscriptionRenewals(input), 200, 'Failed to process subscription renewals'));
+}
+
+export type OccurrenceResolution = ResolveSubscriptionOccurrencesBody['items'][number];
+
+export function useResolveOccurrencesMutation() {
+  return useSubscriptionMutation((items: OccurrenceResolution[]) => unwrapGenerated(resolveSubscriptionOccurrences({ items }), 200, 'Failed to record the renewal'));
+}
+
+export function useCorrectOccurrenceMutation() {
+  return useSubscriptionMutation(({ subscriptionId, dueAt, data }: { subscriptionId: number; dueAt: number; data: CorrectSubscriptionOccurrenceBody }) =>
+    unwrapGenerated(correctSubscriptionOccurrence(subscriptionId, dueAt, data), 201, 'Failed to correct the renewal'));
+}
+
+export function useVoidOccurrenceMutation() {
+  return useSubscriptionMutation(({ subscriptionId, dueAt, reason }: { subscriptionId: number; dueAt: number; reason: string }) =>
+    unwrapGenerated(voidSubscriptionOccurrence(subscriptionId, dueAt, { reason }), 201, 'Failed to void the renewal'));
+}
+
+export function useUnlinkOccurrenceMutation() {
+  return useSubscriptionMutation(({ subscriptionId, dueAt }: { subscriptionId: number; dueAt: number }) =>
+    unwrapGenerated(unlinkSubscriptionOccurrence(subscriptionId, dueAt), 200, 'Failed to unlink the transaction'));
 }

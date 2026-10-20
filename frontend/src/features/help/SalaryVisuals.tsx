@@ -1,15 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import { TakeHomeCard } from '../salary/SalaryCards';
 import { takeHomeBreakdown } from '../salary/income-insights';
-import { Button } from '../../components/ui/Button';
+import { SubscriptionsHero } from '../subscriptions/SubscriptionsHero';
+import type { Subscription } from '../subscriptions/queries';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
-import { formatDate } from '../../lib/utils';
 import { exampleAccounts, useHelpPersonal } from './personal';
 import { VisualFrame } from './visuals';
 
 /**
- * Income & salary’s take-home card (the real component, with example figures), and the
- * Subscriptions page’s missed-renewals notice as it appears there. Clicks are held.
+ * Income & salary’s take-home card and the Subscriptions page’s overview (the real components,
+ * with example figures). Clicks are held.
  */
 
 function Inert({ children, className }: { children: ReactNode; className?: string }) {
@@ -20,15 +20,36 @@ function Inert({ children, className }: { children: ReactNode; className?: strin
 const EXAMPLE = { grossMonthly: 15_000_000, pph21Monthly: 1_050_000, jhtMonthly: 300_000, jpMonthly: 105_474, bpjsKesehatanMonthly: 120_000 };
 const NET = EXAMPLE.grossMonthly - EXAMPLE.pph21Monthly - EXAMPLE.jhtMonthly - EXAMPLE.jpMonthly - EXAMPLE.bpjsKesehatanMonthly;
 
+/** An example subscription renewing `days` from today. */
+function exampleSubscription(id: number, name: string, amount: number, days: number, now: number, accountName: string, billingCycle: 'monthly' | 'annual' = 'monthly'): Subscription {
+  const next = new Date(now);
+  next.setDate(next.getDate() + days);
+  next.setHours(12, 0, 0, 0);
+  return {
+    id, name, amount, billingCycle, intervalCount: 1,
+    monthlyEquivalent: Math.round(billingCycle === 'annual' ? amount / 12 : amount),
+    nextRenewalAt: next.getTime(), billingDay: next.getDate(), status: 'active', paymentMode: 'auto',
+    linkedAccountId: 0, linkedAccountName: accountName, linkedAccountType: 'asset', categoryId: null,
+    trialEndsAt: null, endsAt: null, currency: null, foreignAmount: null, notes: null, lastPayment: null,
+    iconKey: 'default', sortOrder: 0, createdAt: now - 400 * 86_400_000, updatedAt: now,
+  };
+}
+
 export function SalaryAndRenewalDemo() {
   const { formatAmount } = useBalanceVisibility();
   const { first } = exampleAccounts(useHelpPersonal());
   const segments = takeHomeBreakdown({ ...EXAMPLE, estimatedNetMonthly: NET });
-  const [due] = useState(() => Date.now() - 4 * 86_400_000);
+  const [now] = useState(() => Date.now());
+  const examples = [
+    exampleSubscription(1, 'Netflix', 186_000, -4, now, first),
+    exampleSubscription(2, 'Spotify', 64_990, 26, now, first),
+    exampleSubscription(3, 'iCloud Storage', 15_000, 6, now, first),
+    exampleSubscription(4, 'Domain', 278_405, 120, now, first, 'annual'),
+  ];
 
   return (
-    <VisualFrame caption="The Income & salary page’s take-home card with example figures, and the Subscriptions notice for renewals missed while you were away.">
-      <Inert className="grid gap-5 2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] 2xl:items-start">
+    <VisualFrame caption="The Income & salary page’s take-home card and the Subscriptions overview, with example figures: a month’s cost, the year it adds up to, and this month’s renewal days, one of them past due.">
+      <Inert className="grid gap-5">
         <TakeHomeCard
           gross={EXAMPLE.grossMonthly}
           net={NET}
@@ -43,19 +64,20 @@ export function SalaryAndRenewalDemo() {
           formatAmount={formatAmount}
           onEditProfile={() => undefined}
         />
-        <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
-          <div className="flex flex-col justify-between gap-4">
-            <div>
-              <h2 className="font-headline text-lg font-bold">2 missed renewal occurrence(s) need a decision</h2>
-              <p className="mt-1 text-sm">Nothing was posted automatically. Confirm charges only if the subscriptions were active on these dates, or skip them to resume the schedules without changing the ledger.</p>
-              <p className="mt-2 text-xs">{`Netflix · ${formatDate(due)} · ${formatAmount(186_000)}  |  Spotify · ${formatDate(due + 86_400_000)} · ${formatAmount(64_990)}`}</p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Button variant="secondary" tabIndex={-1}>Skip &amp; resume</Button>
-              <Button tabIndex={-1}>Review confirmed · Post</Button>
-            </div>
-          </div>
-        </section>
+        <SubscriptionsHero
+          loading={false}
+          renewing={examples}
+          monthlyTotal={examples.reduce((sum, item) => sum + item.monthlyEquivalent, 0)}
+          upcoming={examples.filter((item) => item.id !== 1).map((item) => ({ subscription: item, dueAt: item.nextRenewalAt })).sort((a, b) => a.dueAt - b.dueAt)}
+          paidThisMonth={64_990}
+          overdue={[{ subscriptionId: 1, subscriptionName: 'Netflix', dueAt: examples[0].nextRenewalAt, amount: 186_000, linkedAccountId: 0, billingCycle: 'monthly', intervalCount: 1, paymentMode: 'auto', currency: null, foreignAmount: null }]}
+          truncated={false}
+          now={now}
+          busy={false}
+          onRecord={() => undefined}
+          onSkip={() => undefined}
+          onResolveAll={() => undefined}
+        />
       </Inert>
     </VisualFrame>
   );

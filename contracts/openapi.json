@@ -23960,6 +23960,20 @@
         "tags": [
           "subscriptions"
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "includeArchived",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -23989,6 +24003,10 @@
                           "linkedAccountName": {
                             "type": "string"
                           },
+                          "linkedAccountType": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "categoryId": {
                             "nullable": true,
                             "type": "integer",
@@ -24003,15 +24021,81 @@
                           "billingCycle": {
                             "type": "string",
                             "enum": [
+                              "daily",
+                              "weekly",
                               "monthly",
                               "annual"
                             ]
                           },
+                          "intervalCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "monthlyEquivalent": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "nextRenewalAt": {
                             "type": "number"
                           },
+                          "billingDay": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "status": {
                             "type": "string"
+                          },
+                          "paymentMode": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "trialEndsAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "endsAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "currency": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "foreignAmount": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "notes": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "lastPayment": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "number"
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "date",
+                              "amount"
+                            ],
+                            "additionalProperties": false
                           },
                           "iconKey": {
                             "type": "string"
@@ -24033,11 +24117,22 @@
                           "name",
                           "linkedAccountId",
                           "linkedAccountName",
+                          "linkedAccountType",
                           "categoryId",
                           "amount",
                           "billingCycle",
+                          "intervalCount",
+                          "monthlyEquivalent",
                           "nextRenewalAt",
+                          "billingDay",
                           "status",
+                          "paymentMode",
+                          "trialEndsAt",
+                          "endsAt",
+                          "currency",
+                          "foreignAmount",
+                          "notes",
+                          "lastPayment",
                           "iconKey",
                           "sortOrder",
                           "createdAt",
@@ -24077,6 +24172,24 @@
                               },
                               "billingCycle": {
                                 "type": "string"
+                              },
+                              "intervalCount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "paymentMode": {
+                                "type": "string"
+                              },
+                              "currency": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "foreignAmount": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
                               }
                             },
                             "required": [
@@ -24085,7 +24198,11 @@
                               "dueAt",
                               "amount",
                               "linkedAccountId",
-                              "billingCycle"
+                              "billingCycle",
+                              "intervalCount",
+                              "paymentMode",
+                              "currency",
+                              "foreignAmount"
                             ],
                             "additionalProperties": {}
                           }
@@ -24099,11 +24216,57 @@
                         "truncated"
                       ],
                       "additionalProperties": {}
+                    },
+                    "monthlyCharges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "month": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "subscriptionId": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "amount": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "subscriptionId",
+                                "amount"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "month",
+                          "total",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "subscriptions",
-                    "renewalPreview"
+                    "renewalPreview",
+                    "monthlyCharges"
                   ],
                   "additionalProperties": {}
                 }
@@ -24148,9 +24311,16 @@
                   "billingCycle": {
                     "type": "string",
                     "enum": [
+                      "daily",
+                      "weekly",
                       "monthly",
                       "annual"
                     ]
+                  },
+                  "intervalCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 366
                   },
                   "nextRenewalAt": {
                     "type": "integer",
@@ -24161,8 +24331,44 @@
                     "type": "string",
                     "enum": [
                       "active",
-                      "paused"
+                      "paused",
+                      "cancelled"
                     ]
+                  },
+                  "paymentMode": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "manual"
+                    ]
+                  },
+                  "trialEndsAt": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "endsAt": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "currency": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^[A-Za-z]{3}$"
+                  },
+                  "foreignAmount": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   },
                   "iconKey": {
                     "type": "string",
@@ -24216,6 +24422,10 @@
                     "linkedAccountName": {
                       "type": "string"
                     },
+                    "linkedAccountType": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "categoryId": {
                       "nullable": true,
                       "type": "integer",
@@ -24230,15 +24440,81 @@
                     "billingCycle": {
                       "type": "string",
                       "enum": [
+                        "daily",
+                        "weekly",
                         "monthly",
                         "annual"
                       ]
                     },
+                    "intervalCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "monthlyEquivalent": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "nextRenewalAt": {
                       "type": "number"
                     },
+                    "billingDay": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "status": {
                       "type": "string"
+                    },
+                    "paymentMode": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "manual"
+                      ]
+                    },
+                    "trialEndsAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "endsAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "currency": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "foreignAmount": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastPayment": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "date": {
+                          "type": "number"
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "date",
+                        "amount"
+                      ],
+                      "additionalProperties": false
                     },
                     "iconKey": {
                       "type": "string"
@@ -24260,11 +24536,22 @@
                     "name",
                     "linkedAccountId",
                     "linkedAccountName",
+                    "linkedAccountType",
                     "categoryId",
                     "amount",
                     "billingCycle",
+                    "intervalCount",
+                    "monthlyEquivalent",
                     "nextRenewalAt",
+                    "billingDay",
                     "status",
+                    "paymentMode",
+                    "trialEndsAt",
+                    "endsAt",
+                    "currency",
+                    "foreignAmount",
+                    "notes",
+                    "lastPayment",
                     "iconKey",
                     "sortOrder",
                     "createdAt",
@@ -24409,6 +24696,469 @@
             }
           },
           "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions/occurrences/resolve": {
+      "post": {
+        "operationId": "resolveSubscriptionOccurrences",
+        "tags": [
+          "subscriptions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "minItems": 1,
+                    "maxItems": 120,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "subscriptionId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "dueAt": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "post"
+                              ]
+                            },
+                            "amount": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "paidAt": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "accountId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "categoryId": {
+                              "nullable": true,
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "reanchor": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "subscriptionId",
+                            "dueAt",
+                            "action"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "subscriptionId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "dueAt": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "link"
+                              ]
+                            },
+                            "transactionId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "reanchor": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "subscriptionId",
+                            "dueAt",
+                            "action",
+                            "transactionId"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "subscriptionId": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "dueAt": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "skip"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "subscriptionId",
+                            "dueAt",
+                            "action"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "items"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "posted": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "linked": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "skipped": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "transactionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "nextRenewals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "subscriptionId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "nextRenewalAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "subscriptionId",
+                          "nextRenewalAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "posted",
+                    "linked",
+                    "skipped",
+                    "transactionIds",
+                    "nextRenewals"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions/{id}/history": {
+      "get": {
+        "operationId": "getSubscriptionHistory",
+        "tags": [
+          "subscriptions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "dueAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "paid",
+                              "linked",
+                              "corrected",
+                              "voided",
+                              "skipped"
+                            ]
+                          },
+                          "note": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "transaction": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "date": {
+                                "type": "number"
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "accountName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "txType": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "date",
+                              "amount",
+                              "description",
+                              "accountName",
+                              "status",
+                              "txType"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "dueAt",
+                          "status",
+                          "note",
+                          "transaction"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totalPaid": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "paidCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "skippedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "entries",
+                    "totalPaid",
+                    "paidCount",
+                    "skippedCount"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions/{id}/occurrences/{dueAt}/candidates": {
+      "get": {
+        "operationId": "listSubscriptionOccurrenceCandidates",
+        "tags": [
+          "subscriptions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "dueAt",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "candidates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "transactionId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "date": {
+                            "type": "number"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "accountName": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "transactionId",
+                          "date",
+                          "description",
+                          "amount",
+                          "accountName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "candidates"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -24643,6 +25393,78 @@
         }
       }
     },
+    "/api/subscriptions/{id}/occurrences/{dueAt}/unlink": {
+      "post": {
+        "operationId": "unlinkSubscriptionOccurrence",
+        "tags": [
+          "subscriptions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "dueAt",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transactionId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "transactionId"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/subscriptions/{id}": {
       "get": {
         "operationId": "getSubscription",
@@ -24685,6 +25507,10 @@
                     "linkedAccountName": {
                       "type": "string"
                     },
+                    "linkedAccountType": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "categoryId": {
                       "nullable": true,
                       "type": "integer",
@@ -24699,15 +25525,81 @@
                     "billingCycle": {
                       "type": "string",
                       "enum": [
+                        "daily",
+                        "weekly",
                         "monthly",
                         "annual"
                       ]
                     },
+                    "intervalCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "monthlyEquivalent": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "nextRenewalAt": {
                       "type": "number"
                     },
+                    "billingDay": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "status": {
                       "type": "string"
+                    },
+                    "paymentMode": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "manual"
+                      ]
+                    },
+                    "trialEndsAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "endsAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "currency": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "foreignAmount": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastPayment": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "date": {
+                          "type": "number"
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "date",
+                        "amount"
+                      ],
+                      "additionalProperties": false
                     },
                     "iconKey": {
                       "type": "string"
@@ -24729,11 +25621,22 @@
                     "name",
                     "linkedAccountId",
                     "linkedAccountName",
+                    "linkedAccountType",
                     "categoryId",
                     "amount",
                     "billingCycle",
+                    "intervalCount",
+                    "monthlyEquivalent",
                     "nextRenewalAt",
+                    "billingDay",
                     "status",
+                    "paymentMode",
+                    "trialEndsAt",
+                    "endsAt",
+                    "currency",
+                    "foreignAmount",
+                    "notes",
+                    "lastPayment",
                     "iconKey",
                     "sortOrder",
                     "createdAt",
@@ -24801,9 +25704,16 @@
                   "billingCycle": {
                     "type": "string",
                     "enum": [
+                      "daily",
+                      "weekly",
                       "monthly",
                       "annual"
                     ]
+                  },
+                  "intervalCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 366
                   },
                   "nextRenewalAt": {
                     "type": "integer",
@@ -24814,8 +25724,45 @@
                     "type": "string",
                     "enum": [
                       "active",
-                      "paused"
+                      "paused",
+                      "cancelled",
+                      "archived"
                     ]
+                  },
+                  "paymentMode": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "manual"
+                    ]
+                  },
+                  "trialEndsAt": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "endsAt": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "currency": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^[A-Za-z]{3}$"
+                  },
+                  "foreignAmount": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   },
                   "iconKey": {
                     "type": "string",
@@ -24875,6 +25822,10 @@
                     "linkedAccountName": {
                       "type": "string"
                     },
+                    "linkedAccountType": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "categoryId": {
                       "nullable": true,
                       "type": "integer",
@@ -24889,15 +25840,81 @@
                     "billingCycle": {
                       "type": "string",
                       "enum": [
+                        "daily",
+                        "weekly",
                         "monthly",
                         "annual"
                       ]
                     },
+                    "intervalCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "monthlyEquivalent": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "nextRenewalAt": {
                       "type": "number"
                     },
+                    "billingDay": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "status": {
                       "type": "string"
+                    },
+                    "paymentMode": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "manual"
+                      ]
+                    },
+                    "trialEndsAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "endsAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "currency": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "foreignAmount": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "notes": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastPayment": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "date": {
+                          "type": "number"
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "date",
+                        "amount"
+                      ],
+                      "additionalProperties": false
                     },
                     "iconKey": {
                       "type": "string"
@@ -24919,11 +25936,22 @@
                     "name",
                     "linkedAccountId",
                     "linkedAccountName",
+                    "linkedAccountType",
                     "categoryId",
                     "amount",
                     "billingCycle",
+                    "intervalCount",
+                    "monthlyEquivalent",
                     "nextRenewalAt",
+                    "billingDay",
                     "status",
+                    "paymentMode",
+                    "trialEndsAt",
+                    "endsAt",
+                    "currency",
+                    "foreignAmount",
+                    "notes",
+                    "lastPayment",
                     "iconKey",
                     "sortOrder",
                     "createdAt",

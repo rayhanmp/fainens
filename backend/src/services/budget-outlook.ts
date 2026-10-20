@@ -4,7 +4,7 @@ import { db } from "../db/client";
 import { budgetPlans, categories, forecastPurchaseReviews, salaryPeriods, subscriptions, transactions } from "../db/schema";
 import { budgetActualsWindow, getFinancialFacts } from "./financial-facts";
 import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
-import { nextOccurrence } from "./subscription-renewals";
+import { nextRenewal } from "./subscription-schedule";
 import { robustHistoricalStats } from "./budget-outlook-math";
 import { getFinancialRevision } from "./financial-revision";
 
@@ -87,7 +87,9 @@ async function scheduledSpendingByCategory(afterMs: number, endMs: number): Prom
       amount: subscriptions.amount,
       nextRenewalAt: subscriptions.nextRenewalAt,
       billingCycle: subscriptions.billingCycle,
+      intervalCount: subscriptions.intervalCount,
       billingDay: subscriptions.billingDay,
+      endsAt: subscriptions.endsAt,
     })
     .from(subscriptions)
     .where(eq(subscriptions.status, "active"));
@@ -96,13 +98,14 @@ async function scheduledSpendingByCategory(afterMs: number, endMs: number): Prom
   for (const subscription of activeSubscriptions) {
     if (subscription.categoryId == null || subscription.amount <= 0) continue;
     let dueAt = toMs(subscription.nextRenewalAt);
+    const lastDueAt = subscription.endsAt == null ? endMs : Math.min(endMs, toMs(subscription.endsAt));
     // Overdue renewals are intentionally not projected. They need review as
     // overdue obligations rather than being silently treated as future spend.
     // Same schedule as the renewal job, so projections land on the real billing day.
-    while (dueAt <= afterMs) dueAt = nextOccurrence(dueAt, subscription.billingCycle, subscription.billingDay);
-    while (dueAt <= endMs) {
+    while (dueAt <= afterMs) dueAt = nextRenewal(dueAt, subscription);
+    while (dueAt <= lastDueAt) {
       scheduled.set(subscription.categoryId, (scheduled.get(subscription.categoryId) ?? 0) + subscription.amount);
-      dueAt = nextOccurrence(dueAt, subscription.billingCycle, subscription.billingDay);
+      dueAt = nextRenewal(dueAt, subscription);
     }
   }
   return scheduled;

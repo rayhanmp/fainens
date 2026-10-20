@@ -500,8 +500,16 @@ export const DOCS: DocPage[] = [
     blocks: [
       { type: 'visual', node: <SalaryAndRenewalDemo />, wide: true },
       { type: 'h2', id: 'subscriptions', text: 'Subscriptions' },
-      { type: 'p', text: 'Add each monthly or annual subscription with the account it’s paid from. You’ll see the monthly total and what renews next. When a renewal is due, Fainens asks: post it, or skip it if you weren’t charged.' },
-      { type: 'p', text: 'Subscriptions can be paused or set to end; ones about to expire are flagged. If renewals were missed while you were away, a panel lists them so you can post or skip each one. The timeline shows upcoming renewals and the account each comes from.' },
+      { type: 'p', text: 'Add each subscription with its price, how often it repeats (weekly, monthly, every few months, yearly, or any number of days, weeks, months or years) and the wallet, bank or card it’s paid from. PayLater accounts can’t pay subscriptions; record those purchases on the Pay later page. The top of the page shows the cost per month and roughly per year, what share each subscription takes, and a calendar with a dot on every renewal day; step or swipe through the months and tap a day to see what renews.' },
+      { type: 'p', text: 'Nothing is posted behind your back. A renewal whose date has passed is listed as past due on the calendar card: record the payment as it happened, even late, with the amount, date and account it really had, or skip it if you weren’t charged. When you pay late, choose whether the next payment keeps its schedule or counts from the day you paid. If you already entered the charge in Transactions, link it instead so it isn’t counted twice.' },
+      { type: 'list', items: [
+        'Paid by hand? Set it to “I pay manually” and record each payment when you make it, early if you like.',
+        'Billed in dollars or another currency? Store that price with a Rupiah estimate; when you record the payment you enter the Rupiah amount from your statement.',
+        'Free trials show when they end, so you can cancel before the first charge.',
+        'Pause a subscription and pick the next payment date when you resume it. Cancel one with its last day; renewals after it aren’t due. Archived ones keep their history and can be restored.',
+        'Each subscription’s payments list what was actually charged. Open one to correct its amount, void a charge that never happened, or unlink a transaction you linked by mistake.',
+        'At the bottom, Payments by month gives each subscription a row across the last year and the next six months: a dot for every month it charged, bigger for bigger charges, filled when paid, a ring when scheduled and amber when past due. Gaps are months it skipped.',
+      ] },
       { type: 'open', link: { to: '/subscriptions', label: 'Open Subscriptions' } },
       { type: 'h2', id: 'income-page', text: 'The Income & salary page' },
       { type: 'list', items: [
@@ -518,7 +526,7 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'See your estimated annual tax and mark other income as taxable, final or exempt. A switch chooses whether other taxable income counts at 50% or 100%.' },
       { type: 'callout', tone: 'warning', text: 'These are planning estimates, not a tax filing.' },
       { type: 'under-hood', entries: [
-        { title: 'A Rp186.000 subscription renewal from {cash}', lines: [{ account: 'Expense (Auto)', note: 'The subscription’s category', debit: '186.000' }, { account: '{cash}', credit: '186.000' }], explain: 'Each confirmed renewal is an ordinary expense, dated on its due date. Voiding a renewal you weren’t charged for cancels it on that same date.' },
+        { title: 'A Rp186.000 subscription renewal from {cash}', lines: [{ account: 'Expense (Auto)', note: 'The subscription’s category', debit: '186.000' }, { account: '{cash}', credit: '186.000' }], explain: 'Each recorded renewal is an ordinary expense, dated on the day it was paid (its due date when you record it as expected). Linking a transaction you already entered adds no new entry. Voiding a renewal you weren’t charged for cancels it on its own date.' },
         { title: 'Posting your salary into {cash}', lines: [{ account: '{cash}', debit: 'Take-home' }, { account: 'Income (Auto)', credit: 'Take-home' }], explain: 'Only your take-home pay is posted. Gross pay, PTKP status and the tax and BPJS estimates are kept in the entry’s notes, not as separate lines. One salary per month, and it needs an open period that includes payday.' },
       ] },
       { type: 'open', link: { to: '/salary-income', label: 'Open Income & salary' } },
