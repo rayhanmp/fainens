@@ -8,7 +8,6 @@ import {
   InstallmentDemo,
   LedgerFlow,
   PeriodTimeline,
-  ReconcileDemo,
   SplitBillDemo,
   YourSetup,
 } from './visuals';
@@ -18,6 +17,7 @@ import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisu
 import { ComposerDemo, TransferDemo } from './ComposerVisuals';
 import { SettingsPreviewDemo } from './SettingsVisuals';
 import { SalaryAndRenewalDemo } from './SalaryVisuals';
+import { MismatchDemo, ReconcileDemo } from './ReconcileVisuals';
 import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
@@ -28,7 +28,6 @@ import {
   CanISummaryDemo,
   GlossaryCardDemo,
   LoanRepaymentDemo,
-  MismatchDemo,
   SavingsFanDemo,
   ShortcutsDemo,
   WhatsNewDemo,

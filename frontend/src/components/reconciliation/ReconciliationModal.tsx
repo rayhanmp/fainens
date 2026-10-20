@@ -55,7 +55,7 @@ interface ReconciliationModalProps {
   onSuccess: () => void;
 }
 
-function AccountIcon({ name }: { name: string }) {
+export function AccountIcon({ name }: { name: string }) {
   const lowerName = name.toLowerCase();
   if (lowerName.includes('bank') || lowerName.includes('bca') || lowerName.includes('bni') || lowerName.includes('mandiri') || lowerName.includes('bri')) {
     return <Building2 className="w-4 h-4" />;
