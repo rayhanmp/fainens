@@ -29,6 +29,10 @@ interface RetirementProjection {
   projectedRetirementSpending: number;
   estimatedAssetIncome: number;
   estimatedJpIncome: number;
+  /** The JP pension a month once it starts at `jpAccessAge`, even when that is after retirement; 0 without one. */
+  jpIncomeWhenPaid: number;
+  /** Rupiah at retirement per rupiah today: divide by it for today's prices. */
+  inflationFactor: number;
   estimatedMonthlyIncome: number;
   monthlyGap: number;
   requiredAdditionalSaving: number | null;
@@ -37,13 +41,18 @@ interface RetirementProjection {
   jpAccessYear: number;
   retirementYear: number;
   jpNormalAgeAtRetirement: number;
-  withdrawalRate: number;
+  payoutUntilAge: number;
+  /** The first month's pay-out from JHT and from personal savings, at retirement. */
+  jhtIncome: number;
+  personalIncome: number;
   totalJpContributionYears: number;
   jpAverageWage: number;
   jhtAvailable: boolean;
   jpAvailable: boolean;
   jpEligible: boolean;
   series: Array<{ age: number; jht: number; personal: number; total: number }>;
+  /** JHT (when claimable) and savings left each year after retiring, as they're paid out. */
+  drawdown: Array<{ age: number; assets: number }>;
 }
 
 function futureValueFactor(monthlyRate: number, months: number): number {
@@ -77,7 +86,10 @@ export function calculateRetirementProjection(input: {
   inflationRate: number;
   jhtReturnRate: number;
   personalReturnRate: number;
-  withdrawalRate: number;
+  /** Yearly return on JHT and savings after retiring, e.g. SBN ritel net of tax. */
+  postRetirementReturn: number;
+  /** The age the money should last until; it's spent down evenly, rising with inflation. */
+  payoutUntilAge: number;
   targetMonthlySpending: number;
   currentYear?: number;
   claimJhtEarly?: boolean;
@@ -92,7 +104,8 @@ export function calculateRetirementProjection(input: {
   if (!Number.isInteger(input.currentAge) || !Number.isInteger(input.retirementAge)
     || input.currentAge < 18 || input.retirementAge < input.currentAge || input.retirementAge > 100
     || input.existingJpYears > Math.min(input.currentAge - 18, Math.max(0, currentYear - 2015))
-    || [input.salaryGrowthRate, input.inflationRate, input.jhtReturnRate, input.personalReturnRate, input.withdrawalRate].some(rate => rate > 100)) {
+    || !Number.isInteger(input.payoutUntilAge) || input.payoutUntilAge <= input.retirementAge || input.payoutUntilAge > 110
+    || [input.salaryGrowthRate, input.inflationRate, input.jhtReturnRate, input.personalReturnRate, input.postRetirementReturn].some(rate => rate > 100)) {
     throw new RangeError('Check ages, contribution history, and annual rates.');
   }
   const pensionAge = jpAccessAge(input.currentAge, currentYear);
@@ -155,14 +168,30 @@ export function calculateRetirementProjection(input: {
   const jpAvailable = input.retirementAge >= pensionAge;
   const availableAssetsAtRetirement = personalBalance + (jhtAvailable ? jhtBalance : 0);
   const projectedRetirementSpending = input.targetMonthlySpending * Math.pow(1 + input.inflationRate / 100, yearsToRetirement);
-  const monthlyWithdrawalRate = input.withdrawalRate / 100 / 12;
+  // After retiring, JHT and savings stay invested and are spent down by `payoutUntilAge`, the
+  // monthly amount rising with inflation: a growing annuity. With i the monthly return, g monthly
+  // inflation and r the real rate (1+i)/(1+g)−1, assets A pay a first month P = A(1+g)·r/(1−(1+r)^−n).
+  const payoutMonths = (input.payoutUntilAge - input.retirementAge) * 12;
+  const monthlyInflation = Math.pow(1 + input.inflationRate / 100, 1 / 12) - 1;
+  const realMonthlyRate = Math.pow((1 + input.postRetirementReturn / 100) / (1 + input.inflationRate / 100), 1 / 12) - 1;
+  const payoutFactor = (1 + monthlyInflation) * (Math.abs(realMonthlyRate) < 1e-12
+    ? 1 / payoutMonths
+    : realMonthlyRate / -Math.expm1(-payoutMonths * Math.log1p(realMonthlyRate)));
   const availableJpIncome = jpAvailable ? estimatedJpIncome : 0;
-  const estimatedAssetIncome = availableAssetsAtRetirement * monthlyWithdrawalRate;
+  const estimatedAssetIncome = availableAssetsAtRetirement * payoutFactor;
+  // The same pay-out month by month, recorded yearly: what's left from retirement to `payoutUntilAge`.
+  const postMonthlyRate = Math.pow(1 + input.postRetirementReturn / 100, 1 / 12) - 1;
+  const drawdown: RetirementProjection['drawdown'] = [{ age: input.retirementAge, assets: availableAssetsAtRetirement }];
+  let remaining = availableAssetsAtRetirement;
+  let payment = estimatedAssetIncome;
+  for (let month = 1; month <= payoutMonths; month += 1) {
+    remaining = Math.max(0, remaining * (1 + postMonthlyRate) - payment);
+    payment *= 1 + monthlyInflation;
+    if (month % 12 === 0) drawdown.push({ age: input.retirementAge + month / 12, assets: remaining });
+  }
   const estimatedMonthlyIncome = availableJpIncome + estimatedAssetIncome;
   const monthlyGap = projectedRetirementSpending - estimatedMonthlyIncome;
-  const targetAssets = monthlyWithdrawalRate > 0
-    ? Math.max(0, (projectedRetirementSpending - availableJpIncome) / monthlyWithdrawalRate)
-    : monthlyGap > 0 ? null : 0;
+  const targetAssets: number | null = Math.max(0, (projectedRetirementSpending - availableJpIncome) / payoutFactor);
   const capitalGap = targetAssets === null ? null : Math.max(0, targetAssets - availableAssetsAtRetirement);
   const requiredAdditionalSaving = monthlyGap <= 0 ? 0
     : monthsToRetirement > 0 && capitalGap !== null
@@ -183,6 +212,8 @@ export function calculateRetirementProjection(input: {
     projectedRetirementSpending,
     estimatedAssetIncome,
     estimatedJpIncome: availableJpIncome,
+    jpIncomeWhenPaid: estimatedJpIncome,
+    inflationFactor: Math.pow(1 + input.inflationRate / 100, yearsToRetirement),
     estimatedMonthlyIncome,
     monthlyGap,
     requiredAdditionalSaving,
@@ -191,13 +222,16 @@ export function calculateRetirementProjection(input: {
     jpAccessYear: pensionYear,
     retirementYear,
     jpNormalAgeAtRetirement,
-    withdrawalRate: input.withdrawalRate,
+    payoutUntilAge: input.payoutUntilAge,
+    jhtIncome: jhtAvailable ? jhtBalance * payoutFactor : 0,
+    personalIncome: personalBalance * payoutFactor,
     totalJpContributionYears: jpTotalMonths / 12,
     jpAverageWage: averageJpWage,
     jhtAvailable,
     jpAvailable,
     jpEligible,
     series,
+    drawdown,
   };
 }
 

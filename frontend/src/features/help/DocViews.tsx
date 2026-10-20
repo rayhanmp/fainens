@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, Info, Layers, Lightbulb, Minus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { Term } from '../../components/ui/Term';
 import { CAN_I, CHANGELOG, GLOSSARY, LIMITS, SHORTCUTS, type CanIAnswer } from './content';
 import { DOC_GROUPS, DOCS, type DocBlock, type DocPage, type LedgerEntry } from './docs';
 import { exampleAccounts, useHelpPersonal } from './personal';
@@ -87,22 +88,6 @@ const GLOSSARY_FORMS: Array<[RegExp, string]> = [
 const GLOSSARY_PATTERN = /\b(closed periods?|balance adjustments?|pending items?|net worth|cash runway|opportunity cost|budget variance|audit log|ledger|reconcil(?:e|es|ed|ing|iation)|drafts?|corrections?|coverage|reallocations?)\b/gi;
 const GLOSSARY_MEANING = new Map(GLOSSARY.map(([term, meaning]) => [term, meaning]));
 
-/** A glossary word in running text: dotted underline, meaning on hover, focus or tap. */
-function Term({ text, meaning }: { text: string; meaning: string }) {
-  // A word near the right edge opens its hint leftwards, so the hint isn't cut off.
-  const [alignRight, setAlignRight] = useState(false);
-  const place = (element: HTMLElement) => setAlignRight(element.getBoundingClientRect().left + 256 > window.innerWidth - 16);
-  return (
-    <span tabIndex={0} onMouseEnter={(event) => place(event.currentTarget)} onFocus={(event) => place(event.currentTarget)} className="group/term relative cursor-help rounded-sm underline decoration-[var(--color-muted)] decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40">
-      {text}
-      {/* Not rendered until hovered or focused, so it never widens the page; showing it plays the
-          app's usual tooltip pop-in. */}
-      <span role="tooltip" className={cn('pointer-events-none absolute bottom-full z-30 mb-2 hidden w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline shadow-lg group-hover/term:block group-focus/term:block', alignRight ? 'right-0' : 'left-0')}>
-        {meaning}
-      </span>
-    </span>
-  );
-}
 
 /** Adds glossary hints to a piece of a page's text; `at` says which piece ("block:item"). */
 type Annotate = (text: string, at: string) => ReactNode;
@@ -131,7 +116,7 @@ function glossaryFor(page: DocPage): Annotate {
     for (const match of text.matchAll(GLOSSARY_PATTERN)) {
       const term = termFor(match[0]);
       if (!term || firstUse.get(term) !== `${at}:${match.index}`) continue;
-      parts.push(text.slice(last, match.index), <Term key={match.index} text={match[0]} meaning={GLOSSARY_MEANING.get(term)!} />);
+      parts.push(text.slice(last, match.index), <Term key={match.index} meaning={GLOSSARY_MEANING.get(term)!}>{match[0]}</Term>);
       last = (match.index ?? 0) + match[0].length;
     }
     if (parts.length === 0) return text;

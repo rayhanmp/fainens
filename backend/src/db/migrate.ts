@@ -240,6 +240,17 @@ function baselineLegacyPushDatabase(journal: MigrationJournal): void {
         )
       `);
     }
+    if (!tableExists("savings_plan")) {
+      db.$client.exec(`
+        CREATE TABLE IF NOT EXISTS savings_plan (
+          id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          name text NOT NULL,
+          inputs text NOT NULL,
+          created_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
+          updated_at integer DEFAULT (unixepoch('now') * 1000) NOT NULL
+        )
+      `);
+    }
     if (tableExists("tag") && !columnExists("tag", "group_id")) {
       db.$client.exec("ALTER TABLE tag ADD COLUMN group_id integer REFERENCES tag_group(id) ON DELETE SET NULL");
     }

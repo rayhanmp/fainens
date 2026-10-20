@@ -190,6 +190,19 @@ export const tagGroups = sqliteTable("tag_group", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** A savings simulator plan saved for comparing; `inputs` is the plan's JSON (amounts, rates, events, goals). */
+export const savingsPlans = sqliteTable("savings_plan", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  inputs: text("inputs").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+});
+
 export const tags = sqliteTable("tag", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),

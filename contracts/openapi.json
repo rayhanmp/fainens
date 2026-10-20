@@ -9565,6 +9565,1171 @@
         }
       }
     },
+    "/api/savings-plans": {
+      "get": {
+        "operationId": "listSavingsPlans",
+        "tags": [
+          "savings"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "inputs": {
+                        "type": "object",
+                        "properties": {
+                          "years": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50
+                          },
+                          "inflation": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 30
+                          },
+                          "pots": {
+                            "minItems": 1,
+                            "maxItems": 6,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000000000000
+                                },
+                                "monthly": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000000000000
+                                },
+                                "raise": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 50
+                                },
+                                "returnRate": {
+                                  "type": "number",
+                                  "minimum": -20,
+                                  "maximum": 50
+                                },
+                                "uncertainty": {
+                                  "type": "string",
+                                  "enum": [
+                                    "off",
+                                    "low",
+                                    "medium",
+                                    "high"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "start",
+                                "monthly",
+                                "raise",
+                                "returnRate",
+                                "uncertainty"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "events": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "maxLength": 80
+                                },
+                                "month": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 600
+                                },
+                                "amount": {
+                                  "type": "integer",
+                                  "minimum": -10000000000000,
+                                  "maximum": 10000000000000
+                                },
+                                "yearly": {
+                                  "type": "boolean"
+                                },
+                                "potId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "month",
+                                "amount",
+                                "yearly",
+                                "potId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "goals": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "amount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000000000000
+                                },
+                                "byMonth": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 600
+                                },
+                                "potId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                },
+                                "spend": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "amount",
+                                "byMonth",
+                                "potId",
+                                "spend"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "years",
+                          "inflation",
+                          "pots",
+                          "events",
+                          "goals"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "createdAt": {
+                        "type": "number"
+                      },
+                      "updatedAt": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "inputs",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSavingsPlan",
+        "tags": [
+          "savings"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "inputs": {
+                    "type": "object",
+                    "properties": {
+                      "years": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50
+                      },
+                      "inflation": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 30
+                      },
+                      "pots": {
+                        "minItems": 1,
+                        "maxItems": 6,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            "monthly": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            "raise": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "returnRate": {
+                              "type": "number",
+                              "minimum": -20,
+                              "maximum": 50
+                            },
+                            "uncertainty": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "low",
+                                "medium",
+                                "high"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "start",
+                            "monthly",
+                            "raise",
+                            "returnRate",
+                            "uncertainty"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "events": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "label": {
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "month": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 600
+                            },
+                            "amount": {
+                              "type": "integer",
+                              "minimum": -10000000000000,
+                              "maximum": 10000000000000
+                            },
+                            "yearly": {
+                              "type": "boolean"
+                            },
+                            "potId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "label",
+                            "month",
+                            "amount",
+                            "yearly",
+                            "potId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "goals": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "amount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            "byMonth": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 600
+                            },
+                            "potId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "spend": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "amount",
+                            "byMonth",
+                            "potId",
+                            "spend"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "years",
+                      "inflation",
+                      "pots",
+                      "events",
+                      "goals"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "inputs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "inputs": {
+                      "type": "object",
+                      "properties": {
+                        "years": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 50
+                        },
+                        "inflation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 30
+                        },
+                        "pots": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
+                              },
+                              "monthly": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
+                              },
+                              "raise": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 50
+                              },
+                              "returnRate": {
+                                "type": "number",
+                                "minimum": -20,
+                                "maximum": 50
+                              },
+                              "uncertainty": {
+                                "type": "string",
+                                "enum": [
+                                  "off",
+                                  "low",
+                                  "medium",
+                                  "high"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "start",
+                              "monthly",
+                              "raise",
+                              "returnRate",
+                              "uncertainty"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "events": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "label": {
+                                "type": "string",
+                                "maxLength": 80
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 600
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": -10000000000000,
+                                "maximum": 10000000000000
+                              },
+                              "yearly": {
+                                "type": "boolean"
+                              },
+                              "potId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "month",
+                              "amount",
+                              "yearly",
+                              "potId"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "goals": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
+                              },
+                              "byMonth": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 600
+                              },
+                              "potId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "spend": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "amount",
+                              "byMonth",
+                              "potId",
+                              "spend"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "years",
+                        "inflation",
+                        "pots",
+                        "events",
+                        "goals"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "inputs",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/savings-plans/{id}": {
+      "patch": {
+        "operationId": "updateSavingsPlan",
+        "tags": [
+          "savings"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "inputs": {
+                    "type": "object",
+                    "properties": {
+                      "years": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50
+                      },
+                      "inflation": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 30
+                      },
+                      "pots": {
+                        "minItems": 1,
+                        "maxItems": 6,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            "monthly": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            "raise": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "returnRate": {
+                              "type": "number",
+                              "minimum": -20,
+                              "maximum": 50
+                            },
+                            "uncertainty": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "low",
+                                "medium",
+                                "high"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "start",
+                            "monthly",
+                            "raise",
+                            "returnRate",
+                            "uncertainty"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "events": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "label": {
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "month": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 600
+                            },
+                            "amount": {
+                              "type": "integer",
+                              "minimum": -10000000000000,
+                              "maximum": 10000000000000
+                            },
+                            "yearly": {
+                              "type": "boolean"
+                            },
+                            "potId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "label",
+                            "month",
+                            "amount",
+                            "yearly",
+                            "potId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "goals": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "amount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
+                            },
+                            "byMonth": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 600
+                            },
+                            "potId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "spend": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "amount",
+                            "byMonth",
+                            "potId",
+                            "spend"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "years",
+                      "inflation",
+                      "pots",
+                      "events",
+                      "goals"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "inputs": {
+                      "type": "object",
+                      "properties": {
+                        "years": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 50
+                        },
+                        "inflation": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 30
+                        },
+                        "pots": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
+                              },
+                              "monthly": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
+                              },
+                              "raise": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 50
+                              },
+                              "returnRate": {
+                                "type": "number",
+                                "minimum": -20,
+                                "maximum": 50
+                              },
+                              "uncertainty": {
+                                "type": "string",
+                                "enum": [
+                                  "off",
+                                  "low",
+                                  "medium",
+                                  "high"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "start",
+                              "monthly",
+                              "raise",
+                              "returnRate",
+                              "uncertainty"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "events": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "label": {
+                                "type": "string",
+                                "maxLength": 80
+                              },
+                              "month": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 600
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": -10000000000000,
+                                "maximum": 10000000000000
+                              },
+                              "yearly": {
+                                "type": "boolean"
+                              },
+                              "potId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "month",
+                              "amount",
+                              "yearly",
+                              "potId"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "goals": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
+                              },
+                              "byMonth": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 600
+                              },
+                              "potId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              "spend": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "amount",
+                              "byMonth",
+                              "potId",
+                              "spend"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "years",
+                        "inflation",
+                        "pots",
+                        "events",
+                        "goals"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "inputs",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSavingsPlan",
+        "tags": [
+          "savings"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [
+                    null
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/periods": {
       "get": {
         "operationId": "listPeriods",
@@ -43282,6 +44447,9 @@
     },
     {
       "name": "reimbursements"
+    },
+    {
+      "name": "savings"
     }
   ]
 }

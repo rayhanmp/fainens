@@ -1302,6 +1302,73 @@ button[data-variant="danger"]:focus-visible,
 /* Nothing chosen yet: no thumb. */
 .ui-segmented[data-segment-index="-1"]::before { opacity: 0; }
 
+.ui-segmented--inverse::before { background: #fff; box-shadow: 0 1px 3px #0b2a5c40; }
+
+/* Savings simulator heroes. The plan: daylight blue over a landscape drawn from the plan. */
+.plan-sky {
+  background:
+    radial-gradient(120% 80% at 85% 0%, color-mix(in srgb, white 18%, transparent), transparent 60%),
+    linear-gradient(160deg, color-mix(in srgb, var(--color-accent) 88%, white), var(--color-accent) 45%, color-mix(in srgb, var(--color-accent) 70%, #0b1b3a));
+}
+/* Retirement: a clear, bright sky over a garden, the same blue lightening toward the hills. */
+.garden-sky {
+  background:
+    radial-gradient(60% 70% at 92% 8%, rgb(253 230 138 / 0.35), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 92%, #0b1530), color-mix(in srgb, var(--color-accent) 55%, #bfe3ff) 85%);
+}
+
+/* A field on an accent card: translucent white instead of the surface. */
+.field-inverse .brutalist-input {
+  background: rgb(255 255 255 / 0.12);
+  border-color: rgb(255 255 255 / 0.3);
+  color: #fff;
+}
+.field-inverse .brutalist-input:focus { border-color: #fff; box-shadow: 0 0 0 3px rgb(255 255 255 / 0.25); }
+.field-inverse .brutalist-input::placeholder { color: rgb(255 255 255 / 0.6); }
+.field-inverse span { color: rgb(255 255 255 / 0.75); }
+
+/* Savings simulator sliders: a thin track filled up to the value (`--fill`), a round thumb. */
+.plan-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+.plan-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--ref-primary) var(--fill, 0%), var(--ref-surface-container-highest) var(--fill, 0%));
+}
+.plan-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--ref-primary) var(--fill, 0%), var(--ref-surface-container-highest) var(--fill, 0%));
+}
+.plan-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 2px solid var(--ref-primary);
+  box-shadow: 0 1px 3px #11182733;
+}
+.plan-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 2px solid var(--ref-primary);
+  box-shadow: 0 1px 3px #11182733;
+}
+.plan-slider:focus-visible { outline: none; }
+.plan-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ref-primary) 25%, transparent); }
+.plan-slider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ref-primary) 25%, transparent); }
+
 /* Menus appear promptly, with just enough movement to establish their source. */
 .ui-popover,
 [role="menu"],

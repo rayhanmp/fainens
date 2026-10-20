@@ -1,10 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Database, Search, Sparkles, UserRound } from 'lucide-react';
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Card } from '../../components/ui/Card';
 import { Toggle } from '../settings/controls';
-import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
+import { Segmented } from '../savings/fields';
+import { DEFAULT_PLAN, goalOutlooks, planRange, runPlan, type PlanInputs } from '../savings/plan';
+import { ProjectionChart, type ValueMode } from '../savings/ProjectionChart';
+import { Section } from '../subscriptions/PageParts';
 import { CAN_I, CHANGELOG, GLOSSARY } from './content';
 import { shown, useAutoplay, useSequence } from './motion';
 import { VisualFrame } from './visuals';
@@ -19,62 +20,32 @@ const card = 'rounded-xl bg-[var(--color-surface)] p-3.5 shadow-sm ring-1 ring-[
 
 // ── Savings ──────────────────────────────────────────────────────────
 
-/** The simulator’s Savings Projection card, built the same way (Recharts, same series and styling) with a sample plan. */
+/** A sample plan for the help page: a savings account and SBN, a wedding paid from savings, and a house goal from SBN. */
+const SAMPLE_PLAN: PlanInputs = {
+  ...DEFAULT_PLAN,
+  years: 10,
+  pots: [
+    { id: 'sample-cash', name: 'Tabungan', start: 10_000_000, monthly: 500_000, raise: 0, returnRate: 2.5, uncertainty: 'off' },
+    { id: 'sample-sbn', name: 'SBN ritel', start: 0, monthly: 1_000_000, raise: 5, returnRate: 6.3, uncertainty: 'medium' },
+  ],
+  events: [{ id: 'sample-wedding', label: 'Wedding', month: 30, amount: -20_000_000, yearly: false, potId: 'sample-cash' }],
+  goals: [{ id: 'sample-house', name: 'House down payment', amount: 100_000_000, byMonth: 84, potId: 'sample-sbn', spend: false }],
+};
+
+/** The simulator’s How it grows card itself, the real chart and switch, drawn from a sample plan. */
 export function SavingsFanDemo() {
-  const { balancesHidden, formatAmount } = useBalanceVisibility();
-  const [visible, setVisible] = useState({ Balance: true, Interest: true, Contributions: true });
-  // Rp10 juta now, Rp1 juta a month, 6% a year; the Monte Carlo band spreads with time.
-  const data = useMemo(() => {
-    const start = new Date();
-    return Array.from({ length: 11 }, (_, year) => {
-      const months = year * 12;
-      const rate = 0.06 / 12;
-      const balance = 10_000_000 * (1 + rate) ** months + 1_000_000 * (((1 + rate) ** months - 1) / rate);
-      const contributions = 10_000_000 + 1_000_000 * months;
-      const date = new Date(start.getFullYear() + year, start.getMonth(), 1);
-      return {
-        month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        Balance: Math.round(balance), Contributions: contributions, Interest: Math.round(balance - contributions),
-        'MC p50': Math.round(balance * 0.98), 'MC p10': Math.round(balance * (1 - 0.03 * year)), 'MC p90': Math.round(balance * (1 + 0.04 * year)),
-      };
-    });
-  }, []);
-  const series = [
-    { key: 'Balance' as const, label: 'Balance', color: 'var(--color-accent)' },
-    { key: 'Interest' as const, label: 'Interest', color: '#22c55e' },
-    { key: 'Contributions' as const, label: 'Contributions', color: '#94a3b8' },
-  ];
+  const [mode, setMode] = useState<ValueMode>('nominal');
+  const run = useMemo(() => runPlan(SAMPLE_PLAN), []);
+  const range = useMemo(() => planRange(SAMPLE_PLAN), []);
+  const outlooks = useMemo(() => goalOutlooks(SAMPLE_PLAN, range), [range]);
 
   return (
-    <VisualFrame caption="The simulator’s projection with a sample plan: Rp10 juta now, Rp1 juta a month, 6% a year, Monte Carlo on. The dashed lines and shaded band are p10, p50 and p90.">
-      <Card className="p-6">
-        <h3 className="mb-4 font-headline text-lg font-bold">Savings Projection</h3>
-        <div className="mb-4 flex flex-wrap gap-3">
-          {series.map((item) => (
-            <button key={item.key} type="button" onClick={() => setVisible((current) => ({ ...current, [item.key]: !current[item.key] }))} className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-all', visible[item.key] ? 'border-transparent text-white' : 'border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] opacity-50')} style={{ backgroundColor: visible[item.key] ? item.color : 'transparent' }}>
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: visible[item.key] ? item.color : 'transparent', border: `2px solid ${item.color}` }} />{item.label}
-            </button>
-          ))}
+    <VisualFrame caption="Try it: switch between the two views and point at the chart (sample plan: Rp10 juta now, Rp1 juta a month, 6% a year, a wedding in year three, and a house goal marked on the line).">
+      <Section title="How it grows" aside={<Segmented ariaLabel="Show amounts" className="w-[220px]" value={mode} onChange={setMode} options={[{ value: 'nominal', label: 'Rupiah then' }, { value: 'real', label: 'Today’s money' }]} />}>
+        <div className="px-3 pb-3 pt-3 sm:px-5 sm:pb-4">
+          <ProjectionChart run={run} range={range} mode={mode} years={SAMPLE_PLAN.years} compared={[]} outlooks={outlooks} selectedGoalId="sample-house" events={SAMPLE_PLAN.events} />
         </div>
-        <div className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }} />
-              <YAxis tickFormatter={(value) => (balancesHidden ? '•••' : `${(value / 1_000_000).toFixed(1)}M`)} tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }} />
-              <Tooltip formatter={(value, name) => [formatAmount(Number(value) || 0), name]} contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }} />
-              <Area type="monotone" dataKey="MC p90" stroke="transparent" fill="var(--color-accent)" fillOpacity={0.1} />
-              <Area type="monotone" dataKey="MC p10" stroke="transparent" fill="var(--color-surface)" fillOpacity={1} />
-              <Line type="monotone" dataKey="MC p50" stroke="var(--color-accent)" strokeWidth={1} strokeDasharray="3 3" dot={false} />
-              <Line type="monotone" dataKey="MC p90" stroke="var(--color-accent)" strokeWidth={1} strokeDasharray="3 3" dot={false} strokeOpacity={0.5} />
-              <Line type="monotone" dataKey="MC p10" stroke="var(--color-accent)" strokeWidth={1} strokeDasharray="3 3" dot={false} strokeOpacity={0.5} />
-              <Line type="monotone" dataKey="Balance" stroke="var(--color-accent)" strokeWidth={2} dot={false} activeDot={{ r: 6, strokeWidth: 2 }} hide={!visible.Balance} />
-              <Line type="monotone" dataKey="Interest" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 6, strokeWidth: 2 }} hide={!visible.Interest} />
-              <Line type="monotone" dataKey="Contributions" stroke="#94a3b8" strokeWidth={2} dot={false} activeDot={{ r: 6, strokeWidth: 2 }} hide={!visible.Contributions} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
+      </Section>
     </VisualFrame>
   );
 }

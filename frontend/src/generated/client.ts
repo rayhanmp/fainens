@@ -4556,6 +4556,705 @@ export type DeleteTransportRouteTemplate404 = {
   [key: string]: unknown;
 };
 
+export type ListSavingsPlans200ItemInputsPotsItemUncertainty = typeof ListSavingsPlans200ItemInputsPotsItemUncertainty[keyof typeof ListSavingsPlans200ItemInputsPotsItemUncertainty];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListSavingsPlans200ItemInputsPotsItemUncertainty = {
+  off: 'off',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type ListSavingsPlans200ItemInputsPotsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  start: number;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  monthly: number;
+  /**
+   * @minimum 0
+   * @maximum 50
+   */
+  raise: number;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  returnRate: number;
+  uncertainty: ListSavingsPlans200ItemInputsPotsItemUncertainty;
+};
+
+export type ListSavingsPlans200ItemInputsEventsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /** @maxLength 80 */
+  label: string;
+  /**
+   * @minimum 1
+   * @maximum 600
+   */
+  month: number;
+  /**
+   * @minimum -10000000000000
+   * @maximum 10000000000000
+   */
+  amount: number;
+  yearly: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+};
+
+export type ListSavingsPlans200ItemInputsGoalsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
+  /**
+   * @minimum 1
+   * @maximum 600
+   * @nullable
+   */
+  byMonth: number | null;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+  spend: boolean;
+};
+
+export type ListSavingsPlans200ItemInputs = {
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  years: number;
+  /**
+   * @minimum 0
+   * @maximum 30
+   */
+  inflation: number;
+  /**
+   * @minItems 1
+   * @maxItems 6
+   */
+  pots: ListSavingsPlans200ItemInputsPotsItem[];
+  /** @maxItems 20 */
+  events: ListSavingsPlans200ItemInputsEventsItem[];
+  /** @maxItems 20 */
+  goals: ListSavingsPlans200ItemInputsGoalsItem[];
+};
+
+export type ListSavingsPlans200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  inputs: ListSavingsPlans200ItemInputs;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CreateSavingsPlanBodyInputsPotsItemUncertainty = typeof CreateSavingsPlanBodyInputsPotsItemUncertainty[keyof typeof CreateSavingsPlanBodyInputsPotsItemUncertainty];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateSavingsPlanBodyInputsPotsItemUncertainty = {
+  off: 'off',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type CreateSavingsPlanBodyInputsPotsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  start: number;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  monthly: number;
+  /**
+   * @minimum 0
+   * @maximum 50
+   */
+  raise: number;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  returnRate: number;
+  uncertainty: CreateSavingsPlanBodyInputsPotsItemUncertainty;
+};
+
+export type CreateSavingsPlanBodyInputsEventsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /** @maxLength 80 */
+  label: string;
+  /**
+   * @minimum 1
+   * @maximum 600
+   */
+  month: number;
+  /**
+   * @minimum -10000000000000
+   * @maximum 10000000000000
+   */
+  amount: number;
+  yearly: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+};
+
+export type CreateSavingsPlanBodyInputsGoalsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
+  /**
+   * @minimum 1
+   * @maximum 600
+   * @nullable
+   */
+  byMonth: number | null;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+  spend: boolean;
+};
+
+export type CreateSavingsPlanBodyInputs = {
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  years: number;
+  /**
+   * @minimum 0
+   * @maximum 30
+   */
+  inflation: number;
+  /**
+   * @minItems 1
+   * @maxItems 6
+   */
+  pots: CreateSavingsPlanBodyInputsPotsItem[];
+  /** @maxItems 20 */
+  events: CreateSavingsPlanBodyInputsEventsItem[];
+  /** @maxItems 20 */
+  goals: CreateSavingsPlanBodyInputsGoalsItem[];
+};
+
+export type CreateSavingsPlanBody = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  inputs: CreateSavingsPlanBodyInputs;
+};
+
+export type CreateSavingsPlan201InputsPotsItemUncertainty = typeof CreateSavingsPlan201InputsPotsItemUncertainty[keyof typeof CreateSavingsPlan201InputsPotsItemUncertainty];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateSavingsPlan201InputsPotsItemUncertainty = {
+  off: 'off',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type CreateSavingsPlan201InputsPotsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  start: number;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  monthly: number;
+  /**
+   * @minimum 0
+   * @maximum 50
+   */
+  raise: number;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  returnRate: number;
+  uncertainty: CreateSavingsPlan201InputsPotsItemUncertainty;
+};
+
+export type CreateSavingsPlan201InputsEventsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /** @maxLength 80 */
+  label: string;
+  /**
+   * @minimum 1
+   * @maximum 600
+   */
+  month: number;
+  /**
+   * @minimum -10000000000000
+   * @maximum 10000000000000
+   */
+  amount: number;
+  yearly: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+};
+
+export type CreateSavingsPlan201InputsGoalsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
+  /**
+   * @minimum 1
+   * @maximum 600
+   * @nullable
+   */
+  byMonth: number | null;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+  spend: boolean;
+};
+
+export type CreateSavingsPlan201Inputs = {
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  years: number;
+  /**
+   * @minimum 0
+   * @maximum 30
+   */
+  inflation: number;
+  /**
+   * @minItems 1
+   * @maxItems 6
+   */
+  pots: CreateSavingsPlan201InputsPotsItem[];
+  /** @maxItems 20 */
+  events: CreateSavingsPlan201InputsEventsItem[];
+  /** @maxItems 20 */
+  goals: CreateSavingsPlan201InputsGoalsItem[];
+};
+
+export type CreateSavingsPlan201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  inputs: CreateSavingsPlan201Inputs;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CreateSavingsPlan400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateSavingsPlanBodyInputsPotsItemUncertainty = typeof UpdateSavingsPlanBodyInputsPotsItemUncertainty[keyof typeof UpdateSavingsPlanBodyInputsPotsItemUncertainty];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateSavingsPlanBodyInputsPotsItemUncertainty = {
+  off: 'off',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type UpdateSavingsPlanBodyInputsPotsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  start: number;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  monthly: number;
+  /**
+   * @minimum 0
+   * @maximum 50
+   */
+  raise: number;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  returnRate: number;
+  uncertainty: UpdateSavingsPlanBodyInputsPotsItemUncertainty;
+};
+
+export type UpdateSavingsPlanBodyInputsEventsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /** @maxLength 80 */
+  label: string;
+  /**
+   * @minimum 1
+   * @maximum 600
+   */
+  month: number;
+  /**
+   * @minimum -10000000000000
+   * @maximum 10000000000000
+   */
+  amount: number;
+  yearly: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+};
+
+export type UpdateSavingsPlanBodyInputsGoalsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
+  /**
+   * @minimum 1
+   * @maximum 600
+   * @nullable
+   */
+  byMonth: number | null;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+  spend: boolean;
+};
+
+export type UpdateSavingsPlanBodyInputs = {
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  years: number;
+  /**
+   * @minimum 0
+   * @maximum 30
+   */
+  inflation: number;
+  /**
+   * @minItems 1
+   * @maxItems 6
+   */
+  pots: UpdateSavingsPlanBodyInputsPotsItem[];
+  /** @maxItems 20 */
+  events: UpdateSavingsPlanBodyInputsEventsItem[];
+  /** @maxItems 20 */
+  goals: UpdateSavingsPlanBodyInputsGoalsItem[];
+};
+
+export type UpdateSavingsPlanBody = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name?: string;
+  inputs?: UpdateSavingsPlanBodyInputs;
+};
+
+export type UpdateSavingsPlan200InputsPotsItemUncertainty = typeof UpdateSavingsPlan200InputsPotsItemUncertainty[keyof typeof UpdateSavingsPlan200InputsPotsItemUncertainty];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateSavingsPlan200InputsPotsItemUncertainty = {
+  off: 'off',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type UpdateSavingsPlan200InputsPotsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  start: number;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  monthly: number;
+  /**
+   * @minimum 0
+   * @maximum 50
+   */
+  raise: number;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  returnRate: number;
+  uncertainty: UpdateSavingsPlan200InputsPotsItemUncertainty;
+};
+
+export type UpdateSavingsPlan200InputsEventsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /** @maxLength 80 */
+  label: string;
+  /**
+   * @minimum 1
+   * @maximum 600
+   */
+  month: number;
+  /**
+   * @minimum -10000000000000
+   * @maximum 10000000000000
+   */
+  amount: number;
+  yearly: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+};
+
+export type UpdateSavingsPlan200InputsGoalsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
+  /**
+   * @minimum 1
+   * @maximum 600
+   * @nullable
+   */
+  byMonth: number | null;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  potId: string;
+  spend: boolean;
+};
+
+export type UpdateSavingsPlan200Inputs = {
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  years: number;
+  /**
+   * @minimum 0
+   * @maximum 30
+   */
+  inflation: number;
+  /**
+   * @minItems 1
+   * @maxItems 6
+   */
+  pots: UpdateSavingsPlan200InputsPotsItem[];
+  /** @maxItems 20 */
+  events: UpdateSavingsPlan200InputsEventsItem[];
+  /** @maxItems 20 */
+  goals: UpdateSavingsPlan200InputsGoalsItem[];
+};
+
+export type UpdateSavingsPlan200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  inputs: UpdateSavingsPlan200Inputs;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type UpdateSavingsPlan400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateSavingsPlan404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteSavingsPlan204 = typeof DeleteSavingsPlan204[keyof typeof DeleteSavingsPlan204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteSavingsPlan204 = {
+} as const;
+
+export type DeleteSavingsPlan404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ListPeriodsParams = {
 includeInactive?: ListPeriodsIncludeInactive;
 };
@@ -21661,6 +22360,167 @@ export const getDeleteTransportRouteTemplateUrl = (id: number,) => {
 export const deleteTransportRouteTemplate = async (id: number, options?: RequestInit): Promise<deleteTransportRouteTemplateResponse> => {
   
   return generatedFetch<deleteTransportRouteTemplateResponse>(getDeleteTransportRouteTemplateUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type listSavingsPlansResponse200 = {
+  data: ListSavingsPlans200Item[]
+  status: 200
+}
+    
+export type listSavingsPlansResponseSuccess = (listSavingsPlansResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listSavingsPlansResponse = (listSavingsPlansResponseSuccess)
+
+export const getListSavingsPlansUrl = () => {
+
+
+  
+
+  return `/api/savings-plans`
+}
+
+export const listSavingsPlans = async ( options?: RequestInit): Promise<listSavingsPlansResponse> => {
+  
+  return generatedFetch<listSavingsPlansResponse>(getListSavingsPlansUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type createSavingsPlanResponse201 = {
+  data: CreateSavingsPlan201
+  status: 201
+}
+
+export type createSavingsPlanResponse400 = {
+  data: CreateSavingsPlan400
+  status: 400
+}
+    
+export type createSavingsPlanResponseSuccess = (createSavingsPlanResponse201) & {
+  headers: Headers;
+};
+export type createSavingsPlanResponseError = (createSavingsPlanResponse400) & {
+  headers: Headers;
+};
+
+export type createSavingsPlanResponse = (createSavingsPlanResponseSuccess | createSavingsPlanResponseError)
+
+export const getCreateSavingsPlanUrl = () => {
+
+
+  
+
+  return `/api/savings-plans`
+}
+
+export const createSavingsPlan = async (createSavingsPlanBody: CreateSavingsPlanBody, options?: RequestInit): Promise<createSavingsPlanResponse> => {
+  
+  return generatedFetch<createSavingsPlanResponse>(getCreateSavingsPlanUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createSavingsPlanBody,)
+  }
+);}
+
+
+
+export type updateSavingsPlanResponse200 = {
+  data: UpdateSavingsPlan200
+  status: 200
+}
+
+export type updateSavingsPlanResponse400 = {
+  data: UpdateSavingsPlan400
+  status: 400
+}
+
+export type updateSavingsPlanResponse404 = {
+  data: UpdateSavingsPlan404
+  status: 404
+}
+    
+export type updateSavingsPlanResponseSuccess = (updateSavingsPlanResponse200) & {
+  headers: Headers;
+};
+export type updateSavingsPlanResponseError = (updateSavingsPlanResponse400 | updateSavingsPlanResponse404) & {
+  headers: Headers;
+};
+
+export type updateSavingsPlanResponse = (updateSavingsPlanResponseSuccess | updateSavingsPlanResponseError)
+
+export const getUpdateSavingsPlanUrl = (id: number,) => {
+
+
+  
+
+  return `/api/savings-plans/${id}`
+}
+
+export const updateSavingsPlan = async (id: number,
+    updateSavingsPlanBody: UpdateSavingsPlanBody, options?: RequestInit): Promise<updateSavingsPlanResponse> => {
+  
+  return generatedFetch<updateSavingsPlanResponse>(getUpdateSavingsPlanUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateSavingsPlanBody,)
+  }
+);}
+
+
+
+export type deleteSavingsPlanResponse204 = {
+  data: DeleteSavingsPlan204
+  status: 204
+}
+
+export type deleteSavingsPlanResponse404 = {
+  data: DeleteSavingsPlan404
+  status: 404
+}
+    
+export type deleteSavingsPlanResponseSuccess = (deleteSavingsPlanResponse204) & {
+  headers: Headers;
+};
+export type deleteSavingsPlanResponseError = (deleteSavingsPlanResponse404) & {
+  headers: Headers;
+};
+
+export type deleteSavingsPlanResponse = (deleteSavingsPlanResponseSuccess | deleteSavingsPlanResponseError)
+
+export const getDeleteSavingsPlanUrl = (id: number,) => {
+
+
+  
+
+  return `/api/savings-plans/${id}`
+}
+
+export const deleteSavingsPlan = async (id: number, options?: RequestInit): Promise<deleteSavingsPlanResponse> => {
+  
+  return generatedFetch<deleteSavingsPlanResponse>(getDeleteSavingsPlanUrl(id),
   {      
     ...options,
     method: 'DELETE'

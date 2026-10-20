@@ -33,6 +33,8 @@ export const queryKeys = {
   salary: { all: ["salary"] as const, income: ["salary", "income"] as const, settings: ["salary", "settings"] as const, catchUpPreview: ["salary", "catch-up-preview"] as const },
   split: { all: ["split-bill"] as const },
   wishlist: { all: ["wishlist"] as const },
+  savings: { plans: ["savings", "plans"] as const },
+  profile: ["profile"] as const,
   attachments: { all: ["attachments"] as const, transaction: (transactionId: number | null) => ["attachments", "transaction", transactionId] as const, download: (id: number) => ["attachments", "download", id] as const },
   gallery: { all: ["gallery"] as const, images: (source: string, search: string) => ["gallery", "images", source, search] as const },
   dashboard: {
