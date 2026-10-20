@@ -10,8 +10,8 @@ import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
 import { FlavourMark } from './FlavourMark';
-import { play, playTicks, setSoundMode, silence, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
-import { chapterStyle, enterDelay, lowEndDevice, nextTransition, OPENING_DURATIONS, OVERLAY_TRANSITIONS, prefersReducedMotion, runParts, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
+import { play, playTicks, setGrooveScene, setSoundMode, silence, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
+import { chapterStyle, enterDelay, grooveScene, lowEndDevice, nextTransition, OPENING_DURATIONS, OVERLAY_TRANSITIONS, prefersReducedMotion, runParts, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
 import './recaps.css';
 
 // The share card and the video recorder are only needed once someone shares.
@@ -135,6 +135,10 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const chapterCount = stories.length;
   const gateOf = (item: RecapStory) => Boolean(item.play && !answers[item.id]);
   const quizOpen = gateOf(story);
+  // The groove follows the story: more layers mid-recap, a theme for the personality, a hush during a game.
+  useEffect(() => {
+    if (sound === 'music') setGrooveScene(grooveScene(story, quizOpen));
+  }, [sound, story, quizOpen]);
   const chapterMs = story.duration ?? CHAPTER_MS;
   // The cover and full-bleed finales keep their own art direction; every other chapter gets remixed.
   const remixOf = (item: RecapStory) => {

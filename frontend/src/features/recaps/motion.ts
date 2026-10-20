@@ -1,4 +1,5 @@
-import type { RecapStoryId } from './stories';
+import type { PersonaKey, RecapStory, RecapStoryId } from './stories';
+import type { GrooveScene } from './sfx';
 import type { PartName } from './parts';
 
 /** A small seeded generator: one run of the recap rolls its dice once, so a chapter looks the same
@@ -51,8 +52,33 @@ export type Edition = typeof EDITIONS[number];
 export const CUTS = ['standard', 'standard', 'standard', 'directors', 'speedrun'] as const;
 export type Cut = typeof CUTS[number];
 /** The music mode's groove, per run. The 8-bit edition always brings chiptune. */
-export const SOUND_PACKS = ['groove', 'lofi', 'chip', 'orchestral', 'koplo'] as const;
+export const SOUND_PACKS = ['groove', 'lofi', 'chip', 'orchestral', 'koplo', 'synthwave', 'bossa', 'trap', 'gamelan', 'jazz', 'disco'] as const;
 export type SoundPack = typeof SOUND_PACKS[number];
+
+/** Each money personality has a theme tune the music switches to when it is revealed. */
+export const PERSONA_THEME_PACKS: Record<PersonaKey, SoundPack> = {
+  weekend: 'disco', monk: 'gamelan', bigTicket: 'trap', steady: 'bossa', loyal: 'chip', devotee: 'orchestral', explorer: 'synthwave', allRounder: 'jazz',
+};
+
+/**
+ * What the music does on a chapter. The opening and the credits play sparse; the middle grooves; bonus
+ * slides and showpieces bring in the lead; a mini-game drops to keys alone while it waits for an answer;
+ * the personality reveal plays its own theme. The chords turn minor only where the figures do (out
+ * ran past in, the budget went over, the boss fight, the ejection), never as a verdict on ordinary
+ * chapters.
+ */
+export function grooveScene(story: RecapStory, waiting: boolean): GrooveScene {
+  if (waiting) return { energy: 0, mood: 'dark' };
+  switch (story.id) {
+    case 'intro': case 'closing': return { energy: 1, mood: 'bright' };
+    case 'persona': return { energy: 3, mood: 'bright', pack: PERSONA_THEME_PACKS[story.persona.key] };
+    case 'bonus': return { energy: 3, mood: story.bonus.kind === 'boss' ? 'dark' : 'bright' };
+    case 'interlude': return story.variant === 'ejected' ? { energy: 0, mood: 'dark' } : { energy: 3, mood: 'bright' };
+    case 'overview': return { energy: 2, mood: story.net < 0 ? 'dark' : 'bright' };
+    case 'budget': return { energy: 2, mood: story.remaining < 0 ? 'dark' : 'bright' };
+    default: return { energy: 2, mood: 'bright' };
+  }
+}
 
 const sectionVariants = {
   intro: ['magazine', 'poster', 'vinyl', 'boarding'],

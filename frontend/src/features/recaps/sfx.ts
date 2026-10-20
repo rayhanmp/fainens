@@ -163,76 +163,159 @@ export function playTicks(count: number, durationMs: number, delayMs = 0) {
   }
 }
 
-/* ---------- The groove: a small generative loop under the recap, in music mode only. ---------- */
-let groove: { timer: number; next: number; step: number } | null = null;
+/* ---------- The groove: a small generative loop under the recap, in music mode only. ----------
+ * Each pack is built from layers (keys, bass, drums, hats, lead), and the story sets a scene as it goes:
+ * an energy that decides how many layers play, a mood that turns the chords minor, and now and then a
+ * whole new pack (a personality's theme). Changes land on the next half-bar after a short drum fill, so
+ * the music moves with the slides without lurching. */
 const progressions = [[130.8, 110, 87.3, 98], [110, 87.3, 130.8, 98], [146.8, 116.5, 87.3, 130.8], [98, 130.8, 110, 87.3]];
 
-export type GroovePack = 'groove' | 'lofi' | 'chip' | 'orchestral' | 'koplo';
-type Beat = { ctx: AudioContext; at: number; step: number; root: number; sixteenth: number; seed: number };
-/** One sixteenth of each pack's pattern. Every sound is synthesised, so a pack costs a few lines, not a file. */
-const packs: Record<GroovePack, { bpm: (seed: number) => number; play: (beat: Beat) => void }> = {
+export type GroovePack = 'groove' | 'lofi' | 'chip' | 'orchestral' | 'koplo' | 'synthwave' | 'bossa' | 'trap' | 'gamelan' | 'jazz' | 'disco';
+/** 0: keys alone (suspense, outros). 1: with bass and drums. 2: the full groove. 3: plus a lead on top. */
+export type GrooveEnergy = 0 | 1 | 2 | 3;
+export type GrooveScene = { energy: GrooveEnergy; mood: 'bright' | 'dark'; pack?: GroovePack };
+/** One sixteenth of the music: `third` is the chord's third, major or minor by the scene's mood. */
+type Beat = { ctx: AudioContext; at: number; step: number; bar: number; root: number; third: number; sixteenth: number; seed: number };
+type Layer = (beat: Beat) => void;
+type Pack = { bpm: (seed: number) => number; keys: Layer; bass?: Layer; drums?: Layer; hats?: Layer; lead?: Layer };
+
+const kick = (ctx: AudioContext, at: number, gain = .14, from = 120) => tone(ctx, { from, to: 42, length: .18, gain }, at);
+const snare = (ctx: AudioContext, at: number, gain = .025, length = .12) => noise(ctx, { length, from: 1800, gain }, at);
+const hat = (ctx: AudioContext, at: number, gain = .012, length = .025) => noise(ctx, { length, from: 8000, gain, filter: 'highpass' }, at);
+const chord = (beat: Beat, octave: number, ratios: number[], options: Omit<ToneOptions, 'from'>) =>
+  ratios.forEach(ratio => tone(beat.ctx, { ...options, from: beat.root * octave * ratio }, beat.at));
+const triad = (third: number) => [1, third, 1.5];
+// Five-note scales over the root, for melodies that can't hit a wrong note.
+const pentatonic = (third: number) => third > 1.2 ? [1, 1.122, 1.26, 1.5, 1.682] : [1, 1.189, 1.335, 1.5, 1.782];
+
+/** Every sound is synthesised, so a pack costs a few lines, not a file. */
+const packs: Record<GroovePack, Pack> = {
   // The house groove: kick, clap, hats, a triangle bass and a soft pad.
-  groove: { bpm: seed => 88 + (seed % 5) * 5, play: ({ ctx, at, step, root, sixteenth }) => {
-    if (step === 0 || step === 8 || step === 10) tone(ctx, { from: 120, to: 42, length: .18, gain: .14 }, at);
-    if (step === 4 || step === 12) noise(ctx, { length: .12, from: 1800, gain: .025 }, at);
-    if (step % 2 === 0) noise(ctx, { length: .025, from: 8000, gain: .012, filter: 'highpass' }, at);
-    if (step === 0 || step === 7) tone(ctx, { type: 'triangle', from: root, length: sixteenth * 6, gain: .045 }, at);
-    if (step === 0) [2, 2.52, 3].forEach(ratio => tone(ctx, { type: 'sine', from: root * ratio * 2, length: sixteenth * 15, gain: .008 }, at));
-  } },
+  groove: { bpm: seed => 88 + (seed % 5) * 5,
+    keys: b => { if (b.step === 0) chord(b, 4, triad(b.third), { length: b.sixteenth * 15, gain: .008 }); },
+    bass: b => { if (b.step === 0 || b.step === 7) tone(b.ctx, { type: 'triangle', from: b.root, length: b.sixteenth * 6, gain: .045 }, b.at); },
+    drums: b => { if ([0, 8, 10].includes(b.step)) kick(b.ctx, b.at); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at); },
+    hats: b => { if (b.step % 2 === 0) hat(b.ctx, b.at); },
+    lead: b => { if (b.step % 2 === 0) tone(b.ctx, { type: 'triangle', from: b.root * 8 * triad(b.third)[(b.step / 2) % 3], length: b.sixteenth * 1.6, gain: .01 }, b.at); } },
   // Lo-fi: slow, swung hats, a wobbly electric-piano chord and a little vinyl crackle.
-  lofi: { bpm: seed => 72 + (seed % 4) * 3, play: ({ ctx, at, step, root, sixteenth }) => {
-    const swing = step % 2 ? sixteenth * .28 : 0;
-    if (step === 0 || step === 10) tone(ctx, { from: 90, to: 40, length: .22, gain: .12 }, at);
-    if (step === 4 || step === 12) noise(ctx, { length: .16, from: 1400, gain: .02 }, at);
-    if (step % 2 === 0 || step === 7) noise(ctx, { length: .03, from: 6500, gain: .008, filter: 'highpass' }, at + swing);
-    if (step === 0 || step === 8) [1, 1.26, 1.5, 1.89].forEach(ratio => tone(ctx, { type: 'sine', from: root * 2 * ratio, length: sixteenth * 7, gain: .012, vibrato: 3 }, at));
-    if (step === 3) noise(ctx, { length: .01, from: 3000, gain: .01, filter: 'highpass' }, at);
-  } },
+  lofi: { bpm: seed => 72 + (seed % 4) * 3,
+    keys: b => { if (b.step === 0 || b.step === 8) chord(b, 2, [1, b.third, 1.5, 1.89], { length: b.sixteenth * 7, gain: .012, vibrato: 3 }); if (b.step === 3) noise(b.ctx, { length: .01, from: 3000, gain: .01, filter: 'highpass' }, b.at); },
+    bass: b => { if (b.step === 0) tone(b.ctx, { from: b.root, length: b.sixteenth * 8, gain: .04 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 10) kick(b.ctx, b.at, .12, 90); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .02, .16); },
+    hats: b => { if (b.step % 2 === 0 || b.step === 7) hat(b.ctx, b.at + (b.step % 2 ? b.sixteenth * .28 : 0), .008, .03); },
+    lead: b => { if (b.step === 6 || b.step === 14) tone(b.ctx, { type: 'triangle', from: b.root * 4 * pentatonic(b.third)[(b.bar + b.step) % 5], length: b.sixteenth * 3, gain: .014, vibrato: 4 }, b.at); } },
   // Chiptune: square-wave arpeggios over a pulse bass, a noise snare.
-  chip: { bpm: seed => 124 + (seed % 4) * 4, play: ({ ctx, at, step, root, sixteenth }) => {
-    tone(ctx, { type: 'square', from: root * 4 * [1, 1.26, 1.5, 2][step % 4], length: sixteenth * .9, gain: .016 }, at);
-    if (step % 4 === 0) tone(ctx, { type: 'square', from: root, length: sixteenth * 1.8, gain: .03 }, at);
-    if (step % 4 === 2) tone(ctx, { type: 'square', from: root * 1.5, length: sixteenth * .9, gain: .02 }, at);
-    if (step === 4 || step === 12) noise(ctx, { length: .07, from: 5000, gain: .03, filter: 'highpass' }, at);
-    if (step === 0 || step === 8) tone(ctx, { type: 'triangle', from: 160, to: 50, length: .12, gain: .12 }, at);
-  } },
+  chip: { bpm: seed => 124 + (seed % 4) * 4,
+    keys: b => tone(b.ctx, { type: 'square', from: b.root * 4 * [1, b.third, 1.5, 2][b.step % 4], length: b.sixteenth * .9, gain: .014 }, b.at),
+    bass: b => { if (b.step % 4 === 0) tone(b.ctx, { type: 'square', from: b.root, length: b.sixteenth * 1.8, gain: .03 }, b.at); if (b.step % 4 === 2) tone(b.ctx, { type: 'square', from: b.root * 1.5, length: b.sixteenth * .9, gain: .02 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { type: 'triangle', from: 160, to: 50, length: .12, gain: .12 }, b.at); if (b.step === 4 || b.step === 12) noise(b.ctx, { length: .07, from: 5000, gain: .03, filter: 'highpass' }, b.at); },
+    hats: b => { if (b.step % 4 === 2) hat(b.ctx, b.at, .01); },
+    lead: b => { if (b.step % 2 === 1) tone(b.ctx, { type: 'square', from: b.root * 8 * pentatonic(b.third)[(b.step + b.bar * 3) % 5], length: b.sixteenth * .8, gain: .008 }, b.at); } },
   // Orchestral: a held string chord each bar, timpani on the downbeat, pizzicato eighths.
-  orchestral: { bpm: seed => 76 + (seed % 3) * 6, play: ({ ctx, at, step, root, sixteenth }) => {
-    if (step === 0) [1, 1.26, 1.5, 2].forEach(ratio => tone(ctx, { type: 'sawtooth', from: root * 2 * ratio, length: sixteenth * 16, gain: .006, vibrato: 4 }, at));
-    if (step === 0 || step === 8) tone(ctx, { from: root, to: root * .82, length: .6, gain: .14 }, at);
-    if (step % 2 === 0) tone(ctx, { type: 'triangle', from: root * 4 * [1, 1.5, 1.26, 2][(step / 2) % 4], length: .09, gain: .02 }, at);
-  } },
+  orchestral: { bpm: seed => 76 + (seed % 3) * 6,
+    keys: b => { if (b.step === 0) chord(b, 2, [1, b.third, 1.5, 2], { type: 'sawtooth', length: b.sixteenth * 16, gain: .006, vibrato: 4 }); },
+    bass: b => { if (b.step === 0) tone(b.ctx, { type: 'sawtooth', from: b.root / 2, length: b.sixteenth * 14, gain: .012 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { from: b.root, to: b.root * .82, length: .6, gain: .14 }, b.at); },
+    hats: b => { if (b.step % 2 === 0) tone(b.ctx, { type: 'triangle', from: b.root * 4 * [1, 1.5, b.third, 2][(b.step / 2) % 4], length: .09, gain: .02 }, b.at); },
+    lead: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { type: 'sawtooth', from: b.root * 4 * (b.step ? 1.5 : 2), length: b.sixteenth * 7, gain: .007, vibrato: 5 }, b.at); } },
   // Dangdut koplo: the kendang's "dhut" and "tak" on the classic koplo pattern, a bass and a suling line.
-  koplo: { bpm: seed => 128 + (seed % 3) * 6, play: ({ ctx, at, step, root, sixteenth, seed }) => {
-    if ([0, 6, 8, 14].includes(step)) tone(ctx, { from: 170, to: 85, length: .22, gain: .16 }, at);
-    if ([3, 4, 11, 12].includes(step)) tone(ctx, { from: 520, to: 380, length: .06, gain: .06 }, at);
-    if (step === 10) tone(ctx, { from: 320, to: 230, length: .12, gain: .07 }, at);
-    if (step % 2 === 0) noise(ctx, { length: .02, from: 7000, gain: .01, filter: 'highpass' }, at);
-    if (step === 0 || step === 8) tone(ctx, { type: 'triangle', from: root, length: sixteenth * 3, gain: .05 }, at);
-    if (step % 4 === 2) tone(ctx, { type: 'sine', from: root * 4 * [1, 1.122, 1.189, 1.335, 1.498][(step + seed) % 5], length: sixteenth * 2, gain: .018, vibrato: 6 }, at);
-  } },
+  koplo: { bpm: seed => 128 + (seed % 3) * 6,
+    keys: b => { if (b.step % 4 === 2) tone(b.ctx, { type: 'sine', from: b.root * 4 * [1, 1.122, b.third, 1.335, 1.498][(b.step + b.seed) % 5], length: b.sixteenth * 2, gain: .018, vibrato: 6 }, b.at); },
+    bass: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { type: 'triangle', from: b.root, length: b.sixteenth * 3, gain: .05 }, b.at); },
+    drums: b => { if ([0, 6, 8, 14].includes(b.step)) tone(b.ctx, { from: 170, to: 85, length: .22, gain: .16 }, b.at); if ([3, 4, 11, 12].includes(b.step)) tone(b.ctx, { from: 520, to: 380, length: .06, gain: .06 }, b.at); if (b.step === 10) tone(b.ctx, { from: 320, to: 230, length: .12, gain: .07 }, b.at); },
+    hats: b => { if (b.step % 2 === 0) hat(b.ctx, b.at, .01, .02); },
+    lead: b => { if (b.step === 13 || b.step === 15) tone(b.ctx, { from: 560, to: 400, length: .05, gain: .05 }, b.at); } },
+  // Synthwave: a driving octave bass, a gated snare, a held pad and a sawtooth arpeggio.
+  synthwave: { bpm: seed => 100 + (seed % 3) * 5,
+    keys: b => { if (b.step === 0) chord(b, 2, triad(b.third), { type: 'sawtooth', length: b.sixteenth * 16, gain: .005, vibrato: 2 }); },
+    bass: b => { if (b.step % 2 === 0) tone(b.ctx, { type: 'sawtooth', from: b.root / 2 * (b.step % 4 ? 2 : 1), length: b.sixteenth * 1.4, gain: .018 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 8) kick(b.ctx, b.at, .15); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .05, .22); },
+    hats: b => { if (b.step % 2 === 0) hat(b.ctx, b.at, .009); },
+    lead: b => tone(b.ctx, { type: 'sawtooth', from: b.root * 4 * [1, b.third, 1.5, 2][b.step % 4], length: b.sixteenth * .8, gain: .006 }, b.at) },
+  // Bossa nova: a clave on the rim, soft surdo, a shaker, nylon-string comping and a breathy flute.
+  bossa: { bpm: seed => 84 + (seed % 3) * 4,
+    keys: b => { if ([2, 5, 8, 11, 14].includes(b.step)) chord(b, 2, [b.third, 1.5, 1.89], { type: 'triangle', length: b.sixteenth * 1.5, gain: .01 }); },
+    bass: b => { if (b.step === 0 || b.step === 8) tone(b.ctx, { from: b.root, length: b.sixteenth * 5, gain: .05 }, b.at); if (b.step === 6 || b.step === 14) tone(b.ctx, { from: b.root * 1.5, length: b.sixteenth * 2, gain: .04 }, b.at); },
+    drums: b => { if ([0, 3, 6, 10, 13].includes(b.step)) tone(b.ctx, { type: 'square', from: 1250, length: .02, gain: .018 }, b.at); if (b.step === 0 || b.step === 8) kick(b.ctx, b.at, .07, 90); },
+    hats: b => hat(b.ctx, b.at, b.step % 4 === 0 ? .009 : .005, .04),
+    lead: b => { if (b.step === 0 || b.step === 10) tone(b.ctx, { from: b.root * 4 * pentatonic(b.third)[(b.bar * 2 + b.step) % 5], length: b.sixteenth * 5, gain: .016, vibrato: 5 }, b.at); } },
+  // Trap: a long 808 under rolling hats, a half-time clap and a bell chord.
+  trap: { bpm: seed => 70 + (seed % 3) * 3,
+    keys: b => { if (b.step === 0) chord(b, 4, triad(b.third), { length: b.sixteenth * 8, gain: .009 }); },
+    bass: b => { if (b.step === 0 || b.step === 7 || b.step === 10) tone(b.ctx, { from: b.root / 2 * 1.06, to: b.root / 2, length: b.sixteenth * 5, gain: .09 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 10) kick(b.ctx, b.at, .1, 90); if (b.step === 8) { snare(b.ctx, b.at, .05, .16); noise(b.ctx, { length: .1, from: 1100, gain: .03 }, b.at + .01); } },
+    hats: b => { hat(b.ctx, b.at, .008); if (b.step >= 13) hat(b.ctx, b.at + b.sixteenth / 2, .007); },
+    lead: b => { if (b.step % 4 === 2) tone(b.ctx, { type: 'triangle', from: b.root * 4 * pentatonic(1.189)[(b.step / 2 + b.bar) % 5], length: .12, gain: .014 }, b.at); } },
+  // Gamelan: interlocking metallophones over a slow gong, a kendang and the kempyang's ticks.
+  gamelan: { bpm: seed => 88 + (seed % 3) * 4,
+    keys: b => { if (b.step % 2 === 0) { const f = b.root * 4 * [1, 1.14, 1.31, 1.51, 1.74][(b.step / 2 + b.bar) % 5]; tone(b.ctx, { from: f, length: .5, gain: .016 }, b.at); tone(b.ctx, { from: f * 2.76, length: .2, gain: .004 }, b.at); } },
+    bass: b => { if (b.step % 4 === 0) tone(b.ctx, { from: b.root * 2 * [1, 1.31, 1.14, 1.51][b.step / 4], length: .9, gain: .03 }, b.at); if (b.step === 0 && b.bar % 2 === 0) tone(b.ctx, { from: 98, to: 96, length: 3, gain: .12, vibrato: 1.5 }, b.at); },
+    drums: b => { if (b.step === 0 || b.step === 11) tone(b.ctx, { from: 210, to: 120, length: .14, gain: .1 }, b.at); if (b.step === 6) tone(b.ctx, { from: 480, to: 360, length: .05, gain: .04 }, b.at); },
+    hats: b => { if (b.step % 2 === 1) tone(b.ctx, { from: 1900, length: .04, gain: .006 }, b.at); },
+    lead: b => tone(b.ctx, { from: b.root * 8 * [1, 1.14, 1.31, 1.51, 1.74][(b.step * 2 + b.bar) % 5], length: .12, gain: .006 }, b.at) },
+  // Jazz: a swung ride, brushes, a walking bass and rootless comping.
+  jazz: { bpm: seed => 100 + (seed % 4) * 4,
+    keys: b => { if (b.step === 6 || b.step === 14) chord(b, 2, [b.third, 1.5, 1.78], { type: 'triangle', length: b.sixteenth * 2, gain: .011 }); },
+    bass: b => { if (b.step % 4 === 0) tone(b.ctx, { type: 'triangle', from: b.root * [1, b.third, 1.5, 1.68][b.step / 4], length: b.sixteenth * 3.5, gain: .05 }, b.at); },
+    drums: b => { if (b.step === 4 || b.step === 12) noise(b.ctx, { length: .18, from: 2500, gain: .012 }, b.at); if (b.step === 0) kick(b.ctx, b.at, .05, 80); },
+    hats: b => { if ([0, 4, 8, 12].includes(b.step) || b.step % 4 === 3) noise(b.ctx, { length: .16, from: 6500, gain: .008, filter: 'highpass' }, b.at + (b.step % 4 === 3 ? b.sixteenth * .3 : 0)); },
+    lead: b => { if (b.step === 2 || b.step === 9) tone(b.ctx, { type: 'sawtooth', from: b.root * 4 * pentatonic(b.third)[(b.bar + b.step) % 5], length: b.sixteenth * 2.5, gain: .005, vibrato: 3 }, b.at); } },
+  // Disco: four on the floor, open hats on the offbeat, an octave bass and string stabs.
+  disco: { bpm: seed => 116 + (seed % 3) * 4,
+    keys: b => { if (b.step === 0 || b.step === 7) chord(b, 2, triad(b.third), { type: 'sawtooth', length: b.sixteenth * 1.2, gain: .008 }); },
+    bass: b => { if (b.step % 2 === 0) tone(b.ctx, { type: 'triangle', from: b.root * (b.step % 4 ? 2 : 1), length: b.sixteenth * 1.2, gain: .05 }, b.at); },
+    drums: b => { if (b.step % 4 === 0) kick(b.ctx, b.at, .14); if (b.step === 4 || b.step === 12) snare(b.ctx, b.at, .03); },
+    hats: b => { if (b.step % 4 === 2) hat(b.ctx, b.at, .014, .12); else if (b.step % 2 === 1) hat(b.ctx, b.at, .006); },
+    lead: b => { if (b.step >= 12) tone(b.ctx, { type: 'sawtooth', from: b.root * 4 * [1, b.third, 1.5, 2][b.step - 12], length: b.sixteenth * .9, gain: .007 }, b.at); } },
 };
 
+type Groove = { timer: number; next: number; step: number; seed: number; base: GroovePack; pack: GroovePack; sixteenth: number; scene: GrooveScene; target: GrooveScene | null };
+let groove: Groove | null = null;
+const sixteenthOf = (pack: GroovePack, seed: number) => 60 / packs[pack].bpm(seed) / 4;
+
 /** Start the loop, with tempo and chords picked by the run, so each viewing has its own groove. */
-export function startGroove(seed: number, pack: GroovePack = 'groove') {
+export function startGroove(seed: number, pack: GroovePack = 'groove', scene: GrooveScene = { energy: 1, mood: 'bright' }) {
   const ctx = audio();
   if (!ctx || mode !== 'music' || groove) return;
   if (ctx.state === 'suspended') void ctx.resume();
-  const style = packs[pack];
-  const sixteenth = 60 / style.bpm(seed) / 4;
   const chords = progressions[seed % progressions.length];
-  groove = { timer: 0, next: ctx.currentTime + .1, step: 0 };
+  const current: Groove = { timer: 0, next: ctx.currentTime + .1, step: 0, seed, base: pack, pack: scene.pack ?? pack, sixteenth: sixteenthOf(scene.pack ?? pack, seed), scene: { ...scene, pack: scene.pack ?? pack }, target: null };
+  groove = current;
   const schedule = () => {
-    if (!groove || mode !== 'music') return;
-    while (groove.next < ctx.currentTime + .25) {
-      const bar = Math.floor(groove.step / 16) % chords.length;
-      style.play({ ctx, at: groove.next, step: groove.step % 16, root: chords[bar], sixteenth, seed });
-      groove.next += sixteenth;
-      groove.step += 1;
+    if (groove !== current || mode !== 'music') return;
+    while (current.next < ctx.currentTime + .25) {
+      const step = current.step % 16;
+      // A requested scene lands on the next half-bar; the two beats before it carry a snare fill.
+      if (current.target && step % 8 === 0) {
+        const target = current.target;
+        current.scene = target; current.target = null;
+        if (target.pack && target.pack !== current.pack) { current.pack = target.pack; current.sixteenth = sixteenthOf(target.pack, seed); }
+      }
+      const { energy, mood } = current.scene;
+      const bar = Math.floor(current.step / 16);
+      const beat: Beat = { ctx, at: current.next, step, bar, root: chords[bar % chords.length], third: mood === 'dark' ? 1.189 : 1.26, sixteenth: current.sixteenth, seed };
+      const style = packs[current.pack];
+      style.keys(beat);
+      if (energy >= 1) { style.bass?.(beat); style.drums?.(beat); }
+      if (energy >= 2) style.hats?.(beat);
+      if (energy >= 3) style.lead?.(beat);
+      if (current.target && step % 8 >= 4) snare(ctx, current.next, .012 + (step % 8 - 4) * .008, .06);
+      current.next += current.sixteenth;
+      current.step += 1;
     }
   };
   schedule();
-  groove.timer = window.setInterval(schedule, 90);
+  current.timer = window.setInterval(schedule, 90);
+}
+
+/** Ask the groove to follow the story: it changes on the next half-bar, after a fill. */
+export function setGrooveScene(scene: GrooveScene) {
+  if (!groove) return;
+  // A scene without a pack of its own returns to the run's groove (after a personality's theme, say).
+  const pack = scene.pack ?? groove.base;
+  const now = groove.target ?? groove.scene;
+  if (now.energy === scene.energy && now.mood === scene.mood && (now.pack ?? groove.pack) === pack) return;
+  groove.target = { ...scene, pack };
 }
 
 export function stopGroove() {
