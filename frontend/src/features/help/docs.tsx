@@ -21,6 +21,7 @@ import {
 } from './visuals';
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
+import { BudgetForecastDemo, CategoryMapDemo, DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
 
 /**
  * The help docs: one entry per page, grouped as in the sidebar. Every fact was checked against the
@@ -302,6 +303,7 @@ export const DOCS: DocPage[] = [
     summary: 'Your period at a glance, and how to make it yours',
     lead: 'The Dashboard is your decision centre: where this period stands, what needs attention, and what’s coming, for the period you pick at the top.',
     blocks: [
+      { type: 'visual', node: <DashboardMapDemo />, wide: true },
       { type: 'h2', id: 'glance', text: 'At a glance' },
       { type: 'p', text: 'The top card shows one headline number, which you choose: cash, budget left, or net worth. Under it, a pacing bar compares how far you are through the period with how much of the budget is used (“Day 12 of 30 · 48% budget used”), with a safe daily pace and what’s due in the next 30 days. On phones this becomes a Today card and a Safe daily pace card.' },
       { type: 'h2', id: 'pulse', text: 'Financial pulse' },
@@ -315,6 +317,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'budget-health', text: 'Budget health and the forecast' },
       { type: 'p', text: 'Each category is a tile sized by its plan, showing how much is spent and where it’s likely to finish. The summary counts categories over plan and at risk, and the likely total by period end. Phones show the same as a list.' },
       { type: 'p', text: 'The likely finish is your spending so far, plus subscription renewals still scheduled in the period, plus what you typically spent over the rest of the period in past completed periods (the median, lined up by day of the pay cycle). Unusually large one-off purchases from the past are counted less, using a review Agent runs in the background. With no completed periods yet, there’s no forecast.' },
+      { type: 'visual', node: <BudgetForecastDemo /> },
       { type: 'callout', tone: 'note', text: 'The forecast is an estimate. It never changes your budget or your ledger.' },
       { type: 'h2', id: 'charts', text: 'Charts and panels' },
       { type: 'list', items: [
@@ -349,6 +352,7 @@ export const DOCS: DocPage[] = [
     summary: 'Income statement, balance sheet, cash flow, spending and trends',
     lead: 'Reports turns your ledger into proper financial statements for a period, or for everything you’ve recorded.',
     blocks: [
+      { type: 'visual', node: <ReportsDemo />, wide: true },
       { type: 'table', head: ['Tab', 'What it shows'], rows: [
         ['Income statement', 'Revenue, expenses and net income, with each category'],
         ['Balance sheet', 'What you own, what you owe, and your net worth at the period’s end'],
@@ -371,6 +375,7 @@ export const DOCS: DocPage[] = [
     summary: 'Your period told as a short, playful story',
     lead: 'A recap replays a salary period as a story in chapters: what came in, where it went, your busiest days, your habits, and a money personality to finish.',
     blocks: [
+      { type: 'visual', node: <RecapStoryDemo />, wide: true },
       { type: 'h2', id: 'open', text: 'Opening a recap' },
       { type: 'list', items: [
         'On the Dashboard, choose Recap for the period you’re viewing.',
@@ -413,6 +418,7 @@ export const DOCS: DocPage[] = [
     lead: 'The Categories page is both a map of your spending and the place to manage the categories and tags you label it with.',
     blocks: [
       { type: 'h2', id: 'charts', text: 'Spending views' },
+      { type: 'visual', node: <CategoryMapDemo />, wide: true },
       { type: 'list', items: [
         'Where the money goes: a map of categories sized by spending, for the last 30 days, this year or all time, by amount or by number of entries.',
         'Spending habits: each category placed by how often you spend on it and how much a purchase usually costs.',

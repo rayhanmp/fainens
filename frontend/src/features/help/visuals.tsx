@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { ArrowRight, Check, CheckCircle2, Clock, Inbox, Lock, Mail, RotateCcw, Sparkles } from 'lucide-react';
 import { cn, formatDayMonth } from '../../lib/utils';
+import { shown, useSequence } from './motion';
 import { exampleAccounts, useHelpPersonal } from './personal';
 
 /**
@@ -8,31 +9,6 @@ import { exampleAccounts, useHelpPersonal } from './personal';
  * Animated ones play once when scrolled into view (and on Replay). Reduced motion — the device
  * setting or Settings → Accessibility — makes their transitions instant.
  */
-
-/** Steps through `count` stages, one every `interval` ms, once the element is on screen. */
-function useSequence(count: number, interval = 900) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [step, setStep] = useState(0);
-  const [run, setRun] = useState(0);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return undefined;
-    const observer = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) setVisible(true); }, { threshold: 0.4 });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!visible) return undefined;
-    const timers = Array.from({ length: count }, (_, index) => window.setTimeout(() => setStep(index + 1), 350 + index * interval));
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [visible, run, count, interval]);
-
-  const replay = () => { setStep(0); setRun((value) => value + 1); };
-  return { ref, step, replay };
-}
 
 /** The panel every illustration sits in, with an optional caption and Replay. */
 export function VisualFrame({ children, caption, onReplay, frameRef }: { children: ReactNode; caption?: string; onReplay?: () => void; frameRef?: React.Ref<HTMLDivElement> }) {
@@ -50,8 +26,6 @@ export function VisualFrame({ children, caption, onReplay, frameRef }: { childre
     </figure>
   );
 }
-
-const shown = (visible: boolean) => cn('transition-all duration-500 ease-out', visible ? 'translate-y-0 opacity-100' : 'translate-y-1.5 opacity-0');
 
 function Chip({ children, className }: { children: ReactNode; className?: string }) {
   return <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', className)}>{children}</span>;

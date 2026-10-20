@@ -159,6 +159,12 @@ h6 {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Help: the recap demo's chapter progress bar. */
+@keyframes recap-demo-fill {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
 .font-headline {
   font-family: var(--font-heading);
 }
