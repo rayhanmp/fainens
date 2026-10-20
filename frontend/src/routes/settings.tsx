@@ -1,10 +1,10 @@
 import { Link, createFileRoute, useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Select } from '../components/ui/Select';
+import { MenuSelect, type MenuSelectOption } from '../components/ui/MenuSelect';
 import { Modal } from '../components/ui/Modal';
 import { RequireAuth } from '../lib/auth';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useId, useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type AgentMemory, type PersonalProfile } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -12,7 +12,7 @@ import { useAccountsLedgerQuery } from '../features/accounts/queries';
 import { useAgentMemoriesQuery } from '../features/agent/queries';
 import { agentCommands } from '../features/agent/commands';
 import { queryKeys } from '../features/core/query-keys';
-import { cn, SETTINGS_CHANGED_EVENT } from '../lib/utils';
+import { cn, formatDate, formatDateTime, SETTINGS_CHANGED_EVENT } from '../lib/utils';
 import { loadTransferFeeRules, saveTransferFeeRules, type TransferFeePayer, type TransferFeeRule } from '../lib/transferFees';
 import { birthdayPassword, loadReportSecuritySettings, passwordFormatDescription, type PdfPasswordFormat } from '../lib/reportSecurity';
 import { useConfirm } from '../components/ui/ConfirmDialog';
@@ -29,7 +29,6 @@ import {
   CreditCard,
   User,
   Settings2,
-  Palette,
   Download,
   Upload,
   ChevronLeft,
@@ -41,6 +40,10 @@ import {
   LockKeyhole,
   Search,
   CloudUpload,
+  X,
+  Monitor,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
@@ -69,7 +72,8 @@ interface ExportOptions {
   memories: boolean;
 }
 
-type TabType = 'profile' | 'general' | 'accounts' | 'appearance' | 'agent' | 'data' | 'backups' | 'reports';
+type TabType = 'profile' | 'general' | 'accounts' | 'agent' | 'data' | 'backups' | 'reports';
+type ThemeChoice = 'auto' | 'light' | 'dark';
 type DatabaseBackupFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
 type DatabaseBackupSettings = {
   enabled: boolean;
@@ -92,23 +96,52 @@ type AgentModel = {
   updatedAt: number | string;
 };
 
-interface SettingsSectionProps {
-  title?: React.ReactNode;
-  action?: React.ReactNode;
+/**
+ * One open section: its groups stacked with a hairline between them. `settings-compact` gives
+ * every field the height of a small button, so no row mixes control sizes.
+ */
+function SettingsPanel({ children }: { children: React.ReactNode }) {
+  return <div className="settings-compact max-w-2xl divide-y divide-[var(--color-border)] animate-in fade-in duration-300">{children}</div>;
+}
+
+interface SettingsGroupProps {
+  title: string;
+  /** One line under the title: what is set now, so a closed group still says something. */
+  summary?: React.ReactNode;
+  /** Groups drill down; the first one in a section usually starts open. */
+  defaultOpen?: boolean;
+  /** A group that is always open, headed by a small label instead of a drill-down row; `summary` is not shown. */
+  fixed?: boolean;
   children: React.ReactNode;
 }
 
-function SettingsSection({ title, action, children }: SettingsSectionProps) {
+function SettingsGroup({ title, summary, defaultOpen = false, fixed = false, children }: SettingsGroupProps) {
+  const header = (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-[var(--ref-on-surface)]">{title}</span>
+        {summary != null && <span className="mt-0.5 block truncate text-xs text-[var(--ref-on-surface-variant)]">{summary}</span>}
+      </span>
+    </>
+  );
+  const body = <div className="pb-5">{children}</div>;
+  if (fixed) {
+    // An always-open group is headed like the app sidebar's groups: a small tracked label, so it never competes with the settings under it.
+    return (
+      <section className="pb-5 pt-5 first:pt-4">
+        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">{title}</h2>
+        {children}
+      </section>
+    );
+  }
   return (
-    <section className="pb-4 last:pb-0">
-      {(title || action) && (
-        <div className="mb-4 flex items-center justify-between gap-4">
-          {title && <div className="min-w-0 text-base font-semibold text-[var(--color-text-primary)]">{title}</div>}
-          {action && <div className="shrink-0">{action}</div>}
-        </div>
-      )}
-      {children}
-    </section>
+    <details className="group py-1" open={defaultOpen}>
+      <summary className="-mx-2 flex cursor-pointer list-none items-center gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]/40 [&::-webkit-details-marker]:hidden">
+        {header}
+        <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform duration-200 group-open:rotate-90" aria-hidden />
+      </summary>
+      {body}
+    </details>
   );
 }
 
@@ -116,16 +149,83 @@ interface SettingsRowProps {
   label: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
+  /** Keep a small control (a toggle, a short button) beside the label on phones too. */
+  inline?: boolean;
 }
 
-function SettingsRow({ label, description, action }: SettingsRowProps) {
+function SettingsRow({ label, description, action, inline = false }: SettingsRowProps) {
   return (
-    <div className="flex flex-col gap-3 border-b border-[var(--color-border)] py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className={cn('flex gap-3 border-b border-[var(--color-border)] py-3 first:pt-0 last:border-b-0 last:pb-0', inline ? 'items-center justify-between gap-4' : 'flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-6')}>
       <div className="min-w-0">
-        <p className="text-sm font-medium text-[var(--color-text-primary)]">{label}</p>
-        {description && <p className="mt-1 max-w-xl text-xs leading-relaxed text-[var(--color-text-secondary)]">{description}</p>}
+        <p className="text-sm font-medium text-[var(--ref-on-surface)]">{label}</p>
+        {description && <p className="mt-0.5 max-w-md text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{description}</p>}
       </div>
-      {action && <div className="shrink-0 sm:min-w-[180px] sm:text-right">{action}</div>}
+      {/* One width for every field beside a label. `.brutalist-input` fills its parent, so fields are sized here. */}
+      {action && <div className={cn('shrink-0', !inline && 'w-full sm:w-48')}>{action}</div>}
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange, disabled, label }: { checked: boolean; onChange: (next: boolean) => void; disabled?: boolean; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50',
+        checked ? 'bg-[var(--ref-primary)]' : 'bg-[var(--ref-surface-container-highest)] ring-1 ring-inset ring-[var(--color-border)]',
+      )}
+    >
+      <span className={cn('inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200', checked ? 'translate-x-[22px]' : 'translate-x-0.5')} aria-hidden />
+    </button>
+  );
+}
+
+/** Success or error under a form, the same everywhere in Settings. */
+function Notice({ notice, className }: { notice: { tone: 'success' | 'error'; text: string } | null; className?: string }) {
+  if (!notice) return null;
+  return (
+    <p role={notice.tone === 'error' ? 'alert' : 'status'} className={cn('flex items-center gap-1.5 text-xs font-medium', notice.tone === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]', className)}>
+      {notice.tone === 'success' ? <CheckCircle className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+      {notice.text}
+    </p>
+  );
+}
+
+/** A unit inside the right edge of a number field; pinned to the field's bottom so a label above it doesn't shift it. */
+function SuffixInput({ suffix, children }: { suffix: string; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <span className="pointer-events-none absolute bottom-px right-3 py-[0.4375rem] text-sm leading-[1.125rem] text-[var(--color-muted)]" aria-hidden>{suffix}</span>
+    </div>
+  );
+}
+
+/** Number fields with a unit inside them: the browser's spin arrows would sit on top of it. */
+const NO_SPIN = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+/** A destructive action that stays quiet until it is needed. */
+const QUIET_DANGER = 'text-[var(--color-danger)]! hover:bg-[var(--color-danger)]/10';
+/** Lists inside a group: hairlines between items, no box around them. */
+const LIST = 'divide-y divide-[var(--color-border)]';
+const EMPTY = 'text-sm text-[var(--ref-on-surface-variant)]';
+/** An inline add/edit form: a quiet tinted panel. */
+const INLINE_FORM = 'rounded-xl bg-[var(--ref-surface-container-low)] p-4';
+
+/**
+ * The app's own dropdown (a bottom sheet on phones) in its field style. `label` shows above it,
+ * as on a text field; without one, `ariaLabel` names it for rows that already have a label.
+ */
+function Dropdown<T extends string>({ label, ariaLabel, value, options, onChange, disabled }: { label?: string; ariaLabel?: string; value: T; options: readonly MenuSelectOption<T>[]; onChange: (value: T) => void; disabled?: boolean }) {
+  const id = useId();
+  return (
+    <div className="space-y-1 text-left">
+      {label && <label htmlFor={id} className="block text-sm font-medium text-[var(--color-text-secondary)]">{label}</label>}
+      <MenuSelect id={id} variant="field" ariaLabel={label ?? ariaLabel ?? ''} value={value} options={options} onChange={onChange} disabled={disabled} />
     </div>
   );
 }
@@ -211,16 +311,61 @@ const AGENT_CONTEXT_OPTIONS: Array<{ key: keyof PersonalProfile['agentContext'];
   { key: 'agentVerbosity', label: 'Agent detail', description: 'Use your preferred response depth.' },
 ];
 
-const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
-  { id: 'profile', label: 'Profile', icon: User },
-  { id: 'general', label: 'General', icon: Settings2 },
-  { id: 'accounts', label: 'Accounts', icon: CreditCard },
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'agent', label: 'Agent', icon: Brain },
-  { id: 'data', label: 'Data', icon: Database },
-  { id: 'backups', label: 'Backups', icon: CloudUpload },
-  { id: 'reports', label: 'PDF reports', icon: LockKeyhole },
+const THEMES: Array<{ value: ThemeChoice; label: string; icon: React.ElementType }> = [
+  { value: 'auto', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
 ];
+
+/** System / Light / Dark as the app's sliding segmented control, as tall as the fields beside it. */
+function ThemeSwitch({ value, onChange }: { value: ThemeChoice; onChange: (next: ThemeChoice) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Theme" className="ui-segmented ui-segmented--3 grid w-full grid-cols-3 gap-1 rounded-lg bg-[var(--ref-surface-container)] p-1" data-segment-index={THEMES.findIndex((option) => option.value === value)}>
+      {THEMES.map(({ value: option, label, icon: Icon }, index) => (
+        <button
+          key={option}
+          type="button"
+          role="radio"
+          aria-checked={value === option}
+          tabIndex={value === option ? 0 : -1}
+          onClick={() => onChange(option)}
+          onKeyDown={(event) => {
+            const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+            if (!step) return;
+            event.preventDefault();
+            const next = (index + step + THEMES.length) % THEMES.length;
+            onChange(THEMES[next]!.value);
+            (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+          }}
+          className={cn('flex h-[26px] items-center justify-center gap-1 rounded-md text-xs font-semibold', value === option ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]')}
+        >
+          <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// `keywords` lets search find a section by the settings inside it, not only by its name.
+const TABS: { id: TabType; label: string; icon: React.ElementType; summary: string; keywords: string }[] = [
+  { id: 'profile', label: 'Profile', icon: User, summary: 'Your name, region, and goals', keywords: 'name preferred pronouns birthday date of birth country region timezone language currency income goal email' },
+  { id: 'general', label: 'General', icon: Settings2, summary: 'Theme, dates, and your pay cycle', keywords: 'appearance theme dark light mode system colour color display date format opportunity cost yield interest rate salary day payday budget period' },
+  { id: 'accounts', label: 'Accounts', icon: CreditCard, summary: 'Defaults and transfer fees', keywords: 'default bank expense income account transfer fee' },
+  { id: 'agent', label: 'Agent', icon: Brain, summary: 'Style, privacy, models, and memory', keywords: 'ai assistant tone detail response style model provider api key openrouter memory memories context sharing privacy' },
+  { id: 'backups', label: 'Backups', icon: CloudUpload, summary: 'Cloud snapshots of your ledger', keywords: 'cloud database backup snapshot automatic frequency schedule' },
+  { id: 'reports', label: 'PDF reports', icon: LockKeyhole, summary: 'Password protection', keywords: 'pdf report password encryption protect birthday security' },
+  { id: 'data', label: 'Data', icon: Database, summary: 'Export, this device, and tools', keywords: 'export import json download data quality image storage gallery security audit log cache delete' },
+];
+
+function matchingTabs(query: string) {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return TABS;
+  return TABS.filter((tab) => {
+    const haystack = `${tab.label} ${tab.keywords}`.toLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  });
+}
 
 export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const { formatAmount } = useBalanceVisibility();
@@ -303,7 +448,15 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [feeRuleAmount, setFeeRuleAmount] = useState('');
   const [feeRulePayer, setFeeRulePayer] = useState<TransferFeePayer>('sender');
   const { confirm } = useConfirm();
-  const visibleTabs = TABS.filter((tab) => tab.label.toLowerCase().includes(settingsSearch.trim().toLowerCase()));
+  const visibleTabs = matchingTabs(settingsSearch);
+  const activeTabInfo = TABS.find((tab) => tab.id === activeTab) ?? TABS[0]!;
+  const sharedContextCount = Object.values(profile.agentContext).filter(Boolean).length;
+  const searchSettings = (query: string) => {
+    setSettingsSearch(query);
+    // Wider screens show the open section beside the list: follow the search to the first match.
+    const matches = matchingTabs(query);
+    if (matches.length > 0 && !matches.some((tab) => tab.id === activeTab)) setActiveTab(matches[0]!.id);
+  };
   // Opened as a page (deep link or the phone menu): go back to where the user came from, else home.
   const closeSettings = onClose ?? (() => { if (canGoBack) router.history.back(); else void navigate({ to: '/' }); });
   
@@ -317,6 +470,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   });
   
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // What was last loaded or written, so opening Settings does not "save" (and flash Saved) unchanged values.
+  const savedSettingsRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -463,7 +618,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   // Auto-save with 500ms debounce
   useEffect(() => {
     if (isLoading) return;
-    
+    const serialized = JSON.stringify(settings);
+    if (serialized === savedSettingsRef.current) return;
+
     setSaveStatus('saving');
     
     if (saveTimeoutRef.current) {
@@ -472,7 +629,8 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     
     saveTimeoutRef.current = setTimeout(() => {
       try {
-        localStorage.setItem('fainens-settings', JSON.stringify(settings));
+        localStorage.setItem('fainens-settings', serialized);
+        savedSettingsRef.current = serialized;
         window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
@@ -494,7 +652,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
       const saved = localStorage.getItem('fainens-settings');
       const parsed = saved ? JSON.parse(saved) : {};
 
-      setSettings({
+      const loaded: AppSettings = {
         dateFormat: parsed.dateFormat || 'DD/MM/YYYY',
         opportunityCostYield: parsed.opportunityCostYield ?? 4.0,
         salaryDay: parsed.salaryDay || 25,
@@ -505,7 +663,9 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         transferFeeRules: loadTransferFeeRules(),
         pdfPasswordEnabled: parsed.pdfPasswordEnabled === true,
         pdfPasswordFormat: parsed.pdfPasswordFormat === 'YYYYMMDD' ? 'YYYYMMDD' : 'DDMMYYYY',
-      });
+      };
+      savedSettingsRef.current = JSON.stringify(loaded);
+      setSettings(loaded);
     } catch (err) {
       console.error('Failed to load settings:', err);
     } finally {
@@ -599,7 +759,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const getAccountOptions = (type?: string) => {
-    const options = [{ value: '', label: 'None (Auto-select)' }];
+    const options = [{ value: '', label: 'Automatic' }];
     const filtered = type ? accounts.filter((a) => a.type === type) : accounts;
     return [
       ...options,
@@ -608,7 +768,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const handleExport = useCallback(async () => {
-    const exportData: any = {
+    const exportData: Record<string, unknown> = {
       exportedAt: new Date().toISOString(),
       version: '1.0.0',
     };
@@ -685,47 +845,74 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         isOpen
         onClose={closeSettings}
         title="Settings"
-        subtitle="Configure Fainens around the way you manage money."
+        // On phones the open section has its own header; the tagline is for wider screens.
+        subtitle={<span className="max-md:hidden">Configure Fainens around the way you manage money.</span>}
         size="xl"
         showCloseLabel={false}
         className="h-[min(680px,82vh)] max-w-[min(920px,92vw)] !rounded-xl !shadow-xl"
         contentClassName="!overflow-hidden !p-0"
       >
         <div className="flex h-full min-h-0 flex-col md:flex-row">
-          <aside className={cn('flex w-full shrink-0 flex-col bg-[var(--ref-surface-container-low)] p-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto md:w-48 md:border-r md:border-[var(--color-border)]', phoneSectionOpen && 'max-md:hidden')}>
-            <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
-              <input value={settingsSearch} onChange={(event) => setSettingsSearch(event.target.value)} placeholder="Search settings" className="w-full rounded-full border border-[var(--color-border)] bg-transparent py-2 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)]" aria-label="Search settings" />
-            </label>
-            {/* Phones: a list of sections, each opening on its own. Wider: the side rail beside the open section. */}
-            <nav className="mt-3 flex flex-col gap-1 max-md:mt-4 max-md:gap-0 max-md:divide-y max-md:divide-[var(--color-border)] max-md:overflow-hidden max-md:rounded-2xl max-md:bg-[var(--color-background)]">
-              {visibleTabs.map(({ id, label, icon: Icon }) => (
+          <aside className={cn('flex w-full shrink-0 flex-col p-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto max-md:px-4 md:w-52 md:border-r md:border-[var(--color-border)] md:bg-[var(--ref-surface-container-low)]', phoneSectionOpen && 'max-md:hidden')}>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" aria-hidden />
+              <input
+                type="search"
+                value={settingsSearch}
+                onChange={(event) => searchSettings(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Escape' && settingsSearch) { event.stopPropagation(); searchSettings(''); } }}
+                placeholder="Search settings"
+                aria-label="Search settings"
+                className={cn('h-[34px] w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] pl-9 text-sm outline-none transition placeholder:text-[var(--color-muted)] focus:border-[var(--ref-primary-container)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--ref-primary-container)_22%,transparent)] [&::-webkit-search-cancel-button]:hidden', settingsSearch ? 'pr-8' : 'pr-3')}
+              />
+              {settingsSearch && (
+                <button type="button" onClick={() => searchSettings('')} className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md text-[var(--color-muted)] hover:bg-[var(--ref-surface-container)] hover:text-[var(--color-text-primary)]" aria-label="Clear search">
+                  <X className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+            {/* Phones: a list of sections that each drill into their own page. Wider: a side rail styled like the app sidebar. */}
+            <nav aria-label="Settings sections" className="mt-3 flex flex-col gap-0.5 max-md:mt-4 max-md:gap-0 max-md:divide-y max-md:divide-[var(--color-border)]">
+              {visibleTabs.map(({ id, label, icon: Icon, summary }) => (
                 <button
                   key={id}
+                  type="button"
+                  aria-current={activeTab === id ? 'page' : undefined}
                   onClick={() => { setActiveTab(id); setPhoneSectionOpen(true); }}
                   className={cn(
-                    'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors max-md:rounded-none max-md:px-4 max-md:py-3.5 max-md:text-[var(--color-text-primary)]',
+                    'group flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors max-md:gap-3 max-md:rounded-none max-md:px-0 max-md:py-3 max-md:text-[var(--ref-on-surface)]',
                     activeTab === id
-                      ? 'md:bg-[var(--color-background)] md:text-[var(--color-text-primary)] md:shadow-sm'
-                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-background)]/70 hover:text-[var(--color-text-primary)]'
+                      ? 'md:bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] md:font-semibold md:text-[var(--color-accent)]'
+                      : 'md:text-[var(--color-text-secondary)] md:hover:bg-[var(--ref-surface-container)] md:hover:text-[var(--color-text-primary)]'
                   )}
                 >
-                  <Icon className={cn('h-4 w-4', activeTab === id && 'md:text-[var(--color-accent)]')} />
-                  <span className="flex-1 text-left">{label}</span>
-                  <ChevronRight className="h-4 w-4 text-[var(--color-muted)] md:hidden" aria-hidden />
+                  <Icon className="h-[18px] w-[18px] shrink-0 max-md:text-[var(--ref-on-surface-variant)]" strokeWidth={1.8} aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{label}</span>
+                    <span className="block truncate text-xs font-normal text-[var(--ref-on-surface-variant)] md:hidden">{summary}</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] md:hidden" aria-hidden />
                 </button>
               ))}
-              {visibleTabs.length === 0 && <p className="px-2 py-3 text-xs text-[var(--color-muted)]">No matching settings</p>}
+              {visibleTabs.length === 0 && (
+                <div className="px-3 py-6 text-center">
+                  <p className="text-sm font-medium text-[var(--ref-on-surface)]">No matches</p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Try a setting’s name, like “theme” or “backup”.</p>
+                </div>
+              )}
             </nav>
           </aside>
 
           <main className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !phoneSectionOpen && 'max-md:hidden')}>
-            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--color-border)] px-4 py-3 sm:px-5">
-              <div className="flex min-w-0 items-center gap-1">
-                <button type="button" onClick={() => setPhoneSectionOpen(false)} className="-ml-2 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] md:hidden" aria-label="All settings">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--color-border)] px-4 py-3 sm:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <button type="button" onClick={() => setPhoneSectionOpen(false)} className="-ml-2 -mr-1 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--ref-surface-container-low)] md:hidden" aria-label="All settings">
                   <ChevronLeft className="h-5 w-5" aria-hidden />
                 </button>
-                <h1 className="truncate font-headline text-xl font-bold text-[var(--color-text-primary)]">{TABS.find((tab) => tab.id === activeTab)?.label}</h1>
+                <div className="min-w-0">
+                  <h1 className="truncate font-headline text-lg font-bold leading-tight text-[var(--ref-on-surface)]">{activeTabInfo.label}</h1>
+                  <p className="truncate text-xs text-[var(--ref-on-surface-variant)]">{activeTabInfo.summary}</p>
+                </div>
               </div>
               {saveStatus !== 'idle' && (
                 <span className={cn('flex items-center gap-1.5 text-xs font-medium', saveStatus === 'saving' ? 'text-[var(--color-accent)]' : 'text-[var(--color-success)]')}>
@@ -735,192 +922,176 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
               )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-              {/* Tab Content */}
-              <div className="transition-opacity duration-300">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
+              <div>
           {/* Profile Tab */}
           {activeTab === 'profile' && (
-            <div className="max-w-3xl space-y-4 animate-in fade-in duration-300">
-              <SettingsSection title="About you">
-                <div className="space-y-5">
-                  <div className="grid max-w-xl gap-4">
-                    <Input label="Name" value={profile.fullName ?? ''} onChange={(event) => setProfile((current) => ({ ...current, fullName: event.target.value || null }))} placeholder="Your full name" maxLength={120} />
-                    <Input label="Preferred name" value={profile.preferredName ?? ''} onChange={(event) => setProfile((current) => ({ ...current, preferredName: event.target.value || null }))} placeholder="What should we call you?" maxLength={80} />
-                    <Input label="Pronouns (optional)" value={profile.pronouns ?? ''} onChange={(event) => setProfile((current) => ({ ...current, pronouns: event.target.value || null }))} placeholder="e.g. they/them" maxLength={80} />
-                    <Input label="Date of birth (optional)" type="date" value={profile.dateOfBirth ?? ''} onChange={(event) => setProfile((current) => ({ ...current, dateOfBirth: event.target.value || null }))} />
-                  </div>
-                  <details className="group border-t border-[var(--color-border)] pt-5">
-                    <summary className="cursor-pointer text-sm font-semibold">Regional preferences</summary>
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <Input label="Country or region" value={profile.country ?? ''} onChange={(event) => setProfile((current) => ({ ...current, country: event.target.value || null }))} placeholder="e.g. Indonesia" maxLength={80} />
-                    <Select label="Timezone" value={profile.timezone} onChange={(event) => setProfile((current) => ({ ...current, timezone: event.target.value }))} options={TIMEZONES} />
-                    <Select label="Language" value={profile.language} onChange={(event) => setProfile((current) => ({ ...current, language: event.target.value as PersonalProfile['language'] }))} options={[{ value: 'en', label: 'English' }, { value: 'id', label: 'Bahasa Indonesia' }]} />
-                    <Select label="Default currency" value={profile.currency} onChange={(event) => setProfile((current) => ({ ...current, currency: event.target.value }))} options={CURRENCIES.map((currency) => ({ value: currency.value, label: currency.label }))} />
-                    </div>
-                  </details>
-                  <details className="group border-t border-[var(--color-border)] pt-5">
-                    <summary className="cursor-pointer text-sm font-semibold">Financial preferences</summary>
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <Select label="Income pattern" value={profile.incomePattern ?? ''} onChange={(event) => setProfile((current) => ({ ...current, incomePattern: (event.target.value || null) as PersonalProfile['incomePattern'] }))} options={INCOME_PATTERNS} />
-                    <Select label="Main financial goal" value={profile.primaryGoal ?? ''} onChange={(event) => setProfile((current) => ({ ...current, primaryGoal: (event.target.value || null) as PersonalProfile['primaryGoal'] }))} options={FINANCIAL_GOALS} />
-                    </div>
-                  </details>
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-5">
-                    <div><p className="text-sm font-semibold">Agent context</p><p className="mt-1 text-xs text-[var(--color-muted)]">{Object.values(profile.agentContext).filter(Boolean).length} profile fields enabled for sharing</p></div>
-                    <Button type="button" size="sm" variant="secondary" disabled={profileBusy} onClick={() => { setContextError(null); setContextDraft({ ...profile.agentContext }); }}>Manage sharing</Button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 border-t border-[var(--color-border)] pt-5">
-                    <Button type="button" onClick={() => void saveProfile()} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save profile'}</Button>
-                    <span className="text-xs text-[var(--color-muted)]">Signed in as {profile.email || user?.email || 'your account'}</span>
-                  </div>
-                  {profileNotice && <p role="status" className={cn('rounded-lg border p-3 text-sm', profileNotice.tone === 'success' ? 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 text-[var(--color-danger)]')}>{profileNotice.text}</p>}
+            <SettingsPanel>
+              <SettingsGroup fixed title="About you">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input label="Name" value={profile.fullName ?? ''} onChange={(event) => setProfile((current) => ({ ...current, fullName: event.target.value || null }))} placeholder="Your full name" maxLength={120} />
+                  <Input label="Preferred name" value={profile.preferredName ?? ''} onChange={(event) => setProfile((current) => ({ ...current, preferredName: event.target.value || null }))} placeholder="What should we call you?" maxLength={80} />
+                  <Input label="Pronouns (optional)" value={profile.pronouns ?? ''} onChange={(event) => setProfile((current) => ({ ...current, pronouns: event.target.value || null }))} placeholder="e.g. they/them" maxLength={80} />
+                  <Input label="Date of birth (optional)" type="date" value={profile.dateOfBirth ?? ''} onChange={(event) => setProfile((current) => ({ ...current, dateOfBirth: event.target.value || null }))} />
                 </div>
-              </SettingsSection>
-            </div>
+              </SettingsGroup>
+              <SettingsGroup title="Region and language" summary={[profile.country, TIMEZONES.find((zone) => zone.value === profile.timezone)?.label ?? profile.timezone, profile.language === 'id' ? 'Bahasa Indonesia' : 'English', profile.currency].filter(Boolean).join(' · ')}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input label="Country or region" value={profile.country ?? ''} onChange={(event) => setProfile((current) => ({ ...current, country: event.target.value || null }))} placeholder="e.g. Indonesia" maxLength={80} />
+                  <Dropdown label="Timezone" value={profile.timezone} onChange={(timezone) => setProfile((current) => ({ ...current, timezone }))} options={TIMEZONES} />
+                  <Dropdown<PersonalProfile['language']> label="Language" value={profile.language} onChange={(language) => setProfile((current) => ({ ...current, language }))} options={[{ value: 'en', label: 'English' }, { value: 'id', label: 'Bahasa Indonesia' }]} />
+                  <Dropdown label="Default currency" value={profile.currency} onChange={(currency) => setProfile((current) => ({ ...current, currency }))} options={CURRENCIES} />
+                </div>
+              </SettingsGroup>
+              <SettingsGroup title="Your finances" summary={[INCOME_PATTERNS.find((item) => item.value === (profile.incomePattern ?? ''))?.label, FINANCIAL_GOALS.find((item) => item.value === (profile.primaryGoal ?? ''))?.label].filter((label) => label && label !== 'Choose later').join(' · ') || 'Income pattern and main goal, optional'}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Dropdown label="Income pattern" value={profile.incomePattern ?? ''} onChange={(value) => setProfile((current) => ({ ...current, incomePattern: (value || null) as PersonalProfile['incomePattern'] }))} options={INCOME_PATTERNS} />
+                  <Dropdown label="Main financial goal" value={profile.primaryGoal ?? ''} onChange={(value) => setProfile((current) => ({ ...current, primaryGoal: (value || null) as PersonalProfile['primaryGoal'] }))} options={FINANCIAL_GOALS} />
+                </div>
+              </SettingsGroup>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
+                <Button type="button" size="sm" onClick={() => void saveProfile()} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save profile'}</Button>
+                <Notice notice={profileNotice} />
+                <span className="ml-auto min-w-0 truncate text-xs text-[var(--color-muted)]">Signed in as {profile.email || user?.email || 'your account'}</span>
+              </div>
+            </SettingsPanel>
           )}
 
           {/* General Tab */}
           {activeTab === 'general' && (
-            <div className="max-w-3xl animate-in fade-in duration-300">
-              <SettingsSection>
-                <div>
-                  <SettingsRow
-                    label="Date format"
-                    description="How dates are displayed throughout Fainens. Currency is managed in Profile."
-                    action={<Select label="" aria-label="Date format" className="w-full sm:w-48" value={settings.dateFormat} onChange={(event) => setSettings({ ...settings, dateFormat: event.target.value })} options={DATE_FORMATS.map((dateFormat) => ({ value: dateFormat.value, label: dateFormat.label }))} />}
-                  />
-                  <SettingsRow
-                    label="Opportunity cost yield"
-                    description="Annual money market rate used for opportunity cost calculations."
-                    action={<Input label="" aria-label="Baseline yield" className="w-full sm:w-32" type="number" value={settings.opportunityCostYield.toString()} onChange={(event) => setSettings({ ...settings, opportunityCostYield: parseFloat(event.target.value) || 0 })} step="0.1" min="0" max="20" />}
-                  />
-                  <SettingsRow
-                    label="Salary day"
-                    description="The day you receive your salary. Budget periods are calculated from this date."
-                    action={<Input label="" aria-label="Salary day of month" className="w-full sm:w-32" type="number" value={settings.salaryDay.toString()} onChange={(event) => setSettings({ ...settings, salaryDay: parseInt(event.target.value) || 1 })} min="1" max="31" />}
-                  />
-                </div>
-              </SettingsSection>
-            </div>
+            <SettingsPanel>
+              <SettingsGroup fixed title="Appearance" summary="How Fainens looks on this device">
+                <SettingsRow
+                  label="Theme"
+                  description="Light, dark, or match your device."
+                  action={<ThemeSwitch value={theme} onChange={setTheme} />}
+                />
+                <SettingsRow
+                  label="Date format"
+                  description="How dates appear throughout Fainens."
+                  action={<Dropdown ariaLabel="Date format" value={settings.dateFormat} onChange={(dateFormat) => setSettings({ ...settings, dateFormat })} options={DATE_FORMATS} />}
+                />
+              </SettingsGroup>
+              <SettingsGroup fixed title="Pay cycle and returns" summary="Used by budgets and opportunity-cost figures">
+                <SettingsRow
+                  label="Salary day"
+                  description="The day of the month your salary arrives. Budget periods start on this day."
+                  action={<SuffixInput suffix="of the month"><Input label="" aria-label="Salary day of month" className={cn(NO_SPIN, 'pr-28!')} type="number" inputMode="numeric" value={settings.salaryDay.toString()} onChange={(event) => setSettings({ ...settings, salaryDay: parseInt(event.target.value) || 1 })} min="1" max="31" /></SuffixInput>}
+                />
+                <SettingsRow
+                  label="Opportunity cost yield"
+                  description="Yearly money market rate, used to show what idle money could have earned."
+                  action={<SuffixInput suffix="% a year"><Input label="" aria-label="Opportunity cost yield, percent a year" className={cn(NO_SPIN, 'pr-20!')} type="number" inputMode="decimal" value={settings.opportunityCostYield.toString()} onChange={(event) => setSettings({ ...settings, opportunityCostYield: parseFloat(event.target.value) || 0 })} step="0.1" min="0" max="20" /></SuffixInput>}
+                />
+              </SettingsGroup>
+            </SettingsPanel>
           )}
 
           {/* Accounts Tab */}
           {activeTab === 'accounts' && (
-            <div className="max-w-3xl space-y-4 animate-in fade-in duration-300">
-              <SettingsSection>
+            <SettingsPanel>
+              <SettingsGroup fixed title="New transaction defaults" summary="Pre-selected when you add a transaction">
                 <div>
-                  <SettingsRow label="Default bank account" description="Pre-selected when you create a transaction." action={<Select label="" aria-label="Default bank account" className="w-full sm:w-52" value={settings.defaultBankAccountId?.toString() || ''} onChange={(event) => setSettings({ ...settings, defaultBankAccountId: event.target.value ? parseInt(event.target.value) : null })} options={getAccountOptions('asset')} />} />
-                  <SettingsRow label="Default expense account" description="Used as the default source for new expenses." action={<Select label="" aria-label="Default expense account" className="w-full sm:w-52" value={settings.defaultExpenseAccountId?.toString() || ''} onChange={(event) => setSettings({ ...settings, defaultExpenseAccountId: event.target.value ? parseInt(event.target.value) : null })} options={getAccountOptions('expense')} />} />
-                  <SettingsRow label="Default income account" description="Used as the default destination for new income." action={<Select label="" aria-label="Default income account" className="w-full sm:w-52" value={settings.defaultIncomeAccountId?.toString() || ''} onChange={(event) => setSettings({ ...settings, defaultIncomeAccountId: event.target.value ? parseInt(event.target.value) : null })} options={getAccountOptions('revenue')} />} />
+                  <SettingsRow label="Bank account" description="Where new transactions are paid from." action={<Dropdown ariaLabel="Default bank account" value={settings.defaultBankAccountId?.toString() || ''} onChange={(value) => setSettings({ ...settings, defaultBankAccountId: value ? parseInt(value) : null })} options={getAccountOptions('asset')} />} />
+                  <SettingsRow label="Expense account" description="The category new expenses start in." action={<Dropdown ariaLabel="Default expense account" value={settings.defaultExpenseAccountId?.toString() || ''} onChange={(value) => setSettings({ ...settings, defaultExpenseAccountId: value ? parseInt(value) : null })} options={getAccountOptions('expense')} />} />
+                  <SettingsRow label="Income account" description="The source new income starts from." action={<Dropdown ariaLabel="Default income account" value={settings.defaultIncomeAccountId?.toString() || ''} onChange={(value) => setSettings({ ...settings, defaultIncomeAccountId: value ? parseInt(value) : null })} options={getAccountOptions('revenue')} />} />
                 </div>
-              </SettingsSection>
-              <details className="group border-b border-[var(--color-border)] pb-6">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-2 [&::-webkit-details-marker]:hidden">
-                  <span><span className="block text-sm font-semibold">Transfer fee defaults</span><span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{settings.transferFeeRules.length} saved pair defaults</span></span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
-                </summary>
-                <div className="mt-4 space-y-4">
-                  <p className="text-sm text-[var(--color-text-secondary)]">Automatically apply a fee when moving money between a specific source and destination.</p>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Select label="From account" value={feeRuleFrom} onChange={(event) => setFeeRuleFrom(event.target.value)} options={[{ value: '', label: 'Choose source…' }, ...accounts.filter((account) => account.type === 'asset' && !account.systemKey).map((account) => ({ value: String(account.id), label: account.name }))]} />
-                    <Select label="To account" value={feeRuleTo} onChange={(event) => setFeeRuleTo(event.target.value)} options={[{ value: '', label: 'Choose destination…' }, ...accounts.filter((account) => account.type === 'asset' && !account.systemKey).map((account) => ({ value: String(account.id), label: account.name }))]} />
-                    <Input label="Fee (IDR)" type="number" min="0" step="1" value={feeRuleAmount} onChange={(event) => setFeeRuleAmount(event.target.value)} placeholder="e.g. 1000" />
-                    <Select label="Who pays" value={feeRulePayer} onChange={(event) => setFeeRulePayer(event.target.value as TransferFeePayer)} options={[{ value: 'sender', label: 'Sender' }, { value: 'recipient', label: 'Recipient' }]} />
+              </SettingsGroup>
+              <SettingsGroup title="Transfer fees" summary={settings.transferFeeRules.length === 0 ? 'Add a fee automatically between two accounts' : `${settings.transferFeeRules.length} account ${settings.transferFeeRules.length === 1 ? 'pair' : 'pairs'}`}>
+                <div className="space-y-4">
+                  <p className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Added automatically whenever money moves from one account to the other.</p>
+                  {settings.transferFeeRules.length > 0 && (
+                    <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
+                      {settings.transferFeeRules.map((rule) => (
+                        <div key={`${rule.fromAccountId}-${rule.toAccountId}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{accounts.find((account) => account.id === rule.fromAccountId)?.name ?? `Account #${rule.fromAccountId}`} → {accounts.find((account) => account.id === rule.toAccountId)?.name ?? `Account #${rule.toAccountId}`}</p>
+                            <p className="text-xs text-[var(--ref-on-surface-variant)]">{formatAmount(rule.feeCents, 'IDR')} · paid by {rule.payer}</p>
+                          </div>
+                          <Button type="button" size="sm" variant="secondary" className={cn('px-2', QUIET_DANGER)} onClick={() => removeTransferFeeRule(rule)} aria-label="Remove transfer fee"><Trash2 className="h-3.5 w-3.5" aria-hidden /></Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className={cn(INLINE_FORM, 'grid grid-cols-1 gap-3 sm:grid-cols-2')}>
+                    <Dropdown label="From account" value={feeRuleFrom} onChange={setFeeRuleFrom} options={[{ value: '', label: 'Choose source…' }, ...accounts.filter((account) => account.type === 'asset' && !account.systemKey).map((account) => ({ value: String(account.id), label: account.name }))]} />
+                    <Dropdown label="To account" value={feeRuleTo} onChange={setFeeRuleTo} options={[{ value: '', label: 'Choose destination…' }, ...accounts.filter((account) => account.type === 'asset' && !account.systemKey).map((account) => ({ value: String(account.id), label: account.name }))]} />
+                    <SuffixInput suffix="IDR"><Input label="Fee" className={cn(NO_SPIN, 'pr-12!')} type="number" inputMode="numeric" min="0" step="1" value={feeRuleAmount} onChange={(event) => setFeeRuleAmount(event.target.value)} placeholder="e.g. 2500" /></SuffixInput>
+                    <Dropdown<TransferFeePayer> label="Who pays" value={feeRulePayer} onChange={setFeeRulePayer} options={[{ value: 'sender', label: 'Sender' }, { value: 'recipient', label: 'Recipient' }]} />
+                    <div className="sm:col-span-2"><Button type="button" size="sm" onClick={addTransferFeeRule} disabled={!feeRuleFrom || !feeRuleTo || !feeRuleAmount}><Plus className="h-4 w-4" aria-hidden /> Add transfer fee</Button></div>
                   </div>
-                  <Button type="button" onClick={addTransferFeeRule} disabled={!feeRuleFrom || !feeRuleTo || !feeRuleAmount}><Plus className="h-4 w-4" /> Save pair default</Button>
-                  {settings.transferFeeRules.length > 0 ? <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">{settings.transferFeeRules.map((rule) => <div key={`${rule.fromAccountId}-${rule.toAccountId}`} className="flex items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-semibold">{accounts.find((account) => account.id === rule.fromAccountId)?.name ?? `Account #${rule.fromAccountId}`} → {accounts.find((account) => account.id === rule.toAccountId)?.name ?? `Account #${rule.toAccountId}`}</p><p className="text-xs text-[var(--color-text-secondary)]">{formatAmount(rule.feeCents, 'IDR')} · paid by {rule.payer}</p></div><Button type="button" size="sm" variant="danger" onClick={() => removeTransferFeeRule(rule)}><Trash2 className="h-3.5 w-3.5" /> Remove</Button></div>)}</div> : <p className="text-xs text-[var(--color-muted)]">No pair defaults yet.</p>}
                 </div>
-              </details>
-            </div>
-          )}
-
-          {/* Appearance Tab */}
-          {activeTab === 'appearance' && (
-            <div className="max-w-3xl animate-in fade-in duration-300">
-              <SettingsSection>
-                <div>
-                  <SettingsRow
-                    label="Theme"
-                    description="Choose light, dark, or follow your system preference."
-                    action={<Select label="" aria-label="Theme" className="w-full sm:w-40" value={theme} onChange={(event) => setTheme(event.target.value as 'light' | 'dark' | 'auto')} options={[{ value: 'auto', label: 'System' }, { value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]} />}
-                  />
-                </div>
-              </SettingsSection>
-            </div>
+              </SettingsGroup>
+            </SettingsPanel>
           )}
 
           {/* Agent tab */}
           {activeTab === 'agent' && (
-            <div className="max-w-3xl space-y-4 animate-in fade-in duration-300">
-              <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
-                <details className="group">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
-                    <span><span className="block text-sm font-semibold">Response style</span><span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{profile.agentTone.charAt(0).toUpperCase() + profile.agentTone.slice(1)} · {profile.agentVerbosity.charAt(0).toUpperCase() + profile.agentVerbosity.slice(1)}</span></span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
-                  </summary>
-                  <div className="pb-5">
-                    <div className="space-y-4">
-                    <p className="text-sm text-[var(--color-text-secondary)]">Set the default tone and amount of detail for everyday conversations.</p>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Select label="Agent tone" value={profile.agentTone} onChange={(event) => setProfile((current) => ({ ...current, agentTone: event.target.value as PersonalProfile['agentTone'] }))} options={[{ value: 'warm', label: 'Warm and friendly' }, { value: 'direct', label: 'Direct and practical' }, { value: 'encouraging', label: 'Encouraging and supportive' }]} />
-                      <Select label="Agent detail" value={profile.agentVerbosity} onChange={(event) => setProfile((current) => ({ ...current, agentVerbosity: event.target.value as PersonalProfile['agentVerbosity'] }))} options={[{ value: 'concise', label: 'Concise' }, { value: 'balanced', label: 'Balanced' }, { value: 'detailed', label: 'Detailed' }]} />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button type="button" size="sm" onClick={() => void saveProfile()} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save response style'}</Button>
-                      {profileNotice && <span role="status" className={cn('text-xs', profileNotice.tone === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{profileNotice.text}</span>}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-5">
-                      <div><p className="text-sm font-semibold">Personal context</p><p className="mt-1 text-xs text-[var(--color-muted)]">{Object.values(profile.agentContext).filter(Boolean).length} profile fields shared · {memories.length} memories available</p></div>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => { setActiveTab('profile'); setContextError(null); setContextDraft({ ...profile.agentContext }); }}>Manage context</Button>
-                    </div>
+            <SettingsPanel>
+              <SettingsGroup defaultOpen title="Response style" summary={`${profile.agentTone.charAt(0).toUpperCase() + profile.agentTone.slice(1)} · ${profile.agentVerbosity.charAt(0).toUpperCase() + profile.agentVerbosity.slice(1)}`}>
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Dropdown<PersonalProfile['agentTone']> label="Tone" value={profile.agentTone} onChange={(agentTone) => setProfile((current) => ({ ...current, agentTone }))} options={[{ value: 'warm', label: 'Warm and friendly' }, { value: 'direct', label: 'Direct and practical' }, { value: 'encouraging', label: 'Encouraging and supportive' }]} />
+                    <Dropdown<PersonalProfile['agentVerbosity']> label="Detail" value={profile.agentVerbosity} onChange={(agentVerbosity) => setProfile((current) => ({ ...current, agentVerbosity }))} options={[{ value: 'concise', label: 'Concise' }, { value: 'balanced', label: 'Balanced' }, { value: 'detailed', label: 'Detailed' }]} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Button type="button" size="sm" onClick={() => void saveProfile()} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save response style'}</Button>
+                    <Notice notice={profileNotice} />
                   </div>
                 </div>
-              </details>
+              </SettingsGroup>
 
-              <details className="group">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
-                  <span><span className="block text-sm font-semibold">Models</span><span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{agentModels.find((model) => model.isDefault)?.name ?? 'No model configured'} · {agentModels.length} saved</span></span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
-                </summary>
-                <div className="pb-5">
-                    <div className="space-y-4">
-                    <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">Choose which OpenAI-compatible model Agent uses. API keys are encrypted and never shown again.</p>
+              <SettingsGroup title="What Agent can see" summary={`${sharedContextCount} of ${AGENT_CONTEXT_OPTIONS.length} profile details shared`}>
+                <SettingsRow
+                  inline
+                  label="Profile details"
+                  description="Choose which parts of your profile Agent may use, such as your preferred name or timezone."
+                  action={<Button type="button" size="sm" variant="secondary" onClick={() => { setContextError(null); setContextDraft({ ...profile.agentContext }); }}>Choose…</Button>}
+                />
+              </SettingsGroup>
+
+              <SettingsGroup title="Models" summary={`${agentModels.find((model) => model.isDefault)?.name ?? 'No default model'} · ${agentModels.length} saved`}>
+                <div className="space-y-4">
+                    <p className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">OpenAI-compatible models Agent can use. API keys are encrypted and never shown again.</p>
                     {agentModels.length === 0 ? (
-                      <p className="border-y border-[var(--color-border)] py-4 text-sm text-[var(--color-text-secondary)]">No saved models yet. Add one to connect Agent to a provider.</p>
+                      <p className={EMPTY}>No models yet. Add one to connect Agent to a provider.</p>
                     ) : (
-                      <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
+                      <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
                         {agentModels.map((model) => (
-                          <div key={model.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{model.name}</p>{model.isDefault && <span className="rounded-full bg-[var(--ref-primary)]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--ref-primary)]">Default</span>}</div><p className="mt-1 truncate font-mono text-xs text-[var(--color-text-secondary)]">{model.model}</p><p className="mt-1 truncate text-xs text-[var(--color-muted)]">{model.baseUrl} · {model.apiKeyConfigured ? `key via ${model.apiKeySource}` : 'no saved key'}</p></div>
-                            <div className="flex shrink-0 flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm(model)}>Edit</Button>{model.apiKeySource === 'database' && <Button type="button" size="sm" variant="secondary" onClick={() => void clearAgentModelKey(model.id)} disabled={agentProviderBusy}>Clear key</Button>}{!model.isDefault && <Button type="button" size="sm" variant="secondary" onClick={() => void makeAgentModelDefault(model.id)} disabled={agentProviderBusy}>Make default</Button>}<Button type="button" size="sm" variant="danger" onClick={() => void removeAgentModel(model.id)} disabled={agentProviderBusy}>Delete</Button></div>
+                          <div key={model.id} className="flex flex-col gap-2.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold">{model.name}</p>{model.isDefault && <span className="rounded-full bg-[var(--ref-primary)]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--ref-primary)]">Default</span>}</div>
+                              <p className="mt-0.5 truncate font-mono text-xs text-[var(--ref-on-surface-variant)]">{model.model}</p>
+                              <p className="truncate text-xs text-[var(--color-muted)]">{model.baseUrl.replace(/^https?:\/\//, '')} · {model.apiKeySource === 'database' ? 'saved key' : model.apiKeySource === 'environment' ? 'server key' : 'no key'}</p>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap gap-1.5">
+                              {!model.isDefault && <Button type="button" size="sm" variant="secondary" onClick={() => void makeAgentModelDefault(model.id)} disabled={agentProviderBusy}>Make default</Button>}
+                              <Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm(model)}>Edit</Button>
+                              {model.apiKeySource === 'database' && <Button type="button" size="sm" variant="secondary" onClick={() => void clearAgentModelKey(model.id)} disabled={agentProviderBusy}>Clear key</Button>}
+                              <Button type="button" size="sm" variant="secondary" className={cn('px-2', QUIET_DANGER)} onClick={() => void removeAgentModel(model.id)} disabled={agentProviderBusy} aria-label={`Delete ${model.name}`}><Trash2 className="h-3.5 w-3.5" aria-hidden /></Button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
-                    {!showAgentModelForm && <Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm()}><Plus className="h-4 w-4" /> Add model</Button>}
+                    {!showAgentModelForm && <Button type="button" size="sm" variant="secondary" onClick={() => openAgentModelForm()}><Plus className="h-4 w-4" aria-hidden /> Add model</Button>}
                     {showAgentModelForm && (
-                      <div className="border-t border-[var(--color-border)] pt-5">
+                      <div className={INLINE_FORM}>
                         <p className="mb-3 text-sm font-semibold">{editingAgentModelId == null ? 'Add model' : 'Edit model'}</p>
-                        <div className="grid gap-3 sm:grid-cols-2"><Input label="Name" value={agentModelDraft.name} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="e.g. Fast daily model" maxLength={120} /><Input label="Model ID" value={agentModelDraft.model} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, model: event.target.value }))} placeholder="e.g. z-ai/glm-5.3-flash" maxLength={200} /><div className="sm:col-span-2"><Input label="Base URL" value={agentModelDraft.baseUrl} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, baseUrl: event.target.value }))} placeholder="https://openrouter.ai/api/v1" maxLength={500} /></div><div className="sm:col-span-2 space-y-1"><label htmlFor="agent-model-api-key" className="block text-sm font-medium text-[var(--color-text-secondary)]">API key (optional)</label><input id="agent-model-api-key" type="password" value={agentModelDraft.apiKey} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, apiKey: event.target.value }))} placeholder={editingAgentModelId == null ? 'Leave blank to use the server environment key' : 'Leave blank to keep the stored key'} autoComplete="new-password" className="brutalist-input" /></div></div>
-                        <div className="mt-4 flex flex-wrap gap-2"><Button type="button" onClick={() => void saveAgentModel()} disabled={agentProviderBusy || !agentModelDraft.name.trim() || !agentModelDraft.model.trim() || !agentModelDraft.baseUrl.trim()}>{agentProviderBusy ? 'Saving…' : editingAgentModelId == null ? 'Add model' : 'Save changes'}</Button><Button type="button" variant="secondary" onClick={resetAgentModelDraft}>Cancel</Button></div>
+                        <div className="grid gap-3 sm:grid-cols-2"><Input label="Name" value={agentModelDraft.name} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="e.g. Fast daily model" maxLength={120} /><Input label="Model ID" value={agentModelDraft.model} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, model: event.target.value }))} placeholder="e.g. z-ai/glm-5.3-flash" maxLength={200} /><div className="sm:col-span-2"><Input label="Base URL" value={agentModelDraft.baseUrl} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, baseUrl: event.target.value }))} placeholder="https://openrouter.ai/api/v1" maxLength={500} /></div><div className="sm:col-span-2 space-y-1"><label htmlFor="agent-model-api-key" className="block text-sm font-medium text-[var(--color-text-secondary)]">API key (optional)</label><input id="agent-model-api-key" type="password" value={agentModelDraft.apiKey} onChange={(event) => setAgentModelDraft((draft) => ({ ...draft, apiKey: event.target.value }))} placeholder={editingAgentModelId == null ? 'Blank uses the server’s key' : 'Blank keeps the saved key'} autoComplete="new-password" className="brutalist-input" /></div></div>
+                        <div className="mt-4 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => void saveAgentModel()} disabled={agentProviderBusy || !agentModelDraft.name.trim() || !agentModelDraft.model.trim() || !agentModelDraft.baseUrl.trim()}>{agentProviderBusy ? 'Saving…' : editingAgentModelId == null ? 'Add model' : 'Save changes'}</Button><Button type="button" size="sm" variant="secondary" onClick={resetAgentModelDraft}>Cancel</Button></div>
                       </div>
                     )}
-                    {agentProviderNotice && <p role="status" className={cn('text-sm', agentProviderNotice.tone === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{agentProviderNotice.text}</p>}
-                  </div>
+                    <Notice notice={agentProviderNotice} />
                 </div>
-              </details>
+              </SettingsGroup>
 
-              <details className="group">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
-                  <span><span className="block text-sm font-semibold">Memory</span><span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{memories.length} saved memories</span></span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
-                </summary>
-                <div className="pb-5">
+              <SettingsGroup title="Memory" summary={memories.length === 0 ? 'Nothing saved yet' : `${memories.length} saved ${memories.length === 1 ? 'memory' : 'memories'}`}>
                     <div className="space-y-3">
-                    <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">Save stable preferences or background for future chats. Memories are context only—not ledger evidence or permission to change data.</p>
-                    {!showMemoryForm && <Button type="button" size="sm" variant="secondary" onClick={openMemoryForm} disabled={memories.length >= memoryLimits.maxItems}><Plus className="h-4 w-4" /> Add memory</Button>}
+                    <p className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Lasting preferences or background Agent brings into future chats. Memories are context only, never proof of a transaction or permission to change your data.</p>
+                    {!showMemoryForm && <Button type="button" size="sm" variant="secondary" onClick={openMemoryForm} disabled={memories.length >= memoryLimits.maxItems}><Plus className="h-4 w-4" aria-hidden /> Add memory</Button>}
                     {showMemoryForm && (
-                      <form className="grid gap-3 border-t border-[var(--color-border)] pt-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]" onSubmit={(event) => void saveMemory(event)}>
+                      <form className={cn(INLINE_FORM, 'grid gap-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]')} onSubmit={(event) => void saveMemory(event)}>
                         <Input label="Memory name" value={memoryLabel} onChange={(event) => setMemoryLabel(event.target.value)} placeholder="e.g. Financial goal" maxLength={memoryLimits.maxLabelLength} required />
                         <div className="space-y-1"><label htmlFor="agent-memory-content" className="block text-sm font-medium text-[var(--color-text-secondary)]">What should Agent remember?</label><textarea id="agent-memory-content" value={memoryContent} onChange={(event) => setMemoryContent(event.target.value)} placeholder="e.g. I am saving for a down payment and prefer conservative suggestions." maxLength={memoryLimits.maxContentLength} required rows={3} className="brutalist-input min-h-24 w-full resize-y" /><p className="text-xs text-[var(--color-muted)]">{memoryContent.length}/{memoryLimits.maxContentLength}</p></div>
                         <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" size="sm" isLoading={isSavingMemory}>{editingMemoryId == null ? 'Add memory' : 'Save changes'}</Button><Button type="button" size="sm" variant="secondary" onClick={resetMemoryForm} disabled={isSavingMemory}>Cancel</Button></div>
@@ -929,96 +1100,59 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                     {memories.length >= memoryLimits.maxItems && !showMemoryForm && <p className="text-xs text-[var(--color-warning)]">You have reached the {memoryLimits.maxItems}-memory limit.</p>}
                     {memoryError && <p role="alert" className="text-sm text-[var(--color-danger)]">{memoryError}</p>}
                     {isLoadingMemories ? (
-                      <p className="flex items-center gap-2 border-y border-[var(--color-border)] py-4 text-sm text-[var(--color-text-secondary)]"><RefreshCw className="h-4 w-4 animate-spin" /> Loading memories…</p>
+                      <p className={cn(EMPTY, 'flex items-center gap-2')}><RefreshCw className="h-4 w-4 animate-spin" aria-hidden /> Loading memories…</p>
                     ) : memories.length === 0 ? (
-                      <p className="border-y border-[var(--color-border)] py-4 text-sm text-[var(--color-text-secondary)]">No memories saved yet.</p>
+                      <p className={EMPTY}>No memories yet. Add something Agent should keep in mind, like a goal or a habit.</p>
                     ) : (
-                      <div className="divide-y divide-[var(--color-border)] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)]">
+                      <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
                         {memories.map((memory) => (
-                          <div key={memory.id} className="flex items-start gap-3 px-3 py-2.5 sm:justify-between">
-                            <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{memory.label}</p><p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[var(--color-text-secondary)]">{memory.content}</p></div>
-                            <div className="flex shrink-0 gap-1"><Button type="button" size="sm" variant="secondary" className="px-2" onClick={() => editMemory(memory)} disabled={isSavingMemory} aria-label={'Edit ' + memory.label}><Pencil className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button><Button type="button" size="sm" variant="danger" className="px-2" onClick={() => void deleteMemory(memory)} disabled={isSavingMemory} aria-label={'Delete ' + memory.label}><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></Button></div>
+                          <div key={memory.id} className="group/memory flex items-start gap-3 py-3">
+                            <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{memory.label}</p><p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{memory.content}</p></div>
+                            <div className="flex shrink-0 gap-1"><Button type="button" size="sm" variant="secondary" className="px-2" onClick={() => editMemory(memory)} disabled={isSavingMemory} aria-label={'Edit ' + memory.label}><Pencil className="h-3.5 w-3.5" aria-hidden /></Button><Button type="button" size="sm" variant="secondary" className={cn('px-2', QUIET_DANGER)} onClick={() => void deleteMemory(memory)} disabled={isSavingMemory} aria-label={'Delete ' + memory.label}><Trash2 className="h-3.5 w-3.5" aria-hidden /></Button></div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-                </div>
-              </details>
-              </div>
-            </div>
-          )}
-
-          {/* Data Tab */}
-          {activeTab === 'data' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <SettingsSection title="Data & security tools">
-                <div className="divide-y divide-[var(--color-border)]">
-                  {[
-                    { to: '/anomalies', label: 'Data quality', description: 'Review issues and inconsistencies in your records.' },
-                    { to: '/gallery', label: 'Image storage', description: 'Manage receipt, conversation, and wishlist images.' },
-                    { to: '/audit-log', label: 'Security audit', description: 'Review account activity and security events.' },
-                  ].map(item => <Link key={item.to} to={item.to} className="flex items-center justify-between gap-4 py-4 text-sm hover:text-[var(--color-accent)]"><span><strong className="block font-semibold">{item.label}</strong><span className="mt-1 block text-[var(--color-text-secondary)]">{item.description}</span></span><ChevronRight className="h-4 w-4 shrink-0" /></Link>)}
-                </div>
-              </SettingsSection>
-
-            </div>
+              </SettingsGroup>
+            </SettingsPanel>
           )}
 
           {/* Backups Tab */}
           {activeTab === 'backups' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    <CloudUpload className="h-5 w-5" />
-                    Cloud database backups
-                  </div>
-                }
-              >
-                <div className="space-y-4">
-                  <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                    Keep integrity-checked SQLite snapshots in your existing storage.
-                  </p>
-                  <SettingsRow
-                    label="Automatic backups"
-                    description="Turn scheduled database snapshots on or off."
-                    action={<input type="checkbox" aria-label="Enable automatic database backups" checked={databaseBackup.enabled} onChange={(event) => void saveDatabaseBackupSettings({ enabled: event.target.checked })} disabled={databaseBackupBusy} className="h-4 w-4 accent-[var(--color-accent)]" />}
-                  />
-                  <SettingsRow
-                    label="Backup frequency"
-                    description="The worker checks hourly and creates a snapshot when this cadence is due."
-                    action={<Select label="" aria-label="Database backup frequency" value={databaseBackup.frequency} onChange={(event) => void saveDatabaseBackupSettings({ frequency: event.target.value as DatabaseBackupFrequency })} disabled={!databaseBackup.enabled || databaseBackupBusy} options={[{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Every two weeks' }, { value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly' }]} />}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
-                    <div className="text-xs text-[var(--color-text-secondary)]">
-                      <p>{databaseBackup.lastBackupAt ? `Last backup: ${new Date(databaseBackup.lastBackupAt).toLocaleString()}` : 'No backup has been recorded yet.'}</p>
-                      {databaseBackup.enabled && databaseBackup.nextBackupAt && <p className="mt-1">Next scheduled backup: {new Date(databaseBackup.nextBackupAt).toLocaleString()}</p>}
-                    </div>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void runDatabaseBackup()} disabled={databaseBackupBusy} isLoading={databaseBackupBusy}>
-                      <CloudUpload className="h-4 w-4" /> Back up now
-                    </Button>
-                  </div>
-                  {databaseBackupNotice && <p role="status" className={cn('text-sm', databaseBackupNotice.tone === 'success' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]')}>{databaseBackupNotice.text}</p>}
-                  <details className="group">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-                      <span>
-                        <span className="block text-sm font-semibold">Existing backups</span>
-                        <span className="mt-1 block text-xs text-[var(--color-muted)]">
-                          {databaseBackup.pagination.total} snapshot{databaseBackup.pagination.total === 1 ? '' : 's'}
-                        </span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open:rotate-90" />
-                    </summary>
-                    <div className="pt-3">
+            <SettingsPanel>
+              <SettingsGroup fixed title="Cloud database backups" summary="Integrity-checked snapshots kept in your existing storage">
+                <SettingsRow
+                  inline
+                  label={<span className="flex items-center gap-1.5">{databaseBackup.lastBackupAt ? <CheckCircle className="h-3.5 w-3.5 shrink-0 text-[var(--color-success)]" aria-hidden /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning)]" aria-hidden />}{databaseBackup.lastBackupAt ? `Last backup ${formatDateTime(databaseBackup.lastBackupAt)}` : 'No backup yet'}</span>}
+                  description={databaseBackup.enabled ? (databaseBackup.nextBackupAt ? `Next one due ${formatDateTime(databaseBackup.nextBackupAt)}` : 'Automatic backups are on.') : 'Automatic backups are off.'}
+                  action={<Button type="button" size="sm" variant="secondary" onClick={() => void runDatabaseBackup()} disabled={databaseBackupBusy} isLoading={databaseBackupBusy}><CloudUpload className="h-4 w-4" aria-hidden /> Back up now</Button>}
+                />
+                <Notice notice={databaseBackupNotice} className="pt-2" />
+              </SettingsGroup>
+              <SettingsGroup fixed title="Schedule" summary={databaseBackup.enabled ? `Automatic, ${databaseBackup.frequency === 'biweekly' ? 'every two weeks' : databaseBackup.frequency}` : 'Off'}>
+                <SettingsRow
+                  inline
+                  label="Automatic backups"
+                  description="Take snapshots on a schedule."
+                  action={<Toggle label="Automatic database backups" checked={databaseBackup.enabled} onChange={(enabled) => void saveDatabaseBackupSettings({ enabled })} disabled={databaseBackupBusy} />}
+                />
+                <SettingsRow
+                  label="Frequency"
+                  description="Checked every hour; a snapshot is taken once one is due."
+                  action={<Dropdown<DatabaseBackupFrequency> ariaLabel="Database backup frequency" value={databaseBackup.frequency} onChange={(frequency) => void saveDatabaseBackupSettings({ frequency })} disabled={!databaseBackup.enabled || databaseBackupBusy} options={[{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Every two weeks' }, { value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly' }]} />}
+                />
+              </SettingsGroup>
+              <SettingsGroup title="Saved backups" summary={`${databaseBackup.pagination.total} ${databaseBackup.pagination.total === 1 ? 'snapshot' : 'snapshots'} in storage`}>
+                    <div>
                       {databaseBackup.backups.length === 0 ? (
-                        <p className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-text-secondary)]">No cloud database backups found.</p>
+                        <p className={EMPTY}>No backups in storage yet. Use Back up now to take the first one.</p>
                       ) : (
-                        <div className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
+                        <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
                           {databaseBackup.backups.map((backup) => (
-                            <div key={backup.key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-xs">
-                              <span className="min-w-0 truncate font-medium" title={backup.key}>{backup.key.split('/').pop()}</span>
-                              <span className="shrink-0 text-[var(--color-text-secondary)]">{formatBytes(backup.size)} · {backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Unknown date'}</span>
+                            <div key={backup.key} className="flex items-center justify-between gap-3 py-2.5">
+                              <span className="min-w-0 truncate text-sm font-medium tabular-nums" title={backup.key}>{backup.createdAt ? formatDateTime(backup.createdAt) : backup.key.split('/').pop()}</span>
+                              <span className="shrink-0 text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatBytes(backup.size)}</span>
                             </div>
                           ))}
                         </div>
@@ -1035,107 +1169,62 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                         </div>
                       )}
                     </div>
-                  </details>
-                </div>
-              </SettingsSection>
-
-            </div>
+              </SettingsGroup>
+            </SettingsPanel>
           )}
 
           {/* PDF Reports Tab */}
           {activeTab === 'reports' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    <LockKeyhole className="h-5 w-5" />
-                    PDF report security
-                  </div>
-                }
-              >
-                <div className="space-y-5">
-                  <label className="flex cursor-pointer items-start justify-between gap-5">
-                    <span>
-                      <span className="block text-sm font-semibold text-[var(--color-text-primary)]">Password-protect monthly reports</span>
-                      <span className="mt-1 block text-xs leading-relaxed text-[var(--color-text-secondary)]">Applies AES-256 encryption in your browser before the PDF is downloaded.</span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={settings.pdfPasswordEnabled}
-                      onChange={(event) => setSettings({ ...settings, pdfPasswordEnabled: event.target.checked })}
-                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
-                    />
-                  </label>
-
-                  <div className="space-y-3 border-t border-[var(--color-border)] pt-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">Birthday</p>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                          {profile.dateOfBirth ? `Using ${profile.dateOfBirth} from your Profile.` : 'Add your birthday in Profile to use this option.'}
-                        </p>
-                      </div>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => setActiveTab('profile')}>Open Profile</Button>
-                    </div>
-                    <Select
-                      label="Password format"
-                      value={settings.pdfPasswordFormat}
-                      onChange={(event) => setSettings({ ...settings, pdfPasswordFormat: event.target.value as PdfPasswordFormat })}
-                      disabled={!settings.pdfPasswordEnabled}
-                      options={[
-                        { value: 'DDMMYYYY', label: 'DDMMYYYY (day first)' },
-                        { value: 'YYYYMMDD', label: 'YYYYMMDD (year first)' },
-                      ]}
-                    />
-                  </div>
-
-                  {settings.pdfPasswordEnabled && (
-                    <div className={cn('border-l-4 px-3 py-2 text-xs leading-relaxed', reportPassword ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/5 text-[var(--color-text-secondary)]' : 'border-[var(--color-danger)] bg-[var(--color-danger)]/5 text-[var(--color-danger)]')}>
-                      {reportPassword
-                        ? `Your PDF password will be your birthday in ${passwordFormatDescription(settings.pdfPasswordFormat)} format (${reportPassword.length} digits).`
-                        : 'Add a valid birthday before downloading a protected report.'}
-                    </div>
-                  )}
-
-                  <p className="text-xs leading-relaxed text-[var(--color-muted)]">Birthday-based passwords are convenient but easier to guess than a unique password. Your birthday is managed securely in Profile; this page only controls whether the report password is enabled and how it is formatted.</p>
-                </div>
-              </SettingsSection>
-
-            </div>
+            <SettingsPanel>
+              <SettingsGroup fixed title="Password protection" summary={settings.pdfPasswordEnabled ? 'On for monthly reports' : 'Off'}>
+                <SettingsRow
+                  inline
+                  label="Password-protect monthly reports"
+                  description="Encrypts each PDF (AES-256) in your browser before it downloads."
+                  action={<Toggle label="Password-protect monthly reports" checked={settings.pdfPasswordEnabled} onChange={(pdfPasswordEnabled) => setSettings({ ...settings, pdfPasswordEnabled })} />}
+                />
+                <SettingsRow
+                  inline
+                  label="Birthday"
+                  description={profile.dateOfBirth ? `${formatDate(new Date(`${profile.dateOfBirth}T00:00:00`).getTime())}, from your Profile` : 'Not set. Add it in Profile to use a password.'}
+                  action={<Button type="button" size="sm" variant="secondary" onClick={() => setActiveTab('profile')}>{profile.dateOfBirth ? 'Edit' : 'Add'}</Button>}
+                />
+                <SettingsRow
+                  label="Password format"
+                  description="The order of your birthday’s digits."
+                  action={<Dropdown<PdfPasswordFormat> ariaLabel="Password format" value={settings.pdfPasswordFormat} onChange={(pdfPasswordFormat) => setSettings({ ...settings, pdfPasswordFormat })} disabled={!settings.pdfPasswordEnabled} options={[{ value: 'DDMMYYYY', label: 'DDMMYYYY (day first)' }, { value: 'YYYYMMDD', label: 'YYYYMMDD (year first)' }]} />}
+                />
+                {settings.pdfPasswordEnabled && (
+                  <p className={cn('mt-4 flex items-start gap-2 rounded-xl px-3.5 py-3 text-xs leading-relaxed', reportPassword ? 'bg-[var(--ref-primary)]/8 text-[var(--ref-on-surface-variant)]' : 'bg-[var(--color-danger)]/8 text-[var(--color-danger)]')}>
+                    <LockKeyhole className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                    {reportPassword
+                      ? `The password is your birthday in ${passwordFormatDescription(settings.pdfPasswordFormat)} format (${reportPassword.length} digits). Convenient, but easier to guess than a unique password.`
+                      : 'Add a valid birthday before downloading a protected report.'}
+                  </p>
+                )}
+              </SettingsGroup>
+            </SettingsPanel>
           )}
 
           {/* Data tools and import/export */}
           {activeTab === 'data' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-
-              {/* Export Section */}
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    <Download className="w-5 h-5" />
-                    Export Data
-                  </div>
-                }
-              >
+            <SettingsPanel>
+              <SettingsGroup fixed title="Export and import" summary="A copy of your data as a JSON file">
                 <div className="space-y-4">
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    Download a backup of your data as a JSON file.
-                  </p>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Select what to export:</label>
-                    <div className="grid grid-cols-2 gap-2">
+                  <fieldset>
+                    <legend className="sr-only">Include in export</legend>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
                       {[
                         { key: 'transactions', label: 'Transactions' },
                         { key: 'accounts', label: 'Accounts' },
-                        { key: 'categories', label: 'Categories & Tags' },
-                        { key: 'budgets', label: 'Budgets & Periods' },
+                        { key: 'categories', label: 'Categories & tags' },
+                        { key: 'budgets', label: 'Budgets & periods' },
                         { key: 'settings', label: 'Settings' },
                         { key: 'memories', label: 'Agent memory' },
                       ].map(({ key, label }) => (
                         <label
                           key={key}
-                          className="flex items-center gap-2 p-3 rounded-lg border border-[var(--color-border)] cursor-pointer hover:bg-[var(--ref-surface-container)] transition-colors"
+                          className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ref-on-surface)]"
                         >
                           <input
                             type="checkbox"
@@ -1143,96 +1232,57 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                             onChange={(e) =>
                               setExportOptions({ ...exportOptions, [key]: e.target.checked })
                             }
-                            className="w-4 h-4 accent-[var(--color-accent)]"
+                            className="h-4 w-4 shrink-0 accent-[var(--ref-primary)]"
                           />
-                          <span className="text-sm">{label}</span>
+                          {label}
                         </label>
                       ))}
                     </div>
-                  </div>
-
-                  <Button
-                    onClick={handleExport}
-                    disabled={!Object.values(exportOptions).some(Boolean)}
-                    className="w-full sm:w-auto"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download JSON
-                  </Button>
-
-                  {showExportSuccess && (
-                    <div className="flex items-center gap-2 text-[var(--color-success)] text-sm">
-                      <CheckCircle className="w-4 h-4" />
-                      Export downloaded successfully!
-                    </div>
-                  )}
-                </div>
-              </SettingsSection>
-
-              {/* Import Section */}
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    <Upload className="w-5 h-5" />
-                    Import Data
-                  </div>
-                }
-              >
-                <div className="space-y-4">
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    Restore data from a previously exported JSON file.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <label className="flex-1">
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={handleImport}
-                        className="block w-full text-sm text-[var(--color-text-secondary)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-2 file:border-[var(--color-border)] file:bg-transparent file:text-sm file:font-medium hover:file:bg-[var(--color-accent)]/10 cursor-pointer"
-                      />
+                  </fieldset>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" onClick={handleExport} disabled={!Object.values(exportOptions).some(Boolean)} isLoading={exportDataMutation.isPending}>
+                      <Download className="mr-1.5 h-4 w-4" aria-hidden />
+                      Download JSON
+                    </Button>
+                    <label className="brutalist-button brutalist-button--secondary inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-sm text-[var(--color-text-primary)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--ref-primary)]/40">
+                      <Upload className="h-4 w-4" aria-hidden />
+                      Import…
+                      <input type="file" accept=".json" onChange={handleImport} className="sr-only" />
                     </label>
+                    {showExportSuccess && <Notice notice={{ tone: 'success', text: 'Export downloaded.' }} />}
                   </div>
-                  <p className="text-xs text-[var(--color-muted)]">
-                    Import will merge with existing data. Duplicate transactions may be created.
-                  </p>
+                  <p className="text-xs leading-relaxed text-[var(--color-muted)]">Restoring from a file isn’t available yet. Import only checks that a file can be read; nothing in your data changes.</p>
                 </div>
-              </SettingsSection>
-
-              {/* Data Management */}
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    <Database className="w-5 h-5" />
-                    Data Management
-                  </div>
-                }
-              >
-                <div className="space-y-3">
-                  <Button
-                    variant="secondary"
-                    className="w-full justify-between"
-                    onClick={() => setShowClearCacheModal(true)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4" />
-                      Clear Local Cache
-                    </span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="w-full justify-between text-[var(--color-danger)] border-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                    onClick={() => setShowDeleteDataModal(true)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Trash2 className="w-4 h-4" />
-                      Delete All Data
-                    </span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
+              </SettingsGroup>
+              <SettingsGroup fixed title="This device" summary="Data Fainens keeps in this browser">
+                <SettingsRow
+                  inline
+                  label="Clear local cache"
+                  description="Reloads data from the server. Your records are not affected."
+                  action={<Button size="sm" variant="secondary" onClick={() => setShowClearCacheModal(true)}>Clear</Button>}
+                />
+                <SettingsRow
+                  inline
+                  label="Delete all data"
+                  description="Clears what this browser stores and signs you out."
+                  action={<Button size="sm" variant="secondary" className={QUIET_DANGER} onClick={() => setShowDeleteDataModal(true)}>Delete…</Button>}
+                />
+              </SettingsGroup>
+              <SettingsGroup fixed title="Tools" summary="Related pages">
+                <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
+                  {[
+                    { to: '/anomalies', label: 'Data quality', description: 'Find issues and inconsistencies in your records.' },
+                    { to: '/gallery', label: 'Image storage', description: 'Receipt, conversation, and wishlist images.' },
+                    { to: '/audit-log', label: 'Security audit', description: 'Account activity and security events.' },
+                  ].map(({ to, label, description }) => (
+                    <Link key={to} to={to} className="group -mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-[var(--ref-surface-container-low)]">
+                      <span className="min-w-0 flex-1"><span className="block font-medium text-[var(--ref-on-surface)]">{label}</span><span className="block text-xs text-[var(--ref-on-surface-variant)]">{description}</span></span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5" aria-hidden />
+                    </Link>
+                  ))}
                 </div>
-              </SettingsSection>
-            </div>
+              </SettingsGroup>
+            </SettingsPanel>
           )}
         </div>
 
@@ -1242,80 +1292,46 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         <Modal
           isOpen={contextDraft !== null}
           onClose={() => { if (!contextBusy) setContextDraft(null); }}
-          title="Agent context"
-          subtitle="Choose what Agent can use from your saved profile."
+          title="What Agent can see"
           overlayClassName="!z-[60]"
-          footer={<div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={contextBusy} onClick={() => setContextDraft(null)}>Cancel</Button><Button type="button" disabled={contextBusy} onClick={() => void saveAgentContext()}>{contextBusy ? 'Saving…' : 'Save sharing'}</Button></div>}
+          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" disabled={contextBusy} onClick={() => setContextDraft(null)}>Cancel</Button><Button type="button" size="sm" disabled={contextBusy} onClick={() => void saveAgentContext()}>{contextBusy ? 'Saving…' : 'Save'}</Button></div>}
         >
           <div className="divide-y divide-[var(--color-border)]">
             {AGENT_CONTEXT_OPTIONS.map((option) => (
-              <label key={option.key} className="flex cursor-pointer items-center justify-between gap-4 py-3">
-                <span><span className="block text-sm font-medium">{option.label}</span><span className="mt-1 block text-xs text-[var(--color-text-secondary)]">{option.description}</span></span>
-                <input type="checkbox" checked={contextDraft?.[option.key] ?? false} disabled={contextBusy} onChange={(event) => setContextDraft((current) => current ? { ...current, [option.key]: event.target.checked } : current)} className="h-4 w-4 shrink-0 accent-[var(--color-accent)]" />
-              </label>
+              <div key={option.key} className="flex items-center justify-between gap-4 py-3">
+                <span className="min-w-0"><span className="block text-sm font-medium">{option.label}</span><span className="mt-0.5 block text-xs text-[var(--ref-on-surface-variant)]">{option.description}</span></span>
+                <Toggle label={option.label} checked={contextDraft?.[option.key] ?? false} disabled={contextBusy} onChange={(checked) => setContextDraft((current) => current ? { ...current, [option.key]: checked } : current)} />
+              </div>
             ))}
           </div>
-          <p className="mt-4 text-xs leading-relaxed text-[var(--color-muted)]">Sharing changes apply after saving. Profile details remain available to other app features. Existing chats and memories are managed separately.</p>
+          <p className="mt-4 text-xs leading-relaxed text-[var(--color-muted)]">Changes apply once saved. Other parts of Fainens still use your profile; chats and memories are managed separately.</p>
           {contextError && <p role="alert" className="mt-3 text-sm text-[var(--color-danger)]">{contextError}</p>}
         </Modal>
 
         <Modal
           isOpen={showClearCacheModal}
           onClose={() => setShowClearCacheModal(false)}
-          title="Clear Cache"
+          title="Clear local cache?"
           overlayClassName="!z-[60]"
+          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowClearCacheModal(false)}>Cancel</Button><Button type="button" size="sm" onClick={handleClearCache}>Clear cache</Button></div>}
         >
-          <div className="space-y-4">
-            <p>Are you sure you want to clear the local cache?</p>
-            <p className="text-sm text-[var(--color-muted)]">
-              This will refresh all data from the server. You won't lose any transactions or accounts.
-            </p>
-            <div className="flex gap-3">
-              <Button onClick={handleClearCache} className="flex-1">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Clear Cache
-              </Button>
-              <Button variant="secondary" onClick={() => setShowClearCacheModal(false)} className="flex-1">
-                Cancel
-              </Button>
-            </div>
-          </div>
+          <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Fainens will reload your data from the server. You won’t lose any transactions or accounts.</p>
         </Modal>
 
         {/* Delete Data Modal */}
         <Modal
           isOpen={showDeleteDataModal}
           onClose={() => setShowDeleteDataModal(false)}
-          title="Delete All Data"
+          title="Delete all data?"
           overlayClassName="!z-[60]"
+          footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={handleDeleteAllData}>Delete and sign out</Button></div>}
         >
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 bg-[var(--color-danger)]/10 border-2 border-[var(--color-danger)]">
-              <AlertTriangle className="w-6 h-6 text-[var(--color-danger)]" />
-              <p className="font-bold text-[var(--color-danger)]">
-                This action cannot be undone!
-              </p>
-            </div>
-            <p>Deleting all data will permanently remove:</p>
-            <ul className="list-disc list-inside text-sm text-[var(--color-text-secondary)] space-y-1">
-              <li>All transactions</li>
-              <li>All accounts (except system defaults)</li>
-              <li>All categories and tags</li>
-              <li>All budget plans and periods</li>
-              <li>All audit logs</li>
-            </ul>
-            <div className="flex gap-3">
-              <Button
-                onClick={handleDeleteAllData}
-                className="flex-1 bg-[var(--color-danger)] hover:bg-[var(--color-danger)]/90"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Everything
-              </Button>
-              <Button variant="secondary" onClick={() => setShowDeleteDataModal(false)} className="flex-1">
-                Cancel
-              </Button>
-            </div>
+          <div className="space-y-3">
+            <p className="flex items-center gap-2 rounded-xl bg-[var(--color-danger)]/8 px-3.5 py-3 text-sm font-medium text-[var(--color-danger)]">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+              This can’t be undone.
+            </p>
+            <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Everything Fainens stores in this browser is cleared, including these settings, and you are signed out.</p>
           </div>
         </Modal>
           </main>
