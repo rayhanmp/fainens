@@ -152,14 +152,23 @@ function TrueFalse({ play, onDone }: { play: Of<'truefalse'> } & GateProps) {
     sfx('thunk'); sfx(correct ? 'chime' : 'buzz', 450);
     later(() => onDone({ choice: guess ? 'True' : 'False', correct, scored: true, verdict: correct ? { text: `✓ ${play.reveal}`, tone: 'good' } : { text: `✗ ${play.reveal}`, tone: 'bad' } }), 1700);
   };
+  // An index card dealt off a little deck; the verdict lands on it as a rubber stamp, with the real figure.
+  const choice = (value: boolean) => ['recap-tf-choice', `is-${value ? 'true' : 'false'}`, pick === value && 'is-picked', pick !== null && play.answer === value && 'is-right'].filter(Boolean).join(' ');
   return <div className={`recap-tf${pick !== null ? ' is-answered' : ''}`}>
-    <div className="recap-tf-card">
-      <p>{play.statement}</p>
-      {pick !== null && <span className={`recap-tf-stamp is-${play.answer ? 'true' : 'false'}`}>{play.answer ? 'True' : 'False'}</span>}
+    <div className="recap-tf-deck">
+      <i className="recap-tf-under" aria-hidden="true" /><i className="recap-tf-under" aria-hidden="true" />
+      <div className="recap-tf-card">
+        <span className="recap-tf-tag">Fact or fiction?</span>
+        <p>{play.statement}</p>
+        {pick !== null && <div className="recap-tf-result">
+          <span className={`recap-tf-stamp is-${play.answer ? 'true' : 'false'}`}>{play.answer ? 'True' : 'False'}</span>
+          <small>{play.reveal}</small>
+        </div>}
+      </div>
     </div>
     <div className="recap-tf-buttons" role="group" aria-label="True or false?">
-      <button type="button" className="recap-solid-button" disabled={pick !== null} onClick={() => choose(true)}>True</button>
-      <button type="button" className="recap-ghost-button" disabled={pick !== null} onClick={() => choose(false)}>False</button>
+      <button type="button" className={choice(true)} disabled={pick !== null} onClick={() => choose(true)}><span aria-hidden="true">✓</span>True</button>
+      <button type="button" className={choice(false)} disabled={pick !== null} onClick={() => choose(false)}><span aria-hidden="true">✗</span>False</button>
     </div>
   </div>;
 }

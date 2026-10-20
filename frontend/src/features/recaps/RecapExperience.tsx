@@ -203,7 +203,7 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
     play(transitionSounds[transition]);
     // The set pieces have their own cues on top.
     if (transition === 'train') { play('horn', 200); play('patter', 450); }
-    if (transition === 'elevator') { play('thunk', 420); play('ding', 620); play('swish', 830); }
+    if (transition === 'elevator') { play('thunk', 420); play('ding', 760); play('swish', 840); }
     if (transition === 'chomp') { for (let i = 0; i < 6; i++) play('pop', 120 + i * 130); }
     cancelToasts();
     if (!gateOf(stories[next])) {
@@ -415,9 +415,11 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
           <i className="recap-train-rails" />
         </>}
         {nav.transition === 'elevator' && <>
-          <i /><i />
-          {/* The lift's floor indicator ticks from the chapter you left to the one you're going to. */}
-          <span className="recap-floor">{nav.direction === 'next' ? '▲' : '▼'}<b><span><span>{nav.direction === 'next' ? index : index + 2}</span><span>{index + 1}</span></span></b></span>
+          <i className="recap-door" /><i className="recap-door" />
+          {/* Floors passing: bands of light slide over the closed doors, the way the lift is travelling. */}
+          <i className={`recap-lift-light is-${nav.direction}`} />
+          {/* The header panel's floor display ticks from the chapter you left to the one you're going to. */}
+          <span className="recap-lift-head"><span className="recap-floor"><em>{nav.direction === 'next' ? '▲' : '▼'}</em><b><span><span>{nav.direction === 'next' ? index : index + 2}</span><span>{index + 1}</span></span></b></span></span>
         </>}
         {nav.transition === 'chomp' && <><i className="recap-chomp-fill" /><i className="recap-chomp-dots" /><i className="recap-chomper" /></>}
       </div>}

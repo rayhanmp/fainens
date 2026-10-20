@@ -856,28 +856,69 @@
 .recap-credits-roll .recap-credits-end { margin-top: 2cqw; font-family: Georgia, serif; font-size: 11cqw; font-style: italic; font-weight: 700; line-height: 1; }
 .recap-credits-fine { font-size: max(1.9cqw, 10.5px); opacity: .8; }
 
-/* Certificate */
-.recap-cert { position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: 1.1cqw; padding: 6cqw 6cqw 5cqw; text-align: center; border-radius: 1.5cqw; background: #fbf7ea; color: #3a2c12;
-  box-shadow: inset 0 0 0 1.2cqw #fbf7ea, inset 0 0 0 1.5cqw #b08a3e, inset 0 0 0 2.3cqw #fbf7ea, inset 0 0 0 2.6cqw #b08a3e, 0 3cqw 6cqw -3cqw #0007;
+/* Pace: a running period's days as a track, filled up to today, a pin on today and a flag at the end. */
+.recap-pace { display: grid; gap: 4cqw; margin-top: 4cqw; }
+.recap-pace-left { display: flex; align-items: baseline; gap: 2.4cqw; margin: 0; }
+.recap-pace-left strong { font-size: 22cqw; font-weight: 900; letter-spacing: -.06em; line-height: .85; }
+.recap-pace-left span { font-size: 4.4cqw; font-weight: 800; }
+.recap-pace-track { position: relative; padding-top: 9cqw; }
+.recap-pace-track > div { display: flex; gap: .6cqw; height: 9cqw; }
+.recap-pace-track i { flex: 1; border-radius: .8cqw; background: var(--recap-soft); box-shadow: inset 0 0 0 1px var(--recap-line); transform-origin: bottom;
+  animation: recap-grow-y .5s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 250ms + var(--i) * 18ms); }
+.recap-pace-track i.is-done { background: var(--recap-ink); box-shadow: none; }
+.recap-pace-pin { position: absolute; left: calc(var(--at) * 100%); top: 0; translate: -50% 0; display: grid; justify-items: center; animation: recap-pace-pin .7s cubic-bezier(.2, 1.5, .4, 1) both; animation-delay: calc(var(--enter) + 900ms); }
+.recap-pace-pin b { padding: .6cqw 2cqw; border-radius: 99px; background: var(--recap-pop); color: var(--recap-on-pop); font-size: max(2.6cqw, 10.5px); font-weight: 900; white-space: nowrap; }
+.recap-pace-pin::after { content: ''; width: 0; height: 0; border: 1.4cqw solid transparent; border-top-color: var(--recap-pop); border-bottom: 0; }
+.recap-pace-flag { position: absolute; right: -1cqw; top: 1cqw; display: grid; place-items: center; width: 7cqw; height: 7cqw; animation: recap-flavour-twinkle 2.2s ease-in-out infinite; }
+.recap-pace-flag svg { width: 6cqw; height: 6cqw; stroke-width: 2.4; }
+.recap-pace-ends { display: flex; justify-content: space-between; margin: -2cqw 0 0; font-size: max(2.3cqw, 10.5px); font-weight: 800; opacity: .8; }
+.recap-pace-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4cqw; margin: 0; }
+.recap-pace-stats > div { display: grid; gap: .8cqw; padding: 3cqw 3.4cqw; border-radius: 3cqw; background: var(--recap-soft); }
+.recap-pace-stats dt { font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.recap-pace-stats dd { margin: 0; font-size: 4.6cqw; font-weight: 900; letter-spacing: -.03em; }
+@keyframes recap-pace-pin { from { opacity: 0; translate: -50% -6cqw; } }
+
+/* Certificate: a physical award, so it keeps its own cream paper, brown print and gold leaf whatever the
+   theme. A double rule with corner flourishes, the persona's icon as a watermark, a foil seal. */
+.recap-cert { --cert-paper: #fbf6e6; --cert-ink: #3a2c12; --cert-gold: #a87b22; position: relative; flex: 1; display: grid; align-content: center; justify-items: center; gap: .9cqw; padding: 9cqw 8cqw 8cqw; overflow: hidden; text-align: center; border-radius: 1.5cqw;
+  background: radial-gradient(ellipse at 50% 40%, #fffdf4 0 35%, transparent 75%), var(--cert-paper); color: var(--cert-ink);
+  box-shadow: inset 0 0 0 2cqw var(--cert-paper), inset 0 0 0 2.5cqw var(--cert-gold), inset 0 0 0 3.2cqw var(--cert-paper), inset 0 0 0 3.4cqw var(--cert-gold), 0 3cqw 6cqw -3cqw #0007;
   animation: recap-cert-in .9s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 150ms) both; }
-.recap-cert > * { animation: recap-fade .6s calc(var(--enter) + 600ms) both; }
-.recap-cert-academy { font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .22em; text-transform: uppercase; opacity: .8; }
-.recap-story .recap-cert h3 { font-family: Georgia, serif; font-size: 10cqw; font-weight: 700; letter-spacing: .02em; line-height: 1; }
-.recap-cert p { font-size: 2.8cqw; }
-.recap-cert .recap-cert-of { margin-top: -.6cqw; font-family: Georgia, serif; font-size: 3.6cqw; font-style: italic; }
-.recap-cert .recap-cert-who { padding: 0 5cqw .6cqw; border-bottom: 1px solid #b08a3e; font-family: Georgia, serif; font-size: 7cqw; font-style: italic; }
-.recap-cert .recap-cert-title { margin-top: .6cqw; font-size: 6.4cqw; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; color: #8a5a00; }
-.recap-cert .recap-cert-reason { max-width: 70cqw; font-size: max(2.5cqw, 10.5px); opacity: .8; }
-.recap-cert-foot { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 3cqw; }
+.recap-cert > * { position: relative; animation: recap-fade .6s calc(var(--enter) + 600ms) both; }
+.recap-cert > .recap-cert-watermark { position: absolute; left: 50%; top: 46%; width: 62cqw; height: 62cqw; translate: -50% -50%; color: var(--cert-gold); opacity: .07; animation: none; }
+.recap-cert-watermark svg { width: 100%; height: 100%; stroke-width: 1.2; }
+.recap-cert > .recap-cert-corner { position: absolute; color: var(--cert-gold); font-size: 4cqw; line-height: 1; }
+.recap-cert-corner.is-0 { left: 4.4cqw; top: 3.8cqw; }
+.recap-cert-corner.is-1 { right: 4.4cqw; top: 3.8cqw; scale: -1 1; }
+.recap-cert-corner.is-2 { left: 4.4cqw; bottom: 3.8cqw; scale: 1 -1; }
+.recap-cert-corner.is-3 { right: 4.4cqw; bottom: 3.8cqw; scale: -1 -1; }
+.recap-cert-academy { max-width: 74cqw; font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--cert-gold); }
+/* Gold leaf: the title catches the light once as it lands. */
+.recap-story .recap-cert h3 { font-family: Georgia, serif; font-size: 10cqw; font-weight: 700; letter-spacing: .02em; line-height: 1;
+  background: linear-gradient(100deg, var(--cert-ink) 0 40%, #c99a3a 48%, #f3d98b 50%, #c99a3a 52%, var(--cert-ink) 60% 100%) 100% 0 / 260% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: recap-fade .6s calc(var(--enter) + 600ms) both, recap-cert-shine 1.6s ease-in-out calc(var(--enter) + 1.4s) both; }
+@keyframes recap-cert-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.recap-cert p { font-size: max(2.8cqw, 10.5px); }
+.recap-cert .recap-cert-of { display: flex; align-items: center; gap: 2.4cqw; margin-top: -.4cqw; font-family: Georgia, serif; font-size: 3.6cqw; font-style: italic; }
+.recap-cert-of i { width: 9cqw; height: 1px; background: linear-gradient(90deg, transparent, var(--cert-gold)); }
+.recap-cert-of i:last-child { rotate: 180deg; }
+.recap-cert .recap-cert-who { padding: 0 6cqw .6cqw; border-bottom: 1px solid var(--cert-gold); font-family: Georgia, serif; font-size: 7.4cqw; font-style: italic; }
+.recap-cert .recap-cert-title { margin-top: .6cqw; font-family: Georgia, serif; font-size: 6.6cqw; font-weight: 700; font-variant: small-caps; letter-spacing: .04em; line-height: 1.05; color: #6e4b0c; }
+.recap-cert .recap-cert-reason { max-width: 70cqw; font-family: Georgia, serif; font-size: max(2.7cqw, 10.5px); font-style: italic; }
+.recap-cert .recap-cert-honours { max-width: 72cqw; margin-top: 1cqw; padding: 1cqw 3cqw; border-block: 1px solid color-mix(in srgb, var(--cert-gold) 50%, transparent); font-size: max(2.4cqw, 10.5px); letter-spacing: .04em; }
+.recap-cert-honours b { font-weight: 800; }
+.recap-cert-foot { display: flex; align-items: flex-end; justify-content: space-between; width: 100%; margin-top: 2cqw; }
 .recap-cert-sign { display: grid; text-align: left; }
-.recap-cert-sign b { padding-right: 6cqw; border-bottom: 1px solid currentColor; font-family: Georgia, serif; font-size: 4.4cqw; font-style: italic; }
-.recap-cert-sign small { margin-top: .6cqw; font-size: max(1.7cqw, 10.5px); letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
-.recap-cert-seal { position: relative; display: grid; place-items: center; width: 16cqw; height: 16cqw; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #e85a5a, #a51d1d 70%); color: #ffe3c4; box-shadow: 0 0 0 .8cqw #c23232, 0 0 0 1.2cqw #a51d1d55;
-  animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.2s) both; }
-.recap-cert-seal b { position: relative; z-index: 1; font-size: 8cqw; line-height: 1; }
-.recap-cert-seal i { position: absolute; top: 70%; width: 4.4cqw; height: 9cqw; background: #a51d1d; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); }
-.recap-cert-seal i:first-child { left: 3cqw; rotate: 18deg; }
-.recap-cert-seal i:nth-child(2) { right: 3cqw; rotate: -18deg; }
+.recap-cert-sign b { padding-right: 6cqw; border-bottom: 1px solid currentColor; font-family: Georgia, serif; font-size: 4.6cqw; font-style: italic; }
+.recap-cert-sign small { margin-top: .6cqw; font-size: max(1.7cqw, 10.5px); letter-spacing: .14em; text-transform: uppercase; }
+/* The seal: scalloped gold foil (edge from the TSX), an engraved ring, the persona's icon, two ribbon tails. */
+.recap-cert-seal { position: relative; display: grid; place-items: center; width: 16cqw; height: 16cqw; animation: recap-stamp .6s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.2s) both; }
+.recap-cert-foil { position: relative; z-index: 1; display: grid; place-items: center; width: 100%; height: 100%; background: radial-gradient(circle at 35% 28%, #fbe7a6, #d9a93f 45%, #9c6d15 85%); filter: drop-shadow(0 .6cqw .8cqw #0004); }
+.recap-cert-foil > span { display: grid; place-items: center; width: 64%; height: 64%; border-radius: 50%; border: .5cqw dashed #7a5410; box-shadow: inset 0 0 0 .9cqw #e8c46a66; color: #5a3d00; }
+.recap-cert-foil svg { width: 52%; height: 52%; stroke-width: 2.2; }
+.recap-cert-ribbon { position: absolute; top: 62%; width: 5cqw; height: 11cqw; background: linear-gradient(#8c2131, #6b1424); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%); }
+.recap-cert-ribbon:first-child { left: 3.4cqw; rotate: 20deg; }
+.recap-cert-ribbon:nth-child(2) { right: 3.4cqw; rotate: -20deg; }
 
 /* High scores */
 .recap-arcade { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 5cqw 4.5cqw 4cqw; border-radius: 3cqw; background: #0b0b14; color: #f4f4ff; font-family: var(--font-mono); text-transform: uppercase;
@@ -1359,18 +1400,31 @@
 .recap-train-rails { position: absolute; left: 0; right: 0; bottom: 0; height: 2.4cqw; background: repeating-linear-gradient(90deg, #3a3a3a 0 3cqw, transparent 3cqw 6cqw), #555; }
 @keyframes recap-train-pass { from { translate: -100% 0; } to { translate: 25% 0; } }
 @keyframes recap-smoke { from { translate: 0 0; scale: .4; opacity: .9; } to { translate: -10cqw -16cqw; scale: 1.6; opacity: 0; } }
-/* Elevator: brushed doors close, the floor ticks over with a ding, the doors open on the next chapter. */
-.recap-wipe-elevator > i { position: absolute; top: 0; bottom: 0; width: 50.5%; background: linear-gradient(90deg, #9aa0a8, #d8dde3 40%, #a7adb5 70%, #c9ced5); box-shadow: inset 0 0 0 .4cqw #0003; }
-.recap-wipe-elevator > i:first-child { left: 0; animation: recap-door-left 1.3s cubic-bezier(.6, 0, .3, 1) both; }
-.recap-wipe-elevator > i:nth-child(2) { right: 0; animation: recap-door-right 1.3s cubic-bezier(.6, 0, .3, 1) both; }
-.recap-floor { position: absolute; z-index: 1; left: 50%; top: 14%; display: flex; align-items: center; gap: 1.6cqw; padding: 1.4cqw 3cqw; translate: -50% 0; border-radius: 1.4cqw; background: #111; color: #ff9b3d;
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 6cqw; font-weight: 900; animation: recap-floor 1.3s both; }
+/* Elevator: brushed-steel doors close with a little bounce under a header panel, floors of light slide
+   past while the car travels, it settles with a jolt and a ding, and the doors open on the next chapter.
+   A lift is a physical object: steel and amber whatever the theme. */
+.recap-wipe-elevator > .recap-door { position: absolute; top: 0; bottom: 0; width: 50.5%;
+  background: linear-gradient(transparent 86%, #0000002e 86% 87%, #ffffff14 87%), repeating-linear-gradient(90deg, #ffffff12 0 .25cqw, #00000010 .25cqw .6cqw), linear-gradient(90deg, #8b9199, #dde2e7 36%, #b2b8c0 60%, #cdd2d8);
+  animation: 1.3s cubic-bezier(.6, 0, .3, 1) both; }
+.recap-wipe-elevator > .recap-door:first-child { left: 0; box-shadow: inset -1cqw 0 0 #2c3036, inset -1.3cqw 0 0 #ffffff33; animation-name: recap-door-left; }
+.recap-wipe-elevator > .recap-door:nth-child(2) { right: 0; box-shadow: inset 1cqw 0 0 #2c3036, inset 1.3cqw 0 0 #ffffff33; animation-name: recap-door-right; }
+.recap-lift-light { position: absolute; inset: 0; z-index: 1; overflow: hidden; opacity: 0; mix-blend-mode: soft-light; animation: recap-lift-travel 1.3s linear both; }
+.recap-lift-light::before { content: ''; position: absolute; left: 0; right: 0; height: 40%; background: linear-gradient(transparent, #fff 45% 55%, transparent); animation: recap-lift-band .26s linear 5 both; animation-delay: .42s; }
+.recap-lift-light.is-prev::before { animation-direction: reverse; }
+.recap-lift-head { position: absolute; z-index: 2; left: 50%; top: 20cqw; display: grid; place-items: center; padding: 2cqw 4cqw; translate: -50% 0; border-radius: 2cqw; background: linear-gradient(#2a2e34, #16191d); box-shadow: 0 0 0 .7cqw #7a8089, 0 1.4cqw 3cqw #0007;
+  animation: recap-lift-head 1.3s cubic-bezier(.6, 0, .3, 1) both; }
+.recap-floor { display: flex; align-items: center; gap: 1.6cqw; padding: 1cqw 3cqw; border-radius: 1cqw; background: #0b0c0e; box-shadow: inset 0 0 0 .3cqw #3a3f46; color: #ffad4d; text-shadow: 0 0 2cqw #ff8a1f;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 6cqw; font-weight: 900; }
+.recap-floor em { font-style: normal; font-size: 4cqw; animation: recap-lift-arrow .26s steps(1) 5 both; animation-delay: .42s; }
 .recap-floor b { display: grid; height: 7cqw; overflow: hidden; line-height: 7cqw; }
 .recap-floor b > span { display: grid; animation: recap-floor-tick 1.3s steps(1) both; }
-@keyframes recap-door-left { 0% { translate: -100% 0; } 32%, 62% { translate: 0 0; } 100% { translate: -100% 0; } }
-@keyframes recap-door-right { 0% { translate: 100% 0; } 32%, 62% { translate: 0 0; } 100% { translate: 100% 0; } }
-@keyframes recap-floor { 0%, 22% { opacity: 0; } 30%, 66% { opacity: 1; } 76%, 100% { opacity: 0; } }
-@keyframes recap-floor-tick { 0%, 45% { translate: 0 0; } 46%, 100% { translate: 0 -7cqw; } }
+@keyframes recap-door-left { 0% { translate: -100% 0; } 28% { translate: 1.2% 0; } 32% { translate: 0 0; } 54% { translate: 0 0; } 57% { translate: 0 .5cqw; } 60% { translate: 0 -.25cqw; } 63% { translate: 0 0; } 100% { translate: -100% 0; } }
+@keyframes recap-door-right { 0% { translate: 100% 0; } 28% { translate: -1.2% 0; } 32% { translate: 0 0; } 54% { translate: 0 0; } 57% { translate: 0 .5cqw; } 60% { translate: 0 -.25cqw; } 63% { translate: 0 0; } 100% { translate: 100% 0; } }
+@keyframes recap-lift-head { 0%, 24% { opacity: 0; scale: .8; } 32%, 66% { opacity: 1; scale: 1; } 76%, 100% { opacity: 0; scale: .9; } }
+@keyframes recap-lift-travel { 0%, 30% { opacity: 0; } 34%, 54% { opacity: .55; } 58%, 100% { opacity: 0; } }
+@keyframes recap-lift-band { from { top: -40%; } to { top: 100%; } }
+@keyframes recap-lift-arrow { 50% { opacity: .25; } }
+@keyframes recap-floor-tick { 0%, 52% { translate: 0 0; } 53%, 100% { translate: 0 -7cqw; } }
 /* Chomp: a chomper crosses the card eating dots; the next colour fills in behind it. */
 .recap-wipe-chomp { overflow: hidden; animation: recap-open-out .3s ease-in both; animation-delay: .95s; }
 .recap-chomp-fill { position: absolute; inset: 0; background: var(--wipe); transform-origin: left; animation: recap-grow-x .9s linear both; }

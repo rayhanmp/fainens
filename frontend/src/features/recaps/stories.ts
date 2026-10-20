@@ -100,9 +100,11 @@ export type YearInsight =
   // Categories that showed up in every period, and ones that appeared in just one.
   | { kind: 'regulars'; regulars: Array<{ name: string; label: string }>; cameos: Array<{ name: string; label: string; month: string }>; regularCount: number; cameoCount: number; periods: number };
 export type YearInsightKind = YearInsight['kind'];
+/** How far into a running period the recap was opened: the copy and a chapter change with it. */
+export type PaceStage = 'early' | 'mid' | 'late';
 const MILESTONES = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
 
-type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour };
+type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour; timely?: boolean };
 // Every chapter can carry a mini-game, a fun comparison line, a question to hand to Fainens Agent,
 // and its own autoplay length.
 /** A pixel-game toast a chapter can unlock when it arrives. */
@@ -127,6 +129,8 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   | { id: 'persona'; persona: Persona; early?: boolean }
   | { id: 'bonus'; bonus: Bonus }
   | { id: 'year'; insight: YearInsight }
+  // Only while a period is running: where in it you are, and the pace so far.
+  | { id: 'pace'; lead: PaceStage; elapsedDays: number; totalDays: number; perDay: number; projected: number; endLabel: string }
   | { id: 'closing'; tiles: ClosingTile[]; persona: Persona; finale: FinaleFacts }
 );
 export type RecapStoryId = RecapStory['id'];
@@ -307,6 +311,11 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     habits: run === 0 ? (repeatRow ? 'count' as const : 'typical' as const) : pickFrom(profile ? ['count', 'typical', 'perDay'] as const : ['count', 'perDay'] as const, random),
   };
 
+  // How far into a running period this is: early on the copy hedges, near the end it counts down.
+  const daysLeft = totalDays - elapsedDays;
+  const paceStage: PaceStage | null = recap.isPartial && !longView && daysLeft >= 1 ? (elapsedDays / totalDays < .3 ? 'early' : elapsedDays / totalDays < .7 ? 'mid' : 'late') : null;
+  const projected = Math.round(Math.max(0, recap.expenses) / elapsedDays * totalDays);
+  const endLabel = formatRecapDay(recap.period.endDate, { weekday: 'short', day: 'numeric', month: 'short' });
   const facts: CopyFacts = {
     period: recap.period.name, isPartial: recap.isPartial, net: recap.net, income: recap.income, expenses: recap.expenses, keptShare, spentPer100,
     budgetUsed: budget?.percentUsed ?? null, elapsedShare: recap.isPartial ? Math.round(elapsedDays / totalDays * 100) : null,
@@ -320,6 +329,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     repeat: repeatRow ? { label: labels.repeatPurchase1 && !isSystemDescription(labels.repeatPurchase1) ? labels.repeatPurchase1 : shortDisplayLabel(repeatRow.description), occurrences: repeatRow.occurrences } : null,
     change: averageChange ?? (recap.comparison ? Math.round(recap.comparison.changePercent) : null), changeMode: averageChange !== null ? 'average' : 'total',
     busiestMonth: longView && months.length > 1 ? months[busiestMonth].name : null,
+    pace: paceStage ? { stage: paceStage, elapsedDays, totalDays, daysLeft, endLabel, projected } : null,
   };
 
   // The saved edition's copy was written for these facts, so it is an option only where the chapter
@@ -344,11 +354,12 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     if (!titleFits || body.length > 160) return null;
     return { eyebrow: shortDisplayLabel(source.eyebrow, 40), title, body };
   };
-  // Flavoured lines talk about this period's own subject (its top category, its busiest day), so when a
-  // chapter has some they lead half the time instead of being one voice among many.
+  // Flavoured lines talk about this period's own subject (its top category, its busiest day) and timely
+  // ones about when you opened it, so when a chapter has some they lead half the time instead of being
+  // one voice among many.
   const pickCopy = (pool: Copy[]): Copy => {
-    const flavoured = pool.filter(line => line.flavour);
-    return flavoured.length && random() < .5 ? pickFrom(flavoured, random) : pickFrom(pool, random);
+    const special = pool.filter(line => line.flavour || line.timely);
+    return special.length && random() < .5 ? pickFrom(special, random) : pickFrom(pool, random);
   };
   const copyFor = (id: RecapStoryId, lead?: string): Copy => {
     const pool = chapterCopy(id, lead, facts);
@@ -480,6 +491,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       cover: { issue: recap.period.id, year: String(recapDay(recap.period.endDate).getUTCFullYear()), startLabel: formatRecapDay(recap.period.startDate, { day: 'numeric', month: 'short' }),
         endLabel: formatRecapDay(recap.period.endDate, { day: 'numeric', month: 'short' }), teasers: [], chapterCount: 0, purchaseCount: recap.purchaseCount, keptShare,
         passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 14), seat: `${(seed % 30) + 1}${'ABCDEF'[seed % 6]}` } },
+    // A running period opens with where you are in it; a finished one doesn't need telling.
+    ...(paceStage && elapsedDays >= 3 ? [{ id: 'pace' as const, lead: paceStage, elapsedDays, totalDays, perDay, projected, endLabel }] : []),
     { id: 'overview', lead: leads.overview, income: recap.income, expenses: recap.expenses, net: recap.net, keptShare, spentPer100, reveal: leads.overview === 'left' && recap.net > 0 ? 'scratch' : 'none' },
     ...(budget && cut !== 'speedrun' ? [{ id: 'budget' as const, planned: budget.planned, spent: budget.spent, remaining: budget.remaining, percentUsed: budget.percentUsed,
       elapsedShare: facts.elapsedShare, over: budget.overBudgetCategories.map(row => ({ name: row.name, over: row.over })), unbudgeted: budget.unbudgetedExpenses }] : []),
@@ -541,17 +554,79 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
       candidates.push({ id: 'categories', play: { kind: 'wheel', winner: topRows[0].name, slices: [...topRows.map(row => ({ name: row.name, label: row.label, share: row.share })),
         ...(rest.length ? [{ name: 'Other', label: 'Everything else', share: share(restAmount) }] : [])] } });
     }
-    // True or false, with a threshold rolled so the answer isn't always the same.
+    // True or false: every chapter keeps a handful of statements, thresholds rolled so the answer isn't
+    // always the same, and a run draws one of them. Each is checked against the figures the chapter shows.
+    const statements = new Map<RecapStoryId, Play[]>();
+    const claim = (id: RecapStoryId, statement: string, answer: boolean, reveal: string) =>
+      statements.set(id, [...(statements.get(id) ?? []), { kind: 'truefalse', statement, answer, reveal }]);
+    const fraction = (line: number) => ({ 10: 'a tenth', 20: 'a fifth', 25: 'a quarter', 33: 'a third', 50: 'half' } as Record<number, string>)[line];
     if (hasWeek) {
       const line = pickFrom([20, 33, 50], random);
-      candidates.push({ id: 'weekdays', play: { kind: 'truefalse', statement: `More than ${line === 33 ? 'a third' : line === 50 ? 'half' : 'a fifth'} of spending landed on weekends.`, answer: weekendShare > line, reveal: `Weekends took ${weekendShare}%.` } });
+      claim('weekdays', `Weekends swallowed more than ${fraction(line)} of the spending.`, weekendShare > line, `Weekends took ${weekendShare}%.`);
+      const [a, b] = shuffled(WEEKDAYS.map((name, i) => ({ name, total: weekdayTotals[i] })).filter(day => day.total > 0)).slice(0, 2);
+      if (a && b && a.total !== b.total) claim('weekdays', `${a.name}s out-spent ${b.name}s.`, a.total > b.total, `${(a.total > b.total ? a : b).name}s spent more.`);
+      claim('weekdays', 'Monday was the most expensive day of the week.', busiestWeekday === 0, `The big one was ${WEEKDAYS[busiestWeekday]}.`);
     }
     if (keptShare !== null) {
       const line = pickFrom([10, 25, 50], random);
-      candidates.push({ id: 'overview', play: { kind: 'truefalse', statement: `More than ${line === 50 ? 'half' : line === 25 ? 'a quarter' : 'a tenth'} of what came in was left over.`, answer: keptShare > line, reveal: `${keptShare}% was left.` } });
+      claim('overview', `More than ${fraction(line)} of what came in survived the period.`, keptShare > line, `${keptShare}% was left.`);
     }
+    if (recap.income > 0) claim('overview', 'Expenses beat income this time.', recap.expenses > recap.income, recap.expenses > recap.income ? 'Out ran past in.' : 'Income stayed ahead.');
     if (elapsedDays >= 7) {
-      candidates.push({ id: 'habits', play: { kind: 'truefalse', statement: 'Most days of the period had some spending.', answer: recap.spendingDays > elapsedDays / 2, reveal: `${recap.spendingDays} of ${elapsedDays} days did.` } });
+      claim('habits', 'Your wallet worked most days of the period.', recap.spendingDays > elapsedDays / 2, `${recap.spendingDays} of ${elapsedDays} days had spending.`);
+      const line = pickFrom([2, 3], random);
+      if (recap.spendingDays > 0) claim('habits', `On a spending day you usually made more than ${line} purchases.`, recap.purchaseCount / recap.spendingDays > line, `About ${Math.round(recap.purchaseCount / recap.spendingDays * 10) / 10} a day.`);
+    }
+    if (repeatRow && repeatRow.occurrences >= 3) {
+      const guess = repeatRow.occurrences + pickFrom([-2, -1, 1, 2], random);
+      claim('habits', `You went back to ${facts.repeat?.label ?? 'your regular'} more than ${guess} times.`, repeatRow.occurrences > guess, `${repeatRow.occurrences} times, in fact.`);
+    }
+    if (top && topRows.length >= 3) {
+      claim('categories', `${top.label} took more than half of everything.`, top.share > 50, `${top.label}: ${top.share}%.`);
+      const [a, b] = shuffled(topRows.slice(1, 4)).slice(0, 2);
+      if (a && b && a.amount !== b.amount) claim('categories', `${a.label} out-spent ${b.label}.`, a.amount > b.amount, `${(a.amount > b.amount ? a : b).label} came out ahead.`);
+      claim('categories', 'Your top three categories took over three-quarters of spending.', top3Share > 75, `They took ${top3Share}%.`);
+    }
+    if (peak && !longView) {
+      claim('calendar', 'Your biggest spending day fell on a weekend.', recapWeekday(peak.date) >= 5, `It was ${dayLabel(peak.date)}.`);
+      claim('calendar', 'There were more spending days than quiet ones.', recap.spendingDays > elapsedDays - recap.spendingDays, `${recap.spendingDays} spending, ${elapsedDays - recap.spendingDays} quiet.`);
+    }
+    if (receiptItems.length >= 3 && receiptItems[0].amount !== receiptItems[1].amount + receiptItems[2].amount) {
+      claim('receipts', `${receiptItems[0].label} cost more than the next two receipts put together.`, receiptItems[0].amount > receiptItems[1].amount + receiptItems[2].amount, 'Checked against the receipts.');
+    }
+    if (largestShare !== null) {
+      const line = pickFrom([10, 25], random);
+      claim('receipts', `A single receipt ate more than ${fraction(line)} of all purchase spending.`, largestShare > line, `The biggest one: ${largestShare}%.`);
+    }
+    if (quiet && quiet.length >= 2) {
+      const guess = Math.max(2, quiet.length + pickFrom([-2, -1, 1, 2], random));
+      claim('streak', `You once went ${guess} days in a row without spending a thing.`, quiet.length >= guess, `The longest quiet run: ${quiet.length} days.`);
+    }
+    if (busy && busy.length >= 3) claim('streak', 'The longest spending streak lasted over a week.', busy.length > 7, `It lasted ${busy.length} days.`);
+    if (budget && budget.planned > 0) claim('budget', 'Every category stayed inside its budget.', budget.overBudgetCategoryCount === 0, budget.overBudgetCategoryCount === 0 ? 'Not one went over.' : `${budget.overBudgetCategoryCount} went over.`);
+    if (averageChange !== null && averageChange !== 0) claim('comparison', 'The average receipt got bigger than before.', averageChange > 0, `${averageChange > 0 ? 'Up' : 'Down'} ${Math.abs(averageChange)}%.`);
+    for (const [id, options] of statements) candidates.push({ id, play: pickFrom(options, random) });
+
+    // More multiple choice, one question per chapter drawn from what it can ask.
+    if (topRows.length >= 3) candidates.push({ id: 'categories', play: quiz('Which category came second?', topRows[1].label, [topRows[1].label, ...others(topRows.map(row => row.label), topRows[1].label, 2)]) });
+    if (hasWeek) {
+      const quietest = weekdayTotals.indexOf(Math.min(...weekdayTotals));
+      candidates.push({ id: 'weekdays', play: quiz('Which day of the week was the quietest?', WEEKDAYS[quietest], [WEEKDAYS[quietest], ...others(WEEKDAYS, WEEKDAYS[quietest], 2)]) });
+    }
+    const receiptCategories = [...new Set(receiptItems.map(item => item.category))];
+    if (receiptItems.length && positiveCategories.length >= 3) {
+      const answer = shortDisplayLabel(receiptItems[0].category);
+      candidates.push({ id: 'receipts', play: quiz('Your biggest receipt came from which category?', answer, [answer, ...others([...new Set([...receiptCategories, ...positiveCategories.map(row => row.name)])].map(name => shortDisplayLabel(name)), answer, 2)]) });
+    }
+    if (elapsedDays >= 7 && !longView && elapsedDays - recap.spendingDays > 0) {
+      const truth = elapsedDays - recap.spendingDays;
+      const decoys = [...new Set([truth + 3, Math.max(0, truth - 2), truth + 6].filter(value => value !== truth))].slice(0, 2);
+      candidates.push({ id: 'calendar', play: quiz('How many days had no spending at all?', String(truth), [truth, ...decoys].map(String)) });
+    }
+    if (repeatRow && receiptItems.length >= 2 && facts.repeat) {
+      const answer = facts.repeat.label;
+      const decoys = [...new Set(receiptItems.map(item => item.label).filter(label => label !== answer))].slice(0, 2);
+      if (decoys.length === 2) candidates.push({ id: 'habits', play: quiz('What did you buy most often?', answer, [answer, ...decoys]) });
     }
   }
   const dealt = new Map<RecapStoryId, Play>();

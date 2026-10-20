@@ -1,6 +1,6 @@
 import { formatRecapCurrency as money } from './currency';
 import { BANKS, categoryFlavour, DAY_BANKS, dayFlavour, type CategoryFlavour, type Flavour } from './flavour';
-import type { Bonus, RecapStoryId, YearInsight } from './stories';
+import type { Bonus, PaceStage, RecapStoryId, YearInsight } from './stories';
 
 export type CopyFacts = {
   period: string; isPartial: boolean; net: number; income: number; expenses: number; keptShare: number | null; spentPer100: number | null;
@@ -12,9 +12,10 @@ export type CopyFacts = {
   purchaseCount: number; median: number | null; average: number | null; perDay: number;
   repeat: { label: string; occurrences: number } | null; change: number | null; changeMode: 'average' | 'total';
   busiestMonth: string | null;
+  pace: { stage: PaceStage; elapsedDays: number; totalDays: number; daysLeft: number; endLabel: string; projected: number } | null;
 };
 /** A flavoured line carries its flavour, so the chapter can show the matching mark beside its eyebrow. */
-export type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour };
+export type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour; timely?: boolean };
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 /** No body line: the visual says it, and a line that only describes the chart is noise. */
@@ -28,10 +29,70 @@ const NONE = '';
  * the saved edition's copy is used.
  */
 export function chapterCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Copy[] {
-  return [...plainCopy(id, lead, f), ...flavouredCopy(id, lead, f)];
+  return [...plainCopy(id, lead, f), ...flavouredCopy(id, lead, f), ...timelyCopy(id, f)];
 }
 
 const tag = (flavour: Flavour, lines: Copy[]): Copy[] => lines.map(line => ({ ...line, flavour }));
+
+/**
+ * Lines for a period that's still running, by how far in it is: early on the copy hedges with a grin,
+ * halfway it calls halftime, near the end it counts down. The chapter's visual already shows the days,
+ * the daily pace and where it's heading, so a body only adds the receipt count.
+ */
+function paceCopy(f: CopyFacts, stage: PaceStage): Copy[] {
+  const p = f.pace!;
+  const count = `${plural(f.purchaseCount, 'receipt')} so far.`;
+  switch (stage) {
+    case 'early': return [
+      { eyebrow: `Day ${p.elapsedDays} of ${p.totalDays}`, title: 'It’s early. The plot is still loading.', body: count },
+      { eyebrow: 'You’re early', title: 'Bold of you to check this soon.', body: NONE },
+      { eyebrow: 'Opening act', title: 'The curtain’s barely up.', body: count },
+      { eyebrow: 'First impressions', title: `${p.elapsedDays} days in. Judging nothing yet.`, body: count },
+    ];
+    case 'mid': return [
+      { eyebrow: 'Halftime', title: 'Halftime report.', body: count },
+      { eyebrow: 'Mid-season', title: 'Halfway through. Still writing.', body: count },
+      { eyebrow: `Day ${p.elapsedDays} of ${p.totalDays}`, title: `${p.elapsedDays} days down, ${p.daysLeft} to go.`, body: NONE },
+      { eyebrow: 'Intermission', title: 'Grab a snack. Act two is coming.', body: count },
+    ];
+    case 'late': return [
+      { eyebrow: 'Final stretch', title: p.daysLeft === 1 ? 'One day left. No pressure.' : `${p.daysLeft} days left. The finale’s in sight.`, body: count },
+      { eyebrow: 'Almost a wrap', title: `Credits roll on ${p.endLabel}.`, body: NONE },
+      { eyebrow: 'Last laps', title: 'Nearly there. Don’t look down.', body: NONE },
+    ];
+  }
+}
+
+/** Timely takes on the cover, the scoreboard and the credits while the period is still running. */
+function timelyCopy(id: RecapStoryId, f: CopyFacts): Copy[] {
+  const p = f.pace;
+  if (!p) return [];
+  const left = plural(p.daysLeft, 'day');
+  const lines: Copy[] = (() => {
+    switch (id) {
+      case 'intro': return p.stage === 'early' ? [
+        { eyebrow: 'Sneak preview', title: `${f.period}: the early cut.`, body: `Day ${p.elapsedDays} of ${p.totalDays}.` },
+        { eyebrow: 'Too soon?', title: 'Too soon? Never.', body: `${plural(f.purchaseCount, 'receipt')} in ${p.elapsedDays} days.` },
+      ] : p.stage === 'mid' ? [
+        { eyebrow: 'Mid-season', title: `${f.period}, so far.`, body: `${left} still to play.` },
+        { eyebrow: 'Previously, halfway', title: 'Half a period, one recap.', body: `${plural(f.purchaseCount, 'receipt')} and counting.` },
+      ] : [
+        { eyebrow: 'Previously, almost', title: `${f.period} is nearly done.`, body: `${left} to go.` },
+        { eyebrow: 'The penultimate cut', title: 'One last look before the finale.', body: `${plural(f.purchaseCount, 'receipt')} and counting.` },
+      ];
+      case 'overview': return p.stage === 'early'
+        ? [{ eyebrow: 'Early numbers', title: 'Early days. Here’s the scoreboard anyway.', body: `${money(f.income)} in, ${money(f.expenses)} out so far.` }]
+        : p.stage === 'late' ? [{ eyebrow: 'Nearly final', title: f.net >= 0 ? 'Still in the green, with days to go.' : 'Out’s ahead, with days to go.', body: `${left} left to write the ending.` }] : [];
+      case 'closing': return [
+        { eyebrow: 'To be continued', title: 'To be continued…', body: `The rest airs over the next ${left}.` },
+        { eyebrow: 'Mid-season finale', title: 'That’s all for now.', body: `The full story lands after ${p.endLabel}.` },
+      ];
+      case 'pace': return paceCopy(f, p.stage);
+      default: return [];
+    }
+  })();
+  return lines.map(line => ({ ...line, timely: true }));
+}
 
 /** Lines in the voice of what the chapter is about: the top category's family, the busiest weekday. */
 function flavouredCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Copy[] {
@@ -363,7 +424,7 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
         { eyebrow: 'The verdict', title: 'Your money personality is in.', body: NONE }];
     }
     // Bonus slides write their own copy from the figures that earned them; see bonusCopy.
-    case 'bonus': case 'year': return [];
+    case 'bonus': case 'year': case 'pace': return [];
     case 'closing': return [
       { eyebrow: 'The period, in one card', title: 'Same you. Fresh chapter.', body: NONE },
       { eyebrow: 'That’s a wrap', title: `That’s a wrap on ${f.period}.`, body: NONE },

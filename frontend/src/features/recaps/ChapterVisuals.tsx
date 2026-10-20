@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Download, Plane, Repeat2, type LucideIcon } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Download, Flag, Plane, Repeat2, type LucideIcon } from 'lucide-react';
 import { Fragment, memo, type CSSProperties, type ReactNode } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { ScratchCover } from './Interactive';
@@ -51,6 +51,7 @@ function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { 
     case 'persona': return <PersonaVisual story={story} run={run} scene={personaExtra ? <personaExtra.AltPersonaScene persona={story.persona} run={run} /> : undefined} />;
     case 'bonus': return bonusExtra ? <bonusExtra.AltBonusVisual story={story} /> : <BonusVisual story={story} />;
     case 'year': return yearExtra ? <yearExtra.YearVisual story={story} /> : null;
+    case 'pace': return <PaceVisual story={story} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;
@@ -667,21 +668,53 @@ function FinaleCredits({ story, games }: { story: Of<'closing'>; games: string |
   </div>;
 }
 
+/** Where a running period stands: days to go, a track of its days with you on it, and the pace so far. */
+function PaceVisual({ story }: { story: Of<'pace'> }) {
+  const left = story.totalDays - story.elapsedDays;
+  return <div className="recap-pace">
+    <p className="recap-pace-left recap-seq" style={seq(0)}><strong><AnimatedValue value={left} /></strong><span>{left === 1 ? 'day' : 'days'} to go</span></p>
+    <div className="recap-pace-track recap-seq" style={{ ...seq(1), '--at': (story.elapsedDays - .5) / story.totalDays } as CSSProperties} aria-hidden="true">
+      <div>{Array.from({ length: story.totalDays }, (_, i) => <i key={i} className={i < story.elapsedDays ? 'is-done' : undefined} style={{ '--i': i } as CSSProperties} />)}</div>
+      <span className="recap-pace-pin"><b>Day {story.elapsedDays}</b></span>
+      <span className="recap-pace-flag"><Flag /></span>
+    </div>
+    <p className="recap-pace-ends recap-seq" style={seq(2)}><span>Day 1</span><span>Ends {story.endLabel}</span></p>
+    <dl className="recap-pace-stats recap-seq" style={seq(3)}>
+      <div><dt>So far, per day</dt><dd><Money value={story.perDay} /></dd></div>
+      <div><dt>At this pace, by the end</dt><dd>≈ <Money value={story.projected} /></dd></div>
+    </dl>
+  </div>;
+}
+
 /** The finale as a certificate awarding the period's money personality. */
+// A foil seal's scalloped edge: 24 points alternating between two radii.
+const SEAL_EDGE = `polygon(${Array.from({ length: 48 }, (_, i) => {
+  const angle = (i / 48) * Math.PI * 2; const radius = i % 2 ? 44 : 50;
+  return `${(50 + radius * Math.cos(angle)).toFixed(1)}% ${(50 + radius * Math.sin(angle)).toFixed(1)}%`;
+}).join(', ')})`;
+
 function FinaleCertificate({ story }: { story: Of<'closing'> }) {
   const { finale, persona } = story;
+  const Icon = personaIcons[persona.key];
   return <div className="recap-cert">
+    {/* The persona's own icon as a watermark, and a flourish in each corner of the double rule. */}
+    <span className="recap-cert-watermark" aria-hidden="true"><Icon /></span>
+    {[0, 1, 2, 3].map(i => <b key={i} className={`recap-cert-corner is-${i}`} aria-hidden="true">❦</b>)}
     <small className="recap-cert-academy">The Fainens Academy of Receipts</small>
     <h3>Certificate</h3>
-    <p className="recap-cert-of">of completion</p>
+    <p className="recap-cert-of"><i aria-hidden="true" />of completion<i aria-hidden="true" /></p>
     <p>This certifies that</p>
     <p className="recap-cert-who">{finale.passenger}</p>
     <p>completed {finale.period} as</p>
     <p className="recap-cert-title">{persona.name}</p>
     <p className="recap-cert-reason">{persona.tagline}</p>
+    {persona.evidence[0] ? <p className="recap-cert-honours">With distinction in <b>{persona.evidence[0].replace(/^\p{Lu}/u, letter => letter.toLowerCase())}</b></p> : null}
     <div className="recap-cert-foot">
       <span className="recap-cert-sign"><b>fainens ✳</b><small>Chief Receipt Officer</small></span>
-      <span className="recap-cert-seal" aria-hidden="true"><i /><i /><b>✳</b></span>
+      <span className="recap-cert-seal" aria-hidden="true">
+        <i className="recap-cert-ribbon" /><i className="recap-cert-ribbon" />
+        <span className="recap-cert-foil" style={{ clipPath: SEAL_EDGE }}><span><Icon /></span></span>
+      </span>
     </div>
   </div>;
 }
