@@ -15,7 +15,10 @@ import {
   ReconcileDemo,
   SplitBillDemo,
   TransferDemo,
+  YourSetup,
 } from './visuals';
+import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
+import { WorkedMonth } from './WorkedMonth';
 
 /**
  * The help docs: one entry per page, grouped as in the sidebar. Every fact was checked against the
@@ -34,7 +37,15 @@ export type DocBlock =
   | { type: 'table'; head: [string, string]; rows: Array<[string, string]> }
   | { type: 'qa'; items: Array<{ q: string; a: string }> }
   | { type: 'open'; link: DocLink }
-  | { type: 'special'; name: 'can-i' | 'limits' | 'shortcuts' | 'glossary' | 'changelog' };
+  | { type: 'special'; name: 'can-i' | 'limits' | 'shortcuts' | 'glossary' | 'changelog' }
+  /** The exact ledger lines Fainens posts, collapsed by default. `{cash}`, `{cash2}` and `{paylater}` become the reader’s own account names. */
+  | { type: 'under-hood'; entries: LedgerEntry[] };
+
+export type LedgerEntry = {
+  title: string;
+  lines: Array<{ account: string; debit?: string; credit?: string; note?: string }>;
+  explain: string;
+};
 
 export type DocPage = {
   slug: string;
@@ -74,6 +85,7 @@ export const DOCS: DocPage[] = [
     summary: 'Set up Fainens in four steps',
     lead: 'Fifteen minutes now saves you guesswork later. Do these four things in order.',
     blocks: [
+      { type: 'visual', node: <YourSetup /> },
       { type: 'h2', id: 'accounts', text: '1. Add your accounts' },
       { type: 'steps', items: ['Open Accounts and choose Add account.', 'Pick Asset for money you hold (bank, e-wallet, cash, investments) or Liability for what you owe (credit card, pay later).', 'Enter today’s balance as the opening balance.', 'Repeat for every place your money lives, and pin the ones you use most.'] },
       { type: 'open', link: { to: '/accounts', label: 'Open Accounts' } },
@@ -83,12 +95,13 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'record', text: '3. Record what you spend' },
       { type: 'p', text: 'Press N anywhere (or the + button on phones). Shorthand like 25k works, and Fainens suggests a category from the name.' },
       { type: 'visual', node: <ComposerDemo /> },
+      { type: 'visual', node: <PracticeComposer /> },
       { type: 'h2', id: 'budget', text: '4. Plan a budget' },
       { type: 'p', text: 'Open Budget, choose Manage budget, and give each category an amount. Start from scratch, from a preset, or by copying last period.' },
       { type: 'open', link: { to: '/budget', label: 'Open Budget' } },
       { type: 'callout', tone: 'tip', title: 'Then, once a week', text: 'Glance at the Dashboard’s Needs attention strip, approve pending items in Transactions, and reconcile your main accounts.' },
     ],
-    related: ['recording', 'periods', 'budgets'],
+    related: ['a-month', 'recording', 'budgets'],
   },
   {
     slug: 'key-ideas',
@@ -98,7 +111,7 @@ export const DOCS: DocPage[] = [
     lead: 'A handful of ideas explain almost everything Fainens does, including the moments it says no.',
     blocks: [
       { type: 'h2', id: 'balances', text: 'Every entry balances' },
-      { type: 'p', text: 'Money always comes from somewhere and goes somewhere. A Rp45.000 lunch paid from BCA adds Rp45.000 to Food & dining and takes Rp45.000 from BCA. Fainens keeps every amount in whole rupiah.' },
+      { type: 'p', text: 'Money always comes from somewhere and goes somewhere. A Rp45.000 lunch paid from BCA records Rp45.000 of spending (tagged Food & dining) and takes Rp45.000 out of BCA. Fainens keeps every amount in whole rupiah.' },
       { type: 'h2', id: 'posted', text: 'Posted, draft and pending' },
       { type: 'table', head: ['State', 'What it means'], rows: [['Posted', 'Counts in balances, budgets and reports. Kept permanently; corrected, never erased.'], ['Draft', 'Doesn’t count yet. Edit or delete freely, then post (for example in Backfill).'], ['Pending', 'Imported (for example from a bank email) and waiting for your approval.']] },
       { type: 'h2', id: 'periods', text: 'Periods follow your pay' },
@@ -108,7 +121,28 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'you-confirm', text: 'Nothing posts without you' },
       { type: 'p', text: 'Bank emails wait as pending items, salary and subscription renewals ask first, and Agent’s drafts need your approval.' },
     ],
-    related: ['fixing-mistakes', 'periods', 'glossary'],
+    related: ['a-month', 'fixing-mistakes', 'glossary'],
+  },
+  {
+    slug: 'a-month',
+    group: 'Getting started',
+    title: 'A month, step by step',
+    summary: 'Follow one salary period from payday to close',
+    lead: 'Ten everyday moments from one period, from payday to closing it. Step through them to see what each one records and what it does to your balances and budget.',
+    blocks: [
+      { type: 'visual', node: <WorkedMonth /> },
+      { type: 'h2', id: 'takeaways', text: 'What to notice' },
+      { type: 'list', items: [
+        'Spent ends at Rp4.270.500, which isn’t the same as what left your accounts: the top-up, your friends’ shares, the installment and the reconcile all moved money without being spending.',
+        'The pay-later purchase counted in full on the day you bought it. Paying the installment later only lowered the debt.',
+        'Only your share of the dinner was spending. What Ani and Budi owed showed up under Owed to you.',
+        'The typo wasn’t deleted: it was cancelled by a correction, so the history still adds up.',
+        'Reconciling fixed the balance without counting as spending, so your budget stayed accurate.',
+      ] },
+      { type: 'callout', tone: 'tip', title: 'Do it with your own money', text: 'Your real period works the same way. Open Transactions and filter by account or category to see every entry behind a number.' },
+      { type: 'open', link: { to: '/transactions', label: 'Open Transactions' } },
+    ],
+    related: ['recording', 'pay-later', 'split-bills', 'fixing-mistakes'],
   },
 
   // ── Everyday money ────────────────────────────────────────────────
@@ -122,6 +156,7 @@ export const DOCS: DocPage[] = [
       { type: 'visual', node: <ComposerDemo /> },
       { type: 'h2', id: 'basics', text: 'Add an expense or income' },
       { type: 'steps', items: ['Press N anywhere, or Add transaction (the + button on phones).', 'Choose Expense, Income, Transfer or Settle PayLater.', 'Enter the amount, a name, the category and the account.', 'Read the sentence at the bottom to check it, then save.'] },
+      { type: 'visual', node: <PracticeComposer /> },
       { type: 'callout', tone: 'tip', text: 'Defaults come from Settings → Accounts, and Fainens remembers the accounts and categories you use most.' },
       { type: 'h2', id: 'journal', text: 'One payment, several categories' },
       { type: 'p', text: 'Switch the composer’s header from Simple to Journal and add a line for each category. The lines must add up to what you paid.' },
@@ -131,6 +166,10 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'Choose a transport category and a trip section appears: set pickup and drop-off on a map, the provider and the service. Save a route you take often and reuse it next time.' },
       { type: 'h2', id: 'tags', text: 'Tags, notes and places' },
       { type: 'p', text: 'Add tags (Fainens suggests some), a note, or a place. These can always be changed later, even after posting.' },
+      { type: 'under-hood', entries: [
+        { title: 'Rp45.000 lunch paid from {cash}, category Food & dining', lines: [{ account: 'Expense (Auto)', note: 'Category: Food & dining', debit: '45.000' }, { account: '{cash}', credit: '45.000' }], explain: 'The spending is counted once, in the built-in Expense (Auto) account, labelled with its category. That label is what budgets and reports group by.' },
+        { title: 'Rp1.000.000 income into {cash}', lines: [{ account: '{cash}', debit: '1.000.000' }, { account: 'Income (Auto)', credit: '1.000.000' }], explain: 'Income always lands in the built-in Income (Auto) account. CSV imports, Agent drafts and approved bank emails post exactly the same lines.' },
+      ] },
       { type: 'open', link: { to: '/transactions', label: 'Open Transactions' } },
     ],
     related: ['transfers', 'fixing-mistakes', 'importing'],
@@ -145,9 +184,14 @@ export const DOCS: DocPage[] = [
       { type: 'visual', node: <TransferDemo /> },
       { type: 'h2', id: 'how', text: 'Record a transfer' },
       { type: 'steps', items: ['Press N and choose Transfer.', 'Pick the account the money leaves and the one it arrives in. Use swap to flip them.', 'If there was a fee, enter it and choose who paid it: sender or recipient.', 'Save.'] },
+      { type: 'visual', node: <PracticeComposer label="Try a transfer" /> },
       { type: 'h2', id: 'fees', text: 'Fees you pay every time' },
       { type: 'p', text: 'If moving money between two accounts always costs the same, set it once in Settings → Accounts → Transfer fees and it’s added automatically.' },
       { type: 'callout', tone: 'note', text: 'Transfers move money between your asset accounts, like bank to e-wallet. Pay-later installments are paid from Pay later, or with Settle PayLater in the composer.' },
+      { type: 'under-hood', entries: [
+        { title: 'Rp100.000 from {cash} to {cash2}', lines: [{ account: '{cash2}', debit: '100.000' }, { account: '{cash}', credit: '100.000' }], explain: 'No income or expense account is touched, which is why a transfer never counts as spending.' },
+        { title: '…with a Rp2.500 fee paid by the sender', lines: [{ account: 'Expense (Auto)', note: 'Category: Bank & Transfer Fees', debit: '2.500' }, { account: '{cash}', credit: '2.500' }], explain: 'The fee is a separate, linked expense from the account that paid it. Altogether {cash} goes down Rp102.500 and {cash2} up Rp100.000. If the recipient pays the fee instead, it comes out of {cash2}, which then goes up Rp97.500.' },
+      ] },
     ],
     related: ['recording', 'pay-later'],
   },
@@ -163,6 +207,9 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'correct', text: 'Correct the amount, account or category' },
       { type: 'steps', items: ['Open the transaction’s row menu and choose Correct transaction.', 'Fainens posts an equal and opposite entry that cancels the original.', 'Choose Add replacement and record it the right way.'] },
       { type: 'visual', node: <CorrectionDemo /> },
+      { type: 'under-hood', entries: [
+        { title: 'Correcting a Rp45.000 expense paid from {cash}', lines: [{ account: '{cash}', debit: '45.000' }, { account: 'Expense (Auto)', note: 'Category: Food & dining, −45.000', credit: '45.000' }], explain: 'The correction mirrors the original exactly and links back to it; the original is marked reversed. It’s dated today, so it lands in the current period; choose “Move to the original’s date” if both periods are open. Linked entries, such as a transfer’s fee, are corrected together.' },
+      ] },
       { type: 'h2', id: 'locked', text: 'Why can’t I change it?' },
       { type: 'qa', items: [
         { q: 'It belongs to another feature', a: 'Entries made by loans, pay later, salary, subscriptions, split bills, reimbursements and reconciliations are changed from their own page.' },
@@ -187,6 +234,10 @@ export const DOCS: DocPage[] = [
       { type: 'visual', node: <ReconcileDemo /> },
       { type: 'steps', items: ['Open Accounts and choose Reconcile.', 'For a routine check, enter the balance each bank shows today.', 'Look at any difference and check for a missing or doubled transaction first.', 'Confirm to record what’s left as a balance adjustment. You can void it later with a reason.'] },
       { type: 'callout', tone: 'note', title: 'Coming back after a gap?', text: 'Choose “Catch up after a gap” in Reconcile for a one-time bridge across all accounts.' },
+      { type: 'under-hood', entries: [
+        { title: 'Opening balance: {cash} starts at Rp1.000.000', lines: [{ account: '{cash}', debit: '1.000.000' }, { account: 'Balance adjustments', note: 'Built-in equity account', credit: '1.000.000' }], explain: 'A starting balance isn’t income, so it’s recorded against Balance adjustments. It’s only possible before the account has any activity.' },
+        { title: 'Reconcile: Fainens says Rp1.000.000, {cash} says Rp950.000', lines: [{ account: 'Balance adjustments', debit: '50.000' }, { account: '{cash}', credit: '50.000' }], explain: 'The gap is corrected through the same equity account, so it never counts as income, spending, or budget. One reconcile covers all the accounts you changed.' },
+      ] },
       { type: 'open', link: { to: '/accounts', label: 'Open Accounts' } },
     ],
     related: ['periods', 'fixing-mistakes'],
@@ -265,6 +316,10 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'tax', text: 'Yearly tax outlook' },
       { type: 'p', text: 'See your estimated annual tax and mark other income as taxable, final or exempt.' },
       { type: 'callout', tone: 'warning', text: 'These are planning estimates, not a tax filing.' },
+      { type: 'under-hood', entries: [
+        { title: 'A Rp186.000 subscription renewal from {cash}', lines: [{ account: 'Expense (Auto)', note: 'The subscription’s category', debit: '186.000' }, { account: '{cash}', credit: '186.000' }], explain: 'Each confirmed renewal is an ordinary expense, dated on its due date. Voiding a renewal you weren’t charged for cancels it on that same date.' },
+        { title: 'Posting your salary into {cash}', lines: [{ account: '{cash}', debit: 'Take-home' }, { account: 'Income (Auto)', credit: 'Take-home' }], explain: 'Only your take-home pay is posted. Gross pay, PTKP status and the tax and BPJS estimates are kept in the entry’s notes, not as separate lines. One salary per month, and it needs an open period that includes payday.' },
+      ] },
       { type: 'open', link: { to: '/salary-income', label: 'Open Income & salary' } },
     ],
     related: ['budgets', 'periods'],
@@ -296,6 +351,11 @@ export const DOCS: DocPage[] = [
     blocks: [
       { type: 'steps', items: ['In Loans, choose New loan.', 'Pick Lend or Borrow, the person (or create a contact), the amount and the account the money moved through.', 'Add a due date if there is one.', 'Record each repayment as it comes.'] },
       { type: 'p', text: 'Loans shows what you’re owed, what you owe and the net. Each contact’s page lists their loans, and split bills appear under their own tab.' },
+      { type: 'under-hood', entries: [
+        { title: 'Lending Rp500.000 from {cash}', lines: [{ account: 'Loans Receivable', debit: '500.000' }, { account: '{cash}', credit: '500.000' }], explain: 'Cash turns into money owed to you, so your net worth doesn’t change and nothing counts as spending.' },
+        { title: 'They pay you back', lines: [{ account: '{cash}', debit: '500.000' }, { account: 'Loans Receivable', credit: '500.000' }], explain: 'A repayment can’t be more than what’s left on the loan.' },
+        { title: 'Borrowing Rp500.000 into {cash}', lines: [{ account: '{cash}', debit: '500.000' }, { account: 'Loans Payable', credit: '500.000' }], explain: 'Repaying it reverses these lines. Neither borrowing nor repaying is income or spending.' },
+      ] },
       { type: 'open', link: { to: '/loans', label: 'Open Loans' } },
     ],
     related: ['split-bills', 'pay-later'],
@@ -310,8 +370,14 @@ export const DOCS: DocPage[] = [
       { type: 'visual', node: <InstallmentDemo /> },
       { type: 'h2', id: 'buy', text: 'Buy with pay later' },
       { type: 'steps', items: ['Record an Expense and choose your pay-later account as the account.', 'Pick 1, 3, 6 or 12 months and the first due date.', 'Add any interest or admin fee and check the schedule.', 'Save.'] },
+      { type: 'visual', node: <PracticeComposer label="Try a pay-later purchase" /> },
       { type: 'h2', id: 'pay', text: 'Pay an installment' },
       { type: 'p', text: 'Open Pay later to see the calendar and what each provider is owed, then Pay now on an installment. You can also use Settle PayLater in the composer.' },
+      { type: 'callout', tone: 'note', title: 'When does it count as spending?', text: 'On the purchase date, all of it: the price plus any interest and fee. Paying installments later only reduces the debt, so it doesn’t count as spending again.' },
+      { type: 'under-hood', entries: [
+        { title: 'Rp600.000 on {paylater}, 3 months, 12% a year, Rp5.000 admin fee', lines: [{ account: 'Expense (Auto)', note: 'Price', debit: '600.000' }, { account: 'Expense (Auto)', note: 'Interest: 600.000 × 1% × 3 months', debit: '18.000' }, { account: 'Expense (Auto)', note: 'Admin fee', debit: '5.000' }, { account: '{paylater}', note: 'Debt', credit: '623.000' }], explain: 'Interest is simple interest on the yearly rate. The fee is added to the first installment, so the schedule is Rp211.000, then Rp206.000, then Rp206.000.' },
+        { title: 'Paying the first installment from {cash}', lines: [{ account: '{paylater}', debit: '211.000' }, { account: '{cash}', credit: '211.000' }], explain: 'Only the debt goes down. Payments go to the oldest open installment first.' },
+      ] },
       { type: 'open', link: { to: '/paylater', label: 'Open Pay later' } },
     ],
     related: ['loans', 'recording'],
@@ -325,6 +391,11 @@ export const DOCS: DocPage[] = [
     blocks: [
       { type: 'visual', node: <SplitBillDemo /> },
       { type: 'steps', items: ['Open Agent, type /split and attach the receipt (or use Transactions → More tools → Split a receipt).', 'Check the items, add people and assign items to them.', 'Choose equal, proportional, or paid by one person.', 'Save it as an image or copy the summary to share.', 'Choose Create linked loans so what friends owe shows up in Loans.'] },
+      { type: 'h2', id: 'try', text: 'Try the card' },
+      { type: 'visual', node: <PracticeSplitBill /> },
+      { type: 'under-hood', entries: [
+        { title: 'Rp300.000 dinner paid from {cash}, split equally with Ani and Budi', lines: [{ account: 'Expense (Auto)', note: 'Your share', debit: '100.000' }, { account: 'Loans Receivable', note: 'Ani owes you', debit: '100.000' }, { account: 'Loans Receivable', note: 'Budi owes you', debit: '100.000' }, { account: '{cash}', credit: '300.000' }], explain: 'Only your share is spending. Each friend’s share becomes a loan they owe you, tagged with the bill so you can find it. When they pay you back, it’s recorded like any loan repayment.' },
+      ] },
       { type: 'open', link: { to: '/agent', label: 'Open Agent' } },
     ],
     related: ['loans', 'agent'],
@@ -339,6 +410,11 @@ export const DOCS: DocPage[] = [
       { type: 'visual', node: <ClaimPipelineDemo /> },
       { type: 'steps', items: ['In Transactions, open the expense’s row menu and choose Mark reimbursable (or create a claim in Reimbursements).', 'Save it as a draft, or mark it submitted.', 'Approve it when it’s accepted.', 'Record payment when the money arrives; partial payments are fine.'] },
       { type: 'p', text: 'Filter claims by status, see overdue ones, and open a claim for its linked expenses and receipts.' },
+      { type: 'under-hood', entries: [
+        { title: 'Marking a Rp150.000 taxi reimbursable', lines: [], explain: 'Nothing is posted yet: a draft or submitted claim is just a record. The taxi still counts as your spending.' },
+        { title: 'When the claim is approved', lines: [{ account: 'Reimbursements Receivable', debit: '150.000' }, { account: 'Expense (Auto)', note: 'Category: Transportation, −150.000', credit: '150.000' }], explain: 'From approval on, the taxi stops counting as your spending and becomes money owed to you. It’s dated on the original expense’s date.' },
+        { title: 'When the money arrives in {cash}', lines: [{ account: '{cash}', debit: '150.000' }, { account: 'Reimbursements Receivable', credit: '150.000' }], explain: 'Partial payments are fine; one payment can also cover several claims.' },
+      ] },
       { type: 'open', link: { to: '/reimbursements', label: 'Open Reimbursements' } },
     ],
     related: ['recording', 'loans'],

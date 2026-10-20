@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 import type { api } from '../lib/api';
 import { usePaylaterQuery, useSettlePaylaterMutation } from '../features/paylater/queries';
 import { PageContainer } from '../components/ui/PageContainer';
+import { PageGuideLink } from '../components/ui/PageHeader';
 import {
   Calendar,
   ChevronLeft,
@@ -148,9 +149,12 @@ function PaylaterPage() {
       <PageContainer>
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)] mb-2">
-              Liability management
-            </p>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">
+                Liability management
+              </p>
+              <PageGuideLink />
+            </div>
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
               PayLater & <span className="text-[var(--ref-primary)] italic">Accruals</span>
             </h1>

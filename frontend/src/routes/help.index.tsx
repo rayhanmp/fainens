@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { ArrowRight, BookOpen, Search, Sparkles, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DOC_GROUPS, DOCS, docText, type DocPage } from '../features/help/docs';
+import { useHelpPersonal } from '../features/help/personal';
 
 export const Route = createFileRoute('/help/')({
   component: HelpHome,
@@ -19,6 +20,7 @@ function snippet(page: DocPage, terms: string[]): string {
 
 function HelpHome() {
   const [query, setQuery] = useState('');
+  const personal = useHelpPersonal();
   const terms = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query]);
   const results = useMemo(() => {
     if (terms.length === 0) return [];
@@ -41,7 +43,7 @@ function HelpHome() {
     <div className="space-y-12">
       <section className="rounded-3xl bg-[color-mix(in_srgb,var(--color-accent)_7%,var(--color-surface))] px-5 py-8 sm:px-8 sm:py-10">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Help centre</p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)] md:text-4xl">Fainens docs</h1>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)] md:text-4xl">{personal.name ? `Hi ${personal.name}, how can we help?` : 'How can we help?'}</h1>
         <p className="mt-2 max-w-xl text-[15px] text-[var(--ref-on-surface-variant)]">Guides for every part of Fainens, with worked examples, the rules behind your numbers, and what’s new.</p>
         <div className="relative mt-6 max-w-2xl">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--color-muted)]" aria-hidden />

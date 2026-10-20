@@ -89,6 +89,7 @@ import { useCalculatePaylaterScheduleMutation, usePaylaterQuery, useRecognizePay
 import { useAttachmentDownload, useAttachmentsQuery, useDeleteAttachmentMutation } from '../../features/attachments/queries';
 import { TagPicker, type TagRow } from './TagPicker';
 import { useDraftStore } from '../../stores/draft-store';
+import { usePracticeMode } from '../../features/help/practice';
 
 export type WalletAccount = {
   id: number;
@@ -194,6 +195,11 @@ const QUICK_ENTRY_PREFS_KEY = 'fainens-quick-entry';
 const SETTINGS_STORAGE_KEY = 'fainens-settings';
 
 type QuickEntryPreferences = { accountIds: number[]; categoryIds: number[] };
+
+/** Stand-ins for the draft store in practice mode: stable, so effects that depend on them don't rerun. */
+const ignoreDraftWrite = (key: string, value: string) => { void key; void value; };
+const ignoreDraftClear = (key: string) => { void key; };
+const readStoredDraft = (key: string, practice: boolean) => (practice ? undefined : useDraftStore.getState().drafts[key]?.value);
 
 function loadDefaultBankAccountId(): number | undefined {
   try {
@@ -368,8 +374,12 @@ export function TransactionModal({
   // resets share one source of truth. UI-only state (map pickers, previews,
   // loading indicators) intentionally remains local to this component.
   const { methods: simpleFormMethods, values: simpleForm, update: setSimpleForm } = useSimpleTransactionForm();
-  const setStoredDraft = useDraftStore((state) => state.setDraft);
-  const clearStoredDraft = useDraftStore((state) => state.clearDraft);
+  // In the help docs' practice mode the composer never reads or overwrites the real saved draft.
+  const practice = usePracticeMode();
+  const storeSetDraft = useDraftStore((state) => state.setDraft);
+  const storeClearDraft = useDraftStore((state) => state.clearDraft);
+  const setStoredDraft = practice ? ignoreDraftWrite : storeSetDraft;
+  const clearStoredDraft = practice ? ignoreDraftClear : storeClearDraft;
 
   useEffect(() => {
     if (!isOpen || editingTransaction || pendingTransaction || inputMode !== 'simple') return;
@@ -465,13 +475,13 @@ export function TransactionModal({
   useEffect(() => {
     if (!isOpen || editingTransaction || pendingTransaction || inputMode !== 'ai') return;
     if (!aiInput) {
-      const stored = useDraftStore.getState().drafts[AI_DRAFT_KEY]?.value;
+      const stored = readStoredDraft(AI_DRAFT_KEY, practice);
       if (stored) setAiInput(stored);
       return;
     }
     const timer = window.setTimeout(() => setStoredDraft(AI_DRAFT_KEY, aiInput), 350);
     return () => window.clearTimeout(timer);
-  }, [aiInput, editingTransaction, inputMode, isOpen, pendingTransaction, setStoredDraft]);
+  }, [aiInput, editingTransaction, inputMode, isOpen, pendingTransaction, practice, setStoredDraft]);
 
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -783,7 +793,7 @@ export function TransactionModal({
       setRouteTemplateEditorMode(null);
       const defaults = createSimpleFormDefaults();
       const preferences = loadQuickEntryPreferences();
-      const stored = useDraftStore.getState().drafts[SIMPLE_DRAFT_KEY]?.value;
+      const stored = readStoredDraft(SIMPLE_DRAFT_KEY, practice);
       let restored = defaults;
       if (stored) {
         try { restored = { ...defaults, ...JSON.parse(stored) } as typeof defaults; }
@@ -832,14 +842,14 @@ export function TransactionModal({
         ],
         categoryAllocations: [],
       };
-      const storedJournal = useDraftStore.getState().drafts[JOURNAL_DRAFT_KEY]?.value;
+      const storedJournal = readStoredDraft(JOURNAL_DRAFT_KEY, practice);
       if (storedJournal) {
         try { journalForm.reset({ ...journalDefaults, ...JSON.parse(storedJournal) } as JournalFormValues); }
         catch { journalForm.reset(journalDefaults); }
       } else journalForm.reset(journalDefaults);
     }
     setFormError('');
-  }, [isOpen, editingTransaction, initialPrefill, pendingTransaction]);
+  }, [isOpen, editingTransaction, initialPrefill, pendingTransaction, practice]);
 
   useEffect(() => {
     if (!isOpen || !editingTransaction || !attachmentsQuery.data) return;
@@ -2548,7 +2558,9 @@ export function TransactionModal({
       isOpen={isOpen}
       onClose={onClose}
       title={pendingTransaction ? 'Review pending item' : isDraftEdit ? 'Edit draft' : savesAsDraft ? 'Add draft' : inputMode === 'journal' ? 'Journal entry' : 'Add transaction'}
-      subtitle={inputMode === 'journal' ? 'Record balanced debit and credit lines.' : undefined}
+      subtitle={practice
+        ? <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-warning)]/14 px-2.5 py-0.5 text-xs font-semibold text-[var(--color-warning)]">Practice mode · nothing you do here is saved</span>
+        : inputMode === 'journal' ? 'Record balanced debit and credit lines.' : undefined}
       size="xl"
       // A form reads best around 44rem; the journal keeps the full width for its line grid.
       className={inputMode === 'journal' ? undefined : 'max-w-[44rem]'}

@@ -18,6 +18,7 @@ import { RequireAuth } from '../lib/auth';
 import { useCreateSubscriptionMutation, useDeleteSubscriptionMutation, useRunRenewalsMutation, useSubscriptionsQuery, useUpdateSubscriptionMutation } from '../features/subscriptions/queries';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { PageGuideLink } from '../components/ui/PageHeader';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -343,9 +344,12 @@ function SubscriptionsPage() {
 
         <header className="mb-12 flex flex-col justify-between gap-6 md:mb-16 md:flex-row md:items-end">
           <div>
-            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--ref-tertiary)]">
-              Total monthly commitment
-            </p>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--ref-tertiary)]">
+                Total monthly commitment
+              </p>
+              <PageGuideLink />
+            </div>
             <h1 className="font-headline text-5xl font-extrabold tracking-tighter text-[var(--ref-on-surface)] md:text-6xl lg:text-7xl">
               {formatAmount(totalMonthly)}
               <span className="ml-1 text-2xl font-medium text-[var(--ref-on-surface-variant)]">/mo</span>

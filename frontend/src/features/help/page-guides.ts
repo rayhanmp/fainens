@@ -1,0 +1,20 @@
+/** Which help page explains each app page, for the "Guide" link in page headers. */
+export const GUIDE_FOR_PATH: Record<string, { slug: string; title: string }> = {
+  '/transactions': { slug: 'recording', title: 'Recording transactions' },
+  '/accounts': { slug: 'accounts', title: 'Accounts and reconciling' },
+  '/budget': { slug: 'budgets', title: 'Budgets' },
+  '/periods': { slug: 'periods', title: 'Salary periods' },
+  '/salary-income': { slug: 'subscriptions-salary', title: 'Subscriptions and salary' },
+  '/subscriptions': { slug: 'subscriptions-salary', title: 'Subscriptions and salary' },
+  '/loans': { slug: 'loans', title: 'Loans and contacts' },
+  '/paylater': { slug: 'pay-later', title: 'Pay later' },
+  '/reimbursements': { slug: 'reimbursements', title: 'Reimbursements' },
+  '/wishlist': { slug: 'savings-wishlist', title: 'Savings and wishlist' },
+  '/savings-simulator': { slug: 'savings-wishlist', title: 'Savings and wishlist' },
+  '/agent': { slug: 'agent', title: 'Using Agent' },
+  '/backfill': { slug: 'importing', title: 'Importing transactions' },
+  '/audit-log': { slug: 'data-privacy', title: 'Backups, exports and privacy' },
+  '/gallery': { slug: 'data-privacy', title: 'Backups, exports and privacy' },
+  '/anomalies': { slug: 'troubleshooting', title: 'Troubleshooting' },
+  '/categories': { slug: 'recording', title: 'Recording transactions' },
+};

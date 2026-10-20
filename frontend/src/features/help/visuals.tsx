@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, Check, CheckCircle2, Clock, Inbox, Lock, Mail, RotateCcw, Sparkles } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatDayMonth } from '../../lib/utils';
+import { exampleAccounts, useHelpPersonal } from './personal';
 
 /**
  * Illustrations for the help docs, drawn with the app's own tokens so they look like Fainens.
@@ -59,6 +60,7 @@ function Chip({ children, className }: { children: ReactNode; className?: string
 /** One record feeding every view: transaction → ledger → balances, budget, reports. */
 export function LedgerFlow() {
   const { ref, step, replay } = useSequence(3, 700);
+  const { second } = exampleAccounts(useHelpPersonal());
   const outputs = ['Account balances', 'Budget progress', 'Reports & recaps'];
   return (
     <VisualFrame frameRef={ref} onReplay={replay} caption="You record a transaction once; every page reads it from the same ledger.">
@@ -71,7 +73,7 @@ export function LedgerFlow() {
         <ArrowRight className={cn('mx-auto h-5 w-5 text-[var(--color-accent)] max-sm:rotate-90', shown(step >= 1))} aria-hidden />
         <div className={cn('rounded-xl bg-[var(--color-accent)] p-3 text-white shadow-sm', shown(step >= 1))}>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-white/75">Ledger</p>
-          <p className="mt-1 text-xs leading-relaxed">Food & dining <span className="font-mono">+25.000</span><br />GoPay <span className="font-mono">−25.000</span></p>
+          <p className="mt-1 text-xs leading-relaxed">Expense <span className="font-mono">+25.000</span> <span className="text-white/70">· Food & dining</span><br />{second} <span className="font-mono">−25.000</span></p>
         </div>
         <ArrowRight className={cn('mx-auto h-5 w-5 text-[var(--color-accent)] max-sm:rotate-90', shown(step >= 2))} aria-hidden />
         <ul className="space-y-1.5">
@@ -89,11 +91,12 @@ export function LedgerFlow() {
 /** The composer turning shorthand into an entry: amount, suggested category, read-back. */
 export function ComposerDemo() {
   const { ref, step, replay } = useSequence(4, 900);
+  const { second } = exampleAccounts(useHelpPersonal());
   return (
     <VisualFrame frameRef={ref} onReplay={replay} caption="Type 25k and a name; Fainens fills in the rest for you to check.">
       <div className="mx-auto max-w-md rounded-2xl bg-[var(--color-surface)] p-4 shadow-sm ring-1 ring-[var(--color-border)]">
         <div className="grid grid-cols-4 gap-1 rounded-lg bg-[var(--ref-surface-container)] p-1 text-center text-[11px] font-semibold">
-          {['Expense', 'Income', 'Transfer', 'PayLater'].map((type, index) => <span key={type} className={cn('rounded-md py-1', index === 0 ? 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] shadow-sm' : 'text-[var(--ref-on-surface-variant)]')}>{type}</span>)}
+          {['Expense', 'Income', 'Transfer', 'Settle PayLater'].map((type, index) => <span key={type} className={cn('rounded-md py-1', index === 0 ? 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] shadow-sm' : 'text-[var(--ref-on-surface-variant)]')}>{type}</span>)}
         </div>
         <div className="mt-3 flex items-baseline justify-between rounded-lg border border-[var(--color-border)] px-3 py-2">
           <span className="text-xs text-[var(--ref-on-surface-variant)]">Amount</span>
@@ -104,7 +107,7 @@ export function ComposerDemo() {
           <span className="flex items-center gap-1.5 text-[var(--ref-on-surface)]"><Sparkles className="h-3.5 w-3.5 text-[var(--color-accent)]" aria-hidden />Looks like <strong>Food & dining</strong></span>
           <span className="font-semibold text-[var(--color-accent)]">Use it</span>
         </div>
-        <p className={cn('mt-3 rounded-lg bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]', shown(step >= 4))}>“You spent <strong className="text-[var(--ref-on-surface)]">Rp25.000</strong> on <strong className="text-[var(--ref-on-surface)]">Kopi susu</strong> (Food & dining) from <strong className="text-[var(--ref-on-surface)]">GoPay</strong> today.”</p>
+        <p className={cn('mt-3 rounded-lg bg-[var(--ref-surface-container-low)] px-3 py-2 text-xs leading-relaxed text-[var(--ref-on-surface-variant)]', shown(step >= 4))}>“You spent <strong className="text-[var(--ref-on-surface)]">Rp25.000</strong> on <strong className="text-[var(--ref-on-surface)]">Kopi susu</strong> (Food & dining) from <strong className="text-[var(--ref-on-surface)]">{second}</strong> today.”</p>
       </div>
     </VisualFrame>
   );
@@ -115,11 +118,12 @@ const rupiah = (value: number) => `Rp${value.toLocaleString('id-ID')}`;
 /** A transfer: money slides from one account to the other, and spending stays at zero. */
 export function TransferDemo() {
   const { ref, step, replay } = useSequence(2, 1100);
+  const { first, second } = exampleAccounts(useHelpPersonal());
   const moved = step >= 2;
   return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Both balances change; income, spending and budgets don’t.">
+    <VisualFrame frameRef={ref} onReplay={replay} caption="Both balances change; income, spending and budgets don’t. (Your account names, example amounts.)">
       <div className="relative grid grid-cols-2 gap-6 sm:gap-16">
-        {[{ name: 'BNI', before: 1_500_000, after: 1_400_000 }, { name: 'GoPay', before: 50_000, after: 150_000 }].map((account) => (
+        {[{ name: first, before: 1_500_000, after: 1_400_000 }, { name: second, before: 50_000, after: 150_000 }].map((account) => (
           <div key={account.name} className="rounded-xl bg-[var(--color-surface)] p-3 shadow-sm ring-1 ring-[var(--color-border)] sm:p-4">
             <p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">{account.name}</p>
             <p className="mt-1 font-mono text-base font-semibold tabular-nums text-[var(--ref-on-surface)] transition-colors sm:text-lg">{rupiah(moved ? account.after : account.before)}</p>
@@ -217,25 +221,33 @@ export function ImportFlowDemo() {
 
 /** A salary period on a calendar strip: from payday to the day before the next one. */
 export function PeriodTimeline() {
-  const days = [25, 26, 27, 28, 29, 30, 1, '…', 22, 23, 24, 25];
+  const personal = useHelpPersonal();
+  const payday = personal.salaryDay;
+  // A strip of days from one payday to the next, with the middle elided.
+  const start = personal.currentPeriod ? new Date(personal.currentPeriod.startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), Math.min(payday, 28));
+  const day = (offset: number) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset).getDate();
+  const end = personal.currentPeriod ? new Date(personal.currentPeriod.endDate) : new Date(start.getFullYear(), start.getMonth() + 1, start.getDate() - 1);
+  const endDay = (offset: number) => new Date(end.getFullYear(), end.getMonth(), end.getDate() + offset).getDate();
+  const days: Array<number | string> = [day(0), day(1), day(2), day(3), day(4), day(5), day(6), '…', endDay(-2), endDay(-1), endDay(0), endDay(1)];
+  const label = `${formatDayMonth(start.getTime())} – ${formatDayMonth(end.getTime())}`;
   return (
-    <VisualFrame caption="With salary day 25, each period runs 25th → 24th of the next month.">
+    <VisualFrame caption={personal.currentPeriod ? `Your current period: ${label}. Each period runs from payday to the day before the next.` : `With salary day ${payday}, each period runs from payday to the day before the next.`}>
       <div className="overflow-x-auto">
         <div className="mx-auto flex min-w-[30rem] max-w-2xl items-end gap-1">
-          {days.map((day, index) => {
-            const payday = day === 25;
+          {days.map((value, index) => {
+            const first = index === 0;
             const next = index === days.length - 1;
             return (
               <div key={index} className="flex-1 text-center">
-                {payday && <p className={cn('mb-1 text-[10px] font-bold uppercase tracking-wider', next ? 'text-[var(--ref-on-surface-variant)]' : 'text-[var(--color-accent)]')}>{next ? 'Next' : 'Payday'}</p>}
-                <div className={cn('grid h-10 place-items-center rounded-lg text-sm font-semibold tabular-nums', payday && !next ? 'bg-[var(--color-accent)] text-white' : next ? 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)] ring-1 ring-dashed ring-[var(--color-border-strong)]' : day === '…' ? 'text-[var(--color-muted)]' : 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] ring-1 ring-[var(--color-border)]')}>{day}</div>
+                {(first || next) && <p className={cn('mb-1 text-[10px] font-bold uppercase tracking-wider', next ? 'text-[var(--ref-on-surface-variant)]' : 'text-[var(--color-accent)]')}>{next ? 'Next' : 'Payday'}</p>}
+                <div className={cn('grid h-10 place-items-center rounded-lg text-sm font-semibold tabular-nums', first ? 'bg-[var(--color-accent)] text-white' : next ? 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)] ring-1 ring-dashed ring-[var(--color-border-strong)]' : value === '…' ? 'text-[var(--color-muted)]' : 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] ring-1 ring-[var(--color-border)]')}>{value}</div>
               </div>
             );
           })}
         </div>
         <div className="mx-auto mt-2 flex min-w-[30rem] max-w-2xl items-center gap-2 pr-[8.5%]">
           <span className="h-px flex-1 bg-[var(--color-accent)]" />
-          <span className="rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-accent)]">One period: 25 Sep – 24 Oct</span>
+          <span className="rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-accent)]">{personal.currentPeriod ? 'This period' : 'One period'}: {label}</span>
           <span className="h-px flex-1 bg-[var(--color-accent)]" />
         </div>
       </div>
@@ -294,12 +306,14 @@ export function ClosedPeriodDemo() {
 /** Pay later: one purchase becomes monthly installments with due dates. */
 export function InstallmentDemo() {
   const { ref, step, replay } = useSequence(3, 500);
-  const months = ['10 Nov', '10 Dec', '10 Jan'];
+  const { payLater } = exampleAccounts(useHelpPersonal());
+  const today = new Date();
+  const months = [1, 2, 3].map((offset) => formatDayMonth(new Date(today.getFullYear(), today.getMonth() + offset, 10).getTime()));
   return (
     <VisualFrame frameRef={ref} onReplay={replay} caption="A Rp600.000 purchase over 3 months, with no interest or fee.">
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 sm:flex-row">
         <div className="w-full rounded-xl bg-[var(--color-surface)] p-3 text-center shadow-sm ring-1 ring-[var(--color-border)] sm:w-44">
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">Headphones · Kredivo</p>
+          <p className="truncate text-xs text-[var(--ref-on-surface-variant)]">Headphones · {payLater}</p>
           <p className="font-mono text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">Rp600.000</p>
         </div>
         <ArrowRight className="h-5 w-5 shrink-0 text-[var(--color-accent)] max-sm:rotate-90" aria-hidden />
@@ -374,17 +388,18 @@ export function ClaimPipelineDemo() {
 /** Agent drafting an expense card that waits for your approval. */
 export function AgentProposalDemo() {
   const { ref, step, replay } = useSequence(3, 1000);
+  const { first } = exampleAccounts(useHelpPersonal());
   return (
     <VisualFrame frameRef={ref} onReplay={replay} caption="Agent drafts; nothing posts until you press Confirm.">
       <div className="mx-auto max-w-md space-y-3">
-        <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-[var(--color-accent)] px-3.5 py-2 text-sm text-white">Lunch 45k at the warteg, paid with BCA</p>
+        <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-[var(--color-accent)] px-3.5 py-2 text-sm text-white">Lunch 45k at the warteg, paid with {first}</p>
         <div className={cn('max-w-[92%] rounded-2xl rounded-bl-md bg-[var(--color-surface)] p-3.5 shadow-sm ring-1 ring-[var(--color-border)]', shown(step >= 1))}>
           <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--ref-on-surface-variant)]"><Sparkles className="h-3.5 w-3.5 text-[var(--color-accent)]" aria-hidden />Ready to post</p>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-sm font-semibold text-[var(--ref-on-surface)]">Lunch at warteg</span>
             <span className="font-mono text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]">Rp45.000</span>
           </div>
-          <p className="text-xs text-[var(--ref-on-surface-variant)]">Expense · Food & dining · BCA · Today</p>
+          <p className="text-xs text-[var(--ref-on-surface-variant)]">Expense · Food & dining · {first} · Today</p>
           {step >= 3 ? (
             <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--color-success)]/12 px-2.5 py-1.5 text-xs font-semibold text-[var(--color-success)]"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />Posted to your ledger</p>
           ) : (
@@ -397,6 +412,29 @@ export function AgentProposalDemo() {
         </div>
       </div>
     </VisualFrame>
+  );
+}
+
+/** Where the reader is with the quick start, from their own data. */
+export function YourSetup() {
+  const personal = useHelpPersonal();
+  if (!personal.ready) return null;
+  const items = [
+    { done: personal.accountCount > 0, label: personal.accountCount > 0 ? `${personal.accountCount} ${personal.accountCount === 1 ? 'account' : 'accounts'} added` : 'No accounts yet' },
+    { done: personal.periodCount > 0, label: personal.currentPeriod ? `Current period: ${formatDayMonth(personal.currentPeriod.startDate)} – ${formatDayMonth(personal.currentPeriod.endDate)}` : personal.periodCount > 0 ? 'Periods set up, but none covers today' : 'No salary period yet' },
+  ];
+  return (
+    <div className="not-prose my-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">Your setup so far</p>
+      <ul className="mt-2 space-y-1.5">
+        {items.map((item) => (
+          <li key={item.label} className="flex items-center gap-2 text-sm text-[var(--ref-on-surface)]">
+            <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full', item.done ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)]')}>{item.done ? <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> : <Clock className="h-3 w-3" aria-hidden />}</span>
+            {item.label}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

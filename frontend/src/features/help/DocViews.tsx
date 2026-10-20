@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Info, Lightbulb, Minus, X } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Info, Layers, Lightbulb, Minus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { CAN_I, CHANGELOG, GLOSSARY, LIMITS, SHORTCUTS, type CanIAnswer } from './content';
-import { DOC_GROUPS, DOCS, type DocBlock, type DocPage } from './docs';
+import { DOC_GROUPS, DOCS, type DocBlock, type DocPage, type LedgerEntry } from './docs';
+import { exampleAccounts, useHelpPersonal } from './personal';
 
 /** The docs' left rail: every page, grouped, with the open one highlighted like the app sidebar. */
 export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {
@@ -31,6 +32,54 @@ export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {
       ))}
     </nav>
   );
+}
+
+/** Words that link to their glossary meaning, with the forms they appear in. Longer phrases first. */
+const GLOSSARY_FORMS: Array<[RegExp, string]> = [
+  [/^closed periods?$/i, 'Closed period'],
+  [/^balance adjustments?$/i, 'Balance adjustment'],
+  [/^pending items?$/i, 'Pending item'],
+  [/^net worth$/i, 'Net worth'],
+  [/^cash runway$/i, 'Cash runway'],
+  [/^opportunity cost$/i, 'Opportunity cost'],
+  [/^budget variance$/i, 'Budget variance'],
+  [/^audit log$/i, 'Audit log'],
+  [/^ledger$/i, 'Ledger'],
+  [/^reconcil(e|es|ed|ing|iation)$/i, 'Reconcile'],
+  [/^drafts?$/i, 'Draft'],
+  [/^corrections?$/i, 'Correction'],
+];
+const GLOSSARY_PATTERN = /\b(closed periods?|balance adjustments?|pending items?|net worth|cash runway|opportunity cost|budget variance|audit log|ledger|reconcil(?:e|es|ed|ing|iation)|drafts?|corrections?)\b/gi;
+const GLOSSARY_MEANING = new Map(GLOSSARY.map(([term, meaning]) => [term, meaning]));
+
+/** A glossary word in running text: dotted underline, meaning on hover, focus or tap. */
+function Term({ text, meaning }: { text: string; meaning: string }) {
+  return (
+    <span tabIndex={0} className="group/term relative cursor-help rounded-sm underline decoration-[var(--color-muted)] decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40">
+      {text}
+      <span role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline opacity-0 shadow-lg transition-opacity duration-150 group-hover/term:opacity-100 group-focus/term:opacity-100">
+        {meaning}
+      </span>
+    </span>
+  );
+}
+
+/** Underlines the first appearance of each glossary word on the page; `used` is shared across the page's blocks. */
+function withGlossary(text: string, used: Set<string>): ReactNode {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(GLOSSARY_PATTERN)) {
+    const word = match[0];
+    const term = GLOSSARY_FORMS.find(([pattern]) => pattern.test(word))?.[1];
+    const meaning = term ? GLOSSARY_MEANING.get(term) : undefined;
+    if (!term || !meaning || used.has(term)) continue;
+    used.add(term);
+    parts.push(text.slice(last, match.index), <Term key={match.index} text={word} meaning={meaning} />);
+    last = (match.index ?? 0) + word.length;
+  }
+  if (parts.length === 0) return text;
+  parts.push(text.slice(last));
+  return parts;
 }
 
 const CALLOUT = {
@@ -79,6 +128,69 @@ function ChangelogTimeline() {
   );
 }
 
+/** "What Fainens records": the real ledger lines behind an action, for readers who want the detail. */
+function UnderTheHood({ entries }: { entries: LedgerEntry[] }) {
+  const { first, second, payLater } = exampleAccounts(useHelpPersonal());
+  const named = (text: string) => text.replaceAll('{cash}', first).replaceAll('{cash2}', second).replaceAll('{paylater}', payLater);
+  return (
+    <details className="group/hood mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ref-primary)]/40 [&::-webkit-details-marker]:hidden">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)]"><Layers className="h-4 w-4" aria-hidden /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-[var(--ref-on-surface)]">Under the hood: what Fainens records</span>
+          <span className="block text-xs text-[var(--ref-on-surface-variant)]">The exact ledger lines, for when you want to know why a number is what it is</span>
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-muted)] transition-transform group-open/hood:rotate-180" aria-hidden />
+      </summary>
+      <div className="space-y-6 border-t border-[var(--color-border)] px-4 py-4">
+        <p className="text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">Every entry has two sides that add up. <strong className="text-[var(--ref-on-surface)]">Debit</strong> is money arriving in an account, or a cost being counted. <strong className="text-[var(--ref-on-surface)]">Credit</strong> is money leaving an account, or income or debt being counted. Categories label spending; they aren’t accounts, so spending is recorded in one built-in account, <em>Expense (Auto)</em>, with the category attached.</p>
+        {entries.map((entry) => (
+          <div key={entry.title}>
+            <p className="text-sm font-semibold text-[var(--ref-on-surface)]">{named(entry.title)}</p>
+            {entry.lines.length === 0 ? (
+              <p className="mt-2 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--ref-on-surface-variant)]">No ledger lines</p>
+            ) : (
+            <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--color-border)]">
+              <table className="w-full min-w-[22rem] text-left text-sm">
+                <thead className="bg-[var(--ref-surface-container-low)] text-[11px] uppercase tracking-wider text-[var(--ref-on-surface-variant)]">
+                  <tr><th className="px-3 py-2 font-semibold">Account</th><th className="w-28 px-3 py-2 text-right font-semibold">Debit</th><th className="w-28 px-3 py-2 text-right font-semibold">Credit</th></tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {entry.lines.map((line, index) => (
+                    <tr key={index}>
+                      <td className="px-3 py-2 text-[var(--ref-on-surface)]">{named(line.account)}{line.note && <span className="block text-xs text-[var(--ref-on-surface-variant)]">{named(line.note)}</span>}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-[var(--ref-on-surface)]">{line.debit ?? ''}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-[var(--ref-on-surface)]">{line.credit ?? ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            )}
+            <p className="mt-2 text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">{named(entry.explain)}</p>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** Limits, with where the reader stands next to the ones Fainens can count for them. */
+function LimitsTable() {
+  const personal = useHelpPersonal();
+  const yours: Record<string, string> = personal.ready ? { 'Agent memories': `You have ${personal.memoryCount}` } : {};
+  return (
+    <dl className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
+      {LIMITS.map(([limit, value]) => (
+        <div key={limit} className="flex items-baseline justify-between gap-4 py-3">
+          <dt className="text-sm font-medium text-[var(--ref-on-surface)]">{limit}</dt>
+          <dd className="text-right text-sm text-[var(--ref-on-surface-variant)]">{value}{yours[limit] && <span className="mt-0.5 block text-xs font-semibold text-[var(--color-accent)]">{yours[limit]}</span>}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function SpecialBlock({ name }: { name: Extract<DocBlock, { type: 'special' }>['name'] }) {
   if (name === 'can-i') {
     return (
@@ -95,13 +207,7 @@ function SpecialBlock({ name }: { name: Extract<DocBlock, { type: 'special' }>['
       </div>
     );
   }
-  if (name === 'limits') {
-    return (
-      <dl className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
-        {LIMITS.map(([limit, value]) => <div key={limit} className="flex items-baseline justify-between gap-4 py-3"><dt className="text-sm font-medium text-[var(--ref-on-surface)]">{limit}</dt><dd className="text-right text-sm text-[var(--ref-on-surface-variant)]">{value}</dd></div>)}
-      </dl>
-    );
-  }
+  if (name === 'limits') return <LimitsTable />;
   if (name === 'shortcuts') {
     return (
       <div className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
@@ -124,10 +230,10 @@ function SpecialBlock({ name }: { name: Extract<DocBlock, { type: 'special' }>['
   return <ChangelogTimeline />;
 }
 
-function BlockView({ block }: { block: DocBlock }) {
+function BlockView({ block, used }: { block: DocBlock; used: Set<string> }) {
   switch (block.type) {
     case 'p':
-      return <p className="mt-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]">{block.text}</p>;
+      return <p className="mt-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]">{withGlossary(block.text, used)}</p>;
     case 'h2':
       return <h2 id={block.id} className="mt-10 scroll-mt-6 font-headline text-xl font-bold tracking-tight text-[var(--ref-on-surface)]">{block.text}</h2>;
     case 'steps':
@@ -136,7 +242,7 @@ function BlockView({ block }: { block: DocBlock }) {
           {block.items.map((step, index) => (
             <li key={step} className="flex gap-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]">
               <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-xs font-bold tabular-nums text-[var(--color-accent)]">{index + 1}</span>
-              <span>{step}</span>
+              <span>{withGlossary(step, used)}</span>
             </li>
           ))}
         </ol>
@@ -144,7 +250,7 @@ function BlockView({ block }: { block: DocBlock }) {
     case 'list':
       return (
         <ul className="mt-3 space-y-2">
-          {block.items.map((item) => <li key={item} className="flex gap-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-hidden /><span>{item}</span></li>)}
+          {block.items.map((item) => <li key={item} className="flex gap-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-hidden /><span>{withGlossary(item, used)}</span></li>)}
         </ul>
       );
     case 'callout': {
@@ -177,6 +283,8 @@ function BlockView({ block }: { block: DocBlock }) {
       return <Link to={block.link.to} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-3 py-1.5 text-sm font-semibold text-[var(--color-accent)] transition-colors hover:bg-[color-mix(in_srgb,var(--color-accent)_16%,transparent)]">{block.link.label}<ArrowRight className="h-4 w-4" aria-hidden /></Link>;
     case 'special':
       return <div className="mt-6"><SpecialBlock name={block.name} /></div>;
+    case 'under-hood':
+      return <UnderTheHood entries={block.entries} />;
   }
 }
 
@@ -204,7 +312,8 @@ export function DocArticle({ page }: { page: DocPage }) {
         </nav>
       )}
 
-      <div className="mt-2">{page.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} />)}</div>
+      {/* A fresh set each render, so every page underlines each glossary word once, in reading order. */}
+      <div className="mt-2">{(() => { const used = new Set<string>(); return page.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} used={used} />); })()}</div>
 
       {related.length > 0 && (
         <section className="mt-12">
