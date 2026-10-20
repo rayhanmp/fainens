@@ -244,6 +244,16 @@ export function SubscriptionDetail({ subscription, overdue, accounts, accountNam
 
   // What can be done to the subscription itself, each with what it means, as Settings lays out a row.
   const busy = update.isPending || archive.isPending;
+  const cancelPaused = async () => {
+    const ok = await confirm({
+      title: `Cancel ${subscription.name}?`,
+      message: `It ends as of its pause: ${formatDate(dayBeforeNext)} is its last day, so no renewals are due. Its payments stay in the history, and you can reactivate it later.`,
+      confirmLabel: 'Cancel subscription',
+      variant: 'danger',
+    });
+    if (ok) void patch({ status: 'cancelled', endsAt: dayBeforeNext }, `${subscription.name} cancelled.`);
+  };
+
   const manage: Array<{ key: string; label: string; detail: string; action: string; run: () => void; danger?: boolean }> = [];
   if (subscription.status === 'active') {
     manage.push({ key: 'pause', label: 'Pause', detail: 'No renewals are due until you resume it.', action: 'Pause', run: () => void patch({ status: 'paused' }, `${subscription.name} paused. No renewals are due while it's paused.`) });
@@ -256,6 +266,10 @@ export function SubscriptionDetail({ subscription, overdue, accounts, accountNam
       action: subscription.status === 'paused' ? 'Resume…' : subscription.status === 'archived' ? 'Restore…' : 'Reactivate…',
       run: () => setDialog('resume'),
     });
+  }
+  if (subscription.status === 'paused') {
+    // Renewals stopped at the pause, so it ends there; a later last day would make the paused months due.
+    manage.push({ key: 'cancel', label: 'Cancel', detail: `End it as of its pause; nothing after ${formatDate(dayBeforeNext)} is due.`, action: 'Cancel…', run: () => void cancelPaused() });
   }
   if (subscription.status !== 'archived') {
     manage.push({ key: 'archive', label: 'Archive', detail: 'Hide it from lists and totals. Its payments stay in the ledger.', action: 'Archive', run: () => void archiveIt(), danger: true });
