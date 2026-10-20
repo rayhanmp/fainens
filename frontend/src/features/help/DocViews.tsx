@@ -93,9 +93,9 @@ function Term({ text, meaning }: { text: string; meaning: string }) {
   return (
     <span tabIndex={0} onMouseEnter={(event) => place(event.currentTarget)} onFocus={(event) => place(event.currentTarget)} className="group/term relative cursor-help rounded-sm underline decoration-[var(--color-muted)] decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40">
       {text}
-      {/* Hidden (invisible, not just transparent) until hovered or focused. animate-none!: the app's
-          tooltip pop-in animation would otherwise hold this at full opacity. */}
-      <span role="tooltip" className={cn('animate-none! pointer-events-none absolute bottom-full z-30', alignRight ? 'right-0' : 'left-0', ' mb-2 w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline invisible opacity-0 shadow-lg transition-[opacity,visibility] duration-150 group-hover/term:visible group-hover/term:opacity-100 group-focus/term:visible group-focus/term:opacity-100')}>
+      {/* Not rendered until hovered or focused, so it never widens the page; showing it plays the
+          app's usual tooltip pop-in. */}
+      <span role="tooltip" className={cn('pointer-events-none absolute bottom-full z-30 mb-2 hidden w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline shadow-lg group-hover/term:block group-focus/term:block', alignRight ? 'right-0' : 'left-0')}>
         {meaning}
       </span>
     </span>
@@ -325,7 +325,7 @@ function BlockView({ block, at, annotate }: { block: DocBlock; at: number; annot
         <div className="mt-4 overflow-hidden rounded-xl border border-[var(--color-border)]">
           <table className="w-full text-left text-sm">
             <thead className="bg-[var(--ref-surface-container-low)] text-xs uppercase tracking-wider text-[var(--ref-on-surface-variant)]"><tr>{block.head.map((cell) => <th key={cell} className="px-4 py-2.5 font-semibold">{cell}</th>)}</tr></thead>
-            <tbody className="divide-y divide-[var(--color-border)]">{block.rows.map(([a, b]) => <tr key={a}><td className="px-4 py-2.5 font-medium text-[var(--ref-on-surface)]">{a}</td><td className="px-4 py-2.5 text-[var(--ref-on-surface-variant)]">{b}</td></tr>)}</tbody>
+            <tbody className="divide-y divide-[var(--color-border)]">{block.rows.map(([a, b]) => <tr key={a}><td className="px-4 py-2.5 font-medium text-[var(--ref-on-surface)]">{a}</td><td className="px-4 py-2.5 text-[var(--ref-on-surface-variant)] [overflow-wrap:anywhere]">{b}</td></tr>)}</tbody>
           </table>
         </div>
       );

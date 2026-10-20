@@ -519,3 +519,41 @@ export function HiddenBalanceDemo() {
     </VisualFrame>
   );
 }
+
+/** How the running pieces fit together, left (your device) to right (outside services). */
+export function ArchitectureDiagram() {
+  const columns: Array<{ label: string; boxes: Array<{ title: string; body: string; tone?: 'accent' | 'data' | 'external' }> }> = [
+    { label: 'Your device', boxes: [{ title: 'Fainens web app', body: 'React, TanStack Router and Query' }, { title: 'Service worker', body: 'Caches the app shell; never API data' }] },
+    { label: 'Web server', boxes: [{ title: 'nginx', body: 'Serves the built app, forwards /api' }] },
+    { label: 'Application', boxes: [{ title: 'API server', body: 'Fastify, port 3000', tone: 'accent' }, { title: 'Worker', body: 'BullMQ jobs on a schedule', tone: 'accent' }] },
+    { label: 'Data', boxes: [{ title: 'SQLite', body: 'The ledger and everything else; source of truth', tone: 'data' }, { title: 'Redis', body: 'Job queues, cache, rate limits', tone: 'data' }] },
+    { label: 'Outside services', boxes: [{ title: 'Google', body: 'Sign-in and Gmail (read-only)', tone: 'external' }, { title: 'Cloudflare R2', body: 'Attachments and database backups', tone: 'external' }, { title: 'OpenRouter', body: 'Language models for Agent', tone: 'external' }] },
+  ];
+  const tone = {
+    accent: 'bg-[var(--color-accent)] text-white ring-transparent',
+    data: 'bg-[var(--color-surface)] ring-[var(--color-accent)]/40',
+    external: 'bg-[var(--color-surface)]/60 ring-dashed ring-[var(--color-border-strong)]',
+  };
+  return (
+    <VisualFrame caption="Everything except the outside services runs as containers on one server. SQLite holds the data; Redis can go down without losing any.">
+      <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr]">
+        {columns.map((column, index) => (
+          <div key={column.label} className="contents">
+            {index > 0 && <ArrowRight className="mx-auto h-5 w-5 text-[var(--color-accent)] max-lg:rotate-90" aria-hidden />}
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">{column.label}</p>
+              <div className="space-y-2">
+                {column.boxes.map((box) => (
+                  <div key={box.title} className={cn('rounded-xl p-3 shadow-sm ring-1', box.tone ? tone[box.tone] : 'bg-[var(--color-surface)] ring-[var(--color-border)]')}>
+                    <p className={cn('text-sm font-semibold', box.tone === 'accent' ? 'text-white' : 'text-[var(--ref-on-surface)]')}>{box.title}</p>
+                    <p className={cn('mt-0.5 text-xs leading-snug', box.tone === 'accent' ? 'text-white/80' : 'text-[var(--ref-on-surface-variant)]')}>{box.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </VisualFrame>
+  );
+}
