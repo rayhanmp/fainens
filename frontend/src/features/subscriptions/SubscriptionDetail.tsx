@@ -2,11 +2,8 @@ import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import { Dropdown } from '../settings/controls';
-import { Archive, CalendarX, Pause } from 'lucide-react';
-import type { SheetAction } from '../../components/ui/ActionSheet';
+import { Dropdown, SettingsRow } from '../settings/controls';
 import { PaymentHistory, type DatedHistoryEntry } from './PaymentHistory';
-import { MoreActions } from './PageParts';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn, formatDate, parseIdNominalToInt } from '../../lib/utils';
 import { cycleLabel, cycleSuffix, daysFromToday, displayStatus, formatForeign, fromDateInput, nextRenewal, relativeDue, renews, STATUS_LABELS, toDateInput, type DisplayStatus } from './schedule';
@@ -17,6 +14,7 @@ import {
   useUnlinkOccurrenceMutation,
   useUpdateSubscriptionMutation,
   useVoidOccurrenceMutation,
+  type RenewalOccurrence,
   type Subscription,
 } from './queries';
 import type { PaymentAccount } from './accounts';
@@ -151,17 +149,21 @@ function FixDialog({ subscription, entry, kind, accounts, onClose, onDone }: {
 }
 
 /** One subscription: what it costs, how it renews, what it has actually charged, and its lifecycle. */
-export function SubscriptionDetail({ subscription, overdueIds, accounts, accountNames, categories, onClose, onEdit, onPay, onMessage }: {
+export function SubscriptionDetail({ subscription, overdue, accounts, accountNames, categories, onClose, onEdit, onRecord, onSkip, onMessage }: {
   subscription: Subscription;
-  overdueIds: ReadonlySet<number>;
+  /** Every past-due renewal; this subscription's are picked out here. */
+  overdue: RenewalOccurrence[];
   accounts: PaymentAccount[];
   accountNames: Map<number, string>;
   categories: Array<{ id: number; name: string }>;
   onClose: () => void;
   onEdit: () => void;
-  onPay: () => void;
+  onRecord: (dueAt: number) => void;
+  onSkip: (occurrence: RenewalOccurrence) => void;
   onMessage: (message: string, tone?: 'success' | 'error') => void;
 }) {
+  const late = overdue.filter((item) => item.subscriptionId === subscription.id).sort((a, b) => a.dueAt - b.dueAt);
+  const overdueIds = new Set(overdue.map((item) => item.subscriptionId));
   const { formatAmount } = useBalanceVisibility();
   const { confirm } = useConfirm();
   const history = useSubscriptionHistoryQuery(subscription.id);
@@ -222,29 +224,38 @@ export function SubscriptionDetail({ subscription, overdueIds, accounts, account
   const dayBeforeNext = (() => { const d = new Date(subscription.nextRenewalAt); d.setDate(d.getDate() - 1); return d.getTime(); })();
   const cancelDefault = daysFromToday(dayBeforeNext) >= 0 ? toDateInput(dayBeforeNext) : today;
 
-  const lifecycle: SheetAction[] = [];
+  // What can be done to the subscription itself, each with what it means, as Settings lays out a row.
+  const busy = update.isPending || archive.isPending;
+  const manage: Array<{ key: string; label: string; detail: string; action: string; run: () => void; danger?: boolean }> = [];
   if (subscription.status === 'active') {
-    lifecycle.push({ key: 'pause', label: 'Pause', icon: Pause, onSelect: () => void patch({ status: 'paused' }, `${subscription.name} paused. No renewals are due while it's paused.`) });
-    lifecycle.push({ key: 'cancel', label: 'Cancel subscription', icon: CalendarX, onSelect: () => setDialog('cancel') });
+    manage.push({ key: 'pause', label: 'Pause', detail: 'No renewals are due until you resume it.', action: 'Pause', run: () => void patch({ status: 'paused' }, `${subscription.name} paused. No renewals are due while it's paused.`) });
+    manage.push({ key: 'cancel', label: 'Cancel', detail: 'Pick its last day; nothing after it is due.', action: 'Cancel…', run: () => setDialog('cancel') });
+  } else {
+    manage.push({
+      key: 'resume',
+      label: subscription.status === 'paused' ? 'Resume' : subscription.status === 'archived' ? 'Restore' : 'Reactivate',
+      detail: 'Pick the next payment date and it renews again.',
+      action: subscription.status === 'paused' ? 'Resume…' : subscription.status === 'archived' ? 'Restore…' : 'Reactivate…',
+      run: () => setDialog('resume'),
+    });
   }
-  if (subscription.status !== 'archived') lifecycle.push({ key: 'archive', label: 'Archive', icon: Archive, tone: 'danger', onSelect: () => void archiveIt() });
-  // Paused, cancelled and archived subscriptions come back with one plain button.
-  const resumeLabel = subscription.status === 'paused' ? 'Resume' : subscription.status === 'archived' ? 'Restore' : subscription.status === 'cancelled' ? 'Reactivate' : null;
+  if (subscription.status !== 'archived') {
+    manage.push({ key: 'archive', label: 'Archive', detail: 'Hide it from lists and totals. Its payments stay in the ledger.', action: 'Archive', run: () => void archiveIt(), danger: true });
+  }
 
   const accountName = accountNames.get(subscription.linkedAccountId) ?? subscription.linkedAccountName;
-  const summary = status === 'paused' ? 'Paused'
-    : status === 'archived' ? 'Archived'
-    : status === 'ended' ? `Ended${subscription.endsAt ? ` ${formatDate(subscription.endsAt)}` : ''}`
-    : status === 'overdue' ? 'A renewal is waiting for review'
-    : `Next ${formatDate(subscription.nextRenewalAt)}, ${relativeDue(subscription.nextRenewalAt)}`;
+  const renewing = renews(subscription);
   const facts: Array<[string, string]> = [
-    ['Repeats', cycleLabel(subscription)],
-    ['Paid from', `${accountName}${subscription.paymentMode === 'manual' ? ', manually' : ''}`],
+    ['Paid from', accountName],
+    ['How it’s paid', subscription.paymentMode === 'manual' ? 'By hand each time' : 'Charged automatically'],
     ['Category', category?.name ?? 'None'],
-    ['Per year', formatAmount(subscription.monthlyEquivalent * 12)],
+    ['Repeats', cycleLabel(subscription)],
+    ...(subscription.currency && subscription.foreignAmount != null ? [['Billed in', `${formatForeign(subscription.foreignAmount, subscription.currency)} (estimate above)`] as [string, string]] : []),
     ...(subscription.trialEndsAt != null ? [['Free trial ends', formatDate(subscription.trialEndsAt)] as [string, string]] : []),
-    ...(subscription.endsAt != null && status !== 'ended' ? [['Last day', formatDate(subscription.endsAt)] as [string, string]] : []),
+    ...(subscription.endsAt != null ? [[status === 'ended' ? 'Ended' : 'Last day', formatDate(subscription.endsAt)] as [string, string]] : []),
   ];
+  const nextLabel = status === 'paused' ? 'Paused' : status === 'archived' ? 'Archived' : !renewing ? 'Ended' : formatDate(subscription.nextRenewalAt);
+  const nextDetail = renewing && status !== 'paused' && status !== 'archived' ? relativeDue(subscription.nextRenewalAt) : status === 'paused' ? 'Resume it to renew' : '';
 
   return (
     <>
@@ -252,42 +263,85 @@ export function SubscriptionDetail({ subscription, overdueIds, accounts, account
         isOpen
         onClose={onClose}
         title={subscription.name}
+        size="xl"
+        showCloseLabel={false}
+        className="max-w-[min(640px,94vw)]"
         footer={
-          <div className="flex items-center justify-between gap-2">
-            {lifecycle.length > 0 ? <MoreActions title={subscription.name} actions={lifecycle} disabled={update.isPending || archive.isPending} /> : <span />}
-            <div className="flex gap-2">
-              <Button type="button" size="sm" variant="secondary" onClick={onEdit}>Edit</Button>
-              {resumeLabel && <Button type="button" size="sm" onClick={() => setDialog('resume')}>{resumeLabel}</Button>}
-              {canPay && <Button type="button" size="sm" onClick={onPay}>Record payment</Button>}
-            </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" size="sm" variant="secondary" onClick={onEdit}>Edit</Button>
+            {canPay && <Button type="button" size="sm" onClick={() => onRecord(subscription.nextRenewalAt)}>{subscription.paymentMode === 'manual' ? 'Pay now' : 'Record payment'}</Button>}
           </div>
         }
       >
-        <div className="space-y-5">
-          <div>
-            <p className="text-lg font-semibold tabular-nums text-[var(--ref-on-surface)]">
-              {formatAmount(subscription.amount)}<span className="text-sm font-normal text-[var(--ref-on-surface-variant)]">{cycleSuffix(subscription)}</span>
-              {subscription.currency && subscription.foreignAmount != null && <span className="ml-2 text-sm font-normal text-[var(--ref-on-surface-variant)]">{formatForeign(subscription.foreignAmount, subscription.currency)}</span>}
-            </p>
-            <p className={cn('text-sm', status === 'overdue' ? 'text-[var(--color-danger)]' : 'text-[var(--ref-on-surface-variant)]')}>{summary}</p>
+        <div className="space-y-6">
+          {/* What it costs, and when it next charges. */}
+          <div className="grid grid-cols-2 overflow-hidden rounded-2xl bg-[var(--ref-surface-container-low)]">
+            <div className="min-w-0 p-4 sm:p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">Costs</p>
+              <p className="mt-1 truncate text-xl font-bold tabular-nums text-[var(--ref-on-surface)] sm:text-2xl">
+                {formatAmount(subscription.amount)}<span className="ml-1 text-sm font-medium text-[var(--ref-on-surface-variant)]">{cycleSuffix(subscription)}</span>
+              </p>
+              <p className="mt-0.5 truncate text-xs text-[var(--ref-on-surface-variant)]">About {formatAmount(Math.round((subscription.monthlyEquivalent * 12) / 1000) * 1000)} a year</p>
+            </div>
+            <div className="min-w-0 border-l border-[var(--color-border)]/70 p-4 sm:p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{late.length > 0 ? 'Past due' : 'Next payment'}</p>
+              <p className={cn('mt-1 truncate text-xl font-bold tabular-nums sm:text-2xl', late.length > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--ref-on-surface)]')}>{late.length > 0 ? formatDate(late[0].dueAt) : nextLabel}</p>
+              <p className="mt-0.5 truncate text-xs text-[var(--ref-on-surface-variant)]">{late.length > 0 ? relativeDue(late[0].dueAt) : nextDetail}{status === 'trial' && subscription.trialEndsAt ? ` · trial ends ${formatDate(subscription.trialEndsAt)}` : ''}</p>
+            </div>
           </div>
 
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+          {late.length > 0 && (
+            <div className="space-y-2">
+              {late.map((item, index) => (
+                <div key={item.dueAt} className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[var(--ref-on-surface)]">The {formatDate(item.dueAt)} renewal isn’t recorded</p>
+                    <p className="text-xs text-[var(--ref-on-surface-variant)]">{relativeDue(item.dueAt)} · {formatAmount(item.amount)} expected from {accountName}</p>
+                  </div>
+                  {index === 0 ? (
+                    <div className="grid grid-cols-2 gap-2 sm:flex">
+                      <Button type="button" size="sm" variant="secondary" onClick={() => onSkip(item)}>Skip</Button>
+                      <Button type="button" size="sm" onClick={() => onRecord(item.dueAt)}>Record payment</Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[var(--ref-on-surface-variant)]">After the one above</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
             {facts.map(([label, value]) => (
               <div key={label} className="min-w-0">
-                <dt className="text-xs text-[var(--ref-on-surface-variant)]">{label}</dt>
-                <dd className="truncate text-sm text-[var(--ref-on-surface)]">{value}</dd>
+                <dt className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{label}</dt>
+                <dd className="mt-0.5 truncate text-sm text-[var(--ref-on-surface)]">{value}</dd>
               </div>
             ))}
           </dl>
-          {subscription.notes && <p className="whitespace-pre-wrap text-sm text-[var(--ref-on-surface-variant)]">{subscription.notes}</p>}
+          {subscription.notes && <p className="whitespace-pre-wrap rounded-xl bg-[var(--ref-surface-container-low)] px-4 py-3 text-sm text-[var(--ref-on-surface-variant)]">{subscription.notes}</p>}
 
-          <section className="border-t border-[var(--color-border)] pt-4">
+          <section>
             <div className="mb-1 flex items-baseline justify-between gap-3">
               <h3 className="text-sm font-semibold text-[var(--ref-on-surface)]">Payments</h3>
-              {history.data && history.data.paidCount > 0 && <p className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatAmount(history.data.totalPaid)} in total</p>}
+              {history.data && history.data.paidCount > 0 && <p className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatAmount(history.data.totalPaid)} across {history.data.paidCount} payment{history.data.paidCount === 1 ? '' : 's'}</p>}
             </div>
             <PaymentHistory history={history} onUnlink={(entry) => void unlinkIt(entry)} onFix={(entry, kind) => setFixing({ entry, kind })} />
+          </section>
+
+          <section className="settings-compact">
+            <h3 className="mb-2 text-sm font-semibold text-[var(--ref-on-surface)]">Manage</h3>
+            <div className="rounded-xl border border-[var(--color-border)] px-4 py-3">
+              {manage.map((row) => (
+                <SettingsRow
+                  key={row.key}
+                  inline
+                  label={row.label}
+                  description={row.detail}
+                  action={<Button type="button" size="sm" variant="secondary" disabled={busy} onClick={row.run} className={row.danger ? 'text-[var(--color-danger)]' : undefined}>{row.action}</Button>}
+                />
+              ))}
+            </div>
           </section>
         </div>
       </Modal>

@@ -291,9 +291,9 @@ function SubscriptionsPage() {
         </div>
 
         {/* Analysis sits last: the lists above are what needs doing. */}
-        <Section title="Payments by month" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">The last 12 months and the next 6</span>}>
+        <Section title="Payments by month" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Paid so far, and the next 6 months</span>}>
           {loading ? <ListSkeleton rows={4} /> : (
-            <PaymentTimeline charges={data?.monthlyCharges ?? []} subscriptions={subscriptions} overdue={occurrences} now={now} />
+            <PaymentTimeline charges={data?.monthlyCharges ?? []} subscriptions={subscriptions} overdue={occurrences} now={now} onOpen={setDetailId} />
           )}
         </Section>
       </PageContainer>
@@ -311,13 +311,14 @@ function SubscriptionsPage() {
       {detail && (
         <SubscriptionDetail
           subscription={detail}
-          overdueIds={overdueIds}
+          overdue={occurrences}
           accounts={accounts}
           accountNames={accountNames}
           categories={categories}
           onClose={() => setDetailId(null)}
           onEdit={() => setEditing(detail)}
-          onPay={() => setPaying({ subscriptionId: detail.id, dueAt: detail.nextRenewalAt })}
+          onRecord={(dueAt) => setPaying({ subscriptionId: detail.id, dueAt })}
+          onSkip={(occurrence) => void skipOne(occurrence)}
           onMessage={notify}
         />
       )}

@@ -1,55 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
-import { ActionSheet, type SheetAction } from '../../components/ui/ActionSheet';
-import { usePhoneSheets } from '../../hooks/usePhoneSheets';
 import { cn } from '../../lib/utils';
 import { ICON_MAP } from './icons';
-
-/**
- * A "More" button for the less frequent actions: a small menu that opens upward (it sits in dialog
- * footers), or a bottom sheet on phones, as on the Accounts page.
- */
-export function MoreActions({ title, actions, disabled }: { title: string; actions: SheetAction[]; disabled?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const asSheet = usePhoneSheets();
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open || asSheet) return undefined;
-    const closeOutside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); }
-    };
-    document.addEventListener('pointerdown', closeOutside);
-    document.addEventListener('keydown', closeOnEscape, true);
-    return () => {
-      document.removeEventListener('pointerdown', closeOutside);
-      document.removeEventListener('keydown', closeOnEscape, true);
-    };
-  }, [open, asSheet]);
-  return (
-    <div ref={rootRef} className="relative">
-      <Button type="button" size="sm" variant="secondary" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <MoreHorizontal className="mr-1 inline h-4 w-4" aria-hidden />More
-      </Button>
-      {asSheet ? (
-        <ActionSheet isOpen={open} onClose={() => setOpen(false)} title={title} actions={actions} />
-      ) : open && (
-        <div role="menu" aria-label={title} className="absolute bottom-[calc(100%+6px)] left-0 z-10 w-52 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-lg">
-          {actions.map((action) => (
-            <button key={action.key} type="button" role="menuitem" disabled={action.disabled} onClick={() => { setOpen(false); action.onSelect(); }}
-              className={cn('flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm disabled:opacity-50', action.tone === 'danger' ? 'text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>
-              {action.icon && <action.icon className="h-4 w-4 shrink-0" aria-hidden />}
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** A titled panel on the Subscriptions page: one border, rows divided inside, no nested cards. */
 export function Section({ id, title, aside, children, className }: { id?: string; title: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
