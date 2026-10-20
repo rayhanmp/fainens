@@ -157,7 +157,7 @@ function SubscriptionsPage() {
           renewing={renewing}
           monthlyTotal={monthlyTotal}
           upcoming={upcoming}
-          paidThisMonth={data?.monthlyCharges.at(-1)?.total ?? 0}
+          charges={data?.monthlyCharges ?? []}
           overdue={occurrences}
           truncated={data?.renewalPreview.truncated ?? false}
           now={now}

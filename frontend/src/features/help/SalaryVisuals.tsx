@@ -46,6 +46,14 @@ export function SalaryAndRenewalDemo() {
     exampleSubscription(3, 'iCloud Storage', 15_000, 6, now, first),
     exampleSubscription(4, 'Domain', 278_405, 120, now, first, 'annual'),
   ];
+  // Twelve months of example charges, this month last: the three monthly plans, and the domain once.
+  const exampleCharges = Array.from({ length: 12 }, (_, index) => {
+    const month = new Date(now);
+    month.setDate(1);
+    month.setMonth(month.getMonth() - 11 + index);
+    const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+    return { month: key, total: index === 11 ? 64_990 : 265_990 + (index === 6 ? 278_405 : 0) };
+  });
 
   return (
     <VisualFrame caption="The Income & salary page’s take-home card and the Subscriptions overview, with example figures: a month’s cost, the year it adds up to, and this month’s renewal days, one of them past due.">
@@ -69,7 +77,7 @@ export function SalaryAndRenewalDemo() {
           renewing={examples}
           monthlyTotal={examples.reduce((sum, item) => sum + item.monthlyEquivalent, 0)}
           upcoming={examples.filter((item) => item.id !== 1).map((item) => ({ subscription: item, dueAt: item.nextRenewalAt })).sort((a, b) => a.dueAt - b.dueAt)}
-          paidThisMonth={64_990}
+          charges={exampleCharges}
           overdue={[{ subscriptionId: 1, subscriptionName: 'Netflix', dueAt: examples[0].nextRenewalAt, amount: 186_000, linkedAccountId: 0, billingCycle: 'monthly', intervalCount: 1, paymentMode: 'auto', currency: null, foreignAmount: null }]}
           truncated={false}
           now={now}

@@ -1,7 +1,7 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { BalanceVisibilityToggle } from '../../components/ui/BalanceVisibilityToggle';
-import { cn } from '../../lib/utils';
 import { RenewalCalendar } from './RenewalCalendar';
+import { YearToDate } from './YearToDate';
 import type { RenewalOccurrence, Subscription } from './queries';
 
 type Upcoming = { subscription: Subscription; dueAt: number };
@@ -11,12 +11,13 @@ type Upcoming = { subscription: Subscription; dueAt: number };
  * calendar. Same family as the Income page's cards (soft surface, accent card), its own
  * arrangement. Past-due renewals are recorded or skipped from the calendar card.
  */
-export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, paidThisMonth, overdue, truncated, now, busy, onRecord, onSkip, onResolveAll }: {
+export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, charges, overdue, truncated, now, busy, onRecord, onSkip, onResolveAll }: {
   loading: boolean;
   renewing: Subscription[];
+  /** What subscriptions charged in each recent month, oldest first, this month last. */
+  charges: Array<{ month: string; total: number }>;
   monthlyTotal: number;
   upcoming: Upcoming[];
-  paidThisMonth: number;
   overdue: RenewalOccurrence[];
   truncated: boolean;
   now: number;
@@ -40,6 +41,7 @@ export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, p
   const biggest = ranked[0];
   const biggestShare = biggest && monthlyTotal > 0 ? Math.round((biggest.monthlyEquivalent / monthlyTotal) * 100) : 0;
   const next30 = upcoming.reduce((sum, item) => sum + item.subscription.amount, 0);
+  const paidThisMonth = charges.at(-1)?.total ?? 0;
   const monthName = new Date(now).toLocaleDateString('en-US', { month: 'short' });
 
   return (
@@ -55,29 +57,24 @@ export function SubscriptionsHero({ loading, renewing, monthlyTotal, upcoming, p
             <p className="text-xs font-bold uppercase tracking-widest text-[var(--ref-on-surface-variant)]">Subscriptions cost you</p>
             <BalanceVisibilityToggle className="h-8 w-8" />
           </div>
-          <p className="mt-3 flex flex-wrap items-baseline gap-x-2">
-            {prefix && <span className="font-headline text-2xl font-bold text-[var(--color-accent)]">{prefix}</span>}
-            <span className="font-headline text-5xl font-black tracking-tighter text-[var(--ref-on-surface)] tabular-nums sm:text-6xl">{digits}</span>
-            <span className="text-base font-semibold text-[var(--ref-on-surface-variant)]">a month</span>
-          </p>
+          {/* A month, and beside it the year that month adds up to at today's prices. */}
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            <p className="flex flex-wrap items-baseline gap-x-2">
+              {prefix && <span className="font-headline text-2xl font-bold text-[var(--color-accent)]">{prefix}</span>}
+              <span className="font-headline text-5xl font-black tracking-tighter text-[var(--ref-on-surface)] tabular-nums sm:text-6xl">{digits}</span>
+              <span className="text-base font-semibold text-[var(--ref-on-surface-variant)]">a month</span>
+            </p>
+            {renewing.length > 0 && (
+              <p className="pb-1.5 sm:text-right">
+                <span className="block text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">A year at today’s prices</span>
+                <span className="block text-2xl font-bold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(Math.round(monthlyTotal * 12))}</span>
+              </p>
+            )}
+          </div>
           {renewing.length === 0 && <p className="mt-3 text-sm text-[var(--ref-on-surface-variant)]">Add the services you pay for to see what they cost over a year.</p>}
           </div>
 
-          {/* The year and the day are figures in their own right, not a sentence. */}
-          {renewing.length > 0 && (
-            <dl className="grid grid-cols-3 divide-x divide-[var(--color-border)]">
-              {[
-                { label: 'Per year', value: formatAmount(Math.round(monthlyTotal * 12)) },
-                { label: 'Per day', value: formatAmount(Math.round((monthlyTotal * 12) / 365)) },
-                { label: 'Renewing', value: String(renewing.length) },
-              ].map((item, index) => (
-                <div key={item.label} className={cn('min-w-0', index > 0 && 'pl-4 sm:pl-6')}>
-                  <dt className="text-[10px] font-bold uppercase tracking-widest text-[var(--ref-outline)]">{item.label}</dt>
-                  <dd className="mt-1 truncate text-lg font-bold tabular-nums text-[var(--ref-on-surface)] sm:text-2xl">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
+          {renewing.length > 0 && <YearToDate charges={charges} renewing={renewing} overdue={overdue} now={now} />}
 
           <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             {[
