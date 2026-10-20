@@ -1,7 +1,8 @@
 import { Link } from '@tanstack/react-router';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Info, Layers, Lightbulb, Minus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { PageHeader } from '../../components/ui/PageHeader';
 import { CAN_I, CHANGELOG, GLOSSARY, LIMITS, SHORTCUTS, type CanIAnswer } from './content';
 import { DOC_GROUPS, DOCS, type DocBlock, type DocPage, type LedgerEntry } from './docs';
 import { exampleAccounts, useHelpPersonal } from './personal';
@@ -95,22 +96,40 @@ function Term({ text, meaning }: { text: string; meaning: string }) {
   );
 }
 
-/** Underlines the first appearance of each glossary word on the page; `used` is shared across the page's blocks. */
-function withGlossary(text: string, used: Set<string>): ReactNode {
-  const parts: ReactNode[] = [];
-  let last = 0;
-  for (const match of text.matchAll(GLOSSARY_PATTERN)) {
-    const word = match[0];
-    const term = GLOSSARY_FORMS.find(([pattern]) => pattern.test(word))?.[1];
-    const meaning = term ? GLOSSARY_MEANING.get(term) : undefined;
-    if (!term || !meaning || used.has(term)) continue;
-    used.add(term);
-    parts.push(text.slice(last, match.index), <Term key={match.index} text={word} meaning={meaning} />);
-    last = (match.index ?? 0) + word.length;
-  }
-  if (parts.length === 0) return text;
-  parts.push(text.slice(last));
-  return parts;
+/** Adds glossary hints to a piece of a page's text; `at` says which piece ("block:item"). */
+type Annotate = (text: string, at: string) => ReactNode;
+
+const termFor = (word: string) => GLOSSARY_FORMS.find(([pattern]) => pattern.test(word))?.[1];
+
+/**
+ * Underlines the first appearance of each glossary word on a page. Where that is gets worked out
+ * from the page up front, so rendering stays pure (React may render a block more than once).
+ */
+function glossaryFor(page: DocPage): Annotate {
+  const firstUse = new Map<string, string>();
+  page.blocks.forEach((block, blockIndex) => {
+    const texts = block.type === 'p' ? [block.text] : block.type === 'steps' || block.type === 'list' ? block.items : [];
+    texts.forEach((text, itemIndex) => {
+      for (const match of text.matchAll(GLOSSARY_PATTERN)) {
+        const term = termFor(match[0]);
+        if (term && GLOSSARY_MEANING.has(term) && !firstUse.has(term)) firstUse.set(term, `${blockIndex}:${itemIndex}:${match.index}`);
+      }
+    });
+  });
+
+  return (text, at) => {
+    const parts: ReactNode[] = [];
+    let last = 0;
+    for (const match of text.matchAll(GLOSSARY_PATTERN)) {
+      const term = termFor(match[0]);
+      if (!term || firstUse.get(term) !== `${at}:${match.index}`) continue;
+      parts.push(text.slice(last, match.index), <Term key={match.index} text={match[0]} meaning={GLOSSARY_MEANING.get(term)!} />);
+      last = (match.index ?? 0) + match[0].length;
+    }
+    if (parts.length === 0) return text;
+    parts.push(text.slice(last));
+    return parts;
+  };
 }
 
 const CALLOUT = {
@@ -261,10 +280,10 @@ function SpecialBlock({ name }: { name: Extract<DocBlock, { type: 'special' }>['
   return <ChangelogTimeline />;
 }
 
-function BlockView({ block, used }: { block: DocBlock; used: Set<string> }) {
+function BlockView({ block, at, annotate }: { block: DocBlock; at: number; annotate: Annotate }) {
   switch (block.type) {
     case 'p':
-      return <p className="mt-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]">{withGlossary(block.text, used)}</p>;
+      return <p className="mt-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]">{annotate(block.text, `${at}:0`)}</p>;
     case 'h2':
       return <h2 id={block.id} className="mt-10 scroll-mt-6 font-headline text-xl font-bold tracking-tight text-[var(--ref-on-surface)]">{block.text}</h2>;
     case 'steps':
@@ -273,7 +292,7 @@ function BlockView({ block, used }: { block: DocBlock; used: Set<string> }) {
           {block.items.map((step, index) => (
             <li key={step} className="flex gap-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]">
               <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-xs font-bold tabular-nums text-[var(--color-accent)]">{index + 1}</span>
-              <span>{withGlossary(step, used)}</span>
+              <span>{annotate(step, `${at}:${index}`)}</span>
             </li>
           ))}
         </ol>
@@ -281,7 +300,7 @@ function BlockView({ block, used }: { block: DocBlock; used: Set<string> }) {
     case 'list':
       return (
         <ul className="mt-3 space-y-2">
-          {block.items.map((item) => <li key={item} className="flex gap-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-hidden /><span>{withGlossary(item, used)}</span></li>)}
+          {block.items.map((item, index) => <li key={item} className="flex gap-3 text-[15px] leading-7 text-[var(--ref-on-surface-variant)]"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-hidden /><span>{annotate(item, `${at}:${index}`)}</span></li>)}
         </ul>
       );
     case 'callout': {
@@ -326,13 +345,12 @@ export function DocArticle({ page }: { page: DocPage }) {
   const next = DOCS[index + 1];
   const headings = page.blocks.filter((block): block is Extract<DocBlock, { type: 'h2' }> => block.type === 'h2');
   const related = (page.related ?? []).map((slug) => DOCS.find((doc) => doc.slug === slug)).filter((doc): doc is DocPage => Boolean(doc));
+  const annotate = useMemo(() => glossaryFor(page), [page]);
 
   return (
     <article className="min-w-0 max-w-3xl">
       <Link to="/help" className="mb-5 inline-flex items-center gap-1 text-sm font-medium text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)] lg:hidden"><ArrowLeft className="h-4 w-4" aria-hidden />All help topics</Link>
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">{page.group}</p>
-      <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)] md:text-4xl">{page.title}</h1>
-      <p className="mt-3 text-lg leading-8 text-[var(--ref-on-surface-variant)]">{page.lead}</p>
+      <PageHeader subtext={page.group} title={page.title} description={page.lead} />
 
       {headings.length > 2 && (
         <nav aria-label="On this page" className="mt-6 flex flex-wrap items-center gap-2 border-y border-[var(--color-border)] py-3">
@@ -343,8 +361,7 @@ export function DocArticle({ page }: { page: DocPage }) {
         </nav>
       )}
 
-      {/* A fresh set each render, so every page underlines each glossary word once, in reading order. */}
-      <div className="mt-2">{(() => { const used = new Set<string>(); return page.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} used={used} />); })()}</div>
+      <div className="mt-2">{page.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} at={blockIndex} annotate={annotate} />)}</div>
 
       {related.length > 0 && (
         <section className="mt-12">

@@ -4,6 +4,7 @@ import { ArrowRight, BookOpen, Search, Sparkles, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DOC_GROUPS, DOCS, docText, type DocPage } from '../features/help/docs';
 import { useHelpPersonal } from '../features/help/personal';
+import { PageHeader } from '../components/ui/PageHeader';
 
 export const Route = createFileRoute('/help/')({
   component: HelpHome,
@@ -41,10 +42,12 @@ function HelpHome() {
 
   return (
     <div className="space-y-12">
-      <section className="rounded-3xl bg-[color-mix(in_srgb,var(--color-accent)_7%,var(--color-surface))] px-5 py-8 sm:px-8 sm:py-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Help centre</p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[var(--ref-on-surface)] md:text-4xl">{personal.name ? `Hi ${personal.name}, how can we help?` : 'How can we help?'}</h1>
-        <p className="mt-2 max-w-xl text-[15px] text-[var(--ref-on-surface-variant)]">Guides for every part of Fainens, with worked examples, the rules behind your numbers, and what’s new.</p>
+      <section>
+        <PageHeader
+          subtext="Help centre"
+          title={personal.name ? `Hi ${personal.name}, how can we help?` : 'How can we help?'}
+          description="Guides for every part of Fainens, with worked examples, the rules behind your numbers, and what’s new."
+        />
         <div className="relative mt-6 max-w-2xl">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--color-muted)]" aria-hidden />
           <input
@@ -94,7 +97,7 @@ function HelpHome() {
           <section aria-labelledby="start-here">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">New here?</p>
             <h2 id="start-here" className="mt-1 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">Start here</h2>
-            <ol className="mt-5 grid gap-4 md:grid-cols-3">
+            <ol className="mt-5 grid gap-4 xl:grid-cols-3">
               {START_HERE.map((slug, index) => {
                 const page = bySlug(slug);
                 return (
@@ -115,7 +118,7 @@ function HelpHome() {
           <section aria-labelledby="all-topics">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--ref-secondary)]">Browse</p>
             <h2 id="all-topics" className="mt-1 font-headline text-2xl font-extrabold tracking-tight text-[var(--ref-on-surface)]">All topics</h2>
-            <div className="mt-5 grid gap-x-12 gap-y-8 sm:grid-cols-2">
+            <div className="mt-5 grid gap-x-12 gap-y-8 md:grid-cols-2">
               {DOC_GROUPS.filter((group) => group !== 'Getting started').map((group) => (
                 <div key={group}>
                   <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]"><BookOpen className="h-3.5 w-3.5" aria-hidden />{group}</h3>
