@@ -5,7 +5,6 @@ import {
   ClaimPipelineDemo,
   ComposerDemo,
   CorrectionDemo,
-  HiddenBalanceDemo,
   ImportFlowDemo,
   InstallmentDemo,
   LedgerFlow,
@@ -18,7 +17,8 @@ import {
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
 import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
-import { DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { RecapStoryDemo, ReportsDemo } from './InsightVisuals';
+import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
 import { BudgetForecastDemo, BudgetRowsDemo, ClosedBudgetDemo } from './BudgetVisuals';
 import {
@@ -314,7 +314,7 @@ export const DOCS: DocPage[] = [
     summary: 'Your period at a glance, and how to make it yours',
     lead: 'The Dashboard is your decision centre: where this period stands, what needs attention, and what’s coming, for the period you pick at the top.',
     blocks: [
-      { type: 'visual', node: <DashboardMapDemo />, wide: true },
+      { type: 'visual', node: <SampleDashboardDemo />, wide: true },
       { type: 'h2', id: 'glance', text: 'At a glance' },
       { type: 'p', text: 'The top card shows one headline number, which you choose: cash, budget left, or net worth. Under it, a pacing bar compares how far you are through the period with how much of the budget is used (“Day 12 of 30 · 48% budget used”), with a safe daily pace and what’s due in the next 30 days. On phones this becomes a Today card and a Safe daily pace card.' },
       { type: 'h2', id: 'pulse', text: 'Financial pulse' },
