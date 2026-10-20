@@ -33,7 +33,8 @@ export type DocBlock =
   | { type: 'steps'; items: string[] }
   | { type: 'list'; items: string[] }
   | { type: 'callout'; tone: 'tip' | 'note' | 'warning'; title?: string; text: string }
-  | { type: 'visual'; node: ReactNode }
+  /** `wide` lets a visual step out of the reading column on wide screens; only for ones laid out to use the room. */
+  | { type: 'visual'; node: ReactNode; wide?: boolean }
   | { type: 'table'; head: [string, string]; rows: Array<[string, string]> }
   | { type: 'qa'; items: Array<{ q: string; a: string }> }
   | { type: 'open'; link: DocLink }
@@ -79,7 +80,7 @@ export const DOCS: DocPage[] = [
     summary: 'One ledger, pay periods, and what counts as spending',
     lead: 'Fainens is a private finance app built around one ledger. You record money once; balances, budgets, reports and recaps are all read from that same record.',
     blocks: [
-      { type: 'visual', node: <LedgerFlow /> },
+      { type: 'visual', node: <LedgerFlow />, wide: true },
       { type: 'h2', id: 'mental-model', text: 'The idea in one sentence' },
       { type: 'p', text: 'Every rupiah that moves is written down as a transaction, and every number you see is a view of those transactions. When something looks off, you can always trace it back to the entries behind it.' },
       { type: 'h2', id: 'what-you-can-do', text: 'What you can do with it' },
@@ -89,7 +90,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'posted', text: 'Posted, draft and pending' },
       { type: 'table', head: ['State', 'What it means'], rows: [['Posted', 'Counts in balances, budgets and reports. Kept permanently; corrected, never erased.'], ['Draft', 'Doesn’t count yet. Edit or delete freely, then post (for example in Backfill).'], ['Pending', 'Imported (for example from a bank email) and waiting for your approval.']] },
       { type: 'h2', id: 'periods', text: 'Periods follow your pay' },
-      { type: 'visual', node: <PeriodTimeline /> },
+      { type: 'visual', node: <PeriodTimeline />, wide: true },
       { type: 'h2', id: 'not-spending', text: 'Not everything is spending' },
       { type: 'p', text: 'Transfers between your own accounts, money you lend, loan repayments, other people’s share of a split bill, and expenses waiting to be reimbursed all move money, but none of them is spending.' },
       { type: 'h2', id: 'you-confirm', text: 'Nothing posts without you' },
@@ -130,7 +131,7 @@ export const DOCS: DocPage[] = [
     summary: 'Follow one salary period from payday to close',
     lead: 'Ten everyday moments from one period, from payday to closing it. Step through them to see what each one records and what it does to your balances and budget.',
     blocks: [
-      { type: 'visual', node: <WorkedMonth /> },
+      { type: 'visual', node: <WorkedMonth />, wide: true },
       { type: 'h2', id: 'takeaways', text: 'What to notice' },
       { type: 'list', items: [
         'Spent ends at Rp4.270.500, which isn’t the same as what left your accounts: the top-up, your friends’ shares, the installment and the reconcile all moved money without being spending.',
@@ -238,7 +239,7 @@ export const DOCS: DocPage[] = [
     lead: 'Three ways to get transactions in without typing them, and all of them let you check before anything posts.',
     blocks: [
       { type: 'h2', id: 'gmail', text: 'Bank emails from Gmail' },
-      { type: 'visual', node: <ImportFlowDemo /> },
+      { type: 'visual', node: <ImportFlowDemo />, wide: true },
       { type: 'steps', items: ['In Transactions, choose Connect Gmail and allow read-only access.', 'Fainens checks for new emails every 15 minutes, or when you press Sync now.', 'Open Review pending to approve, edit or reject each one.'] },
       { type: 'callout', tone: 'warning', title: 'Only wondr by BNI for now', text: 'Fainens reads “Transaction successful” emails from wondr by BNI. Other banks and e-wallets need CSV for now.' },
       { type: 'h2', id: 'csv', text: 'CSV files' },
@@ -261,7 +262,7 @@ export const DOCS: DocPage[] = [
     lead: 'Everything in Fainens is grouped into periods that run from one payday to the next, and each period gets its own budget.',
     blocks: [
       { type: 'h2', id: 'periods', text: 'Salary periods' },
-      { type: 'visual', node: <PeriodTimeline /> },
+      { type: 'visual', node: <PeriodTimeline />, wide: true },
       { type: 'p', text: 'Set your salary day in Settings → General. In months without that day, the last day of the month is used. Periods never overlap.' },
       { type: 'h2', id: 'budget', text: 'Plan a budget' },
       { type: 'visual', node: <BudgetBarsDemo /> },

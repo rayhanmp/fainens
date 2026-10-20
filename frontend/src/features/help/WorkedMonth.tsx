@@ -199,6 +199,8 @@ export function WorkedMonth() {
         </div>
 
         <div className="space-y-4 p-4 sm:p-5">
+          {/* Wide screens: what you did on the left, what it changed on the right, both in view at once. */}
+          <div className="space-y-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.75fr)] xl:items-start xl:gap-5 xl:space-y-0">
           {/* What happens */}
           <div key={index} className="animate-[finance-page-header-in_300ms_ease-out]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-accent)]">
@@ -281,6 +283,7 @@ export function WorkedMonth() {
                 </p>
               </div>
             </section>
+          </div>
           </div>
 
           {/* Controls */}

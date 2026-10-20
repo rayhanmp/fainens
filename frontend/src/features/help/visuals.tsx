@@ -232,7 +232,8 @@ export function PeriodTimeline() {
   const label = `${formatDayMonth(start.getTime())} – ${formatDayMonth(end.getTime())}`;
   return (
     <VisualFrame caption={personal.currentPeriod ? `Your current period: ${label}. Each period runs from payday to the day before the next.` : `With salary day ${payday}, each period runs from payday to the day before the next.`}>
-      <div className="overflow-x-auto">
+      <FullPeriodStrip start={start} end={end} current={Boolean(personal.currentPeriod)} />
+      <div className="overflow-x-auto xl:hidden">
         <div className="mx-auto flex min-w-[30rem] max-w-2xl items-end gap-1">
           {days.map((value, index) => {
             const first = index === 0;
@@ -252,6 +253,69 @@ export function PeriodTimeline() {
         </div>
       </div>
     </VisualFrame>
+  );
+}
+
+/**
+ * With room to spare (wide screens), every day of the period instead of an elided strip: weekdays,
+ * where months turn, the days already behind you, and today.
+ */
+function FullPeriodStrip({ start, end, current }: { start: Date; end: Date; current: boolean }) {
+  const today = new Date();
+  const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const days: Date[] = [];
+  for (let day = new Date(start); day <= end; day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)) days.push(day);
+  const nextPayday = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+  const todayIndex = current ? days.findIndex((day) => sameDay(day, today)) : -1;
+  const left = todayIndex >= 0 ? days.length - todayIndex - 1 : null;
+
+  return (
+    <div className="hidden xl:block">
+      <div className="flex items-end gap-[3px]">
+        {[...days, nextPayday].map((day, index) => {
+          const isNext = index === days.length;
+          const isPayday = index === 0;
+          const isToday = index === todayIndex;
+          const past = todayIndex >= 0 && index < todayIndex;
+          const newMonth = index > 0 && day.getDate() === 1;
+          return (
+            <div key={day.getTime()} className={cn('min-w-0 flex-1 text-center', isNext && 'ml-2')}>
+              {/* Labels are wider than a day, so they hang centred over it (or from its edge at either end). */}
+              <p className="relative mb-1 h-3.5">
+                <span className={cn('absolute top-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider', isPayday ? 'left-0 text-[var(--color-accent)]' : isNext ? 'right-0 text-[var(--ref-on-surface-variant)]' : isToday ? 'left-1/2 -translate-x-1/2 text-[var(--color-accent)]' : 'left-1/2 -translate-x-1/2 text-[var(--ref-on-surface-variant)]')}>
+                  {isPayday ? 'Payday' : isNext ? 'Next payday' : isToday ? 'Today' : newMonth ? day.toLocaleDateString('en-GB', { month: 'short' }) : ''}
+                </span>
+              </p>
+              <div
+                className={cn(
+                  'grid h-12 place-items-center rounded-md text-xs font-semibold tabular-nums',
+                  isPayday ? 'bg-[var(--color-accent)] text-white'
+                    : isNext ? 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)] ring-1 ring-dashed ring-[var(--color-border-strong)]'
+                      : isToday ? 'bg-[var(--color-surface)] text-[var(--color-accent)] ring-2 ring-[var(--color-accent)]'
+                        : past ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--ref-on-surface)]'
+                          : 'bg-[var(--color-surface)] text-[var(--ref-on-surface)] ring-1 ring-[var(--color-border)]',
+                  newMonth && !isToday && 'ring-1 ring-[var(--color-border-strong)]',
+                )}
+              >
+                <span className="leading-none">
+                  {day.getDate()}
+                  <span className={cn('mt-1 block text-[9px] font-medium uppercase', isPayday ? 'text-white/75' : 'text-[var(--color-muted)]')}>{day.toLocaleDateString('en-GB', { weekday: 'narrow' })}</span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+        <span className="font-semibold text-[var(--ref-on-surface)]">{days.length} days, {formatDayMonth(start.getTime())} – {formatDayMonth(end.getTime())}</span>
+        {left !== null && (
+          <span className="flex items-center gap-3 text-[var(--ref-on-surface-variant)]">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[color-mix(in_srgb,var(--color-accent)_25%,transparent)]" />Behind you</span>
+            <span>Day {todayIndex + 1} · {left === 0 ? 'payday is tomorrow' : `${left + 1} days to payday`}</span>
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

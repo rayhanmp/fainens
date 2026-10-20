@@ -370,9 +370,9 @@ export function DocArticle({ page }: { page: DocPage }) {
         </nav>
       )}
 
-      {/* Text keeps a comfortable line length; visuals and ledger tables step out of the column on wide screens. */}
+      {/* Text keeps a comfortable line length; visuals laid out for more room step out of the column on wide screens. */}
       <div className="mt-2">{page.blocks.map((block, blockIndex) => (
-        <div key={blockIndex} className={cn((block.type === 'visual' || block.type === 'under-hood') && 'xl:-mx-16 2xl:-mx-32')}>
+        <div key={blockIndex} className={cn(block.type === 'visual' && block.wide && 'xl:-mx-16 2xl:-mx-32')}>
           <BlockView block={block} at={blockIndex} annotate={annotate} />
         </div>
       ))}</div>
