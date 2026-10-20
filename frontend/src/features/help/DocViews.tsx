@@ -89,7 +89,8 @@ function Term({ text, meaning }: { text: string; meaning: string }) {
   return (
     <span tabIndex={0} className="group/term relative cursor-help rounded-sm underline decoration-[var(--color-muted)] decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40">
       {text}
-      <span role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline opacity-0 shadow-lg transition-opacity duration-150 group-hover/term:opacity-100 group-focus/term:opacity-100">
+      {/* animate-none!: the app's tooltip pop-in animation would otherwise hold this at full opacity. */}
+      <span role="tooltip" className="animate-none! pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-max max-w-[min(16rem,75vw)] rounded-lg bg-[var(--ref-on-surface)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--color-surface)] no-underline opacity-0 shadow-lg transition-opacity duration-150 group-hover/term:opacity-100 group-focus/term:opacity-100">
         {meaning}
       </span>
     </span>
