@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import type { LinkProps } from '@tanstack/react-router';
 import {
   ArchitectureDiagram,
-  CorrectionDemo,
   LedgerFlow,
   PeriodTimeline,
   SplitBillDemo,
@@ -17,6 +16,7 @@ import { SalaryAndRenewalDemo } from './SalaryVisuals';
 import { MismatchDemo, ReconcileDemo } from './ReconcileVisuals';
 import { ImportFlowDemo } from './ImportVisuals';
 import { ClaimPipelineDemo } from './ClaimVisuals';
+import { CorrectionDemo } from './TransactionVisuals';
 import { RecapPlayerDemo } from './RecapVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
