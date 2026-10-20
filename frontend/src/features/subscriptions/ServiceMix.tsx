@@ -1,12 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
 import { squarify } from '../categories/treemap';
 import { serviceTypeLabel, serviceTypeOf, type ServiceType } from './service-types';
 import type { Subscription } from './queries';
 
-/** The layout box the treemap is computed in; the tiles are placed as percentages of it. */
-const BOX = { w: 100, h: 32 };
+/** Size (px) to lay out in until the treemap's real box has been measured. */
+const DEFAULT_BOX = { w: 340, h: 120 };
 
 /**
  * Cost per month by kind of service as a treemap: each tile's area is its share, the darkest is
@@ -18,6 +18,19 @@ export function ServiceMix({ renewing, selected, onSelect }: {
   onSelect: (type: ServiceType | null) => void;
 }) {
   const { formatAmount } = useBalanceVisibility();
+  // The treemap fills the height its column leaves it, so it lays out in the box it actually gets.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState(DEFAULT_BOX);
+  useEffect(() => {
+    const element = boxRef.current;
+    if (!element) return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setBox({ w: width, h: height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const groups = useMemo(() => {
     const byType = new Map<ServiceType, { type: ServiceType; monthly: number; names: string[] }>();
     for (const subscription of renewing) {
@@ -33,18 +46,19 @@ export function ServiceMix({ renewing, selected, onSelect }: {
   if (groups.length === 0) return <p className="px-4 py-8 text-center text-sm text-[var(--ref-on-surface-variant)] sm:px-5">Types show here once subscriptions renew.</p>;
 
   const total = groups.reduce((sum, group) => sum + group.monthly, 0);
-  const rects = squarify(groups.map((group) => group.monthly), BOX.w, BOX.h);
+  const rects = squarify(groups.map((group) => group.monthly), box.w, box.h);
 
   return (
-    <div className="px-4 pb-4 pt-3 sm:px-5">
-      <div className="relative w-full" style={{ aspectRatio: `${BOX.w} / ${BOX.h}` }} role="list" aria-label="Cost per month by type of service">
+    <div className="flex flex-1 flex-col px-4 pb-4 pt-3 sm:px-5">
+      <div ref={boxRef} className="relative min-h-[120px] w-full flex-1" role="list" aria-label="Cost per month by type of service">
         {groups.map((group, index) => {
           const rect = rects[index];
           const share = group.monthly / total;
           // Bigger shares are darker steps of the accent; the text keeps contrast on each.
           const strength = Math.round(30 + (group.monthly / groups[0].monthly) * 70);
           const dark = strength >= 60;
-          const roomy = rect.w >= 26 && rect.h >= 13;
+          // Name and figures need about this much room; smaller tiles show the share and a tooltip.
+          const roomy = rect.w >= 92 && rect.h >= 52;
           const isSelected = selected === group.type;
           return (
             <button
@@ -58,7 +72,7 @@ export function ServiceMix({ renewing, selected, onSelect }: {
                 'group absolute overflow-visible p-[2px] text-left transition-opacity',
                 selected && !isSelected && 'opacity-40 hover:opacity-80',
               )}
-              style={{ left: `${(rect.x / BOX.w) * 100}%`, top: `${(rect.y / BOX.h) * 100}%`, width: `${(rect.w / BOX.w) * 100}%`, height: `${(rect.h / BOX.h) * 100}%` }}
+              style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
             >
               <span
                 className={cn('flex h-full w-full flex-col justify-between overflow-hidden rounded-lg p-2', isSelected && 'ring-2 ring-[var(--ref-on-surface)] ring-offset-1 ring-offset-[var(--color-surface)]')}

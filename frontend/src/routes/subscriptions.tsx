@@ -251,13 +251,14 @@ function SubscriptionsPage() {
             )}
           </Section>
 
-          <div className="grid gap-6">
+          {/* Paid from keeps its own height; the type treemap takes whatever height the list leaves. */}
+          <div className="flex flex-col gap-6">
             <Section title="Paid from" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Due in {UPCOMING_DAYS} days against each balance</span>}>
               {loading ? <ListSkeleton rows={2} /> : (
                 <AccountLoad accounts={accounts} accountNames={accountNames} renewing={renewing} upcoming={upcoming} overdue={occurrences} windowDays={UPCOMING_DAYS} />
               )}
             </Section>
-            <Section title="What kind of services" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Share of the monthly cost</span>}>
+            <Section className="flex flex-1 flex-col" title="What kind of services" aside={<span className="text-xs text-[var(--ref-on-surface-variant)]">Share of the monthly cost</span>}>
               {loading ? <ListSkeleton rows={2} /> : <ServiceMix renewing={renewing} selected={typeFilter} onSelect={setTypeFilter} />}
             </Section>
           </div>
