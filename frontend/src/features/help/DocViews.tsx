@@ -354,13 +354,13 @@ export function DocArticle({ page }: { page: DocPage }) {
   const annotate = useMemo(() => glossaryFor(page), [page]);
 
   return (
-    <article className="min-w-0">
+    <article className="mx-auto min-w-0 max-w-3xl">
       {/* The same "Back to …" link the app's other sub-pages have. */}
       <Link to="/help" className="mb-5 inline-flex items-center gap-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]"><ArrowLeft className="h-4 w-4" aria-hidden />Back to help</Link>
       <PageHeader subtext={page.group} title={page.title} description={page.lead} />
       <PageGuide headings={headings.length > 2 ? headings : []} activeSlug={page.slug} />
 
-      <div className="max-w-3xl">
+      <div>
       {headings.length > 2 && (
         <nav aria-label="Sections" className="mt-6 flex flex-wrap items-center gap-2 border-y border-[var(--color-border)] py-3 xl:hidden">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">On this page</span>
