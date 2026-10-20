@@ -1005,8 +1005,6 @@
 .recap-boss-bar > i { position: absolute; inset: 0; transform-origin: left; }
 .recap-boss-ghost { background: #ffcc33; animation: recap-boss-drain .9s 1 both; animation-delay: calc(var(--enter) + 2000ms); }
 .recap-boss-hp { background: #3ecf6e; animation: recap-boss-drain .35s 1 both; animation-delay: calc(var(--enter) + 1400ms); }
-.recap-boss-damage { position: absolute; right: 5.5cqw; top: 8.6cqw; color: #ff5a5f; font-size: 6cqw; font-weight: 900; text-shadow: .5cqw .5cqw 0 var(--recap-paper);
-  animation: recap-boss-pop 1.4s cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--enter) + 1400ms); }
 .recap-boss-hit { display: flex; align-items: center; gap: 3cqw; padding: 3cqw 4cqw; border-radius: 2cqw; background: var(--recap-ink); color: var(--recap-paper);
   animation: recap-boss-strike 1s cubic-bezier(.5, 0, .3, 1.4) both; animation-delay: calc(var(--enter) + 600ms); }
 .recap-boss-hit > span:last-child { display: grid; gap: .6cqw; min-width: 0; }
@@ -1078,7 +1076,6 @@
 @keyframes recap-grow-y { from { scale: 1 0; } }
 @keyframes recap-rush-glow { 50% { filter: brightness(1.25); } }
 @keyframes recap-boss-drain { to { scale: calc(1 - var(--dmg)) 1; } }
-@keyframes recap-boss-pop { 0% { opacity: 0; scale: .4; translate: 0 2cqw; } 25% { opacity: 1; scale: 1.2; } 40% { scale: 1; } 75% { opacity: 1; translate: 0 -2cqw; } 100% { opacity: 1; translate: 0 -2cqw; } }
 @keyframes recap-boss-strike { 0% { opacity: 0; translate: -70cqw 0; rotate: -8deg; } 70% { opacity: 1; translate: 3cqw -2cqw; rotate: 3deg; } 85% { translate: -1cqw 0; } 100% { opacity: 1; translate: 0 0; rotate: 0deg; } }
 @keyframes recap-suspect-in { from { opacity: 0; translate: 0 30cqw; } }
 @keyframes recap-flash { 0% { opacity: .85; } 100% { opacity: 0; } }

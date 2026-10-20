@@ -30,7 +30,6 @@ export function BonusVisual({ story }: { story: BonusStory }) {
         <div className="recap-boss-hud">
           <span className="recap-boss-name"><span>Boss</span><span>Your purchases</span></span>
           <span className="recap-boss-bar" aria-hidden="true"><i className="recap-boss-ghost" /><i className="recap-boss-hp" /></span>
-          <b className="recap-boss-damage" aria-hidden="true">−{b.share}%</b>
         </div>
         <div className="recap-boss-hit">
           <span className="recap-boss-weapon" aria-hidden="true"><Swords /></span>
