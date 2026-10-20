@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Info, Layers, Lightbulb, Minus, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, Info, Layers, Lightbulb, Minus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { CAN_I, CHANGELOG, GLOSSARY, LIMITS, SHORTCUTS, type CanIAnswer } from './content';
@@ -12,7 +12,7 @@ import { exampleAccounts, useHelpPersonal } from './personal';
  * Topics as drill-down groups: only one is open at a time, starting with the one holding the page
  * you're on, so the sidebar stays short.
  */
-export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {
+export function DocsSidebar({ activeSlug, onNavigate }: { activeSlug?: string; onNavigate?: () => void }) {
   const activeGroup = DOCS.find((doc) => doc.slug === activeSlug)?.group ?? DOC_GROUPS[0];
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroup);
   // Moving to a page in another group (a related link, Next) opens that group.
@@ -24,7 +24,7 @@ export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {
 
   return (
     <nav aria-label="Help topics" className="space-y-1">
-      <Link to="/help" className={cn('mb-3 block rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors', !activeSlug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)]' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>Help home</Link>
+      <Link to="/help" onClick={onNavigate} className={cn('mb-3 block rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors', !activeSlug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)]' : 'text-[var(--ref-on-surface)] hover:bg-[var(--ref-surface-container-low)]')}>Help home</Link>
       {DOC_GROUPS.map((group) => {
         const pages = DOCS.filter((doc) => doc.group === group);
         const open = openGroup === group;
@@ -50,6 +50,7 @@ export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {
                     <Link
                       to="/help/$slug"
                       params={{ slug: doc.slug }}
+                      onClick={onNavigate}
                       aria-current={activeSlug === doc.slug ? 'page' : undefined}
                       className={cn('block rounded-lg px-3 py-1.5 text-sm transition-colors', activeSlug === doc.slug ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] font-semibold text-[var(--color-accent)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]')}
                     >
@@ -344,17 +345,21 @@ export function DocArticle({ page }: { page: DocPage }) {
   const index = DOCS.findIndex((doc) => doc.slug === page.slug);
   const previous = DOCS[index - 1];
   const next = DOCS[index + 1];
-  const headings = page.blocks.filter((block): block is Extract<DocBlock, { type: 'h2' }> => block.type === 'h2');
+  const headings = useMemo(() => page.blocks.filter((block): block is Extract<DocBlock, { type: 'h2' }> => block.type === 'h2'), [page]);
   const related = (page.related ?? []).map((slug) => DOCS.find((doc) => doc.slug === slug)).filter((doc): doc is DocPage => Boolean(doc));
   const annotate = useMemo(() => glossaryFor(page), [page]);
 
   return (
-    <article className="min-w-0 max-w-3xl">
-      <Link to="/help" className="mb-5 inline-flex items-center gap-1 text-sm font-medium text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)] lg:hidden"><ArrowLeft className="h-4 w-4" aria-hidden />All help topics</Link>
-      <PageHeader subtext={page.group} title={page.title} description={page.lead} />
+    <article className="min-w-0">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <PageHeader subtext={page.group} title={page.title} description={page.lead} />
+        <TopicsMenu activeSlug={page.slug} />
+      </div>
+      {headings.length > 2 && <OnThisPage headings={headings} />}
 
+      <div className="max-w-3xl">
       {headings.length > 2 && (
-        <nav aria-label="On this page" className="mt-6 flex flex-wrap items-center gap-2 border-y border-[var(--color-border)] py-3">
+        <nav aria-label="Sections" className="mt-6 flex flex-wrap items-center gap-2 border-y border-[var(--color-border)] py-3 lg:hidden">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">On this page</span>
           {headings.map((heading) => (
             <a key={heading.id} href={`#${heading.id}`} onClick={(event) => { event.preventDefault(); document.getElementById(heading.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="rounded-full bg-[var(--ref-surface-container-low)] px-2.5 py-1 text-xs font-medium text-[var(--ref-on-surface)] hover:text-[var(--color-accent)]">{heading.text.replace(/^\d+\.\s*/, '')}</a>
@@ -394,6 +399,110 @@ export function DocArticle({ page }: { page: DocPage }) {
           </Link>
         )}
       </nav>
+      </div>
     </article>
+  );
+}
+
+/** "All topics": the drill-down topic list in a menu beside the page title. */
+function TopicsMenu({ activeSlug }: { activeSlug: string }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        className={cn('inline-flex h-11 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] pl-4 pr-3 text-xs font-bold text-[var(--ref-on-surface)] shadow-sm transition-colors hover:bg-[var(--ref-surface-container-low)]', open && 'bg-[var(--ref-surface-container-low)] text-[var(--ref-primary)]')}
+      >
+        <BookOpen className="h-4 w-4" aria-hidden />All topics<ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} aria-hidden />
+      </button>
+      {open && (
+        <div className="ui-popover period-picker-scroll absolute left-0 top-[calc(100%+0.55rem)] z-50 max-h-[min(32rem,70vh)] w-[min(17rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 shadow-2xl lg:left-auto lg:right-0">
+          <DocsSidebar activeSlug={activeSlug} onNavigate={() => setOpen(false)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The page's sections as a slim strip pinned to the right edge, one dash per section with the one
+ * you're reading highlighted. Hovering (or tabbing into) it opens the full list.
+ */
+function OnThisPage({ headings }: { headings: Array<{ id: string; text: string }> }) {
+  const [active, setActive] = useState(headings[0]?.id);
+
+  useEffect(() => {
+    let frame = 0;
+    // The section you're in is the last one whose heading has passed the top third of the screen.
+    const update = () => {
+      frame = 0;
+      let current = headings[0]?.id;
+      for (const heading of headings) {
+        const element = document.getElementById(heading.id);
+        if (element && element.getBoundingClientRect().top <= window.innerHeight * 0.3) current = heading.id;
+      }
+      setActive(current);
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    frame = window.requestAnimationFrame(update);
+    return () => {
+      document.removeEventListener('scroll', onScroll, { capture: true });
+      window.cancelAnimationFrame(frame);
+    };
+  }, [headings]);
+
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  return (
+    <nav aria-label="On this page" className="group/toc fixed right-5 top-1/2 z-30 hidden -translate-y-1/2 lg:block">
+      <ul aria-hidden className="flex flex-col items-end gap-3 py-4 pl-8 pr-1 transition-opacity duration-150 group-focus-within/toc:opacity-0 group-hover/toc:opacity-0">
+        {headings.map((heading) => (
+          <li key={heading.id}><span className={cn('block h-[3px] rounded-full transition-all duration-300', heading.id === active ? 'w-6 bg-[var(--color-accent)]' : 'w-3.5 bg-[var(--color-border-strong)]')} /></li>
+        ))}
+      </ul>
+      <div className="pointer-events-none absolute right-0 top-1/2 w-64 -translate-y-1/2 translate-x-2 rounded-2xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-2 opacity-0 shadow-2xl transition duration-150 ease-out group-focus-within/toc:pointer-events-auto group-focus-within/toc:translate-x-0 group-focus-within/toc:opacity-100 group-hover/toc:pointer-events-auto group-hover/toc:translate-x-0 group-hover/toc:opacity-100">
+        <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">On this page</p>
+        <ul>
+          {headings.map((heading) => (
+            <li key={heading.id}>
+              <a
+                href={`#${heading.id}`}
+                onClick={(event) => { event.preventDefault(); jump(heading.id); }}
+                aria-current={heading.id === active ? 'location' : undefined}
+                className={cn('block rounded-lg px-3 py-1.5 text-sm transition-colors', heading.id === active ? 'bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] font-semibold text-[var(--color-accent)]' : 'text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]')}
+              >
+                {heading.text.replace(/^\d+\.\s*/, '')}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </nav>
   );
 }
