@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowRight, BookOpen, Check, CheckCircle2, Database, Search, Sparkles, UserRound } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, Database, Search, Sparkles, UserRound } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { CAN_I, CHANGELOG, GLOSSARY, SHORTCUTS } from './content';
 import { shown, useAutoplay, useSequence } from './motion';
@@ -151,35 +151,6 @@ export function SavingsFanDemo() {
 }
 
 // ── Agent ────────────────────────────────────────────────────────────
-
-/** Agent working out an answer: each look-up ticks off before the reply arrives. */
-export function AgentLookupDemo() {
-  const { ref, step, replay } = useSequence(5, 750);
-  const lookups = ['Searched transactions for “Grab”, last two periods', 'Grouped the totals by period', 'Compared the two periods'];
-  return (
-    <VisualFrame frameRef={ref} onReplay={replay} caption="Agent looks things up in your records before it answers, and shows what it checked.">
-      <div className="mx-auto max-w-md space-y-3">
-        <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-[var(--color-accent)] px-3.5 py-2 text-sm text-white">How much did I spend on Grab this period compared with last?</p>
-        <ol className="space-y-1.5">
-          {lookups.map((lookup, index) => {
-            const done = step > index + 1;
-            const running = step === index + 1;
-            return (
-              <li key={lookup} className={cn('flex items-center gap-2 text-xs', shown(step > index))}>
-                <span className={cn('grid h-5 w-5 place-items-center rounded-full', done ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--ref-surface-container)] text-[var(--ref-on-surface-variant)]')}>{done ? <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> : <Search className={cn('h-3 w-3', running && 'animate-pulse')} aria-hidden />}</span>
-                <span className={done ? 'text-[var(--ref-on-surface)]' : 'text-[var(--ref-on-surface-variant)]'}>{lookup}</span>
-              </li>
-            );
-          })}
-        </ol>
-        <div className={cn(card, shown(step >= 5))}>
-          <p className="text-sm leading-relaxed text-[var(--ref-on-surface)]">You’ve spent <strong>Rp540.000</strong> on Grab this period, up from <strong>Rp410.000</strong> last period (+32%). Most of the increase is from weekday evening rides.</p>
-          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-[var(--ref-on-surface-variant)]"><Database className="h-3.5 w-3.5" aria-hidden />Evidence checked 3 ledger sources</p>
-        </div>
-      </div>
-    </VisualFrame>
-  );
-}
 
 const PROFILE_FIELDS: Array<{ key: string; name: string; on: boolean; value: string }> = [
   { key: 'preferred', name: 'Preferred name', on: true, value: 'Sam' },

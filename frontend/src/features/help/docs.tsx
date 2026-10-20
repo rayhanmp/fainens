@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react';
 import type { LinkProps } from '@tanstack/react-router';
 import {
-  AgentAnswerDemo,
-  AgentProposalDemo,
   ArchitectureDiagram,
   BudgetBarsDemo,
   ClaimPipelineDemo,
@@ -21,10 +19,10 @@ import {
 } from './visuals';
 import { PracticeComposer, PracticeSplitBill } from './PracticeComposer';
 import { WorkedMonth } from './WorkedMonth';
+import { AgentAnswerDemo, AgentLookupDemo, AgentProposalDemo } from './AgentVisuals';
 import { BudgetForecastDemo, CategoryMapDemo, DashboardMapDemo, RecapStoryDemo, ReportsDemo } from './InsightVisuals';
 import {
   AgentContextDemo,
-  AgentLookupDemo,
   CanISummaryDemo,
   GlossaryCardDemo,
   LoanRepaymentDemo,
