@@ -288,6 +288,80 @@ export const goalAllocations = sqliteTable("goal_allocation", {
   goalIdx: index("idx_goal_allocation_goal").on(table.goalId),
 }));
 
+/**
+ * Someone on a holiday goal's trip: whether they pay a share, and their passport and visa. The
+ * trip itself (places, dates, currency, daily budget) is in the goal's `type_data`.
+ */
+export const goalTravellers = sqliteTable("goal_traveller", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  paying: integer("paying", { mode: "boolean" }).notNull().default(true),
+  passportNumber: text("passport_number"),
+  passportExpiry: integer("passport_expiry", { mode: "timestamp_ms" }),
+  /** not-needed | to-apply | applied | approved */
+  visaStatus: text("visa_status").notNull().default("not-needed"),
+  visaDate: integer("visa_date", { mode: "timestamp_ms" }),
+  insurance: text("insurance"),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  goalIdx: index("idx_goal_traveller_goal").on(table.goalId),
+}));
+
+/**
+ * Something booked for a trip: a flight, stay, transport, ticket or anything else, with its cost
+ * in rupiah or the trip's currency. It keeps a part of the goal's breakdown in step (`part_id`), so
+ * paying it from the goal ticks that part off. `details` (JSON) holds the kind's own fields, like a
+ * flight's number and airports.
+ */
+export const goalBookings = sqliteTable("goal_booking", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("other"),
+  title: text("title").notNull(),
+  startAt: integer("start_at", { mode: "timestamp_ms" }),
+  endAt: integer("end_at", { mode: "timestamp_ms" }),
+  place: text("place"),
+  address: text("address"),
+  code: text("code"),
+  cost: real("cost").notNull().default(0),
+  costCurrency: text("cost_currency").notNull().default("IDR"),
+  cancelBy: integer("cancel_by", { mode: "timestamp_ms" }),
+  details: text("details").notNull().default("{}"),
+  fileIds: text("file_ids").notNull().default("[]"),
+  partId: integer("part_id").references(() => goalParts.id, { onDelete: "set null" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  goalIdx: index("idx_goal_booking_goal").on(table.goalId),
+}));
+
+/** A plan for a day of the trip: a time, what, where, and what it's expected to cost. */
+export const goalPlans = sqliteTable("goal_plan", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  day: text("day").notNull(),
+  time: text("time"),
+  title: text("title").notNull(),
+  place: text("place"),
+  cost: real("cost").notNull().default(0),
+  costCurrency: text("cost_currency").notNull().default("IDR"),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  goalIdx: index("idx_goal_plan_goal").on(table.goalId),
+}));
+
+/** Something to pack, for one traveller or everyone. */
+export const goalPacking = sqliteTable("goal_packing", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  travellerId: integer("traveller_id").references(() => goalTravellers.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  done: integer("done", { mode: "boolean" }).notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  goalIdx: index("idx_goal_packing_goal").on(table.goalId),
+}));
+
 /** A page of a goal's notes, like "Notes" or "Places to eat"; its content is markdown. */
 export const goalNotePages = sqliteTable("goal_note_page", {
   id: integer("id").primaryKey({ autoIncrement: true }),

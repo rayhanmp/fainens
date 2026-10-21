@@ -5,6 +5,8 @@ import { cn } from '../../lib/utils';
 import { GoalsHero } from '../goals/GoalsHero';
 import { ReachPanel, ThisMonthPanel } from '../goals/GoalsSidePanels';
 import type { GoalsOverview } from '../goals/queries';
+import type { Trip } from '../goals/trip/queries';
+import { TripBudget } from '../goals/trip/TripBudget';
 import { Segmented } from '../savings/fields';
 import { DEFAULT_PLAN, goalOutlooks, planRange, runPlan, type PlanInputs } from '../savings/plan';
 import { ProjectionChart, type ValueMode } from '../savings/ProjectionChart';
@@ -79,6 +81,33 @@ export function GoalsPlanDemo() {
         <ThisMonthPanel overview={SAMPLE_GOALS} funding={false} onFund={() => {}} />
         <ReachPanel overview={SAMPLE_GOALS} />
       </div>
+    </VisualFrame>
+  );
+}
+
+const tripBooking = { goalId: 1, startAt: null, endAt: null, place: null, address: null, code: null, cancelBy: null, details: {}, fileIds: [], partId: null, paidAt: null, paid: 0, sortOrder: 0 };
+/** A sample week in Japan for two, priced partly in yen at Rp105,5. */
+const SAMPLE_TRIP: Trip = {
+  basics: { places: ['Tokyo', 'Kyoto'], startDate: new Date(2027, 2, 10, 12).getTime(), endDate: new Date(2027, 2, 16, 12).getTime(), currency: 'JPY', rate: 105.5, dailyBudget: 600_000, climate: 'cold' },
+  travellers: [
+    { id: 1, goalId: 1, name: 'You', paying: true, passportNumber: null, passportExpiry: null, visaStatus: 'not-needed', visaDate: null, insurance: null, sortOrder: 0 },
+    { id: 2, goalId: 1, name: 'Sari', paying: true, passportNumber: null, passportExpiry: null, visaStatus: 'not-needed', visaDate: null, insurance: null, sortOrder: 1 },
+  ],
+  bookings: [
+    { ...tripBooking, id: 1, kind: 'flight', title: 'Flights there and back', cost: 19_400_000, costCurrency: 'IDR', rupiah: 19_400_000, paidAt: 1, paid: 19_400_000 },
+    { ...tripBooking, id: 2, kind: 'stay', title: 'Hotel in Shinjuku', cost: 63_000, costCurrency: 'JPY', rupiah: 6_646_500 },
+    { ...tripBooking, id: 3, kind: 'transport', title: 'JR Pass, 7 days', cost: 50_000, costCurrency: 'JPY', rupiah: 5_275_000 },
+  ],
+  plans: [{ id: 1, goalId: 1, day: '2027-03-12', time: null, title: 'Kimono rental', place: null, cost: 8_000, costCurrency: 'JPY', rupiah: 844_000, sortOrder: 0 }],
+  packing: [],
+  spending: null,
+};
+
+/** A holiday's Budget card itself, from a sample week in Japan. */
+export function TripBudgetDemo() {
+  return (
+    <VisualFrame caption="Sample: flights paid, a hotel and JR Pass priced in yen, one day’s plan, and Rp600 ribu spending money a day each for two people over seven days.">
+      <TripBudget trip={SAMPLE_TRIP} target={42_000_000} />
     </VisualFrame>
   );
 }

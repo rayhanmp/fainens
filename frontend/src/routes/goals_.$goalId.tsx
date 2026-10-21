@@ -14,6 +14,15 @@ import { GrowthChart } from '../features/goals/detail/GrowthChart';
 import { PartsSection } from '../features/goals/detail/PartsSection';
 import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, type GoalDraft } from '../features/goals/dialogs';
 import { NotesWorkspace } from '../features/goals/notes/NotesWorkspace';
+import { BookingsSection } from '../features/goals/trip/BookingsSection';
+import { ItinerarySection } from '../features/goals/trip/ItinerarySection';
+import { PackingSection, PeopleSection } from '../features/goals/trip/PeopleSection';
+import { useTripQuery } from '../features/goals/trip/queries';
+import { TripBudget } from '../features/goals/trip/TripBudget';
+import { TripIllustration } from '../features/goals/trip/TripIllustration';
+import { TripRail } from '../features/goals/trip/TripRail';
+import { TodayPanel, TripRecap } from '../features/goals/trip/TripStatus';
+import { tripPhase } from '../features/goals/trip/trip-utils';
 import { useGoalHeadline } from '../features/goals/use-headline';
 import {
   useAllocateMutation,
@@ -58,6 +67,12 @@ function GoalPage() {
   const goal = detail?.goal;
   const color = coloredGoals(overview?.goals ?? []).find((item) => item.goal.id === id)?.color ?? GOAL_COLORS[0];
   const headline = useGoalHeadline();
+  // A holiday has its trip: where and when, bookings, its days, who's going and packing.
+  const tripQuery = useTripQuery(id, goal?.goalType === 'trip');
+  const trip = goal?.goalType === 'trip' ? tripQuery.data : undefined;
+  const [now] = useState(() => Date.now());
+  const phase = trip ? tripPhase(trip.basics, now) : null;
+  const firstFlight = trip?.bookings.find((booking) => booking.kind === 'flight');
 
   // Putting money in that reaches a new quarter of the target is celebrated.
   const celebrateIfReached = (before: number, after: { setAside: number; targetAmount: number }) => {
@@ -100,6 +115,7 @@ function GoalPage() {
                 detail={detail}
                 color={color}
                 headline={headline(goal, detail.parts)}
+                art={trip ? <TripIllustration color={color} place={trip.basics.places[0]} from={firstFlight?.place} leaves={trip.basics.startDate} /> : undefined}
                 pausing={update.isPending}
                 onPutIn={() => setMoving('in')}
                 onTakeOut={() => setMoving('out')}
@@ -116,12 +132,28 @@ function GoalPage() {
 
             <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
               <div className="min-w-0 space-y-6">
+                {trip && (
+                  <>
+                    {phase === 'during' && <TodayPanel trip={trip} now={now} />}
+                    {phase === 'after' && <TripRecap goalId={id} trip={trip} target={goal.targetAmount} files={detail.attachments} />}
+                    {/* Where and when sit beside the page on wide screens, and first here on narrow ones. */}
+                    <div className="xl:hidden"><TripRail goalId={id} trip={trip} /></div>
+                    <TripBudget trip={trip} target={goal.targetAmount} />
+                    <BookingsSection goalId={id} trip={trip} files={detail.attachments} canPay={goal.status === 'active' && goal.setAside > 0} onPay={(partId) => setPaying({ partId })} now={now} />
+                    <ItinerarySection goalId={id} goalName={goal.name} trip={trip} now={now} />
+                    <PeopleSection goalId={id} trip={trip} now={now} />
+                    <PackingSection goalId={id} trip={trip} />
+                  </>
+                )}
                 <GrowthChart detail={detail} color={color} />
-                <NotesWorkspace key={id} detail={detail} />
+                <NotesWorkspace key={id} detail={detail} bookings={trip?.bookings} />
                 <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
                 <FilesSection detail={detail} />
               </div>
-              <DetailsPanel detail={detail} overview={overview} />
+              <div className="space-y-6">
+                {trip && <div className="hidden xl:block"><TripRail goalId={id} trip={trip} /></div>}
+                <DetailsPanel detail={detail} overview={overview} />
+              </div>
             </div>
 
             {moving && (

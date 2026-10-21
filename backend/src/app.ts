@@ -24,6 +24,7 @@ import savingsPlanRoutes from "./routes/savings-plans";
 import goalRoutes from "./routes/goals";
 import goalFileRoutes from "./routes/goal-files";
 import goalNoteRoutes from "./routes/goal-notes";
+import goalTripRoutes from "./routes/goal-trips";
 import periodRoutes from "./routes/periods";
 import budgetRoutes from "./routes/budget";
 import attachmentRoutes from "./routes/attachments";
@@ -128,6 +129,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(goalRoutes);
   app.register(goalFileRoutes);
   app.register(goalNoteRoutes);
+  app.register(goalTripRoutes);
   app.register(periodRoutes);
   app.register(budgetRoutes);
   app.register(attachmentRoutes);

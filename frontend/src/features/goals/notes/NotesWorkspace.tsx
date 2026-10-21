@@ -14,6 +14,7 @@ import { NotesContext, type NoteTarget } from './context';
 import { HistoryDialog } from './HistoryDialog';
 import { downloadMarkdown, printNotes } from './notes-export';
 import { readableMarkdown } from './notes-utils';
+import { wallLabel } from '../trip/trip-utils';
 import { NotesEditor, type SaveStatus } from './NotesEditor';
 import {
   useAddPageMutation,
@@ -39,6 +40,7 @@ const countIn = (text: string, query: string) => {
 };
 
 type Heading = { level: number; text: string; pos: number };
+const NO_BOOKINGS: [] = [];
 
 /** A small menu anchored under a button, closed by a click outside or Escape. */
 function Menu({ open, onClose, children, align = 'left' }: { open: boolean; onClose: () => void; children: React.ReactNode; align?: 'left' | 'right' }) {
@@ -68,7 +70,11 @@ function MenuItem({ onClick, children, danger, disabled }: { onClick: () => void
  * tools search all pages (and other goals' notes), show an outline, bring back an earlier copy,
  * export the page, and widen it to a full-screen focus mode.
  */
-export function NotesWorkspace({ detail }: { detail: GoalDetail }) {
+export function NotesWorkspace({ detail, bookings = NO_BOOKINGS }: {
+  detail: GoalDetail;
+  /** A holiday's bookings, which notes can link to as well. */
+  bookings?: ReadonlyArray<{ id: number; title: string; startAt: number | null; rupiah: number; paidAt: number | null }>;
+}) {
   const { goal } = detail;
   const goalId = goal.id;
   const { confirm } = useConfirm();
@@ -105,8 +111,15 @@ export function NotesWorkspace({ detail }: { detail: GoalDetail }) {
 
   const targets = useMemo<NoteTarget[]>(() => [
     ...detail.parts.map((part) => ({ kind: 'part' as const, id: part.id, label: part.name, detail: `${formatAmount(part.amount)}${part.paidAt ? ' · paid' : ''}`, done: part.paidAt !== null })),
+    ...bookings.map((booking) => ({
+      kind: 'booking' as const,
+      id: booking.id,
+      label: booking.title,
+      detail: [booking.startAt !== null ? wallLabel(booking.startAt) : null, booking.rupiah ? formatAmount(booking.rupiah) : null, booking.paidAt ? 'paid' : null].filter(Boolean).join(' · '),
+      done: booking.paidAt !== null,
+    })),
     ...detail.attachments.map((file) => ({ kind: 'file' as const, id: file.id, label: file.filename, href: goalFileUrl(file.id) })),
-  ], [detail.parts, detail.attachments, formatAmount]);
+  ], [detail.parts, detail.attachments, bookings, formatAmount]);
 
   // The outline follows the page's headings as it changes.
   useEffect(() => {

@@ -14,7 +14,7 @@ export const CAN_I: CanIAnswer[] = [
   { question: 'Change a closed period?', answer: 'partly', detail: 'Reopen it first, then close it again.' },
   { question: 'Use it offline?', answer: 'partly', detail: 'It opens, but balances can’t load and changes can’t be saved.' },
   { question: 'Use it in Bahasa Indonesia?', answer: 'partly', detail: 'Agent can reply in Bahasa Indonesia; the app itself is in English.' },
-  { question: 'Track other currencies?', answer: 'no', detail: 'Everything is in whole rupiah. Agent can look up exchange rates for reference only.' },
+  { question: 'Track other currencies?', answer: 'partly', detail: 'Everything is counted in whole rupiah. A holiday’s bookings and plans can be priced in the local money at your rate, and Agent can look up exchange rates for reference.' },
   { question: 'Delete a posted transaction?', answer: 'no', detail: 'Correct it instead; the history keeps both entries.' },
   { question: 'Restore a backup in the app?', answer: 'no', detail: 'Backups and exports are kept safe, but restoring isn’t built in yet.' },
   { question: 'Share it with someone else?', answer: 'no', detail: 'It’s single-user; loans and split bills track people without giving them access.' },
@@ -80,6 +80,7 @@ export const CHANGELOG: ChangelogMonth[] = [
     month: 'October 2026',
     highlights: [
       { title: 'Goals for your money', body: 'Split your cash and investments into goals, each its own pot, and see what’s still free. Put in every goal’s monthly amount in one tap or on payday, in priority order, save for a wishlist item, and finish a goal with the purchase that paid for it.' },
+      { title: 'Plan a holiday on its goal', body: 'Places, dates and the money there; flights, stays, passes and tickets with codes, maps and files; a day-by-day plan you can drag, export to your calendar or print; who’s going with their passports and visas; packing lists; a budget against the target; a Today view on the trip and a look back after it, with reminders before you go.' },
       { title: 'Notes you write in place', body: 'A goal’s notes have pages, tables, pictures, link cards, highlights, dates that remind you, and live links to its parts and files. Fold sections, drag blocks, search across goals, look back at earlier copies, and export to Markdown or PDF.' },
       { title: 'Every goal has its own page', body: 'Notes with checklists, a cost breakdown you pay part by part, files and a cover photo, a product link, where its money sits and what it earns, the category whose expenses it pays, milestones and a monthly streak. Start from templates, repeat a goal every year, pause one, and get reminders in the Dashboard’s bell.' },
       { title: 'A new savings simulator', body: 'Start a plan from your ledger, split it into pots like Tabungan, SBN and Saham, and give each goal its own pot so no two goals count the same money. Save plans to compare on any device, and plan retirement in today’s prices with BPJS, health cover and sourced guidance.' },

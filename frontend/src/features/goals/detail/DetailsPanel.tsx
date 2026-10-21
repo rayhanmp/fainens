@@ -26,7 +26,7 @@ const PLACES = [{ name: 'Nowhere', returnRate: 0, title: 'Cash or a wallet: earn
 const placeLabel = (place: (typeof PLACES)[number]) => (place.returnRate ? `${place.name} · ${place.returnRate.toLocaleString('id-ID')}%` : `${place.name} · 0%`);
 
 /** One setting: its name (and a hint) on the left, its control on the right; a note can follow below. */
-function Row({ label, info, control, children }: { label: string; info?: ReactNode; control?: ReactNode; children?: ReactNode }) {
+export function DetailRow({ label, info, control, children }: { label: string; info?: ReactNode; control?: ReactNode; children?: ReactNode }) {
   return (
     <div className="px-4 py-3 sm:px-5">
       <div className="flex items-center justify-between gap-3">
@@ -72,7 +72,7 @@ function LinkRow({ detail }: { detail: GoalDetail }) {
 
   const adding = editing || (!goal.linkUrl && url !== (goal.linkUrl ?? ''));
   return (
-    <Row
+    <DetailRow
       label="Link"
       info="A product, tour or booking page. Pages from the shops the wishlist knows show their title and picture, and their price can become the target."
       control={!goal.linkUrl && !adding ? <Button type="button" size="sm" variant="secondary" className="h-[34px] w-full" onClick={() => setEditing(true)}><Link2 className="mr-1.5 inline h-3.5 w-3.5" aria-hidden />Add link</Button> : undefined}
@@ -104,7 +104,7 @@ function LinkRow({ detail }: { detail: GoalDetail }) {
           </span>
         </div>
       )}
-    </Row>
+    </DetailRow>
   );
 }
 
@@ -117,7 +117,7 @@ function EarnsRow({ detail }: { detail: GoalDetail }) {
   const save = (next: number) => update.mutate({ id: detail.goal.id, expectedReturn: next }, { onError: (error) => toast.error(errorText(error, 'Could not save')) });
   const value = custom !== null ? 'custom' : known?.name ?? 'custom';
   return (
-    <Row
+    <DetailRow
       label="Earns"
       info="The yearly return, after tax, where its money sits. It’s counted in when the goal is reached, here and in the savings simulator."
       control={(
@@ -139,7 +139,7 @@ function EarnsRow({ detail }: { detail: GoalDetail }) {
           <Button type="button" size="sm" variant="secondary" isLoading={update.isPending} disabled={custom === rate} onClick={() => save(custom)}>Save</Button>
         </div>
       )}
-    </Row>
+    </DetailRow>
   );
 }
 
@@ -162,7 +162,7 @@ export function DetailsPanel({ detail, overview }: { detail: GoalDetail; overvie
       <Section title="Details">
         <div className="divide-y divide-[var(--color-border)]">
           <LinkRow detail={detail} />
-          <Row
+          <DetailRow
             label="Sits in"
             info="The account or pocket this goal’s money is really kept in, like a Jago pocket. Nothing moves; it’s a note, and a check that the account holds enough for its goals."
             control={<Dropdown ariaLabel="Sits in" value={goal.accountId ? String(goal.accountId) : 'none'} options={[{ value: 'none', label: 'Not said' }, ...overview.accounts.map((item) => ({ value: String(item.id), label: item.name }))]} onChange={(value) => save({ id: goal.id, accountId: value === 'none' ? null : Number(value) })} />}
@@ -170,15 +170,15 @@ export function DetailsPanel({ detail, overview }: { detail: GoalDetail; overvie
             {account && account.balance < account.goalsHold && (
               <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-warning)]"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />{account.name} holds {formatAmount(account.balance)}, less than the {formatAmount(account.goalsHold)} its goals have.</p>
             )}
-          </Row>
+          </DetailRow>
           <EarnsRow key={goal.expectedReturn} detail={detail} />
-          <Row
+          <DetailRow
             label="Pays for"
             info="Expenses you record in this category come out of the goal automatically, from the day you choose it, as far as its money goes. Reverse an expense and its money comes back."
             control={<Dropdown ariaLabel="Pays for" value={goal.categoryId ? String(goal.categoryId) : 'none'} options={categoryOptions} onChange={(value) => save({ id: goal.id, categoryId: value === 'none' ? null : Number(value) })} />}
           >
             {goal.categoryId && goal.categorySince && <p className="mt-2 text-xs text-[var(--ref-on-surface-variant)]">{detail.categoryName ?? 'Its'} expenses from {new Date(goal.categorySince).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} come out of it.</p>}
-          </Row>
+          </DetailRow>
         </div>
       </Section>
 

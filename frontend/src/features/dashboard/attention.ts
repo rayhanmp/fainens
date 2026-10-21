@@ -42,7 +42,39 @@ export type GoalReminders = {
   shortAccounts: ReadonlyArray<{ id: number; name: string; balance: number; goalsHold: number }>;
   /** Unticked checklist items in goals' notes, with the day they're due. */
   tasks?: ReadonlyArray<{ goalId: number; goalName: string; text: string; dueAt: number }>;
+  /** What holidays need soon: free cancellation ending, unpaid bookings, passports, visas, packing. */
+  trips?: ReadonlyArray<TripReminder>;
 };
+
+export type TripReminder = {
+  kind: 'cancel' | 'unpaid' | 'passport' | 'visa' | 'packing';
+  goalId: number;
+  goalName: string;
+  /** When free cancellation ends, when you leave, or when a passport runs out. */
+  at: number;
+  /** Whose passport or visa, or which booking. */
+  name: string | null;
+  count: number;
+};
+
+/** A trip reminder in words, for the bell. */
+function tripAttention(reminder: TripReminder, now: number, format: AttentionFormat): Attention {
+  const days = Math.round((new Date(reminder.at).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / DAY_MS);
+  const when = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+  const base = { id: `trip-${reminder.kind}:${reminder.goalId}:${reminder.name ?? ''}:${reminder.at}`, to: '/goals' as const, action: 'Open goals' };
+  switch (reminder.kind) {
+    case 'cancel':
+      return { ...base, tone: 'warning', title: `Free cancellation for ${reminder.name} ends ${when}`, detail: `On ${reminder.goalName}. Cancel by ${format.date(reminder.at)} if your plans change.` };
+    case 'unpaid':
+      return { ...base, tone: 'warning', title: `${plural(reminder.count, 'booking')} not paid yet`, detail: `${reminder.goalName} leaves ${when}, on ${format.date(reminder.at)}.` };
+    case 'passport':
+      return { ...base, tone: 'warning', title: `${reminder.name}’s passport runs out ${format.date(reminder.at)}`, detail: `That’s within six months of coming back from ${reminder.goalName}; some countries won’t let you in with less. Check the rule for where you’re going.` };
+    case 'visa':
+      return { ...base, tone: 'warning', title: `Apply for ${reminder.name}’s visa`, detail: `${reminder.goalName} leaves ${when}, on ${format.date(reminder.at)}.` };
+    case 'packing':
+      return { ...base, tone: 'info', title: `${plural(reminder.count, 'thing')} not packed yet`, detail: `${reminder.goalName} leaves ${when}.` };
+  }
+}
 
 /**
  * The goal reminders from the Goals overview: this month's amounts not yet in, goals that won't
@@ -211,6 +243,7 @@ export function buildAttentionItems(input: AttentionInput, format: AttentionForm
         action: 'Open goals',
       });
     }
+    for (const reminder of (goals.trips ?? []).slice(0, 4)) next.push(tripAttention(reminder, now, format));
     if (goals.due > 0 && goals.free > 0) {
       next.push({ id: `goals-due:${monthKey}`, tone: 'info', title: `${format.amount(Math.min(goals.due, goals.free))} to put into goals`, detail: 'This month’s amounts aren’t in yet. One tap on Goals puts them in from your free money.', to: '/goals', action: 'Put it in' });
     }

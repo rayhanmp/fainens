@@ -12,7 +12,7 @@ import type { Goal } from './queries';
 import { GOAL_TYPE_KEYS, GOAL_TYPES, isGoalTypeKey, type GoalTypeKey } from './goal-types';
 import { GOAL_ICONS, GOAL_TEMPLATES, type GoalTemplate } from './templates';
 
-function Footer({ formId, submitLabel, onClose, busy, extra }: { formId: string; submitLabel: string; onClose: () => void; busy?: boolean; extra?: React.ReactNode }) {
+export function Footer({ formId, submitLabel, onClose, busy, extra }: { formId: string; submitLabel: string; onClose: () => void; busy?: boolean; extra?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex gap-2">{extra}</div>
@@ -24,7 +24,7 @@ function Footer({ formId, submitLabel, onClose, busy, extra }: { formId: string;
   );
 }
 
-function ErrorLine({ error }: { error: string | null }) {
+export function ErrorLine({ error }: { error: string | null }) {
   return error ? <p role="alert" className="rounded-lg bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</p> : null;
 }
 

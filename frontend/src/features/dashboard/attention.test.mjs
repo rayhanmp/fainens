@@ -181,3 +181,24 @@ test('dated checklist items in goals’ notes are reminded of when due within th
     ['info', 'Book the hotel: due tomorrow'],
   ]);
 });
+
+test('holidays remind you of cancellation, payment, passports, visas and packing', () => {
+  const day = (offset) => new Date(new Date(NOW).setHours(12, 0, 0, 0) + offset * DAY_MS).getTime();
+  const trip = { goalId: 3, goalName: 'Japan', count: 1, name: null };
+  const goals = { due: 0, free: 0, late: [], shortAccounts: [], trips: [
+    { ...trip, kind: 'cancel', at: day(2), name: 'Shinjuku hotel' },
+    { ...trip, kind: 'unpaid', at: day(10), count: 2 },
+    { ...trip, kind: 'passport', at: Date.UTC(2027, 5, 1), name: 'Sari' },
+    { ...trip, kind: 'visa', at: day(10), name: 'Sari' },
+    { ...trip, kind: 'packing', at: day(1), count: 12 },
+  ] };
+  const items = buildAttentionItems(input({ goals }), format).filter((item) => item.id.startsWith('trip-'));
+  assert.deepEqual(items.map((item) => [item.tone, item.title]), [
+    ['warning', 'Free cancellation for Shinjuku hotel ends in 2 days'],
+    ['warning', '2 bookings not paid yet'],
+    ['warning', 'Sari’s passport runs out 2027-06-01'],
+    ['warning', 'Apply for Sari’s visa'],
+  ]);
+  // Four at most, so the bell isn't only about one trip.
+  assert.equal(buildAttentionItems(input({ goals: { ...goals, trips: goals.trips.slice(4) } }), format).find((item) => item.id.startsWith('trip-packing')).title, '12 things not packed yet');
+});

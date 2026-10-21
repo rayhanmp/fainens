@@ -7762,6 +7762,1336 @@ export type RestoreGoalPageVersion404 = {
   [key: string]: unknown;
 };
 
+export type ListTripReminders200ItemKind = typeof ListTripReminders200ItemKind[keyof typeof ListTripReminders200ItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ListTripReminders200ItemKind = {
+  cancel: 'cancel',
+  unpaid: 'unpaid',
+  passport: 'passport',
+  visa: 'visa',
+  packing: 'packing',
+} as const;
+
+export type ListTripReminders200Item = {
+  kind: ListTripReminders200ItemKind;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  goalName: string;
+  at: number;
+  /** @nullable */
+  name: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  count: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetGoalTrip200BasicsClimate = typeof GetGoalTrip200BasicsClimate[keyof typeof GetGoalTrip200BasicsClimate] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalTrip200BasicsClimate = {
+  cold: 'cold',
+  warm: 'warm',
+  mixed: 'mixed',
+} as const;
+
+export type GetGoalTrip200Basics = {
+  places: string[];
+  /** @nullable */
+  startDate: number | null;
+  /** @nullable */
+  endDate: number | null;
+  /** @nullable */
+  currency: string | null;
+  /** @nullable */
+  rate: number | null;
+  dailyBudget: number;
+  /** @nullable */
+  climate: GetGoalTrip200BasicsClimate;
+};
+
+export type GetGoalTrip200TravellersItemVisaStatus = typeof GetGoalTrip200TravellersItemVisaStatus[keyof typeof GetGoalTrip200TravellersItemVisaStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalTrip200TravellersItemVisaStatus = {
+  'not-needed': 'not-needed',
+  'to-apply': 'to-apply',
+  applied: 'applied',
+  approved: 'approved',
+} as const;
+
+export type GetGoalTrip200TravellersItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  name: string;
+  paying: boolean;
+  /** @nullable */
+  passportNumber: string | null;
+  /** @nullable */
+  passportExpiry: number | null;
+  visaStatus: GetGoalTrip200TravellersItemVisaStatus;
+  /** @nullable */
+  visaDate: number | null;
+  /** @nullable */
+  insurance: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type GetGoalTrip200BookingsItemKind = typeof GetGoalTrip200BookingsItemKind[keyof typeof GetGoalTrip200BookingsItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalTrip200BookingsItemKind = {
+  flight: 'flight',
+  stay: 'stay',
+  transport: 'transport',
+  ticket: 'ticket',
+  other: 'other',
+} as const;
+
+export type GetGoalTrip200BookingsItemDetails = {[key: string]: string | number | null};
+
+export type GetGoalTrip200BookingsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  kind: GetGoalTrip200BookingsItemKind;
+  title: string;
+  /** @nullable */
+  startAt: number | null;
+  /** @nullable */
+  endAt: number | null;
+  /** @nullable */
+  place: string | null;
+  /** @nullable */
+  address: string | null;
+  /** @nullable */
+  code: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /** @nullable */
+  cancelBy: number | null;
+  details: GetGoalTrip200BookingsItemDetails;
+  fileIds: number[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  partId: number | null;
+  /** @nullable */
+  paidAt: number | null;
+  paid: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type GetGoalTrip200PlansItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  day: string;
+  /** @nullable */
+  time: string | null;
+  title: string;
+  /** @nullable */
+  place: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type GetGoalTrip200PackingItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  travellerId: number | null;
+  text: string;
+  done: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type GetGoalTrip200SpendingByDayItem = {
+  day: string;
+  total: number;
+};
+
+export type GetGoalTrip200SpendingByCategoryItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  categoryId: number;
+  name: string;
+  total: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetGoalTrip200Spending = {
+  total: number;
+  byDay: GetGoalTrip200SpendingByDayItem[];
+  byCategory: GetGoalTrip200SpendingByCategoryItem[];
+} | null;
+
+export type GetGoalTrip200 = {
+  basics: GetGoalTrip200Basics;
+  travellers: GetGoalTrip200TravellersItem[];
+  bookings: GetGoalTrip200BookingsItem[];
+  plans: GetGoalTrip200PlansItem[];
+  packing: GetGoalTrip200PackingItem[];
+  /** @nullable */
+  spending: GetGoalTrip200Spending;
+};
+
+export type GetGoalTrip404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type UpdateGoalTripBodyClimate = typeof UpdateGoalTripBodyClimate[keyof typeof UpdateGoalTripBodyClimate] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTripBodyClimate = {
+  cold: 'cold',
+  warm: 'warm',
+  mixed: 'mixed',
+} as const;
+
+export type UpdateGoalTripBody = {
+  /** @maxItems 20 */
+  places?: string[];
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  startDate?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  endDate?: number | null;
+  /**
+   * @nullable
+   * @pattern ^[A-Z]{3}$
+   */
+  currency?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 1000000
+   * @exclusiveMinimum
+   * @nullable
+   */
+  rate?: number | null;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  dailyBudget?: number;
+  /** @nullable */
+  climate?: UpdateGoalTripBodyClimate;
+};
+
+/**
+ * @nullable
+ */
+export type UpdateGoalTrip200BasicsClimate = typeof UpdateGoalTrip200BasicsClimate[keyof typeof UpdateGoalTrip200BasicsClimate] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTrip200BasicsClimate = {
+  cold: 'cold',
+  warm: 'warm',
+  mixed: 'mixed',
+} as const;
+
+export type UpdateGoalTrip200Basics = {
+  places: string[];
+  /** @nullable */
+  startDate: number | null;
+  /** @nullable */
+  endDate: number | null;
+  /** @nullable */
+  currency: string | null;
+  /** @nullable */
+  rate: number | null;
+  dailyBudget: number;
+  /** @nullable */
+  climate: UpdateGoalTrip200BasicsClimate;
+};
+
+export type UpdateGoalTrip200TravellersItemVisaStatus = typeof UpdateGoalTrip200TravellersItemVisaStatus[keyof typeof UpdateGoalTrip200TravellersItemVisaStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTrip200TravellersItemVisaStatus = {
+  'not-needed': 'not-needed',
+  'to-apply': 'to-apply',
+  applied: 'applied',
+  approved: 'approved',
+} as const;
+
+export type UpdateGoalTrip200TravellersItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  name: string;
+  paying: boolean;
+  /** @nullable */
+  passportNumber: string | null;
+  /** @nullable */
+  passportExpiry: number | null;
+  visaStatus: UpdateGoalTrip200TravellersItemVisaStatus;
+  /** @nullable */
+  visaDate: number | null;
+  /** @nullable */
+  insurance: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateGoalTrip200BookingsItemKind = typeof UpdateGoalTrip200BookingsItemKind[keyof typeof UpdateGoalTrip200BookingsItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTrip200BookingsItemKind = {
+  flight: 'flight',
+  stay: 'stay',
+  transport: 'transport',
+  ticket: 'ticket',
+  other: 'other',
+} as const;
+
+export type UpdateGoalTrip200BookingsItemDetails = {[key: string]: string | number | null};
+
+export type UpdateGoalTrip200BookingsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  kind: UpdateGoalTrip200BookingsItemKind;
+  title: string;
+  /** @nullable */
+  startAt: number | null;
+  /** @nullable */
+  endAt: number | null;
+  /** @nullable */
+  place: string | null;
+  /** @nullable */
+  address: string | null;
+  /** @nullable */
+  code: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /** @nullable */
+  cancelBy: number | null;
+  details: UpdateGoalTrip200BookingsItemDetails;
+  fileIds: number[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  partId: number | null;
+  /** @nullable */
+  paidAt: number | null;
+  paid: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateGoalTrip200PlansItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  day: string;
+  /** @nullable */
+  time: string | null;
+  title: string;
+  /** @nullable */
+  place: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateGoalTrip200PackingItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  travellerId: number | null;
+  text: string;
+  done: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateGoalTrip200SpendingByDayItem = {
+  day: string;
+  total: number;
+};
+
+export type UpdateGoalTrip200SpendingByCategoryItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  categoryId: number;
+  name: string;
+  total: number;
+};
+
+/**
+ * @nullable
+ */
+export type UpdateGoalTrip200Spending = {
+  total: number;
+  byDay: UpdateGoalTrip200SpendingByDayItem[];
+  byCategory: UpdateGoalTrip200SpendingByCategoryItem[];
+} | null;
+
+export type UpdateGoalTrip200 = {
+  basics: UpdateGoalTrip200Basics;
+  travellers: UpdateGoalTrip200TravellersItem[];
+  bookings: UpdateGoalTrip200BookingsItem[];
+  plans: UpdateGoalTrip200PlansItem[];
+  packing: UpdateGoalTrip200PackingItem[];
+  /** @nullable */
+  spending: UpdateGoalTrip200Spending;
+};
+
+export type UpdateGoalTrip400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateGoalTrip404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PlanTripAgain201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+};
+
+export type PlanTripAgain400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PlanTripAgain404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripTravellerBodyVisaStatus = typeof AddTripTravellerBodyVisaStatus[keyof typeof AddTripTravellerBodyVisaStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripTravellerBodyVisaStatus = {
+  'not-needed': 'not-needed',
+  'to-apply': 'to-apply',
+  applied: 'applied',
+  approved: 'approved',
+} as const;
+
+export type AddTripTravellerBody = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  paying?: boolean;
+  /**
+   * @maxLength 30
+   * @nullable
+   */
+  passportNumber?: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  passportExpiry?: number | null;
+  visaStatus?: AddTripTravellerBodyVisaStatus;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  visaDate?: number | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  insurance?: string | null;
+};
+
+export type AddTripTraveller201VisaStatus = typeof AddTripTraveller201VisaStatus[keyof typeof AddTripTraveller201VisaStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripTraveller201VisaStatus = {
+  'not-needed': 'not-needed',
+  'to-apply': 'to-apply',
+  applied: 'applied',
+  approved: 'approved',
+} as const;
+
+export type AddTripTraveller201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  name: string;
+  paying: boolean;
+  /** @nullable */
+  passportNumber: string | null;
+  /** @nullable */
+  passportExpiry: number | null;
+  visaStatus: AddTripTraveller201VisaStatus;
+  /** @nullable */
+  visaDate: number | null;
+  /** @nullable */
+  insurance: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type AddTripTraveller400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripTraveller404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripTravellerBodyVisaStatus = typeof UpdateTripTravellerBodyVisaStatus[keyof typeof UpdateTripTravellerBodyVisaStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripTravellerBodyVisaStatus = {
+  'not-needed': 'not-needed',
+  'to-apply': 'to-apply',
+  applied: 'applied',
+  approved: 'approved',
+} as const;
+
+export type UpdateTripTravellerBody = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name?: string;
+  paying?: boolean;
+  /**
+   * @maxLength 30
+   * @nullable
+   */
+  passportNumber?: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  passportExpiry?: number | null;
+  visaStatus?: UpdateTripTravellerBodyVisaStatus;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  visaDate?: number | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  insurance?: string | null;
+};
+
+export type UpdateTripTraveller200VisaStatus = typeof UpdateTripTraveller200VisaStatus[keyof typeof UpdateTripTraveller200VisaStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripTraveller200VisaStatus = {
+  'not-needed': 'not-needed',
+  'to-apply': 'to-apply',
+  applied: 'applied',
+  approved: 'approved',
+} as const;
+
+export type UpdateTripTraveller200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  name: string;
+  paying: boolean;
+  /** @nullable */
+  passportNumber: string | null;
+  /** @nullable */
+  passportExpiry: number | null;
+  visaStatus: UpdateTripTraveller200VisaStatus;
+  /** @nullable */
+  visaDate: number | null;
+  /** @nullable */
+  insurance: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateTripTraveller400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripTraveller404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteTripTraveller204 = typeof DeleteTripTraveller204[keyof typeof DeleteTripTraveller204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteTripTraveller204 = {
+} as const;
+
+export type DeleteTripTraveller404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripBookingBodyKind = typeof AddTripBookingBodyKind[keyof typeof AddTripBookingBodyKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripBookingBodyKind = {
+  flight: 'flight',
+  stay: 'stay',
+  transport: 'transport',
+  ticket: 'ticket',
+  other: 'other',
+} as const;
+
+export type AddTripBookingBodyDetails = {[key: string]: string | number | null};
+
+export type AddTripBookingBody = {
+  kind: AddTripBookingBodyKind;
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  title: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  startAt?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  endAt?: number | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  place?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  address?: string | null;
+  /**
+   * @maxLength 60
+   * @nullable
+   */
+  code?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  cost?: number;
+  /** @pattern ^[A-Z]{3}$ */
+  costCurrency?: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  cancelBy?: number | null;
+  details?: AddTripBookingBodyDetails;
+  /** @maxItems 20 */
+  fileIds?: number[];
+};
+
+export type AddTripBooking201Kind = typeof AddTripBooking201Kind[keyof typeof AddTripBooking201Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripBooking201Kind = {
+  flight: 'flight',
+  stay: 'stay',
+  transport: 'transport',
+  ticket: 'ticket',
+  other: 'other',
+} as const;
+
+export type AddTripBooking201Details = {[key: string]: string | number | null};
+
+export type AddTripBooking201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  kind: AddTripBooking201Kind;
+  title: string;
+  /** @nullable */
+  startAt: number | null;
+  /** @nullable */
+  endAt: number | null;
+  /** @nullable */
+  place: string | null;
+  /** @nullable */
+  address: string | null;
+  /** @nullable */
+  code: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /** @nullable */
+  cancelBy: number | null;
+  details: AddTripBooking201Details;
+  fileIds: number[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  partId: number | null;
+  /** @nullable */
+  paidAt: number | null;
+  paid: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type AddTripBooking400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripBooking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripBookingBodyKind = typeof UpdateTripBookingBodyKind[keyof typeof UpdateTripBookingBodyKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripBookingBodyKind = {
+  flight: 'flight',
+  stay: 'stay',
+  transport: 'transport',
+  ticket: 'ticket',
+  other: 'other',
+} as const;
+
+export type UpdateTripBookingBodyDetails = {[key: string]: string | number | null};
+
+export type UpdateTripBookingBody = {
+  kind?: UpdateTripBookingBodyKind;
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  title?: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  startAt?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  endAt?: number | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  place?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  address?: string | null;
+  /**
+   * @maxLength 60
+   * @nullable
+   */
+  code?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  cost?: number;
+  /** @pattern ^[A-Z]{3}$ */
+  costCurrency?: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  cancelBy?: number | null;
+  details?: UpdateTripBookingBodyDetails;
+  /** @maxItems 20 */
+  fileIds?: number[];
+};
+
+export type UpdateTripBooking200Kind = typeof UpdateTripBooking200Kind[keyof typeof UpdateTripBooking200Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripBooking200Kind = {
+  flight: 'flight',
+  stay: 'stay',
+  transport: 'transport',
+  ticket: 'ticket',
+  other: 'other',
+} as const;
+
+export type UpdateTripBooking200Details = {[key: string]: string | number | null};
+
+export type UpdateTripBooking200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  kind: UpdateTripBooking200Kind;
+  title: string;
+  /** @nullable */
+  startAt: number | null;
+  /** @nullable */
+  endAt: number | null;
+  /** @nullable */
+  place: string | null;
+  /** @nullable */
+  address: string | null;
+  /** @nullable */
+  code: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /** @nullable */
+  cancelBy: number | null;
+  details: UpdateTripBooking200Details;
+  fileIds: number[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  partId: number | null;
+  /** @nullable */
+  paidAt: number | null;
+  paid: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateTripBooking400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripBooking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteTripBooking204 = typeof DeleteTripBooking204[keyof typeof DeleteTripBooking204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteTripBooking204 = {
+} as const;
+
+export type DeleteTripBooking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripPlanBody = {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  day: string;
+  /**
+   * @nullable
+   * @pattern ^\d{2}:\d{2}$
+   */
+  time?: string | null;
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  title: string;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  place?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  cost?: number;
+  /** @pattern ^[A-Z]{3}$ */
+  costCurrency?: string;
+};
+
+export type AddTripPlan201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  day: string;
+  /** @nullable */
+  time: string | null;
+  title: string;
+  /** @nullable */
+  place: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type AddTripPlan400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripPlan404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripPlanBody = {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  day?: string;
+  /**
+   * @nullable
+   * @pattern ^\d{2}:\d{2}$
+   */
+  time?: string | null;
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  title?: string;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  place?: string | null;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  cost?: number;
+  /** @pattern ^[A-Z]{3}$ */
+  costCurrency?: string;
+};
+
+export type UpdateTripPlan200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  day: string;
+  /** @nullable */
+  time: string | null;
+  title: string;
+  /** @nullable */
+  place: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateTripPlan400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripPlan404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteTripPlan204 = typeof DeleteTripPlan204[keyof typeof DeleteTripPlan204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteTripPlan204 = {
+} as const;
+
+export type DeleteTripPlan404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type MoveTripPlansBody = {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  day: string;
+  /** @maxItems 200 */
+  ids: number[];
+};
+
+export type MoveTripPlans200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  day: string;
+  /** @nullable */
+  time: string | null;
+  title: string;
+  /** @nullable */
+  place: string | null;
+  cost: number;
+  costCurrency: string;
+  rupiah: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type MoveTripPlans400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type MoveTripPlans404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripPackingBodyItemsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  text: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  travellerId?: number | null;
+};
+
+export type AddTripPackingBody = {
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
+  items: AddTripPackingBodyItemsItem[];
+};
+
+export type AddTripPacking201Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  travellerId: number | null;
+  text: string;
+  done: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type AddTripPacking400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type AddTripPacking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripPackingBody = {
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  text?: string;
+  done?: boolean;
+};
+
+export type UpdateTripPacking200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  travellerId: number | null;
+  text: string;
+  done: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateTripPacking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteTripPacking204 = typeof DeleteTripPacking204[keyof typeof DeleteTripPacking204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteTripPacking204 = {
+} as const;
+
+export type DeleteTripPacking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ListPeriodsParams = {
 includeInactive?: ListPeriodsIncludeInactive;
 };
@@ -26335,6 +27665,749 @@ export const restoreGoalPageVersion = async (id: number, options?: RequestInit):
   {      
     ...options,
     method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type listTripRemindersResponse200 = {
+  data: ListTripReminders200Item[]
+  status: 200
+}
+    
+export type listTripRemindersResponseSuccess = (listTripRemindersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listTripRemindersResponse = (listTripRemindersResponseSuccess)
+
+export const getListTripRemindersUrl = () => {
+
+
+  
+
+  return `/api/goals/trips/reminders`
+}
+
+export const listTripReminders = async ( options?: RequestInit): Promise<listTripRemindersResponse> => {
+  
+  return generatedFetch<listTripRemindersResponse>(getListTripRemindersUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getGoalTripResponse200 = {
+  data: GetGoalTrip200
+  status: 200
+}
+
+export type getGoalTripResponse404 = {
+  data: GetGoalTrip404
+  status: 404
+}
+    
+export type getGoalTripResponseSuccess = (getGoalTripResponse200) & {
+  headers: Headers;
+};
+export type getGoalTripResponseError = (getGoalTripResponse404) & {
+  headers: Headers;
+};
+
+export type getGoalTripResponse = (getGoalTripResponseSuccess | getGoalTripResponseError)
+
+export const getGetGoalTripUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/trip`
+}
+
+export const getGoalTrip = async (id: number, options?: RequestInit): Promise<getGoalTripResponse> => {
+  
+  return generatedFetch<getGoalTripResponse>(getGetGoalTripUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type updateGoalTripResponse200 = {
+  data: UpdateGoalTrip200
+  status: 200
+}
+
+export type updateGoalTripResponse400 = {
+  data: UpdateGoalTrip400
+  status: 400
+}
+
+export type updateGoalTripResponse404 = {
+  data: UpdateGoalTrip404
+  status: 404
+}
+    
+export type updateGoalTripResponseSuccess = (updateGoalTripResponse200) & {
+  headers: Headers;
+};
+export type updateGoalTripResponseError = (updateGoalTripResponse400 | updateGoalTripResponse404) & {
+  headers: Headers;
+};
+
+export type updateGoalTripResponse = (updateGoalTripResponseSuccess | updateGoalTripResponseError)
+
+export const getUpdateGoalTripUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/trip`
+}
+
+export const updateGoalTrip = async (id: number,
+    updateGoalTripBody: UpdateGoalTripBody, options?: RequestInit): Promise<updateGoalTripResponse> => {
+  
+  return generatedFetch<updateGoalTripResponse>(getUpdateGoalTripUrl(id),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateGoalTripBody,)
+  }
+);}
+
+
+
+export type planTripAgainResponse201 = {
+  data: PlanTripAgain201
+  status: 201
+}
+
+export type planTripAgainResponse400 = {
+  data: PlanTripAgain400
+  status: 400
+}
+
+export type planTripAgainResponse404 = {
+  data: PlanTripAgain404
+  status: 404
+}
+    
+export type planTripAgainResponseSuccess = (planTripAgainResponse201) & {
+  headers: Headers;
+};
+export type planTripAgainResponseError = (planTripAgainResponse400 | planTripAgainResponse404) & {
+  headers: Headers;
+};
+
+export type planTripAgainResponse = (planTripAgainResponseSuccess | planTripAgainResponseError)
+
+export const getPlanTripAgainUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/trip/again`
+}
+
+export const planTripAgain = async (id: number, options?: RequestInit): Promise<planTripAgainResponse> => {
+  
+  return generatedFetch<planTripAgainResponse>(getPlanTripAgainUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type addTripTravellerResponse201 = {
+  data: AddTripTraveller201
+  status: 201
+}
+
+export type addTripTravellerResponse400 = {
+  data: AddTripTraveller400
+  status: 400
+}
+
+export type addTripTravellerResponse404 = {
+  data: AddTripTraveller404
+  status: 404
+}
+    
+export type addTripTravellerResponseSuccess = (addTripTravellerResponse201) & {
+  headers: Headers;
+};
+export type addTripTravellerResponseError = (addTripTravellerResponse400 | addTripTravellerResponse404) & {
+  headers: Headers;
+};
+
+export type addTripTravellerResponse = (addTripTravellerResponseSuccess | addTripTravellerResponseError)
+
+export const getAddTripTravellerUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/travellers`
+}
+
+export const addTripTraveller = async (id: number,
+    addTripTravellerBody: AddTripTravellerBody, options?: RequestInit): Promise<addTripTravellerResponse> => {
+  
+  return generatedFetch<addTripTravellerResponse>(getAddTripTravellerUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addTripTravellerBody,)
+  }
+);}
+
+
+
+export type updateTripTravellerResponse200 = {
+  data: UpdateTripTraveller200
+  status: 200
+}
+
+export type updateTripTravellerResponse400 = {
+  data: UpdateTripTraveller400
+  status: 400
+}
+
+export type updateTripTravellerResponse404 = {
+  data: UpdateTripTraveller404
+  status: 404
+}
+    
+export type updateTripTravellerResponseSuccess = (updateTripTravellerResponse200) & {
+  headers: Headers;
+};
+export type updateTripTravellerResponseError = (updateTripTravellerResponse400 | updateTripTravellerResponse404) & {
+  headers: Headers;
+};
+
+export type updateTripTravellerResponse = (updateTripTravellerResponseSuccess | updateTripTravellerResponseError)
+
+export const getUpdateTripTravellerUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-travellers/${id}`
+}
+
+export const updateTripTraveller = async (id: number,
+    updateTripTravellerBody: UpdateTripTravellerBody, options?: RequestInit): Promise<updateTripTravellerResponse> => {
+  
+  return generatedFetch<updateTripTravellerResponse>(getUpdateTripTravellerUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTripTravellerBody,)
+  }
+);}
+
+
+
+export type deleteTripTravellerResponse204 = {
+  data: DeleteTripTraveller204
+  status: 204
+}
+
+export type deleteTripTravellerResponse404 = {
+  data: DeleteTripTraveller404
+  status: 404
+}
+    
+export type deleteTripTravellerResponseSuccess = (deleteTripTravellerResponse204) & {
+  headers: Headers;
+};
+export type deleteTripTravellerResponseError = (deleteTripTravellerResponse404) & {
+  headers: Headers;
+};
+
+export type deleteTripTravellerResponse = (deleteTripTravellerResponseSuccess | deleteTripTravellerResponseError)
+
+export const getDeleteTripTravellerUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-travellers/${id}`
+}
+
+export const deleteTripTraveller = async (id: number, options?: RequestInit): Promise<deleteTripTravellerResponse> => {
+  
+  return generatedFetch<deleteTripTravellerResponse>(getDeleteTripTravellerUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type addTripBookingResponse201 = {
+  data: AddTripBooking201
+  status: 201
+}
+
+export type addTripBookingResponse400 = {
+  data: AddTripBooking400
+  status: 400
+}
+
+export type addTripBookingResponse404 = {
+  data: AddTripBooking404
+  status: 404
+}
+    
+export type addTripBookingResponseSuccess = (addTripBookingResponse201) & {
+  headers: Headers;
+};
+export type addTripBookingResponseError = (addTripBookingResponse400 | addTripBookingResponse404) & {
+  headers: Headers;
+};
+
+export type addTripBookingResponse = (addTripBookingResponseSuccess | addTripBookingResponseError)
+
+export const getAddTripBookingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/bookings`
+}
+
+export const addTripBooking = async (id: number,
+    addTripBookingBody: AddTripBookingBody, options?: RequestInit): Promise<addTripBookingResponse> => {
+  
+  return generatedFetch<addTripBookingResponse>(getAddTripBookingUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addTripBookingBody,)
+  }
+);}
+
+
+
+export type updateTripBookingResponse200 = {
+  data: UpdateTripBooking200
+  status: 200
+}
+
+export type updateTripBookingResponse400 = {
+  data: UpdateTripBooking400
+  status: 400
+}
+
+export type updateTripBookingResponse404 = {
+  data: UpdateTripBooking404
+  status: 404
+}
+    
+export type updateTripBookingResponseSuccess = (updateTripBookingResponse200) & {
+  headers: Headers;
+};
+export type updateTripBookingResponseError = (updateTripBookingResponse400 | updateTripBookingResponse404) & {
+  headers: Headers;
+};
+
+export type updateTripBookingResponse = (updateTripBookingResponseSuccess | updateTripBookingResponseError)
+
+export const getUpdateTripBookingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-bookings/${id}`
+}
+
+export const updateTripBooking = async (id: number,
+    updateTripBookingBody: UpdateTripBookingBody, options?: RequestInit): Promise<updateTripBookingResponse> => {
+  
+  return generatedFetch<updateTripBookingResponse>(getUpdateTripBookingUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTripBookingBody,)
+  }
+);}
+
+
+
+export type deleteTripBookingResponse204 = {
+  data: DeleteTripBooking204
+  status: 204
+}
+
+export type deleteTripBookingResponse404 = {
+  data: DeleteTripBooking404
+  status: 404
+}
+    
+export type deleteTripBookingResponseSuccess = (deleteTripBookingResponse204) & {
+  headers: Headers;
+};
+export type deleteTripBookingResponseError = (deleteTripBookingResponse404) & {
+  headers: Headers;
+};
+
+export type deleteTripBookingResponse = (deleteTripBookingResponseSuccess | deleteTripBookingResponseError)
+
+export const getDeleteTripBookingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-bookings/${id}`
+}
+
+export const deleteTripBooking = async (id: number, options?: RequestInit): Promise<deleteTripBookingResponse> => {
+  
+  return generatedFetch<deleteTripBookingResponse>(getDeleteTripBookingUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type addTripPlanResponse201 = {
+  data: AddTripPlan201
+  status: 201
+}
+
+export type addTripPlanResponse400 = {
+  data: AddTripPlan400
+  status: 400
+}
+
+export type addTripPlanResponse404 = {
+  data: AddTripPlan404
+  status: 404
+}
+    
+export type addTripPlanResponseSuccess = (addTripPlanResponse201) & {
+  headers: Headers;
+};
+export type addTripPlanResponseError = (addTripPlanResponse400 | addTripPlanResponse404) & {
+  headers: Headers;
+};
+
+export type addTripPlanResponse = (addTripPlanResponseSuccess | addTripPlanResponseError)
+
+export const getAddTripPlanUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/plans`
+}
+
+export const addTripPlan = async (id: number,
+    addTripPlanBody: AddTripPlanBody, options?: RequestInit): Promise<addTripPlanResponse> => {
+  
+  return generatedFetch<addTripPlanResponse>(getAddTripPlanUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addTripPlanBody,)
+  }
+);}
+
+
+
+export type updateTripPlanResponse200 = {
+  data: UpdateTripPlan200
+  status: 200
+}
+
+export type updateTripPlanResponse400 = {
+  data: UpdateTripPlan400
+  status: 400
+}
+
+export type updateTripPlanResponse404 = {
+  data: UpdateTripPlan404
+  status: 404
+}
+    
+export type updateTripPlanResponseSuccess = (updateTripPlanResponse200) & {
+  headers: Headers;
+};
+export type updateTripPlanResponseError = (updateTripPlanResponse400 | updateTripPlanResponse404) & {
+  headers: Headers;
+};
+
+export type updateTripPlanResponse = (updateTripPlanResponseSuccess | updateTripPlanResponseError)
+
+export const getUpdateTripPlanUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-plans/${id}`
+}
+
+export const updateTripPlan = async (id: number,
+    updateTripPlanBody: UpdateTripPlanBody, options?: RequestInit): Promise<updateTripPlanResponse> => {
+  
+  return generatedFetch<updateTripPlanResponse>(getUpdateTripPlanUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTripPlanBody,)
+  }
+);}
+
+
+
+export type deleteTripPlanResponse204 = {
+  data: DeleteTripPlan204
+  status: 204
+}
+
+export type deleteTripPlanResponse404 = {
+  data: DeleteTripPlan404
+  status: 404
+}
+    
+export type deleteTripPlanResponseSuccess = (deleteTripPlanResponse204) & {
+  headers: Headers;
+};
+export type deleteTripPlanResponseError = (deleteTripPlanResponse404) & {
+  headers: Headers;
+};
+
+export type deleteTripPlanResponse = (deleteTripPlanResponseSuccess | deleteTripPlanResponseError)
+
+export const getDeleteTripPlanUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-plans/${id}`
+}
+
+export const deleteTripPlan = async (id: number, options?: RequestInit): Promise<deleteTripPlanResponse> => {
+  
+  return generatedFetch<deleteTripPlanResponse>(getDeleteTripPlanUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type moveTripPlansResponse200 = {
+  data: MoveTripPlans200Item[]
+  status: 200
+}
+
+export type moveTripPlansResponse400 = {
+  data: MoveTripPlans400
+  status: 400
+}
+
+export type moveTripPlansResponse404 = {
+  data: MoveTripPlans404
+  status: 404
+}
+    
+export type moveTripPlansResponseSuccess = (moveTripPlansResponse200) & {
+  headers: Headers;
+};
+export type moveTripPlansResponseError = (moveTripPlansResponse400 | moveTripPlansResponse404) & {
+  headers: Headers;
+};
+
+export type moveTripPlansResponse = (moveTripPlansResponseSuccess | moveTripPlansResponseError)
+
+export const getMoveTripPlansUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/plans/order`
+}
+
+export const moveTripPlans = async (id: number,
+    moveTripPlansBody: MoveTripPlansBody, options?: RequestInit): Promise<moveTripPlansResponse> => {
+  
+  return generatedFetch<moveTripPlansResponse>(getMoveTripPlansUrl(id),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      moveTripPlansBody,)
+  }
+);}
+
+
+
+export type addTripPackingResponse201 = {
+  data: AddTripPacking201Item[]
+  status: 201
+}
+
+export type addTripPackingResponse400 = {
+  data: AddTripPacking400
+  status: 400
+}
+
+export type addTripPackingResponse404 = {
+  data: AddTripPacking404
+  status: 404
+}
+    
+export type addTripPackingResponseSuccess = (addTripPackingResponse201) & {
+  headers: Headers;
+};
+export type addTripPackingResponseError = (addTripPackingResponse400 | addTripPackingResponse404) & {
+  headers: Headers;
+};
+
+export type addTripPackingResponse = (addTripPackingResponseSuccess | addTripPackingResponseError)
+
+export const getAddTripPackingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/packing`
+}
+
+export const addTripPacking = async (id: number,
+    addTripPackingBody: AddTripPackingBody, options?: RequestInit): Promise<addTripPackingResponse> => {
+  
+  return generatedFetch<addTripPackingResponse>(getAddTripPackingUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addTripPackingBody,)
+  }
+);}
+
+
+
+export type updateTripPackingResponse200 = {
+  data: UpdateTripPacking200
+  status: 200
+}
+
+export type updateTripPackingResponse404 = {
+  data: UpdateTripPacking404
+  status: 404
+}
+    
+export type updateTripPackingResponseSuccess = (updateTripPackingResponse200) & {
+  headers: Headers;
+};
+export type updateTripPackingResponseError = (updateTripPackingResponse404) & {
+  headers: Headers;
+};
+
+export type updateTripPackingResponse = (updateTripPackingResponseSuccess | updateTripPackingResponseError)
+
+export const getUpdateTripPackingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-packing/${id}`
+}
+
+export const updateTripPacking = async (id: number,
+    updateTripPackingBody: UpdateTripPackingBody, options?: RequestInit): Promise<updateTripPackingResponse> => {
+  
+  return generatedFetch<updateTripPackingResponse>(getUpdateTripPackingUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTripPackingBody,)
+  }
+);}
+
+
+
+export type deleteTripPackingResponse204 = {
+  data: DeleteTripPacking204
+  status: 204
+}
+
+export type deleteTripPackingResponse404 = {
+  data: DeleteTripPacking404
+  status: 404
+}
+    
+export type deleteTripPackingResponseSuccess = (deleteTripPackingResponse204) & {
+  headers: Headers;
+};
+export type deleteTripPackingResponseError = (deleteTripPackingResponse404) & {
+  headers: Headers;
+};
+
+export type deleteTripPackingResponse = (deleteTripPackingResponseSuccess | deleteTripPackingResponseError)
+
+export const getDeleteTripPackingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-packing/${id}`
+}
+
+export const deleteTripPacking = async (id: number, options?: RequestInit): Promise<deleteTripPackingResponse> => {
+  
+  return generatedFetch<deleteTripPackingResponse>(getDeleteTripPackingUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
     
     
   }
