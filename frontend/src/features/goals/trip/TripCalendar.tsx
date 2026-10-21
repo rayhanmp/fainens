@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Modal } from '../../../components/ui/Modal';
 import { toast } from '../../../components/ui/useToast';
 import { cn } from '../../../lib/utils';
@@ -45,6 +45,10 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
   onOpenDay: (day: string) => void;
 }) {
   const update = useUpdatePlanMutation();
+  // Grabbing the calendar and dragging sideways scrolls it; a drag that moved isn't a click.
+  const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const panned = useRef(false);
+  const [grabbing, setGrabbing] = useState(false);
   const [dialog, setDialog] = useState<{ day: string; time: string | null; plan?: Plan } | null>(null);
   const [dragged, setDragged] = useState<Plan | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
@@ -77,9 +81,44 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
     onDragEnd: () => { setDragged(null); setOverDay(null); },
   });
 
+  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Only the mouse, and not from a plan (those drag to move) or a button.
+    if (event.pointerType !== 'mouse' || event.button !== 0 || (event.target as HTMLElement).closest('button, [draggable="true"]')) return;
+    pan.current = { x: event.clientX, left: event.currentTarget.scrollLeft, moved: false };
+    panned.current = false;
+  };
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = pan.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    if (!start.moved && Math.abs(dx) < 5) return;
+    if (!start.moved) {
+      start.moved = true;
+      setGrabbing(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    event.currentTarget.scrollLeft = start.left - dx;
+  };
+  const endPan = () => {
+    panned.current = Boolean(pan.current?.moved);
+    pan.current = null;
+    setGrabbing(false);
+  };
+  const add = (day: string, time: string | null) => {
+    // The click that ends a drag across the calendar doesn't add a plan.
+    if (panned.current) { panned.current = false; return; }
+    setDialog({ day, time });
+  };
+
   return (
     <>
-      <div className="overflow-x-auto">
+      <div
+        className={cn('overflow-x-auto [scrollbar-color:var(--ref-outline)_transparent] [scrollbar-width:thin]', grabbing ? 'cursor-grabbing select-none' : 'cursor-grab')}
+        onPointerDown={startPan}
+        onPointerMove={movePan}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+      >
         <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 52 + days.length * 124 }}>
           {/* Day headers, with the city; each opens that day. */}
           <div className="sticky left-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)]" />
@@ -100,7 +139,7 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
                 key={day.key}
                 onDragOver={(event) => { if (dragged) event.preventDefault(); }}
                 onDrop={(event) => { event.preventDefault(); dropOn(day.key, null); }}
-                onClick={(event) => { if (event.target === event.currentTarget) setDialog({ day: day.key, time: null }); }}
+                onClick={(event) => { if (event.target === event.currentTarget) add(day.key, null); }}
                 className={cn('min-h-[40px] space-y-1 border-b border-l border-[var(--color-border)] p-1.5', day.key === today && 'bg-[var(--ref-primary)]/5')}
               >
                 {untimed.map((item) => {
@@ -122,10 +161,10 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
             <div
               key={day.key}
               role="presentation"
-              onClick={(event) => { if (event.target === event.currentTarget) setDialog({ day: day.key, time: timeAt(event) }); }}
+              onClick={(event) => { if (event.target === event.currentTarget) add(day.key, timeAt(event)); }}
               onDragOver={(event) => { if (!dragged) return; event.preventDefault(); if (overDay !== day.key) setOverDay(day.key); }}
               onDrop={(event) => { event.preventDefault(); if (dragged) dropOn(day.key, timeAt(event)); }}
-              className={cn('relative cursor-copy border-l border-[var(--color-border)]', day.key === today && 'bg-[var(--ref-primary)]/5', overDay === day.key && 'bg-[var(--ref-primary)]/10')}
+              className={cn('relative border-l border-[var(--color-border)]', day.key === today && 'bg-[var(--ref-primary)]/5', overDay === day.key && 'bg-[var(--ref-primary)]/10')}
               style={{ height, backgroundImage: `repeating-linear-gradient(to bottom, var(--color-border) 0, var(--color-border) 1px, transparent 1px, transparent ${HOUR}px)` }}
               title={`Click to add a plan on ${dayLabel(day.key)}`}
             >

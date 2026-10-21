@@ -146,7 +146,7 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
       ) : view === 'calendar' ? (
         <>
           <TripCalendar goalId={goalId} trip={trip} days={days} cities={cities} today={today} onOpenDay={(day) => { setPicked(day); setView('day'); }} />
-          <p className="border-t border-[var(--color-border)] px-4 py-2.5 text-xs text-[var(--ref-on-surface-variant)] sm:px-5">Click an empty spot to add a plan at that time, or a plan to change it; drag a plan to another day or time. A day’s name opens it on its own.</p>
+          <p className="border-t border-[var(--color-border)] px-4 py-2.5 text-xs text-[var(--ref-on-surface-variant)] sm:px-5">Grab the calendar to move it left or right. Click an empty spot to add a plan at that time, or a plan to change it; drag a plan to another day or time. A day’s name opens it on its own.</p>
         </>
       ) : (
         <>
