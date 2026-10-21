@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ElementType, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ChevronDown, ChevronRight, GripVertical, Pencil, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Pause, Pencil, PiggyBank, Repeat, RotateCcw, ShoppingBag } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn, formatDate } from '../../lib/utils';
@@ -12,6 +12,16 @@ import type { Goal, GoalsOverview } from './queries';
 import { useGoalHeadline } from './use-headline';
 
 const monthYear = (time: number) => new Date(time).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+/** A small quiet tag beside a goal, like "To keep" or "Paused". */
+function Chip({ icon: Icon, children }: { icon: ElementType; children: ReactNode }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-px text-[11px] font-medium text-[var(--ref-on-surface-variant)]">
+      <Icon className="h-3 w-3" aria-hidden />
+      {children}
+    </span>
+  );
+}
 
 /** Moves the item at `from` to `to`, shifting the ones between. */
 function moved<T>(items: readonly T[], from: number, to: number): T[] {
@@ -108,18 +118,25 @@ export function GoalList({ overview, selectedId, onMove, onComplete, onEdit, onR
                           <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: color }} aria-hidden />
                           {goal.icon && <span aria-hidden>{goal.icon}</span>}
                           <span className="truncate group-hover:underline">{goal.name}</span>
-                          {goal.paused && <span className="shrink-0 rounded bg-[var(--ref-surface-container-high)] px-1.5 py-px text-[10px] font-semibold text-[var(--ref-on-surface-variant)]">Paused</span>}
-                          {goal.recurrence === 'yearly' && <span className="shrink-0 rounded bg-[var(--ref-surface-container-high)] px-1.5 py-px text-[10px] font-semibold text-[var(--ref-on-surface-variant)]">Yearly</span>}
                           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--ref-outline)]" aria-hidden />
                         </span>
                         <span className="shrink-0 text-sm tabular-nums text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">{formatAmount(goal.setAside)}</span> of {formatAmount(goal.targetAmount)}</span>
                       </span>
-                      {headlines.get(goal.id) && <span className="mt-0.5 block text-xs font-semibold text-[var(--ref-on-surface)]">{headlines.get(goal.id)}</span>}
-                      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-[var(--ref-on-surface-variant)]">
-                        {goal.kind === 'spend' ? 'to buy' : 'to keep'}
-                        {goal.byDate ? ` · by ${monthYear(goal.byDate)}` : ''}
-                        {goal.monthlyAmount > 0 && !goal.paused ? ` · ${formatAmount(goal.monthlyAmount)} a month${goal.monthlyPercent ? ` (${goal.monthlyPercent}% of salary)` : ''}` : ''}
+                      {/* What kind of money it is, then what's true of it now, then its plan. */}
+                      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--ref-on-surface-variant)]">
+                        <Chip icon={goal.kind === 'spend' ? ShoppingBag : PiggyBank}>{goal.kind === 'spend' ? 'To buy' : 'To keep'}</Chip>
+                        {goal.recurrence === 'yearly' && <Chip icon={Repeat}>Yearly</Chip>}
+                        {goal.paused && <Chip icon={Pause}>Paused</Chip>}
+                        {headlines.get(goal.id) && <span className="font-semibold text-[var(--ref-on-surface)]">{headlines.get(goal.id)}</span>}
                       </span>
+                      {(goal.byDate || (goal.monthlyAmount > 0 && !goal.paused)) && (
+                        <span className="mt-1 block text-xs text-[var(--ref-on-surface-variant)]">
+                          {[
+                            goal.byDate ? `Needed by ${monthYear(goal.byDate)}` : null,
+                            goal.monthlyAmount > 0 && !goal.paused ? `${formatAmount(goal.monthlyAmount)} a month${goal.monthlyPercent ? ` (${goal.monthlyPercent}% of salary)` : ''}` : null,
+                          ].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
                       <span className="mt-2 block h-2 overflow-hidden rounded-full bg-[var(--ref-surface-container-highest)]" aria-hidden>
                         <span className="block h-full rounded-full transition-[width]" style={{ width: `${progress * 100}%`, background: color }} />
                       </span>
