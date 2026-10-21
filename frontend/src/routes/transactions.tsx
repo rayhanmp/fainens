@@ -159,6 +159,8 @@ function TransactionsPage() {
   const openedDeepLinkId = useRef<string | null>(null);
   const [chartAsOf] = useState(() => Date.now());
   const [page, setPage] = useState(1);
+  // The rows a phone has already loaded, before the current page.
+  const [earlierRows, setEarlierRows] = useState<TransactionRow[]>([]);
   const [pageSize, setPageSize] = useState(25);
   const [filterQuery, setFilterQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -224,7 +226,12 @@ function TransactionsPage() {
   const alignReversalMutation = useAlignReversal();
   const voidRenewalMutation = useVoidSubscriptionRenewal();
   const deleteTransactionMutation = useDeleteTransaction();
-  const transactions = (transactionQuery.data?.data ?? []) as TransactionRow[];
+  const pageRows = (transactionQuery.data?.data ?? []) as TransactionRow[];
+  // On a phone, Load more keeps what's shown and adds the next page; one bigger page would stop at the
+  // server's 100-row cap. Rows are matched by id so a page shown while the next loads isn't doubled.
+  const transactions = isMobile && earlierRows.length > 0
+    ? [...earlierRows, ...pageRows.filter((row) => !earlierRows.some((earlier) => earlier.id === row.id))]
+    : pageRows;
   const actionTransaction = transactions.find((transaction) => transaction.id === rowActionsId) ?? null;
   const accounts = (accountsQuery.data ?? []) as WalletAccount[];
   const categories = (categoriesQuery.data ?? []) as Category[];
@@ -394,7 +401,7 @@ function TransactionsPage() {
   useEffect(() => { setCategoryFilter(search.categoryId ?? ''); }, [search.categoryId]);
   // Reset pagination when the server query scope changes.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1); }, [search.periodId, search.accountId, search.tagId, categoryFilter, debouncedQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, pageSize]);
+  useEffect(() => { setPage(1); setEarlierRows([]); }, [search.periodId, search.accountId, search.tagId, categoryFilter, debouncedQuery, kindFilter, startDate, endDate, minAmount, maxAmount, includeAdjustments, sort, pageSize, isMobile]);
   useEffect(() => {
     if ((search.action !== 'new' && search.action !== 'new-income') || isModalOpen) return;
     // Route actions open the existing modal after navigation; "new-income" lands on the Income tab.
@@ -672,7 +679,7 @@ function TransactionsPage() {
       {total > 0 && !transactionQuery.isError && <>
         <footer className="hidden flex-col gap-3 border-t border-[var(--ref-outline-variant)]/20 bg-[var(--ref-surface-container-low)]/50 px-5 py-4 sm:flex sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3 text-xs text-[var(--ref-on-surface-variant)]"><span>Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()}</span><select aria-label="Transactions per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-lg border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] px-2 py-1">{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div><div className="flex items-center gap-2"><button type="button" aria-label="Previous page" disabled={page <= 1 || transactionQuery.isFetching} onClick={() => setPage((current) => current - 1)} className="rounded-lg p-2 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button><span className="text-xs font-bold">{page} / {totalPages}</span><button type="button" aria-label="Next page" disabled={page >= totalPages || transactionQuery.isFetching} onClick={() => setPage((current) => current + 1)} className="rounded-lg p-2 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button></div></footer>
         <footer className="border-t border-[var(--ref-outline-variant)]/20 p-4 sm:hidden">
-          {pageSize < total ? <Button type="button" variant="secondary" className="min-h-12 w-full rounded-full" isLoading={transactionQuery.isFetching} onClick={() => setPageSize((size) => size + 25)}>Load more <span className="ml-1 text-xs opacity-70">({Math.min(pageSize, total)} of {total.toLocaleString()})</span></Button> : <p className="text-center text-xs text-[var(--ref-on-surface-variant)]">All {total.toLocaleString()} transactions loaded</p>}
+          {transactions.length < total && page < totalPages ? <Button type="button" variant="secondary" className="min-h-12 w-full rounded-full" isLoading={transactionQuery.isFetching} disabled={transactionQuery.isPlaceholderData} onClick={() => { setEarlierRows(transactions); setPage((current) => current + 1); }}>Load more <span className="ml-1 text-xs opacity-70">({transactions.length.toLocaleString()} of {total.toLocaleString()})</span></Button> : <p className="text-center text-xs text-[var(--ref-on-surface-variant)]">All {total.toLocaleString()} transactions loaded</p>}
         </footer>
       </>}
     </section>
