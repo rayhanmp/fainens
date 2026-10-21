@@ -3,6 +3,7 @@ import { ArrowRight, BookOpen, Database, Search, Sparkles, UserRound } from 'luc
 import { Toggle } from '../settings/controls';
 import { cn } from '../../lib/utils';
 import { GoalsHero } from '../goals/GoalsHero';
+import { ReachPanel, ThisMonthPanel } from '../goals/GoalsSidePanels';
 import type { GoalsOverview } from '../goals/queries';
 import { Segmented } from '../savings/fields';
 import { DEFAULT_PLAN, goalOutlooks, planRange, runPlan, type PlanInputs } from '../savings/plan';
@@ -47,7 +48,7 @@ const SAMPLE_GOALS: GoalsOverview = {
     { id: 3, name: 'Bibit', liquidityClass: 'investment', balance: 15_000_000, included: true },
   ],
   goals: [
-    { ...sampleGoal, id: 1, name: 'Emergency fund', targetAmount: 30_000_000, monthlyAmount: 1_000_000, sortOrder: 0, setAside: 24_000_000 },
+    { ...sampleGoal, id: 1, name: 'Emergency fund', targetAmount: 30_000_000, monthlyAmount: 1_000_000, sortOrder: 0, setAside: 24_000_000, setAsideThisMonth: 1_000_000 },
     { ...sampleGoal, id: 2, name: 'Laptop', targetAmount: 18_000_000, kind: 'spend', byDate: new Date(2027, 5, 30).getTime(), monthlyAmount: 1_500_000, sortOrder: 1, setAside: 5_000_000 },
     { ...sampleGoal, id: 3, name: 'Japan trip', targetAmount: 25_000_000, kind: 'spend', monthlyAmount: 0, sortOrder: 2, setAside: 0 },
   ],
@@ -58,7 +59,19 @@ export function GoalsShelfDemo() {
   const [selectedId, setSelectedId] = useState<number | null>(1);
   return (
     <VisualFrame caption="Try it: pick a goal in the bar (sample: Rp45 juta in three accounts, Rp29 juta in two goals, Rp16 juta still free).">
-      <GoalsHero overview={SAMPLE_GOALS} selectedId={selectedId} onSelect={setSelectedId} onAdd={() => {}} onFundMonthly={() => {}} funding={false} monthlyTotal={2_500_000} />
+      <GoalsHero overview={SAMPLE_GOALS} selectedId={selectedId} onSelect={setSelectedId} onAdd={() => {}} />
+    </VisualFrame>
+  );
+}
+
+/** The two cards beside the goal list, This month and When you’ll get there, from the same sample. */
+export function GoalsPlanDemo() {
+  return (
+    <VisualFrame caption="Sample: the emergency fund already got this month’s Rp1 juta; the laptop at Rp1,5 juta a month arrives a month after it’s needed; the trip has no monthly amount yet.">
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+        <ThisMonthPanel overview={SAMPLE_GOALS} funding={false} onFund={() => {}} />
+        <ReachPanel overview={SAMPLE_GOALS} />
+      </div>
     </VisualFrame>
   );
 }

@@ -71,7 +71,8 @@ export function GoalList({ overview, selectedId, onSelect, onMove, onComplete, o
             return (
               <li key={goal.id} id={`goal-${goal.id}`} className={cn('scroll-mt-24 transition-colors', selected && 'bg-[var(--color-accent)]/[0.06]')}>
                 <div className="px-4 py-3.5 sm:px-5">
-                  <button type="button" aria-expanded={selected} onClick={() => onSelect(selected ? null : goal.id)} className="block w-full text-left">
+                  {/* Padded and rounded, so the focus ring hugs the row instead of boxing it. */}
+                  <button type="button" aria-expanded={selected} onClick={() => onSelect(selected ? null : goal.id)} className="-mx-2 -my-1 block w-[calc(100%+1rem)] rounded-lg px-2 py-1 text-left">
                     <span className="flex items-baseline justify-between gap-3">
                       <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-[var(--ref-on-surface)]">
                         <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: color }} aria-hidden />
@@ -98,7 +99,8 @@ export function GoalList({ overview, selectedId, onSelect, onMove, onComplete, o
                   </button>
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
                     <Button type="button" size="sm" variant={goal.setAside === 0 ? 'primary' : 'secondary'} className="h-[34px]" onClick={() => onMove(goal)}>Put money in</Button>
-                    <Button type="button" size="sm" variant="secondary" className="h-[34px]" onClick={() => onComplete(goal)}>{goal.kind === 'spend' ? 'Bought it' : 'Done'}</Button>
+                    {/* Money you keep is never finished; only a purchase is. */}
+                    {goal.kind === 'spend' && <Button type="button" size="sm" variant="secondary" className="h-[34px]" onClick={() => onComplete(goal)}>Bought it</Button>}
                     <button type="button" aria-label={`Edit ${goal.name}`} onClick={() => onEdit(goal)} className="ml-auto grid h-[34px] w-[34px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]"><Pencil className="h-4 w-4" aria-hidden /></button>
                   </div>
                 </div>

@@ -109,7 +109,7 @@ export default async function (fastify: FastifyInstance) {
       wishlistId: body.wishlistId ?? null,
       sortOrder: Number(next),
     }).returning();
-    if (body.setAside) await allocate(created.id, body.setAside, "Set aside when created");
+    if (body.setAside) await allocate(created.id, body.setAside, "Already saved when added");
     return reply.code(201).send(await oneGoal(created.id));
   }));
 

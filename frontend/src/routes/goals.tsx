@@ -10,7 +10,7 @@ import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, type GoalDraft } from '../features/goals/dialogs';
 import { GoalList } from '../features/goals/GoalList';
 import { GoalsHero, type GoalStarter } from '../features/goals/GoalsHero';
-import { dueThisMonth } from '../features/goals/pace';
+import { ReachPanel, ThisMonthPanel } from '../features/goals/GoalsSidePanels';
 import { AccountsDialog } from '../features/goals/AccountsDialog';
 import { usePeriodSummariesQuery } from '../features/analytics/queries';
 import { compactRupiah, recentSaving } from '../features/savings/plan';
@@ -89,7 +89,6 @@ function GoalsPage() {
     setInitial(draft);
     setEditing('new');
   };
-  const monthlyTotal = overview?.goals.reduce((sum, goal) => sum + dueThisMonth(goal), 0) ?? 0;
   const closeEditor = () => {
     setEditing(null);
     setInitial(undefined);
@@ -143,35 +142,44 @@ function GoalsPage() {
               onAdd={addGoal}
               onAccounts={() => setChoosingAccounts(true)}
               starters={starters}
-              monthlyTotal={monthlyTotal}
-              funding={fundMonthly.isPending}
-              onFundMonthly={async () => {
-                try {
-                  const result = await fundMonthly.mutateAsync(null);
-                  toast.success(result.total > 0 ? `Put ${formatAmount(result.total)} into ${result.assigned.length} goal${result.assigned.length === 1 ? '' : 's'}.` : 'Nothing to put in: goals are full or nothing is free.');
-                } catch (error) {
-                  toast.error(errorText(error, 'Could not put the money in'));
-                }
-              }}
             />
 
-            {/* The goals, once there are any. */}
+            {/* The goals, once there are any, with this month's plan and when each gets there beside them. */}
             {overview.goals.length > 0 && (
-              <GoalList
-                overview={overview}
-                selectedId={selectedId}
-                onSelect={select}
-                onMove={setMoving}
-                onComplete={setCompleting}
-                onEdit={setEditing}
-                onReopen={async (goal) => {
-                  try {
-                    await (goal.status === 'archived' ? updateGoal.mutateAsync({ id: goal.id, status: 'active' }) : reopenGoal.mutateAsync(goal.id));
-                  } catch (error) {
-                    toast.error(errorText(error, 'Could not reopen the goal'));
-                  }
-                }}
-              />
+              <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+                <GoalList
+                  overview={overview}
+                  selectedId={selectedId}
+                  onSelect={select}
+                  onMove={setMoving}
+                  onComplete={setCompleting}
+                  onEdit={setEditing}
+                  onReopen={async (goal) => {
+                    try {
+                      await (goal.status === 'archived' ? updateGoal.mutateAsync({ id: goal.id, status: 'active' }) : reopenGoal.mutateAsync(goal.id));
+                    } catch (error) {
+                      toast.error(errorText(error, 'Could not reopen the goal'));
+                    }
+                  }}
+                />
+                {overview.goals.some((goal) => goal.status === 'active') && (
+                  <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2 xl:grid-cols-1">
+                    <ThisMonthPanel
+                      overview={overview}
+                      funding={fundMonthly.isPending}
+                      onFund={async () => {
+                        try {
+                          const result = await fundMonthly.mutateAsync(null);
+                          toast.success(result.total > 0 ? `Put ${formatAmount(result.total)} into ${result.assigned.length} goal${result.assigned.length === 1 ? '' : 's'}.` : 'Nothing to put in: goals are full or nothing is free.');
+                        } catch (error) {
+                          toast.error(errorText(error, 'Could not put the money in'));
+                        }
+                      }}
+                    />
+                    <ReachPanel overview={overview} />
+                  </div>
+                )}
+              </div>
             )}
             {choosingAccounts && (
               <AccountsDialog

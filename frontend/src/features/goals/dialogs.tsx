@@ -164,10 +164,10 @@ export function MoveMoneyDialog({ goal, unassigned, busy, onClose, onSave }: { g
   );
 }
 
-/** Mark a goal bought or finished, optionally with the purchase that paid it. */
+/** Mark something you saved for as bought, optionally with the expense that paid for it. */
 export function CompleteGoalDialog({ goal, busy, onClose, onSave }: { goal: Goal; busy: boolean; onClose: () => void; onSave: (transactionId: number | null) => void }) {
   const { formatAmount } = useBalanceVisibility();
-  const [search, setSearch] = useState(goal.kind === 'spend' ? goal.name.split(' ')[0] ?? '' : '');
+  const [search, setSearch] = useState(goal.name.split(' ')[0] ?? '');
   const [picked, setPicked] = useState<number | null>(null);
   const filters = useMemo(() => ({ kind: 'expense', periodId: 'all', status: 'posted', limit: '25', sort: 'newest', ...(search.trim() ? { search: search.trim() } : {}) }), [search]);
   const transactions = useTransactionList(filters as never);
@@ -177,12 +177,15 @@ export function CompleteGoalDialog({ goal, busy, onClose, onSave }: { goal: Goal
     <Modal
       isOpen
       onClose={() => { if (!busy) onClose(); }}
-      title={goal.kind === 'spend' ? `Bought ${goal.name}?` : `Finish ${goal.name}?`}
-      footer={<Footer formId="goal-complete" submitLabel={picked ? 'Link and finish' : 'Finish without a transaction'} onClose={onClose} busy={busy} />}
+      title={`Bought ${goal.name}?`}
+      footer={<Footer formId="goal-complete" submitLabel={picked ? 'Mark bought' : 'Skip and mark bought'} onClose={onClose} busy={busy} />}
     >
       <form id="goal-complete" onSubmit={(event) => { event.preventDefault(); onSave(picked); }} className="settings-compact space-y-3">
         <p className="text-sm text-[var(--ref-on-surface-variant)]">
-          Its <span className="font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(goal.setAside)}</span> is released{goal.kind === 'spend' ? ', since the purchase spent it' : ''}. Pick the expense that paid for it to keep them linked{goal.wishlistId ? '; its wishlist item is marked bought too' : ''}.
+          Its <span className="font-semibold tabular-nums text-[var(--ref-on-surface)]">{formatAmount(goal.setAside)}</span> was spent on it, so the goal is finished and its money leaves it.
+        </p>
+        <p className="text-sm text-[var(--ref-on-surface-variant)]">
+          Optional: pick the expense you recorded for the purchase, so the goal’s history shows what you bought{goal.wishlistId ? ' and its wishlist item is marked bought too' : ''}.
         </p>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" aria-hidden />
