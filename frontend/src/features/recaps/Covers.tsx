@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Burst } from './Burst';
+import { DAY_MS, formatRecapDay } from './dates';
 import type { RecapStory } from './stories';
 import './covers.css';
 
@@ -143,16 +144,25 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
       {headline}{body}
     </div>;
     case 'tearoff': {
-      const day = story.isPartial ? story.elapsedDays : story.totalDays;
+      // The page is a real calendar day: today while the period runs, its last day once it's over. How far
+      // into the period that is goes on a ribbon of its own, so the big number is never mistaken for it.
+      const day = cover.shownDay;
+      const date = (ms: number, options: Intl.DateTimeFormatOptions) => formatRecapDay(ms, options);
+      const dayOfPeriod = story.isPartial ? story.elapsedDays : story.totalDays;
+      // The pages torn off on the way here: the three days before, as far back as the period goes.
+      const earlier = [3, 2, 1].filter(back => back < dayOfPeriod).map(back => day - back * DAY_MS);
       return <div className="recap-cover recap-cover-tearoff">
         <div className="recap-tearoff" aria-hidden="true">
+          <span className="recap-tearoff-stack" />
           <span className="recap-tearoff-rings"><i /><i /></span>
-          <span className="recap-tearoff-head">{story.monthWord} {second}</span>
+          <span className="recap-tearoff-head">{date(day, { month: 'long', year: 'numeric' })}</span>
+          <span className="recap-tearoff-stub" />
           <div className="recap-tearoff-pages">
-            <span className="recap-tearoff-page is-final"><b>{day}</b><small>{story.isPartial ? `of ${story.totalDays} days` : 'days, all torn off'}</small></span>
-            {[3, 2, 1].map((page, i) => <span key={page} className="recap-tearoff-page is-flying" style={vars({ '--i': 2 - i })}><b>{page}</b><small>{cover.startLabel}</small></span>)}
+            <span className="recap-tearoff-page is-final"><b>{date(day, { day: 'numeric' })}</b><small>{date(day, { weekday: 'long' })}</small></span>
+            {earlier.map((ms, i) => <span key={ms} className="recap-tearoff-page is-flying" style={vars({ '--i': i })}><b>{date(ms, { day: 'numeric' })}</b><small>{date(ms, { weekday: 'long' })}</small></span>)}
           </div>
         </div>
+        <p className="recap-tearoff-ribbon"><b>Day {dayOfPeriod}</b> of {story.totalDays}{story.isPartial ? ' in this period' : ' · the last page'}</p>
         {headline}{body}
       </div>;
     }

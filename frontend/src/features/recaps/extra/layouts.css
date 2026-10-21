@@ -55,9 +55,17 @@
   animation: recap-grow-y .5s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 200ms + var(--i) * 20ms); }
 .recap-dominoes > i.has-spend { background: color-mix(in srgb, var(--recap-ink) 55%, transparent); }
 .recap-dominoes > i b { margin: auto; width: 1cqw; height: 1cqw; border-radius: 50%; background: var(--recap-paper); opacity: .8; }
-.recap-dominoes > i.in-run { background: var(--recap-accent); animation: recap-grow-y .5s cubic-bezier(.2, 1.3, .4, 1) both, recap-topple .45s cubic-bezier(.6, 0, .9, .4) both;
+/* The streak's dominoes fall flat toward you, one after another, each within its own spot: falling sideways
+   laid them across the standing ones. A soft shadow marks where each landed. */
+.recap-dominoes > i.in-run { position: relative; background: var(--recap-accent); transform-origin: center bottom;
+  animation: recap-grow-y .5s cubic-bezier(.2, 1.3, .4, 1) both, recap-topple .55s cubic-bezier(.55, 0, .85, .45) both;
   animation-delay: calc(var(--enter) + 200ms + var(--i) * 20ms), calc(var(--enter) + 1300ms + var(--r) * 110ms); }
-@keyframes recap-topple { to { rotate: 62deg; } }
+@keyframes recap-topple {
+  0% { transform: perspective(40cqw) rotateX(0deg); }
+  75% { transform: perspective(40cqw) rotateX(-84deg); }
+  88% { transform: perspective(40cqw) rotateX(-72deg); }
+  100% { transform: perspective(40cqw) rotateX(-80deg); box-shadow: 0 1.4cqw 1.6cqw -.6cqw #0005; }
+}
 
 /* Combo meter. */
 .recap-combo { display: grid; justify-items: center; gap: 1cqw; margin-top: 4cqw; padding: 5cqw 4cqw 4cqw; border-radius: 3cqw; background: var(--recap-ink); color: var(--recap-paper); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

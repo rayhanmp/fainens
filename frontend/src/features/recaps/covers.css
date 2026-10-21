@@ -157,18 +157,35 @@
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: max(1.8cqw, 10.5px); font-weight: 900; letter-spacing: 0; line-height: 1.05; text-align: center; text-transform: uppercase; overflow-wrap: anywhere; rotate: 14deg; box-shadow: 0 1cqw 2cqw -1cqw #0008;
   animation: recap-badge-in .8s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 1.3s) both; }
 
-/* Tear-off calendar: three pages fly off to show where the period is. */
-.recap-tearoff { position: relative; align-self: center; width: 56cqw; margin-bottom: 4cqw; border-radius: 2cqw; background: var(--slip); color: var(--slip-ink); box-shadow: 0 3cqw 6cqw -3cqw #0008; animation: recap-cover-drop .8s cubic-bezier(.2, 1.2, .35, 1) var(--enter) both; }
-.recap-tearoff-rings { position: absolute; left: 0; right: 0; top: -2.6cqw; display: flex; justify-content: space-around; }
-.recap-tearoff-rings i { width: 3cqw; height: 6cqw; border: .8cqw solid #555; border-radius: 2cqw; background: transparent; }
-.recap-tearoff-head { display: block; padding: 3.4cqw 3cqw 2.6cqw; border-radius: 2cqw 2cqw 0 0; background: var(--recap-pop); color: var(--recap-on-pop); font-size: max(3cqw, 11px); font-weight: 900; letter-spacing: .16em; text-align: center; text-transform: uppercase; }
-.recap-tearoff-pages { position: relative; height: 50cqw; }
-.recap-tearoff-page { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 1cqw; background: var(--slip); border-radius: 0 0 2cqw 2cqw; text-align: center; }
-.recap-tearoff-page b { font-size: 30cqw; font-weight: 900; letter-spacing: -.07em; line-height: .85; font-variant-numeric: tabular-nums; }
-.recap-tearoff-page small { font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
-.recap-tearoff-page.is-final b { color: var(--recap-pop); }
+/* Tear-off calendar: a desk block in its own palette (red header, cream pages, dark ink), metal rings, a
+   ragged strip where pages were torn, a stack of pages beneath and a curling corner. The days before fly
+   off to land on the real date; the ribbon underneath says how far into the period that is. */
+.recap-tearoff { position: relative; align-self: center; width: 66cqw; margin-top: 3cqw; border-radius: 2.4cqw; background: #fbf7ee; color: #1d211c;
+  box-shadow: 0 4cqw 7cqw -3cqw #0009; animation: recap-cover-drop .8s cubic-bezier(.2, 1.2, .35, 1) var(--enter) both; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+/* Pages still to come, peeking out underneath. */
+.recap-tearoff-stack { position: absolute; z-index: -1; left: 1.6cqw; right: 1.6cqw; bottom: -2.4cqw; height: 6cqw; border-radius: 0 0 2.4cqw 2.4cqw; background: #efe7d6;
+  box-shadow: 0 1.2cqw 0 -.4cqw #e2d8c2, 0 2.2cqw 0 -.8cqw #d6caaf; }
+.recap-tearoff-rings { position: absolute; z-index: 2; left: 0; right: 0; top: -3.4cqw; display: flex; justify-content: space-around; padding: 0 8cqw; }
+.recap-tearoff-rings i { width: 3.4cqw; height: 8cqw; border-radius: 2cqw; background: linear-gradient(90deg, #6d7076, #e9ecf0 40%, #9aa0a6 70%, #5a5e64); box-shadow: 0 .6cqw .8cqw #0006; }
+.recap-tearoff-head { display: block; padding: 4.4cqw 3cqw 3cqw; border-radius: 2.4cqw 2.4cqw 0 0; background: linear-gradient(180deg, #e53b3b, #c62828); color: #fff; font-size: max(3.2cqw, 11px); font-weight: 900; letter-spacing: .2em; text-align: center; text-transform: uppercase;
+  box-shadow: inset 0 -.6cqw 0 #0002; }
+/* The ragged paper left behind where earlier pages were torn off. */
+.recap-tearoff-stub { display: block; height: 2.4cqw; background: #fbf7ee;
+  -webkit-mask: linear-gradient(180deg, #000 45%, transparent 45%), conic-gradient(from 135deg at 50% 45%, #000 90deg, transparent 0) 0 0 / 2.4cqw 100%;
+  mask: linear-gradient(180deg, #000 45%, transparent 45%), conic-gradient(from 135deg at 50% 45%, #000 90deg, transparent 0) 0 0 / 2.4cqw 100%; }
+.recap-tearoff-pages { position: relative; height: 54cqw; margin-top: -1.2cqw; }
+.recap-tearoff-page { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 1.6cqw; overflow: hidden; background: #fbf7ee; border-radius: 0 0 2.4cqw 2.4cqw; text-align: center; }
+.recap-tearoff-page b { font-size: 34cqw; font-weight: 900; letter-spacing: -.06em; line-height: .82; font-variant-numeric: tabular-nums; color: #1d211c; }
+.recap-tearoff-page small { font-size: max(2.8cqw, 11px); font-weight: 800; letter-spacing: .24em; text-transform: uppercase; color: #c62828; }
+/* The final page curls up at the corner. */
+.recap-tearoff-page.is-final::after { content: ''; position: absolute; right: 0; bottom: 0; width: 9cqw; height: 9cqw; border-radius: 0 0 2.4cqw 0;
+  background: linear-gradient(135deg, transparent 50%, #e9dfc9 50%, #fffdf7 78%, #d9ceb5); box-shadow: -.6cqw -.6cqw 1.4cqw -.4cqw #0002; }
 /* Hidden at rest, so with motion switched off only the final page shows. */
 .recap-tearoff-page.is-flying { opacity: 0; border-bottom: .4cqw solid #0001; transform-origin: 50% 0; animation: recap-cover-flyoff .7s cubic-bezier(.5, 0, .7, .4) calc(var(--enter) + 500ms + var(--i) * 260ms) both; }
+.recap-tearoff-ribbon { align-self: center; margin-top: 6cqw; padding: 1.6cqw 4cqw; border-radius: 99px; background: var(--recap-ink); color: var(--recap-paper); font-size: max(2.6cqw, 11px); font-weight: 700; letter-spacing: .04em;
+  animation: recap-rise .6s cubic-bezier(.2, 1.2, .4, 1) calc(var(--enter) + 1.4s) both; }
+.recap-tearoff-ribbon b { font-weight: 900; }
+.recap-cover-tearoff .recap-cover-headline { margin-top: 5cqw; }
 
 /* Festival lineup: a poster with its own sunset palette (it doesn't take the run's theme, which muddied it).
    A striped retro sun sinks behind the hills under the month in big type; below the horizon the run's

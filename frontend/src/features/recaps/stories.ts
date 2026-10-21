@@ -101,6 +101,8 @@ export type FinaleFacts = {
 export type CoverFacts = {
   issue: number; year: string; startLabel: string; endLabel: string; teasers: string[]; chapterCount: number;
   purchaseCount: number; keptShare: number | null; passenger: string; seat: string;
+  /** The calendar day the cover stands on: today while the period runs, its last day once it's over. */
+  shownDay: number;
 };
 export type PersonaKey = 'weekend' | 'bigTicket' | 'steady' | 'monk' | 'loyal' | 'devotee' | 'explorer' | 'allRounder';
 export type Persona = {
@@ -142,7 +144,38 @@ export type YearInsightKind = YearInsight['kind'];
 export type PaceStage = 'early' | 'mid' | 'late';
 const MILESTONES = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
 
-type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour; timely?: boolean };
+type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour; timely?: boolean; covers?: string[] };
+
+/**
+ * Words that belong to particular covers: "the October issue" is a magazine's line, "starring" a film's,
+ * "now boarding" a flight's. A cover line using one is kept for those covers only, so a calendar is never
+ * introduced as an issue. Lines without any of them suit every cover. Matched against saved copy too.
+ */
+const COVER_TALK: Array<[RegExp, string[]]> = [
+  [/\b(issue|cover story|on the cover|the cover|hot off the press|this just in|breaking news|headlines?|front page|newsstand)\b/i, ['magazine', 'comic', 'novel']],
+  [/\b(starring|now showing|director[’']?s cut|premiere|movie|films?|scenes?|supporting roles?|cast|curtain|blockbuster|popcorn|top billing)\b/i, ['ticket', 'poster', 'lineup']],
+  [/\b(press play|tracks?|album|side a|remix(ed)?|mixtape|needle|playlist|deluxe)\b/i, ['vinyl', 'cartridge', 'lineup']],
+  [/\b(flights?|boarding|passengers?|departures?|take-?off|landed|seatbelt)\b/i, ['boarding', 'passport']],
+  [/\b(unbox(ing)?)\b/i, ['cereal']],
+  [/\b(previously on|last time, on|season finale|episode)\b/i, ['comic', 'ticket', 'poster']],
+];
+/** A plain headline per chapter, used only if every line in its pool would repeat the visual's figure. */
+const NEUTRAL_TITLES: Partial<Record<string, string>> = {
+  overview: 'In and out.', budget: 'The plan, against the receipts.', categories: 'Where the money went.', calendar: 'Your period, day by day.',
+  weekdays: 'Your week, in spending.', streak: 'Your longest run.', receipts: 'The biggest receipts.', habits: 'How you buy.',
+  comparison: 'Then and now.', pace: 'Where the period stands.', months: 'Month by month.', interlude: 'A quick interlude.',
+};
+const BONUS_NEUTRAL: Record<Bonus['kind'], string> = {
+  payday: 'Payday came in fast.', boss: 'A boss-level receipt.', suspects: 'The usual suspects.', milestone: 'A milestone receipt.',
+  takeover: 'One category took over.', comeback: 'A comeback in the rankings.',
+};
+/** Whether a cover line suits the cover it would be printed on. */
+export function suitsCover(line: { eyebrow: string; title: string; body: string; covers?: string[] }, cover: string | null) {
+  if (!cover) return true;
+  if (line.covers) return line.covers.includes(cover);
+  const text = `${line.eyebrow} ${line.title} ${line.body}`;
+  return COVER_TALK.every(([words, covers]) => !words.test(text) || covers.includes(cover));
+}
 // Every chapter can carry a mini-game, a fun comparison line, a question to hand to Fainens Agent,
 // and its own autoplay length.
 /** A pixel-game toast a chapter can unlock when it arrives. */
@@ -204,6 +237,19 @@ export function shownFigures(chapter: ChapterData): number[] {
       chapter.repeat?.occurrences ?? NONE_SHOWN, chapter.repeat?.total ?? NONE_SHOWN];
     case 'comparison': return [Math.abs(chapter.change), chapter.now, chapter.before];
     case 'pace': return [chapter.totalDays - chapter.elapsedDays, chapter.elapsedDays, chapter.totalDays, chapter.perDay, chapter.projected, ...numbersIn(chapter.endLabel)];
+    case 'interlude': return [chapter.value, chapter.share ?? NONE_SHOWN];
+    case 'bonus': {
+      const bonus = chapter.bonus;
+      switch (bonus.kind) {
+        case 'payday': return [bonus.share, bonus.amount];
+        case 'boss': return [bonus.amount, bonus.share];
+        case 'suspects': return bonus.items.flatMap(item => [item.occurrences, item.total]);
+        case 'milestone': return [bonus.count, bonus.dayIndex + 1, bonus.totalDays];
+        case 'takeover': return [bonus.share];
+        case 'comeback': return [bonus.rank, bonus.share, bonus.previousRank ?? NONE_SHOWN];
+      }
+      return [];
+    }
     default: return [];
   }
 }
@@ -430,16 +476,30 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
   // ones about when you opened it, so when a chapter has some they lead half the time instead of being
   // one voice among many.
   const pickCopy = (pool: Copy[]): Copy => {
-    const special = pool.filter(line => line.flavour || line.timely);
+    const special = pool.filter(line => line.flavour || line.timely || line.covers);
     return special.length && random() < .5 ? pickFrom(special, random) : pickFrom(pool, random);
+  };
+  /** A line from a pool that doesn't restate the visual's figures, else the neutral headline, else any. */
+  const pickFresh = (pool: Copy[], shown: number[], neutral: string): Copy => {
+    const fresh = pool.filter(line => !repeatsFigure(line.title, shown) && !repeatsFigure(line.eyebrow, shown));
+    const line = fresh.length ? pickCopy(fresh) : { eyebrow: pool[0]?.eyebrow ?? '', title: neutral, body: '' };
+    return repeatsFigure(line.body, shown) ? { ...line, body: '' } : line;
   };
   // The chapter's visual already prints its figures large, so a headline or eyebrow that says one of them
   // again is dropped from the pool, and a body that does is left out. (A "4× combo." over a big 4 said it twice.)
+  // The cover's lines are also written for the object it's printed as (see COVER_TALK), and the streak's
+  // for its layout: "The strip" names the house layout, so it isn't the eyebrow over dominoes or a chain.
+  const layouts = run === 0 ? null : runVariants(run);
+  const cover = layouts?.intro ?? null;
   const copyFor = (id: RecapStoryId, lead: string | undefined, shown: number[]): Copy => {
     const says = (text: string) => repeatsFigure(text, shown);
-    const fresh = (line: Copy) => !says(line.title) && !says(line.eyebrow);
+    const fits = (line: Copy) => id === 'intro' ? suitsCover(line, cover)
+      : id === 'streak' && layouts && layouts.streak !== 'strip' ? !/\bstrip\b/i.test(`${line.eyebrow} ${line.title}`) : true;
+    const fresh = (line: Copy) => !says(line.title) && !says(line.eyebrow) && fits(line);
     const all = chapterCopy(id, lead, facts);
-    const pool = all.filter(fresh).length ? all.filter(fresh) : all;
+    // Should every line repeat the visual's figure, a plain headline for the chapter stands in.
+    const neutral = NEUTRAL_TITLES[id] ? [{ eyebrow: all.find(fits)?.eyebrow ?? '', title: NEUTRAL_TITLES[id]!, body: '' }] : [];
+    const pool = [all.filter(fresh), neutral, all.filter(fits), all].find(list => list.length) ?? [];
     const candidate = savedCopy(id);
     const saved = candidate && fresh(candidate) ? candidate : null;
     const trim = (copy: Copy): Copy => says(copy.body) ? { ...copy, body: '' } : copy;
@@ -449,7 +509,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     const copy = trim(pool.length ? pickCopy(pool) : saved ?? { eyebrow: '', title: recap.period.name, body: '' });
     // Half the time the eyebrow comes from the chapter's own pool, so labels and headlines mix freely.
     // A flavoured line keeps its own: its eyebrow is part of the joke.
-    const eyebrows = chapterEyebrows(id).filter(eyebrow => !says(eyebrow));
+    const eyebrows = chapterEyebrows(id).filter(eyebrow => !says(eyebrow) && fits({ eyebrow, title: '', body: '' }));
     return run !== 0 && !copy.flavour && eyebrows.length && random() < .5 ? { ...copy, eyebrow: pickFrom(eyebrows, random) } : copy;
   };
 
@@ -569,7 +629,8 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     { id: 'intro', dateRange: periodDateRange(recap.period), isPartial: recap.isPartial, elapsedDays, totalDays, monthWord: recap.period.name.split(' ')[0],
       cover: { issue: recap.period.id, year: String(recapDay(recap.period.endDate).getUTCFullYear()), startLabel: formatRecapDay(recap.period.startDate, { day: 'numeric', month: 'short' }),
         endLabel: formatRecapDay(recap.period.endDate, { day: 'numeric', month: 'short' }), teasers: [], chapterCount: 0, purchaseCount: recap.purchaseCount, keptShare,
-        passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 14), seat: `${(seed % 30) + 1}${'ABCDEF'[seed % 6]}` } },
+        passenger: (edition?.personalization?.preferredName ?? 'You').slice(0, 14), seat: `${(seed % 30) + 1}${'ABCDEF'[seed % 6]}`,
+        shownDay: recap.isPartial ? recap.period.startDate + (elapsedDays - 1) * DAY_MS : recap.period.endDate } },
     // A running period opens with where you are in it; a finished one doesn't need telling.
     ...(paceStage && elapsedDays >= 3 ? [{ id: 'pace' as const, lead: paceStage, elapsedDays, totalDays, perDay, projected, endLabel }] : []),
     { id: 'overview', lead: leads.overview, income: recap.income, expenses: recap.expenses, net: recap.net, keptShare, spentPer100, reveal: leads.overview === 'left' && recap.net > 0 ? 'scratch' : 'none' },
@@ -801,7 +862,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
     // A crossroads' own copy is replaced by what was picked (applyCrossroads); this is its label until then.
     const raw = chapter.id === 'crossroads' ? { eyebrow: pickFrom(['Choose your own recap', 'Your call', 'Plot twist, your way'], random), title: 'You pick what’s next.', body: '' }
-      : chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts)) : chapter.id === 'year' ? pickCopy(yearCopy(chapter.insight))
+      : chapter.id === 'bonus' ? pickFresh(bonusCopy(chapter.bonus, facts), shownFigures(chapter), BONUS_NEUTRAL[chapter.bonus.kind]) : chapter.id === 'year' ? pickCopy(yearCopy(chapter.insight))
       : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined, shownFigures(chapter));
     const early = chapter.id === 'persona' && chapter.early;
     const copy = { eyebrow: forYear(early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body), flavour: early ? undefined : raw.flavour };

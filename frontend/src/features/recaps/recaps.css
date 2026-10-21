@@ -1332,7 +1332,8 @@
 .recap-ed-y2k { --font-heading: 'Trebuchet MS', Verdana, system-ui, sans-serif; font-family: 'Trebuchet MS', Verdana, system-ui, sans-serif; }
 .recap-ed-y2k h2 { font-style: italic; font-weight: 900; letter-spacing: -.035em; }
 .recap-ed-y2k .recap-story-eyebrow::before { content: '✦'; width: auto; height: auto; background: none; animation: none; }
-.recap-ed-y2k::after { background: radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--recap-accent) 35%, transparent) 0 3cqw, transparent 3.2cqw), radial-gradient(circle at 6% 94%, color-mix(in srgb, var(--recap-accent) 25%, transparent) 0 5cqw, transparent 5.2cqw);
+/* The bubbles peek in from the side edges at mid-height, in the padding, clear of the controls in the corners. */
+.recap-ed-y2k::after { background: radial-gradient(circle at calc(100% + 2cqw) 30%, color-mix(in srgb, var(--recap-accent) 35%, transparent) 0 6.4cqw, transparent 6.6cqw), radial-gradient(circle at -3cqw 64%, color-mix(in srgb, var(--recap-accent) 25%, transparent) 0 7.6cqw, transparent 7.8cqw);
   box-shadow: inset 0 0 0 .8cqw color-mix(in srgb, var(--recap-ink) 12%, transparent); }
 /* Zine: headline words cut out and pasted, a strip of tape, photocopy grain. */
 .recap-ed-zine h2 .recap-word-mask { margin: .06em 0; }

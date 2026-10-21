@@ -15,9 +15,67 @@ export type CopyFacts = {
   pace: { stage: PaceStage; elapsedDays: number; totalDays: number; daysLeft: number; endLabel: string; projected: number } | null;
 };
 /** A flavoured line carries its flavour, so the chapter can show the matching mark beside its eyebrow. */
-export type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour; timely?: boolean };
+/** `covers` keeps a cover line to the covers it was written for (see suitsCover in stories). */
+export type Copy = { eyebrow: string; title: string; body: string; flavour?: Flavour; timely?: boolean; covers?: string[] };
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
+/** Cover lines in the voice of the object the cover is printed as. Each is offered only on its own cover. */
+function coverLines(f: CopyFacts): Copy[] {
+  const on = (covers: string[], lines: Array<Omit<Copy, 'covers'>>) => lines.map(line => ({ ...line, covers }));
+  const featuring = f.top ? `Featuring ${f.top.label}.` : NONE;
+  return [
+    ...on(['tearoff'], [
+      { eyebrow: 'Another page', title: 'Another page, torn off.', body: f.isPartial ? 'A few more to go before this period is done.' : 'And that was the last one.' },
+      { eyebrow: 'Day by day', title: f.isPartial ? 'Circle today on the calendar.' : 'Every page, torn and counted.', body: featuring },
+      { eyebrow: 'The desk calendar', title: f.isPartial ? 'The days keep peeling off.' : 'The whole block, used up.', body: NONE },
+    ]),
+    ...on(['ticket'], [
+      { eyebrow: 'Tonight only', title: 'Grab the popcorn.', body: featuring },
+      { eyebrow: 'Take your seat', title: 'The lights are going down.', body: NONE },
+    ]),
+    ...on(['passport'], [
+      { eyebrow: 'Passport control', title: 'Anything to declare?', body: featuring },
+      { eyebrow: 'Stamped and ready', title: 'Where your money travelled.', body: NONE },
+    ]),
+    ...on(['photostrip'], [
+      { eyebrow: 'Photo booth', title: 'Four flashes, one period.', body: NONE },
+      { eyebrow: 'Strike a pose', title: 'Smile for the receipts.', body: featuring },
+    ]),
+    ...on(['cartridge'], [
+      { eyebrow: 'Insert coin', title: 'Player one, ready?', body: featuring },
+      { eyebrow: 'New game', title: `${f.period}: the game.`, body: NONE },
+    ]),
+    ...on(['postcard'], [
+      { eyebrow: 'Sent with love', title: 'A postcard from your period.', body: featuring },
+      { eyebrow: 'Wish you were here', title: 'Greetings from the ledger.', body: NONE },
+    ]),
+    ...on(['cereal'], [
+      { eyebrow: 'Part of a balanced ledger', title: 'Pour yourself a recap.', body: NONE },
+      { eyebrow: 'Fresh in the bowl', title: 'Your period, freshly poured.', body: featuring },
+    ]),
+    ...on(['novel'], [
+      { eyebrow: 'Chapter one', title: 'Once upon a period.', body: featuring },
+      { eyebrow: 'A page-turner', title: 'Your period, in chapters.', body: NONE },
+    ]),
+    ...on(['lineup'], [
+      { eyebrow: 'Gates open', title: 'The lineup is out.', body: NONE },
+      { eyebrow: 'Live on stage', title: 'Your period, headlining.', body: featuring },
+    ]),
+    ...on(['comic'], [
+      { eyebrow: 'Meanwhile', title: 'Meanwhile, in your ledger.', body: featuring },
+      { eyebrow: 'A new adventure', title: 'Our hero opens the books.', body: NONE },
+    ]),
+    ...on(['vinyl'], [
+      { eyebrow: 'Side A', title: 'Drop the needle.', body: featuring },
+      { eyebrow: 'The new release', title: 'Your period, pressed on vinyl.', body: NONE },
+    ]),
+    ...on(['boarding'], [
+      { eyebrow: 'Now boarding', title: 'Fasten your seatbelt.', body: featuring },
+      { eyebrow: 'Final call', title: 'Next stop: your highlights.', body: NONE },
+    ]),
+  ];
+}
 /** No body line: the visual says it, and a line that only describes the chart is noise. */
 const NONE = '';
 
@@ -152,6 +210,8 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
       { eyebrow: 'Tap to begin', title: 'Your money had a story.', body: `${plural(f.purchaseCount, 'receipt')} long.` },
       { eyebrow: 'Season finale', title: `Last time, on ${f.period}…`, body: `${plural(f.purchaseCount, 'purchase')} and a few surprises.` },
       { eyebrow: 'Unboxing', title: 'Let’s open this period up.', body: `What’s inside: ${plural(f.purchaseCount, 'receipt')}, ${plural(f.spendingDays, 'day')}.` },
+      // Lines written for one cover, each in its own object's voice (only offered on that cover).
+      ...coverLines(f),
     ];
     case 'overview': return lead === 'ratio' && f.spentPer100 !== null ? [
       { eyebrow: 'Money in, money out', title: `Every Rp100 in, Rp${f.spentPer100} out.`, body: f.keptShare !== null ? `The other ${f.keptShare}% was left after expenses.` : 'Expenses went past what came in.' },
@@ -260,12 +320,20 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
         { eyebrow: 'Streaks', title: `A ${f.busy}-day spending streak.`, body: NONE },
         { eyebrow: 'Combo', title: `${f.busy}× combo.`, body: NONE },
         { eyebrow: 'Unbroken', title: `${plural(f.busy, 'day')}, no gaps.`, body: f.quiet >= 2 ? `The longest pause: ${plural(f.quiet, 'day')}.` : NONE },
+        // The visual prints the run's length, so these leave the number to it.
+        { eyebrow: 'On a roll', title: 'The wallet kept going.', body: f.quiet >= 2 ? `The longest pause: ${plural(f.quiet, 'day')}.` : NONE },
+        { eyebrow: 'Back to back', title: 'Day after day after day.', body: NONE },
+        { eyebrow: 'In a row', title: 'Your longest spending run.', body: NONE },
       ];
       return [
         { eyebrow: 'Quiet time', title: `${f.quiet} days in a row, no spending.`, body: f.busy >= 3 ? `The longest spending run: ${plural(f.busy, 'day')}.` : NONE },
         { eyebrow: 'Streaks', title: `The longest pause: ${plural(f.quiet, 'day')}.`, body: NONE },
         { eyebrow: 'Radio silence', title: `${plural(f.quiet, 'day')} of silence.`, body: NONE },
         { eyebrow: 'Pause button', title: `Paused for ${plural(f.quiet, 'day')}.`, body: f.busy >= 3 ? `Then a ${f.busy}-day run elsewhere.` : NONE },
+        // The visual prints the pause's length, so these leave the number to it.
+        { eyebrow: 'Quiet time', title: 'The wallet took a break.', body: f.busy >= 3 ? `The longest spending run: ${plural(f.busy, 'day')}.` : NONE },
+        { eyebrow: 'Radio silence', title: 'A stretch of silence.', body: NONE },
+        { eyebrow: 'Pause button', title: 'Your longest pause.', body: NONE },
       ];
     case 'receipts': return f.receipt ? [
       { eyebrow: 'The standout receipts', title: 'The biggest receipts.', body: `Your ${f.receipt.count} largest purchases this period.` },
@@ -332,10 +400,14 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
         ? [
           { eyebrow: 'Fill it up', title: `${f.keptShare}% left in the glass.`, body: NONE },
           { eyebrow: 'Half full?', title: `The glass reads ${f.keptShare}%.`, body: NONE },
+          // The glass prints its level, so these leave the number to it.
+          { eyebrow: 'Half full?', title: 'What’s left in the glass.', body: NONE },
+          { eyebrow: 'Fill it up', title: 'The income that stayed.', body: NONE },
         ]
         : [
           { eyebrow: 'Fill it up', title: `${f.budgetUsed}% of the plan, poured.`, body: NONE },
           { eyebrow: 'Pour it out', title: `${f.budgetUsed}% to the line.`, body: NONE },
+          { eyebrow: 'Pour it out', title: 'The plan, poured so far.', body: NONE },
         ];
       if (lead === 'rain') return [
         { eyebrow: 'Today’s forecast', title: `Cloudy with a chance of ${f.purchaseCount} receipts.`, body: NONE },
