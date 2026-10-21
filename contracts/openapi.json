@@ -15769,9 +15769,9 @@
         }
       }
     },
-    "/api/goals/trips/reminders": {
+    "/api/goals/reminders": {
       "get": {
-        "operationId": "listTripReminders",
+        "operationId": "listGoalReminders",
         "tags": [
           "goals"
         ],
@@ -15792,7 +15792,10 @@
                           "unpaid",
                           "passport",
                           "visa",
-                          "packing"
+                          "packing",
+                          "refill",
+                          "part-due",
+                          "thr"
                         ]
                       },
                       "goalId": {
@@ -15814,6 +15817,13 @@
                         "type": "integer",
                         "minimum": -9007199254740991,
                         "maximum": 9007199254740991
+                      },
+                      "amount": {
+                        "nullable": true,
+                        "type": "number"
+                      },
+                      "short": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -15822,7 +15832,9 @@
                       "goalName",
                       "at",
                       "name",
-                      "count"
+                      "count",
+                      "amount",
+                      "short"
                     ],
                     "additionalProperties": false
                   }

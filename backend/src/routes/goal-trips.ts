@@ -19,11 +19,14 @@ import {
   tripBasics,
   tripDetail,
   tripGoal,
-  tripReminders,
   VISA_STATUSES,
 } from "../services/goal-trips";
+import { goalReminders } from "../services/goal-reminders";
 
-/** A holiday goal's trip: where and when, who's going, bookings, plans for each day and packing. */
+/**
+ * A holiday goal's trip: where and when, who's going, bookings, plans for each day and packing.
+ * Also every goal's reminders for the bell, which start with the trips'.
+ */
 
 const MAX_COST = 10_000_000_000_000;
 const idParams = z.object({ id: z.coerce.number().int().positive() });
@@ -196,13 +199,24 @@ async function guarded<T>(reply: any, run: () => Promise<T>): Promise<T | undefi
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
 
-  fastify.get("/api/goals/trips/reminders", {
+  fastify.get("/api/goals/reminders", {
     schema: {
-      operationId: "listTripReminders",
+      operationId: "listGoalReminders",
       tags: ["goals"],
-      response: { 200: z.array(z.object({ kind: z.enum(["cancel", "unpaid", "passport", "visa", "packing"]), goalId: z.number().int(), goalName: z.string(), at: z.number(), name: z.string().nullable(), count: z.number().int() })) },
+      response: {
+        200: z.array(z.object({
+          kind: z.enum(["cancel", "unpaid", "passport", "visa", "packing", "refill", "part-due", "thr"]),
+          goalId: z.number().int(),
+          goalName: z.string(),
+          at: z.number(),
+          name: z.string().nullable(),
+          count: z.number().int(),
+          amount: z.number().nullable(),
+          short: z.boolean(),
+        })),
+      },
     },
-  }, async () => tripReminders());
+  }, async () => goalReminders());
 
   fastify.get("/api/goals/:id/trip", {
     schema: { operationId: "getGoalTrip", tags: ["goals"], params: idParams, response: { 200: tripSchema, 404: errorSchema } },

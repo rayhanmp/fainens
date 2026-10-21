@@ -184,15 +184,15 @@ test('dated checklist items in goals’ notes are reminded of when due within th
 
 test('holidays remind you of cancellation, payment, passports, visas and packing', () => {
   const day = (offset) => new Date(new Date(NOW).setHours(12, 0, 0, 0) + offset * DAY_MS).getTime();
-  const trip = { goalId: 3, goalName: 'Japan', count: 1, name: null };
-  const goals = { due: 0, free: 0, late: [], shortAccounts: [], trips: [
+  const trip = { goalId: 3, goalName: 'Japan', count: 1, name: null, amount: null, short: false };
+  const goals = { due: 0, free: 0, late: [], shortAccounts: [], kinds: [
     { ...trip, kind: 'cancel', at: day(2), name: 'Shinjuku hotel' },
     { ...trip, kind: 'unpaid', at: day(10), count: 2 },
     { ...trip, kind: 'passport', at: Date.UTC(2027, 5, 1), name: 'Sari' },
     { ...trip, kind: 'visa', at: day(10), name: 'Sari' },
     { ...trip, kind: 'packing', at: day(1), count: 12 },
   ] };
-  const items = buildAttentionItems(input({ goals }), format).filter((item) => item.id.startsWith('trip-'));
+  const items = buildAttentionItems(input({ goals }), format).filter((item) => item.id.startsWith('goal-'));
   assert.deepEqual(items.map((item) => [item.tone, item.title]), [
     ['warning', 'Free cancellation for Shinjuku hotel ends in 2 days'],
     ['warning', '2 bookings not paid yet'],
@@ -200,5 +200,38 @@ test('holidays remind you of cancellation, payment, passports, visas and packing
     ['warning', 'Apply for Sari’s visa'],
   ]);
   // Four at most, so the bell isn't only about one trip.
-  assert.equal(buildAttentionItems(input({ goals: { ...goals, trips: goals.trips.slice(4) } }), format).find((item) => item.id.startsWith('trip-packing')).title, '12 things not packed yet');
+  assert.equal(buildAttentionItems(input({ goals: { ...goals, kinds: goals.kinds.slice(4) } }), format).find((item) => item.id.startsWith('goal-packing')).title, '12 things not packed yet');
+});
+
+test('goals of each kind remind you of parts due, refills, THR, and what their kind asks', () => {
+  const day = (offset) => new Date(new Date(NOW).setHours(12, 0, 0, 0) + offset * DAY_MS).getTime();
+  const base = { count: 1, name: null, amount: null, short: false };
+  const goals = { due: 0, free: 0, late: [], shortAccounts: [], kinds: [
+    { ...base, kind: 'part-due', goalId: 1, goalName: 'Wedding', at: day(10), name: 'Venue deposit', amount: 25_000_000 },
+    { ...base, kind: 'part-due', goalId: 2, goalName: 'School', at: day(25), name: 'Term 2', amount: 9_000_000, short: true },
+    { ...base, kind: 'refill', goalId: 3, goalName: 'Fund', at: day(-5), name: 'Car repair', amount: 4_000_000 },
+    { ...base, kind: 'thr', goalId: 4, goalName: 'Lebaran', at: day(-2), amount: 9_000_000 },
+  ], types: [
+    { kind: 'emergency-low', goalId: 3, goalName: 'Fund', months: 2.4 },
+    { kind: 'yearly-due', goalId: 5, goalName: 'Vehicle tax', at: day(20), days: 20, short: 0 },
+  ] };
+  const items = buildAttentionItems(input({ goals }), format).filter((item) => item.id.startsWith('goal-'));
+  assert.deepEqual(items.map((item) => [item.tone, item.title]), [
+    ['warning', 'Term 2: due in 25 days'],
+    ['warning', 'Fill Fund back up'],
+    ['warning', 'Fund covers 2,4 months of spending'],
+    ['info', 'Venue deposit: due in 10 days'],
+    ['info', 'Put some THR into Lebaran'],
+    ['info', 'Vehicle tax is due in 20 days'],
+  ]);
+  assert.equal(items.find((item) => item.title.startsWith('Term 2')).detail, 'Rp9000000 on School, by ' + new Date(day(25)).toISOString().slice(0, 10) + '. School holds less than that so far.');
+});
+
+test('the overview’s goals give their kind’s reminders', () => {
+  const goal = { status: 'active', paused: false, setAsideThisMonth: 0, accountId: null, byDate: null, reachMonths: null, monthlyAmount: 0, typeData: {} };
+  const reminders = goalReminders({ unassigned: 0, salary: 20_000_000, accounts: [], goals: [
+    { ...goal, id: 1, name: 'Fund', goalType: 'emergency', targetAmount: 30_000_000, setAside: 10_000_000 },
+    { ...goal, id: 2, name: 'House', goalType: 'house', targetAmount: 265_000_000, setAside: 0, typeData: { price: 1_000_000_000 } },
+  ] }, NOW, 5_000_000);
+  assert.deepEqual(reminders.types.map((item) => item.kind), ['emergency-low', 'kpr-limit']);
 });

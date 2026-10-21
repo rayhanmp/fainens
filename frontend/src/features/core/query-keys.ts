@@ -43,7 +43,7 @@ export const queryKeys = {
     search: (query: string) => ["goals", "notes-search", query] as const,
     tasks: ["goals", "tasks"] as const,
     trip: (id: number) => ["goals", "trip", id] as const,
-    tripReminders: ["goals", "trip-reminders"] as const,
+    reminders: ["goals", "reminders"] as const,
   },
   profile: ["profile"] as const,
   attachments: { all: ["attachments"] as const, transaction: (transactionId: number | null) => ["attachments", "transaction", transactionId] as const, download: (id: number) => ["attachments", "download", id] as const },

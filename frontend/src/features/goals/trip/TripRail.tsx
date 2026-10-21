@@ -7,7 +7,7 @@ import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { MoneyField } from '../../savings/fields';
 import { Dropdown } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
-import { DetailRow } from '../detail/DetailsPanel';
+import { DetailRow } from '../detail/DetailRow';
 import { useUpdateTripMutation, type Trip } from './queries';
 import { CURRENCIES, dayKey, fromDayKey, tripLength } from './trip-utils';
 

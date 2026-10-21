@@ -202,6 +202,12 @@ describe("goals", () => {
     expect(next).toMatchObject({ status: "active", setAside: 0, recurrence: "yearly" });
     expect(new Date(next.byDate).getFullYear()).toBeGreaterThanOrEqual(2027);
     expect((await app.inject({ method: "GET", url: `/api/goals/${tax.id}` })).json().parts[0].paidAt).toBeNull();
+    // What it took this year is kept as next year's guide.
+    expect(next.typeData).toMatchObject({ lastYear: 3_000_000, lastPaidAt: expect.any(Number) });
+    await post(`/api/goals/${tax.id}/allocations`, { amount: 2_500_000 });
+    await post(`/api/goals/${tax.id}/spend`, { amount: 2_400_000 });
+    const after = (await post(`/api/goals/${tax.id}/complete`, {})).json();
+    expect(after.typeData.lastYear).toBe(2_500_000);
   });
 
   it("pays expenses in a goal's category out of it, and gives the money back if the expense goes", async () => {

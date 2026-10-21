@@ -205,9 +205,10 @@ export default async function (fastify: FastifyInstance) {
     const key = decodeURIComponent(request.url.replace("/api/goal-link-images/", "").split("?")[0] ?? "");
     if (!/^wishlist-images\/[A-Za-z0-9._-]+$/.test(key)) return reply.code(404).send({ error: "Image not found" });
     const [owner] = await db.select({ id: savingsGoals.id }).from(savingsGoals).where(eq(savingsGoals.linkImage, key)).limit(1);
-    // A link card in a goal's notes holds its picture's key too.
+    // A link card in a goal's notes holds its picture's key too, and so does a gadget's comparison.
     const [inNotes] = owner ? [owner] : await db.select({ id: goalNotePages.id }).from(goalNotePages).where(sql`instr(${goalNotePages.content}, ${key}) > 0`).limit(1);
-    if (!owner && !inNotes && !previewed.has(key)) return reply.code(404).send({ error: "Image not found" });
+    const [compared] = owner || inNotes ? [true] : await db.select({ id: savingsGoals.id }).from(savingsGoals).where(sql`instr(${savingsGoals.typeData}, ${key}) > 0`).limit(1);
+    if (!owner && !inNotes && !compared && !previewed.has(key)) return reply.code(404).send({ error: "Image not found" });
     try {
       return await sendStored(reply, key, "image/jpeg");
     } catch {

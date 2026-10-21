@@ -36,6 +36,7 @@ import {
   ShortcutsDemo,
   WhatsNewDemo,
 } from './PageVisuals';
+import { EducationDemo, EmergencyDemo, GadgetDemo, HouseDemo, UmrahDemo, WeddingDemo, YearlyDemo } from './GoalTypeVisuals';
 
 /**
  * The help docs: one entry per page, grouped as in the sidebar. Every fact was checked against the
@@ -596,7 +597,8 @@ export const DOCS: DocPage[] = [
       { type: 'list', items: [
         'How it’s growing: a chart of what the goal held after each move, the dashed path to its target at its monthly amount and return, the needed-by date, and gold dots where it reached each quarter.',
         'Notes: pages of their own, as tabs (add one blank or from the goal’s kind, like Places to eat for a holiday; double-click a tab to rename it). Write straight on the page: ## makes a heading, - [ ] a checklist, **bold** bold. Type / for blocks (headings, lists, a table, a picture, a link card), [[ to link a part, booking or file of the goal (it shows how it stands, like “Flights · Rp9 jt · paid”), and @ for a date (14 mar, tomorrow); a dated checklist item is reminded of in the Dashboard’s bell. Select text for a toolbar with highlights and the total of any amounts in it; paste or drop a picture to add it; a link pasted on an empty line becomes a card. Drag a block by its handle, fold a section under its heading, and use the tools for search (across your other goals’ notes too), an outline, the history of earlier copies, export (Markdown, text, or print to PDF) and focus mode. Everything saves by itself.',
-        'Breakdown: split the cost into parts, like flights, stay and JR Pass. Tick a part when it’s paid, or Pay it from the goal’s money with the expense you recorded; the rest of the goal stays open. Make the parts’ total the target in one tap.',
+        'Breakdown: split the cost into parts, like flights, stay and JR Pass. Tick a part when it’s paid, or Pay it from the goal’s money with the expense you recorded; the rest of the goal stays open. Make the parts’ total the target in one tap. Give a part a due date, like a deposit or a school fee, and you’re reminded before it.',
+        'Its kind: a goal made from a template (or given a kind when you edit it) has its own tool on its page and its own picture at the top, described below.',
         'Files: quotes, brochures, bookings and photos up to 5 MB each. A picture can be the cover.',
         'Link: a product or booking page. Pages from the shops the wishlist knows (Tokopedia, Shopee and others) show their title and picture, and their price can become the target.',
         'Sits in: the account or pocket it’s really kept in. You’re warned when that account holds less than its goals.',
@@ -616,6 +618,27 @@ export const DOCS: DocPage[] = [
         'In the Dashboard’s bell: free cancellation ending, bookings unpaid two weeks before you leave, a passport that runs out too soon, a visa not applied for 45 days out, and things not packed two days before.',
       ] },
       { type: 'visual', node: <TripBudgetDemo />, wide: true },
+      { type: 'h2', id: 'goal-emergency', text: 'An emergency fund' },
+      { type: 'p', text: 'Its page counts the fund in months of what you spend on average, one block a month. In Details, say who relies on it (just you, or a family) and how many months it should cover: one person usually keeps 3 to 6 months, a family 6 to 12 (the sources are linked on the page). When your spending moves, it offers the target that covers the same months. Taking money out asks what it was for; the bell then reminds you to fill it back up, and whenever it covers less than three months.' },
+      { type: 'visual', node: <EmergencyDemo />, wide: true },
+      { type: 'h2', id: 'goal-house', text: 'A house down payment' },
+      { type: 'p', text: 'The down payment and the KPR, worked out together: the price, the share you pay down, and the loan’s years and rate give the monthly payment, set against the share of your take-home pay banks usually allow, about 30% (change it under Bank’s limit in Details). BPHTB (up to 5% of the price above an untaxed amount your region sets, at least Rp80 juta for a first home), the notary, the bank’s provisi and the appraisal add to what’s needed upfront. Make that the target, or put each cost in the breakdown. The bell tells you when the payment is past the limit.' },
+      { type: 'visual', node: <HouseDemo />, wide: true },
+      { type: 'h2', id: 'goal-wedding', text: 'A wedding' },
+      { type: 'p', text: 'Guests times catering for each, plus every other part of the breakdown, against the target. Give a vendor’s deposit a due date in the breakdown and you’re reminded two weeks before it, and sooner when the goal can’t cover it yet.' },
+      { type: 'visual', node: <WeddingDemo />, wide: true },
+      { type: 'h2', id: 'goal-umrah', text: 'Umrah' },
+      { type: 'p', text: 'The package and spending money for everyone going, against the target. A package priced under Kemenag’s reference price, Rp23 juta, is flagged: the reference isn’t a minimum, but agents must report packages priced lower. Two months before you leave, the bell reminds you to check vaccines and documents.' },
+      { type: 'visual', node: <UmrahDemo />, wide: true },
+      { type: 'h2', id: 'goal-education', text: 'School and study' },
+      { type: 'p', text: 'Fees with the day they’re due, added one at a time or repeating each term or year. The next one counts down, with whether the goal holds enough for it; a month before a fee it can’t cover yet, the bell reminds you. Name the school in Details.' },
+      { type: 'visual', node: <EducationDemo />, wide: true },
+      { type: 'h2', id: 'goal-gadget', text: 'A gadget' },
+      { type: 'p', text: 'Paste up to three shops’ links: their prices are read from the page (or type them in), the cheapest is marked, and you pick one. With the old one’s trade-in taken off, its price can become the target. Check prices again any time; when the one you picked gets cheaper, the bell says so and the goal’s headline shows by how much.' },
+      { type: 'visual', node: <GadgetDemo />, wide: true },
+      { type: 'h2', id: 'goal-yearly', text: 'Vehicle tax, insurance and Lebaran' },
+      { type: 'p', text: 'These come every year. Marking one paid keeps what it took as next year’s guide, and the page offers a twelfth of it a month, or what’s left over the months until it’s due. A vehicle’s plate and STNK renew every five years, which costs more than the yearly tax (UU 22/2009); give the plate’s year in Details and that year’s bill says so. THR has to be paid at the latest seven days before Lebaran (Permenaker 6/2016): Put in my THR puts it into the goal, and the bell reminds you when a THR comes in and goes nowhere. Each is reminded of a month before it’s due.' },
+      { type: 'visual', node: <YearlyDemo />, wide: true },
       { type: 'h2', id: 'goals-plan', text: 'This month, and when you’ll get there' },
       { type: 'p', text: 'Beside your goals, This month lists each goal’s monthly amount and what it already got; Put in adds the rest from your free money in one go, top of the list first. What a goal already got this month counts, so pressing it twice adds nothing more. Switch on Put in on payday and it happens when your salary posts. Budget has the same button next to this period’s savings target. When you’ll get there draws each goal from today to the month it’s reached at its monthly amount and return, with a tick where it’s needed by.' },
       { type: 'visual', node: <GoalsPlanDemo />, wide: true },

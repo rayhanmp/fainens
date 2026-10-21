@@ -275,21 +275,26 @@ export function GoalDialog({ goal, initial, unassigned, salary, emergencyAmount 
   );
 }
 
-/** Put money into a goal from what's free, or take some out again. */
-export function MoveMoneyDialog({ goal, unassigned, busy, onClose, onSave, initialDirection = 'in' }: { goal: Goal; unassigned: number; busy: boolean; onClose: () => void; onSave: (amount: number, note: string | null) => void; initialDirection?: 'in' | 'out' }) {
+/**
+ * Put money into a goal from what's free, or take some out again. Taking money out of an emergency
+ * fund asks what it was for, which its activity keeps.
+ */
+export function MoveMoneyDialog({ goal, unassigned, busy, onClose, onSave, initialDirection = 'in', initialNote = '' }: { goal: Goal; unassigned: number; busy: boolean; onClose: () => void; onSave: (amount: number, note: string | null) => void; initialDirection?: 'in' | 'out'; initialNote?: string }) {
   const { formatAmount } = useBalanceVisibility();
   const [direction, setDirection] = useState<'in' | 'out'>(initialDirection);
   const [amount, setAmount] = useState(0);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initialNote);
   const [error, setError] = useState<string | null>(null);
   const free = Math.max(0, unassigned);
   const toGo = Math.max(0, goal.targetAmount - goal.setAside);
   const limit = direction === 'in' ? free : goal.setAside;
+  const needsReason = direction === 'out' && goal.goalType === 'emergency';
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!amount) return setError('Enter an amount.');
     if (amount > limit) return setError(direction === 'in' ? `Only ${formatAmount(free)} is free.` : `${goal.name} has ${formatAmount(goal.setAside)}.`);
+    if (needsReason && !note.trim()) return setError('Say what it was for; the fund’s activity keeps it, and you’re reminded to fill it back up.');
     onSave(direction === 'in' ? amount : -amount, note.trim() || null);
   };
 
@@ -309,8 +314,8 @@ export function MoveMoneyDialog({ goal, unassigned, busy, onClose, onSave, initi
           {direction === 'in' && goal.monthlyAmount > 0 && goal.monthlyAmount <= free && <Button type="button" size="sm" variant="secondary" onClick={() => setAmount(Math.min(goal.monthlyAmount, toGo || goal.monthlyAmount))}>This month’s · {formatAmount(goal.monthlyAmount)}</Button>}
           {direction === 'out' && goal.setAside > 0 && <Button type="button" size="sm" variant="secondary" onClick={() => setAmount(goal.setAside)}>All of it · {formatAmount(goal.setAside)}</Button>}
         </div>
-        <Field label="Note" htmlFor="goal-move-note">
-          <input id="goal-move-note" className="brutalist-input" value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} placeholder={direction === 'in' ? 'THR, bonus, this month…' : 'Needed it for…'} />
+        <Field label={needsReason ? 'What was it for?' : 'Note'} htmlFor="goal-move-note">
+          <input id="goal-move-note" className="brutalist-input" value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} placeholder={direction === 'in' ? 'THR, bonus, this month…' : needsReason ? 'Car repair, hospital, between jobs…' : 'Needed it for…'} />
         </Field>
       </form>
     </Modal>

@@ -7762,20 +7762,23 @@ export type RestoreGoalPageVersion404 = {
   [key: string]: unknown;
 };
 
-export type ListTripReminders200ItemKind = typeof ListTripReminders200ItemKind[keyof typeof ListTripReminders200ItemKind];
+export type ListGoalReminders200ItemKind = typeof ListGoalReminders200ItemKind[keyof typeof ListGoalReminders200ItemKind];
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
-export const ListTripReminders200ItemKind = {
+export const ListGoalReminders200ItemKind = {
   cancel: 'cancel',
   unpaid: 'unpaid',
   passport: 'passport',
   visa: 'visa',
   packing: 'packing',
+  refill: 'refill',
+  'part-due': 'part-due',
+  thr: 'thr',
 } as const;
 
-export type ListTripReminders200Item = {
-  kind: ListTripReminders200ItemKind;
+export type ListGoalReminders200Item = {
+  kind: ListGoalReminders200ItemKind;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -7790,6 +7793,9 @@ export type ListTripReminders200Item = {
    * @maximum 9007199254740991
    */
   count: number;
+  /** @nullable */
+  amount: number | null;
+  short: boolean;
 };
 
 /**
@@ -27672,29 +27678,29 @@ export const restoreGoalPageVersion = async (id: number, options?: RequestInit):
 
 
 
-export type listTripRemindersResponse200 = {
-  data: ListTripReminders200Item[]
+export type listGoalRemindersResponse200 = {
+  data: ListGoalReminders200Item[]
   status: 200
 }
     
-export type listTripRemindersResponseSuccess = (listTripRemindersResponse200) & {
+export type listGoalRemindersResponseSuccess = (listGoalRemindersResponse200) & {
   headers: Headers;
 };
 ;
 
-export type listTripRemindersResponse = (listTripRemindersResponseSuccess)
+export type listGoalRemindersResponse = (listGoalRemindersResponseSuccess)
 
-export const getListTripRemindersUrl = () => {
+export const getListGoalRemindersUrl = () => {
 
 
   
 
-  return `/api/goals/trips/reminders`
+  return `/api/goals/reminders`
 }
 
-export const listTripReminders = async ( options?: RequestInit): Promise<listTripRemindersResponse> => {
+export const listGoalReminders = async ( options?: RequestInit): Promise<listGoalRemindersResponse> => {
   
-  return generatedFetch<listTripRemindersResponse>(getListTripRemindersUrl(),
+  return generatedFetch<listGoalRemindersResponse>(getListGoalRemindersUrl(),
   {      
     ...options,
     method: 'GET'

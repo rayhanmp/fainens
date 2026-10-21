@@ -23,7 +23,10 @@ import { TripIllustration } from '../features/goals/trip/TripIllustration';
 import { TripRail } from '../features/goals/trip/TripRail';
 import { TodayPanel, TripRecap } from '../features/goals/trip/TripStatus';
 import { tripPhase } from '../features/goals/trip/trip-utils';
-import { useGoalHeadline } from '../features/goals/use-headline';
+import { TypeArt } from '../features/goals/types/TypeArt';
+import { TypePanel } from '../features/goals/types/TypePanel';
+import { useAverageSpending, useGoalHeadline } from '../features/goals/use-headline';
+import { isGoalTypeKey } from '../features/goals/goal-types';
 import {
   useAllocateMutation,
   useCompleteGoalMutation,
@@ -56,7 +59,7 @@ function GoalPage() {
   const complete = useCompleteGoalMutation();
   const update = useUpdateGoalMutation();
   const remove = useDeleteGoalMutation();
-  const [moving, setMoving] = useState<'in' | 'out' | null>(null);
+  const [moving, setMoving] = useState<{ direction: 'in' | 'out'; note?: string } | null>(null);
   const [paying, setPaying] = useState<{ partId: number | null } | null>(null);
   const [completing, setCompleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -67,6 +70,7 @@ function GoalPage() {
   const goal = detail?.goal;
   const color = coloredGoals(overview?.goals ?? []).find((item) => item.goal.id === id)?.color ?? GOAL_COLORS[0];
   const headline = useGoalHeadline();
+  const spending = useAverageSpending();
   // A holiday has its trip: where and when, bookings, its days, who's going and packing.
   const tripQuery = useTripQuery(id, goal?.goalType === 'trip');
   const trip = goal?.goalType === 'trip' ? tripQuery.data : undefined;
@@ -115,10 +119,12 @@ function GoalPage() {
                 detail={detail}
                 color={color}
                 headline={headline(goal, detail.parts)}
-                art={trip ? <TripIllustration color={color} place={trip.basics.places[0]} from={firstFlight?.place} leaves={trip.basics.startDate} /> : undefined}
+                art={trip
+                  ? <TripIllustration color={color} place={trip.basics.places[0]} from={firstFlight?.place} leaves={trip.basics.startDate} />
+                  : isGoalTypeKey(goal.goalType) && goal.goalType !== 'trip' ? <TypeArt goalType={goal.goalType} color={color} fill={goal.targetAmount > 0 ? Math.min(1, goal.setAside / goal.targetAmount) : 0} /> : undefined}
                 pausing={update.isPending}
-                onPutIn={() => setMoving('in')}
-                onTakeOut={() => setMoving('out')}
+                onPutIn={() => setMoving({ direction: 'in' })}
+                onTakeOut={() => setMoving({ direction: 'out' })}
                 onPay={() => setPaying({ partId: null })}
                 onBought={() => setCompleting(true)}
                 onEdit={() => setEditing(true)}
@@ -145,6 +151,7 @@ function GoalPage() {
                     <PackingSection goalId={id} trip={trip} />
                   </>
                 )}
+                {!trip && <TypePanel detail={detail} overview={overview} spending={spending} now={now} color={color} onPutIn={(note) => setMoving({ direction: 'in', note })} />}
                 <GrowthChart detail={detail} color={color} />
                 <NotesWorkspace key={id} detail={detail} bookings={trip?.bookings} />
                 <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
@@ -160,7 +167,8 @@ function GoalPage() {
               <MoveMoneyDialog
                 goal={goal}
                 unassigned={overview.unassigned}
-                initialDirection={moving}
+                initialDirection={moving.direction}
+                initialNote={moving.note}
                 busy={allocate.isPending}
                 onClose={() => setMoving(null)}
                 onSave={async (amount, note) => {

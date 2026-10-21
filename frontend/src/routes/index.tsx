@@ -33,7 +33,8 @@ import { useAgentProfileQuery, useFinancialFactsQuery } from '../features/agent/
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import { useGoalsQuery } from '../features/goals/queries';
 import { useGoalDueTasksQuery } from '../features/goals/notes/queries';
-import { useTripRemindersQuery } from '../features/goals/trip/queries';
+import { useGoalRemindersQuery } from '../features/goals/trip/queries';
+import { useAverageSpending } from '../features/goals/use-headline';
 import { GoalsDashboardPanel } from '../features/dashboard/GoalsDashboardPanel';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
@@ -223,7 +224,8 @@ function DashboardPage() {
   // Goals feed the bell (what to put in, goals running late) and the pulse strip.
   const goalsQuery = useGoalsQuery();
   const goalTasksQuery = useGoalDueTasksQuery();
-  const tripRemindersQuery = useTripRemindersQuery();
+  const goalRemindersQuery = useGoalRemindersQuery();
+  const averageSpending = useAverageSpending();
   const attentionItems = useMemo(() => buildAttentionItems({
     now: dashboardNow,
     pendingTransactionCount,
@@ -237,8 +239,8 @@ function DashboardPage() {
     payLaterObligations: paylater?.obligations ?? [],
     subscriptionRenewals: subscriptions?.renewalPreview.occurrences ?? [],
     commitments,
-    goals: goalsQuery.data ? { ...goalReminders(goalsQuery.data, dashboardNow), tasks: goalTasksQuery.data ?? [], trips: tripRemindersQuery.data ?? [] } : null,
-  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, goalsQuery.data, goalTasksQuery.data, tripRemindersQuery.data, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
+    goals: goalsQuery.data ? { ...goalReminders(goalsQuery.data, dashboardNow, averageSpending), tasks: goalTasksQuery.data ?? [], kinds: goalRemindersQuery.data ?? [] } : null,
+  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, averageSpending, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, goalsQuery.data, goalTasksQuery.data, goalRemindersQuery.data, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
   // One read state for the bell and the inline strip, so marking an item read clears it from both.
   const attentionReadState = useAttentionReadState(attentionItems, user?.email);
 

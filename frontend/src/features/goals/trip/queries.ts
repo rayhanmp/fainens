@@ -9,7 +9,7 @@ import {
   deleteTripPlan,
   deleteTripTraveller,
   getGoalTrip,
-  listTripReminders,
+  listGoalReminders,
   moveTripPlans,
   planTripAgain,
   updateGoalTrip,
@@ -22,7 +22,6 @@ import {
   type AddTripPlanBody,
   type AddTripTravellerBody,
   type GetGoalTrip200,
-  type ListTripReminders200Item,
   type MoveTripPlansBody,
   type UpdateGoalTripBody,
   type UpdateTripBookingBody,
@@ -38,7 +37,6 @@ export type Booking = Trip['bookings'][number];
 export type Plan = Trip['plans'][number];
 export type Traveller = Trip['travellers'][number];
 export type PackingItem = Trip['packing'][number];
-export type TripReminder = ListTripReminders200Item;
 
 export function useTripQuery(goalId: number, enabled = true) {
   return useQuery({
@@ -49,10 +47,11 @@ export function useTripQuery(goalId: number, enabled = true) {
   });
 }
 
-export function useTripRemindersQuery(enabled = true) {
+/** What goals need from you soon: a trip's bookings and papers, parts due, a fund to refill, a THR to put in. */
+export function useGoalRemindersQuery(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.goals.tripReminders,
-    queryFn: ({ signal }) => unwrapGenerated(listTripReminders({ signal }), 200, 'Failed to load trip reminders'),
+    queryKey: queryKeys.goals.reminders,
+    queryFn: ({ signal }) => unwrapGenerated(listGoalReminders({ signal }), 200, 'Failed to load goal reminders'),
     enabled,
   });
 }

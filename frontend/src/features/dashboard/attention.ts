@@ -1,4 +1,5 @@
 import { DAY_MS, type CommitmentLoan, type CommitmentPayLater, type UpcomingCommitments } from './commitments.ts';
+import { typeReminders, type TypeReminder, type TypeReminderGoal } from '../goals/types/type-math.ts';
 
 export type Attention = {
   id: string;
@@ -42,27 +43,46 @@ export type GoalReminders = {
   shortAccounts: ReadonlyArray<{ id: number; name: string; balance: number; goalsHold: number }>;
   /** Unticked checklist items in goals' notes, with the day they're due. */
   tasks?: ReadonlyArray<{ goalId: number; goalName: string; text: string; dueAt: number }>;
-  /** What holidays need soon: free cancellation ending, unpaid bookings, passports, visas, packing. */
-  trips?: ReadonlyArray<TripReminder>;
+  /** What the server sees goals need soon: a trip's bookings and papers, parts due, a fund to refill, a THR. */
+  kinds?: ReadonlyArray<KindReminder>;
+  /** What each goal's kind asks, worked out from the overview: see {@link typeReminders}. */
+  types?: ReadonlyArray<TypeReminder>;
 };
 
-export type TripReminder = {
-  kind: 'cancel' | 'unpaid' | 'passport' | 'visa' | 'packing';
+export type KindReminder = {
+  kind: 'cancel' | 'unpaid' | 'passport' | 'visa' | 'packing' | 'refill' | 'part-due' | 'thr';
   goalId: number;
   goalName: string;
-  /** When free cancellation ends, when you leave, or when a passport runs out. */
+  /** When it's about: free cancellation ending, leaving, a passport running out, a part due, money taken out, a THR. */
   at: number;
-  /** Whose passport or visa, or which booking. */
+  /** Whose passport or visa, which booking or part, or why money came out. */
   name: string | null;
   count: number;
+  amount: number | null;
+  /** A part due while the goal holds less than it. */
+  short: boolean;
 };
 
-/** A trip reminder in words, for the bell. */
-function tripAttention(reminder: TripReminder, now: number, format: AttentionFormat): Attention {
-  const days = Math.round((new Date(reminder.at).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / DAY_MS);
-  const when = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
-  const base = { id: `trip-${reminder.kind}:${reminder.goalId}:${reminder.name ?? ''}:${reminder.at}`, to: '/goals' as const, action: 'Open goals' };
+const inDays = (at: number, now: number) => Math.round((new Date(at).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / DAY_MS);
+const whenIn = (days: number) => (days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`);
+
+/** A server reminder in words, for the bell. */
+function kindAttention(reminder: KindReminder, now: number, format: AttentionFormat): Attention {
+  const days = inDays(reminder.at, now);
+  const when = whenIn(days);
+  const base = { id: `goal-${reminder.kind}:${reminder.goalId}:${reminder.name ?? ''}:${reminder.at}`, to: '/goals' as const, action: 'Open goals' };
   switch (reminder.kind) {
+    case 'refill':
+      return { ...base, tone: 'warning', title: `Fill ${reminder.goalName} back up`, detail: `${format.amount(reminder.amount ?? 0)} short since money came out on ${format.date(reminder.at)}${reminder.name ? ` for ${reminder.name}` : ''}.` };
+    case 'part-due':
+      return {
+        ...base,
+        tone: days < 0 || reminder.short ? 'warning' : 'info',
+        title: `${reminder.name}: ${days < 0 ? 'was due' : `due ${when}`}`,
+        detail: `${format.amount(reminder.amount ?? 0)} on ${reminder.goalName}, by ${format.date(reminder.at)}.${reminder.short ? ` ${reminder.goalName} holds less than that so far.` : ''}`,
+      };
+    case 'thr':
+      return { ...base, tone: 'info', title: `Put some THR into ${reminder.goalName}`, detail: `${format.amount(reminder.amount ?? 0)} came in on ${format.date(reminder.at)}, and nothing has gone into ${reminder.goalName} since.` };
     case 'cancel':
       return { ...base, tone: 'warning', title: `Free cancellation for ${reminder.name} ends ${when}`, detail: `On ${reminder.goalName}. Cancel by ${format.date(reminder.at)} if your plans change.` };
     case 'unpaid':
@@ -76,15 +96,36 @@ function tripAttention(reminder: TripReminder, now: number, format: AttentionFor
   }
 }
 
+/** What a goal's kind asks, in words, for the bell. */
+function typeAttention(reminder: TypeReminder, format: AttentionFormat): Attention {
+  const base = { id: `goal-${reminder.kind}:${reminder.goalId}`, to: '/goals' as const, action: 'Open goals' };
+  switch (reminder.kind) {
+    case 'emergency-low':
+      return { ...base, tone: 'warning', title: `${reminder.goalName} covers ${reminder.months.toLocaleString('id-ID', { maximumFractionDigits: 1 })} months of spending`, detail: 'An emergency fund is usually at least three months of what you spend.' };
+    case 'kpr-limit':
+      return { ...base, tone: 'warning', title: `${reminder.goalName}: the KPR payment is more than banks usually allow`, detail: `${format.amount(reminder.monthly)} a month, against about ${format.amount(reminder.allowed)} from your take-home pay. A bigger down payment or a longer loan brings it down.` };
+    case 'umrah-papers':
+      return { ...base, tone: 'info', title: `${reminder.goalName} leaves ${whenIn(reminder.days)}`, detail: 'Check the vaccines and documents your travel agent needs, and your passport.' };
+    case 'price-drop':
+      return { ...base, tone: 'info', title: `${reminder.goalName} got cheaper`, detail: `From ${format.amount(reminder.from)} to ${format.amount(reminder.to)}.` };
+    case 'yearly-due':
+      return reminder.short > 0
+        ? { ...base, tone: 'warning', title: `${reminder.goalName} is due ${whenIn(reminder.days)}`, detail: `${format.amount(reminder.short)} still to put in by ${format.date(reminder.at)}.` }
+        : { ...base, tone: 'info', title: `${reminder.goalName} is due ${whenIn(reminder.days)}`, detail: `It has all it needs; pay it by ${format.date(reminder.at)}.` };
+  }
+}
+
 /**
  * The goal reminders from the Goals overview: this month's amounts not yet in, goals that won't
- * make their date at their pace (paused ones aside), and accounts holding less than their goals.
+ * make their date at their pace (paused ones aside), accounts holding less than their goals, and
+ * what each goal's kind asks (given your average spending for an emergency fund).
  */
 export function goalReminders(overview: {
   unassigned: number;
+  salary?: number | null;
   accounts: ReadonlyArray<{ id: number; name: string; balance: number }>;
-  goals: ReadonlyArray<{ id: number; name: string; status: string; paused: boolean; targetAmount: number; setAside: number; monthlyAmount: number; setAsideThisMonth: number; byDate: number | null; reachMonths: number | null; accountId: number | null }>;
-}, now: number): GoalReminders {
+  goals: ReadonlyArray<TypeReminderGoal & { paused: boolean; monthlyAmount: number; setAsideThisMonth: number; reachMonths: number | null; accountId: number | null }>;
+}, now: number, spending: number | null = null): GoalReminders {
   const active = overview.goals.filter((goal) => goal.status === 'active');
   const today = new Date(now);
   const monthsUntil = (time: number) => {
@@ -98,7 +139,8 @@ export function goalReminders(overview: {
   const shortAccounts = overview.accounts
     .map((account) => ({ ...account, goalsHold: sum(active.filter((goal) => goal.accountId === account.id).map((goal) => goal.setAside)) }))
     .filter((account) => account.goalsHold > 0 && account.balance < account.goalsHold);
-  return { due, free: Math.max(0, overview.unassigned), late, shortAccounts };
+  const types = typeReminders(overview.goals, { spending, salary: overview.salary ?? null, now });
+  return { due, free: Math.max(0, overview.unassigned), late, shortAccounts, types };
 }
 
 export type AttentionFormat = { amount: (cents: number) => string; date: (ms: number) => string };
@@ -243,7 +285,8 @@ export function buildAttentionItems(input: AttentionInput, format: AttentionForm
         action: 'Open goals',
       });
     }
-    for (const reminder of (goals.trips ?? []).slice(0, 4)) next.push(tripAttention(reminder, now, format));
+    for (const reminder of (goals.kinds ?? []).slice(0, 4)) next.push(kindAttention(reminder, now, format));
+    for (const reminder of (goals.types ?? []).slice(0, 3)) next.push(typeAttention(reminder, format));
     if (goals.due > 0 && goals.free > 0) {
       next.push({ id: `goals-due:${monthKey}`, tone: 'info', title: `${format.amount(Math.min(goals.due, goals.free))} to put into goals`, detail: 'This month’s amounts aren’t in yet. One tap on Goals puts them in from your free money.', to: '/goals', action: 'Put it in' });
     }

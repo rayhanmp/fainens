@@ -175,6 +175,45 @@ describe("goal trips", () => {
     expect(kinds(day(2, 18))).toEqual([]);
   });
 
+  it("reminds about parts due, an emergency fund to refill, and a THR that went into no Lebaran goal", async () => {
+    const now = Date.now();
+    const days = (count: number) => new Date(now + count * 86_400_000);
+    state.db.insert(schema.savingsGoals).values([
+      { id: 2, name: "Wedding", targetAmount: 150_000_000 },
+      { id: 3, name: "Fund", targetAmount: 30_000_000, goalType: "emergency", kind: "keep" },
+      { id: 4, name: "Lebaran", targetAmount: 8_000_000, goalType: "lebaran" },
+      { id: 5, name: "School", targetAmount: 20_000_000, goalType: "education" },
+    ]).run();
+    state.db.insert(schema.goalAllocations).values([
+      { goalId: 2, amount: 40_000_000, kind: "assign" },
+      { goalId: 3, amount: 30_000_000, kind: "assign", createdAt: days(-200) },
+      { goalId: 3, amount: -4_000_000, kind: "release", note: "Car repair", createdAt: days(-5) },
+      { goalId: 5, amount: 2_000_000, kind: "assign" },
+    ]).run();
+    state.db.insert(schema.goalParts).values([
+      { goalId: 2, name: "Venue deposit", amount: 25_000_000, dueAt: days(10) },
+      { goalId: 2, name: "Catering", amount: 60_000_000, dueAt: days(60) },
+      { goalId: 2, name: "Paid already", amount: 5_000_000, dueAt: days(3), paidAt: days(-1) },
+      // A fee the goal can't cover yet is reminded of a month ahead.
+      { goalId: 5, name: "Term 2 fee", amount: 9_000_000, dueAt: days(25) },
+    ]).run();
+    state.db.insert(schema.accounts).values([{ id: 1, name: "BNI", type: "asset" }, { id: 9, name: "Salary", type: "revenue" }]).run();
+    state.db.insert(schema.transactions).values({ id: 1, date: days(-2), description: "THR 2027", status: "posted" }).run();
+    state.db.insert(schema.transactionLines).values([{ transactionId: 1, accountId: 1, debit: 9_000_000, credit: 0 }, { transactionId: 1, accountId: 9, debit: 0, credit: 9_000_000 }]).run();
+
+    const reminders = (await inject("GET", "/api/goals/reminders")).json();
+    const read = (list: Array<{ kind: string; goalName: string; name: string | null; amount: number | null; short: boolean }>) => list.map((item) => [item.kind, item.goalName, item.name, item.amount, item.short]);
+    expect(read(reminders)).toEqual([
+      ["part-due", "Wedding", "Venue deposit", 25_000_000, false],
+      ["part-due", "School", "Term 2 fee", 9_000_000, true],
+      ["refill", "Fund", "Car repair", 4_000_000, false],
+      ["thr", "Lebaran", null, 9_000_000, false],
+    ]);
+    // Once some of the THR goes in, and the fund is full again, those stop.
+    state.db.insert(schema.goalAllocations).values([{ goalId: 4, amount: 3_000_000, kind: "assign" }, { goalId: 3, amount: 4_000_000, kind: "assign" }]).run();
+    expect((await inject("GET", "/api/goals/reminders")).json().map((item: { kind: string }) => item.kind)).toEqual(["part-due", "part-due"]);
+  });
+
   it("plans the same trip again without its dates or bookings", async () => {
     await inject("PUT", "/api/goals/1/trip", { places: ["Seoul"], startDate: day(2, 10), endDate: day(2, 16), currency: "KRW", rate: 11.5, dailyBudget: 500_000 });
     const sari = (await inject("POST", "/api/goals/1/travellers", { name: "Sari", visaStatus: "approved", passportNumber: "X1234567" })).json();

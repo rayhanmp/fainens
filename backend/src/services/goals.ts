@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { db as defaultDb } from "../db/client";
 import { accounts, goalAllocations, goalAttachments, goalParts, goalSettings, savingsGoals, transactionCategoryAllocations, transactions, wishlist } from "../db/schema";
@@ -353,7 +353,16 @@ export async function completeGoal(goalId: number, transactionId: number | null,
     // Next year's date, a year after this one (or after today, if this one is long past).
     let next = new Date(due.getFullYear() + 1, due.getMonth(), due.getDate(), 12);
     while (next.getTime() <= now.getTime()) next = new Date(next.getFullYear() + 1, next.getMonth(), next.getDate(), 12);
-    await dbLike.update(savingsGoals).set({ byDate: next, spentTransactionId: transactionId, updatedAt: now }).where(eq(savingsGoals.id, goalId));
+    // What this year's took, from what was paid out of it since it last started again (entries after
+    // the last one counted then), is next year's guide.
+    const data = parseTypeData(goal.typeData);
+    const since = typeof data.paidThroughId === "number" ? data.paidThroughId : 0;
+    const paidOut = await dbLike.select({ id: goalAllocations.id, amount: goalAllocations.amount, kind: goalAllocations.kind }).from(goalAllocations)
+      .where(and(eq(goalAllocations.goalId, goalId), gt(goalAllocations.id, since)));
+    const lastYear = -paidOut.filter((row: { kind: string }) => row.kind === "spend" || row.kind === "category").reduce((sum: number, row: { amount: number }) => sum + row.amount, 0);
+    const paidThroughId = paidOut.reduce((max: number, row: { id: number }) => Math.max(max, row.id), since);
+    const typeData = { ...data, ...(lastYear > 0 ? { lastYear } : {}), lastPaidAt: now.getTime(), paidThroughId };
+    await dbLike.update(savingsGoals).set({ byDate: next, spentTransactionId: transactionId, typeData: JSON.stringify(typeData), updatedAt: now }).where(eq(savingsGoals.id, goalId));
     await dbLike.update(goalParts).set({ paidAt: null, transactionId: null }).where(eq(goalParts.goalId, goalId));
     return;
   }

@@ -1,16 +1,17 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, ExternalLink, Link2, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { toast } from '../../../components/ui/useToast';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { useCategoriesQuery } from '../../categories/queries';
 import { PercentField } from '../../savings/fields';
-import { InfoHint } from '../../savings/InfoHint';
 import { POT_TEMPLATES } from '../../savings/pots';
 import { Dropdown } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
 import { GoalHistory } from '../GoalHistory';
 import { goalLinkImageUrl, usePreviewLinkMutation, useUpdateGoalMutation, type GoalDetail, type GoalsOverview } from '../queries';
+import { TypeRows } from '../types/TypeRows';
+import { DetailRow } from './DetailRow';
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const host = (url: string) => {
@@ -24,22 +25,6 @@ const host = (url: string) => {
 /** Where a goal's money can earn, as one choice each; anything else is "Another rate". */
 const PLACES = [{ name: 'Nowhere', returnRate: 0, title: 'Cash or a wallet: earns nothing' }, ...POT_TEMPLATES];
 const placeLabel = (place: (typeof PLACES)[number]) => (place.returnRate ? `${place.name} · ${place.returnRate.toLocaleString('id-ID')}%` : `${place.name} · 0%`);
-
-/** One setting: its name (and a hint) on the left, its control on the right; a note can follow below. */
-export function DetailRow({ label, info, control, children }: { label: string; info?: ReactNode; control?: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="px-4 py-3 sm:px-5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-[var(--ref-on-surface)]">
-          {label}
-          {info && <InfoHint label={`About ${label.toLowerCase()}`}>{info}</InfoHint>}
-        </span>
-        {control && <div className="min-w-0 max-w-[200px] flex-1">{control}</div>}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 /** A product or booking page: a button to add one, then a small card; reading it fills its title, picture and price. */
 function LinkRow({ detail }: { detail: GoalDetail }) {
@@ -161,6 +146,7 @@ export function DetailsPanel({ detail, overview }: { detail: GoalDetail; overvie
     <div className="space-y-6">
       <Section title="Details">
         <div className="divide-y divide-[var(--color-border)]">
+          <TypeRows goal={goal} />
           <LinkRow detail={detail} />
           <DetailRow
             label="Sits in"
