@@ -121,14 +121,15 @@ export function resolvePendingSourceWallet<T extends { id: number; name: string 
 
 export default async function pendingRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
-  // List all pending transactions
+  // Everything waiting for review: items read and ready, and messages that couldn't be read, so they
+  // can be tried again, filled in by hand or rejected rather than vanishing.
   fastify.get("/api/pending-transactions", {
     schema: { operationId: "listPendingTransactions", tags: ["pending-transactions"], response: { 200: z.array(pendingListItemSchema) } },
   }, async (request, reply) => {
     const pending = await db
       .select()
       .from(pendingTransactions)
-      .where(eq(pendingTransactions.status, "pending"))
+      .where(inArray(pendingTransactions.status, ["pending", "failed"]))
       .orderBy(desc(pendingTransactions.createdAt));
 
     return pending.map((p) => ({
@@ -427,7 +428,7 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
     const resolved = db.transaction((tx) => {
       const updated = tx.update(pendingTransactions)
         .set({ status: "approved", updatedAt: new Date() })
-        .where(and(eq(pendingTransactions.id, pendingId), eq(pendingTransactions.status, "pending")))
+        .where(and(eq(pendingTransactions.id, pendingId), inArray(pendingTransactions.status, ["pending", "failed"])))
         .returning({ id: pendingTransactions.id })
         .all()[0];
       if (!updated) return false;
@@ -524,14 +525,15 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       .where(eq(pendingTransactions.id, pendingId))
       .limit(1);
     if (!pending) return reply.code(404).send({ error: "Pending transaction not found" });
-    if (pending.status !== "pending") return reply.code(409).send({ error: "Pending transaction already processed" });
+    if (pending.status !== "pending" && pending.status !== "failed") return reply.code(409).send({ error: "Pending transaction already processed" });
     const parsed = {
       ...body.parsed,
       notes: body.parsed.notes ?? body.parsed.memo ?? undefined,
     };
+    // Filling in a message that couldn't be read makes it an ordinary pending item.
     await db.update(pendingTransactions)
-      .set({ parsedData: JSON.stringify(parsed), updatedAt: new Date(), lastError: null })
-      .where(eq(pendingTransactions.id, pendingId));
+      .set({ parsedData: JSON.stringify(parsed), status: "pending", updatedAt: new Date(), lastError: null })
+      .where(and(eq(pendingTransactions.id, pendingId), inArray(pendingTransactions.status, ["pending", "failed"])));
     return { success: true as const };
   });
 

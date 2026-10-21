@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Check, X, Edit2, Loader2 } from 'lucide-react';
+import { Check, X, Edit2, Loader2, RotateCcw } from 'lucide-react';
 import {
   type PendingTransactionListItem,
   usePendingTransactionsQuery,
+  useRetryPendingTransactionMutation,
   useUpdatePendingTransactionMutation,
 } from '../../features/transactions/queries';
 import { useAssetAccountsQuery } from '../../features/accounts/queries';
@@ -61,6 +62,7 @@ export function PendingTransactionsModal({
   const pendingQuery = usePendingTransactionsQuery();
   const accountsQuery = useAssetAccountsQuery(isOpen);
   const updateMutation = useUpdatePendingTransactionMutation();
+  const retryMutation = useRetryPendingTransactionMutation();
   const pendingTxs = pendingQuery.data ?? [];
   const wallets: WalletOption[] = (accountsQuery.data ?? [])
     .filter((account) => account.type === 'asset' && !account.systemKey && account.isActive !== false)
@@ -125,6 +127,21 @@ export function PendingTransactionsModal({
     }
   };
 
+  /** Reads a message that couldn't be read again; says so when it still can't. */
+  const handleRetry = async (tx: PendingTransactionListItem) => {
+    setActionLoading(tx.id);
+    setActionError('');
+    try {
+      const result = await retryMutation.mutateAsync(tx.id);
+      setItemError(tx.id, result.success ? null : 'Still couldn’t read it. Fill it in yourself with Edit, or reject it.');
+      onRefresh();
+    } catch (err) {
+      setItemError(tx.id, err instanceof Error ? err.message : 'Could not try again');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleReject = async (id: number) => {
     setActionLoading(id);
     setActionError('');
@@ -171,6 +188,8 @@ export function PendingTransactionsModal({
             const resolvedWalletId = resolveWalletId(tx.parsedData, wallets);
             const needsAccount = tx.parsedData.type !== 'transfer' && wallets.length > 0 && resolvedWalletId == null;
             const itemError = itemErrors[tx.id];
+            // A message that couldn't be read has nothing to approve yet.
+            const unreadable = tx.status === 'failed';
             return (
             <div
               key={tx.id}
@@ -184,10 +203,15 @@ export function PendingTransactionsModal({
                   </p>
                 </div>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
-                  {Math.round(tx.parsedData.confidence * 100)}% confidence
+                  {unreadable ? 'Couldn’t read' : `${Math.round(tx.parsedData.confidence * 100)}% confidence`}
                 </span>
               </div>
 
+              {unreadable ? (
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                  This message couldn’t be read{tx.parseAttempts > 1 ? ` after ${tx.parseAttempts} tries` : ''}. Try again, fill it in yourself with Edit, or reject it.
+                </p>
+              ) : (
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-[var(--color-muted)]">Type</span>
@@ -230,6 +254,7 @@ export function PendingTransactionsModal({
                   </div>
                 )}
               </div>
+              )}
 
               {itemError && (
                 <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600">{itemError}</p>
@@ -261,13 +286,13 @@ export function PendingTransactionsModal({
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleApprove(tx)}
+                  onClick={() => (unreadable ? handleRetry(tx) : handleApprove(tx))}
                   disabled={actionLoading === tx.id}
                   isLoading={actionLoading === tx.id}
                   className="flex-1 rounded-full"
                 >
-                  <Check className="w-4 h-4 mr-1" />
-                  {tx.parsedData.type === 'transfer' ? 'Review & approve' : 'Approve'}
+                  {unreadable ? <RotateCcw className="w-4 h-4 mr-1" /> : <Check className="w-4 h-4 mr-1" />}
+                  {unreadable ? 'Try again' : tx.parsedData.type === 'transfer' ? 'Review & approve' : 'Approve'}
                 </Button>
               </div>
             </div>

@@ -139,6 +139,18 @@ describe("pending transaction routes", () => {
     expect((await app.inject({ method: "POST", url: `/api/pending-transactions/4242/resolve`, payload: { transactionId: posted } })).statusCode).toBe(404);
   });
 
+  it("lists messages that couldn't be read, and filling one in makes it pending", async () => {
+    const failed = insertPending({ ...expense, confidence: 0 }, { status: "failed", lastError: "Failed to parse after multiple attempts" });
+    const done = insertPending(expense, { status: "approved" });
+    const listed = (await app.inject({ method: "GET", url: "/api/pending-transactions" })).json() as Array<{ id: number; status: string }>;
+    expect(listed.map((row) => [row.id, row.status])).toEqual([[failed, "failed"]]);
+    expect(listed.some((row) => row.id === done)).toBe(false);
+
+    const filled = await app.inject({ method: "PUT", url: `/api/pending-transactions/${failed}`, payload: { parsed: { ...expense, confidence: 1 } } });
+    expect(filled.statusCode).toBe(200);
+    expect(pendingStatus(failed)).toBe("pending");
+  });
+
   it("refuses to post into a closed period", async () => {
     state.db.insert(schema.salaryPeriods).values({
       name: "September", startDate: Date.parse("2026-09-01T00:00:00+07:00"), endDate: Date.parse("2026-09-30T00:00:00+07:00"), status: "closed",
