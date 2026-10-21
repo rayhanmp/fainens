@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { goalGrowth } from './growth.ts';
+import { goalGrowth, oneGoGrowth } from './growth.ts';
 
 const at = (year, month, day = 10) => new Date(year, month, day).getTime();
 const goal = { setAside: 6_000_000, targetAmount: 10_000_000, monthlyAmount: 2_000_000, expectedReturn: 0, paused: false, byDate: null };
@@ -29,6 +29,19 @@ test('a reached goal has no projection, and a paused one stays flat', () => {
   const paused = goalGrowth([], { ...goal, paused: true }, at(2026, 9));
   assert.equal(paused.length, 13);
   assert.ok(paused.every((point) => point.projected === 6_000_000));
+});
+
+test('money that all went in at once lately, with nothing ahead, is told rather than charted', () => {
+  const now = at(2026, 9, 21);
+  const reached = { ...goal, setAside: 24_000_000, targetAmount: 18_000_000 };
+  // Set aside when it was made, today, past its target.
+  assert.deepEqual(oneGoGrowth(goalGrowth([{ amount: 24_000_000, createdAt: at(2026, 9, 21) - 3_600_000 }], reached, now), now), { since: at(2026, 9, 21) - 3_600_000, until: at(2026, 9, 21) - 3_600_000 });
+  // A few moves within days still count as one go.
+  assert.ok(oneGoGrowth(goalGrowth([{ amount: 20_000_000, createdAt: at(2026, 9, 15) }, { amount: 4_000_000, createdAt: at(2026, 9, 18) }], reached, now), now));
+  // Months of history, or a path ahead to draw, keep the chart.
+  assert.equal(oneGoGrowth(goalGrowth([{ amount: 12_000_000, createdAt: at(2026, 5) }, { amount: 12_000_000, createdAt: at(2026, 9, 1) }], reached, now), now), null);
+  assert.equal(oneGoGrowth(goalGrowth([{ amount: 6_000_000, createdAt: at(2026, 9, 20) }], goal, now), now), null);
+  assert.equal(oneGoGrowth(goalGrowth([], reached, now), now), null);
 });
 
 test('what it earns is counted, and the projection reaches past the needed-by date', () => {

@@ -121,10 +121,16 @@ export function goalHeadline(goal: HeadlineGoal, context: HeadlineContext): stri
   const data = goal.typeData;
   switch (goal.goalType) {
     case 'emergency': {
-      const spending = context.spending ?? 0;
+      // Your own figure for a month's spending, when you set one, else your average.
+      const own = num(data.burn);
+      const spending = own && own > 0 ? own : context.spending ?? 0;
       if (spending <= 0) return null;
       const months = num(data.months) ?? goal.targetAmount / spending;
-      return `${decimal(goal.setAside / spending)} of ${decimal(months)} months of spending`;
+      const covered = goal.setAside / spending;
+      // Past its target, "4,8 of 3,6" would read as a mistake; say it covers more than it aims for.
+      if (decimal(covered) === decimal(months)) return `All ${decimal(months)} months of spending covered`;
+      if (covered > months) return `${decimal(covered)} months of spending covered, past its ${decimal(months)}-month target`;
+      return `${decimal(covered)} of ${decimal(months)} months of spending`;
     }
     case 'trip': {
       const start = num(data.startDate) ?? goal.byDate;

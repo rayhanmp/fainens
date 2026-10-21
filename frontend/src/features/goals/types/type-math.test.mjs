@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   cheapestOption,
+  emergencyBurn,
   emergencyData,
   emergencyTarget,
   gadgetData,
@@ -26,9 +27,16 @@ const now = new Date(2026, 9, 21, 10).getTime();
 const day = (offset) => new Date(2026, 9, 21 + offset, 12).getTime();
 
 test('an emergency fund counts months of spending, and its target follows them', () => {
-  assert.deepEqual(emergencyData({}, 30_000_000, 5_000_000), { months: 6, household: 'single' });
-  assert.deepEqual(emergencyData({ months: 9, household: 'family' }, 30_000_000, 5_000_000), { months: 9, household: 'family' });
-  assert.deepEqual(emergencyData({}, 30_000_000, null), { months: 3, household: 'single' });
+  assert.deepEqual(emergencyData({}, 30_000_000, 5_000_000), { months: 6, household: 'single', burn: null });
+  assert.deepEqual(emergencyData({ months: 9, household: 'family' }, 30_000_000, 5_000_000), { months: 9, household: 'family', burn: null });
+  assert.deepEqual(emergencyData({}, 30_000_000, null), { months: 3, household: 'single', burn: null });
+  // Without months chosen, they're what the target covers, not rounded.
+  assert.equal(emergencyData({}, 18_000_000, 5_000_000).months, 3.6);
+  // Your own month's spending, like just the essentials, counts instead of the average.
+  assert.deepEqual(emergencyData({ burn: 3_000_000 }, 18_000_000, 5_000_000), { months: 6, household: 'single', burn: 3_000_000 });
+  assert.equal(emergencyBurn({ burn: 3_000_000 }, 5_000_000), 3_000_000);
+  assert.equal(emergencyBurn({ burn: null }, 5_000_000), 5_000_000);
+  assert.equal(emergencyBurn({}, null), null);
   assert.equal(monthsCovered(21_000_000, 5_000_000), 4.2);
   assert.equal(monthsCovered(21_000_000, null), null);
   assert.equal(emergencyTarget(6, 5_123_456), 30_700_000);
@@ -100,6 +108,8 @@ test('each kind reminds of what it needs', () => {
   assert.deepEqual(reminders.map((item) => [item.kind, item.goalId]), [['emergency-low', 1], ['kpr-limit', 2], ['umrah-papers', 3], ['price-drop', 4], ['yearly-due', 5]]);
   assert.equal(reminders[0].months, 2);
   assert.equal(reminders[4].short, 2_000_000);
+  // A fund counted in your own, smaller month's spending covers more months.
+  assert.deepEqual(typeReminders([goal(1, 'emergency', { typeData: { burn: 2_000_000 } })], { spending: 5_000_000, salary: null, now }), []);
   // Without spending or salary, those two can't be judged.
   assert.deepEqual(typeReminders([goal(1, 'emergency'), goal(2, 'house', { typeData: { price: 1 } })], { spending: null, salary: null, now }), []);
 });

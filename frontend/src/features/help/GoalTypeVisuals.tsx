@@ -33,9 +33,10 @@ function KindFrame({ goalType, fill, caption, children }: { goalType: string; fi
 }
 
 export function EmergencyDemo() {
+  const [burn, setBurn] = useState<number | null>(null);
   return (
-    <KindFrame goalType="emergency" fill={0.7} caption="Sample: Rp21 juta set aside, spending Rp5 juta a month, aiming for six months.">
-      <EmergencyPanel color={GOAL_COLORS[0]} held={21_000_000} target={27_000_000} spending={5_000_000} data={{ months: 6, household: 'single' }} />
+    <KindFrame goalType="emergency" fill={0.7} caption="Try it: use your own month’s spending, like just the essentials (sample: Rp21 juta set aside, an average of Rp5 juta a month, aiming for six months).">
+      <EmergencyPanel color={GOAL_COLORS[0]} held={21_000_000} target={30_000_000} average={5_000_000} data={{ months: 6, household: 'single', burn }} onBurn={setBurn} />
     </KindFrame>
   );
 }

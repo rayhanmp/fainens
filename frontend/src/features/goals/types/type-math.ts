@@ -17,12 +17,26 @@ export const EMERGENCY_ADVICE = { single: { min: 3, max: 6 }, family: { min: 6, 
 /** Below this many months, the fund is reminded of. */
 export const EMERGENCY_FLOOR = 3;
 
-export type EmergencyData = { months: number; household: 'single' | 'family' };
+export type EmergencyData = {
+  months: number;
+  household: 'single' | 'family';
+  /** Your own figure for a month's spending, like just the essentials; null to go by your average. */
+  burn: number | null;
+};
 
-export function emergencyData(typeData: Record<string, unknown>, targetAmount: number, spending: number | null): EmergencyData {
+/** The month's spending a fund is counted in: your own figure when you set one, else your average. */
+export function emergencyBurn(typeData: Record<string, unknown>, average: number | null): number | null {
+  const own = num(typeData.burn, 0);
+  return own > 0 ? own : average && average > 0 ? average : null;
+}
+
+export function emergencyData(typeData: Record<string, unknown>, targetAmount: number, average: number | null): EmergencyData {
   const household = typeData.household === 'family' ? 'family' : 'single';
-  const fallback = spending && spending > 0 ? Math.max(1, Math.round(targetAmount / spending)) : EMERGENCY_ADVICE[household].min;
-  return { months: Math.min(24, Math.max(1, num(typeData.months, fallback))), household };
+  const own = num(typeData.burn, 0);
+  const spending = emergencyBurn(typeData, average);
+  // Without months chosen, they're what the target covers, like 3,6; the page shows a block for each started month.
+  const fallback = spending ? Math.max(1, targetAmount / spending) : EMERGENCY_ADVICE[household].min;
+  return { months: Math.min(24, Math.max(1, num(typeData.months, fallback))), household, burn: own > 0 ? own : null };
 }
 
 /** What the fund covers, in months of your average spending; null before there's spending to go by. */
@@ -220,7 +234,7 @@ export function typeReminders(goals: readonly TypeReminderGoal[], context: { spe
     const base = { goalId: goal.id, goalName: goal.name };
     switch (goal.goalType) {
       case 'emergency': {
-        const months = monthsCovered(goal.setAside, context.spending);
+        const months = monthsCovered(goal.setAside, emergencyBurn(goal.typeData, context.spending));
         if (months !== null && months < EMERGENCY_FLOOR) out.push({ ...base, kind: 'emergency-low', months });
         break;
       }

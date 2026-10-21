@@ -22,6 +22,25 @@ const monthsBetween = (from: number, to: number) => {
   return (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
 };
 
+const DAY = 86_400_000;
+/** Below this much history, with nothing ahead to draw, a chart is a single jump: say it in words instead. */
+export const YOUNG_HISTORY_DAYS = 31;
+
+/**
+ * When a goal's money all went in within a few days of each other, lately, and there's no path
+ * ahead to draw (it's reached, paused, or has no monthly amount), its chart would be one jump
+ * squeezed against the edge. This gives when that money went in, for a sentence instead; null when
+ * the chart has something to show.
+ */
+export function oneGoGrowth(points: readonly GrowthPoint[], now: number): { since: number; until: number } | null {
+  if (points.some((point) => point.held === undefined)) return null;
+  const steps = points.filter((point) => point.held !== undefined && point.projected === undefined && point.held !== 0);
+  if (!steps.length) return null;
+  const since = steps[0]!.time;
+  const until = steps.at(-1)!.time;
+  return now - since < YOUNG_HISTORY_DAYS * DAY && until - since < 7 * DAY ? { since, until } : null;
+}
+
 /**
  * What it held after each move of its money, on the day it happened (drawn as steps), then a
  * projection from today. Today carries both, so the two lines meet. The projection runs until the

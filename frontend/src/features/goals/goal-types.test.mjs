@@ -20,6 +20,11 @@ test('each type leads with its own figure', () => {
   const context = { now, amount, spending: 5_000_000 };
   assert.equal(goalHeadline(goal('emergency'), context), '4,2 of 6 months of spending');
   assert.equal(goalHeadline(goal('emergency', { typeData: { months: 8 } }), context), '4,2 of 8 months of spending');
+  // Past its target it says so, rather than "4,8 of 3,6".
+  assert.equal(goalHeadline(goal('emergency', { setAside: 24_000_000, targetAmount: 18_000_000 }), context), '4,8 months of spending covered, past its 3,6-month target');
+  assert.equal(goalHeadline(goal('emergency', { setAside: 30_000_000 }), context), 'All 6 months of spending covered');
+  // Your own month's spending counts instead of the average.
+  assert.equal(goalHeadline(goal('emergency', { typeData: { burn: 3_000_000, months: 8 } }), context), '7 of 8 months of spending');
   assert.equal(goalHeadline(goal('emergency'), { now, amount }), null);
   assert.equal(goalHeadline(goal('trip', { byDate: new Date(2027, 2, 13, 12).getTime() }), context), '143 days to go');
   assert.equal(goalHeadline(goal('trip', { typeData: { startDate: new Date(2026, 9, 22).getTime() } }), context), 'Tomorrow');

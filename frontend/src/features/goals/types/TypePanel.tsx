@@ -245,9 +245,10 @@ export function TypePanel(props: Props) {
           color={props.color}
           held={goal.setAside}
           target={goal.targetAmount}
-          spending={props.spending}
+          average={props.spending}
           data={emergencyData(goal.typeData, goal.targetAmount, props.spending)}
           onUseTarget={(targetAmount) => update.mutate({ id: goal.id, targetAmount }, { onSuccess: () => toast.success(`${goal.name} now aims for ${formatAmount(targetAmount)}.`), onError: (error) => toast.error(errorText(error, 'Could not save')) })}
+          onBurn={(burn) => update.mutate({ id: goal.id, typeData: { ...goal.typeData, burn } }, { onError: (error) => toast.error(errorText(error, 'Could not save')) })}
         />
       );
     case 'house': return <House key={goal.id} {...props} />;
