@@ -5,9 +5,17 @@ import { env } from "../lib/env";
 import {
   BACKUP_FREQUENCIES,
   getDatabaseBackupSettings,
+  readDatabaseBackup,
+  restoreDatabaseBackup,
+  restoreDatabaseBuffer,
+  RestoreError,
   runDatabaseBackupNow,
   updateDatabaseBackupSettings,
 } from "../services/database-backup";
+
+/** A database file sent as it is, for restoring; snapshots outgrow the JSON body limit. */
+const BACKUP_FILE_TYPE = "application/vnd.sqlite3";
+const MAX_BACKUP_FILE = 500 * 1024 * 1024;
 
 const errorSchema = z.object({ error: z.string() }).passthrough();
 const frequencySchema = z.enum(BACKUP_FREQUENCIES);
@@ -28,6 +36,12 @@ const responseSchema = z.object({
 const updateSchema = z.object({ enabled: z.boolean().optional(), frequency: frequencySchema.optional() }).passthrough();
 const querySchema = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(10) }).passthrough();
 const runResponseSchema = z.object({ backup: z.object({ key: z.string(), size: z.number().int().nonnegative(), createdAt: z.string() }).passthrough(), settings: responseSchema });
+const keyQuerySchema = z.object({ key: z.string().min(1).max(200) });
+const restoreBodySchema = z.object({ key: z.string().min(1).max(200) });
+const restoreResponseSchema = z.object({ restoredAt: z.string(), undoBackupKey: z.string().nullable() });
+
+/** A restore's own refusals are told as they are; anything else stays generic. */
+const restoreFailure = (error: unknown) => (error instanceof RestoreError ? error.message : `Could not restore the backup${error instanceof Error ? `: ${error.message}` : ""}`);
 
 function ownerEmail(request: FastifyRequest): string {
   const email = (request.user as { email?: unknown } | undefined)?.email;
@@ -64,5 +78,43 @@ export default async function databaseBackupRoutes(fastify: FastifyInstance) {
       const settings = await getDatabaseBackupSettings(ownerEmail(request));
       return reply.send(runResponseSchema.parse({ backup, settings }));
     } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Could not create database backup" }); }
+  });
+
+  // One of the backups in storage, to keep a copy of it.
+  fastify.get("/api/settings/database-backup/file", {
+    schema: { operationId: "downloadDatabaseBackup", tags: ["settings"], querystring: keyQuerySchema, response: { 400: errorSchema, 401: errorSchema } },
+  }, async (request, reply) => {
+    try {
+      ownerEmail(request);
+      const { key } = keyQuerySchema.parse(request.query);
+      const data = await readDatabaseBackup(key);
+      return reply
+        .header("Content-Type", BACKUP_FILE_TYPE)
+        .header("Content-Disposition", `attachment; filename="${key.split("/").pop()}"`)
+        .send(data);
+    } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Could not download the backup" }); }
+  });
+
+  fastify.post("/api/settings/database-backup/restore", {
+    schema: { operationId: "restoreDatabaseBackup", tags: ["settings"], body: restoreBodySchema, response: { 200: restoreResponseSchema, 400: errorSchema, 401: errorSchema } },
+  }, async (request, reply) => {
+    try {
+      ownerEmail(request);
+      const { key } = restoreBodySchema.parse(request.body);
+      return reply.send(await restoreDatabaseBackup(key));
+    } catch (error) { return reply.code(400).send({ error: restoreFailure(error) }); }
+  });
+
+  // A backup file from this computer, sent as it is.
+  fastify.addContentTypeParser(BACKUP_FILE_TYPE, { parseAs: "buffer", bodyLimit: MAX_BACKUP_FILE }, (_request, body, done) => done(null, body));
+  fastify.post("/api/settings/database-backup/restore-file", {
+    bodyLimit: MAX_BACKUP_FILE,
+    schema: { operationId: "restoreDatabaseBackupFile", tags: ["settings"], response: { 200: restoreResponseSchema, 400: errorSchema, 401: errorSchema } },
+  }, async (request, reply) => {
+    try {
+      ownerEmail(request);
+      if (!Buffer.isBuffer(request.body) || request.body.length === 0) throw new RestoreError("Choose a backup file to restore");
+      return reply.send(await restoreDatabaseBuffer(request.body));
+    } catch (error) { return reply.code(400).send({ error: restoreFailure(error) }); }
   });
 }

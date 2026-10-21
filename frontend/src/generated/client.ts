@@ -24054,6 +24054,64 @@ export type RunDatabaseBackup401 = {
   [key: string]: unknown;
 };
 
+export type DownloadDatabaseBackupParams = {
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+key: string;
+};
+
+export type DownloadDatabaseBackup400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type DownloadDatabaseBackup401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RestoreDatabaseBackupBody = {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  key: string;
+};
+
+export type RestoreDatabaseBackup200 = {
+  restoredAt: string;
+  /** @nullable */
+  undoBackupKey: string | null;
+};
+
+export type RestoreDatabaseBackup400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RestoreDatabaseBackup401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RestoreDatabaseBackupFile200 = {
+  restoredAt: string;
+  /** @nullable */
+  undoBackupKey: string | null;
+};
+
+export type RestoreDatabaseBackupFile400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RestoreDatabaseBackupFile401 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ServeGoalLinkImage404 = {
   error: string;
   [key: string]: unknown;
@@ -38575,6 +38633,142 @@ export const getRunDatabaseBackupUrl = () => {
 export const runDatabaseBackup = async ( options?: RequestInit): Promise<runDatabaseBackupResponse> => {
   
   return generatedFetch<runDatabaseBackupResponse>(getRunDatabaseBackupUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type downloadDatabaseBackupResponse400 = {
+  data: DownloadDatabaseBackup400
+  status: 400
+}
+
+export type downloadDatabaseBackupResponse401 = {
+  data: DownloadDatabaseBackup401
+  status: 401
+}
+    
+;
+export type downloadDatabaseBackupResponseError = (downloadDatabaseBackupResponse400 | downloadDatabaseBackupResponse401) & {
+  headers: Headers;
+};
+
+export type downloadDatabaseBackupResponse = (downloadDatabaseBackupResponseError)
+
+export const getDownloadDatabaseBackupUrl = (params: DownloadDatabaseBackupParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/settings/database-backup/file?${stringifiedParams}` : `/api/settings/database-backup/file`
+}
+
+export const downloadDatabaseBackup = async (params: DownloadDatabaseBackupParams, options?: RequestInit): Promise<downloadDatabaseBackupResponse> => {
+  
+  return generatedFetch<downloadDatabaseBackupResponse>(getDownloadDatabaseBackupUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type restoreDatabaseBackupResponse200 = {
+  data: RestoreDatabaseBackup200
+  status: 200
+}
+
+export type restoreDatabaseBackupResponse400 = {
+  data: RestoreDatabaseBackup400
+  status: 400
+}
+
+export type restoreDatabaseBackupResponse401 = {
+  data: RestoreDatabaseBackup401
+  status: 401
+}
+    
+export type restoreDatabaseBackupResponseSuccess = (restoreDatabaseBackupResponse200) & {
+  headers: Headers;
+};
+export type restoreDatabaseBackupResponseError = (restoreDatabaseBackupResponse400 | restoreDatabaseBackupResponse401) & {
+  headers: Headers;
+};
+
+export type restoreDatabaseBackupResponse = (restoreDatabaseBackupResponseSuccess | restoreDatabaseBackupResponseError)
+
+export const getRestoreDatabaseBackupUrl = () => {
+
+
+  
+
+  return `/api/settings/database-backup/restore`
+}
+
+export const restoreDatabaseBackup = async (restoreDatabaseBackupBody: RestoreDatabaseBackupBody, options?: RequestInit): Promise<restoreDatabaseBackupResponse> => {
+  
+  return generatedFetch<restoreDatabaseBackupResponse>(getRestoreDatabaseBackupUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      restoreDatabaseBackupBody,)
+  }
+);}
+
+
+
+export type restoreDatabaseBackupFileResponse200 = {
+  data: RestoreDatabaseBackupFile200
+  status: 200
+}
+
+export type restoreDatabaseBackupFileResponse400 = {
+  data: RestoreDatabaseBackupFile400
+  status: 400
+}
+
+export type restoreDatabaseBackupFileResponse401 = {
+  data: RestoreDatabaseBackupFile401
+  status: 401
+}
+    
+export type restoreDatabaseBackupFileResponseSuccess = (restoreDatabaseBackupFileResponse200) & {
+  headers: Headers;
+};
+export type restoreDatabaseBackupFileResponseError = (restoreDatabaseBackupFileResponse400 | restoreDatabaseBackupFileResponse401) & {
+  headers: Headers;
+};
+
+export type restoreDatabaseBackupFileResponse = (restoreDatabaseBackupFileResponseSuccess | restoreDatabaseBackupFileResponseError)
+
+export const getRestoreDatabaseBackupFileUrl = () => {
+
+
+  
+
+  return `/api/settings/database-backup/restore-file`
+}
+
+export const restoreDatabaseBackupFile = async ( options?: RequestInit): Promise<restoreDatabaseBackupFileResponse> => {
+  
+  return generatedFetch<restoreDatabaseBackupFileResponse>(getRestoreDatabaseBackupFileUrl(),
   {      
     ...options,
     method: 'POST'

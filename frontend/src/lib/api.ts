@@ -531,6 +531,11 @@ export const api = {
         pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
       };
     }>('/settings/database-backup/run', { method: 'POST' }),
+    /** Where a saved backup downloads from; the browser sends the session cookie. */
+    fileUrl: (key: string) => `${API_BASE}/settings/database-backup/file?key=${encodeURIComponent(key)}`,
+    restore: (key: string) => fetchApi<{ restoredAt: string; undoBackupKey: string | null }>('/settings/database-backup/restore', { method: 'POST', body: JSON.stringify({ key }) }),
+    /** A backup file from this computer, sent as it is: snapshots outgrow the JSON body limit. */
+    restoreFile: (file: Blob) => fetchApi<{ restoredAt: string; undoBackupKey: string | null }>('/settings/database-backup/restore-file', { method: 'POST', headers: { 'Content-Type': 'application/vnd.sqlite3' }, body: file }),
   },
 
   agentProvider: {

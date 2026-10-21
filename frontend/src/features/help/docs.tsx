@@ -946,10 +946,16 @@ export const DOCS: DocPage[] = [
     lead: 'Your ledger is yours. Here’s how to keep a copy, protect reports and keep amounts out of sight.',
     blocks: [
       { type: 'h2', id: 'backups', text: 'Cloud backups' },
-      { type: 'p', text: 'Settings → Backups saves snapshots of your database to your cloud storage: weekly, every two weeks, monthly or quarterly, or now with Back up now.' },
+      { type: 'p', text: 'Settings → Backups saves snapshots of your database to your cloud storage: weekly, every two weeks, monthly or quarterly, or now with Back up now. Each saved backup’s menu (⋯) can download it, to keep a copy of your own.' },
+      { type: 'h2', id: 'restore', text: 'Restoring a backup' },
+      { type: 'list', items: [
+        'Choose Restore this backup from a saved backup’s menu, or Restore → From a file for a backup you downloaded.',
+        'Restoring replaces everything with the backup. Your data as it is now is backed up first and listed as Before a restore, so you can go back to it the same way.',
+        'The file is checked first: it has to be an intact Fainens backup, not from a newer version of the app. An older backup is brought up to this version as it’s restored. The app reloads when it’s done.',
+      ] },
       { type: 'h2', id: 'exports', text: 'Exports' },
       { type: 'list', items: ['Settings → Data downloads a JSON copy of the data you choose.', 'Reports exports the income statement, balance sheet and cash flow as CSV.', 'Transactions exports the rows you’re viewing as CSV.', 'The Dashboard’s View report downloads a monthly PDF.'] },
-      { type: 'callout', tone: 'warning', text: 'Restoring from a backup or JSON file isn’t available in the app yet.' },
+      { type: 'callout', tone: 'warning', text: 'The JSON export is a copy of parts of your data to read or keep; it can’t be restored. Restore from a backup instead.' },
       { type: 'h2', id: 'hide', text: 'Hide balances' },
       { type: 'visual', node: <HiddenBalanceDemo /> },
       { type: 'p', text: 'Use the eye button in the sidebar, or press H on the Dashboard. Phones start with balances hidden.' },
@@ -1027,7 +1033,7 @@ export const DOCS: DocPage[] = [
         ['General', 'Display: theme (light, dark or automatic), accent colour, date format, 12- or 24-hour time, the day weeks start, compact rows. Pay cycle: your salary day. Accessibility: text size and reduce motion'],
         ['Accounts', 'The bank, expense and income accounts new transactions start with, and transfer fees you pay every time'],
         ['Agent', 'Response tone and detail, what Agent can see about you, models, and memory'],
-        ['Backups', 'Automatic cloud backups of your database, how often they run, and the backups saved so far'],
+        ['Backups', 'Automatic cloud backups of your database, how often they run, the backups saved so far (to download or restore), and restoring from a file'],
         ['PDF reports', 'Password protection for monthly report PDFs'],
         ['Data', 'Export a JSON copy of the data you choose; clear this browser; links to Data quality, Image storage and Security audit'],
       ] },
@@ -1149,7 +1155,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'backups', text: 'Backups and exports' },
       { type: 'list', items: [
         'A database backup takes a consistent SQLite snapshot, runs an integrity check, and uploads it to R2 as database-backups/fainens-<time>.db. Schedule it weekly, every two weeks, monthly or quarterly in Settings, or run one now.',
-        'Old backups aren’t deleted automatically, and restoring is done by replacing the database file.',
+        'Old backups aren’t deleted automatically. Restoring (POST /api/settings/database-backup/restore, or /restore-file with the raw file) checks the file, uploads a before-restore backup of the current data, keeps a local copy, copies the backup in with SQLite’s online backup and runs the migrations; if those fail the local copy goes back. It then moves financial_state.revision past both so caches are dropped.',
         'Reports export as CSV from the server, and the monthly report is built as a PDF in the browser, optionally password-protected.',
       ] },
 

@@ -10,7 +10,6 @@ CREATE TABLE `reimbursement_claim` (
   `submitted_at` integer,
   `approved_at` integer,
   `written_off_at` integer,
-  `writeoff_transaction_id` integer REFERENCES `transaction`(`id`) ON UPDATE no action ON DELETE restrict,
   `version` integer DEFAULT 1 NOT NULL,
   `created_at` integer DEFAULT (unixepoch('now') * 1000) NOT NULL,
   `updated_at` integer DEFAULT (unixepoch('now') * 1000) NOT NULL

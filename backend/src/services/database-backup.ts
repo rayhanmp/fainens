@@ -1,13 +1,16 @@
 import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
-import { promises as fs } from "fs";
+import { closeSync, openSync, promises as fs, readFileSync, readSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
 
 import { db, dbPath } from "../db/client";
+import { bootstrapDb } from "../db/migrate";
 import { databaseBackupSettings } from "../db/schema";
 import { env } from "../lib/env";
-import { isObjectStorageConfigured, listFiles, uploadFile } from "./r2";
+import { downloadFile, isObjectStorageConfigured, listFiles, uploadFile } from "./r2";
+
+const backendRoot = resolve(__dirname, "..", "..");
 
 const BACKUP_CONTENT_TYPE = "application/vnd.sqlite3";
 const BACKUP_PREFIX = "database-backups/";
@@ -47,9 +50,15 @@ export function isBackupFrequency(value: unknown): value is BackupFrequency {
   return typeof value === "string" && (BACKUP_FREQUENCIES as readonly string[]).includes(value);
 }
 
-export function databaseBackupKey(date = new Date()): string {
+/** `label` marks a backup taken for a reason, such as the one taken just before a restore. */
+export function databaseBackupKey(date = new Date(), label?: string): string {
   const timestamp = date.toISOString().replace(/[:.]/g, "-");
-  return `${BACKUP_PREFIX}fainens-${timestamp}.db`;
+  return `${BACKUP_PREFIX}fainens-${timestamp}${label ? `-${label}` : ""}.db`;
+}
+
+/** Only keys this feature wrote: a file directly under the backup prefix, ending in .db. */
+export function isDatabaseBackupKey(key: string): boolean {
+  return /^database-backups\/[A-Za-z0-9._-]+\.db$/.test(key) && !key.includes("..");
 }
 
 function addCalendarMonths(date: Date, months: number): Date {
@@ -94,7 +103,7 @@ function verifySnapshot(snapshotPath: string): number {
 }
 
 /** Create and upload a consistent SQLite snapshot to the configured R2 bucket. */
-export async function createDatabaseBackup(now = new Date()): Promise<DatabaseBackupResult> {
+export async function createDatabaseBackup(now = new Date(), label?: string): Promise<DatabaseBackupResult> {
   if (!isObjectStorageConfigured()) {
     throw new Error("Database backup requires the existing R2 storage configuration");
   }
@@ -106,7 +115,7 @@ export async function createDatabaseBackup(now = new Date()): Promise<DatabaseBa
     const verifiedSize = verifySnapshot(snapshotPath);
     if (verifiedSize <= 0) throw new Error("Database backup is empty");
     const snapshot = await fs.readFile(snapshotPath);
-    const uploaded = await uploadFile(databaseBackupKey(now), snapshot, BACKUP_CONTENT_TYPE);
+    const uploaded = await uploadFile(databaseBackupKey(now, label), snapshot, BACKUP_CONTENT_TYPE);
     return { key: uploaded.key, size: uploaded.size, createdAt: now.toISOString() };
   } finally {
     await fs.rm(temporaryDirectory, { recursive: true, force: true });
@@ -190,8 +199,10 @@ async function saveLastBackup(ownerEmail: string, createdAt: Date): Promise<void
 }
 
 let activeBackup: Promise<DatabaseBackupResult | null> | null = null;
+let restoring = false;
 
 async function runDatabaseBackup(ownerEmail: string, now: Date, force: boolean): Promise<DatabaseBackupResult | null> {
+  if (restoring) throw new Error("A restore is running; try again when it's done");
   if (activeBackup) return activeBackup;
   activeBackup = (async () => {
     if (!env.DATABASE_BACKUP_ENABLED && !force) return null;
@@ -213,4 +224,117 @@ export async function runDatabaseBackupNow(ownerEmail: string, now = new Date())
   const result = await runDatabaseBackup(ownerEmail, now, true);
   if (!result) throw new Error("Database backups are disabled by the server configuration");
   return result;
+}
+
+/** A backup saved in storage, read for downloading or restoring; only keys this feature wrote. */
+export async function readDatabaseBackup(key: string): Promise<Buffer> {
+  if (!isDatabaseBackupKey(key)) throw new RestoreError("That isn't one of your backups");
+  return downloadFile(key);
+}
+
+/** A restore that can't go ahead, said in words for the person restoring. */
+export class RestoreError extends Error {}
+
+const SQLITE_HEADER = Buffer.from("SQLite format 3\0", "latin1");
+const RESTORE_TABLES = ["transaction", "transaction_line", "account", "__drizzle_migrations"];
+
+/** The newest migration this version of the app knows. */
+function latestKnownMigration(): number {
+  const journal = JSON.parse(readFileSync(join(backendRoot, "drizzle", "meta", "_journal.json"), "utf8")) as { entries: Array<{ when: number }> };
+  return Math.max(...journal.entries.map((entry) => entry.when));
+}
+
+/**
+ * Checks a file before it's restored: it must be an intact SQLite database with Fainens' ledger in
+ * it, and not from a newer version of the app than this one (which couldn't read it).
+ */
+export function checkBackupFile(path: string): void {
+  const header = Buffer.alloc(SQLITE_HEADER.length);
+  const handle = openSync(path, "r");
+  try { readSync(handle, header, 0, header.length, 0); } finally { closeSync(handle); }
+  if (!header.equals(SQLITE_HEADER)) throw new RestoreError("That file isn't a Fainens backup");
+  let snapshot: InstanceType<typeof Database>;
+  try {
+    snapshot = new Database(path, { readonly: true, fileMustExist: true });
+  } catch {
+    throw new RestoreError("That file isn't a Fainens backup");
+  }
+  try {
+    const integrity = snapshot.prepare("PRAGMA integrity_check").get() as { integrity_check?: string };
+    if (integrity.integrity_check !== "ok") throw new RestoreError("That backup is damaged and can't be restored");
+    const tables = new Set((snapshot.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((row) => row.name));
+    if (!RESTORE_TABLES.every((table) => tables.has(table))) throw new RestoreError("That file isn't a Fainens backup");
+    const newest = Number((snapshot.prepare("SELECT MAX(created_at) AS newest FROM __drizzle_migrations").get() as { newest: number | null }).newest ?? 0);
+    if (newest > latestKnownMigration()) throw new RestoreError("That backup is from a newer version of Fainens; update this one first");
+  } finally {
+    snapshot.close();
+  }
+}
+
+export type RestoreResult = { restoredAt: string; undoBackupKey: string | null };
+
+/**
+ * Replaces all of the data with a backup file. In order: the file is checked; the data as it is now
+ * is backed up to storage (when it's configured), so the restore can be undone from the list; a copy
+ * is also kept beside the database; the backup is copied in with SQLite's online backup, then
+ * brought up to this version's schema. If that fails, the copy goes back. The data's revision moves
+ * past both, so nothing cached from before is served.
+ */
+export async function restoreDatabaseFromFile(filePath: string, now = new Date(), options: { undoBackup?: boolean } = {}): Promise<RestoreResult> {
+  if (restoring || activeBackup) throw new RestoreError("A backup or restore is already running; try again in a moment");
+  restoring = true;
+  const workDirectory = await fs.mkdtemp(join(tmpdir(), "fainens-restore-"));
+  try {
+    checkBackupFile(filePath);
+    const undo = options.undoBackup !== false && isObjectStorageConfigured() ? await createDatabaseBackup(now, "before-restore") : null;
+    const revisionBefore = currentRevision();
+    const rollbackPath = join(workDirectory, "before-restore.db");
+    await db.$client.backup(rollbackPath);
+    try {
+      await copyDatabaseInto(filePath);
+      await bootstrapDb();
+    } catch (error) {
+      await copyDatabaseInto(rollbackPath);
+      await bootstrapDb();
+      throw new RestoreError(`That backup couldn't be brought up to this version, so nothing was changed (${error instanceof Error ? error.message : "unknown error"})`);
+    }
+    db.$client.prepare("UPDATE financial_state SET revision = MAX(revision, ?) + 1, updated_at = ? WHERE id = 1").run(revisionBefore, now.getTime());
+    return { restoredAt: now.toISOString(), undoBackupKey: undo?.key ?? null };
+  } finally {
+    restoring = false;
+    await fs.rm(workDirectory, { recursive: true, force: true });
+  }
+}
+
+/** Restores one of the backups in storage. */
+export async function restoreDatabaseBackup(key: string, now = new Date()): Promise<RestoreResult> {
+  const data = await readDatabaseBackup(key);
+  return restoreDatabaseBuffer(data, now);
+}
+
+/** Restores a backup file sent from the browser. */
+export async function restoreDatabaseBuffer(data: Buffer, now = new Date()): Promise<RestoreResult> {
+  const directory = await fs.mkdtemp(join(tmpdir(), "fainens-restore-upload-"));
+  try {
+    const path = join(directory, "backup.db");
+    await fs.writeFile(path, data);
+    return await restoreDatabaseFromFile(path, now);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+}
+
+function currentRevision(): number {
+  const row = db.$client.prepare("SELECT revision FROM financial_state WHERE id = 1").get() as { revision?: number } | undefined;
+  return Number(row?.revision ?? 0);
+}
+
+/** Copies a database file over the live one with SQLite's online backup, so open connections stay valid. */
+async function copyDatabaseInto(sourcePath: string): Promise<void> {
+  const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
+  try {
+    await source.backup(dbPath);
+  } finally {
+    source.close();
+  }
 }

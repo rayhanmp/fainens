@@ -48,6 +48,7 @@ import {
   LogOut,
   MoreHorizontal,
   KeyRound,
+  RotateCcw,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
@@ -530,6 +531,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [feeRuleAmount, setFeeRuleAmount] = useState('');
   const [feeRulePayer, setFeeRulePayer] = useState<TransferFeePayer>('sender');
   const { confirm } = useConfirm();
+  const restoreFileInput = useRef<HTMLInputElement>(null);
   const visibleTabs = matchingTabs(settingsSearch);
   const activeTabInfo = TABS.find((tab) => tab.id === activeTab) ?? TABS[0]!;
   const sharedContextCount = Object.values(profile.agentContext).filter(Boolean).length;
@@ -731,6 +733,41 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     } catch (error) {
       setDatabaseBackupNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not create database backup.' });
     } finally { setDatabaseBackupBusy(false); }
+  };
+
+  const downloadDatabaseBackup = (key: string) => {
+    const link = document.createElement('a');
+    link.href = api.databaseBackup.fileUrl(key);
+    link.download = key.split('/').pop() ?? 'fainens-backup.db';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  /**
+   * Replaces everything with a backup, after saying so plainly. The server backs up the data as it
+   * is now first; once it's done the app reloads, so nothing from before stays on screen.
+   */
+  const restoreDatabase = async (source: { key: string; createdAt: number } | { file: File }) => {
+    const what = 'file' in source ? `“${source.file.name}”` : `the backup from ${formatDateTime(source.createdAt)}`;
+    const ok = await confirm({
+      title: `Restore ${what}?`,
+      message: 'Everything in Fainens is replaced with this backup. Your data as it is now is backed up first and listed under Saved backups, so you can go back to it.',
+      confirmLabel: 'Restore',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setDatabaseBackupBusy(true);
+    setDatabaseBackupNotice(null);
+    try {
+      await ('file' in source ? api.databaseBackup.restoreFile(source.file) : api.databaseBackup.restore(source.key));
+      setDatabaseBackupNotice({ tone: 'success', text: 'Restored. Reloading…' });
+      queryClient.clear();
+      window.setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+      setDatabaseBackupNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Could not restore the backup.' });
+      setDatabaseBackupBusy(false);
+    }
   };
 
   // Auto-save with a short debounce
@@ -1284,9 +1321,21 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                       ) : (
                         <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
                           {databaseBackup.backups.map((backup) => (
-                            <div key={backup.key} className="flex items-center justify-between gap-3 py-2.5">
-                              <span className="min-w-0 truncate text-sm font-medium tabular-nums" title={backup.key}>{backup.createdAt ? formatDateTime(backup.createdAt) : backup.key.split('/').pop()}</span>
-                              <span className="shrink-0 text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatBytes(backup.size)}</span>
+                            <div key={backup.key} className="flex items-center justify-between gap-3 py-1.5">
+                              <span className="flex min-w-0 items-center gap-2">
+                                <span className="truncate text-sm font-medium tabular-nums" title={backup.key}>{backup.createdAt ? formatDateTime(backup.createdAt) : backup.key.split('/').pop()}</span>
+                                {backup.key.includes('-before-restore') && <span className="shrink-0 rounded-full bg-[var(--ref-surface-container-high)] px-2 py-0.5 text-[11px] font-medium text-[var(--ref-on-surface-variant)]">Before a restore</span>}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-1">
+                                <span className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatBytes(backup.size)}</span>
+                                <RowActions
+                                  title={backup.createdAt ? formatDateTime(backup.createdAt) : 'Backup'}
+                                  actions={[
+                                    { key: 'download', label: 'Download', icon: Download, onSelect: () => downloadDatabaseBackup(backup.key) },
+                                    { key: 'restore', label: 'Restore this backup', icon: RotateCcw, tone: 'danger' as const, disabled: databaseBackupBusy, onSelect: () => void restoreDatabase(backup) },
+                                  ]}
+                                />
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1303,6 +1352,30 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                         </div>
                       )}
                     </div>
+              </SettingsGroup>
+              <SettingsGroup fixed title="Restore" summary="Go back to a backup">
+                <SettingsRow
+                  inline
+                  label="From a saved backup"
+                  description="Open a backup’s menu (⋯) under Saved backups and choose Restore this backup."
+                />
+                <SettingsRow
+                  inline
+                  label="From a file"
+                  description="A .db backup you downloaded. Your data as it is now is backed up first."
+                  action={(
+                    <>
+                      <input
+                        ref={restoreFileInput}
+                        type="file"
+                        className="hidden"
+                        accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3,application/x-sqlite3"
+                        onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void restoreDatabase({ file }); }}
+                      />
+                      <Button type="button" size="sm" variant="secondary" onClick={() => restoreFileInput.current?.click()} disabled={databaseBackupBusy}><RotateCcw className="h-4 w-4" aria-hidden /> Choose file</Button>
+                    </>
+                  )}
+                />
               </SettingsGroup>
             </SettingsPanel>
           )}
