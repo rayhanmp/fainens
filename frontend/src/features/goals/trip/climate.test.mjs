@@ -16,7 +16,9 @@ test('a place is found however it’s typed, by other names or by its country', 
 
 test('the weather is guessed from the places and the months the trip touches', () => {
   const tokyo = guessClimate(['Tokyo'], noon(2026, 10, 12), noon(2026, 10, 21));
-  assert.deepEqual(tokyo, { climate: 'mixed', low: 9, high: 17, places: ['Tokyo'], months: 'Nov' });
+  const { sources, ...rest } = tokyo;
+  assert.deepEqual(rest, { climate: 'mixed', low: 9, high: 17, places: ['Tokyo'], months: 'Nov' });
+  assert.match(sources, /Tokyo: Japan Meteorological Agency, 1991–2020/);
   assert.equal(guessText(tokyo), 'usually 9–17°C in Nov');
   assert.equal(guessClimate(['Seoul'], noon(2026, 11, 28), noon(2027, 0, 3))?.climate, 'cold');
   assert.equal(guessClimate(['Seoul'], noon(2026, 11, 28), noon(2027, 0, 3))?.months, 'Dec–Jan');
@@ -36,7 +38,8 @@ test('places are suggested by name first, then by country, leaving out ones alre
 
 test('every place has twelve months, with lows below highs, and a name of its own', () => {
   assert.equal(new Set(KNOWN_PLACES.map((place) => place.name)).size, KNOWN_PLACES.length);
-  for (const { name, high, low } of KNOWN_PLACES) {
+  for (const { name, high, low, source } of KNOWN_PLACES) {
+    assert.ok(source, `${name} has a source`);
     assert.equal(high.length, 12, name);
     assert.equal(low.length, 12, name);
     high.forEach((value, month) => assert.ok(low[month] < value, `${name} ${month}`));

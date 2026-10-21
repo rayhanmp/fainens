@@ -4,7 +4,7 @@ import { Button } from '../../../components/ui/Button';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { cn } from '../../../lib/utils';
 import { Section } from '../../subscriptions/PageParts';
-import { CLIMATE_SOURCE, guessClimate, guessText, WEATHER } from './climate';
+import { guessClimate, guessText, WEATHER } from './climate';
 import { useTripSave, type Trip } from './queries';
 import { DatesEditor, MoneyEditor, PlacesEditor, SpendingEditor, WeatherEditor } from './TripSettings';
 import { CURRENCIES, daysBetween, shortDate, tripLength, tripPhase } from './trip-utils';
@@ -77,7 +77,7 @@ export function TripSummary({ goalId, trip, now, editing, onEditing, onPeople }:
         </Fact>
         <Fact icon={CloudSun} label="Weather" empty="Say what it’s like" onAdd={edit} editor={editing && <WeatherEditor trip={trip} save={save} />}>
           {basics.climate ? WEATHER[basics.climate] : guess ? (
-            <span title={CLIMATE_SOURCE}>
+            <span title={guess.sources}>
               {WEATHER[guess.climate]}
               <span className="text-[var(--ref-on-surface-variant)]"> · {guessText(guess)}</span>
             </span>

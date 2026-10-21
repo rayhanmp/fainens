@@ -20,7 +20,7 @@ import {
   type PackingBag,
   type PackingCategory,
 } from './packing';
-import { CLIMATE_SOURCE, guessClimate, guessText } from './climate';
+import { guessClimate, guessText } from './climate';
 import { useAddPackingMutation, useDeletePackingMutation, useMovePackingMutation, useUpdatePackingMutation, type PackingItem, type Trip } from './queries';
 import { tripLength } from './trip-utils';
 
@@ -161,7 +161,7 @@ function Starter({ goalId, trip, onDone }: { goalId: number; trip: Trip; onDone?
       <div className="settings-compact mt-3 grid grid-cols-1 gap-3 @lg:grid-cols-[minmax(0,1fr)_90px]">
         <div className="space-y-1">
           <Segmented ariaLabel="Weather" value={climate} onChange={setClimate} options={[{ value: 'cold', label: 'Cold' }, { value: 'warm', label: 'Warm' }, { value: 'mixed', label: 'Some of each' }]} />
-          {!trip.basics.climate && guess && <p className="text-xs text-[var(--ref-on-surface-variant)]" title={CLIMATE_SOURCE}>Guessed from where and when: {guessText(guess)}.</p>}
+          {!trip.basics.climate && guess && <p className="text-xs text-[var(--ref-on-surface-variant)]" title={guess.sources}>Guessed from where and when: {guessText(guess)}.</p>}
         </div>
         <label className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]">
           <input aria-label="Days" inputMode="numeric" className="brutalist-input !w-[52px] text-center tabular-nums" value={days} onChange={(event) => setDays(event.target.value.replace(/\D/g, '').slice(0, 2))} />

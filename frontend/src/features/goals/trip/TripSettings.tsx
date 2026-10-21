@@ -5,7 +5,7 @@ import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { cn } from '../../../lib/utils';
 import { MoneyField } from '../../savings/fields';
 import { Dropdown } from '../../settings/controls';
-import { CLIMATE_SOURCE, guessClimate, guessText, suggestPlaces, WEATHER } from './climate';
+import { guessClimate, guessText, suggestPlaces, WEATHER } from './climate';
 import type { Trip, TripSave } from './queries';
 import { CURRENCIES, dayKey, fromDayKey, tripLength } from './trip-utils';
 
@@ -188,7 +188,12 @@ export function WeatherEditor({ trip, save }: { trip: Trip; save: TripSave }) {
         options={[{ value: 'none', label: guess ? `${WEATHER[guess.climate]} (guessed)` : 'Not said' }, { value: 'cold', label: 'Cold' }, { value: 'warm', label: 'Warm' }, { value: 'mixed', label: 'Some of each' }]}
         onChange={(value) => save({ climate: value === 'none' ? null : value })}
       />
-      {guess && <p className={cn(note, 'first-letter:uppercase')} title={CLIMATE_SOURCE}>{guessText(guess)}</p>}
+      {guess && (
+        <>
+          <p className={cn(note, 'first-letter:uppercase')}>{guessText(guess)}, from long-term averages, not a forecast.</p>
+          <p className="text-[11px] text-[var(--ref-outline)]">{guess.sources.replace(/^.*?forecast\. /, 'Source: ')}</p>
+        </>
+      )}
     </div>
   );
 }
