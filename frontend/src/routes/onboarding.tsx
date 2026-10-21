@@ -1,14 +1,15 @@
 import { createFileRoute, redirect, useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
 import { getCurrentUser } from '../generated/client';
 import { useCategoriesQuery, useCreateCategoryMutation } from '../features/categories/queries';
 import { useCreateAccountMutation } from '../features/accounts/queries';
-import { useCreateBudgetMutation } from '../features/budgets/queries';
-import { useCreatePeriodMutation, useSuggestedPeriodQuery } from '../features/periods/queries';
+import { useCreateBudgetMutation, useUpdateBudgetMutation } from '../features/budgets/queries';
+import { useCreatePeriodMutation, useSuggestedPeriodQuery, useUpdatePeriodMutation } from '../features/periods/queries';
 import { useUpdateSalarySettingsMutation } from '../features/salary/queries';
 import { useOnboardingForm } from '../features/onboarding/controller';
 import { api } from '../lib/api';
+import { parseIdNominalToInt } from '../lib/utils';
 import {
   Wallet,
   Tag,
@@ -102,7 +103,9 @@ function OnboardingPage() {
   const createCategoryMutation = useCreateCategoryMutation();
   const createAccountMutation = useCreateAccountMutation();
   const createBudgetMutation = useCreateBudgetMutation();
+  const updateBudgetMutation = useUpdateBudgetMutation();
   const createPeriodMutation = useCreatePeriodMutation();
+  const updatePeriodMutation = useUpdatePeriodMutation();
   const updateSalarySettingsMutation = useUpdateSalarySettingsMutation();
   const onboardingForm = useOnboardingForm();
   const { values, setField, toggleWallet, addCustomWallet, setBudget } = onboardingForm;
@@ -114,6 +117,10 @@ function OnboardingPage() {
   const [profile, setProfile] = useState({ fullName: '', preferredName: '', pronouns: '', dateOfBirth: '' });
 
   const [createdPeriodId, setCreatedPeriodId] = useState<number | null>(null);
+  // What earlier Next presses already made, so going Back and forward again doesn't make it twice.
+  const createdWallets = useRef(new Set<string>());
+  const createdPeriod = useRef<{ name: string; startDate: string; endDate: string } | null>(null);
+  const createdBudgets = useRef(new Map<string, { id: number; amount: number }>());
 
   const categories = [...(categoriesQuery.data ?? []), ...previewCategories];
   const selectedWallets = new Set(values.selectedWallets);
@@ -168,10 +175,12 @@ function OnboardingPage() {
         setLoading(true);
         try {
           for (const name of selectedWallets) {
+            if (createdWallets.current.has(name)) continue;
             await createAccountMutation.mutateAsync({
               name,
               type: 'asset',
             });
+            createdWallets.current.add(name);
           }
         } catch (e) {
           setError(e instanceof Error ? e.message : 'Could not create wallets');
@@ -210,12 +219,19 @@ function OnboardingPage() {
       } else {
         setLoading(true);
         try {
-          const period = await createPeriodMutation.mutateAsync({
-            name: values.periodName.trim(),
-            startDate: values.periodStart,
-            endDate: values.periodEnd,
-          });
-          setCreatedPeriodId(period.id);
+          const wanted = { name: values.periodName.trim(), startDate: values.periodStart, endDate: values.periodEnd };
+          const made = createdPeriod.current;
+          // Coming back to this step changes the period already made rather than adding one that overlaps it.
+          if (createdPeriodId != null && made) {
+            if (made.name !== wanted.name || made.startDate !== wanted.startDate || made.endDate !== wanted.endDate) {
+              await updatePeriodMutation.mutateAsync({ id: createdPeriodId, data: wanted });
+              createdPeriod.current = wanted;
+            }
+          } else {
+            const period = await createPeriodMutation.mutateAsync(wanted);
+            createdPeriod.current = wanted;
+            setCreatedPeriodId(period.id);
+          }
         } catch (e) {
           setError(e instanceof Error ? e.message : 'Could not create period');
           setLoading(false);
@@ -231,13 +247,23 @@ function OnboardingPage() {
         setLoading(true);
         try {
           for (const [catId, raw] of entries) {
-            const rupiah = Math.round(parseFloat(raw.replace(/,/g, '')));
+            // "1.500.000", "1,500,000" and "1500000" are all one and a half million rupiah.
+            const rupiah = parseIdNominalToInt(raw);
             if (!Number.isFinite(rupiah) || rupiah <= 0) continue;
-            await createBudgetMutation.mutateAsync({
+            const made = createdBudgets.current.get(catId);
+            if (made) {
+              if (made.amount !== rupiah) {
+                await updateBudgetMutation.mutateAsync({ id: made.id, data: { plannedAmount: rupiah } });
+                createdBudgets.current.set(catId, { id: made.id, amount: rupiah });
+              }
+              continue;
+            }
+            const budget = await createBudgetMutation.mutateAsync({
               periodId: createdPeriodId,
               categoryId: Number(catId),
               plannedAmount: rupiah,
-            });
+            }) as { id: number };
+            createdBudgets.current.set(catId, { id: budget.id, amount: rupiah });
           }
         } catch (e) {
           setError(e instanceof Error ? e.message : 'Could not save budgets');
@@ -283,8 +309,10 @@ function OnboardingPage() {
     navigate,
     createAccountMutation,
     createBudgetMutation,
+    updateBudgetMutation,
     createCategoryMutation,
     createPeriodMutation,
+    updatePeriodMutation,
     preferences,
     profile,
     updateSalarySettingsMutation,
