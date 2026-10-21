@@ -34,11 +34,18 @@ export function ExtraFinale({ story, form, games, run }: { story: Closing; form:
   }
   if (form === 'museum') {
     // The painting is the period's spending: one panel per top category, sized by its share.
-    const panels = finale.categories.length ? finale.categories : [{ label: finale.period, share: 100 }];
+    // A Mondrian: the top category is the tall panel on the left, the next two share the right column,
+    // each sized by its share of spending.
+    const panels = (finale.categories.length ? finale.categories : [{ label: finale.period, share: 100 }]).slice(0, 3);
+    const [a, b, c] = panels.map(row => Math.max(8, row.share));
+    const grid: CSSProperties = panels.length === 1 ? {} : { gridTemplateColumns: `${a}fr ${b + (c ?? 0)}fr`, gridTemplateRows: c ? `${b}fr ${c}fr` : '1fr' };
     return <div className="recap-museum">
       <i className="recap-museum-light" aria-hidden="true" />
       <figure className="recap-museum-frame">
-        <div className="recap-museum-canvas" aria-hidden="true">{panels.map((row, i) => <span key={row.label} className={`is-${i}`} style={vars({ '--share': Math.max(12, row.share), '--i': i })} />)}<b>✳</b></div>
+        <div className="recap-museum-canvas" style={grid} aria-hidden="true">
+          {panels.map((row, i) => <span key={row.label} className={`is-${i}`} style={vars({ '--i': i, ...(i === 0 ? { gridRow: '1 / -1' } : {}) })} />)}
+          <b>✳</b>
+        </div>
       </figure>
       <div className="recap-museum-label">
         <b>{finale.period}</b>
@@ -61,7 +68,8 @@ export function ExtraFinale({ story, form, games, run }: { story: Closing; form:
         </div>
       </div>
       <p className="recap-weather-reading">{finale.keptShare !== null ? 'Degrees of income left over' : 'Receipts on the radar'}</p>
-      <ul className="recap-weather-outlook">{finale.categories.map((row, i) => <li key={row.label} style={vars({ '--i': i, '--share': row.share })}><small>{row.label}</small><i /><b>{row.share}%</b></li>)}</ul>
+      {/* Bars are relative to the leading category, so the outlook reads at a glance. */}
+      <ul className="recap-weather-outlook">{finale.categories.map((row, i) => <li key={row.label} style={vars({ '--i': i, '--rel': row.share / Math.max(1, ...finale.categories.map(item => item.share)) })}><small>{row.label}</small><i /><b>{row.share}%</b></li>)}</ul>
       <p className="recap-weather-foot"><span>Gusts: {finale.peakLabel ?? 'none'}</span><span>Spending days: {finale.spendingDays}</span></p>
       <p className="recap-weather-net">{sunny ? 'Left over' : 'Shortfall'} · <Money value={Math.abs(finale.net)} /></p>
     </div>;

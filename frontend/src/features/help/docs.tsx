@@ -435,7 +435,7 @@ export const DOCS: DocPage[] = [
         'The ⓘ panel shows when the figures were taken and when the edition was saved.',
       ] },
       { type: 'h2', id: 'without-ai', text: 'Without AI' },
-      { type: 'p', text: 'If no model is set up, the provider refuses (out of credits, a rejected key, too many requests), it doesn’t answer, or its story fails the fact check, the recap still opens. A notice on the cover and in the ⓘ panel says what happened.' },
+      { type: 'p', text: 'If no model is set up, the provider refuses (out of credits, a rejected key, too many requests), it doesn’t answer, or its story fails the fact check, the recap still opens. A dot appears on the ⓘ button, and the ⓘ panel says what happened.' },
       { type: 'table', head: ['Part of the recap', 'Without AI'], rows: [
         ['Figures, chapters, games, persona, share card', 'Unchanged. None of these use AI.'],
         ['The words of the story', 'The built-in Fainens edit: the same facts, told from a set of prepared lines for every chapter. Its ⓘ panel says “The Fainens edit”.'],

@@ -159,6 +159,10 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
       { eyebrow: 'Quick maths', title: `Rp100 came in. Rp${f.spentPer100} went out.`, body: `In total: ${money(f.expenses)} of ${money(f.income)}.` },
       { eyebrow: 'The ratio', title: `${f.spentPer100} out of every 100.`, body: `${money(f.expenses)} out, ${money(f.income)} in${soFar}.` },
       ...(f.keptShare !== null ? [{ eyebrow: 'The split', title: `${f.spentPer100} spent, ${f.keptShare} kept.`, body: `${money(f.net)} left over.` }] : []),
+      // The ratio is the visual's big figure, so these headlines leave the number to it.
+      { eyebrow: 'Quick maths', title: f.spentPer100 <= 50 ? 'Less than half went back out.' : f.spentPer100 < 100 ? 'Most of it went back out.' : 'More went out than came in.', body: NONE },
+      { eyebrow: 'The exchange rate', title: 'Here’s how each rupiah split.', body: NONE },
+      { eyebrow: 'In and out', title: f.net >= 0 ? 'Income stayed ahead.' : 'Expenses ran ahead.', body: `${money(f.expenses)} out, ${money(f.income)} in${soFar}.` },
     ] : [
       { eyebrow: 'Money in, money out', title: f.net >= 0 ? 'More came in than went out.' : 'Expenses overtook income.', body: `${money(f.income)} in, ${money(f.expenses)} out${soFar}.` },
       { eyebrow: 'The scoreboard', title: f.net >= 0 ? 'Income takes the lead.' : 'Expenses take the lead.', body: `In: ${money(f.income)}. Out: ${money(f.expenses)}.` },

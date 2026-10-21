@@ -176,6 +176,38 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
 export type RecapStoryId = RecapStory['id'];
 type ChapterData = RecapStory extends infer Story ? Story extends RecapStory ? Omit<Story, 'theme' | keyof Copy | keyof Extras> : never : never;
 
+/** The numbers written in a line of copy: "Rp2.136.939" is 2136939, "32%" is 32, "1,5×" is 1.5. */
+export function numbersIn(text: string): number[] {
+  return [...text.matchAll(/\d+(?:[.,]\d+)*/g)].map(([raw]) => /^\d{1,3}(?:[.,]\d{3})+$/.test(raw) ? Number(raw.replace(/[.,]/g, '')) : Number(raw.replace(',', '.')));
+}
+/** Whether a line of copy states one of the figures a visual already shows. */
+export function repeatsFigure(text: string, shown: number[]) {
+  const figures = shown.filter(Number.isFinite);
+  return numbersIn(text).some(value => figures.some(figure => Math.abs(figure - value) < .5));
+}
+const NONE_SHOWN = NaN;
+/**
+ * The figures each chapter's visual prints: its big stat, its pairs and fact lines, its list. Copy that
+ * repeats one of them is passed over (see copyFor). Kept in step with ChapterVisuals.
+ */
+export function shownFigures(chapter: ChapterData): number[] {
+  switch (chapter.id) {
+    case 'intro': return [chapter.cover.purchaseCount, chapter.elapsedDays, chapter.totalDays, chapter.cover.keptShare ?? NONE_SHOWN];
+    case 'overview': return [chapter.income, chapter.expenses, Math.abs(chapter.net), chapter.keptShare ?? NONE_SHOWN, chapter.lead === 'ratio' ? chapter.spentPer100 ?? NONE_SHOWN : NONE_SHOWN];
+    case 'budget': return [chapter.percentUsed ?? NONE_SHOWN, chapter.elapsedShare ?? NONE_SHOWN, chapter.planned, Math.abs(chapter.remaining), chapter.spent, ...chapter.over.map(row => row.over)];
+    case 'categories': return [chapter.top3Share, chapter.count, ...chapter.rows.flatMap(row => [row.share, row.amount]), chapter.others?.count ?? NONE_SHOWN, chapter.others?.amount ?? NONE_SHOWN];
+    case 'calendar': return [chapter.spendingDays, chapter.elapsedDays, chapter.peak?.amount ?? NONE_SHOWN, chapter.peak?.purchaseCount ?? NONE_SHOWN, chapter.week?.weekendShare ?? NONE_SHOWN];
+    case 'weekdays': return [chapter.weekendShare, chapter.totals[chapter.busiest]];
+    case 'streak': return [chapter.quiet?.length ?? NONE_SHOWN, chapter.busy?.length ?? NONE_SHOWN];
+    case 'receipts': return [chapter.purchaseCount, chapter.items.length, ...chapter.items.map(item => item.amount)];
+    case 'habits': return [chapter.purchaseCount, chapter.spendingDays, chapter.median ?? NONE_SHOWN, chapter.average !== null ? Math.round(chapter.average) : NONE_SHOWN, chapter.perDay,
+      chapter.repeat?.occurrences ?? NONE_SHOWN, chapter.repeat?.total ?? NONE_SHOWN];
+    case 'comparison': return [Math.abs(chapter.change), chapter.now, chapter.before];
+    case 'pace': return [chapter.totalDays - chapter.elapsedDays, chapter.elapsedDays, chapter.totalDays, chapter.perDay, chapter.projected, ...numbersIn(chapter.endLabel)];
+    default: return [];
+  }
+}
+
 // Older editions saved app-written transfer fees as a "recurring purchase"; they are not habits.
 const isSystemDescription = (description: string) => /^transfer fee:/i.test(description.trim());
 
@@ -401,16 +433,23 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     const special = pool.filter(line => line.flavour || line.timely);
     return special.length && random() < .5 ? pickFrom(special, random) : pickFrom(pool, random);
   };
-  const copyFor = (id: RecapStoryId, lead?: string): Copy => {
-    const pool = chapterCopy(id, lead, facts);
-    const saved = savedCopy(id);
+  // The chapter's visual already prints its figures large, so a headline or eyebrow that says one of them
+  // again is dropped from the pool, and a body that does is left out. (A "4× combo." over a big 4 said it twice.)
+  const copyFor = (id: RecapStoryId, lead: string | undefined, shown: number[]): Copy => {
+    const says = (text: string) => repeatsFigure(text, shown);
+    const fresh = (line: Copy) => !says(line.title) && !says(line.eyebrow);
+    const all = chapterCopy(id, lead, facts);
+    const pool = all.filter(fresh).length ? all.filter(fresh) : all;
+    const candidate = savedCopy(id);
+    const saved = candidate && fresh(candidate) ? candidate : null;
+    const trim = (copy: Copy): Copy => says(copy.body) ? { ...copy, body: '' } : copy;
     // Without a run (the share card, first paint) the saved edition's copy leads; otherwise it is one
     // voice among the generated ones.
-    if (saved && (run === 0 || random() < .2)) return { ...saved, eyebrow: pool[0]?.eyebrow ?? saved.eyebrow };
-    const copy = pool.length ? pickCopy(pool) : saved ?? { eyebrow: '', title: recap.period.name, body: '' };
+    if (saved && (run === 0 || random() < .2)) return trim({ ...saved, eyebrow: pool[0]?.eyebrow ?? saved.eyebrow });
+    const copy = trim(pool.length ? pickCopy(pool) : saved ?? { eyebrow: '', title: recap.period.name, body: '' });
     // Half the time the eyebrow comes from the chapter's own pool, so labels and headlines mix freely.
     // A flavoured line keeps its own: its eyebrow is part of the joke.
-    const eyebrows = chapterEyebrows(id);
+    const eyebrows = chapterEyebrows(id).filter(eyebrow => !says(eyebrow));
     return run !== 0 && !copy.flavour && eyebrows.length && random() < .5 ? { ...copy, eyebrow: pickFrom(eyebrows, random) } : copy;
   };
 
@@ -763,7 +802,7 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     // A crossroads' own copy is replaced by what was picked (applyCrossroads); this is its label until then.
     const raw = chapter.id === 'crossroads' ? { eyebrow: pickFrom(['Choose your own recap', 'Your call', 'Plot twist, your way'], random), title: 'You pick what’s next.', body: '' }
       : chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts)) : chapter.id === 'year' ? pickCopy(yearCopy(chapter.insight))
-      : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
+      : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined, shownFigures(chapter));
     const early = chapter.id === 'persona' && chapter.early;
     const copy = { eyebrow: forYear(early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body), flavour: early ? undefined : raw.flavour };
     const equivalence = equivalences[chapter.id];

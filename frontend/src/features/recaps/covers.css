@@ -50,10 +50,13 @@
 
 /* Photo booth strip: four frames flash in turn beside the headline. */
 .recap-cover.recap-cover-photostrip { flex-direction: row; align-items: center; gap: 5cqw; }
-.recap-photostrip { flex-shrink: 0; display: grid; gap: 1.6cqw; width: 34cqw; padding: 2.4cqw 2.4cqw 1.6cqw; background: var(--slip); color: var(--slip-ink); rotate: -4deg; box-shadow: 0 3cqw 6cqw -3cqw #0008;
+.recap-photostrip { flex-shrink: 0; display: grid; gap: 1.6cqw; width: 34cqw; margin-left: 3cqw; padding: 2.4cqw 2.4cqw 1.6cqw; background: var(--slip); color: var(--slip-ink); rotate: -4deg; box-shadow: 0 3cqw 6cqw -3cqw #0008;
   animation: recap-cover-drop 1s cubic-bezier(.2, 1.1, .35, 1) var(--enter) both; }
 .recap-photo-frame { display: grid; place-items: center; align-content: center; gap: 1cqw; height: 19cqw; padding: 1.6cqw; overflow: hidden; text-align: center;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--recap-accent) 70%, #fff), var(--recap-accent)); color: #fff; animation: recap-cover-flash .7s ease-out calc(var(--enter) + 500ms + var(--i) * 380ms) both; }
+  background: linear-gradient(160deg, color-mix(in srgb, var(--recap-accent) 70%, #fff), var(--recap-accent)); color: #fff; animation: recap-cover-flash .7s ease-out calc(var(--enter) + 500ms + var(--i) * 380ms) both;
+  /* A photo's vignette and the booth flash's highlight. */
+  box-shadow: inset 0 0 5cqw #0006, inset 0 0 0 .3cqw #0002; position: relative; }
+.recap-photo-frame::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 30% 20%, #ffffff40, transparent 45%); pointer-events: none; }
 .recap-photo-frame.is-2 { background: linear-gradient(160deg, color-mix(in srgb, var(--recap-pop) 70%, #fff), var(--recap-pop)); color: var(--recap-on-pop); }
 .recap-photo-frame.is-3 { background: linear-gradient(160deg, #3a3a3a, #111); }
 .recap-photo-frame.is-title b { font-size: min(8cqw, calc(30cqw / var(--n))); font-weight: 900; letter-spacing: -.04em; line-height: 1; text-transform: uppercase; }
@@ -69,44 +72,60 @@
 .recap-cv-cart { position: relative; width: 62cqw; padding: 7cqw 5cqw 6cqw; border-radius: 3cqw 3cqw 6cqw 6cqw; background: linear-gradient(180deg, #c9c9c4, #a9a9a3); box-shadow: inset 0 -1.2cqw 0 #0002, 0 3cqw 6cqw -2cqw #0008;
   animation: recap-cover-slot .9s cubic-bezier(.2, 1.2, .35, 1) var(--enter) both; }
 .recap-cv-cart-ridges { position: absolute; left: 8cqw; right: 8cqw; top: 2cqw; height: 3cqw; background: repeating-linear-gradient(90deg, #0002 0 .7cqw, transparent .7cqw 1.8cqw); border-radius: 1cqw; }
-.recap-cv-cart-label { position: relative; display: grid; justify-items: center; gap: 1.4cqw; padding: 5cqw 3cqw; overflow: hidden; border-radius: 1.6cqw;
-  background: radial-gradient(circle at 70% 20%, color-mix(in srgb, var(--recap-pop) 70%, transparent), transparent 55%), linear-gradient(160deg, var(--recap-accent), #111); color: #fff; }
-.recap-cv-cart-brand { font-family: var(--font-mono); font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
-.recap-cv-cart-label strong { font-family: var(--font-mono); font-size: min(9cqw, calc(46cqw / var(--n))); font-weight: 900; letter-spacing: -.02em; line-height: 1; text-transform: uppercase; text-shadow: .5cqw .5cqw 0 #000; }
-.recap-cv-cart-sub { font-family: var(--font-mono); font-size: max(2cqw, 10.5px); font-weight: 700; text-transform: uppercase; }
-.recap-cv-cart-pixel { position: absolute; width: 1.6cqw; height: 1.6cqw; background: #fff; left: calc(10% + var(--i) * 19%); top: calc(14% + (var(--i) * 37 % 60) * 1%); opacity: .7; animation: recap-cover-twinkle 1.4s steps(2) calc(var(--enter) + var(--i) * 200ms) infinite; }
+/* The label is a pixel-art night: its own palette (not the run's theme, which turned it muddy), pixel
+   stars, a blocky sun and stepped hills, with the title over it in a chunky shadowed type. */
+.recap-cv-cart-label { position: relative; display: grid; justify-items: center; align-content: start; gap: 1.4cqw; min-height: 32cqw; padding: 4cqw 3cqw 11cqw; overflow: hidden; border-radius: 1.6cqw;
+  background: linear-gradient(180deg, #1b1f5e 0%, #3b2479 45%, #a33a7e 78%, #ff7a59 100%); color: #fff; box-shadow: inset 0 0 0 .6cqw #0004; image-rendering: pixelated; }
+.recap-cv-cart-brand { position: relative; z-index: 1; font-family: var(--font-mono); font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .2em; text-transform: uppercase; color: #ffe37a; }
+.recap-cv-cart-label strong { position: relative; z-index: 1; font-family: var(--font-mono); font-size: min(9cqw, calc(46cqw / var(--n))); font-weight: 900; letter-spacing: .02em; line-height: 1; text-transform: uppercase;
+  text-shadow: .6cqw 0 0 #ff3d7f, 0 .6cqw 0 #ff3d7f, .6cqw .6cqw 0 #ff3d7f, 1.2cqw 1.2cqw 0 #1b1f5e; }
+.recap-cv-cart-sub { position: relative; z-index: 1; font-family: var(--font-mono); font-size: max(2cqw, 10.5px); font-weight: 700; text-transform: uppercase; text-shadow: .4cqw .4cqw 0 #1b1f5e; }
+.recap-cv-cart-pixel { position: absolute; left: var(--x); top: var(--y); width: 1.2cqw; height: 1.2cqw; background: #fff; animation: recap-cover-twinkle 1.4s steps(2) calc(var(--enter) + var(--i) * 200ms) infinite; }
+.recap-cv-cart-sun { position: absolute; left: 66%; bottom: 5.4cqw; width: 12cqw; height: 6cqw; background: #ffd23d;
+  clip-path: polygon(25% 0, 75% 0, 75% 12.5%, 87.5% 12.5%, 87.5% 25%, 100% 25%, 100% 100%, 0 100%, 0 25%, 12.5% 25%, 12.5% 12.5%, 25% 12.5%); }
+.recap-cv-cart-hills { position: absolute; left: 0; right: 0; bottom: 0; height: 9cqw; background: #120f3a;
+  clip-path: polygon(0 40%, 8% 40%, 8% 20%, 18% 20%, 18% 0, 28% 0, 28% 30%, 40% 30%, 40% 55%, 60% 55%, 60% 25%, 70% 25%, 70% 5%, 80% 5%, 80% 30%, 92% 30%, 92% 45%, 100% 45%, 100% 100%, 0 100%); }
 .recap-cv-cart-seal { position: absolute; right: 3cqw; bottom: 1.4cqw; font-size: max(1.7cqw, 10.5px); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #555; }
 .recap-cv-cart-press { margin-top: 4cqw; font-family: var(--font-mono); font-size: max(3cqw, 11px); font-weight: 900; letter-spacing: .3em; text-transform: uppercase; animation: recap-fade .3s calc(var(--enter) + 1.1s) both, recap-cover-blink 1s steps(2) calc(var(--enter) + 1.4s) infinite; }
 .recap-cv-cart-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 1cqw 4cqw; margin: 2cqw 0 3cqw; font-family: var(--font-mono); font-size: max(2.2cqw, 10.5px); font-weight: 700; opacity: .8; animation: recap-fade .6s calc(var(--enter) + 1.2s) both; }
 
 /* Postcard: Greetings from the month, a stamp and a postmark on the back. */
 .recap-cover-postcard .recap-cover-headline { margin-bottom: 4cqw; }
-.recap-postcard { display: grid; grid-template-columns: 58fr 42fr; min-height: 56cqw; overflow: hidden; border-radius: 1.6cqw; background: var(--slip); color: var(--slip-ink); box-shadow: 0 3cqw 6cqw -3cqw #0008; rotate: -2deg;
+/* A white-bordered card: the front is a seaside sunset (its own palette) with giant block letters filled
+   with the same sunset; the stamp and its postmark sit in the corner; a handwritten note runs underneath. */
+.recap-postcard { position: relative; padding: 2.4cqw 2.4cqw 0; border-radius: 1.6cqw; background: var(--slip); color: var(--slip-ink); box-shadow: 0 3cqw 6cqw -3cqw #0008; rotate: -2deg;
   animation: recap-cover-drop .9s cubic-bezier(.2, 1.2, .35, 1) calc(var(--enter) + 200ms) both; }
-.recap-postcard-front { display: grid; align-content: center; justify-items: start; gap: 1cqw; padding: 4cqw; overflow: hidden;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--recap-accent) 40%, #fff) 0 55%, color-mix(in srgb, var(--recap-pop) 55%, #fff) 55%); }
-.recap-postcard-front small { font-family: Georgia, serif; font-size: max(3cqw, 11px); font-style: italic; font-weight: 700; }
-.recap-postcard-front strong { display: flex; font-size: min(11cqw, calc(46cqw / var(--n))); font-weight: 900; letter-spacing: -.03em; line-height: .9; text-transform: uppercase; color: #fff; -webkit-text-stroke: .35cqw var(--slip-ink); text-shadow: .7cqw .7cqw 0 var(--slip-ink); }
+.recap-postcard-front { position: relative; display: grid; align-content: center; justify-items: center; gap: .6cqw; height: 46cqw; padding: 4cqw 3cqw; overflow: hidden; border-radius: .8cqw; text-align: center;
+  background: linear-gradient(180deg, #ffd9a8 0%, #ffb08a 40%, #ff8a7a 58%, #2f9bd0 58%, #1f6fa8 100%); }
+.recap-postcard-sun { position: absolute; left: 50%; top: 30%; width: 28cqw; height: 28cqw; margin-left: -14cqw; border-radius: 50%; background: radial-gradient(circle, #fff3c4, #ffd36b 60%, #ffb35c); }
+/* The sea covers the lower half of the sun; its waves are thin light bands. */
+.recap-postcard-sea { position: absolute; left: 0; right: 0; top: 58%; bottom: 0; background: repeating-linear-gradient(180deg, transparent 0 2.4cqw, #ffffff33 2.4cqw 2.8cqw), linear-gradient(180deg, #2f9bd0, #1f6fa8); }
+.recap-postcard-front small { position: relative; z-index: 1; font-family: Georgia, serif; font-size: max(4cqw, 12px); font-style: italic; font-weight: 700; color: #1d211c; }
+.recap-postcard-front strong { position: relative; z-index: 1; display: flex; font-size: min(17cqw, calc(86cqw / var(--n))); font-weight: 900; letter-spacing: -.02em; line-height: .9; text-transform: uppercase;
+  color: #ffe37a; background: linear-gradient(180deg, #ffe37a 0 45%, #ff6b8f 45% 70%, #4fc3f7 70%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: .45cqw #1d211c; filter: drop-shadow(.9cqw .9cqw 0 #1d211c); }
 .recap-postcard-front strong > span { display: inline-block; animation: recap-poster-letter .7s cubic-bezier(.2, 1.3, .4, 1) both; animation-delay: calc(var(--enter) + 500ms + var(--l) * 55ms); }
-.recap-postcard-front > span { font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .2em; }
-.recap-postcard-back { position: relative; display: grid; align-content: end; gap: 2cqw; padding: 4cqw 3.4cqw; border-left: .3cqw solid #1d211c22; }
-.recap-postcard-stamp { position: absolute; right: 3cqw; top: 3cqw; display: grid; place-items: center; width: 12cqw; height: 14cqw; padding: .8cqw; background: var(--recap-pop); color: var(--recap-on-pop); outline: .6cqw dotted var(--slip); outline-offset: -.3cqw; }
+.recap-postcard-front > span { position: relative; z-index: 1; padding: .4cqw 2cqw; border-radius: 99px; background: #fffaf0e6; color: #1d211c; font-size: max(2.2cqw, 10.5px); font-weight: 900; letter-spacing: .24em; }
+.recap-postcard-back { display: flex; align-items: baseline; justify-content: space-between; gap: 3cqw; padding: 2.6cqw .6cqw 2.8cqw; }
+.recap-postcard-stamp { position: absolute; z-index: 2; right: 4.4cqw; top: 4.4cqw; display: grid; place-items: center; width: 12cqw; height: 14cqw; padding: .8cqw; background: var(--recap-pop); color: var(--recap-on-pop); outline: .6cqw dotted var(--slip); outline-offset: -.3cqw; rotate: 4deg; }
 .recap-postcard-stamp b { font-size: 6cqw; line-height: 1; }
 .recap-postcard-stamp small { font-weight: 900; }
-.recap-postcard-postmark { position: absolute; right: 9cqw; top: 9cqw; display: grid; place-items: center; width: 15cqw; height: 15cqw; border: .4cqw solid #1d211caa; border-radius: 50%; color: #1d211ccc; text-align: center; rotate: -16deg;
+.recap-postcard-postmark { position: absolute; z-index: 3; right: 11cqw; top: 9cqw; display: grid; place-items: center; width: 15cqw; height: 15cqw; border: .4cqw solid #1d211ccc; border-radius: 50%; background: #fffaf055; color: #1d211c; text-align: center; rotate: -16deg;
   animation: recap-stamp .5s cubic-bezier(.2, 1.4, .4, 1) calc(var(--enter) + 1.3s) both; }
 .recap-postcard-postmark small { font-family: var(--font-mono); font-weight: 800; line-height: 1.1; }
-.recap-postcard-note { font-family: Georgia, serif; font-size: max(3cqw, 11px); font-style: italic; }
-.recap-postcard-line { padding-bottom: .8cqw; overflow: hidden; border-bottom: .3cqw solid #1d211c33; font-family: var(--font-mono); font-size: max(2.2cqw, 10.5px); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.recap-postcard-note { flex-shrink: 0; font-family: Georgia, serif; font-size: max(3.4cqw, 12px); font-style: italic; }
+.recap-postcard-line { min-width: 0; overflow: hidden; font-family: var(--font-mono); font-size: max(2.1cqw, 10.5px); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
 .recap-cover-postcard .recap-cover-body { margin-top: 4cqw; }
 
 /* Cereal box: the month as a breakfast brand, beside its nutrition panel. */
 .recap-cereal-stage { display: grid; grid-template-columns: 54cqw minmax(0, 1fr); align-items: end; gap: 4cqw; margin: 2cqw 0 4cqw; }
 .recap-cereal { position: relative; display: grid; justify-items: center; gap: 1.6cqw; padding: 4cqw 3cqw 3cqw; border-radius: 1.4cqw; overflow: hidden; text-align: center;
-  background: radial-gradient(circle at 50% 100%, #fff6 0 30%, transparent 31%), linear-gradient(170deg, var(--recap-pop), color-mix(in srgb, var(--recap-pop) 60%, #000)); color: var(--recap-on-pop);
-  box-shadow: 2.4cqw 2.4cqw 0 -.4cqw color-mix(in srgb, var(--recap-pop) 45%, #000), 0 3cqw 6cqw -2cqw #0008; animation: recap-cover-slot .9s cubic-bezier(.2, 1.3, .35, 1) var(--enter) both; }
-.recap-cereal-brand { font-size: max(2.2cqw, 10.5px); font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
-.recap-cereal-name { display: grid; font-size: min(10cqw, calc(44cqw / var(--n))); font-weight: 900; letter-spacing: -.04em; line-height: .9; text-transform: uppercase; text-shadow: .6cqw .6cqw 0 #0004; }
+  /* A breakfast-aisle box in its own sunny palette, rays behind the bowl, and the side of the box in shade. */
+  background: repeating-conic-gradient(from 0deg at 50% 78%, #ffffff26 0 8deg, transparent 8deg 16deg), linear-gradient(170deg, #ffd23d, #ff8a1f); color: #6b1b0b;
+  box-shadow: 2.4cqw 2.4cqw 0 -.4cqw #b8520c, 0 3cqw 6cqw -2cqw #0008; animation: recap-cover-slot .9s cubic-bezier(.2, 1.3, .35, 1) var(--enter) both; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+.recap-cereal-brand { padding: .6cqw 2.4cqw; border-radius: 99px; background: #d62828; color: #fff; font-size: max(2cqw, 10.5px); font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+.recap-cereal-name { display: grid; font-size: min(10cqw, calc(44cqw / var(--n))); font-weight: 900; letter-spacing: -.03em; line-height: .9; text-transform: uppercase; color: #d62828;
+  text-shadow: .4cqw .4cqw 0 #fff, .9cqw .9cqw 0 #6b1b0b; }
 .recap-cereal-name em { font-family: Georgia, serif; font-size: .75em; font-style: italic; font-weight: 700; text-transform: none; }
 .recap-cereal-burst { display: grid; place-items: center; width: 22cqw; height: 22cqw; padding: 2cqw; background: #ffe14d; color: #3b2a00; font-size: max(2.2cqw, 10.5px); font-weight: 900; line-height: 1.1; rotate: 12deg;
   clip-path: polygon(50% 0, 61% 18%, 82% 10%, 80% 32%, 100% 40%, 84% 55%, 96% 75%, 74% 76%, 70% 98%, 52% 84%, 32% 100%, 28% 78%, 6% 80%, 16% 60%, 0 44%, 20% 34%, 14% 12%, 36% 18%);
@@ -121,7 +140,8 @@
 .recap-cereal-facts > span b { font-weight: 900; }
 
 /* Paperback: a classic three-band cover with its author and a corner badge. */
-.recap-book { position: relative; align-self: center; display: grid; grid-template-rows: auto 1fr auto; width: 58cqw; height: 78cqw; margin-bottom: 4cqw; overflow: hidden; border-radius: .8cqw 2cqw 2cqw .8cqw; background: var(--recap-accent); color: #fff;
+.recap-book-wrap { position: relative; align-self: center; margin-bottom: 4cqw; }
+.recap-book { position: relative; display: grid; grid-template-rows: auto 1fr auto; width: 58cqw; height: 78cqw; overflow: hidden; border-radius: .8cqw 2cqw 2cqw .8cqw; background: var(--recap-accent); color: #fff;
   box-shadow: inset 2cqw 0 1.4cqw -1cqw #0006, 0 3cqw 6cqw -2cqw #0008; animation: recap-cover-open 1s cubic-bezier(.2, 1.1, .35, 1) var(--enter) both; transform-origin: 0 50%; }
 .recap-book-band { padding: 3cqw 4cqw; font-size: max(2.1cqw, 10.5px); font-weight: 800; letter-spacing: .18em; text-align: center; text-transform: uppercase; }
 .recap-book-face { display: grid; align-content: center; justify-items: center; gap: 2cqw; margin: 0 2.4cqw; padding: 3cqw; background: var(--slip); color: var(--slip-ink); text-align: center; }
@@ -133,8 +153,8 @@
 .recap-book-art i:nth-child(2) { left: 0; right: 0; bottom: 0; height: .6cqw; border-radius: 0; background: var(--slip-ink); transform-origin: left; animation: recap-cover-draw-x .7s calc(var(--enter) + 900ms) both; }
 .recap-book-art i:nth-child(3) { left: 3cqw; right: 3cqw; bottom: 2cqw; height: .4cqw; border-radius: 0; background: var(--slip-ink); opacity: .5; transform-origin: left; animation: recap-cover-draw-x .7s calc(var(--enter) + 1s) both; }
 .recap-book-author { font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
-.recap-book-badge { position: absolute; right: 1.5cqw; top: 40cqw; display: grid; place-items: center; width: 17cqw; height: 17cqw; padding: 1.6cqw; border-radius: 50%; background: var(--recap-pop); color: var(--recap-on-pop);
-  font-size: max(1.8cqw, 10.5px); font-weight: 900; letter-spacing: .04em; line-height: 1.1; text-align: center; text-transform: uppercase; rotate: 14deg; box-shadow: 0 1cqw 2cqw -1cqw #0008;
+.recap-book-badge { position: absolute; z-index: 1; right: -12cqw; top: -8cqw; display: grid; place-items: center; width: 21cqw; height: 21cqw; padding: 1cqw; border-radius: 50%; background: var(--recap-pop); color: var(--recap-on-pop);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: max(1.8cqw, 10.5px); font-weight: 900; letter-spacing: 0; line-height: 1.05; text-align: center; text-transform: uppercase; overflow-wrap: anywhere; rotate: 14deg; box-shadow: 0 1cqw 2cqw -1cqw #0008;
   animation: recap-badge-in .8s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 1.3s) both; }
 
 /* Tear-off calendar: three pages fly off to show where the period is. */
@@ -150,27 +170,41 @@
 /* Hidden at rest, so with motion switched off only the final page shows. */
 .recap-tearoff-page.is-flying { opacity: 0; border-bottom: .4cqw solid #0001; transform-origin: 50% 0; animation: recap-cover-flyoff .7s cubic-bezier(.5, 0, .7, .4) calc(var(--enter) + 500ms + var(--i) * 260ms) both; }
 
-/* Festival lineup: a setting sun, the month as the festival, and the teasers billed as acts. */
-.recap-cover.recap-cover-lineup { align-items: center; text-align: center; }
-.recap-cv-lineup-sun { position: absolute; z-index: -1; left: 50%; top: 2cqw; translate: -50% 0; width: 80cqw; height: 40cqw; overflow: hidden; }
-.recap-cv-lineup-sun i { position: absolute; left: 50%; bottom: -40cqw; translate: -50% 0; width: calc(80cqw - var(--r, 0cqw)); aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--recap-pop) 22%, transparent);
-  animation: recap-cover-rise-sun 1.2s cubic-bezier(.2, 1, .3, 1) var(--enter) both; }
-.recap-cv-lineup-sun i:nth-child(2) { --r: 20cqw; background: color-mix(in srgb, var(--recap-pop) 40%, transparent); animation-delay: calc(var(--enter) + 120ms); }
-.recap-cv-lineup-sun i:nth-child(3) { --r: 40cqw; background: var(--recap-pop); animation-delay: calc(var(--enter) + 240ms); }
-.recap-cv-lineup-kicker { margin-top: 10cqw; font-weight: 900; letter-spacing: .24em; text-transform: uppercase; animation: recap-fade .5s calc(var(--enter) + 300ms) both; }
-.recap-cv-lineup-name { display: flex; align-items: baseline; gap: 1.4cqw; margin-top: 1cqw; font-size: min(14cqw, calc(80cqw / var(--n))); font-weight: 900; letter-spacing: -.05em; line-height: .9; text-transform: uppercase;
-  animation: recap-mast-drop .8s cubic-bezier(.3, 1.4, .5, 1) calc(var(--enter) + 400ms) both; }
-.recap-cv-lineup-name span { font-family: Georgia, serif; font-size: .6em; font-style: italic; font-weight: 700; letter-spacing: -.02em; text-transform: none; color: var(--recap-pop); }
-.recap-cv-lineup-dates { margin-top: 1.6cqw; font-size: max(2.2cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.recap-cv-lineup-acts { display: grid; gap: 1.4cqw; margin: 4cqw 0 3cqw; padding: 3cqw 0; border-block: .4cqw solid currentColor; width: 100%; }
-.recap-cv-lineup-acts li { font-size: calc(5cqw - var(--i) * .7cqw); font-weight: 900; letter-spacing: -.02em; line-height: 1.1; text-transform: uppercase; animation: recap-rise .5s cubic-bezier(.2, 1.2, .4, 1) calc(var(--enter) + 800ms + var(--i) * 140ms) both; }
-.recap-cv-lineup-acts li + li::before { content: '✦'; display: block; margin-bottom: 1.4cqw; font-size: 2.4cqw; color: var(--recap-pop); }
-.recap-cv-lineup-foot { font-size: max(2cqw, 10.5px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
-.recap-cover-lineup .recap-cover-headline { margin-top: 3cqw; }
+/* Festival lineup: a poster with its own sunset palette (it doesn't take the run's theme, which muddied it).
+   A striped retro sun sinks behind the hills under the month in big type; below the horizon the run's
+   chapters are billed in tiers like a real lineup: the headliner, two co-headliners, then the small print. */
+.recap-cover.recap-cover-lineup { justify-content: center; }
+.recap-cv-lineup-poster { position: relative; overflow: hidden; border-radius: 3cqw; background: #150c2b; color: #fff4e6; text-align: center; box-shadow: 0 4cqw 8cqw -3cqw #0009;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; animation: recap-cover-drop .9s cubic-bezier(.2, 1.15, .35, 1) var(--enter) both; }
+.recap-cv-lineup-sky { position: relative; height: 52cqw; overflow: hidden; background: linear-gradient(180deg, #170d38 0%, #3d1659 38%, #9a2a6a 66%, #ff6b6b 86%, #ffb35c 100%); }
+.recap-cv-lineup-sky > b { position: absolute; left: var(--x); top: var(--y); width: .7cqw; height: .7cqw; border-radius: 50%; background: #fff; opacity: .8; animation: recap-fade .6s calc(var(--enter) + var(--t)) both; }
+.recap-cv-lineup-sun { position: absolute; left: 50%; bottom: -12cqw; width: 46cqw; height: 46cqw; margin-left: -23cqw; border-radius: 50%; background: linear-gradient(180deg, #ffe37a 0%, #ffb35c 45%, #ff5f8f 100%);
+  box-shadow: 0 0 10cqw #ff8f6b88;
+  -webkit-mask: linear-gradient(180deg, #000 0 48%, transparent 48% 52%, #000 52% 59%, transparent 59% 64%, #000 64% 70%, transparent 70% 76%, #000 76% 82%, transparent 82% 89%, #000 89%);
+  mask: linear-gradient(180deg, #000 0 48%, transparent 48% 52%, #000 52% 59%, transparent 59% 64%, #000 64% 70%, transparent 70% 76%, #000 76% 82%, transparent 82% 89%, #000 89%);
+  animation: recap-cover-rise-sun 1.4s cubic-bezier(.2, 1, .3, 1) calc(var(--enter) + 200ms) both; }
+.recap-cv-lineup-hills { position: absolute; left: -10%; right: -10%; bottom: -1px; height: 13cqw;
+  background: radial-gradient(ellipse 40% 100% at 22% 100%, #150c2b 98%, transparent 100%), radial-gradient(ellipse 46% 80% at 78% 100%, #150c2b 98%, transparent 100%), radial-gradient(ellipse 30% 55% at 50% 100%, #2a1540 98%, transparent 100%); }
+.recap-cv-lineup-head { position: absolute; inset: 0 0 auto; z-index: 1; display: grid; justify-items: center; gap: 1.4cqw; padding: 5cqw 4cqw 0; }
+.recap-cv-lineup-kicker { font-size: max(2.1cqw, 10.5px); font-weight: 800; letter-spacing: .3em; text-transform: uppercase; opacity: .9; animation: recap-fade .5s calc(var(--enter) + 300ms) both; }
+.recap-cv-lineup-name { font-size: min(15cqw, calc(84cqw / var(--n))); font-weight: 900; letter-spacing: -.035em; line-height: .88; text-transform: uppercase; color: #fff;
+  text-shadow: 0 .7cqw 0 #ff5f8f, 0 1.4cqw 0 #6b1f63; animation: recap-mast-drop .8s cubic-bezier(.3, 1.4, .5, 1) calc(var(--enter) + 400ms) both; }
+.recap-cv-lineup-fest { margin-top: 1.4cqw; padding: .8cqw 3cqw; border-radius: 99px; background: #ffe37a; color: #3b1240; font-size: max(2.4cqw, 10.5px); font-weight: 900; letter-spacing: .22em; text-transform: uppercase;
+  animation: recap-badge-in .8s cubic-bezier(.2, 1.3, .35, 1) calc(var(--enter) + 800ms) both; }
+.recap-cv-lineup-bill { display: grid; justify-items: center; gap: 2.2cqw; padding: 3cqw 5cqw 4.4cqw; }
+.recap-cv-lineup-dates { font-size: max(2.1cqw, 10.5px); font-weight: 800; letter-spacing: .2em; text-transform: uppercase; color: #ffb35c; }
+.recap-cv-lineup-bill p { max-width: 100%; font-weight: 900; letter-spacing: -.01em; line-height: 1.12; text-transform: uppercase; text-wrap: balance; animation: recap-rise .5s cubic-bezier(.2, 1.2, .4, 1) calc(var(--enter) + 900ms + var(--i) * 160ms) both; }
+.recap-cv-lineup-bill p.is-head { font-size: 5.4cqw; color: #ffe37a; }
+.recap-cv-lineup-bill p.is-mid { margin-top: -.8cqw; font-size: 3.4cqw; }
+.recap-cv-lineup-bill p.is-mid.is-1 { color: #ffb3c7; }
+.recap-cv-lineup-bill p.is-low { font-size: max(2.4cqw, 10.5px); font-weight: 800; letter-spacing: .06em; opacity: .75; }
+.recap-cv-lineup-foot { margin-top: .6cqw; padding-top: 2.4cqw; border-top: .3cqw solid #fff4e633; width: 100%; font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .16em; text-transform: uppercase; opacity: .7; }
+.recap-story .recap-cover-lineup .recap-cover-headline { margin-top: 4cqw; font-size: 7.4cqw; }
 
 /* Comic book: halftone dots, a price box, POW, a speech bubble and a seal. */
 .recap-comic { position: relative; height: 80cqw; margin-bottom: 4cqw; overflow: hidden; border: 1.2cqw solid #111; border-radius: 1cqw; color: #111;
-  background: radial-gradient(circle, #0002 .5cqw, transparent .6cqw) 0 0 / 2.6cqw 2.6cqw, linear-gradient(160deg, #ffe14d, #ff8a3d); box-shadow: 1.6cqw 1.6cqw 0 #111; animation: recap-cover-slam .7s cubic-bezier(.2, 1.4, .4, 1) var(--enter) both; }
+  /* Halftone dots over speed lines bursting from behind the title. */
+  background: radial-gradient(circle, #0002 .5cqw, transparent .6cqw) 0 0 / 2.6cqw 2.6cqw, repeating-conic-gradient(from 0deg at 50% 32%, #fff5 0 4deg, transparent 4deg 11deg), linear-gradient(160deg, #ffe14d, #ff8a3d); box-shadow: 1.6cqw 1.6cqw 0 #111; animation: recap-cover-slam .7s cubic-bezier(.2, 1.4, .4, 1) var(--enter) both; }
 .recap-comic-corner { position: absolute; left: 0; top: 0; display: grid; justify-items: center; padding: 1.4cqw 2.4cqw; border: 0 solid #111; border-width: 0 .8cqw .8cqw 0; background: #fff; }
 .recap-comic-corner b { font-size: 6cqw; font-weight: 900; line-height: 1; }
 .recap-comic-corner small { font-weight: 900; }
@@ -205,7 +239,7 @@
 /* Hand-held parallax, as on the house covers. */
 .recap-ticket, .recap-cv-passport, .recap-photostrip, .recap-cv-cart, .recap-postcard, .recap-cereal, .recap-book, .recap-tearoff, .recap-comic {
   transform: translate3d(calc(var(--px, 0) * -2cqw), calc(var(--py, 0) * -1.5cqw), 0); transition: transform .3s ease-out; }
-.recap-cv-lineup-sun { transform: translate3d(calc(var(--px, 0) * 5cqw), calc(var(--py, 0) * 3cqw), 0); transition: transform .3s ease-out; }
+.recap-cv-lineup-poster { transform: translate3d(calc(var(--px, 0) * -2cqw), calc(var(--py, 0) * -1.5cqw), 0); transition: transform .3s ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  .recap-ticket, .recap-cv-passport, .recap-photostrip, .recap-cv-cart, .recap-postcard, .recap-cereal, .recap-book, .recap-tearoff, .recap-comic, .recap-cv-lineup-sun { transform: none; }
+  .recap-ticket, .recap-cv-passport, .recap-photostrip, .recap-cv-cart, .recap-postcard, .recap-cereal, .recap-book, .recap-tearoff, .recap-comic, .recap-cv-lineup-poster { transform: none; }
 }

@@ -76,7 +76,8 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
           <span className="recap-cv-cart-brand">✳ Fainens</span>
           <strong style={sized(story.monthWord)}>{story.monthWord}</strong>
           <span className="recap-cv-cart-sub">{second} · {cover.chapterCount} levels</span>
-          {[0, 1, 2, 3, 4].map(i => <i key={i} className="recap-cv-cart-pixel" style={vars({ '--i': i })} />)}
+          {[[8, 14], [22, 30], [37, 10], [62, 22], [78, 12], [90, 34], [50, 6]].map(([x, y], i) => <i key={i} className="recap-cv-cart-pixel" style={vars({ '--i': i, '--x': `${x}%`, '--y': `${y}%` })} />)}
+          <i className="recap-cv-cart-sun" /><i className="recap-cv-cart-hills" />
         </div>
         <span className="recap-cv-cart-seal">Official receipts</span>
       </div>
@@ -86,18 +87,19 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
     </div>;
     case 'postcard': return <div className="recap-cover recap-cover-postcard">
       {headline}
+      {/* A classic "Greetings from" card: giant block letters filled with the view, over a seaside sunset. */}
       <div className="recap-postcard">
         <div className="recap-postcard-front" aria-hidden="true">
+          <i className="recap-postcard-sun" /><i className="recap-postcard-sea" />
           <small>Greetings from</small>
           <strong style={sized(story.monthWord)}>{letters(story.monthWord)}</strong>
           <span>{second}</span>
         </div>
+        <span className="recap-postcard-stamp" aria-hidden="true"><b>✳</b><small>Rp0</small></span>
+        <span className="recap-postcard-postmark" aria-hidden="true"><small>{cover.startLabel}</small><small>{cover.endLabel}</small></span>
         <div className="recap-postcard-back">
-          <span className="recap-postcard-stamp" aria-hidden="true"><b>✳</b><small>Rp0</small></span>
-          <span className="recap-postcard-postmark" aria-hidden="true"><small>{cover.startLabel}</small><small>{cover.endLabel}</small></span>
           <p className="recap-postcard-note">Wish you were here.</p>
-          <p className="recap-postcard-line">To: {cover.passenger}</p>
-          <p className="recap-postcard-line">{cover.purchaseCount} receipts inside</p>
+          <p className="recap-postcard-line">To {cover.passenger} · {cover.purchaseCount} receipts inside</p>
         </div>
       </div>
       {body}
@@ -107,9 +109,10 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
         <div className="recap-cereal">
           <span className="recap-cereal-brand">✳ Fainens</span>
           <strong className="recap-cereal-name" style={sized(story.monthWord)}>{story.monthWord}<em>Crunch</em></strong>
-          <span className="recap-cereal-burst">Now with {cover.purchaseCount} receipts!</span>
+          {/* The figures live on the side panel; the front of the box only sells. */}
+          <span className="recap-cereal-burst">100% real receipts!</span>
           <span className="recap-cereal-bowl">{[0, 1, 2, 3, 4, 5].map(i => <i key={i} style={vars({ '--i': i })} />)}</span>
-          <span className="recap-cereal-net">Net wt. {cover.chapterCount} chapters</span>
+          <span className="recap-cereal-net">Net wt. 1 period</span>
         </div>
         <div className="recap-cereal-facts">
           <b>Ledger facts</b>
@@ -123,7 +126,10 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
       {headline}{body}
     </div>;
     case 'novel': return <div className="recap-cover recap-cover-novel">
-      <div className="recap-book" aria-hidden="true">
+      {/* The sticker sits on the book's corner, outside its cover art. */}
+      <div className="recap-book-wrap" aria-hidden="true">
+      <span className="recap-book-badge">{story.isPartial ? 'In progress' : 'Complete edition'}</span>
+      <div className="recap-book">
         <span className="recap-book-band">✳ Fainens Classics</span>
         <div className="recap-book-face">
           <small>A novel in {cover.chapterCount} chapters</small>
@@ -132,7 +138,7 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
           <span className="recap-book-author">{cover.passenger}</span>
         </div>
         <span className="recap-book-band is-foot">{second} · {cover.purchaseCount} receipts</span>
-        <span className="recap-book-badge">{story.isPartial ? 'In progress' : 'Complete edition'}</span>
+      </div>
       </div>
       {headline}{body}
     </div>;
@@ -143,22 +149,41 @@ export function MoreCover({ form, story, headline, second, run }: { form: MoreCo
           <span className="recap-tearoff-rings"><i /><i /></span>
           <span className="recap-tearoff-head">{story.monthWord} {second}</span>
           <div className="recap-tearoff-pages">
-            <span className="recap-tearoff-page is-final"><b>{day}</b><small>{story.isPartial ? `Day ${day} of ${story.totalDays}` : `${day} days, all torn`}</small></span>
+            <span className="recap-tearoff-page is-final"><b>{day}</b><small>{story.isPartial ? `of ${story.totalDays} days` : 'days, all torn off'}</small></span>
             {[3, 2, 1].map((page, i) => <span key={page} className="recap-tearoff-page is-flying" style={vars({ '--i': 2 - i })}><b>{page}</b><small>{cover.startLabel}</small></span>)}
           </div>
         </div>
         {headline}{body}
       </div>;
     }
-    case 'lineup': return <div className="recap-cover recap-cover-lineup">
-      <span className="recap-cv-lineup-sun" aria-hidden="true"><i /><i /><i /></span>
-      <small className="recap-cv-lineup-kicker">✳ Fainens presents</small>
-      <strong className="recap-cv-lineup-name" style={sized(`${story.monthWord}Fest`)}>{story.monthWord}<span>Fest</span></strong>
-      <span className="recap-cv-lineup-dates">{cover.startLabel} — {cover.endLabel} · {second}</span>
-      <ul className="recap-cv-lineup-acts">{facts.slice(0, 4).map((line, i) => <li key={line} style={vars({ '--i': i })}>{line}</li>)}</ul>
-      <span className="recap-cv-lineup-foot">{cover.chapterCount} stages · {cover.purchaseCount} receipts · {story.isPartial ? 'Live now' : 'Sold out'}</span>
-      {headline}{body}
-    </div>;
+    case 'lineup': {
+      // Billed in tiers, as a festival lineup is: the headliner, two co-headliners side by side, the small print.
+      const [lead, ...rest] = facts.slice(0, 4);
+      const middle = rest.slice(0, 2);
+      const small = rest[2];
+      return <div className="recap-cover recap-cover-lineup">
+        <div className="recap-cv-lineup-poster">
+          <div className="recap-cv-lineup-sky" aria-hidden="true">
+            {[[8, 10], [22, 24], [36, 8], [64, 14], [80, 26], [90, 9], [14, 40], [86, 44]].map(([x, y], i) => <b key={i} style={vars({ '--x': `${x}%`, '--y': `${y}%`, '--t': `${i * 90}ms` })} />)}
+            <i className="recap-cv-lineup-sun" />
+            <i className="recap-cv-lineup-hills" />
+          </div>
+          <div className="recap-cv-lineup-head">
+            <small className="recap-cv-lineup-kicker">✳ Fainens presents</small>
+            <strong className="recap-cv-lineup-name" style={sized(story.monthWord)}>{story.monthWord}</strong>
+            <span className="recap-cv-lineup-fest">Fest · {second}</span>
+          </div>
+          <div className="recap-cv-lineup-bill">
+            <span className="recap-cv-lineup-dates">{cover.startLabel} — {cover.endLabel}</span>
+            {lead && <p className="is-head" style={vars({ '--i': 0 })}>{lead}</p>}
+            {middle.map((line, i) => <p key={line} className={`is-mid is-${i}`} style={vars({ '--i': 1 + i })}>{line}</p>)}
+            {small && <p className="is-low" style={vars({ '--i': 3 })}>{small}</p>}
+            <span className="recap-cv-lineup-foot">{cover.chapterCount} stages · {cover.purchaseCount} receipts · {story.isPartial ? 'Live now' : 'Sold out'}</span>
+          </div>
+        </div>
+        {headline}{body}
+      </div>;
+    }
     case 'comic': return <div className="recap-cover recap-cover-comic">
       <div className="recap-comic" aria-hidden="true">
         <span className="recap-comic-corner"><small>No.</small><b>{cover.issue}</b><small>Rp0</small></span>

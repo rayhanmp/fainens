@@ -373,7 +373,8 @@ function BudgetVisual({ story, periodId, gauge }: { story: Of<'budget'>; periodI
         {story.elapsedShare !== null && <b style={{ left: `${story.elapsedShare}%` }} className={story.elapsedShare > 85 ? 'is-end' : story.elapsedShare < 15 ? 'is-start' : undefined}><span>Today</span></b>}
       </div>
     </>}
-    {story.elapsedShare !== null && used !== null && <p className="recap-fact recap-seq" style={seq(5)}>{used}% of the plan used, {story.elapsedShare}% of the period gone.</p>}
+    {/* The share used is the big figure above; the line adds where Today sits, which the marker only shows. */}
+    {story.elapsedShare !== null && used !== null && <p className="recap-fact recap-seq" style={seq(5)}>Today marks {story.elapsedShare}% of the period gone.</p>}
     <dl className="recap-pair recap-seq" style={seq(6)}>
       <div><dt>Planned</dt><dd><Money value={story.planned} /></dd></div>
       <div><dt>{over ? 'Over plan' : 'Still unspent'}</dt><dd><Money value={Math.abs(story.remaining)} /></dd></div>

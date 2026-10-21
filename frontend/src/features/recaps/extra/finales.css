@@ -97,9 +97,11 @@
 .recap-trophy-plaque small { font-size: max(1.9cqw, 10.5px); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
 .recap-trophy-plaque b { font-family: Georgia, serif; font-size: 4.4cqw; font-style: italic; }
 .recap-trophy-podium { display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; gap: 1.4cqw; width: 100%; }
-.recap-trophy-podium-step { display: grid; justify-items: center; align-content: start; gap: .6cqw; padding: 2cqw 1.4cqw; border-radius: 2cqw 2cqw 0 0; background: var(--recap-ink); color: var(--recap-paper); text-align: center; transform-origin: bottom;
+.recap-trophy-podium-step { position: relative; display: grid; justify-items: center; align-content: start; gap: .6cqw; padding: 2cqw 1.4cqw; border-radius: 2cqw 2cqw 0 0; background: var(--recap-ink); color: var(--recap-paper); text-align: center; transform-origin: bottom;
   animation: recap-draw-y .7s cubic-bezier(.3, 1.3, .5, 1) calc(var(--enter) + 200ms + var(--i) * 150ms) both; }
-.recap-trophy-podium-step small { order: -1; max-width: 100%; overflow: hidden; font-size: max(2cqw, 10.5px); font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+/* Each category's name stands on top of its step, as winners do, so a short step never hides it. */
+.recap-trophy-podium-step small { position: absolute; left: 0; right: 0; bottom: calc(100% + 1cqw); overflow: hidden; color: var(--recap-ink); font-size: max(2.2cqw, 10.5px); font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.recap-trophy-podium { margin-top: 5cqw; }
 .recap-trophy-podium-step b { font-size: 8cqw; font-weight: 900; line-height: 1; }
 .recap-trophy-podium-step span { font-size: max(2.4cqw, 10.5px); font-weight: 800; opacity: .8; }
 .recap-trophy-podium-step.is-first { height: 30cqw; background: var(--recap-pop); color: var(--recap-on-pop); }
@@ -113,11 +115,14 @@
 .recap-museum-light { position: absolute; z-index: -1; left: 50%; top: -14cqw; width: 90cqw; height: 110cqw; translate: -50% 0; background: radial-gradient(ellipse at 50% 0, #fff6, transparent 65%); clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%);
   animation: recap-fade 1s calc(var(--enter) + 200ms) both, recap-museum-flicker .2s steps(2) calc(var(--enter) + 200ms) 3; }
 .recap-museum-frame { margin: 0; padding: 4cqw; border-radius: .6cqw; background: linear-gradient(135deg, #8a5a1f, #e3b76a 40%, #9c6a26); box-shadow: inset 0 0 0 1cqw #5c3a12, 0 4cqw 6cqw -2cqw #0008; animation: recap-sleeve-in .9s cubic-bezier(.2, 1.1, .35, 1) calc(var(--enter) + 300ms) both; }
-.recap-museum-canvas { position: relative; display: flex; flex-wrap: wrap; width: 62cqw; height: 62cqw; overflow: hidden; gap: 1cqw; padding: 1cqw; background: #f4efe2; }
-.recap-museum-canvas > span { flex: var(--share) 1 22cqw; min-height: 18cqw; background: var(--recap-pop); animation: recap-fade .6s calc(var(--enter) + 1s + var(--i) * 250ms) both; }
-.recap-museum-canvas > span.is-1 { background: var(--recap-accent); }
-.recap-museum-canvas > span.is-2 { background: #1d211c; }
-.recap-museum-canvas > b { position: absolute; right: 4cqw; bottom: 3cqw; color: #f4efe2; font-size: 10cqw; mix-blend-mode: difference; }
+/* The painting keeps a gallery palette of its own (red, blue, yellow on black lines), whatever the run's theme. */
+.recap-museum-canvas { position: relative; display: grid; width: 62cqw; height: 62cqw; overflow: hidden; gap: 1.4cqw; padding: 1.4cqw; background: #1d211c; }
+.recap-museum-canvas > span { position: relative; overflow: hidden; background: #d62828; animation: recap-fade .6s calc(var(--enter) + 1s + var(--i) * 250ms) both; }
+.recap-museum-canvas > span.is-1 { background: #1f4fd8; }
+.recap-museum-canvas > span.is-2 { background: #f6c90e; }
+/* A white block cut into the big panel, the way the style likes. */
+.recap-museum-canvas > span.is-0::after { content: ''; position: absolute; left: 0; bottom: 0; width: 44%; height: 30%; border: 1.4cqw solid #1d211c; border-width: 1.4cqw 1.4cqw 0 0; background: #f4efe2; }
+.recap-museum-canvas > b { position: absolute; right: 3.4cqw; bottom: 2.6cqw; color: #f4efe2; font-size: 8cqw; line-height: 1; text-shadow: 0 0 2cqw #0006; }
 .recap-museum-label { width: 62cqw; padding: 3cqw 3.4cqw; background: #fbfaf5; color: #1d211c; box-shadow: 0 1cqw 2cqw #0003; animation: recap-rise .6s calc(var(--enter) + 1.6s) both; }
 .recap-museum-label b { display: block; font-family: Georgia, serif; font-size: 4.4cqw; font-style: italic; }
 .recap-museum-label small { display: block; margin-top: .6cqw; font-size: max(2cqw, 10.5px); font-weight: 700; opacity: .75; }
@@ -143,7 +148,7 @@
 .recap-weather-outlook { display: grid; gap: 2cqw; padding: 3cqw; border-radius: 3cqw; background: var(--recap-soft); }
 .recap-weather-outlook li { display: grid; grid-template-columns: 30cqw minmax(0, 1fr) auto; align-items: center; gap: 2.4cqw; font-size: max(2.6cqw, 10.5px); font-weight: 750; }
 .recap-weather-outlook small { overflow: hidden; font-size: inherit; text-overflow: ellipsis; white-space: nowrap; }
-.recap-weather-outlook i { height: 2.2cqw; border-radius: 2cqw; background: linear-gradient(90deg, #4aa3ff, #ffc83d calc(100% - var(--share) * 1%)); transform-origin: left; scale: calc(.15 + var(--share) / 100 * .85) 1;
+.recap-weather-outlook i { height: 2.2cqw; border-radius: 2cqw; background: linear-gradient(90deg, #4aa3ff, #ffc83d); transform-origin: left; scale: calc(.08 + var(--rel) * .92) 1;
   animation: recap-weather-bar .8s cubic-bezier(.2, 1.1, .4, 1) calc(var(--enter) + 700ms + var(--i) * 150ms) both; }
 .recap-weather-foot { display: flex; justify-content: space-between; gap: 3cqw; font-size: max(2.2cqw, 10.5px); font-weight: 700; opacity: .8; }
 .recap-weather-net { font-size: 4cqw; font-weight: 800; animation: recap-fade .6s calc(var(--enter) + 1.4s) both; }
