@@ -227,6 +227,21 @@ describe("goals", () => {
     expect((await app.inject({ method: "GET", url: `/api/goals/${trip.id}` })).json().categoryName).toBe("Travel");
   });
 
+  it("pays a category expense from what the goal held on its day, dated on the expense", async () => {
+    state.db.insert(schema.categories).values({ id: 5, name: "Travel" }).run();
+    const trip = (await post("/api/goals", { name: "Trip", targetAmount: 10_000_000, setAside: 1_000_000 })).json();
+    await patch(`/api/goals/${trip.id}`, { categoryId: 5 });
+    const expenseDay = new Date(Date.now() + 3_600_000);
+    state.db.insert(schema.transactions).values({ id: 5, date: expenseDay, description: "Flight", status: "posted" }).run();
+    state.db.insert(schema.transactionCategoryAllocations).values({ transactionId: 5, categoryId: 5, amount: 1_500_000 }).run();
+    // Money put in after the expense can't have paid for it.
+    state.db.insert(schema.goalAllocations).values({ goalId: trip.id, amount: 2_000_000, kind: "assign", createdAt: new Date(expenseDay.getTime() + 3_600_000) }).run();
+    expect((await get()).goals[0].setAside).toBe(2_000_000);
+    const [paid] = state.db.select().from(schema.goalAllocations).where(eq(schema.goalAllocations.kind, "category")).all();
+    expect(paid).toMatchObject({ amount: -1_000_000, transactionId: 5, note: "Flight (more than the goal had)" });
+    expect(paid.createdAt.getTime()).toBe(expenseDay.getTime());
+  });
+
   it("keeps a goal's type and that type's figures, and a part's due date", async () => {
     const house = (await post("/api/goals", { name: "House", targetAmount: 170_000_000, goalType: "house", typeData: { price: 850_000_000, dpShare: 20 } })).json();
     expect(house).toMatchObject({ goalType: "house", typeData: { price: 850_000_000, dpShare: 20 } });

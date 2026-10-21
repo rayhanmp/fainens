@@ -182,9 +182,11 @@ export async function latestSalary(_dbLike: any = defaultDb): Promise<number | n
 
 /**
  * Pays a goal's expenses in its chosen category out of it: each posted expense in that category
- * from `category_since` on gets one `category` entry taking up to what the goal holds. Entries
- * whose expense was reversed, removed or no longer counts are dropped, so the money comes back.
- * Matched on read because some ways of posting (CSV import, batch drafts) skip the shared hooks.
+ * from `category_since` on gets one `category` entry, dated on the expense, taking up to what the
+ * goal held on that day (oldest expense first), so money put in later doesn't pay for it and the
+ * monthly report counts it in the right period. Entries whose expense was reversed, removed or no
+ * longer counts are dropped, so the money comes back. Matched on read, by everything that reads a
+ * goal's balance, because some ways of posting (CSV import, batch drafts) skip the shared hooks.
  */
 export async function syncCategorySpending(dbLike: any = defaultDb) {
   const goals = await dbLike.select().from(savingsGoals).where(eq(savingsGoals.status, "active"));
@@ -194,31 +196,39 @@ export async function syncCategorySpending(dbLike: any = defaultDb) {
     .where(eq(goalAllocations.kind, "category"));
   const active = new Map<number, typeof savingsGoals.$inferSelect>(goals.map((goal: typeof savingsGoals.$inferSelect) => [goal.id, goal]));
   const keep = new Set<string>();
-  const wanted: Array<{ goalId: number; transactionId: number; amount: number; description: string }> = [];
+  const wanted: Array<{ goalId: number; transactionId: number; amount: number; description: string; date: Date }> = [];
   for (const goal of goals as Array<typeof savingsGoals.$inferSelect>) {
     if (goal.categoryId == null || goal.categorySince == null) continue;
     const rows = await dbLike
-      .select({ transactionId: transactionCategoryAllocations.transactionId, amount: transactionCategoryAllocations.amount, description: transactions.description })
+      .select({ transactionId: transactionCategoryAllocations.transactionId, amount: transactionCategoryAllocations.amount, description: transactions.description, date: transactions.date })
       .from(transactionCategoryAllocations)
       .innerJoin(transactions, eq(transactionCategoryAllocations.transactionId, transactions.id))
       .where(and(eq(transactionCategoryAllocations.categoryId, goal.categoryId), eq(transactions.status, "posted"), gte(transactions.date, goal.categorySince), sql`${transactionCategoryAllocations.amount} > 0`));
     for (const row of rows) {
       keep.add(`${goal.id}:${row.transactionId}`);
-      wanted.push({ goalId: goal.id, transactionId: row.transactionId, amount: row.amount, description: row.description });
+      wanted.push({ goalId: goal.id, transactionId: row.transactionId, amount: row.amount, description: row.description, date: row.date });
     }
   }
   // Drop entries that no longer count; only for active goals, so a finished goal's history stays.
   const stale = existing.filter((row: { id: number; goalId: number; transactionId: number | null }) => active.has(row.goalId) && (row.transactionId == null || !keep.has(`${row.goalId}:${row.transactionId}`)));
   if (stale.length) await dbLike.delete(goalAllocations).where(inArray(goalAllocations.id, stale.map((row: { id: number }) => row.id)));
   const done = new Set(existing.filter((row: { transactionId: number | null }) => row.transactionId != null).map((row: { goalId: number; transactionId: number }) => `${row.goalId}:${row.transactionId}`));
-  const fresh = wanted.filter((row) => !done.has(`${row.goalId}:${row.transactionId}`));
+  const fresh = wanted
+    .filter((row) => !done.has(`${row.goalId}:${row.transactionId}`))
+    .sort((a, b) => a.date.getTime() - b.date.getTime() || a.transactionId - b.transactionId);
   if (!fresh.length) return;
-  const held = await setAsideByGoal(dbLike);
+  // Every entry of the goals involved, to know what each held on an expense's day.
+  const ledger = (await dbLike
+    .select({ goalId: goalAllocations.goalId, amount: goalAllocations.amount, createdAt: goalAllocations.createdAt })
+    .from(goalAllocations)
+    .where(inArray(goalAllocations.goalId, [...new Set(fresh.map((row) => row.goalId))]))) as Array<{ goalId: number; amount: number; createdAt: Date }>;
   for (const row of fresh) {
-    const holds = held.get(row.goalId) ?? 0;
+    const holds = ledger
+      .filter((entry) => entry.goalId === row.goalId && entry.createdAt.getTime() <= row.date.getTime())
+      .reduce((sum, entry) => sum + entry.amount, 0);
     const taken = Math.max(0, Math.min(row.amount, holds));
-    await dbLike.insert(goalAllocations).values({ goalId: row.goalId, amount: -taken, kind: "category", transactionId: row.transactionId, note: taken < row.amount ? `${row.description} (more than the goal had)` : row.description });
-    held.set(row.goalId, holds - taken);
+    await dbLike.insert(goalAllocations).values({ goalId: row.goalId, amount: -taken, kind: "category", transactionId: row.transactionId, note: taken < row.amount ? `${row.description} (more than the goal had)` : row.description, createdAt: row.date });
+    ledger.push({ goalId: row.goalId, amount: -taken, createdAt: row.date });
   }
 }
 
@@ -228,7 +238,8 @@ export async function syncCategorySpending(dbLike: any = defaultDb) {
  * Goals with nothing in them and nothing happening are left out.
  */
 export async function goalsForPeriod(startMs: number, endMs: number, dbLike: any = defaultDb) {
-  const goals = await dbLike.select().from(savingsGoals).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id));
+  await syncCategorySpending(dbLike);
+  const goals =await dbLike.select().from(savingsGoals).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id));
   const entries = await dbLike
     .select({ goalId: goalAllocations.goalId, amount: goalAllocations.amount, kind: goalAllocations.kind, createdAt: goalAllocations.createdAt })
     .from(goalAllocations);
@@ -319,6 +330,7 @@ export async function allocate(goalId: number, amount: number, note: string | nu
  */
 export async function spendFromGoal(goalId: number, input: { amount: number; transactionId: number | null; partId: number | null; note: string | null }, dbLike: any = defaultDb) {
   if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new GoalError("Enter an amount");
+  await syncCategorySpending(dbLike);
   const [goal] = await dbLike.select().from(savingsGoals).where(eq(savingsGoals.id, goalId)).limit(1);
   if (!goal) throw new GoalError("Goal not found", 404);
   if (goal.status !== "active") throw new GoalError("Only an active goal can pay for something", 409);
@@ -340,7 +352,8 @@ export async function spendFromGoal(goalId: number, input: { amount: number; tra
  * goal isn't finished: it starts again for the same date next year, its parts unticked.
  */
 export async function completeGoal(goalId: number, transactionId: number | null, dbLike: any = defaultDb) {
-  const [goal] = await dbLike.select().from(savingsGoals).where(eq(savingsGoals.id, goalId)).limit(1);
+  await syncCategorySpending(dbLike);
+  const [goal] =await dbLike.select().from(savingsGoals).where(eq(savingsGoals.id, goalId)).limit(1);
   if (!goal) throw new GoalError("Goal not found", 404);
   if (goal.status === "done") throw new GoalError("This goal is already done", 409);
   const holds = (await setAsideByGoal(dbLike)).get(goalId) ?? 0;

@@ -2,7 +2,7 @@ import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { db as defaultDb } from "../db/client";
 import { accounts, goalAllocations, goalParts, savingsGoals, transactionLines, transactions } from "../db/schema";
-import { setAsideByGoal } from "./goals";
+import { setAsideByGoal, syncCategorySpending } from "./goals";
 import { daysBetween, startOfDay, tripReminders, type TripReminder } from "./goal-trips";
 
 /**
@@ -39,6 +39,8 @@ export function partReminders(goal: { id: number; name: string; holds: number },
 }
 
 export async function goalReminders(now = Date.now(), dbLike: any = defaultDb): Promise<GoalReminder[]> {
+  // "Pays for" expenses come out first, so what a goal holds here matches the Goals page.
+  await syncCategorySpending(dbLike);
   const out: GoalReminder[] = (await tripReminders(now, dbLike)).map((item) => ({ ...item, amount: null, short: false }));
   const goals = (await dbLike.select().from(savingsGoals).where(eq(savingsGoals.status, "active"))) as Array<typeof savingsGoals.$inferSelect>;
   if (!goals.length) return out;
