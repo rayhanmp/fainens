@@ -167,3 +167,17 @@ test('goals remind you of this month’s amounts, goals that won’t make their 
   // Nothing free, nothing to remind about putting in.
   assert.equal(buildAttentionItems(input({ goals: { ...reminders, free: 0 } }), format).some((item) => item.id.startsWith('goals-due')), false);
 });
+
+test('dated checklist items in goals’ notes are reminded of when due within three days or late', () => {
+  const day = (offset) => new Date(new Date(NOW).setHours(12, 0, 0, 0) + offset * DAY_MS).getTime();
+  const goals = { due: 0, free: 0, late: [], shortAccounts: [], tasks: [
+    { goalId: 1, goalName: 'Japan', text: 'Apply for the visa', dueAt: day(-1) },
+    { goalId: 1, goalName: 'Japan', text: 'Book the hotel', dueAt: day(1) },
+    { goalId: 2, goalName: 'Laptop', text: 'Compare prices', dueAt: day(10) },
+  ] };
+  const items = buildAttentionItems(input({ goals }), format).filter((item) => item.id.startsWith('goal-task'));
+  assert.deepEqual(items.map((item) => [item.tone, item.title]), [
+    ['warning', 'Apply for the visa: was due'],
+    ['info', 'Book the hotel: due tomorrow'],
+  ]);
+});

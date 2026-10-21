@@ -7399,6 +7399,7 @@ export type UploadGoalAttachmentBody = {
   contentType: UploadGoalAttachmentBodyContentType;
   /** @minLength 1 */
   data: string;
+  fromNotes?: boolean;
 };
 
 export type UploadGoalAttachment201 = {
@@ -7516,6 +7517,247 @@ export type PreviewGoalLink200 = {
 };
 
 export type PreviewGoalLink400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SearchGoalNotesParams = {
+/**
+ * @maxLength 100
+ */
+q: string;
+};
+
+export type SearchGoalNotes200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  goalName: string;
+  /** @nullable */
+  goalIcon: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  pageId: number;
+  pageTitle: string;
+  snippet: string;
+};
+
+export type ListGoalDueTasks200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  goalName: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  pageId: number;
+  text: string;
+  dueAt: number;
+};
+
+export type ListGoalPages200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  title: string;
+  content: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  updatedAt: number;
+};
+
+export type AddGoalPageBody = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  title: string;
+  /** @maxLength 100000 */
+  content?: string;
+};
+
+export type AddGoalPage201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  title: string;
+  content: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  updatedAt: number;
+};
+
+export type AddGoalPage404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ReorderGoalPagesBody = {
+  /** @maxItems 100 */
+  ids: number[];
+};
+
+export type ReorderGoalPages200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  title: string;
+  content: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  updatedAt: number;
+};
+
+export type UpdateGoalPageBody = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  title?: string;
+  /** @maxLength 100000 */
+  content?: string;
+};
+
+export type UpdateGoalPage200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  title: string;
+  content: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  updatedAt: number;
+};
+
+export type UpdateGoalPage404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteGoalPage204 = typeof DeleteGoalPage204[keyof typeof DeleteGoalPage204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteGoalPage204 = {
+} as const;
+
+export type DeleteGoalPage404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ListGoalPageVersions200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  pageId: number;
+  createdAt: number;
+  preview: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  length: number;
+};
+
+export type GetGoalPageVersion200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  pageId: number;
+  content: string;
+  createdAt: number;
+};
+
+export type GetGoalPageVersion404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type RestoreGoalPageVersion200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  title: string;
+  content: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  updatedAt: number;
+};
+
+export type RestoreGoalPageVersion404 = {
   error: string;
   [key: string]: unknown;
 };
@@ -25717,6 +25959,384 @@ export const previewGoalLink = async (previewGoalLinkBody: PreviewGoalLinkBody, 
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       previewGoalLinkBody,)
+  }
+);}
+
+
+
+export type searchGoalNotesResponse200 = {
+  data: SearchGoalNotes200Item[]
+  status: 200
+}
+    
+export type searchGoalNotesResponseSuccess = (searchGoalNotesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type searchGoalNotesResponse = (searchGoalNotesResponseSuccess)
+
+export const getSearchGoalNotesUrl = (params: SearchGoalNotesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/goals/notes/search?${stringifiedParams}` : `/api/goals/notes/search`
+}
+
+export const searchGoalNotes = async (params: SearchGoalNotesParams, options?: RequestInit): Promise<searchGoalNotesResponse> => {
+  
+  return generatedFetch<searchGoalNotesResponse>(getSearchGoalNotesUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type listGoalDueTasksResponse200 = {
+  data: ListGoalDueTasks200Item[]
+  status: 200
+}
+    
+export type listGoalDueTasksResponseSuccess = (listGoalDueTasksResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listGoalDueTasksResponse = (listGoalDueTasksResponseSuccess)
+
+export const getListGoalDueTasksUrl = () => {
+
+
+  
+
+  return `/api/goals/notes/tasks`
+}
+
+export const listGoalDueTasks = async ( options?: RequestInit): Promise<listGoalDueTasksResponse> => {
+  
+  return generatedFetch<listGoalDueTasksResponse>(getListGoalDueTasksUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type listGoalPagesResponse200 = {
+  data: ListGoalPages200Item[]
+  status: 200
+}
+    
+export type listGoalPagesResponseSuccess = (listGoalPagesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listGoalPagesResponse = (listGoalPagesResponseSuccess)
+
+export const getListGoalPagesUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/pages`
+}
+
+export const listGoalPages = async (id: number, options?: RequestInit): Promise<listGoalPagesResponse> => {
+  
+  return generatedFetch<listGoalPagesResponse>(getListGoalPagesUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type addGoalPageResponse201 = {
+  data: AddGoalPage201
+  status: 201
+}
+
+export type addGoalPageResponse404 = {
+  data: AddGoalPage404
+  status: 404
+}
+    
+export type addGoalPageResponseSuccess = (addGoalPageResponse201) & {
+  headers: Headers;
+};
+export type addGoalPageResponseError = (addGoalPageResponse404) & {
+  headers: Headers;
+};
+
+export type addGoalPageResponse = (addGoalPageResponseSuccess | addGoalPageResponseError)
+
+export const getAddGoalPageUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/pages`
+}
+
+export const addGoalPage = async (id: number,
+    addGoalPageBody: AddGoalPageBody, options?: RequestInit): Promise<addGoalPageResponse> => {
+  
+  return generatedFetch<addGoalPageResponse>(getAddGoalPageUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addGoalPageBody,)
+  }
+);}
+
+
+
+export type reorderGoalPagesResponse200 = {
+  data: ReorderGoalPages200Item[]
+  status: 200
+}
+    
+export type reorderGoalPagesResponseSuccess = (reorderGoalPagesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type reorderGoalPagesResponse = (reorderGoalPagesResponseSuccess)
+
+export const getReorderGoalPagesUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/pages/order`
+}
+
+export const reorderGoalPages = async (id: number,
+    reorderGoalPagesBody: ReorderGoalPagesBody, options?: RequestInit): Promise<reorderGoalPagesResponse> => {
+  
+  return generatedFetch<reorderGoalPagesResponse>(getReorderGoalPagesUrl(id),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reorderGoalPagesBody,)
+  }
+);}
+
+
+
+export type updateGoalPageResponse200 = {
+  data: UpdateGoalPage200
+  status: 200
+}
+
+export type updateGoalPageResponse404 = {
+  data: UpdateGoalPage404
+  status: 404
+}
+    
+export type updateGoalPageResponseSuccess = (updateGoalPageResponse200) & {
+  headers: Headers;
+};
+export type updateGoalPageResponseError = (updateGoalPageResponse404) & {
+  headers: Headers;
+};
+
+export type updateGoalPageResponse = (updateGoalPageResponseSuccess | updateGoalPageResponseError)
+
+export const getUpdateGoalPageUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-pages/${id}`
+}
+
+export const updateGoalPage = async (id: number,
+    updateGoalPageBody: UpdateGoalPageBody, options?: RequestInit): Promise<updateGoalPageResponse> => {
+  
+  return generatedFetch<updateGoalPageResponse>(getUpdateGoalPageUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateGoalPageBody,)
+  }
+);}
+
+
+
+export type deleteGoalPageResponse204 = {
+  data: DeleteGoalPage204
+  status: 204
+}
+
+export type deleteGoalPageResponse404 = {
+  data: DeleteGoalPage404
+  status: 404
+}
+    
+export type deleteGoalPageResponseSuccess = (deleteGoalPageResponse204) & {
+  headers: Headers;
+};
+export type deleteGoalPageResponseError = (deleteGoalPageResponse404) & {
+  headers: Headers;
+};
+
+export type deleteGoalPageResponse = (deleteGoalPageResponseSuccess | deleteGoalPageResponseError)
+
+export const getDeleteGoalPageUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-pages/${id}`
+}
+
+export const deleteGoalPage = async (id: number, options?: RequestInit): Promise<deleteGoalPageResponse> => {
+  
+  return generatedFetch<deleteGoalPageResponse>(getDeleteGoalPageUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type listGoalPageVersionsResponse200 = {
+  data: ListGoalPageVersions200Item[]
+  status: 200
+}
+    
+export type listGoalPageVersionsResponseSuccess = (listGoalPageVersionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listGoalPageVersionsResponse = (listGoalPageVersionsResponseSuccess)
+
+export const getListGoalPageVersionsUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-pages/${id}/versions`
+}
+
+export const listGoalPageVersions = async (id: number, options?: RequestInit): Promise<listGoalPageVersionsResponse> => {
+  
+  return generatedFetch<listGoalPageVersionsResponse>(getListGoalPageVersionsUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getGoalPageVersionResponse200 = {
+  data: GetGoalPageVersion200
+  status: 200
+}
+
+export type getGoalPageVersionResponse404 = {
+  data: GetGoalPageVersion404
+  status: 404
+}
+    
+export type getGoalPageVersionResponseSuccess = (getGoalPageVersionResponse200) & {
+  headers: Headers;
+};
+export type getGoalPageVersionResponseError = (getGoalPageVersionResponse404) & {
+  headers: Headers;
+};
+
+export type getGoalPageVersionResponse = (getGoalPageVersionResponseSuccess | getGoalPageVersionResponseError)
+
+export const getGetGoalPageVersionUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-page-versions/${id}`
+}
+
+export const getGoalPageVersion = async (id: number, options?: RequestInit): Promise<getGoalPageVersionResponse> => {
+  
+  return generatedFetch<getGoalPageVersionResponse>(getGetGoalPageVersionUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type restoreGoalPageVersionResponse200 = {
+  data: RestoreGoalPageVersion200
+  status: 200
+}
+
+export type restoreGoalPageVersionResponse404 = {
+  data: RestoreGoalPageVersion404
+  status: 404
+}
+    
+export type restoreGoalPageVersionResponseSuccess = (restoreGoalPageVersionResponse200) & {
+  headers: Headers;
+};
+export type restoreGoalPageVersionResponseError = (restoreGoalPageVersionResponse404) & {
+  headers: Headers;
+};
+
+export type restoreGoalPageVersionResponse = (restoreGoalPageVersionResponseSuccess | restoreGoalPageVersionResponseError)
+
+export const getRestoreGoalPageVersionUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-page-versions/${id}/restore`
+}
+
+export const restoreGoalPageVersion = async (id: number, options?: RequestInit): Promise<restoreGoalPageVersionResponse> => {
+  
+  return generatedFetch<restoreGoalPageVersionResponse>(getRestoreGoalPageVersionUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
   }
 );}
 

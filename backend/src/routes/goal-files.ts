@@ -1,11 +1,11 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createReadStream } from "fs";
 import { promises as fs } from "fs";
 
 import { db } from "../db/client";
-import { goalAttachments, savingsGoals, storageDeletionOutbox } from "../db/schema";
+import { goalAttachments, goalNotePages, savingsGoals, storageDeletionOutbox } from "../db/schema";
 import { generatePresignedDownloadUrl, getLocalFilePath, isObjectStorageConfigured, uploadFile } from "../services/r2";
 import { scrapeProduct } from "../services/scraper-enhanced";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
@@ -79,12 +79,18 @@ export default async function (fastify: FastifyInstance) {
       operationId: "uploadGoalAttachment",
       tags: ["goals"],
       params: idParams,
-      body: z.object({ filename: z.string().trim().min(1).max(200), contentType: z.enum(ALLOWED_MIME_TYPES), data: z.string().min(1) }).strict(),
+      body: z.object({
+        filename: z.string().trim().min(1).max(200),
+        contentType: z.enum(ALLOWED_MIME_TYPES),
+        data: z.string().min(1),
+        /** A picture pasted into the notes never becomes the cover by itself. */
+        fromNotes: z.boolean().optional(),
+      }).strict(),
       response: { 201: attachmentSchema, 400: errorSchema, 404: errorSchema, 500: errorSchema },
     },
   }, async (request, reply) => {
     const { id } = request.params as z.infer<typeof idParams>;
-    const body = request.body as { filename: string; contentType: (typeof ALLOWED_MIME_TYPES)[number]; data: string };
+    const body = request.body as { filename: string; contentType: (typeof ALLOWED_MIME_TYPES)[number]; data: string; fromNotes?: boolean };
     const [goal] = await db.select({ id: savingsGoals.id }).from(savingsGoals).where(eq(savingsGoals.id, id)).limit(1);
     if (!goal) return reply.code(404).send({ error: "Goal not found" });
     const existing = await db.select({ id: goalAttachments.id, isCover: goalAttachments.isCover }).from(goalAttachments).where(eq(goalAttachments.goalId, id));
@@ -104,7 +110,7 @@ export default async function (fastify: FastifyInstance) {
     }
     try {
       // The first picture becomes the cover.
-      const isCover = body.contentType.startsWith("image/") && !existing.some((row: { isCover: boolean }) => row.isCover);
+      const isCover = !body.fromNotes && body.contentType.startsWith("image/") && !existing.some((row: { isCover: boolean }) => row.isCover);
       const [created] = await db.insert(goalAttachments).values({ goalId: id, filename, r2Key: key, mimetype: body.contentType, fileSize: buffer.length, isCover }).returning();
       return reply.code(201).send(view(created));
     } catch (error) {
@@ -199,7 +205,9 @@ export default async function (fastify: FastifyInstance) {
     const key = decodeURIComponent(request.url.replace("/api/goal-link-images/", "").split("?")[0] ?? "");
     if (!/^wishlist-images\/[A-Za-z0-9._-]+$/.test(key)) return reply.code(404).send({ error: "Image not found" });
     const [owner] = await db.select({ id: savingsGoals.id }).from(savingsGoals).where(eq(savingsGoals.linkImage, key)).limit(1);
-    if (!owner && !previewed.has(key)) return reply.code(404).send({ error: "Image not found" });
+    // A link card in a goal's notes holds its picture's key too.
+    const [inNotes] = owner ? [owner] : await db.select({ id: goalNotePages.id }).from(goalNotePages).where(sql`instr(${goalNotePages.content}, ${key}) > 0`).limit(1);
+    if (!owner && !inNotes && !previewed.has(key)) return reply.code(404).send({ error: "Image not found" });
     try {
       return await sendStored(reply, key, "image/jpeg");
     } catch {

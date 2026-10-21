@@ -86,7 +86,7 @@ export const GOAL_FILE_TYPES = Object.values(UploadGoalAttachmentBodyContentType
 export const GOAL_FILE_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Reads a file and uploads it to the goal. */
-export const useUploadGoalFileMutation = () => useGoalMutation(async ({ id, file }: { id: number; file: File }) => {
+export const useUploadGoalFileMutation = () => useGoalMutation(async ({ id, file, fromNotes }: { id: number; file: File; fromNotes?: boolean }) => {
   if (!GOAL_FILE_TYPES.includes(file.type)) throw new Error('Use a picture, PDF or text file');
   if (file.size > GOAL_FILE_MAX_BYTES) throw new Error('Files can be up to 5 MB');
   const data = await new Promise<string>((resolve, reject) => {
@@ -95,7 +95,7 @@ export const useUploadGoalFileMutation = () => useGoalMutation(async ({ id, file
     reader.onerror = () => reject(new Error('Could not read the file'));
     reader.readAsDataURL(file);
   });
-  return unwrapGenerated(uploadGoalAttachment(id, { filename: file.name, contentType: file.type as UploadGoalAttachmentBody['contentType'], data }), 201, 'Could not upload the file');
+  return unwrapGenerated(uploadGoalAttachment(id, { filename: file.name, contentType: file.type as UploadGoalAttachmentBody['contentType'], data, ...(fromNotes ? { fromNotes } : {}) }), 201, 'Could not upload the file');
 });
 
 /** Reads a product link: its title, price and picture. Shops outside the scraper's list say so. */

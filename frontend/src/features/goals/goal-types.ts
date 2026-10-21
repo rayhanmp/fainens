@@ -17,6 +17,8 @@ export type GoalTypeInfo = {
   notes: string;
   /** Names of the parts its cost is usually made of. */
   parts: string[];
+  /** More note pages it's offered, beyond its first. */
+  pages?: Array<{ title: string; content: string }>;
 };
 
 export const isGoalTypeKey = (value: unknown): value is GoalTypeKey => typeof value === 'string' && (GOAL_TYPE_KEYS as readonly string[]).includes(value);
@@ -31,18 +33,28 @@ export const GOAL_TYPES: Record<GoalTypeKey, GoalTypeInfo> = {
   },
   trip: {
     key: 'trip', label: 'Holiday', icon: '✈️', kind: 'spend', yearly: false,
-    notes: '## Ideas\n\n\n\n## Places to eat\n\n\n\n## Things to buy\n\n',
+    notes: '## Ideas\n\n\n\n## Must do\n\n- [ ] \n',
     parts: ['Flights', 'Stay', 'Local transport', 'Food', 'Activities', 'Shopping', 'Insurance'],
+    pages: [
+      { title: 'Itinerary ideas', content: '## Day 1\n\n\n\n## Day 2\n\n' },
+      { title: 'Places to eat', content: '| Place | Area | What to get | Price |\n| --- | --- | --- | --- |\n|  |  |  |  |\n' },
+      { title: 'Things to buy', content: '- [ ] \n' },
+    ],
   },
   house: {
     key: 'house', label: 'House down payment', icon: '🏠', kind: 'spend', yearly: false,
     notes: '## Houses seen\n\n| House | Price | Notes |\n| --- | --- | --- |\n|  |  |  |\n\n## Banks compared\n\n| Bank | Rate | Fixed for | Notes |\n| --- | --- | --- | --- |\n|  |  |  |  |\n\n## Documents\n\n- [ ] KTP and KK\n- [ ] NPWP\n- [ ] Salary slips and bank statements\n- [ ] Employment letter\n',
     parts: ['Down payment', 'BPHTB', 'Notary and AJB', 'Bank fees and provisi', 'Appraisal', 'Moving'],
+    pages: [{ title: 'Moving in', content: '- [ ] Furniture\n- [ ] Internet\n- [ ] Change of address\n' }],
   },
   wedding: {
     key: 'wedding', label: 'Wedding', icon: '💍', kind: 'spend', yearly: false,
     notes: '## Timeline\n\n- [ ] 12 months before: venue and date\n- [ ] 6 months before: catering, attire, documentation\n- [ ] 3 months before: invitations, KUA paperwork\n- [ ] 1 month before: final guest count and payments\n\n## Vendors\n\n| Vendor | For | Deposit | Rest due |\n| --- | --- | --- | --- |\n|  |  |  |  |\n\n## Guests\n\n',
     parts: ['Venue', 'Catering', 'Attire', 'Makeup', 'Documentation', 'Decoration', 'Invitations', 'KUA', 'Rings'],
+    pages: [
+      { title: 'Guests', content: '| Name | Side | Invited | Coming |\n| --- | --- | --- | --- |\n|  |  |  |  |\n' },
+      { title: 'Ideas', content: '' },
+    ],
   },
   umrah: {
     key: 'umrah', label: 'Umrah', icon: '🕋', kind: 'spend', yearly: false,

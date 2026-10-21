@@ -1335,6 +1335,32 @@ button[data-variant="danger"]:focus-visible,
 .goal-notes-editor blockquote { padding: 0.5rem 0.85rem; border-radius: 0.75rem; background: var(--ref-surface-container-low); color: var(--ref-on-surface-variant); }
 .goal-notes-editor hr { border: 0; border-top: 1px solid var(--color-border); margin: 1rem 0; }
 .goal-notes-editor a { color: var(--ref-primary); text-decoration: underline; text-underline-offset: 2px; cursor: text; }
+.goal-notes-editor mark { border-radius: 3px; padding: 0 2px; color: #191b23; }
+.goal-notes-editor table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0.75rem 0; font-size: 0.875rem; }
+.goal-notes-editor th, .goal-notes-editor td { border: 1px solid var(--color-border); padding: 0.4rem 0.55rem; vertical-align: top; text-align: left; }
+.goal-notes-editor th { background: var(--ref-surface-container-low); font-weight: 600; }
+.goal-notes-editor td > p, .goal-notes-editor th > p { margin: 0; }
+.goal-notes-editor .selectedCell { background: color-mix(in srgb, var(--ref-primary) 10%, transparent); }
+.goal-notes-editor .tableWrapper { overflow-x: auto; }
+.goal-notes-editor .goal-notes-match { background: #fde68a; color: #191b23; border-radius: 2px; }
+.goal-notes-editor .is-folded { display: none; }
+.goal-notes-editor h2, .goal-notes-editor h3 { position: relative; }
+/* The fold toggle sits in the gutter before each heading, showing on hover or while folded. */
+.goal-notes-fold {
+  position: absolute;
+  left: -1.4rem;
+  top: 0.15em;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 4px;
+  opacity: 0;
+  color: var(--ref-on-surface-variant);
+  background: center / 0.8rem no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23737785' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  transition: transform 0.15s, opacity 0.15s;
+}
+.goal-notes-editor h2:hover .goal-notes-fold, .goal-notes-editor h3:hover .goal-notes-fold, .goal-notes-fold.is-closed, .goal-notes-fold:focus-visible { opacity: 1; }
+.goal-notes-fold.is-closed { transform: rotate(-90deg); }
+.goal-notes-editor .is-folded-heading::after { content: " …"; color: var(--ref-outline); font-weight: 400; }
 .goal-notes-editor p.is-empty::before,
 .goal-notes-editor h2.is-empty::before,
 .goal-notes-editor h3.is-empty::before {

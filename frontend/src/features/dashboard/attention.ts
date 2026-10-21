@@ -40,6 +40,8 @@ export type GoalReminders = {
   late: ReadonlyArray<{ id: number; name: string; months: number; byDate: number }>;
   /** Accounts holding less than the goals said to sit in them. */
   shortAccounts: ReadonlyArray<{ id: number; name: string; balance: number; goalsHold: number }>;
+  /** Unticked checklist items in goals' notes, with the day they're due. */
+  tasks?: ReadonlyArray<{ goalId: number; goalName: string; text: string; dueAt: number }>;
 };
 
 /**
@@ -192,6 +194,21 @@ export function buildAttentionItems(input: AttentionInput, format: AttentionForm
         detail: `At its monthly amount it gets there ${plural(first.months, 'month')} after ${format.date(first.byDate)}. Put in more each month, or move the date.`,
         to: '/goals',
         action: 'Review goals',
+      });
+    }
+    // Dated checklist items in goals' notes: past their day, or due within three.
+    const startOfToday = new Date(now).setHours(0, 0, 0, 0);
+    const soonTasks = (goals.tasks ?? []).filter((task) => task.dueAt < startOfToday + 4 * DAY_MS);
+    for (const task of soonTasks.slice(0, 3)) {
+      const late = task.dueAt < startOfToday;
+      const days = Math.round((new Date(task.dueAt).setHours(0, 0, 0, 0) - startOfToday) / DAY_MS);
+      next.push({
+        id: `goal-task:${task.goalId}:${task.text}:${task.dueAt}`,
+        tone: late ? 'warning' : 'info',
+        title: `${task.text}: ${late ? 'was due' : days === 0 ? 'due today' : days === 1 ? 'due tomorrow' : `due in ${days} days`}`,
+        detail: `On ${task.goalName}’s checklist, for ${format.date(task.dueAt)}.`,
+        to: '/goals',
+        action: 'Open goals',
       });
     }
     if (goals.due > 0 && goals.free > 0) {

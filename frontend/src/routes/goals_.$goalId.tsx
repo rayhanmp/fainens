@@ -13,9 +13,8 @@ import { GoalPageHero } from '../features/goals/detail/GoalPageHero';
 import { GrowthChart } from '../features/goals/detail/GrowthChart';
 import { PartsSection } from '../features/goals/detail/PartsSection';
 import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, type GoalDraft } from '../features/goals/dialogs';
-import { GoalNotes } from '../features/goals/GoalNotes';
+import { NotesWorkspace } from '../features/goals/notes/NotesWorkspace';
 import { useGoalHeadline } from '../features/goals/use-headline';
-import { GOAL_TYPES, isGoalTypeKey } from '../features/goals/goal-types';
 import {
   useAllocateMutation,
   useCompleteGoalMutation,
@@ -47,7 +46,6 @@ function GoalPage() {
   const spend = useSpendFromGoalMutation();
   const complete = useCompleteGoalMutation();
   const update = useUpdateGoalMutation();
-  const saveNotes = useUpdateGoalMutation();
   const remove = useDeleteGoalMutation();
   const [moving, setMoving] = useState<'in' | 'out' | null>(null);
   const [paying, setPaying] = useState<{ partId: number | null } | null>(null);
@@ -119,8 +117,7 @@ function GoalPage() {
             <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
               <div className="min-w-0 space-y-6">
                 <GrowthChart detail={detail} color={color} />
-                {/* Its own save, so typing never holds up the buttons above; the notes say when they're saved. */}
-                <GoalNotes key={id} value={goal.description} starter={isGoalTypeKey(goal.goalType) ? { label: GOAL_TYPES[goal.goalType].label, markdown: GOAL_TYPES[goal.goalType].notes } : undefined} onSave={async (next) => { await saveNotes.mutateAsync({ id, description: next }); }} />
+                <NotesWorkspace key={id} detail={detail} />
                 <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
                 <FilesSection detail={detail} />
               </div>

@@ -23,6 +23,7 @@ import transportRouteTemplateRoutes from "./routes/transport-route-templates";
 import savingsPlanRoutes from "./routes/savings-plans";
 import goalRoutes from "./routes/goals";
 import goalFileRoutes from "./routes/goal-files";
+import goalNoteRoutes from "./routes/goal-notes";
 import periodRoutes from "./routes/periods";
 import budgetRoutes from "./routes/budget";
 import attachmentRoutes from "./routes/attachments";
@@ -126,6 +127,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(savingsPlanRoutes);
   app.register(goalRoutes);
   app.register(goalFileRoutes);
+  app.register(goalNoteRoutes);
   app.register(periodRoutes);
   app.register(budgetRoutes);
   app.register(attachmentRoutes);

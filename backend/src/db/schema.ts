@@ -288,6 +288,29 @@ export const goalAllocations = sqliteTable("goal_allocation", {
   goalIdx: index("idx_goal_allocation_goal").on(table.goalId),
 }));
 
+/** A page of a goal's notes, like "Notes" or "Places to eat"; its content is markdown. */
+export const goalNotePages = sqliteTable("goal_note_page", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  goalIdx: index("idx_goal_note_page_goal").on(table.goalId),
+}));
+
+/** An earlier copy of a note page, kept as it changes (at most one per ten minutes, the last fifty). */
+export const goalNoteVersions = sqliteTable("goal_note_version", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  pageId: integer("page_id").notNull().references(() => goalNotePages.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  pageIdx: index("idx_goal_note_version_page").on(table.pageId),
+}));
+
 /** A file on a goal: a quote, brochure, booking or photo; one can be its cover. */
 export const goalAttachments = sqliteTable("goal_attachment", {
   id: integer("id").primaryKey({ autoIncrement: true }),
