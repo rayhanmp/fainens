@@ -115,8 +115,8 @@ export function PartsSection({ detail, onPay }: { detail: GoalDetail; onPay: (pa
         )}
         {active && (
           <form onSubmit={(event) => { event.preventDefault(); void submit(); }} className={cn('flex flex-wrap items-center gap-2', parts.length > 0 && 'mt-3')}>
-            <input aria-label="New part" className="brutalist-input h-[34px] min-w-[140px] flex-1" placeholder={parts.length ? 'Another part' : 'A part of the cost, like flights'} value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
-            <div className="w-[150px]"><MoneyField ariaLabel="Part amount" value={amount} onChange={setAmount} /></div>
+            <input aria-label="New part" className="brutalist-input h-[34px] w-full min-w-0 sm:w-auto sm:flex-1" placeholder={parts.length ? 'Another part' : 'A part of the cost, like flights'} value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
+            <div className="min-w-0 flex-1 sm:w-[150px] sm:flex-none"><MoneyField ariaLabel="Part amount" value={amount} onChange={setAmount} /></div>
             <Button type="submit" size="sm" variant="secondary" isLoading={add.isPending} disabled={!name.trim() || !amount}><Plus className="mr-1 inline h-3.5 w-3.5" aria-hidden />Add</Button>
           </form>
         )}

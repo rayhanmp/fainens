@@ -10,9 +10,9 @@ import { Celebration } from '../features/goals/detail/Celebration';
 import { DetailsPanel } from '../features/goals/detail/DetailsPanel';
 import { FilesSection } from '../features/goals/detail/FilesSection';
 import { GoalPageHero } from '../features/goals/detail/GoalPageHero';
+import { GrowthChart } from '../features/goals/detail/GrowthChart';
 import { PartsSection } from '../features/goals/detail/PartsSection';
 import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, type GoalDraft } from '../features/goals/dialogs';
-import { GoalHistory } from '../features/goals/GoalHistory';
 import { GoalNotes } from '../features/goals/GoalNotes';
 import {
   useAllocateMutation,
@@ -23,7 +23,6 @@ import {
   useSpendFromGoalMutation,
   useUpdateGoalMutation,
 } from '../features/goals/queries';
-import { Section } from '../features/subscriptions/PageParts';
 import { RequireAuth } from '../lib/auth';
 
 export const Route = createFileRoute('/goals_/$goalId')({
@@ -46,6 +45,7 @@ function GoalPage() {
   const spend = useSpendFromGoalMutation();
   const complete = useCompleteGoalMutation();
   const update = useUpdateGoalMutation();
+  const saveNotes = useUpdateGoalMutation();
   const remove = useDeleteGoalMutation();
   const [moving, setMoving] = useState<'in' | 'out' | null>(null);
   const [paying, setPaying] = useState<{ partId: number | null } | null>(null);
@@ -114,27 +114,11 @@ function GoalPage() {
 
             <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
               <div className="min-w-0 space-y-6">
-                <Section title="Notes">
-                  <div className="px-4 py-4 sm:px-5">
-                    <GoalNotes
-                      value={goal.description}
-                      busy={update.isPending}
-                      onSave={async (next) => {
-                        try {
-                          await update.mutateAsync({ id, description: next });
-                        } catch (error) {
-                          toast.error(errorText(error, 'Could not save the notes'));
-                          throw error;
-                        }
-                      }}
-                    />
-                  </div>
-                </Section>
+                <GrowthChart detail={detail} color={color} />
+                {/* Its own save, so typing never holds up the buttons above; the notes say when they're saved. */}
+                <GoalNotes key={id} value={goal.description} onSave={async (next) => { await saveNotes.mutateAsync({ id, description: next }); }} />
                 <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
                 <FilesSection detail={detail} />
-                <Section title="History">
-                  <div className="px-4 py-2 sm:px-5"><GoalHistory goalId={id} /></div>
-                </Section>
               </div>
               <DetailsPanel detail={detail} overview={overview} />
             </div>
