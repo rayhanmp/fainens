@@ -26,7 +26,7 @@ function Fact({ icon: Icon, label, children, empty, onAdd, editor }: { icon: Ele
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ref-on-surface-variant)]" aria-hidden />
       <div className="min-w-0 flex-1">
         <p className={cn('text-xs text-[var(--ref-on-surface-variant)]', editor && 'mb-1.5 font-semibold')}>{label}</p>
-        {editor ?? <div className="mt-0.5 text-sm text-[var(--ref-on-surface)]">{children ?? <button type="button" onClick={onAdd} className="font-medium text-[var(--ref-primary)] hover:underline">{empty}</button>}</div>}
+        {editor || <div className="mt-0.5 text-sm text-[var(--ref-on-surface)]">{children ?? <button type="button" onClick={onAdd} className="font-medium text-[var(--ref-primary)] hover:underline">{empty}</button>}</div>}
       </div>
     </div>
   );
