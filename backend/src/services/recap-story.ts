@@ -203,18 +203,85 @@ export function getSavedRecapStory(ownerEmail: string, periodId: number): SavedR
   return row ? savedRecapStorySchema.parse(JSON.parse(row.payload_json)) : null;
 }
 
+const DAY_MS = 86_400_000;
+const utcDay = (ms: number) => Math.floor(ms / DAY_MS);
+
+/** A still-running period's edition is good for the (UTC) day its figures were taken on, the same day
+ * boundary the viewer counts elapsed days by. From the next day on, its figures have moved on. */
+export function isStaleEdition(saved: SavedRecapStory, now = Date.now()) {
+  return saved.snapshot.isPartial && utcDay(saved.snapshot.generatedAt) !== utcDay(now);
+}
+
+/** What the written story quotes by name or wording. While none of it changed, a saved AI draft still fits
+ * fresh figures and is only re-rendered; a change means the words need writing again. */
+export function quotedFacts(snapshot: Snapshot) {
+  return JSON.stringify({
+    isPartial: snapshot.isPartial, coverageComplete: snapshot.coverageComplete,
+    categories: snapshot.categories.slice(0, 8).map(row => row.name),
+    purchases: (snapshot.highlights?.topPurchases ?? []).map(row => row.description),
+    repeats: (snapshot.highlights?.repeatPurchases ?? []).map(row => row.description),
+    standout: snapshot.largestPurchase?.description ?? null,
+    peakDay: snapshot.highlights?.peakSpendingDay?.date ?? null,
+    budget: snapshot.budget ? { over: snapshot.budget.overBudgetCategories.map(row => row.name), credits: snapshot.budget.spent < 0, even: snapshot.budget.remaining === 0 } : null,
+    comparison: snapshot.comparison?.periodName ?? null, history: Boolean(snapshot.baseline),
+  });
+}
+
+/** A short, safe account of why the provider failed. The raw provider text never reaches the reader. */
+export function describeProviderFailure(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error);
+  if (/\b402\b|insufficient credits|credit/i.test(text)) return "is out of credits";
+  if (/\b401\b|invalid api key|unauthori[sz]ed|no auth credentials/i.test(text)) return "rejected the API key";
+  if (/\b429\b|rate limit/i.test(text)) return "is rate-limited right now";
+  if (/abort|timed? ?out/i.test(text)) return "took too long to answer";
+  return "didn’t answer";
+}
+
+type FallbackReason = { kind: "no-provider" } | { kind: "provider-failed"; detail: string } | { kind: "invalid-copy" };
+/** The reader's explanation when the words are the built-in edition instead of AI-written. */
+function fallbackNotice(reason: FallbackReason) {
+  const edit = "The figures are current; the words are the built-in Fainens edit.";
+  if (reason.kind === "no-provider") return `No AI model is set up, so this story wasn’t written by AI. ${edit} Add a model and key in Settings → Agent.`;
+  if (reason.kind === "invalid-copy") return `The AI’s story didn’t pass the fact check. ${edit}`;
+  return `The story couldn’t be written: the AI provider ${reason.detail}. ${edit}`;
+}
+
+function saveStory(ownerEmail: string, periodId: number, input: Omit<SavedRecapStory, "savedAt">) {
+  const story = savedRecapStorySchema.parse({ ...input, savedAt: Date.now() });
+  db.$client.prepare(`INSERT INTO recap_period_story (owner_email, period_id, payload_json, generated_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(owner_email, period_id) DO UPDATE SET payload_json = excluded.payload_json, generated_at = excluded.generated_at`).run(ownerEmail, periodId, JSON.stringify(story), story.savedAt);
+  return story;
+}
+
+/** The saved AI draft rendered over fresh figures, when it still quotes the same things; null when the words need rewriting. */
+function rerenderDraft(previous: SavedRecapStory, snapshot: Snapshot, personalization: SavedRecapStory["personalization"]): Omit<SavedRecapStory, "savedAt"> | null {
+  if (previous.source !== "ai" || !previous.draft || quotedFacts(previous.snapshot) !== quotedFacts(snapshot)) return null;
+  try {
+    const copy = parseRecapCopy(previous.draft, snapshot, personalization?.preferredName, previous.seed, personalization?.language);
+    return { ...previous, snapshot, copy, personalization, notice: null };
+  } catch { return null; }
+}
+
 async function generate(ownerEmail: string, periodId: number, regenerate: boolean): Promise<SavedRecapStory> {
   const previous = getSavedRecapStory(ownerEmail, periodId);
-  if (previous && !regenerate) return previous;
+  if (previous && !regenerate && !isStaleEdition(previous)) return previous;
   const snapshot = await getPeriodRecap(periodId);
+  const personalization = getRecapPersonalization(ownerEmail);
+  // A new day of a running period: fresh figures under the same words, as long as the words still fit.
+  if (previous && !regenerate) {
+    const rerendered = rerenderDraft(previous, snapshot, personalization);
+    if (rerendered) return saveStory(ownerEmail, periodId, rerendered);
+  }
   const recent = recentRecapEditions(ownerEmail);
   let seed = randomInt(0, 1_000_000);
   const recentStyles = new Set(recent.map(edition => edition.seed % WRITING_STYLES.length));
   while ((previous && seed % 3 === previous.seed % 3) || recentStyles.has(seed % WRITING_STYLES.length)) seed += 1;
-  const personalization = getRecapPersonalization(ownerEmail);
   let copy = fallbackRecapCopy(snapshot, seed, personalization.preferredName, personalization.language);
   let source: SavedRecapStory["source"] = "template";
+  let draft: string | null = null;
+  let notice: string | null = null;
   const config = snapshot.activityCount ? await getAgentProviderConfig() : null;
+  if (config && !config.apiKey) notice = fallbackNotice({ kind: "no-provider" });
   if (config?.apiKey) {
     try {
       const raw = await callOpenRouter(
@@ -239,23 +306,26 @@ Tell a different beat on each slide: specific opening hook; informative money-in
       try {
         copy = parseRecapCopy(raw, snapshot, personalization.preferredName, seed, personalization.language);
         source = "ai";
+        draft = raw;
       } catch {
         // An unusable model response should still make an explicitly requested
         // new take useful: the deterministic edition includes observed names
-        // and repeat patterns. Provider/network failures still preserve cache.
+        // and repeat patterns, and the reader is told why.
         source = "template";
+        notice = fallbackNotice({ kind: "invalid-copy" });
       }
-    } catch {
-      if (previous) throw new RecapGenerationError("The new take could not be written. Your saved recap is still available.");
+    } catch (error) {
+      // A requested new take keeps the saved edition rather than replacing AI words with built-in ones.
+      // A daily refresh still goes ahead: the figures must move on even while the provider is down.
+      if (previous && regenerate) throw new RecapGenerationError(`The new take couldn’t be written: the AI provider ${describeProviderFailure(error)}. Your saved recap is still available.`);
+      notice = fallbackNotice({ kind: "provider-failed", detail: describeProviderFailure(error) });
     }
   }
-  const story = savedRecapStorySchema.parse({ snapshot, copy, personalization, source, seed, savedAt: Date.now() });
-  db.$client.prepare(`INSERT INTO recap_period_story (owner_email, period_id, payload_json, generated_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(owner_email, period_id) DO UPDATE SET payload_json = excluded.payload_json, generated_at = excluded.generated_at`).run(ownerEmail, periodId, JSON.stringify(story), story.savedAt);
-  return story;
+  return saveStory(ownerEmail, periodId, { snapshot, copy, personalization, source, seed, draft, notice });
 }
 
-/** Durable cache has no TTL. Joining concurrent requests prevents duplicate provider calls. */
+/** A finished period's edition is kept for good; a running period's is refreshed once a day (see isStaleEdition).
+ * Joining concurrent requests prevents duplicate provider calls. */
 export function ensureRecapStory(ownerEmail: string, periodId: number, regenerate = false): Promise<SavedRecapStory> {
   const key = JSON.stringify([ownerEmail, periodId]);
   const existing = pending.get(key);

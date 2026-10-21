@@ -14252,6 +14252,16 @@ export type GetSavedRecapStory200Story = {
    * @maximum 9007199254740991
    */
   seed: number;
+  /**
+   * @maxLength 24000
+   * @nullable
+   */
+  draft?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  notice?: string | null;
 } | null;
 
 export type GetSavedRecapStory200 = {
@@ -14598,6 +14608,16 @@ export type WriteRecapStory200 = {
    * @maximum 9007199254740991
    */
   seed: number;
+  /**
+   * @maxLength 24000
+   * @nullable
+   */
+  draft?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  notice?: string | null;
 };
 
 export type WriteRecapStory400 = {

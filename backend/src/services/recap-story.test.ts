@@ -118,9 +118,74 @@ describe("durable recap editions", () => {
   });
   it("keeps the saved edition intact if a requested rewrite fails", async () => {
     const first = await ensureRecapStory("owner@example.test", snapshot.period.id);
-    mocks.call.mockRejectedValue(new Error("upstream secrets"));
-    await expect(ensureRecapStory("owner@example.test", snapshot.period.id, true)).rejects.toBeInstanceOf(RecapGenerationError);
+    mocks.call.mockRejectedValue(new Error("OpenRouter API error: upstream secrets 402 Insufficient credits"));
+    const failure = await ensureRecapStory("owner@example.test", snapshot.period.id, true).catch(error => error);
+    expect(failure).toBeInstanceOf(RecapGenerationError);
+    expect(failure.message).toContain("is out of credits");
+    expect(failure.message).not.toContain("upstream secrets");
     expect(getSavedRecapStory("owner@example.test", snapshot.period.id)).toEqual(first);
+  });
+  describe("a period that is still running", () => {
+    const yesterday = Date.now() - 86_400_000;
+    const running = { ...snapshot, isPartial: true, generatedAt: yesterday };
+    it("refreshes the figures on a new day under the same words, without another provider call", async () => {
+      mocks.facts.mockResolvedValue(running);
+      const first = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(first.source).toBe("ai"); expect(first.draft).toBe(JSON.stringify(library())); expect(first.notice).toBeNull();
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now(), income: 200000, net: 130000 });
+      const next = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(next.snapshot.income).toBe(200000);
+      expect(next.snapshot.generatedAt).toBeGreaterThan(yesterday);
+      expect(next.copy.headline).toBe(first.copy.headline); expect(next.seed).toBe(first.seed); expect(next.source).toBe("ai");
+      expect(next.savedAt).toBeGreaterThanOrEqual(first.savedAt);
+      expect(mocks.call).toHaveBeenCalledTimes(1);
+      expect(getSavedRecapStory("owner@example.test", snapshot.period.id)).toEqual(next);
+    });
+    it("keeps the same day's edition as it is", async () => {
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now() });
+      const first = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now(), income: 1 });
+      expect(await ensureRecapStory("owner@example.test", snapshot.period.id)).toEqual(first);
+      expect(mocks.facts).toHaveBeenCalledTimes(1);
+    });
+    it("writes new words when what the story quotes has changed", async () => {
+      mocks.facts.mockResolvedValue(running);
+      await ensureRecapStory("owner@example.test", snapshot.period.id);
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now(), categories: [{ name: "Travel", amount: 90000 }] });
+      mocks.call.mockResolvedValue(JSON.stringify({ ...library(), headline: "{category1} took the wheel." }));
+      const next = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(mocks.call).toHaveBeenCalledTimes(2);
+      expect(next.copy.headline).toBe("Travel took the wheel."); expect(next.source).toBe("ai"); expect(next.notice).toBeNull();
+    });
+    it("still refreshes the figures when the provider is out of credits, and says so without quoting it", async () => {
+      mocks.facts.mockResolvedValue(running);
+      await ensureRecapStory("owner@example.test", snapshot.period.id);
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now(), income: 200000, categories: [{ name: "Travel", amount: 90000 }] });
+      mocks.call.mockRejectedValue(new Error('OpenRouter API error: {"error":{"message":"Insufficient credits. Add more at openrouter.ai","code":402}}'));
+      const next = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(next.snapshot.income).toBe(200000); expect(next.source).toBe("template");
+      expect(next.notice).toContain("is out of credits"); expect(next.notice).toContain("Fainens edit");
+      expect(next.notice).not.toContain("openrouter.ai");
+      expect(next.copy.chapters.find(chapter => chapter.id === "spotlight")?.title).toContain("Travel");
+    });
+    it("tries the provider again on the next day after a fallback", async () => {
+      mocks.call.mockRejectedValue(new Error("provider unavailable"));
+      mocks.facts.mockResolvedValue(running);
+      const first = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(first.source).toBe("template"); expect(first.notice).toContain("didn’t answer");
+      mocks.call.mockResolvedValue(JSON.stringify(library()));
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now() });
+      const next = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(next.source).toBe("ai"); expect(next.notice).toBeNull(); expect(mocks.call).toHaveBeenCalledTimes(2);
+    });
+    it("refreshes a legacy edition saved without a draft by writing it again", async () => {
+      const legacy = { snapshot: running, seed: 1, savedAt: 1, source: "ai", copy: library() };
+      mocks.client.prepare("INSERT INTO recap_period_story VALUES (?, ?, ?, ?)").run("owner@example.test", snapshot.period.id, JSON.stringify(legacy), 1);
+      mocks.facts.mockResolvedValue({ ...running, generatedAt: Date.now() });
+      const next = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(next.snapshot.generatedAt).toBeGreaterThan(yesterday); expect(next.draft).toBeTruthy();
+      expect(mocks.call).toHaveBeenCalledTimes(1);
+    });
   });
   it("uses the fact-based rewrite when the model returns generic or invalid copy", async () => {
     await ensureRecapStory("owner@example.test", snapshot.period.id);
@@ -141,7 +206,9 @@ describe("durable recap editions", () => {
   });
   it("works without any provider configuration", async () => {
     mocks.config.mockResolvedValue({ apiKey: undefined });
-    expect((await ensureRecapStory("owner@example.test", snapshot.period.id)).source).toBe("template");
+    const story = await ensureRecapStory("owner@example.test", snapshot.period.id);
+    expect(story.source).toBe("template");
+    expect(story.notice).toContain("Settings → Agent");
     expect(mocks.call).not.toHaveBeenCalled();
   });
   it("uses cached short display labels while preserving original purchase descriptions", async () => {
@@ -166,7 +233,7 @@ describe("durable recap editions", () => {
     const budget = { planned: 100000, spent: 150000, remaining: -50000, percentUsed: 150,
       categoryCount: 1, unbudgetedExpenses: 20000, overBudgetCategoryCount: 1,
       overBudgetCategories: [{ name: 'Food', planned: 100000, spent: 150000, over: 50000 }] };
-    mocks.facts.mockResolvedValue({ ...snapshot, budget, isPartial: true, coverageComplete: false });
+    mocks.facts.mockResolvedValue({ ...snapshot, budget, isPartial: true, generatedAt: Date.now(), coverageComplete: false });
     const response = library();
     response.chapters.find(chapter => chapter.id === 'budget')!.body = '{budgetCategory1} redrew its allocation line.';
     mocks.call.mockResolvedValue(JSON.stringify(response));
@@ -190,7 +257,7 @@ describe("durable recap editions", () => {
   });
   it('grounds the overview in matched history and caches the verified observation', async () => {
     const withHistory = { ...snapshot, income: 180000, purchaseCount: 15,
-      baseline: { periodCount: 3, matchedElapsed: true, income: 120000, expenses: 60000, purchaseCount: 10 }, isPartial: true };
+      baseline: { periodCount: 3, matchedElapsed: true, income: 120000, expenses: 60000, purchaseCount: 10 }, isPartial: true, generatedAt: Date.now() };
     mocks.facts.mockResolvedValue(withHistory);
     const saved = await ensureRecapStory('owner@example.test', snapshot.period.id);
     const overview = saved.copy.chapters.find(chapter => chapter.id === 'overview')!;

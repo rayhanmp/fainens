@@ -38,7 +38,9 @@ export function useRecapPreview(periodId: number | undefined) {
 export function useRecapStory(periodId: number | undefined) {
   const queryClient = useQueryClient();
   return useQuery({
-    queryKey: storyKey(periodId ?? 0), enabled: Boolean(periodId), staleTime: Infinity, retry: false,
+    // A running period's edition is refreshed by the server once a day, so an app left open is asked again after an hour.
+    // The viewer is keyed by savedAt: a same-day answer changes nothing on screen.
+    queryKey: storyKey(periodId ?? 0), enabled: Boolean(periodId), staleTime: 60 * 60_000, retry: false,
     queryFn: async ({ signal }) => {
       const story = await unwrapGenerated(writeRecapStory(periodId!, { regenerate: false }, { signal }), 200, 'Your recap could not be prepared. Please try again.');
       queryClient.setQueryData(previewKey(periodId!), { story });

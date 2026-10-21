@@ -40,6 +40,10 @@ export const recapCopySchema = z.object({
 export const savedRecapStorySchema = z.object({
   personalization: z.object({ preferredName: z.string().nullable(), language: z.enum(["en", "id"]) }).optional(),
   snapshot: recapSchema, copy: recapCopySchema, savedAt: z.number(), source: z.enum(["ai", "template"]), seed: z.number().int().nonnegative(),
+  // The model's unrendered copy, kept so a running period's daily refresh can re-render it over fresh figures without another call.
+  draft: z.string().max(24_000).nullable().optional(),
+  // Why this edition's words are the built-in ones rather than AI-written, when that is the case. Shown to the reader.
+  notice: z.string().max(300).nullable().optional(),
 });
 export type RecapCopy = z.infer<typeof recapCopySchema>;
 export type SavedRecapStory = z.infer<typeof savedRecapStorySchema>;
