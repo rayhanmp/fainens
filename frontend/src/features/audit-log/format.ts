@@ -4,7 +4,7 @@ import { useAccountsQuery } from '../accounts/queries';
 import { useCategoriesQuery, useTagsQuery } from '../categories/queries';
 import { usePeriodsQuery } from '../periods/queries';
 import { formatDate, formatDateTime } from '../../lib/utils';
-import { auditName, entityLabel, type AuditEntry, type AuditFormat } from './describe';
+import { actionLabel, auditName, entityLabel, type AuditEntry, type AuditFormat } from './describe';
 
 type Named = ReadonlyArray<{ id: number; name: string }> | undefined;
 
@@ -36,4 +36,9 @@ export function useAuditFormat(): AuditFormat {
 /** The record's own name, or its kind and number when it has none. */
 export function entryTitle(entry: AuditEntry): string {
   return auditName(entry) ?? `${entityLabel(entry.entityType)} #${entry.entityId}`;
+}
+
+/** What happened, to what kind of record, and exactly when: the opened entry's subtitle. */
+export function entrySubtitle(entry: AuditEntry): string {
+  return `${actionLabel(entry.action)} · ${entityLabel(entry.entityType)} · ${formatDateTime(entry.createdAt, { withSeconds: true })}`;
 }

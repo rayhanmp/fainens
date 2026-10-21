@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { cn, formatDateTime, formatTime } from '../../lib/utils';
 import { useAuditRecordHistoryQuery } from './queries';
-import { entryTitle } from './format';
+import { entrySubtitle, entryTitle } from './format';
 import { actionLabel, auditAmount, auditChanges, auditKind, auditReason, entityLabel, type AuditEntry, type AuditFormat, type AuditKind } from './describe';
 
 const KIND_ICON: Record<AuditKind, { icon: typeof Plus; className: string }> = {
@@ -65,86 +65,101 @@ function Swatch({ color }: { color: string | null | undefined }) {
   return color ? <span className="mr-1.5 inline-block h-3 w-3 rounded-full align-[-1px] ring-1 ring-black/10" style={{ background: color }} aria-hidden /> : null;
 }
 
+export function EntryReason({ reason }: { reason: string }) {
+  return <p className="text-sm text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">Reason given:</span> {reason}</p>;
+}
+
+/** An entry's fields: before and after for a change, or what an added or deleted record held. */
+export function EntryChanges({ entry, format }: { entry: AuditEntry; format: AuditFormat }) {
+  const kind = auditKind(entry.action);
+  const changes = auditChanges(entry, format);
+  const compare = Boolean(entry.beforeSnapshot && entry.afterSnapshot);
+  const heading = compare ? 'What changed' : kind === 'removed' || !entry.afterSnapshot ? 'What it held' : 'What was recorded';
+  return (
+    <div>
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">{heading}</h3>
+      {changes.length === 0 ? (
+        <p className="mt-2 text-sm text-[var(--ref-on-surface-variant)]">Nothing you’d see changed; this step only touched the record’s bookkeeping.</p>
+      ) : (
+        <table className="mt-2 w-full table-fixed border-collapse text-sm">
+          {compare && (
+            <thead>
+              <tr className="text-left text-xs text-[var(--ref-on-surface-variant)]">
+                <th className="w-[30%] py-1.5 pr-3 font-medium"><span className="sr-only">Field</span></th>
+                <th className="py-1.5 pr-3 font-medium">Before</th>
+                <th className="py-1.5 font-medium">After</th>
+              </tr>
+            </thead>
+          )}
+          <tbody className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
+            {changes.map((change) => (
+              <tr key={change.key} className="align-top">
+                <th scope="row" className="w-[30%] py-2 pr-3 text-left font-medium text-[var(--ref-on-surface-variant)]">{change.label}</th>
+                {compare ? (
+                  <>
+                    <td className="break-words py-2 pr-3 text-[var(--ref-on-surface-variant)]"><Swatch color={change.color?.before} />{change.before}</td>
+                    <td className="break-words py-2 font-medium text-[var(--ref-on-surface)]"><Swatch color={change.color?.after} />{change.after}</td>
+                  </>
+                ) : (
+                  <td className="break-words py-2 text-[var(--ref-on-surface)]" colSpan={2}>
+                    <Swatch color={entry.afterSnapshot ? change.color?.after : change.color?.before} />{entry.afterSnapshot ? change.after : change.before}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/** Every entry for one record, newest first; the open one is marked, the others open on click. */
+export function RecordHistory({ history, currentId, onOpen }: { history: AuditEntry[]; currentId: number; onOpen: (entry: AuditEntry) => void }) {
+  return (
+    <div>
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">Everything that happened to it</h3>
+      <ol className="mt-2 space-y-0.5">
+        {history.map((step) => (
+          <li key={step.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(step)}
+              disabled={step.id === currentId}
+              className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)] disabled:cursor-default disabled:bg-[var(--ref-surface-container-low)]"
+            >
+              <KindIcon action={step.action} className="h-7 w-7" />
+              <span className="flex-1 font-medium text-[var(--ref-on-surface)]">{actionLabel(step.action)}{step.id === currentId ? <span className="ml-2 text-xs font-normal text-[var(--ref-on-surface-variant)]">This entry</span> : null}</span>
+              <span className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatDateTime(step.createdAt)}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 /** An entry opened: every field that changed, the record's whole history, and the raw record. */
 export function EntryDetail({ entry, format, onClose, onOpen }: { entry: AuditEntry | null; format: AuditFormat; onClose: () => void; onOpen: (entry: AuditEntry) => void }) {
   const historyQuery = useAuditRecordHistoryQuery(entry?.entityType ?? null, entry?.entityId ?? null);
   if (!entry) return null;
   const kind = auditKind(entry.action);
-  const changes = auditChanges(entry, format);
-  const compare = Boolean(entry.beforeSnapshot && entry.afterSnapshot);
   const reason = auditReason(entry);
   const history = (historyQuery.data?.history ?? []) as AuditEntry[];
-  const heading = compare ? 'What changed' : kind === 'removed' || !entry.afterSnapshot ? 'What it held' : 'What was recorded';
 
   return (
     <Modal
       isOpen
       onClose={onClose}
       title={entryTitle(entry)}
-      subtitle={`${actionLabel(entry.action)} · ${entityLabel(entry.entityType)} · ${formatDateTime(entry.createdAt, { withSeconds: true })}`}
+      subtitle={entrySubtitle(entry)}
       size="xl"
       showCloseLabel={false}
     >
       <div className="space-y-6">
-        {reason && <p className="text-sm text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">Reason given:</span> {reason}</p>}
-
-        <div>
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">{heading}</h3>
-          {changes.length === 0 ? (
-            <p className="mt-2 text-sm text-[var(--ref-on-surface-variant)]">Nothing you’d see changed; this step only touched the record’s bookkeeping.</p>
-          ) : (
-            <table className="mt-2 w-full table-fixed border-collapse text-sm">
-              {compare && (
-                <thead>
-                  <tr className="text-left text-xs text-[var(--ref-on-surface-variant)]">
-                    <th className="w-[30%] py-1.5 pr-3 font-medium"><span className="sr-only">Field</span></th>
-                    <th className="py-1.5 pr-3 font-medium">Before</th>
-                    <th className="py-1.5 font-medium">After</th>
-                  </tr>
-                </thead>
-              )}
-              <tbody className="divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
-                {changes.map((change) => (
-                  <tr key={change.key} className="align-top">
-                    <th scope="row" className="w-[30%] py-2 pr-3 text-left font-medium text-[var(--ref-on-surface-variant)]">{change.label}</th>
-                    {compare ? (
-                      <>
-                        <td className="break-words py-2 pr-3 text-[var(--ref-on-surface-variant)]"><Swatch color={change.color?.before} />{change.before}</td>
-                        <td className="break-words py-2 font-medium text-[var(--ref-on-surface)]"><Swatch color={change.color?.after} />{change.after}</td>
-                      </>
-                    ) : (
-                      <td className="break-words py-2 text-[var(--ref-on-surface)]" colSpan={2}>
-                        <Swatch color={entry.afterSnapshot ? change.color?.after : change.color?.before} />{entry.afterSnapshot ? change.after : change.before}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {history.length > 1 && (
-          <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">Everything that happened to it</h3>
-            <ol className="mt-2 space-y-0.5">
-              {history.map((step) => (
-                <li key={step.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(step)}
-                    disabled={step.id === entry.id}
-                    className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-[var(--ref-surface-container-low)] disabled:cursor-default disabled:bg-[var(--ref-surface-container-low)]"
-                  >
-                    <KindIcon action={step.action} className="h-7 w-7" />
-                    <span className="flex-1 font-medium text-[var(--ref-on-surface)]">{actionLabel(step.action)}{step.id === entry.id ? <span className="ml-2 text-xs font-normal text-[var(--ref-on-surface-variant)]">This entry</span> : null}</span>
-                    <span className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">{formatDateTime(step.createdAt)}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
+        {reason && <EntryReason reason={reason} />}
+        <EntryChanges entry={entry} format={format} />
+        {history.length > 1 && <RecordHistory history={history} currentId={entry.id} onOpen={onOpen} />}
 
         <details className="text-sm">
           <summary className="cursor-pointer select-none text-xs font-semibold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]">The full record as saved</summary>

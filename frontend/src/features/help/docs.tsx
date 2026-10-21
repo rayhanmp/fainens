@@ -21,6 +21,7 @@ import { LoanRepaymentDemo } from './LoanVisuals';
 import { AgentFlow, SaveTransactionFlow } from './TechVisuals';
 import { SchemaDiagram } from './SchemaDiagram';
 import { RecapPlayerDemo } from './RecapVisuals';
+import { AuditActivityDemo, AuditEntryDemo } from './AuditVisuals';
 import { LiveReports } from './ReportVisuals';
 import { HiddenBalanceDemo, SampleDashboardDemo } from './DashboardVisuals';
 import { LiveCategoryViews, LiveDashboardCharts } from './LiveVisuals';
@@ -243,9 +244,9 @@ export const DOCS: DocPage[] = [
         { q: 'Its period is closed', a: 'Reopen the period in Salary periods, make the change, then close it again.' },
         { q: 'I want to delete it', a: 'Posted entries can’t be deleted; correct them instead. Drafts can be deleted.' },
       ] },
-      { type: 'callout', tone: 'tip', text: 'Not sure what changed? Security audit lists important changes and when they happened.' },
+      { type: 'callout', tone: 'tip', text: 'Not sure what changed? Security audit lists every change and when it happened, with each field before and after.' },
     ],
-    related: ['periods-budgets', 'accounts', 'troubleshooting'],
+    related: ['periods-budgets', 'accounts', 'security-audit', 'troubleshooting'],
   },
   {
     slug: 'accounts',
@@ -992,13 +993,53 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'Use the eye button in the sidebar, or press H on the Dashboard. Phones start with balances hidden.' },
       { type: 'h2', id: 'pdf', text: 'Password-protected reports' },
       { type: 'p', text: 'Turn it on in Settings → PDF reports. The password is your birthday in the order you choose, and each PDF is encrypted before it downloads.' },
-      { type: 'h2', id: 'audit', text: 'Security audit' },
-      { type: 'p', text: 'See everything that was added, changed or deleted, and when. The squares at the top show the last 12 weeks, darker on busier days with a red dot where something was deleted; click one to list only that day. Search by a name, place or note, or filter by the kind of record and change. Open an entry to see each field before and after, and everything else that happened to that record.' },
       { type: 'h2', id: 'images', text: 'Image storage' },
       { type: 'p', text: 'Every receipt and photo you attach, whether in Agent, on a transaction or in the wishlist, is kept in Image storage. Filter by where it came from, search, preview, and delete images you don’t need.' },
       { type: 'open', link: { to: '/settings', label: 'Open Settings' } },
     ],
-    related: ['can-i', 'agent'],
+    related: ['security-audit', 'can-i', 'agent'],
+  },
+  {
+    slug: 'security-audit',
+    group: 'Agent and your data',
+    title: 'Security audit',
+    summary: 'See what was added, changed or deleted, and when',
+    lead: 'Fainens keeps an entry every time a record is added, changed or deleted. Security audit lists them, so you can see when something happened and exactly what changed.',
+    blocks: [
+      { type: 'h2', id: 'open', text: 'Opening it' },
+      { type: 'p', text: 'Choose your name at the bottom of the sidebar, then Security audit. It’s also in Settings → Data, under Tools.' },
+      { type: 'h2', id: 'recorded', text: 'What gets recorded' },
+      { type: 'list', items: [
+        'Adding, changing and deleting transactions, accounts, categories, budgets, subscriptions, loans, reimbursements, split bills, wishlist items and attached pictures.',
+        'Steps along the way, such as posting an imported draft, closing or reopening a period, approving a claim, archiving an account or voiding a renewal.',
+        'Changes made for you: imports, Agent’s changes, automatic subscription renewals and salary posting.',
+      ] },
+      { type: 'h2', id: 'weeks', text: 'The last 12 weeks' },
+      { type: 'visual', node: <AuditActivityDemo /> },
+      { type: 'list', items: [
+        'One square per day, a column per week. A darker square had more entries than your other days; grey means nothing was recorded. Shades compare days with each other, so one big import doesn’t make every other day look empty.',
+        'A red dot marks a day when something was deleted.',
+        'Click a day to list only that day’s entries. Click it again, press Escape, or use the day chip above the list to see every day.',
+        'Beside the squares: entries in the last 7 days and the week before, how many of them were deletions, and your busiest day.',
+      ] },
+      { type: 'h2', id: 'entries', text: 'Reading and opening entries' },
+      { type: 'visual', node: <AuditEntryDemo />, wide: true },
+      { type: 'list', items: [
+        'Entries are grouped by day, newest first, and named by their record: a transaction’s description, a category’s or a period’s name. A deleted record’s name is struck through.',
+        'Under the name: what happened, the kind of record, its amount, and the reason when one was saved. Changes show their first two fields, like Category Food & dining → Coffee.',
+        'Open an entry for every field before and after. For something added it shows What was recorded; for something deleted, What it held.',
+        'Everything that happened to it lists the record’s other entries, oldest at the bottom; click one to open it. The full record as saved shows the raw data, and Open in Transactions goes to a transaction that still exists.',
+      ] },
+      { type: 'h2', id: 'find', text: 'Finding something' },
+      { type: 'list', items: [
+        'Search finds the names, places and notes the records held.',
+        'Filter by the kind of record, and by the kind of change: Added, Changed, Deleted, or Other steps such as posting or closing.',
+        'Clear filters puts everything back, including a picked day.',
+      ] },
+      { type: 'callout', tone: 'note', title: 'What it doesn’t cover', text: 'It doesn’t record sign-ins or which device made a change, and goals, Settings and your profile aren’t logged here. Entries can’t be edited or deleted in the app; restoring a backup brings back the log as it was in that backup.' },
+      { type: 'open', link: { to: '/audit-log', label: 'Open Security audit' } },
+    ],
+    related: ['fixing-mistakes', 'data-privacy', 'troubleshooting'],
   },
 
   // ── Reference ─────────────────────────────────────────────────────
@@ -1039,7 +1080,7 @@ export const DOCS: DocPage[] = [
         { q: 'I can’t close a period.', a: 'It still has drafts. Post or delete them, then close it.' },
         { q: 'My bank email didn’t show up.', a: 'Only wondr by BNI emails are read. Fainens checks every 15 minutes; use Sync now in Transactions, then look in Review pending.' },
         { q: 'Agent’s draft won’t post.', a: 'Drafts expire after 15 minutes or when your data changes. Ask Agent to prepare it again.' },
-        { q: 'Something changed and I don’t know why.', a: 'Open Security audit to see important changes and when they happened.' },
+        { q: 'Something changed and I don’t know why.', a: 'Open Security audit and search for the record’s name: each entry shows what changed, before and after, and when.' },
       ] },
       { type: 'h2', id: 'data-quality', text: 'Data quality checks' },
       { type: 'p', text: 'Data quality scans your ledger for entries that look like mistakes and lists them for you to review. Choose Scan ledger to check again.' },

@@ -70,6 +70,7 @@ const ACTION_LABELS: Record<string, string> = {
   archive: 'Archived',
   restore: 'Restored',
   agent_update: 'Changed by Agent',
+  agent_create: 'Added by Agent',
   discard: 'Discarded',
   create_opening_balance: 'Set opening balances',
   create_recovery: 'Recovered balances',
@@ -165,7 +166,7 @@ export function actionLabel(action: string): string {
 }
 
 export function auditKind(action: string): AuditKind {
-  if (action === 'create') return 'added';
+  if (action === 'create' || action === 'agent_create') return 'added';
   if (action === 'update' || action === 'agent_update') return 'changed';
   if (action === 'delete' || action === 'discard') return 'removed';
   return 'step';
