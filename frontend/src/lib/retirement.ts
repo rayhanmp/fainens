@@ -36,6 +36,10 @@ interface RetirementProjection {
   estimatedMonthlyIncome: number;
   monthlyGap: number;
   requiredAdditionalSaving: number | null;
+  /** The same extra as a share of the wage (in %), rising with it each year; null without a wage or time. */
+  requiredAdditionalRate: number | null;
+  /** What you put in this month: the amount, or the share of today's wage. */
+  monthlyContributionNow: number;
   capitalGap: number | null;
   jpAccessAge: number;
   jpAccessYear: number;
@@ -61,6 +65,18 @@ function futureValueFactor(monthlyRate: number, months: number): number {
   return Math.expm1(months * Math.log1p(monthlyRate)) / monthlyRate;
 }
 
+/**
+ * What saving one rupiah a month grows to over `months`, when the amount rises by `yearlyGrowth`
+ * each year (as a wage does) and the balance earns `monthlyRate` a month.
+ */
+function growingFutureValueFactor(monthlyRate: number, yearlyGrowth: number, months: number): number {
+  let total = 0;
+  for (let month = 1; month <= months; month += 1) {
+    total += Math.pow(1 + yearlyGrowth, Math.floor((month - 1) / 12)) * Math.pow(1 + monthlyRate, months - month);
+  }
+  return total;
+}
+
 /** PP 45/2015: age rises every three years, reaching 65 in 2043. */
 export function jpAgeForYear(year: number): number {
   return Math.min(65, 59 + Math.max(0, Math.floor((year - 2025) / 3)));
@@ -81,6 +97,8 @@ export function calculateRetirementProjection(input: {
   currentJhtBalance: number;
   currentPersonalSavings: number;
   monthlyPersonalContribution: number;
+  /** Save a share of the wage (in %) instead of a fixed amount, so it rises as the wage does; overrides the amount. */
+  personalContributionRate?: number;
   existingJpYears: number;
   salaryGrowthRate: number;
   inflationRate: number;
@@ -105,7 +123,7 @@ export function calculateRetirementProjection(input: {
     || input.currentAge < 18 || input.retirementAge < input.currentAge || input.retirementAge > 100
     || input.existingJpYears > Math.min(input.currentAge - 18, Math.max(0, currentYear - 2015))
     || !Number.isInteger(input.payoutUntilAge) || input.payoutUntilAge <= input.retirementAge || input.payoutUntilAge > 110
-    || [input.salaryGrowthRate, input.inflationRate, input.jhtReturnRate, input.personalReturnRate, input.postRetirementReturn].some(rate => rate > 100)) {
+    || [input.salaryGrowthRate, input.inflationRate, input.jhtReturnRate, input.personalReturnRate, input.postRetirementReturn, input.personalContributionRate ?? 0].some(rate => rate > 100)) {
     throw new RangeError('Check ages, contribution history, and annual rates.');
   }
   const pensionAge = jpAccessAge(input.currentAge, currentYear);
@@ -139,10 +157,13 @@ export function calculateRetirementProjection(input: {
     total: Math.round(jhtBalance + personalBalance),
   }];
 
+  // A share of the wage rises with it each year; an amount stays the same.
+  const byWage = input.personalContributionRate !== undefined;
+  const contributionShare = (input.personalContributionRate ?? 0) / 100;
   for (let month = 1; month <= monthsToRetirement; month += 1) {
     const wageAtMonth = input.monthlyWage * Math.pow(1 + salaryGrowth, Math.floor((month - 1) / 12));
     jhtBalance = jhtBalance * (1 + jhtMonthlyRate) + wageAtMonth * jhtTotalRate;
-    personalBalance = personalBalance * (1 + personalMonthlyRate) + input.monthlyPersonalContribution;
+    personalBalance = personalBalance * (1 + personalMonthlyRate) + (byWage ? wageAtMonth * contributionShare : input.monthlyPersonalContribution);
     if (month <= jpFutureMonths) futureJpWageTotal += Math.min(wageAtMonth, wageCap);
 
     if (month % 12 === 0 || month === monthsToRetirement) {
@@ -196,6 +217,11 @@ export function calculateRetirementProjection(input: {
   const requiredAdditionalSaving = monthlyGap <= 0 ? 0
     : monthsToRetirement > 0 && capitalGap !== null
       ? capitalGap / futureValueFactor(personalMonthlyRate, monthsToRetirement) : null;
+  // As a share of the wage: what one rupiah of today's wage, rising with it and saved each month, grows to.
+  const wageSavingFactor = growingFutureValueFactor(personalMonthlyRate, salaryGrowth, monthsToRetirement);
+  const requiredAdditionalRate = monthlyGap <= 0 ? 0
+    : capitalGap !== null && input.monthlyWage > 0 && wageSavingFactor > 0
+      ? (capitalGap / (input.monthlyWage * wageSavingFactor)) * 100 : null;
 
   return {
     yearsToRetirement,
@@ -217,6 +243,8 @@ export function calculateRetirementProjection(input: {
     estimatedMonthlyIncome,
     monthlyGap,
     requiredAdditionalSaving,
+    requiredAdditionalRate,
+    monthlyContributionNow: byWage ? input.monthlyWage * contributionShare : input.monthlyPersonalContribution,
     capitalGap,
     jpAccessAge: pensionAge,
     jpAccessYear: pensionYear,

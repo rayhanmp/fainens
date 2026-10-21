@@ -89,6 +89,9 @@ export function RetirementPlanner() {
   const [currentJhtBalance, setCurrentJhtBalance] = useState(0);
   const [currentPersonalSavings, setCurrentPersonalSavings] = useState(0);
   const [monthlyPersonalContribution, setMonthlyPersonalContribution] = useState(0);
+  // A share of the wage by default: it rises as the wage does, as saving usually does.
+  const [contributionMode, setContributionMode] = useState<'wage' | 'amount'>('wage');
+  const [contributionRate, setContributionRate] = useState(0);
   const [existingJpYears, setExistingJpYears] = useState('0');
   const [targetMonthlySpending, setTargetMonthlySpending] = useState(0);
   const [healthClass, setHealthClass] = useState<HealthClass>('none');
@@ -134,6 +137,7 @@ export function RetirementPlanner() {
         currentJhtBalance,
         currentPersonalSavings,
         monthlyPersonalContribution,
+        personalContributionRate: contributionMode === 'wage' ? contributionRate : undefined,
         existingJpYears: workerType === 'pu' ? Number(existingJpYears) : 0,
         salaryGrowthRate,
         inflationRate,
@@ -148,7 +152,7 @@ export function RetirementPlanner() {
     } catch {
       return { projection: null, error: 'Check your inputs: ages are whole numbers from 18 to 100, you retire no earlier than today, the money lasts past retirement (up to 110), amounts are zero or more and rates 0–100%. JP history can’t start before 18 or before 2015.' };
     }
-  }, [workerType, currentAge, retirementAge, monthlyWage, currentJhtBalance, currentPersonalSavings, monthlyPersonalContribution, existingJpYears, totalTarget, salaryGrowthRate, inflationRate, jhtReturnRate, personalReturnRate, postRetirementReturn, payoutUntil, claimJhtEarly, jpWageCap]);
+  }, [workerType, currentAge, retirementAge, monthlyWage, currentJhtBalance, currentPersonalSavings, monthlyPersonalContribution, contributionMode, contributionRate, existingJpYears, totalTarget, salaryGrowthRate, inflationRate, jhtReturnRate, personalReturnRate, postRetirementReturn, payoutUntil, claimJhtEarly, jpWageCap]);
   const { projection } = result;
 
   // Everything is shown in today's prices: rupiah decades from now mean little to anyone.
@@ -233,11 +237,17 @@ export function RetirementPlanner() {
                     <p className="mt-0.5 text-2xl font-bold tabular-nums">{formatAmount(Math.round(projection.capitalGap ?? 0))}</p>
                     <p className="mt-0.5 text-xs text-white/75">more in savings today would pay for it. Without it you’d be {formatAmount(today(projection.monthlyGap))} a month short.</p>
                   </>
+                ) : contributionMode === 'wage' && projection.requiredAdditionalRate !== null ? (
+                  <>
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-[#fde68a]"><TrendingUp className="h-4 w-4" aria-hidden />Not enough yet. To afford it, save</p>
+                    <p className="mt-0.5 text-2xl font-bold tabular-nums">{formatDecimal(projection.requiredAdditionalRate, 1)}%<span className="ml-1.5 text-sm font-semibold text-white/70">more of your wage</span></p>
+                    <p className="mt-0.5 text-xs text-white/75">That’s {formatAmount(Math.round((monthlyWage * projection.requiredAdditionalRate) / 100))} a month now, rising {formatDecimal(salaryGrowthRate, 1)}% a year with your wage until {projection.retirementAge}, at Your return. Without it you’d be {formatAmount(today(projection.monthlyGap))} a month short.</p>
+                  </>
                 ) : (
                   <>
                     <p className="flex items-center gap-1.5 text-sm font-semibold text-[#fde68a]"><TrendingUp className="h-4 w-4" aria-hidden />Not enough yet. To afford it, save</p>
                     <p className="mt-0.5 text-2xl font-bold tabular-nums">{formatAmount(Math.round(projection.requiredAdditionalSaving ?? 0))}<span className="ml-1.5 text-sm font-semibold text-white/70">more a month</span></p>
-                    <p className="mt-0.5 text-xs text-white/75">from now until {projection.retirementAge}, at Your return. Without it you’d be {formatAmount(today(projection.monthlyGap))} a month short.</p>
+                    <p className="mt-0.5 text-xs text-white/75">the same amount from now until {projection.retirementAge}, at Your return. Without it you’d be {formatAmount(today(projection.monthlyGap))} a month short.</p>
                   </>
                 )}
               </div>
@@ -346,7 +356,7 @@ export function RetirementPlanner() {
 
           <Group
             title="What you have so far"
-            summary={`JHT ${mask(compactRupiah(currentJhtBalance))}${workerType === 'pu' ? ` · JP ${existingJpYears || 0} yrs` : ''} · savings ${mask(compactRupiah(currentPersonalSavings))} + ${mask(compactRupiah(monthlyPersonalContribution))} a month`}
+            summary={`JHT ${mask(compactRupiah(currentJhtBalance))}${workerType === 'pu' ? ` · JP ${existingJpYears || 0} yrs` : ''} · savings ${mask(compactRupiah(currentPersonalSavings))} + ${contributionMode === 'wage' ? `${formatDecimal(contributionRate, 1)}% of wage` : mask(compactRupiah(monthlyPersonalContribution))} a month`}
             open={openGroups.has('have')}
             onToggle={() => toggleGroup('have')}
           >
@@ -357,8 +367,20 @@ export function RetirementPlanner() {
             <Field label="Retirement savings now" htmlFor="retirement-personal" info="Money you’ve already set aside for retirement outside BPJS, like a fund or a pension account.">
               <MoneyField id="retirement-personal" value={currentPersonalSavings} onChange={setCurrentPersonalSavings} />
             </Field>
-            <Field label="You add a month" htmlFor="retirement-contribution" info="What you put into those savings every month, on top of BPJS.">
-              <MoneyField id="retirement-contribution" value={monthlyPersonalContribution} onChange={setMonthlyPersonalContribution} />
+            <Field
+              label="You add a month"
+              htmlFor="retirement-contribution"
+              info="What you put into those savings every month, on top of BPJS. A share of your wage rises each year with Salary growth; a fixed amount stays the same until you retire."
+              hint={contributionMode === 'wage'
+                ? monthlyWage > 0 ? `${mask(formatAmount(Math.round((monthlyWage * contributionRate) / 100)))} now, rising ${formatDecimal(salaryGrowthRate, 1)}% a year with your wage.` : 'Add your wage above to see it in rupiah.'
+                : 'The same amount every month until you retire.'}
+            >
+              <div className="space-y-2">
+                <Segmented ariaLabel="Save" value={contributionMode} onChange={setContributionMode} options={[{ value: 'wage', label: '% of wage' }, { value: 'amount', label: 'Fixed amount' }]} />
+                {contributionMode === 'wage'
+                  ? <PercentField id="retirement-contribution" value={contributionRate} min={0} max={100} onChange={setContributionRate} />
+                  : <MoneyField id="retirement-contribution" value={monthlyPersonalContribution} onChange={setMonthlyPersonalContribution} />}
+              </div>
             </Field>
             {workerType === 'pu' && (
               <Field label="Years of JP paid so far" htmlFor="retirement-jp-years" info="How long you’ve been paying into JP, shown in JMO. JP began in July 2015.">

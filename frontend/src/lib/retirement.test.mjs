@@ -62,6 +62,24 @@ test('saving the suggested extra closes the gap', () => {
   close(topped.monthlyGap, 0, 1e-6);
 });
 
+test('saving a share of the wage rises with it, and the suggested share closes the gap', () => {
+  const growing = { ...base, salaryGrowthRate: 5 };
+  const flat = calculateRetirementProjection({ ...growing, monthlyPersonalContribution: 800_000 });
+  const share = calculateRetirementProjection({ ...growing, personalContributionRate: 10 });
+  // 10% of 8 jt is the same 800k today, but it rises with the wage, so it ends up with more.
+  assert.equal(share.monthlyContributionNow, 800_000);
+  assert.ok(share.projectedPersonalSavings > flat.projectedPersonalSavings * 1.5);
+  // The first year matches month for month.
+  const year = calculateRetirementProjection({ ...growing, retirementAge: 31, personalContributionRate: 10 });
+  const i = 1.06 ** (1 / 12) - 1;
+  close(year.projectedPersonalSavings, 800_000 * ((1 + i) ** 12 - 1) / i);
+  // Saving the suggested share, on top of nothing, leaves no gap.
+  const projection = calculateRetirementProjection(growing);
+  assert.ok(projection.requiredAdditionalRate > 0);
+  const topped = calculateRetirementProjection({ ...growing, personalContributionRate: projection.requiredAdditionalRate });
+  close(topped.monthlyGap, 0, 1e-6);
+});
+
 test('the pay-out rises with inflation and empties the savings exactly at the chosen age', () => {
   const projection = calculateRetirementProjection({ ...base, currentPersonalSavings: 500_000_000, retirementAge: 65 });
   const i = 1.0625 ** (1 / 12) - 1;

@@ -663,6 +663,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'retirement', text: 'Retirement' },
       { type: 'list', items: [
         'Say what you want to spend each month after work, in today’s prices, or start from what you spend now. The answer shows what JHT, JP and your own savings pay each month and whether that covers it, or how much more to save.',
+        'Your own saving can be a share of your wage, which rises each year with Salary growth, or a fixed amount that stays the same. Saved as a share, the answer says what share more to save and what that is in rupiah now. Your savings, JHT and what’s left after you retire all earn the returns set under Assumptions and After you retire.',
         'After you retire, JHT and your savings stay invested at a rate you choose (the latest SBN ritel coupon after tax is one tap) and are spent down evenly until an age you choose; JP is paid for life.',
         'Retire at starts at the age your JP pension begins. Underlined figures in What old age needs, such as BPJS Kesehatan rates and medical inflation, link to their sources.',
         'It’s a planning estimate in today’s prices, not an official BPJS calculation.',
