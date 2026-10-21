@@ -194,6 +194,56 @@ export function itinerary(basics: TripBasics, bookings: readonly TripBooking[], 
   };
 }
 
+/**
+ * The city each day of the trip is spent in: the one you chose for it, or else the day before's,
+ * starting from the first place on the trip.
+ */
+export function dayCities(days: readonly string[], places: readonly string[], chosen: Readonly<Record<string, unknown>>): string[] {
+  let current = places[0] ?? '';
+  return days.map((day) => {
+    const set = chosen[day];
+    if (typeof set === 'string' && set.trim()) current = set.trim();
+    return current;
+  });
+}
+
+export type PartOfDay = 'morning' | 'afternoon' | 'evening' | 'any';
+export const PARTS_OF_DAY: Record<PartOfDay, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', any: 'Any time' };
+
+/** Before noon is morning, until five the afternoon, then evening; no time is any time. */
+export const partOfDay = (time: string | null): PartOfDay => (time === null ? 'any' : time < '12:00' ? 'morning' : time < '17:00' ? 'afternoon' : 'evening');
+
+/** `HH:MM` as minutes after midnight, and back. */
+export const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+export const clockOf = (minutes: number) => `${pad(Math.floor(minutes / 60) % 24)}:${pad(minutes % 60)}`;
+
+/**
+ * Side-by-side lanes for one day's timed things on a calendar: what overlaps sits next to each
+ * other, each taking a lane, and a group of overlapping things shares how many lanes it needs.
+ */
+export function calendarLanes<T extends { start: number; end: number }>(items: readonly T[]): Array<T & { lane: number; lanes: number }> {
+  const sorted = [...items].sort((a, b) => a.start - b.start || b.end - a.end);
+  const out: Array<T & { lane: number; lanes: number }> = [];
+  let group: Array<T & { lane: number; lanes: number }> = [];
+  let groupEnd = -1;
+  const close = () => {
+    const lanes = Math.max(1, ...group.map((item) => item.lane + 1));
+    for (const item of group) item.lanes = lanes;
+    out.push(...group);
+    group = [];
+  };
+  for (const item of sorted) {
+    if (group.length && item.start >= groupEnd) close();
+    const used = new Set(group.filter((other) => other.end > item.start).map((other) => other.lane));
+    let lane = 0;
+    while (used.has(lane)) lane += 1;
+    group.push({ ...item, lane, lanes: 1 });
+    groupEnd = Math.max(groupEnd, item.end);
+  }
+  if (group.length) close();
+  return out;
+}
+
 export type NextItem =
   | { type: 'booking'; day: string; time: string | null; booking: TripBooking; role: 'leave' | 'arrive' | 'check-in' | 'check-out' | 'on' }
   | { type: 'plan'; day: string; time: string | null; plan: TripPlan };

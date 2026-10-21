@@ -170,7 +170,7 @@ export function TripWorkspace({ detail, trip, now, color, canPay, tab, onTab, on
         <BookingsSection goalId={goal.id} trip={trip} files={detail.attachments} canPay={canPay} onPay={onPayPart} now={now} />
       </div>
       <div role="tabpanel" hidden={tab !== 'days'}>
-        <ItinerarySection goalId={goal.id} goalName={goal.name} trip={trip} now={now} />
+        <ItinerarySection goalId={goal.id} goalName={goal.name} trip={trip} typeData={goal.typeData} now={now} />
       </div>
       <div role="tabpanel" hidden={tab !== 'people'}>
         <PeopleSection goalId={goal.id} trip={trip} now={now} />

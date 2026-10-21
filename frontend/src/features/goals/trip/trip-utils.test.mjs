@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  calendarLanes,
+  clockOf,
   costText,
+  dayCities,
+  minutesOf,
+  partOfDay,
   fromWallInput,
   itinerary,
   nextUp,
@@ -59,6 +64,25 @@ test('each day holds its bookings and plans in time order, and where you sleep',
   assert.deepEqual(days.map((day) => day.sleep?.title ?? null), ['Shinjuku hotel', 'Shinjuku hotel', null, null]);
   assert.equal(days[1].planned, 1_300_000);
   assert.deepEqual(elsewhere.map((item) => item.title), ['Moved away']);
+});
+
+test('each day has its city, carried on from the day before, and times fall in parts of the day', () => {
+  const days = ['2027-03-10', '2027-03-11', '2027-03-12', '2027-03-13'];
+  assert.deepEqual(dayCities(days, ['Tokyo', 'Kyoto'], { '2027-03-12': 'Kyoto' }), ['Tokyo', 'Tokyo', 'Kyoto', 'Kyoto']);
+  assert.deepEqual(dayCities(days.slice(0, 2), [], {}), ['', '']);
+  assert.deepEqual([partOfDay('07:30'), partOfDay('12:00'), partOfDay('16:59'), partOfDay('17:00'), partOfDay(null)], ['morning', 'afternoon', 'afternoon', 'evening', 'any']);
+});
+
+test('a day on the calendar puts overlapping things side by side', () => {
+  const laid = calendarLanes([
+    { id: 'a', start: 9 * 60, end: 10 * 60 },
+    { id: 'b', start: 9 * 60 + 30, end: 11 * 60 },
+    { id: 'c', start: 10 * 60, end: 10 * 60 + 30 },
+    { id: 'd', start: 14 * 60, end: 15 * 60 },
+  ]);
+  const read = Object.fromEntries(laid.map((item) => [item.id, [item.lane, item.lanes]]));
+  assert.deepEqual(read, { a: [0, 2], b: [1, 2], c: [0, 2], d: [0, 1] });
+  assert.equal(clockOf(minutesOf('07:45') + 90), '09:15');
 });
 
 test('next up lists what comes from now on, in order', () => {

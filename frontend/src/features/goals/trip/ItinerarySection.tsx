@@ -1,75 +1,22 @@
 import { useState } from 'react';
-import { BedDouble, CalendarPlus, ExternalLink, GripVertical, Plus, Printer, Trash2 } from 'lucide-react';
+import { BedDouble, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, GripVertical, Plus, Printer } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { toast } from '../../../components/ui/useToast';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { cn } from '../../../lib/utils';
-import { MoneyField, Segmented } from '../../savings/fields';
+import { Segmented } from '../../savings/fields';
 import { Dropdown } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
 import { BOOKING_ICONS } from './booking-icons';
-import { useAddPlanMutation, useDeletePlanMutation, useMovePlansMutation, useUpdatePlanMutation, type Trip } from './queries';
+import { PlanForm } from './PlanForm';
+import { useMovePlansMutation, type Trip } from './queries';
+import { TripCalendar } from './TripCalendar';
 import { downloadCalendar, printItinerary } from './trip-export';
-import { costText, dayKey, dayLabel, itinerary, mapsUrl, type DayItem, type TripPlan as Plan } from './trip-utils';
+import { useUpdateGoalMutation } from '../queries';
+import { costText, dayCities, dayKey, dayLabel, itinerary, mapsUrl, partOfDay, PARTS_OF_DAY, type DayItem, type PartOfDay, type TripPlan as Plan } from './trip-utils';
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const ROLE: Record<string, string> = { leave: 'Leaves', arrive: 'Lands', 'check-in': 'Check in', 'check-out': 'Check out' };
-
-/** Adds a plan to a day, or edits one (and moves it to another day). */
-function PlanForm({ goalId, trip, day, days, plan, onDone }: { goalId: number; trip: Trip; day: string; days: string[]; plan?: Plan; onDone: () => void }) {
-  const add = useAddPlanMutation();
-  const update = useUpdatePlanMutation();
-  const remove = useDeletePlanMutation();
-  const foreign = trip.basics.currency;
-  const [title, setTitle] = useState(plan?.title ?? '');
-  const [time, setTime] = useState(plan?.time ?? '');
-  const [place, setPlace] = useState(plan?.place ?? '');
-  const [cost, setCost] = useState(plan?.cost ?? 0);
-  const [currency, setCurrency] = useState(plan?.costCurrency ?? foreign ?? 'IDR');
-  const [onDay, setOnDay] = useState(plan?.day ?? day);
-
-  const save = async () => {
-    if (!title.trim()) return;
-    const body = { day: onDay, time: time || null, title: title.trim(), place: place.trim() || null, cost, costCurrency: currency };
-    try {
-      if (plan) await update.mutateAsync({ id: plan.id, ...body });
-      else await add.mutateAsync({ goalId, ...body });
-      onDone();
-    } catch (error) {
-      toast.error(errorText(error, 'Could not save the plan'));
-    }
-  };
-
-  return (
-    <form onSubmit={(event) => { event.preventDefault(); void save(); }} onKeyDown={(event) => { if (event.key === 'Escape') onDone(); }} className="my-2 space-y-2 rounded-xl bg-[var(--ref-surface-container-low)] p-3">
-      <div className="flex flex-wrap gap-2">
-        <input aria-label="Time" type="time" className="brutalist-input h-[34px] w-[110px]" value={time} onChange={(event) => setTime(event.target.value)} />
-        <input aria-label="Plan" autoFocus className="brutalist-input h-[34px] min-w-0 flex-1" placeholder="Fushimi Inari at sunrise" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <input aria-label="Where" className="brutalist-input h-[34px] min-w-0 flex-1" placeholder="Where (for the map)" value={place} maxLength={200} onChange={(event) => setPlace(event.target.value)} />
-        {foreign && <Segmented ariaLabel="Currency" value={currency} options={[{ value: 'IDR', label: 'Rp' }, { value: foreign, label: foreign }]} onChange={setCurrency} />}
-        <div className="w-[150px]">
-          {currency === 'IDR'
-            ? <MoneyField ariaLabel="Expected cost" value={cost} onChange={setCost} />
-            : <input aria-label="Expected cost" inputMode="decimal" className="brutalist-input h-[34px] w-full text-right tabular-nums" placeholder="0" value={cost ? String(cost) : ''} onChange={(event) => { const value = Number(event.target.value.replace(/[^\d.,]/g, '').replace(',', '.')); setCost(Number.isFinite(value) ? value : 0); }} />}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {plan ? (
-          <div className="flex items-center gap-2">
-            <div className="w-[170px]"><Dropdown ariaLabel="Day" value={onDay} options={[...new Set([...days, plan.day])].map((key) => ({ value: key, label: days.includes(key) ? `Day ${days.indexOf(key) + 1} · ${dayLabel(key)}` : dayLabel(key) }))} onChange={setOnDay} /></div>
-            <button type="button" aria-label="Remove plan" onClick={() => remove.mutate(plan.id, { onSuccess: onDone, onError: (error) => toast.error(errorText(error, 'Could not remove the plan')) })} className="grid h-[34px] w-[34px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)]"><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
-          </div>
-        ) : <span />}
-        <div className="flex gap-2">
-          <Button type="button" size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
-          <Button type="submit" size="sm" isLoading={add.isPending || update.isPending} disabled={!title.trim()}>{plan ? 'Save' : 'Add'}</Button>
-        </div>
-      </div>
-    </form>
-  );
-}
 
 function ItemRow({ item, onEdit, dragging, onDragStart, onDragEnd, onDragOverPlan, dropBefore }: {
   item: DayItem;
@@ -121,99 +68,182 @@ function ItemRow({ item, onEdit, dragging, onDragStart, onDragEnd, onDragOverPla
   );
 }
 
+/** The city a day is spent in: pick one of the trip's places, or type another. */
+function CityPicker({ city, places, onChange }: { city: string; places: string[]; onChange: (city: string) => void }) {
+  const [typing, setTyping] = useState(false);
+  const [draft, setDraft] = useState(city);
+  if (typing || !places.length) {
+    return (
+      <form onSubmit={(event) => { event.preventDefault(); if (draft.trim()) onChange(draft.trim()); setTyping(false); }} className="flex items-center gap-1.5">
+        <input aria-label="City" autoFocus={typing} className="brutalist-input h-[30px] w-[150px] text-sm" placeholder="Which city?" value={draft} maxLength={80} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (draft.trim() && draft.trim() !== city) onChange(draft.trim()); setTyping(false); }} />
+      </form>
+    );
+  }
+  return (
+    <div className="w-[170px]">
+      <Dropdown
+        ariaLabel="City"
+        value={places.includes(city) ? city : '__other'}
+        options={[...places.map((place) => ({ value: place, label: place })), ...(!places.includes(city) && city ? [{ value: '__other', label: city }] : []), { value: '__type', label: 'Another city…' }]}
+        onChange={(value) => { if (value === '__type') { setDraft(''); setTyping(true); } else if (value !== '__other') onChange(value); }}
+      />
+    </div>
+  );
+}
+
 /**
- * The trip day by day. Each day shows its bookings where they fall (flights, check-in and
- * check-out, tickets), your own plans with their time, place and expected cost, and where you
- * sleep. Plans drag between days, or move by editing. Each day's plans are set against its
- * spending money, and once the day has passed, what was spent.
+ * The trip day by day: a strip of its days (with the city and how full each is) to pick one, then
+ * that day as morning, afternoon, evening and any time, with its bookings where they fall
+ * (leaving, landing, check-in, check-out, tickets), your plans with their time, place and cost,
+ * where you sleep, its budget and, once it's passed, what was spent. Drag a plan onto another
+ * day in the strip to move it there, or open it and pick the day.
  */
-export function ItinerarySection({ goalId, goalName, trip, now }: { goalId: number; goalName: string; trip: Trip; now: number }) {
+export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { goalId: number; goalName: string; trip: Trip; typeData: Record<string, unknown>; now: number }) {
   const { formatAmount } = useBalanceVisibility();
   const move = useMovePlansMutation(goalId);
-  const [adding, setAdding] = useState<string | null>(null);
+  const updateGoal = useUpdateGoalMutation();
+  const [view, setView] = useState<'calendar' | 'day'>('calendar');
   const [editing, setEditing] = useState<number | null>(null);
+  const [formKey, setFormKey] = useState(0);
   const [dragged, setDragged] = useState<Plan | null>(null);
-  const [over, setOver] = useState<{ day: string; before: number | null } | null>(null);
+  const [overDay, setOverDay] = useState<string | null>(null);
   const { days, elsewhere } = itinerary(trip.basics, trip.bookings, trip.plans);
   const keys = days.map((day) => day.key);
   const today = dayKey(now);
+  const [picked, setPicked] = useState<string | null>(null);
+  const selected = days.find((day) => day.key === picked) ?? days.find((day) => day.key === today) ?? days[0];
+  const chosen = typeData.dayPlaces && typeof typeData.dayPlaces === 'object' ? typeData.dayPlaces as Record<string, unknown> : {};
+  const cities = dayCities(keys, trip.basics.places, chosen);
   const people = Math.max(1, trip.travellers.length);
   const allowance = trip.basics.dailyBudget * people;
   const spentOn = new Map((trip.spending?.byDay ?? []).map((row) => [row.day, row.total]));
 
-  const drop = (day: string) => {
-    if (!dragged || !over) return;
-    const order = trip.plans.filter((plan) => plan.day === day && plan.id !== dragged.id).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).map((plan) => plan.id);
-    const at = over.before === null ? order.length : Math.max(0, order.indexOf(over.before));
-    order.splice(at, 0, dragged.id);
+  const moveTo = (day: string) => {
+    if (!dragged || dragged.day === day) return;
+    const order = [...trip.plans.filter((plan) => plan.day === day).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).map((plan) => plan.id), dragged.id];
     move.mutate({ day, ids: order }, { onError: (error) => toast.error(errorText(error, 'Could not move the plan')) });
     setDragged(null);
-    setOver(null);
+    setOverDay(null);
   };
+  const setCity = (day: string, city: string) => updateGoal.mutate({ id: goalId, typeData: { ...typeData, dayPlaces: { ...chosen, [day]: city } } }, { onError: (error) => toast.error(errorText(error, 'Could not save the city')) });
 
   const exportMenu = days.length > 0 && (
-    <span className="flex gap-1">
-      <Button type="button" size="sm" variant="secondary" className="h-[30px] px-2 text-xs" onClick={() => downloadCalendar(goalName, trip.bookings, trip.plans)}><CalendarPlus className="mr-1 inline h-3.5 w-3.5" aria-hidden />Calendar</Button>
+    <span className="flex flex-wrap items-center gap-2">
+      <Segmented ariaLabel="Show" value={view} onChange={setView} options={[{ value: 'calendar', label: 'Calendar' }, { value: 'day', label: 'One day' }]} />
+      <Button type="button" size="sm" variant="secondary" className="h-[30px] px-2 text-xs" title="Save as a calendar file" onClick={() => downloadCalendar(goalName, trip.bookings, trip.plans)}><CalendarPlus className="mr-1 inline h-3.5 w-3.5" aria-hidden />.ics</Button>
       <Button type="button" size="sm" variant="secondary" className="h-[30px] px-2 text-xs" onClick={() => printItinerary(goalName, trip.basics, trip.bookings, trip.plans, formatAmount)}><Printer className="mr-1 inline h-3.5 w-3.5" aria-hidden />Print</Button>
     </span>
   );
 
+  const index = selected ? days.indexOf(selected) : -1;
+  const spent = selected && selected.key <= today ? spentOn.get(selected.key) ?? 0 : null;
+  const parts = selected ? (Object.keys(PARTS_OF_DAY) as PartOfDay[]).map((part) => ({ part, items: selected.items.filter((item) => partOfDay(item.time) === part) })) : [];
+
   return (
     <Section title="Day by day" aside={exportMenu || undefined}>
-      {days.length === 0 ? (
+      {!selected ? (
         <p className="px-4 py-4 text-sm text-[var(--ref-on-surface-variant)] sm:px-5">Add when you leave and come back in Trip to plan each day. Bookings with a date show up on their day.</p>
+      ) : view === 'calendar' ? (
+        <>
+          <TripCalendar goalId={goalId} trip={trip} days={days} cities={cities} today={today} onOpenDay={(day) => { setPicked(day); setView('day'); }} />
+          <p className="border-t border-[var(--color-border)] px-4 py-2.5 text-xs text-[var(--ref-on-surface-variant)] sm:px-5">Click an empty spot to add a plan at that time, or a plan to change it; drag a plan to another day or time. A day’s name opens it on its own.</p>
+        </>
       ) : (
-        <ol className="divide-y divide-[var(--color-border)]">
-          {days.map((day) => {
-            const isToday = day.key === today;
-            const spent = day.key <= today ? spentOn.get(day.key) ?? 0 : null;
-            return (
-              <li
-                key={day.key}
-                onDragOver={(event) => { if (!dragged) return; event.preventDefault(); if (over?.day !== day.key || over.before !== null) setOver({ day: day.key, before: null }); }}
-                onDrop={(event) => { event.preventDefault(); drop(day.key); }}
-                className={cn('px-4 py-3 sm:px-5', isToday && 'bg-[var(--ref-primary)]/5', dragged && over?.day === day.key && over.before === null && 'bg-[var(--ref-surface-container-low)]')}
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <h3 className="text-sm font-semibold text-[var(--ref-on-surface)]">
-                    Day {day.index} <span className="font-normal text-[var(--ref-on-surface-variant)]">· {dayLabel(day.key)}</span>
-                    {isToday && <span className="ml-2 rounded-full bg-[var(--ref-primary)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-surface)]">Today</span>}
-                  </h3>
-                  <span className="text-xs tabular-nums text-[var(--ref-on-surface-variant)]">
-                    {day.planned > 0 && <>{formatAmount(day.planned)} planned</>}
-                    {day.planned > 0 && allowance > 0 && ' · '}
-                    {allowance > 0 && <>{formatAmount(allowance)} spending money</>}
-                    {spent !== null && spent > 0 && <span className={cn('font-semibold', allowance > 0 && spent > allowance + day.planned ? 'text-[var(--color-warning)]' : 'text-[var(--ref-on-surface)]')}> · {formatAmount(spent)} spent</span>}
+        <>
+          {/* The days to pick from; drop a plan on one to move it there. */}
+          <div className="flex gap-2 overflow-x-auto border-b border-[var(--color-border)] px-4 py-3 [scrollbar-width:none] sm:px-5" role="tablist" aria-label="Days">
+            {days.map((day, at) => {
+              const count = day.items.length;
+              const isSelected = day.key === selected.key;
+              return (
+                <button
+                  key={day.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  ref={isSelected ? (node) => node?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) : undefined}
+                  onClick={() => { setPicked(day.key); setEditing(null); }}
+                  onDragOver={(event) => { if (!dragged) return; event.preventDefault(); if (overDay !== day.key) setOverDay(day.key); }}
+                  onDragLeave={() => { if (overDay === day.key) setOverDay(null); }}
+                  onDrop={(event) => { event.preventDefault(); moveTo(day.key); }}
+                  className={cn(
+                    'flex w-[92px] shrink-0 flex-col rounded-xl border px-2.5 py-2 text-left transition-colors',
+                    isSelected ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10' : 'border-[var(--color-border)] hover:bg-[var(--ref-surface-container-low)]',
+                    overDay === day.key && 'border-[var(--ref-primary)] ring-2 ring-[var(--ref-primary)]/30',
+                  )}
+                >
+                  <span className={cn('text-[11px] font-bold uppercase tracking-wide', isSelected ? 'text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface-variant)]')}>Day {day.index}{day.key === today ? ' · today' : ''}</span>
+                  <span className="text-sm font-semibold text-[var(--ref-on-surface)]">{new Date(day.noon).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</span>
+                  <span className="truncate text-xs text-[var(--ref-on-surface-variant)]">{cities[at] || '—'}</span>
+                  {/* How full the day is: a dot a thing, up to four. */}
+                  <span className="mt-1.5 flex h-1.5 gap-0.5" aria-label={`${count} thing${count === 1 ? '' : 's'}`}>
+                    {count === 0 ? <span className="h-1.5 w-1.5 rounded-full border border-[var(--ref-outline)]" /> : Array.from({ length: Math.min(4, count) }, (_, dot) => <span key={dot} className="h-1.5 w-1.5 rounded-full bg-[var(--ref-primary)]" />)}
                   </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="px-4 py-4 sm:px-5" role="tabpanel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="font-headline text-lg font-bold text-[var(--ref-on-surface)]">Day {selected.index} · {dayLabel(selected.key)}</h3>
+                <p className="mt-0.5 text-xs tabular-nums text-[var(--ref-on-surface-variant)]">
+                  {[
+                    allowance > 0 ? `${formatAmount(allowance)} spending money` : null,
+                    selected.planned > 0 ? `${formatAmount(selected.planned)} planned` : null,
+                  ].filter(Boolean).join(' · ') || 'No spending money set'}
+                  {spent !== null && spent > 0 && <span className={cn('font-semibold', allowance > 0 && spent > allowance + selected.planned ? 'text-[var(--color-warning)]' : 'text-[var(--ref-on-surface)]')}> · {formatAmount(spent)} spent</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <CityPicker key={`${selected.key}:${cities[index]}`} city={cities[index] ?? ''} places={trip.basics.places} onChange={(city) => setCity(selected.key, city)} />
+                <span className="flex">
+                  <button type="button" aria-label="The day before" disabled={index <= 0} onClick={() => setPicked(days[index - 1].key)} className="grid h-[30px] w-[30px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] disabled:opacity-30"><ChevronLeft className="h-4 w-4" aria-hidden /></button>
+                  <button type="button" aria-label="The day after" disabled={index >= days.length - 1} onClick={() => setPicked(days[index + 1].key)} className="grid h-[30px] w-[30px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] disabled:opacity-30"><ChevronRight className="h-4 w-4" aria-hidden /></button>
+                </span>
+              </div>
+            </div>
+
+            {/* The day by its parts, so it reads like the day itself. */}
+            <div className="mt-4 space-y-3">
+              {parts.filter(({ part, items }) => items.length > 0 || part !== 'any').map(({ part, items }) => (
+                <div key={part} className="grid grid-cols-[78px_minmax(0,1fr)] gap-3">
+                  <p className="pt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--ref-on-surface-variant)]">{PARTS_OF_DAY[part]}</p>
+                  {items.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-2 text-xs text-[var(--ref-on-surface-variant)]">Nothing yet</p>
+                  ) : (
+                    <ul className="rounded-lg bg-[var(--ref-surface-container-low)] px-2">
+                      {items.map((item) => (
+                        item.type === 'plan' && editing === item.plan.id
+                          ? <li key={`plan-${item.plan.id}`}><PlanForm goalId={goalId} trip={trip} day={selected.key} days={keys} plan={item.plan} onDone={() => setEditing(null)} /></li>
+                          : (
+                            <ItemRow
+                              key={item.type === 'plan' ? `plan-${item.plan.id}` : `${item.role}-${item.booking.id}`}
+                              item={item}
+                              onEdit={(plan) => setEditing(plan.id)}
+                              dragging={item.type === 'plan' && dragged?.id === item.plan.id}
+                              onDragStart={setDragged}
+                              onDragEnd={() => { setDragged(null); setOverDay(null); }}
+                              onDragOverPlan={() => {}}
+                              dropBefore={false}
+                            />
+                          )
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                {day.items.length > 0 && (
-                  <ul className="mt-1">
-                    {day.items.map((item) => (
-                      item.type === 'plan' && editing === item.plan.id
-                        ? <li key={`plan-${item.plan.id}`}><PlanForm goalId={goalId} trip={trip} day={day.key} days={keys} plan={item.plan} onDone={() => setEditing(null)} /></li>
-                        : (
-                          <ItemRow
-                            key={item.type === 'plan' ? `plan-${item.plan.id}` : `${item.role}-${item.booking.id}`}
-                            item={item}
-                            onEdit={(plan) => { setAdding(null); setEditing(plan.id); }}
-                            dragging={item.type === 'plan' && dragged?.id === item.plan.id}
-                            onDragStart={setDragged}
-                            onDragEnd={() => { setDragged(null); setOver(null); }}
-                            onDragOverPlan={(plan) => { if (over?.before !== plan.id) setOver({ day: day.key, before: plan.id }); }}
-                            dropBefore={item.type === 'plan' && dragged !== null && over?.before === item.plan.id && dragged.id !== item.plan.id}
-                          />
-                        )
-                    ))}
-                  </ul>
-                )}
-                {day.sleep && <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ref-on-surface-variant)]"><BedDouble className="h-3.5 w-3.5" aria-hidden />Night at {day.sleep.title}</p>}
-                {adding === day.key
-                  ? <PlanForm goalId={goalId} trip={trip} day={day.key} days={keys} onDone={() => setAdding(null)} />
-                  : <button type="button" onClick={() => { setEditing(null); setAdding(day.key); }} className="mt-1 inline-flex items-center gap-1 rounded-md py-1 text-xs font-semibold text-[var(--ref-primary)] hover:underline"><Plus className="h-3.5 w-3.5" aria-hidden />Plan</button>}
-              </li>
-            );
-          })}
-        </ol>
+              ))}
+            </div>
+            {selected.sleep && <p className="mt-3 flex items-center gap-1.5 text-sm text-[var(--ref-on-surface-variant)]"><BedDouble className="h-4 w-4" aria-hidden />Night at <span className="font-medium text-[var(--ref-on-surface)]">{selected.sleep.title}</span></p>}
+
+            <div className="mt-4 border-t border-[var(--color-border)] pt-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ref-on-surface)]"><Plus className="h-4 w-4" aria-hidden />Add to this day</p>
+              <PlanForm key={`${selected.key}:${formKey}`} goalId={goalId} trip={trip} day={selected.key} days={keys} onDone={() => setFormKey((value) => value + 1)} />
+              <p className="text-xs text-[var(--ref-on-surface-variant)]">Without a time it goes under Any time. Drag a plan onto another day above to move it.</p>
+            </div>
+          </div>
+        </>
       )}
       {elsewhere.length > 0 && (
         <div className="border-t border-[var(--color-border)] px-4 py-3 sm:px-5">
