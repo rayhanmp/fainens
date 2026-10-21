@@ -6,7 +6,9 @@ export type Attention = {
   tone: 'danger' | 'warning' | 'info';
   title: string;
   detail: string;
-  to: '/accounts' | '/budget' | '/goals' | '/loans' | '/paylater' | '/periods' | '/subscriptions' | '/transactions';
+  to: '/accounts' | '/budget' | '/goals' | '/loans' | '/paylater' | '/periods' | '/settings' | '/subscriptions' | '/transactions';
+  /** Opens a section of the page, for Settings. */
+  search?: { tab: 'data' };
   action: string;
 };
 
@@ -30,6 +32,8 @@ export type AttentionInput = {
   commitments: UpcomingCommitments;
   /** What goals need from you; null while loading or without goals. */
   goals?: GoalReminders | null;
+  /** Deleted files storage still holds after every retry. */
+  stuckStorageFiles?: number;
 };
 
 /** The goal facts the bell reminds you of. */
@@ -178,6 +182,14 @@ export function buildAttentionItems(input: AttentionInput, format: AttentionForm
 
   if (input.ledgerBalanced === false) {
     next.push({ id: 'trial-balance', tone: 'danger', title: 'Ledger needs review', detail: 'The trial balance is not currently balanced.', to: '/accounts', action: 'Review accounts' });
+  }
+
+  if (input.stuckStorageFiles) {
+    next.push({
+      id: `storage-cleanup:${input.stuckStorageFiles}`, tone: 'warning',
+      title: `${plural(input.stuckStorageFiles, 'deleted file')} still in storage`,
+      detail: 'Storage refused to remove them on every try.', to: '/settings', search: { tab: 'data' }, action: 'Try again in Settings',
+    });
   }
 
   if (currentPeriod && currentPeriod.coverageStatus !== 'complete') {

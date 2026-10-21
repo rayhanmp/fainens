@@ -1,5 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  getStorageCleanupStatus,
   listAccounts,
   listAgentMemories,
   listBudgets,
@@ -7,8 +8,27 @@ import {
   listPeriods,
   listTags,
   listTransactions,
+  retryStorageCleanup,
 } from '../../generated/client';
 import { unwrapGenerated } from '../core/generated-response';
+import { queryKeys } from '../core/query-keys';
+
+/** Deleted attachments and pictures that storage still holds after every retry. */
+export function useStorageCleanupQuery() {
+  return useQuery({
+    queryKey: queryKeys.storageCleanup,
+    queryFn: ({ signal }) => unwrapGenerated(getStorageCleanupStatus({ signal }), 200, 'Failed to load storage cleanup'),
+    staleTime: 10 * 60_000,
+  });
+}
+
+export function useRetryStorageCleanupMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrapGenerated(retryStorageCleanup(), 200, 'Could not try again'),
+    onSuccess: (result) => queryClient.setQueryData(queryKeys.storageCleanup, { stuck: result.stuck, lastError: result.lastError }),
+  });
+}
 
 export type ExportSelection = {
   transactions: boolean;

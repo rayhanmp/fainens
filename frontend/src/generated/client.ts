@@ -24182,6 +24182,36 @@ export type RestoreDatabaseBackupFile401 = {
   [key: string]: unknown;
 };
 
+export type GetStorageCleanupStatus200 = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  stuck: number;
+  /** @nullable */
+  lastError: string | null;
+};
+
+export type RetryStorageCleanup200 = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  stuck: number;
+  /** @nullable */
+  lastError: string | null;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  processed: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  failed: number;
+};
+
 export type ServeGoalLinkImage404 = {
   error: string;
   [key: string]: unknown;
@@ -38891,6 +38921,72 @@ export const getRestoreDatabaseBackupFileUrl = () => {
 export const restoreDatabaseBackupFile = async ( options?: RequestInit): Promise<restoreDatabaseBackupFileResponse> => {
   
   return generatedFetch<restoreDatabaseBackupFileResponse>(getRestoreDatabaseBackupFileUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type getStorageCleanupStatusResponse200 = {
+  data: GetStorageCleanupStatus200
+  status: 200
+}
+    
+export type getStorageCleanupStatusResponseSuccess = (getStorageCleanupStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getStorageCleanupStatusResponse = (getStorageCleanupStatusResponseSuccess)
+
+export const getGetStorageCleanupStatusUrl = () => {
+
+
+  
+
+  return `/api/settings/storage-cleanup`
+}
+
+export const getStorageCleanupStatus = async ( options?: RequestInit): Promise<getStorageCleanupStatusResponse> => {
+  
+  return generatedFetch<getStorageCleanupStatusResponse>(getGetStorageCleanupStatusUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type retryStorageCleanupResponse200 = {
+  data: RetryStorageCleanup200
+  status: 200
+}
+    
+export type retryStorageCleanupResponseSuccess = (retryStorageCleanupResponse200) & {
+  headers: Headers;
+};
+;
+
+export type retryStorageCleanupResponse = (retryStorageCleanupResponseSuccess)
+
+export const getRetryStorageCleanupUrl = () => {
+
+
+  
+
+  return `/api/settings/storage-cleanup/retry`
+}
+
+export const retryStorageCleanup = async ( options?: RequestInit): Promise<retryStorageCleanupResponse> => {
+  
+  return generatedFetch<retryStorageCleanupResponse>(getRetryStorageCleanupUrl(),
   {      
     ...options,
     method: 'POST'

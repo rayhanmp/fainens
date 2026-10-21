@@ -7,6 +7,7 @@ import { useGoalsQuery } from '../goals/queries';
 import { useGoalDueTasksQuery } from '../goals/notes/queries';
 import { useGoalRemindersQuery } from '../goals/trip/queries';
 import { useAverageSpending } from '../goals/use-headline';
+import { useStorageCleanupQuery } from '../settings/queries';
 import {
   useDashboardLoansQuery,
   useDashboardOverviewQuery,
@@ -49,6 +50,7 @@ export function useAttentionItems(now: number): Attention[] {
   const goalTasksQuery = useGoalDueTasksQuery();
   const goalRemindersQuery = useGoalRemindersQuery();
   const averageSpending = useAverageSpending();
+  const stuckStorageFiles = useStorageCleanupQuery().data?.stuck ?? 0;
 
   const periods = useMemo(() => (periodsQuery.data ?? []) as Period[], [periodsQuery.data]);
   const currentPeriod = useMemo(() => findCurrentPeriod(periods, now) ?? null, [periods, now]);
@@ -83,5 +85,6 @@ export function useAttentionItems(now: number): Attention[] {
     subscriptionRenewals: subscriptions?.renewalPreview.occurrences ?? [],
     commitments,
     goals: goalsQuery.data ? { ...goalReminders(goalsQuery.data, now, averageSpending), tasks: goalTasksQuery.data ?? [], kinds: goalRemindersQuery.data ?? [] } : null,
-  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, averageSpending, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, now, goalsQuery.data, goalTasksQuery.data, goalRemindersQuery.data, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
+    stuckStorageFiles,
+  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, averageSpending, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, now, goalsQuery.data, goalTasksQuery.data, goalRemindersQuery.data, loans, paylater, pendingTransactionCount, reconciliation, stuckStorageFiles, subscriptions]);
 }

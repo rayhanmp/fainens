@@ -608,6 +608,8 @@ export const storageDeletionOutbox = sqliteTable("storage_deletion_outbox", {
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),
   processedAt: integer("processed_at", { mode: "timestamp_ms" }),
+  /** After a failure, the next try waits until then; null means try on the next pass. */
+  nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
 }, (table) => ({
   statusIdx: index("idx_storage_deletion_outbox_status").on(table.status),
 }));

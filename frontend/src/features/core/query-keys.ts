@@ -34,6 +34,7 @@ export const queryKeys = {
   split: { all: ["split-bill"] as const },
   wishlist: { all: ["wishlist"] as const },
   savings: { plans: ["savings", "plans"] as const },
+  storageCleanup: ["storage-cleanup"] as const,
   goals: {
     all: ["goals"] as const,
     allocations: (id: number) => ["goals", "allocations", id] as const,

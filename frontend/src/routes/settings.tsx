@@ -1,4 +1,4 @@
-import { Link, createFileRoute, useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
+import { Link, createFileRoute, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { type MenuSelectOption } from '../components/ui/MenuSelect';
@@ -23,7 +23,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { toast, errorMessage } from '../components/ui/useToast';
 import { useTheme } from '../hooks/useTheme';
 import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
-import { useExportDataMutation, type ExportSelection } from '../features/settings/queries';
+import { useExportDataMutation, useRetryStorageCleanupMutation, useStorageCleanupQuery, type ExportSelection } from '../features/settings/queries';
 import { AccentPicker, Dropdown, SettingsRow, ThemeSwitch, Toggle } from '../features/settings/controls';
 import {
   Database,
@@ -52,6 +52,10 @@ import {
 } from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
+  // A link can open a section directly, e.g. the bell pointing at Data.
+  validateSearch: (search: Record<string, unknown>): { tab?: TabType } => ({
+    tab: TAB_IDS.includes(search.tab as TabType) ? search.tab as TabType : undefined,
+  }),
   component: SettingsPage,
 });
 
@@ -82,7 +86,8 @@ interface ExportOptions {
   memories: boolean;
 }
 
-type TabType = 'profile' | 'general' | 'accounts' | 'agent' | 'data' | 'backups' | 'reports';
+const TAB_IDS = ['profile', 'general', 'accounts', 'agent', 'data', 'backups', 'reports'] as const;
+type TabType = typeof TAB_IDS[number];
 type DatabaseBackupFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
 type DatabaseBackupSettings = {
   enabled: boolean;
@@ -508,9 +513,21 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>('general');
+  // Opened from the overlay there's no /settings search, so this is only set by a link to the page.
+  const linkedTab = (useSearch({ strict: false }) as { tab?: TabType }).tab;
+  const [activeTab, setActiveTab] = useState<TabType>(linkedTab ?? 'general');
   // Phones show either the list of sections or one open section, with a way back; wider screens show both.
-  const [phoneSectionOpen, setPhoneSectionOpen] = useState(false);
+  const [phoneSectionOpen, setPhoneSectionOpen] = useState(Boolean(linkedTab));
+  const storageCleanup = useStorageCleanupQuery();
+  const retryStorageCleanup = useRetryStorageCleanupMutation();
+  const stuckFiles = storageCleanup.data?.stuck ?? 0;
+  const retryStuckFiles = () => retryStorageCleanup.mutate(undefined, {
+    onSuccess: (result) => {
+      if (result.failed === 0) toast.success(result.processed === 1 ? 'File removed from storage' : 'Files removed from storage');
+      else toast.error('Storage still wouldn’t remove them', 'Fainens keeps trying in the background, waiting a little longer each time.');
+    },
+    onError: (err) => toast.error('Could not try again', errorMessage(err)),
+  });
   const [settingsSearch, setSettingsSearch] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showClearCacheModal, setShowClearCacheModal] = useState(false);
@@ -1477,6 +1494,16 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   action={<Button size="sm" variant="secondary" className={QUIET_DANGER} onClick={() => setShowDeleteDataModal(true)}>Clear…</Button>}
                 />
               </SettingsGroup>
+              {stuckFiles > 0 && (
+                <SettingsGroup fixed title="Storage" summary="Deleted files still stored">
+                  <SettingsRow
+                    inline
+                    label={<span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning)]" aria-hidden />{stuckFiles === 1 ? '1 deleted file is' : `${stuckFiles} deleted files are`} still in storage</span>}
+                    description={`You deleted ${stuckFiles === 1 ? 'it' : 'them'} in Fainens, but storage refused to remove ${stuckFiles === 1 ? 'it' : 'them'} on every try.${storageCleanup.data?.lastError ? ` Storage said: ${storageCleanup.data.lastError}` : ''}`}
+                    action={<Button type="button" size="sm" variant="secondary" onClick={retryStuckFiles} isLoading={retryStorageCleanup.isPending}><RotateCcw className="h-4 w-4" aria-hidden /> Try again</Button>}
+                  />
+                </SettingsGroup>
+              )}
               <SettingsGroup fixed title="Tools" summary="Related pages">
                 <div className={cn(LIST, 'border-y border-[var(--color-border)]')}>
                   {[

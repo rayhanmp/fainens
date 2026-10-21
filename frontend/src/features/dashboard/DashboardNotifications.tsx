@@ -59,7 +59,7 @@ export function DashboardNotifications({ items, readState, maskAmounts }: {
         {items.length === 0 ? <p className="px-2 py-5 text-sm text-[var(--ref-on-surface-variant)]">Nothing needs your attention right now.</p> : <div className="mt-2 divide-y divide-[var(--color-border)]">{items.map((item) => {
           const read = isRead(item);
           return <div key={item.id} className={cn('flex items-start gap-2', read && 'opacity-60')}>
-            <Link to={item.to} className="flex min-w-0 flex-1 gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)]">
+            <Link to={item.to} search={item.search} className="flex min-w-0 flex-1 gap-3 rounded-xl px-2 py-3 transition-colors hover:bg-[var(--ref-surface-container-low)]">
               <span className={cn('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', read ? 'bg-slate-400' : item.tone === 'danger' ? 'bg-rose-500' : item.tone === 'warning' ? 'bg-amber-500' : 'bg-sky-500')} />
               <span className="min-w-0"><strong className="block text-sm">{item.title}</strong><span className="mt-0.5 block text-xs leading-relaxed text-[var(--ref-on-surface-variant)]">{maskAmounts(item.detail)}</span><span className="mt-1.5 block text-xs font-bold text-[var(--ref-primary)]">{item.action}</span></span>
             </Link>

@@ -54,6 +54,12 @@ test('a healthy position raises no notifications', () => {
   assert.deepEqual(buildAttentionItems(input(), format), []);
 });
 
+test('deleted files storage would not remove point to Settings > Data', () => {
+  const [item] = buildAttentionItems(input({ stuckStorageFiles: 2 }), format);
+  assert.deepEqual([item.tone, item.title, item.to, item.search], ['warning', '2 deleted files still in storage', '/settings', { tab: 'data' }]);
+  assert.deepEqual(buildAttentionItems(input({ stuckStorageFiles: 0 }), format), []);
+});
+
 test('notifications wait for their data instead of raising false alarms', () => {
   assert.deepEqual(buildAttentionItems(input({ ledgerBalanced: null, reconciliationSessions: null }), format), []);
   assert.deepEqual(ids(buildAttentionItems(input({ ledgerBalanced: false, reconciliationSessions: [] }), format)), ['trial-balance', 'reconciliation:none']);
