@@ -72,7 +72,7 @@ import { CategoryIcon } from '../../features/categories/CategoryIcon';
 import { useReplaceDraftMutation } from '../../features/backfill/queries';
 import {
   reverseTransactionNow,
-  useApprovePendingTransactionMutation,
+  useResolvePendingTransactionMutation,
   useCreatePendingTransactionMutation,
   useCreateTransaction,
   useCreateTransportRouteTemplateMutation,
@@ -284,7 +284,7 @@ export function TransactionModal({
   const previewPendingMutation = usePreviewPendingTransactionMutation();
   const createPendingMutation = useCreatePendingTransactionMutation();
   const updatePendingMutation = useUpdatePendingTransactionMutation();
-  const approvePendingMutation = useApprovePendingTransactionMutation();
+  const resolvePendingMutation = useResolvePendingTransactionMutation();
   const routeTemplatesQuery = useTransportRouteTemplatesQuery(isOpen);
   const createRouteTemplateMutation = useCreateTransportRouteTemplateMutation();
   const updateRouteTemplateMutation = useUpdateTransportRouteTemplateMutation();
@@ -326,11 +326,14 @@ export function TransactionModal({
     // Exact, unique name match only (as the approval endpoint does), so
     // "BCA" never preselects "BCA Syariah"; otherwise the user picks.
     const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
-    const nameMatches = parsed.fromAccount?.trim()
-      ? accounts.filter(a => normalizeName(a.name) === normalizeName(parsed.fromAccount!))
-      : [];
+    const byName = (name: string | null | undefined) => {
+      const matches = name?.trim() ? accounts.filter(a => normalizeName(a.name) === normalizeName(name)) : [];
+      return matches.length === 1 ? matches[0] : undefined;
+    };
     const fromAcc = accounts.find(a => a.id === parsedFromAccountId)
-      ?? (parsedFromAccountId == null && nameMatches.length === 1 ? nameMatches[0] : undefined);
+      ?? (parsedFromAccountId == null ? byName(parsed.fromAccount) : undefined);
+    // A transfer's destination, by its exact name too.
+    const toAcc = parsed.type === 'transfer' ? byName(parsed.toAccount) : undefined;
     const transactionTime = (parsed as Record<string, unknown>).transactionTime;
     const time = typeof transactionTime === 'string' && /^\d{1,2}:\d{2}/.test(transactionTime)
       ? transactionTime.slice(0, 5)
@@ -341,7 +344,9 @@ export function TransactionModal({
       subscriptionId: '',
       dateTime: parsed.date ? `${parsed.date}T${time}` : toDatetimeLocal(),
       type: parsed.type === 'income' ? 'income' : parsed.type === 'transfer' ? 'transfer' : 'expense',
-      fromAccountId: fromAcc?.id.toString() || '',
+      // Income lands in "Deposit into"; the item's wallet is where the money went.
+      fromAccountId: parsed.type === 'income' ? '' : fromAcc?.id.toString() || '',
+      toAccountId: parsed.type === 'income' ? fromAcc?.id.toString() || '' : toAcc?.id.toString() || '',
       categoryId: cat?.id.toString() || '',
       amount: parsed.amount.toString(),
       description: parsed.description,
@@ -1143,8 +1148,18 @@ export function TransactionModal({
 
     let walletAccountId: number;
     let toWalletAccountId: number | undefined;
+    // A pending item reviewed here is posted like any other transaction, then closed and linked to it.
+    const finishPending = async (transactionId: number) => {
+      if (pendingTransaction) await resolvePendingMutation.mutateAsync({ id: pendingTransaction.id, transactionId });
+    };
+    // PayLater sets up a schedule of instalments as it posts, so it can't wait in a batch as a draft.
+    const paylaterDraftError = 'PayLater can’t be saved as a draft. Record it from Transactions instead, outside this batch.';
 
     if (simpleForm.type === 'paylater') {
+      if (savesAsDraft) {
+        setFormError(paylaterDraftError);
+        return;
+      }
       if (!simpleForm.fromAccountId) {
         setFormError('Please select a wallet to pay from');
         return;
@@ -1170,7 +1185,7 @@ export function TransactionModal({
 
       setIsSubmitting(true);
       try {
-        await settlePaylaterMutation.mutateAsync({
+        const settled = await settlePaylaterMutation.mutateAsync({
           date: new Date(simpleForm.dateTime).getTime(),
           description: simpleForm.description || 'Paylater payment',
           paymentAmount: amount,
@@ -1179,6 +1194,7 @@ export function TransactionModal({
           originalTxId: recognitionId,
           notes: simpleForm.notes || undefined,
         });
+        await finishPending(settled.transactionId);
         clearStoredDraft(SIMPLE_DRAFT_KEY);
         onSaved();
         onClose();
@@ -1204,13 +1220,17 @@ export function TransactionModal({
       const selectedAccount = accounts.find(a => a.id.toString() === simpleForm.fromAccountId);
       if (selectedAccount?.type === 'liability') {
         // PayLater purchase
+        if (savesAsDraft) {
+          setFormError(paylaterDraftError);
+          return;
+        }
         if (!simpleForm.paylaterFirstDueDate) {
           setFormError('Select first installment due date');
           return;
         }
         setIsSubmitting(true);
         try {
-          await recognizePaylaterMutation.mutateAsync({
+          const recognized = await recognizePaylaterMutation.mutateAsync({
             date: new Date(simpleForm.dateTime).getTime(),
             description: simpleForm.description || 'PayLater purchase',
             principalAmount: amount,
@@ -1222,6 +1242,7 @@ export function TransactionModal({
             firstDueDate: startOfLocalDayMs(new Date(simpleForm.paylaterFirstDueDate).getTime()),
             notes: simpleForm.notes || undefined,
       });
+      await finishPending(recognized.transactionId);
       clearStoredDraft(SIMPLE_DRAFT_KEY);
       onSaved();
       onClose();
@@ -1418,7 +1439,11 @@ export function TransactionModal({
       );
       clearStoredDraft(SIMPLE_DRAFT_KEY);
       const createdIds = [mainTransaction.id, ...linkedTransactionIds];
-      if (savesAsDraft) toast.success('Draft saved', simpleForm.description || undefined);
+      if (pendingTransaction) {
+        // No undo here: it would delete the transaction while the item stays approved.
+        await finishPending(mainTransaction.id);
+        toast.success('Approved', simpleForm.description || undefined);
+      } else if (savesAsDraft) toast.success('Draft saved', simpleForm.description || undefined);
       else offerUndo(createdIds.length > 1 ? 'Transfer and fee added' : 'Transaction added', createdIds, simpleForm.description || undefined);
       onSaved();
       onSuccess?.(mainTransaction.id, createdIds);
@@ -2941,6 +2966,7 @@ export function TransactionModal({
                   variant="secondary"
                   onClick={async () => {
                     if (!pendingTransaction) return;
+                    const walletChoice = simpleForm.type === 'income' ? simpleForm.toAccountId : simpleForm.fromAccountId;
                     setIsSubmitting(true);
                     try {
                       await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {
@@ -2950,11 +2976,14 @@ export function TransactionModal({
                         description: simpleForm.description,
                         category: categories.find(c => c.id.toString() === simpleForm.categoryId)?.name || 'Others',
                         date: simpleForm.dateTime.split('T')[0],
+                        // Kept so the time of day comes back when the item is opened again.
+                        transactionTime: simpleForm.dateTime.split('T')[1]?.slice(0, 5),
                         place: simpleForm.place || undefined,
                         memo: simpleForm.notes || undefined,
-                        fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
-                        fromAccountId: simpleForm.fromAccountId ? Number(simpleForm.fromAccountId) : null,
-                        toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
+                        // Income goes into the "Deposit into" account; that's the wallet the item used.
+                        fromAccount: accounts.find(a => a.id.toString() === walletChoice)?.name,
+                        fromAccountId: walletChoice ? Number(walletChoice) : null,
+                        toAccount: simpleForm.type === 'transfer' ? accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name : undefined,
                         confidence: 1,
                       }});
                       onSaved();
@@ -2972,37 +3001,9 @@ export function TransactionModal({
                 </Button>
                 <Button
                   type="button"
-                  onClick={async () => {
-                    if (!pendingTransaction) return;
-                    if (simpleForm.type !== 'transfer' && !simpleForm.fromAccountId) {
-                      setFormError('Choose the account this transaction used before approving.');
-                      return;
-                    }
-                    setIsSubmitting(true);
-                    try {
-                      await updatePendingMutation.mutateAsync({ id: pendingTransaction.id, parsed: {
-                        ...pendingTransaction.parsedData,
-                        type: simpleForm.type === 'expense' ? 'expense' : simpleForm.type === 'income' ? 'income' : 'transfer',
-                        amount: parseIdNominalToInt(simpleForm.amount) || 0,
-                        description: simpleForm.description,
-                        category: categories.find(c => c.id.toString() === simpleForm.categoryId)?.name || 'Others',
-                        date: simpleForm.dateTime.split('T')[0],
-                        place: simpleForm.place || undefined,
-                        memo: simpleForm.notes || undefined,
-                        fromAccount: accounts.find(a => a.id.toString() === simpleForm.fromAccountId)?.name,
-                        fromAccountId: simpleForm.fromAccountId ? Number(simpleForm.fromAccountId) : null,
-                        toAccount: accounts.find(a => a.id.toString() === simpleForm.toAccountId)?.name,
-                        confidence: 1,
-                      }});
-                      await approvePendingMutation.mutateAsync(pendingTransaction.id);
-                      onSaved();
-                      onClose();
-                    } catch (err) {
-                      setFormError(err instanceof Error ? err.message : 'Failed to approve');
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
+                  // Approving saves the form like Add transaction does (transfers, fees, tags, receipts,
+                  // the time of day), then closes the pending item and links it to what was saved.
+                  onClick={() => void handleSimpleSubmit({ preventDefault() {} } as React.FormEvent)}
                   isLoading={isSubmitting}
                   className="flex-1 rounded-full"
                 >

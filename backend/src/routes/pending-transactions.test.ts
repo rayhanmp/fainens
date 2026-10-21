@@ -122,6 +122,23 @@ describe("pending transaction routes", () => {
     expect(state.db.select().from(schema.transactions).all()).toHaveLength(1);
   });
 
+  it("closes an item posted through the transaction form, once, linking the transaction", async () => {
+    const id = insertPending({ ...expense, type: "transfer" });
+    const posted = state.db.insert(schema.transactions).values({ date: new Date(), description: "Top up", status: "posted" }).returning({ id: schema.transactions.id }).all()[0].id;
+
+    expect((await app.inject({ method: "POST", url: `/api/pending-transactions/${id}/resolve`, payload: { transactionId: 999 } })).statusCode).toBe(422);
+    expect(pendingStatus(id)).toBe("pending");
+
+    const first = await app.inject({ method: "POST", url: `/api/pending-transactions/${id}/resolve`, payload: { transactionId: posted } });
+    expect(first.statusCode).toBe(200);
+    expect(pendingStatus(id)).toBe("approved");
+    const audit = state.db.select().from(schema.auditLogs).all().find((row: { entityId: number }) => row.entityId === id);
+    expect(JSON.parse(Buffer.from(audit.afterSnapshot).toString())).toMatchObject({ transactionId: posted });
+
+    expect((await app.inject({ method: "POST", url: `/api/pending-transactions/${id}/resolve`, payload: { transactionId: posted } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", url: `/api/pending-transactions/4242/resolve`, payload: { transactionId: posted } })).statusCode).toBe(404);
+  });
+
   it("refuses to post into a closed period", async () => {
     state.db.insert(schema.salaryPeriods).values({
       name: "September", startDate: Date.parse("2026-09-01T00:00:00+07:00"), endDate: Date.parse("2026-09-30T00:00:00+07:00"), status: "closed",

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   alignReversalWithOriginal,
   approvePendingTransaction,
+  resolvePendingTransaction,
   bulkDeleteTransactions,
   confirmTransactionImport,
   createPendingTransaction,
@@ -323,6 +324,15 @@ export function useApprovePendingTransactionMutation() {
   return useMutation({
     mutationFn: (id: number) => unwrapGenerated(approvePendingTransaction(id), 200, 'Failed to approve transaction'),
     onSuccess: () => invalidateFinancialSummaries(queryClient),
+  });
+}
+
+/** Marks a pending item as posted, once the review form has saved it as a transaction. */
+export function useResolvePendingTransactionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, transactionId }: { id: number; transactionId: number }) => unwrapGenerated(resolvePendingTransaction(id, { transactionId }), 200, 'The transaction was saved, but the pending item couldn’t be cleared; reject it from the list'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.pending }),
   });
 }
 

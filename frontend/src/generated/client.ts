@@ -20517,6 +20517,34 @@ export type ApprovePendingTransaction500 = {
   [key: string]: unknown;
 };
 
+export type ResolvePendingTransactionBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   */
+  transactionId: number;
+};
+
+export type ResolvePendingTransaction200 = {
+  success: boolean;
+  [key: string]: unknown;
+};
+
+export type ResolvePendingTransaction404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ResolvePendingTransaction409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ResolvePendingTransaction422 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type RejectPendingTransaction200 = {
   success: boolean;
   [key: string]: unknown;
@@ -35856,6 +35884,58 @@ export const approvePendingTransaction = async (id: number, options?: RequestIni
     method: 'POST'
     
     
+  }
+);}
+
+
+
+export type resolvePendingTransactionResponse200 = {
+  data: ResolvePendingTransaction200
+  status: 200
+}
+
+export type resolvePendingTransactionResponse404 = {
+  data: ResolvePendingTransaction404
+  status: 404
+}
+
+export type resolvePendingTransactionResponse409 = {
+  data: ResolvePendingTransaction409
+  status: 409
+}
+
+export type resolvePendingTransactionResponse422 = {
+  data: ResolvePendingTransaction422
+  status: 422
+}
+    
+export type resolvePendingTransactionResponseSuccess = (resolvePendingTransactionResponse200) & {
+  headers: Headers;
+};
+export type resolvePendingTransactionResponseError = (resolvePendingTransactionResponse404 | resolvePendingTransactionResponse409 | resolvePendingTransactionResponse422) & {
+  headers: Headers;
+};
+
+export type resolvePendingTransactionResponse = (resolvePendingTransactionResponseSuccess | resolvePendingTransactionResponseError)
+
+export const getResolvePendingTransactionUrl = (id: number,) => {
+
+
+  
+
+  return `/api/pending-transactions/${id}/resolve`
+}
+
+export const resolvePendingTransaction = async (id: number,
+    resolvePendingTransactionBody: ResolvePendingTransactionBody, options?: RequestInit): Promise<resolvePendingTransactionResponse> => {
+  
+  return generatedFetch<resolvePendingTransactionResponse>(getResolvePendingTransactionUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      resolvePendingTransactionBody,)
   }
 );}
 

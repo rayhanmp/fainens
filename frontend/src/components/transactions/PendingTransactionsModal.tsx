@@ -100,7 +100,12 @@ export function PendingTransactionsModal({
   };
 
   const handleApprove = async (tx: PendingTransactionListItem) => {
-    if (tx.parsedData.type !== 'transfer' && wallets.length > 0 && resolveWalletId(tx.parsedData, wallets) == null) {
+    // A transfer needs both wallets and maybe a fee; the review form posts it like any other transfer.
+    if (tx.parsedData.type === 'transfer') {
+      onEdit(tx);
+      return;
+    }
+    if (wallets.length > 0 && resolveWalletId(tx.parsedData, wallets) == null) {
       setItemError(tx.id, 'Choose the account this transaction used before approving.');
       return;
     }
@@ -262,7 +267,7 @@ export function PendingTransactionsModal({
                   className="flex-1 rounded-full"
                 >
                   <Check className="w-4 h-4 mr-1" />
-                  Approve
+                  {tx.parsedData.type === 'transfer' ? 'Review & approve' : 'Approve'}
                 </Button>
               </div>
             </div>

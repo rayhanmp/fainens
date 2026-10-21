@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { and, eq, desc, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client";
-import { auditLogs, pendingTransactions, categories, accounts } from "../db/schema";
+import { auditLogs, pendingTransactions, categories, accounts, transactions } from "../db/schema";
 import { parseNaturalLanguageTransaction } from "../services/transaction-parser";
 import {
   getOrCreateAutoExpenseAccount,
@@ -46,6 +46,7 @@ const pendingUpdateBodySchema = z.object({ parsed: pendingParsedTransactionSchem
 const pendingParseResponseSchema = z.object({ pendingId: z.number().int(), parsed: z.unknown(), message: z.string().optional(), error: z.string().optional() }).passthrough();
 const pendingApproveResponseSchema = z.object({ success: z.literal(true), transactionId: z.number().int(), message: z.string() }).passthrough();
 const pendingSuccessResponseSchema = z.object({ success: z.literal(true) }).passthrough();
+const pendingResolveBodySchema = z.object({ transactionId: z.number().int().positive() });
 const pendingRetryResponseSchema = z.object({ success: z.boolean(), parsed: z.unknown().optional(), error: z.string().optional() }).passthrough();
 
 function parseStoredPendingData(value: string): unknown {
@@ -412,6 +413,37 @@ export default async function pendingRoutes(fastify: FastifyInstance) {
       transactionId,
       message: `Transaction created: ${formatCurrency(amount)} ${description}`,
     };
+  });
+
+  // Close a pending item that was posted through the regular transaction form, which handles
+  // transfers, fees, tags, receipts and the time of day. This only links the two; it posts nothing.
+  fastify.post("/api/pending-transactions/:id/resolve", {
+    schema: { operationId: "resolvePendingTransaction", tags: ["pending-transactions"], params: pendingIdParamsSchema, body: pendingResolveBodySchema, response: { 200: pendingSuccessResponseSchema, 404: pendingErrorSchema, 409: pendingErrorSchema, 422: pendingErrorSchema } },
+  }, async (request, reply) => {
+    const { id: pendingId } = request.params as z.infer<typeof pendingIdParamsSchema>;
+    const { transactionId } = request.body as z.infer<typeof pendingResolveBodySchema>;
+    const [posted] = await db.select({ id: transactions.id }).from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+    if (!posted) return reply.code(422).send({ error: "That transaction doesn't exist" });
+    const resolved = db.transaction((tx) => {
+      const updated = tx.update(pendingTransactions)
+        .set({ status: "approved", updatedAt: new Date() })
+        .where(and(eq(pendingTransactions.id, pendingId), eq(pendingTransactions.status, "pending")))
+        .returning({ id: pendingTransactions.id })
+        .all()[0];
+      if (!updated) return false;
+      tx.insert(auditLogs).values({
+        entityType: "pending_transaction",
+        entityId: pendingId,
+        action: "approve",
+        afterSnapshot: Buffer.from(JSON.stringify({ source: "pending_review_form", status: "approved", transactionId })),
+      }).run();
+      return true;
+    });
+    if (!resolved) {
+      const [pending] = await db.select({ status: pendingTransactions.status }).from(pendingTransactions).where(eq(pendingTransactions.id, pendingId)).limit(1);
+      return pending ? reply.code(409).send({ error: "Pending transaction already processed" }) : reply.code(404).send({ error: "Pending transaction not found" });
+    }
+    return { success: true as const };
   });
 
   // Reject pending transaction. Approved items already have a ledger posting,
