@@ -2178,6 +2178,13 @@ export const api = {
       fetchApi('/reimbursement-receipts', { method: 'POST', body: JSON.stringify(data) }),
     writeOff: (id: number, data: { date: number; notes?: string | null; idempotencyKey: string }) =>
       fetchApi(`/reimbursements/${id}/write-off`, { method: 'POST', body: JSON.stringify(data) }),
+    reject: (id: number) => fetchApi(`/reimbursements/${id}/reject`, { method: 'POST' }),
+    reverseApproval: (id: number, data: { reason: string; idempotencyKey: string }) =>
+      fetchApi(`/reimbursements/${id}/reverse-approval`, { method: 'POST', body: JSON.stringify(data) }),
+    reverseWriteOff: (id: number, data: { reason: string; idempotencyKey: string }) =>
+      fetchApi(`/reimbursements/${id}/reverse-write-off`, { method: 'POST', body: JSON.stringify(data) }),
+    reverseReceipt: (receiptId: number, data: { reason: string; idempotencyKey: string }) =>
+      fetchApi(`/reimbursement-receipts/${receiptId}/reverse`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   // Loans

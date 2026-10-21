@@ -2,7 +2,7 @@ import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Check, CheckCircle2, ChevronDown, Clock3, FilePlus2, HandCoins, ReceiptText, Search, Send, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock3, Eraser, FilePlus2, HandCoins, ReceiptText, Search, Send, Trash2, Undo2, Wallet, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -39,7 +39,27 @@ const statusColors: Record<string, string> = {
   partially_paid: 'bg-amber-500/10 text-[var(--color-warning)]',
   settled: 'bg-emerald-500/10 text-[var(--ref-secondary)]',
   rejected: 'bg-red-500/10 text-[var(--ref-error)]',
+  written_off: 'bg-[var(--ref-surface-container-high)] text-[var(--ref-on-surface-variant)]',
+  cancelled: 'bg-[var(--ref-surface-container)] text-[var(--ref-outline)]',
 };
+type ClaimAction = 'submit' | 'approve' | 'cancel' | 'reject' | 'writeOff' | 'reverseApproval' | 'reverseWriteOff';
+const ACTION_DONE: Record<ClaimAction, string> = {
+  submit: 'Claim submitted', approve: 'Claim approved', cancel: 'Claim cancelled', reject: 'Claim rejected',
+  writeOff: 'Written off', reverseApproval: 'Approval undone', reverseWriteOff: 'Write-off undone',
+};
+
+/** What each step does, asked before it happens. */
+function actionQuestion(claim: Claim, kind: Exclude<ClaimAction, 'submit'>): { title: string; message: string; confirmLabel: string; variant: 'default' | 'danger' } {
+  switch (kind) {
+    case 'approve': return { title: 'Approve reimbursement?', message: `Approve ${formatCurrency(claim.proposedAmount)} for “${claim.title}”? This moves the approved expense amount to money owed to you. Record a payment when it arrives.`, confirmLabel: 'Approve claim', variant: 'default' };
+    case 'cancel': return { title: 'Cancel this claim?', message: `“${claim.title}” will be cancelled. Its original expense will stay unchanged.`, confirmLabel: 'Cancel claim', variant: 'danger' };
+    case 'reject': return { title: 'Mark as rejected?', message: `${claim.contact?.name ?? 'The payer'} turned down “${claim.title}”. Its expense stays yours, as it was.`, confirmLabel: 'Mark rejected', variant: 'danger' };
+    case 'writeOff': return { title: 'Write off what’s left?', message: `You won’t collect the ${formatCurrency(claim.outstandingAmount)} still owed on “${claim.title}”; it counts as your expense from today. You can undo this.`, confirmLabel: 'Write off', variant: 'danger' };
+    case 'reverseApproval': return { title: 'Undo the approval?', message: `“${claim.title}” goes back to submitted and the money owed is taken back off. Payments recorded on it have to be reversed first.`, confirmLabel: 'Undo approval', variant: 'danger' };
+    case 'reverseWriteOff': return { title: 'Undo the write-off?', message: `The ${formatCurrency(claim.proposedAmount)} claim on “${claim.title}” is owed to you again.`, confirmLabel: 'Undo write-off', variant: 'default' };
+  }
+}
+
 function displayDate(value: number | string) {
   return formatDate(new Date(value).getTime());
 }
@@ -79,19 +99,33 @@ function ReimbursementsPage() {
     ]);
   };
   const action = useMutation({
-    mutationFn: ({ claim, kind }: { claim: Claim; kind: 'submit' | 'approve' | 'cancel' }) => kind === 'approve'
-      ? api.reimbursements.approve(claim.id, crypto.randomUUID()) : api.reimbursements[kind](claim.id),
-    onSuccess: async (_, { kind }) => { toast.success(kind === 'submit' ? 'Claim submitted' : kind === 'approve' ? 'Claim approved' : 'Claim cancelled'); await refresh(); },
+    mutationFn: ({ claim, kind }: { claim: Claim; kind: ClaimAction }) => {
+      const idempotencyKey = crypto.randomUUID();
+      switch (kind) {
+        case 'approve': return api.reimbursements.approve(claim.id, idempotencyKey);
+        case 'writeOff': return api.reimbursements.writeOff(claim.id, { date: Date.now(), notes: null, idempotencyKey });
+        case 'reverseApproval': return api.reimbursements.reverseApproval(claim.id, { reason: 'Approval undone in Reimbursements', idempotencyKey });
+        case 'reverseWriteOff': return api.reimbursements.reverseWriteOff(claim.id, { reason: 'Write-off undone in Reimbursements', idempotencyKey });
+        default: return api.reimbursements[kind](claim.id);
+      }
+    },
+    onSuccess: async (_, { kind }) => { toast.success(ACTION_DONE[kind]); await refresh(); },
     onError: (error) => toast.error('Could not update claim', error.message),
   });
-  const performAction = async (claim: Claim, kind: 'submit' | 'approve' | 'cancel') => {
-    if (kind !== 'submit' && !await confirm({
-      title: kind === 'approve' ? 'Approve reimbursement?' : 'Cancel this claim?',
-      message: kind === 'approve' ? `Approve ${formatCurrency(claim.proposedAmount)} for “${claim.title}”? This moves the approved expense amount to money owed to you. Record a payment when it arrives.` : `“${claim.title}” will be cancelled. Its original expense will stay unchanged.`,
-      confirmLabel: kind === 'approve' ? 'Approve claim' : 'Cancel claim',
-      cancelLabel: 'Go back', variant: kind === 'cancel' ? 'danger' : 'default',
-    })) return;
+  const performAction = async (claim: Claim, kind: ClaimAction) => {
+    const ask = kind === 'submit' ? null : actionQuestion(claim, kind);
+    if (ask && !await confirm({ ...ask, cancelLabel: 'Go back' })) return;
     action.mutate({ claim, kind });
+  };
+  /** A payment recorded by mistake is reversed: its money leaves the account and the claim is owed it again. */
+  const reverseReceipt = useMutation({
+    mutationFn: (receiptId: number) => api.reimbursements.reverseReceipt(receiptId, { reason: 'Payment reversed in Reimbursements', idempotencyKey: crypto.randomUUID() }),
+    onSuccess: async () => { toast.success('Payment reversed'); await refresh(); },
+    onError: (error) => toast.error('Could not reverse the payment', error.message),
+  });
+  const confirmReverseReceipt = async (receiptId: number, amount: number, date: number) => {
+    if (!await confirm({ title: 'Reverse this payment?', message: `The ${formatCurrency(amount)} recorded on ${displayDate(date)} comes off the account it went into, and the claim is owed it again.`, confirmLabel: 'Reverse payment', cancelLabel: 'Go back', variant: 'danger' })) return;
+    reverseReceipt.mutate(receiptId);
   };
   const outstanding = claims.reduce((sum, claim) => sum + claim.outstandingAmount, 0);
   const awaiting = claims.filter((claim) => claim.status === 'submitted');
@@ -148,11 +182,17 @@ function ReimbursementsPage() {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><button type="button" aria-expanded={isExpanded} aria-controls={`claim-details-${claim.id}`} onClick={() => setExpanded(isExpanded ? null : claim.id)} className="flex items-center gap-1 rounded-lg py-2 pr-2 text-xs font-semibold text-[var(--ref-primary)]">{isExpanded ? 'Hide details' : 'View details'}<ChevronDown className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-180')} /></button><div className="flex flex-wrap gap-2">
               {editable && <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => void performAction(claim, 'cancel')} aria-label={`Cancel ${claim.title}`}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Cancel claim</Button>}
               {claim.status === 'draft' && <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => void performAction(claim, 'submit')}><Send className="mr-1.5 h-3.5 w-3.5" />{busy && action.variables.kind === 'submit' ? 'Submitting…' : 'Mark submitted'}</Button>}
+              {claim.status === 'submitted' && <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => void performAction(claim, 'reject')}><Ban className="mr-1.5 h-3.5 w-3.5" />Mark rejected</Button>}
               {editable && <Button size="sm" disabled={action.isPending} onClick={() => void performAction(claim, 'approve')}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />{busy && action.variables.kind === 'approve' ? 'Approving…' : 'Approve claim'}</Button>}
-              {claim.outstandingAmount > 0 && <Button size="sm" onClick={() => setPayment({ claimId: claim.id })}><Wallet className="mr-1.5 h-3.5 w-3.5" />Record payment</Button>}
+              {claim.outstandingAmount > 0 && <>
+                <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => void performAction(claim, 'reverseApproval')}><Undo2 className="mr-1.5 h-3.5 w-3.5" />Undo approval</Button>
+                <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => void performAction(claim, 'writeOff')}><Eraser className="mr-1.5 h-3.5 w-3.5" />Write off</Button>
+                <Button size="sm" onClick={() => setPayment({ claimId: claim.id })}><Wallet className="mr-1.5 h-3.5 w-3.5" />Record payment</Button>
+              </>}
+              {claim.status === 'written_off' && <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => void performAction(claim, 'reverseWriteOff')}><Undo2 className="mr-1.5 h-3.5 w-3.5" />Undo write-off</Button>}
               {claim.status === 'settled' && <span className="flex items-center gap-1.5 text-xs font-semibold text-[var(--ref-secondary)]"><Check className="h-4 w-4" />Fully reimbursed</span>}
             </div></div>
-            {isExpanded && <div id={`claim-details-${claim.id}`} className="mt-3 grid gap-5 rounded-xl bg-[var(--ref-surface-container-low)] p-4 text-sm sm:grid-cols-2"><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Linked expenses</p>{claim.sources.map((source) => <Link key={source.id} to="/transactions" search={{ transactionId: String(source.sourceTransactionId) }} className="flex items-center justify-between gap-3 rounded-lg py-2 text-[var(--ref-primary)] hover:underline"><span>Transaction #{source.sourceTransactionId} ↗</span><span className="tabular-nums">{formatAmount(source.amount)}</span></Link>)}{claim.notes && <p className="mt-3 whitespace-pre-wrap break-words text-[var(--ref-on-surface-variant)]">{claim.notes}</p>}</div><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Payment history</p>{claim.receipts.length ? claim.receipts.map((row, index) => <Link key={`${row.receipt.id}-${index}`} to="/transactions" search={{ transactionId: String(row.receipt.transactionId) }} className="flex justify-between gap-3 rounded-lg py-2 text-[var(--ref-primary)] hover:underline"><span>{displayDate(row.receipt.receiptDate)}{row.receipt.status !== 'posted' && ` · ${row.receipt.status}`} ↗</span><span className="tabular-nums">{formatAmount(row.allocation.amount)}</span></Link>) : <p className="py-2 text-[var(--ref-on-surface-variant)]">No payments recorded yet.</p>}</div></div>}
+            {isExpanded && <div id={`claim-details-${claim.id}`} className="mt-3 grid gap-5 rounded-xl bg-[var(--ref-surface-container-low)] p-4 text-sm sm:grid-cols-2"><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Linked expenses</p>{claim.sources.map((source) => <Link key={source.id} to="/transactions" search={{ transactionId: String(source.sourceTransactionId) }} className="flex items-center justify-between gap-3 rounded-lg py-2 text-[var(--ref-primary)] hover:underline"><span>Transaction #{source.sourceTransactionId} ↗</span><span className="tabular-nums">{formatAmount(source.amount)}</span></Link>)}{claim.notes && <p className="mt-3 whitespace-pre-wrap break-words text-[var(--ref-on-surface-variant)]">{claim.notes}</p>}</div><div><p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--ref-outline)]">Payment history</p>{claim.receipts.length ? claim.receipts.map((row, index) => <div key={`${row.receipt.id}-${index}`} className="flex items-center justify-between gap-3 py-2"><Link to="/transactions" search={{ transactionId: String(row.receipt.transactionId) }} className="min-w-0 rounded-lg text-[var(--ref-primary)] hover:underline">{displayDate(row.receipt.receiptDate)}{row.receipt.status !== 'posted' && ` · ${row.receipt.status}`} ↗</Link><span className="flex shrink-0 items-center gap-2"><span className="tabular-nums">{formatAmount(row.allocation.amount)}</span>{row.receipt.status === 'posted' && <button type="button" disabled={reverseReceipt.isPending} onClick={() => void confirmReverseReceipt(row.receipt.id, row.receipt.amount, row.receipt.receiptDate)} className="rounded-md px-1.5 py-0.5 text-xs font-semibold text-[var(--ref-error)] hover:bg-red-500/10 disabled:opacity-50">Reverse</button>}</span></div>) : <p className="py-2 text-[var(--ref-on-surface-variant)]">No payments recorded yet.</p>}</div></div>}
           </article>;
         })}
         {filtered.length > 0 && <p role="status" className="px-6 py-3 text-xs text-[var(--ref-outline)]">Showing {filtered.length} of {claims.length} claims</p>}
