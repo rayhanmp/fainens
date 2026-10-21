@@ -965,7 +965,13 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
     setTimeout(() => setSaveStatus('idle'), 2000);
   };
 
-  const handleDeleteAllData = () => {
+  /** Signs out on the server first (the session is a cookie storage can't clear), then empties this browser. */
+  const handleDeleteAllData = async () => {
+    if (!(await logout())) {
+      toast.error('Could not sign out', 'Nothing was cleared. Check your connection and try again.');
+      return;
+    }
+    queryClient.clear();
     localStorage.clear();
     sessionStorage.clear();
     window.location.href = '/login';
@@ -1598,7 +1604,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
         onClose={() => setShowDeleteDataModal(false)}
         title="Clear this browser and sign out?"
         overlayClassName="!z-[60]"
-        footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={handleDeleteAllData}>Clear and sign out</Button></div>}
+        footer={<div className="flex justify-end gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setShowDeleteDataModal(false)}>Cancel</Button><Button type="button" size="sm" variant="danger" onClick={() => void handleDeleteAllData()}>Clear and sign out</Button></div>}
       >
         <div className="space-y-3">
           <p className="text-sm leading-relaxed text-[var(--ref-on-surface-variant)]">Everything Fainens keeps in this browser is removed, including the settings on this page, and you are signed out. Your transactions, accounts, and budgets stay safe on the server.</p>

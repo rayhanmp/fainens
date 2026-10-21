@@ -11,7 +11,8 @@ interface AuthContextType {
   isLoading: boolean;
   user: { email: string } | null;
   login: () => void;
-  logout: () => Promise<void>;
+  /** Ends the session on the server; true once it has. */
+  logout: () => Promise<boolean>;
   checkAuth: () => Promise<void>;
   isDemoMode: boolean;
 }
@@ -62,15 +63,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (DEMO_MODE) {
       // In demo mode, just reload
       window.location.reload();
-      return;
+      return true;
     }
     try {
       const response = await generatedLogout();
       if (response.status !== 200) throw new Error('Logout failed');
       setUser(null);
       setIsAuthenticated(false);
+      return true;
     } catch (error) {
       console.error('Logout failed:', error);
+      return false;
     }
   }, []);
 
