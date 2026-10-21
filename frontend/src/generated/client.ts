@@ -17256,7 +17256,11 @@ export type CreateWishlistItemBody = {
    * @nullable
    */
   periodId?: number | null;
-  /** @nullable */
+  /**
+   * @maxLength 300
+   * @nullable
+   * @pattern ^wishlist-images\/[A-Za-z0-9._-]+$
+   */
   imageUrl?: string | null;
   [key: string]: unknown;
 };
@@ -17505,7 +17509,11 @@ export type UpdateWishlistItemBody = {
    * @nullable
    */
   periodId?: number | null;
-  /** @nullable */
+  /**
+   * @maxLength 300
+   * @nullable
+   * @pattern ^wishlist-images\/[A-Za-z0-9._-]+$
+   */
   imageUrl?: string | null;
   status?: UpdateWishlistItemBodyStatus;
   [key: string]: unknown;

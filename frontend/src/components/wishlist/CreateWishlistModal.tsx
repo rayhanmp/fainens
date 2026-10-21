@@ -17,9 +17,12 @@ import {
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { CurrencyInput } from '../ui/CurrencyInput';
-import { cn } from '../../lib/utils';
+import { cn, parseIdNominalToInt } from '../../lib/utils';
 import { useCreateWishlistMutation, useAdvancedScrapeWishlistMutation, useScrapeWishlistMutation } from '../../features/wishlist/queries';
 import { usePeriodsLedgerQuery } from '../../features/periods/queries';
+
+/** A product picture the scraper stored (shown through /api/wishlist-images/), not a shop's own link. */
+const isSavedPicture = (value: string | null | undefined): value is string => typeof value === 'string' && /^wishlist-images\/[A-Za-z0-9._-]+$/.test(value);
 
 interface CreateWishlistModalProps {
   isOpen: boolean;
@@ -251,7 +254,9 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
       return;
     }
     
-    if (!amount || parseFloat(amount) <= 0) {
+    // The amount field gives "1.500.000"; read it as whole rupiah, not as 1.5.
+    const rupiah = parseIdNominalToInt(amount);
+    if (!Number.isFinite(rupiah) || rupiah <= 0) {
       setFormError('Please enter a valid amount');
       return;
     }
@@ -261,10 +266,11 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
       await createWishlistMutation.mutateAsync({
         name: name.trim(),
         description: description.trim() || null,
-        amount: Math.round(parseFloat(amount)),
+        amount: rupiah,
         categoryId: categoryId ? parseInt(categoryId) : null,
         periodId: periodId ? parseInt(periodId) : null,
-        imageUrl: scrapedData?.imageUrl || null,
+        // Only a picture the scraper saved can be shown; a shop's own link can't.
+        imageUrl: isSavedPicture(scrapedData?.imageUrl) ? scrapedData!.imageUrl : null,
       });
       
       onSuccess();
@@ -416,7 +422,7 @@ export function CreateWishlistModal({ isOpen, onClose, onSuccess, categories }: 
             
             {/* Product Image */}
             <div className="flex justify-center">
-              {scrapedData.imageUrl ? (
+              {isSavedPicture(scrapedData.imageUrl) ? (
                 <div className="relative">
                   <img 
                     src={`/api/wishlist-images/${scrapedData.imageUrl}`}
