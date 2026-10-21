@@ -16196,6 +16196,31 @@
                           "text": {
                             "type": "string"
                           },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "clothes",
+                              "toiletries",
+                              "documents",
+                              "electronics",
+                              "medicine",
+                              "other"
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bag": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "carry-on",
+                              "checked",
+                              "personal"
+                            ]
+                          },
                           "done": {
                             "type": "boolean"
                           },
@@ -16210,6 +16235,9 @@
                           "goalId",
                           "travellerId",
                           "text",
+                          "category",
+                          "quantity",
+                          "bag",
                           "done",
                           "sortOrder"
                         ],
@@ -16720,6 +16748,31 @@
                           "text": {
                             "type": "string"
                           },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "clothes",
+                              "toiletries",
+                              "documents",
+                              "electronics",
+                              "medicine",
+                              "other"
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bag": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "carry-on",
+                              "checked",
+                              "personal"
+                            ]
+                          },
                           "done": {
                             "type": "boolean"
                           },
@@ -16734,6 +16787,9 @@
                           "goalId",
                           "travellerId",
                           "text",
+                          "category",
+                          "quantity",
+                          "bag",
                           "done",
                           "sortOrder"
                         ],
@@ -18553,6 +18609,31 @@
                           "type": "integer",
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": [
+                            "clothes",
+                            "toiletries",
+                            "documents",
+                            "electronics",
+                            "medicine",
+                            "other"
+                          ]
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 99
+                        },
+                        "bag": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "carry-on",
+                            "checked",
+                            "personal"
+                          ]
                         }
                       },
                       "required": [
@@ -18611,6 +18692,31 @@
                       "text": {
                         "type": "string"
                       },
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "clothes",
+                          "toiletries",
+                          "documents",
+                          "electronics",
+                          "medicine",
+                          "other"
+                        ]
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "bag": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "carry-on",
+                          "checked",
+                          "personal"
+                        ]
+                      },
                       "done": {
                         "type": "boolean"
                       },
@@ -18625,6 +18731,9 @@
                       "goalId",
                       "travellerId",
                       "text",
+                      "category",
+                      "quantity",
+                      "bag",
                       "done",
                       "sortOrder"
                     ],
@@ -18675,6 +18784,161 @@
         }
       }
     },
+    "/api/goals/{id}/packing/order": {
+      "put": {
+        "operationId": "moveTripPacking",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bag": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "carry-on",
+                      "checked",
+                      "personal"
+                    ]
+                  },
+                  "ids": {
+                    "maxItems": 300,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "required": [
+                  "bag",
+                  "ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "goalId": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "travellerId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "clothes",
+                          "toiletries",
+                          "documents",
+                          "electronics",
+                          "medicine",
+                          "other"
+                        ]
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "bag": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "carry-on",
+                          "checked",
+                          "personal"
+                        ]
+                      },
+                      "done": {
+                        "type": "boolean"
+                      },
+                      "sortOrder": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "goalId",
+                      "travellerId",
+                      "text",
+                      "category",
+                      "quantity",
+                      "bag",
+                      "done",
+                      "sortOrder"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/goal-packing/{id}": {
       "patch": {
         "operationId": "updateTripPacking",
@@ -18692,6 +18956,37 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "travellerId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "clothes",
+                      "toiletries",
+                      "documents",
+                      "electronics",
+                      "medicine",
+                      "other"
+                    ]
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 99
+                  },
+                  "bag": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "carry-on",
+                      "checked",
+                      "personal"
+                    ]
                   },
                   "done": {
                     "type": "boolean"
@@ -18741,6 +19036,31 @@
                     "text": {
                       "type": "string"
                     },
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "clothes",
+                        "toiletries",
+                        "documents",
+                        "electronics",
+                        "medicine",
+                        "other"
+                      ]
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "bag": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "carry-on",
+                        "checked",
+                        "personal"
+                      ]
+                    },
                     "done": {
                       "type": "boolean"
                     },
@@ -18755,10 +19075,32 @@
                     "goalId",
                     "travellerId",
                     "text",
+                    "category",
+                    "quantity",
+                    "bag",
                     "done",
                     "sortOrder"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
                 }
               }
             }

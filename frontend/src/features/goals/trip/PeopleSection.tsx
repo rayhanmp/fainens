@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Plus } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
 import { toast } from '../../../components/ui/useToast';
@@ -8,18 +8,8 @@ import { Field } from '../../savings/fields';
 import { InfoHint } from '../../savings/InfoHint';
 import { Dropdown, Toggle } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
-import {
-  useAddPackingMutation,
-  useAddTravellerMutation,
-  useDeletePackingMutation,
-  useDeleteTravellerMutation,
-  useUpdatePackingMutation,
-  useUpdateTravellerMutation,
-  type PackingItem,
-  type Traveller,
-  type Trip,
-} from './queries';
-import { dayKey, daysBetween, fromDayKey, packingStarter, passportState, PASSPORT_MONTHS, shortDate } from './trip-utils';
+import { useAddTravellerMutation, useDeleteTravellerMutation, useUpdateTravellerMutation, type Traveller, type Trip } from './queries';
+import { dayKey, daysBetween, fromDayKey, passportState, PASSPORT_MONTHS, shortDate } from './trip-utils';
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
@@ -163,76 +153,3 @@ export function PeopleSection({ goalId, trip, now }: { goalId: number; trip: Tri
   );
 }
 
-function PackingGroup({ goalId, title, travellerId, items }: { goalId: number; title: string; travellerId: number | null; items: PackingItem[] }) {
-  const add = useAddPackingMutation();
-  const update = useUpdatePackingMutation();
-  const remove = useDeletePackingMutation();
-  const [text, setText] = useState('');
-  const packed = items.filter((item) => item.done).length;
-  const submit = () => {
-    if (!text.trim()) return;
-    add.mutate({ goalId, items: [{ text: text.trim(), travellerId }] }, { onSuccess: () => setText(''), onError: (error) => toast.error(errorText(error, 'Could not add it')) });
-  };
-  return (
-    <div className="py-3">
-      <p className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">
-        <span>{title}</span>
-        {items.length > 0 && <span className="tabular-nums tracking-normal">{packed} of {items.length}</span>}
-      </p>
-      <ul className="mt-1">
-        {items.map((item) => (
-          <li key={item.id} className="group flex items-center gap-3 py-1">
-            <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--ref-primary)]" checked={item.done} aria-label={item.text} onChange={(event) => update.mutate({ id: item.id, done: event.target.checked }, { onError: (error) => toast.error(errorText(error, 'Could not save')) })} />
-            <span className={cn('min-w-0 flex-1 truncate text-sm', item.done ? 'text-[var(--ref-on-surface-variant)] line-through' : 'text-[var(--ref-on-surface)]')}>{item.text}</span>
-            <button type="button" aria-label={`Remove ${item.text}`} onClick={() => remove.mutate(item.id)} className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--ref-on-surface-variant)] opacity-60 hover:bg-[var(--ref-surface-container-low)] hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={(event) => { event.preventDefault(); submit(); }} className="mt-1">
-        <input aria-label={`Add to ${title}`} className="brutalist-input h-[34px] w-full" placeholder="Add something" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} />
-      </form>
-    </div>
-  );
-}
-
-/**
- * What to pack, for each person and for the group, with how much is packed. An empty list can
- * start from one for the weather there.
- */
-export function PackingSection({ goalId, trip }: { goalId: number; trip: Trip }) {
-  const add = useAddPackingMutation();
-  const total = trip.packing.length;
-  const packed = trip.packing.filter((item) => item.done).length;
-  const climates = [trip.basics.climate ?? 'cold', ...(['cold', 'warm', 'mixed'] as const).filter((climate) => climate !== (trip.basics.climate ?? 'cold'))];
-  const label = { cold: 'Cold', warm: 'Warm', mixed: 'Some of each' } as const;
-  const start = (climate: 'cold' | 'warm' | 'mixed') => {
-    const items = packingStarter(climate, trip.travellers, trip.packing);
-    if (items.length) add.mutate({ goalId, items }, { onError: (error) => toast.error(errorText(error, 'Could not add the list')) });
-  };
-  const groups = [
-    ...trip.travellers.map((traveller) => ({ key: `t${traveller.id}`, title: traveller.name, travellerId: traveller.id as number | null })),
-    { key: 'all', title: trip.travellers.length ? 'For everyone' : 'To pack', travellerId: null },
-  ];
-  return (
-    <Section title="Packing" aside={total > 0 ? <span className="text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">{packed} of {total} packed</span> : undefined}>
-      <div className="@container px-4 sm:px-5">
-        {total > 0 && (
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
-            <div className="h-full rounded-full bg-[var(--ref-primary)] transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${(packed / total) * 100}%` }} />
-          </div>
-        )}
-        {total === 0 && (
-          <div className="pt-4">
-            <p className="text-sm text-[var(--ref-on-surface-variant)]">Start from a list for the weather there{trip.travellers.length ? ', one for each person and one for everyone' : ''}, then add your own.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {climates.map((climate, index) => <Button key={climate} type="button" size="sm" variant={index === 0 ? 'primary' : 'secondary'} isLoading={add.isPending && index === 0} onClick={() => start(climate)}>{label[climate]}</Button>)}
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-1 gap-x-6 @lg:grid-cols-2">
-          {groups.map((group) => <PackingGroup key={group.key} goalId={goalId} title={group.title} travellerId={group.travellerId} items={trip.packing.filter((item) => item.travellerId === group.travellerId)} />)}
-        </div>
-      </div>
-    </Section>
-  );
-}

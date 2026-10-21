@@ -7953,6 +7953,32 @@ export type GetGoalTrip200PlansItem = {
   sortOrder: number;
 };
 
+export type GetGoalTrip200PackingItemCategory = typeof GetGoalTrip200PackingItemCategory[keyof typeof GetGoalTrip200PackingItemCategory];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalTrip200PackingItemCategory = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetGoalTrip200PackingItemBag = typeof GetGoalTrip200PackingItemBag[keyof typeof GetGoalTrip200PackingItemBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalTrip200PackingItemBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
+
 export type GetGoalTrip200PackingItem = {
   /**
    * @minimum -9007199254740991
@@ -7971,6 +7997,14 @@ export type GetGoalTrip200PackingItem = {
    */
   travellerId: number | null;
   text: string;
+  category: GetGoalTrip200PackingItemCategory;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  quantity: number;
+  /** @nullable */
+  bag: GetGoalTrip200PackingItemBag;
   done: boolean;
   /**
    * @minimum -9007199254740991
@@ -8222,6 +8256,32 @@ export type UpdateGoalTrip200PlansItem = {
   sortOrder: number;
 };
 
+export type UpdateGoalTrip200PackingItemCategory = typeof UpdateGoalTrip200PackingItemCategory[keyof typeof UpdateGoalTrip200PackingItemCategory];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTrip200PackingItemCategory = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateGoalTrip200PackingItemBag = typeof UpdateGoalTrip200PackingItemBag[keyof typeof UpdateGoalTrip200PackingItemBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTrip200PackingItemBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
+
 export type UpdateGoalTrip200PackingItem = {
   /**
    * @minimum -9007199254740991
@@ -8240,6 +8300,14 @@ export type UpdateGoalTrip200PackingItem = {
    */
   travellerId: number | null;
   text: string;
+  category: UpdateGoalTrip200PackingItemCategory;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  quantity: number;
+  /** @nullable */
+  bag: UpdateGoalTrip200PackingItemBag;
   done: boolean;
   /**
    * @minimum -9007199254740991
@@ -8985,6 +9053,32 @@ export type MoveTripPlans404 = {
   [key: string]: unknown;
 };
 
+export type AddTripPackingBodyItemsItemCategory = typeof AddTripPackingBodyItemsItemCategory[keyof typeof AddTripPackingBodyItemsItemCategory];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripPackingBodyItemsItemCategory = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AddTripPackingBodyItemsItemBag = typeof AddTripPackingBodyItemsItemBag[keyof typeof AddTripPackingBodyItemsItemBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripPackingBodyItemsItemBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
+
 export type AddTripPackingBodyItemsItem = {
   /**
    * @minLength 1
@@ -8997,6 +9091,14 @@ export type AddTripPackingBodyItemsItem = {
    * @nullable
    */
   travellerId?: number | null;
+  category?: AddTripPackingBodyItemsItemCategory;
+  /**
+   * @minimum 1
+   * @maximum 99
+   */
+  quantity?: number;
+  /** @nullable */
+  bag?: AddTripPackingBodyItemsItemBag;
 };
 
 export type AddTripPackingBody = {
@@ -9006,6 +9108,32 @@ export type AddTripPackingBody = {
    */
   items: AddTripPackingBodyItemsItem[];
 };
+
+export type AddTripPacking201ItemCategory = typeof AddTripPacking201ItemCategory[keyof typeof AddTripPacking201ItemCategory];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripPacking201ItemCategory = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AddTripPacking201ItemBag = typeof AddTripPacking201ItemBag[keyof typeof AddTripPacking201ItemBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripPacking201ItemBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
 
 export type AddTripPacking201Item = {
   /**
@@ -9025,6 +9153,14 @@ export type AddTripPacking201Item = {
    */
   travellerId: number | null;
   text: string;
+  category: AddTripPacking201ItemCategory;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  quantity: number;
+  /** @nullable */
+  bag: AddTripPacking201ItemBag;
   done: boolean;
   /**
    * @minimum -9007199254740991
@@ -9043,14 +9179,165 @@ export type AddTripPacking404 = {
   [key: string]: unknown;
 };
 
+/**
+ * @nullable
+ */
+export type MoveTripPackingBodyBag = typeof MoveTripPackingBodyBag[keyof typeof MoveTripPackingBodyBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const MoveTripPackingBodyBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
+
+export type MoveTripPackingBody = {
+  /** @nullable */
+  bag: MoveTripPackingBodyBag;
+  /** @maxItems 300 */
+  ids: number[];
+};
+
+export type MoveTripPacking200ItemCategory = typeof MoveTripPacking200ItemCategory[keyof typeof MoveTripPacking200ItemCategory];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const MoveTripPacking200ItemCategory = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type MoveTripPacking200ItemBag = typeof MoveTripPacking200ItemBag[keyof typeof MoveTripPacking200ItemBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const MoveTripPacking200ItemBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
+
+export type MoveTripPacking200Item = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  travellerId: number | null;
+  text: string;
+  category: MoveTripPacking200ItemCategory;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  quantity: number;
+  /** @nullable */
+  bag: MoveTripPacking200ItemBag;
+  done: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type MoveTripPacking404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateTripPackingBodyCategory = typeof UpdateTripPackingBodyCategory[keyof typeof UpdateTripPackingBodyCategory];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripPackingBodyCategory = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateTripPackingBodyBag = typeof UpdateTripPackingBodyBag[keyof typeof UpdateTripPackingBodyBag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripPackingBodyBag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
+
 export type UpdateTripPackingBody = {
   /**
    * @minLength 1
    * @maxLength 120
    */
   text?: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  travellerId?: number | null;
+  category?: UpdateTripPackingBodyCategory;
+  /**
+   * @minimum 1
+   * @maximum 99
+   */
+  quantity?: number;
+  /** @nullable */
+  bag?: UpdateTripPackingBodyBag;
   done?: boolean;
 };
+
+export type UpdateTripPacking200Category = typeof UpdateTripPacking200Category[keyof typeof UpdateTripPacking200Category];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripPacking200Category = {
+  clothes: 'clothes',
+  toiletries: 'toiletries',
+  documents: 'documents',
+  electronics: 'electronics',
+  medicine: 'medicine',
+  other: 'other',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateTripPacking200Bag = typeof UpdateTripPacking200Bag[keyof typeof UpdateTripPacking200Bag] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripPacking200Bag = {
+  'carry-on': 'carry-on',
+  checked: 'checked',
+  personal: 'personal',
+} as const;
 
 export type UpdateTripPacking200 = {
   /**
@@ -9070,12 +9357,25 @@ export type UpdateTripPacking200 = {
    */
   travellerId: number | null;
   text: string;
+  category: UpdateTripPacking200Category;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  quantity: number;
+  /** @nullable */
+  bag: UpdateTripPacking200Bag;
   done: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
   sortOrder: number;
+};
+
+export type UpdateTripPacking400 = {
+  error: string;
+  [key: string]: unknown;
 };
 
 export type UpdateTripPacking404 = {
@@ -28339,9 +28639,56 @@ export const addTripPacking = async (id: number,
 
 
 
+export type moveTripPackingResponse200 = {
+  data: MoveTripPacking200Item[]
+  status: 200
+}
+
+export type moveTripPackingResponse404 = {
+  data: MoveTripPacking404
+  status: 404
+}
+    
+export type moveTripPackingResponseSuccess = (moveTripPackingResponse200) & {
+  headers: Headers;
+};
+export type moveTripPackingResponseError = (moveTripPackingResponse404) & {
+  headers: Headers;
+};
+
+export type moveTripPackingResponse = (moveTripPackingResponseSuccess | moveTripPackingResponseError)
+
+export const getMoveTripPackingUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/packing/order`
+}
+
+export const moveTripPacking = async (id: number,
+    moveTripPackingBody: MoveTripPackingBody, options?: RequestInit): Promise<moveTripPackingResponse> => {
+  
+  return generatedFetch<moveTripPackingResponse>(getMoveTripPackingUrl(id),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      moveTripPackingBody,)
+  }
+);}
+
+
+
 export type updateTripPackingResponse200 = {
   data: UpdateTripPacking200
   status: 200
+}
+
+export type updateTripPackingResponse400 = {
+  data: UpdateTripPacking400
+  status: 400
 }
 
 export type updateTripPackingResponse404 = {
@@ -28352,7 +28699,7 @@ export type updateTripPackingResponse404 = {
 export type updateTripPackingResponseSuccess = (updateTripPackingResponse200) & {
   headers: Headers;
 };
-export type updateTripPackingResponseError = (updateTripPackingResponse404) & {
+export type updateTripPackingResponseError = (updateTripPackingResponse400 | updateTripPackingResponse404) & {
   headers: Headers;
 };
 

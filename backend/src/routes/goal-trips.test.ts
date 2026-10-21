@@ -109,11 +109,16 @@ describe("goal trips", () => {
     const rayhan = (await inject("POST", "/api/goals/1/travellers", { name: "Rayhan", passportExpiry: day(5, 1) })).json();
     const kid = (await inject("POST", "/api/goals/1/travellers", { name: "Kid", paying: false })).json();
     expect([rayhan.paying, kid.paying, rayhan.visaStatus]).toEqual([true, false, "not-needed"]);
-    const items = (await inject("POST", "/api/goals/1/packing", { items: [{ text: "Coat", travellerId: rayhan.id }, { text: "Gloves", travellerId: kid.id }, { text: "Adapter" }] })).json();
+    const items = (await inject("POST", "/api/goals/1/packing", { items: [{ text: "Coat", travellerId: rayhan.id, category: "clothes", bag: "checked" }, { text: "Gloves", travellerId: kid.id }, { text: "Adapter", category: "electronics", quantity: 2 }] })).json();
+    expect(items.map((item: { category: string; quantity: number; bag: string | null }) => [item.category, item.quantity, item.bag])).toEqual([["clothes", 1, "checked"], ["other", 1, null], ["electronics", 2, null]]);
     await inject("PATCH", `/api/goal-packing/${items[0].id}`, { done: true });
+    // Dragged into the carry-on, ahead of what's there.
+    const bagged = (await inject("PUT", "/api/goals/1/packing/order", { bag: "carry-on", ids: [items[2].id, items[0].id] })).json();
+    expect(bagged.filter((item: { bag: string | null }) => item.bag === "carry-on").map((item: { text: string }) => item.text)).toEqual(["Adapter", "Coat"]);
+    expect((await inject("PATCH", `/api/goal-packing/${items[2].id}`, { travellerId: 999 })).statusCode).toBe(400);
     await inject("DELETE", `/api/goal-travellers/${kid.id}`);
     const trip = (await inject("GET", "/api/goals/1/trip")).json();
-    expect(trip.packing.map((item: { text: string; done: boolean }) => [item.text, item.done])).toEqual([["Coat", true], ["Adapter", false]]);
+    expect(trip.packing.map((item: { text: string; done: boolean }) => [item.text, item.done])).toEqual([["Adapter", false], ["Coat", true]]);
     expect(trip.travellers.map((traveller: { name: string }) => traveller.name)).toEqual(["Rayhan"]);
     expect((await inject("POST", "/api/goals/1/packing", { items: [{ text: "Hat", travellerId: kid.id }] })).statusCode).toBe(400);
   });

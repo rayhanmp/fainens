@@ -10,6 +10,7 @@ import {
   deleteTripTraveller,
   getGoalTrip,
   listGoalReminders,
+  moveTripPacking,
   moveTripPlans,
   planTripAgain,
   updateGoalTrip,
@@ -22,6 +23,7 @@ import {
   type AddTripPlanBody,
   type AddTripTravellerBody,
   type GetGoalTrip200,
+  type MoveTripPackingBody,
   type MoveTripPlansBody,
   type UpdateGoalTripBody,
   type UpdateTripBookingBody,
@@ -82,6 +84,25 @@ export const useDeletePlanMutation = () => useTripMutation((id: number) => unwra
 export const useAddPackingMutation = () => useTripMutation(({ goalId, ...body }: AddTripPackingBody & { goalId: number }) => unwrapGenerated(addTripPacking(goalId, body), 201, 'Could not add it'));
 export const useUpdatePackingMutation = () => useTripMutation(({ id, ...body }: UpdateTripPackingBody & { id: number }) => unwrapGenerated(updateTripPacking(id, body), 200, 'Could not save'));
 export const useDeletePackingMutation = () => useTripMutation((id: number) => unwrapGenerated(deleteTripPacking(id), 204, 'Could not remove it'));
+
+/** Dragging packing between bags moves it at once, before the server answers. */
+export function useMovePackingMutation(goalId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: MoveTripPackingBody) => unwrapGenerated(moveTripPacking(goalId, body), 200, 'Could not move it'),
+    onMutate: (body) => {
+      queryClient.setQueryData<Trip>(queryKeys.goals.trip(goalId), (trip) => trip && {
+        ...trip,
+        packing: trip.packing.map((item) => {
+          const index = body.ids.indexOf(item.id);
+          return index === -1 ? item : { ...item, bag: body.bag, sortOrder: index };
+        }),
+      });
+    },
+    onSuccess: (packing) => queryClient.setQueryData<Trip>(queryKeys.goals.trip(goalId), (trip) => trip && { ...trip, packing }),
+    onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.goals.trip(goalId) }),
+  });
+}
 
 /** Moving plans changes their order and day at once, so the trip's cache is set straight away. */
 export function useMovePlansMutation(goalId: number) {

@@ -165,11 +165,17 @@ export const planView = (row: typeof goalPlans.$inferSelect, basics: TripBasics)
   sortOrder: row.sortOrder,
 });
 
+export const PACKING_CATEGORIES = ["clothes", "toiletries", "documents", "electronics", "medicine", "other"] as const;
+export const PACKING_BAGS = ["carry-on", "checked", "personal"] as const;
+
 export const packingView = (row: typeof goalPacking.$inferSelect) => ({
   id: row.id,
   goalId: row.goalId,
   travellerId: row.travellerId ?? null,
   text: row.text,
+  category: (PACKING_CATEGORIES as readonly string[]).includes(row.category) ? row.category as (typeof PACKING_CATEGORIES)[number] : "other",
+  quantity: row.quantity,
+  bag: (PACKING_BAGS as readonly string[]).includes(row.bag ?? "") ? row.bag as (typeof PACKING_BAGS)[number] : null,
   done: Boolean(row.done),
   sortOrder: row.sortOrder,
 });
@@ -386,6 +392,9 @@ export async function planAgain(goalId: number, dbLike: any = defaultDb) {
       goalId: created.id,
       travellerId: item.travellerId != null ? travellerIds.get(item.travellerId) ?? null : null,
       text: item.text,
+      category: item.category,
+      quantity: item.quantity,
+      bag: item.bag,
       done: false,
       sortOrder: item.sortOrder,
     })));

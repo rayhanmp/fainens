@@ -350,12 +350,19 @@ export const goalPlans = sqliteTable("goal_plan", {
   goalIdx: index("idx_goal_plan_goal").on(table.goalId),
 }));
 
-/** Something to pack, for one traveller or everyone. */
+/**
+ * Something to pack, for one traveller or everyone: what kind of thing it is (clothes, toiletries,
+ * documents, electronics, medicine, other), how many, and the bag it goes in (carry-on, checked,
+ * personal; null until it's decided).
+ */
 export const goalPacking = sqliteTable("goal_packing", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
   travellerId: integer("traveller_id").references(() => goalTravellers.id, { onDelete: "cascade" }),
   text: text("text").notNull(),
+  category: text("category").notNull().default("other"),
+  quantity: integer("quantity").notNull().default(1),
+  bag: text("bag"),
   done: integer("done", { mode: "boolean" }).notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
 }, (table) => ({

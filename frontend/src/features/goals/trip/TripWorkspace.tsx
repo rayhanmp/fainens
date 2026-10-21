@@ -13,7 +13,8 @@ import type { GoalDetail, GoalPart } from '../queries';
 import { BOOKING_ICONS } from './booking-icons';
 import { BookingsSection } from './BookingsSection';
 import { ItinerarySection } from './ItinerarySection';
-import { PackingSection, PeopleSection } from './PeopleSection';
+import { PackingPanel } from './PackingPanel';
+import { PeopleSection } from './PeopleSection';
 import type { Trip } from './queries';
 import { TripBudget } from './TripBudget';
 import { TripSettings } from './TripSettings';
@@ -227,7 +228,7 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
         <PeopleSection goalId={goal.id} trip={trip} now={now} />
       </div>
       <div role="tabpanel" hidden={tab !== 'packing'}>
-        <PackingSection goalId={goal.id} trip={trip} />
+        <PackingPanel goalId={goal.id} trip={trip} />
       </div>
       <div role="tabpanel" hidden={tab !== 'notes'}>
         <NotesWorkspace key={goal.id} detail={detail} bookings={trip.bookings} />

@@ -18,6 +18,8 @@ import {
   travellerView,
   tripBasics,
   tripDetail,
+  PACKING_BAGS,
+  PACKING_CATEGORIES,
   tripGoal,
   VISA_STATUSES,
 } from "../services/goal-trips";
@@ -92,7 +94,17 @@ const planSchema = z.object({
   rupiah: z.number(),
   sortOrder: z.number().int(),
 });
-const packingSchema = z.object({ id: z.number().int(), goalId: z.number().int(), travellerId: z.number().int().nullable(), text: z.string(), done: z.boolean(), sortOrder: z.number().int() });
+const packingSchema = z.object({
+  id: z.number().int(),
+  goalId: z.number().int(),
+  travellerId: z.number().int().nullable(),
+  text: z.string(),
+  category: z.enum(PACKING_CATEGORIES),
+  quantity: z.number().int(),
+  bag: z.enum(PACKING_BAGS).nullable(),
+  done: z.boolean(),
+  sortOrder: z.number().int(),
+});
 const tripSchema = z.object({
   basics: basicsSchema,
   travellers: z.array(travellerSchema),
@@ -147,7 +159,13 @@ const planBody = z.object({
   cost: cost.optional(),
   costCurrency: currency.optional(),
 }).strict();
-const packingBody = z.object({ text: text(120), travellerId: z.number().int().positive().nullable().optional() }).strict();
+const packingBody = z.object({
+  text: text(120),
+  travellerId: z.number().int().positive().nullable().optional(),
+  category: z.enum(PACKING_CATEGORIES).optional(),
+  quantity: z.number().int().min(1).max(99).optional(),
+  bag: z.enum(PACKING_BAGS).nullable().optional(),
+}).strict();
 
 const toDate = (value: number | null | undefined) => (value === undefined ? undefined : value ? new Date(value) : null);
 
@@ -382,8 +400,38 @@ export default async function (fastify: FastifyInstance) {
     const { items } = request.body as { items: Array<z.infer<typeof packingBody>> };
     for (const travellerId of new Set(items.map((item) => item.travellerId))) await checkTraveller(id, travellerId);
     const start = await nextOrder(goalPacking, id);
-    const created = await db.insert(goalPacking).values(items.map((item, index) => ({ goalId: id, text: item.text, travellerId: item.travellerId ?? null, sortOrder: start + index }))).returning();
+    const created = await db.insert(goalPacking).values(items.map((item, index) => ({
+      goalId: id,
+      text: item.text,
+      travellerId: item.travellerId ?? null,
+      category: item.category ?? "other",
+      quantity: item.quantity ?? 1,
+      bag: item.bag ?? null,
+      sortOrder: start + index,
+    }))).returning();
     return reply.code(201).send(created.map(packingView));
+  }));
+
+  fastify.put("/api/goals/:id/packing/order", {
+    schema: {
+      operationId: "moveTripPacking",
+      tags: ["goals"],
+      params: idParams,
+      body: z.object({ bag: z.enum(PACKING_BAGS).nullable(), ids: z.array(z.number().int().positive()).max(300) }).strict(),
+      response: { 200: z.array(packingSchema), 404: errorSchema },
+    },
+  }, async (request, reply) => guarded(reply, async () => {
+    // A bag's items in the order given; an item from another bag moves into this one.
+    const { id } = request.params as z.infer<typeof idParams>;
+    const { bag, ids } = request.body as { bag: (typeof PACKING_BAGS)[number] | null; ids: number[] };
+    await tripGoal(id);
+    const own = await db.select({ id: goalPacking.id }).from(goalPacking).where(and(eq(goalPacking.goalId, id), inArray(goalPacking.id, ids.length ? ids : [0])));
+    const known = new Set(own.map((row: { id: number }) => row.id));
+    for (const [index, itemId] of ids.filter((itemId) => known.has(itemId)).entries()) {
+      await db.update(goalPacking).set({ bag, sortOrder: index }).where(eq(goalPacking.id, itemId));
+    }
+    const rows = await db.select().from(goalPacking).where(eq(goalPacking.goalId, id)).orderBy(asc(goalPacking.sortOrder), asc(goalPacking.id));
+    return rows.map(packingView);
   }));
 
   fastify.patch("/api/goal-packing/:id", {
@@ -391,13 +439,16 @@ export default async function (fastify: FastifyInstance) {
       operationId: "updateTripPacking",
       tags: ["goals"],
       params: idParams,
-      body: z.object({ text: text(120).optional(), done: z.boolean().optional() }).strict(),
-      response: { 200: packingSchema, 404: errorSchema },
+      body: packingBody.partial().extend({ done: z.boolean().optional() }).strict(),
+      response: { 200: packingSchema, 400: errorSchema, 404: errorSchema },
     },
   }, async (request, reply) => guarded(reply, async () => {
     const { id } = request.params as z.infer<typeof idParams>;
-    const [updated] = await db.update(goalPacking).set(request.body as { text?: string; done?: boolean }).where(eq(goalPacking.id, id)).returning();
-    if (!updated) throw new GoalError("Item not found", 404);
+    const body = request.body as Partial<z.infer<typeof packingBody>> & { done?: boolean };
+    const [existing] = await db.select().from(goalPacking).where(eq(goalPacking.id, id)).limit(1);
+    if (!existing) throw new GoalError("Item not found", 404);
+    await checkTraveller(existing.goalId, body.travellerId);
+    const [updated] = await db.update(goalPacking).set(body).where(eq(goalPacking.id, id)).returning();
     return packingView(updated);
   }));
 

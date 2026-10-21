@@ -279,42 +279,6 @@ export function passportState(expiry: number | null, basics: Pick<TripBasics, 's
   return expiry < needed.getTime() ? 'soon' : 'ok';
 }
 
-/** What to pack, by weather: each person's own things, and what the group shares. */
-export const PACKING: Record<'cold' | 'warm' | 'mixed', { person: string[]; shared: string[] }> = {
-  cold: {
-    person: ['Passport', 'Warm coat', 'Sweaters', 'Thermal underwear', 'Scarf, gloves and beanie', 'Warm socks', 'Comfortable walking shoes', 'Lip balm and moisturiser', 'Medicines', 'Phone charger'],
-    shared: ['Plug adapter', 'Power bank', 'Pocket Wi-Fi or eSIM', 'Some cash in the local currency', 'Copies of bookings', 'Travel insurance details', 'Small first-aid kit'],
-  },
-  warm: {
-    person: ['Passport', 'Light clothes', 'Swimwear', 'Sandals', 'Comfortable walking shoes', 'Hat and sunglasses', 'Sunscreen', 'Insect repellent', 'Medicines', 'Phone charger'],
-    shared: ['Plug adapter', 'Power bank', 'Pocket Wi-Fi or eSIM', 'Some cash in the local currency', 'Copies of bookings', 'Travel insurance details', 'Small first-aid kit', 'Umbrella'],
-  },
-  mixed: {
-    person: ['Passport', 'Clothes to layer', 'A light jacket', 'Comfortable walking shoes', 'Sunscreen', 'Medicines', 'Phone charger'],
-    shared: ['Plug adapter', 'Power bank', 'Pocket Wi-Fi or eSIM', 'Some cash in the local currency', 'Copies of bookings', 'Travel insurance details', 'Small first-aid kit', 'Umbrella'],
-  },
-};
-
-/** The starter packing list for the travellers, leaving out what's already on it. */
-export function packingStarter(climate: 'cold' | 'warm' | 'mixed', travellers: ReadonlyArray<{ id: number }>, existing: ReadonlyArray<{ text: string; travellerId: number | null }>) {
-  const key = (item: { text: string; travellerId: number | null }) => `${item.travellerId ?? 'all'}:${item.text.trim().toLowerCase()}`;
-  const has = new Set(existing.map(key));
-  const list = PACKING[climate];
-  // Without travellers yet, everything is the group's.
-  const owners: Array<number | null> = travellers.length ? travellers.map((traveller) => traveller.id) : [null];
-  const items = [
-    ...owners.flatMap((travellerId) => list.person.map((text) => ({ text, travellerId }))),
-    ...list.shared.map((text) => ({ text, travellerId: null })),
-  ];
-  const out: Array<{ text: string; travellerId: number | null }> = [];
-  for (const item of items) {
-    if (has.has(key(item))) continue;
-    has.add(key(item));
-    out.push(item);
-  }
-  return out;
-}
-
 const icsText = (value: string) => value.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 /** A booking time as a calendar's "floating" time: that clock time wherever you are. */
 const icsWall = (time: number) => `${wallDay(time).replace(/-/g, '')}T${(wallTime(time) ?? '00:00').replace(':', '')}00`;

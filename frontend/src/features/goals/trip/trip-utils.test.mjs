@@ -5,7 +5,6 @@ import {
   fromWallInput,
   itinerary,
   nextUp,
-  packingStarter,
   passportState,
   toWall,
   tripBudget,
@@ -99,15 +98,6 @@ test('a passport is flagged when it runs out within six months of coming home', 
   assert.equal(passportState(noon(7, 1), basics), 'soon');
   assert.equal(passportState(noon(9, 1), basics), 'ok');
   assert.equal(passportState(null, basics), null);
-});
-
-test('the packing starter gives each person their things and the group its own, once', () => {
-  const first = packingStarter('cold', [{ id: 1 }, { id: 2 }], [{ text: 'passport', travellerId: 1 }, { text: 'Plug adapter', travellerId: null }]);
-  assert.ok(first.some((item) => item.text === 'Passport' && item.travellerId === 2));
-  assert.ok(!first.some((item) => item.text === 'Passport' && item.travellerId === 1));
-  assert.ok(!first.some((item) => item.text === 'Plug adapter'));
-  assert.equal(first.filter((item) => item.text === 'Power bank').length, 1);
-  assert.ok(packingStarter('warm', [], []).every((item) => item.travellerId === null));
 });
 
 test('the calendar file has an event for each dated booking and plan', () => {
