@@ -436,9 +436,9 @@ export const DOCS: DocPage[] = [
       { type: 'p', text: 'If no model is set up, the provider refuses (out of credits, a rejected key, too many requests), it doesn’t answer, or its story fails the fact check, the recap still opens. A notice on the cover and in the ⓘ panel says what happened.' },
       { type: 'table', head: ['Part of the recap', 'Without AI'], rows: [
         ['Figures, chapters, games, persona, share card', 'Unchanged. None of these use AI.'],
-        ['The words of the story', 'The built-in Fainens edit: the same facts, told in a plain house style. Its ⓘ panel says “The Fainens edit”.'],
-        ['Daily refresh of a running period', 'Still happens. The figures move on; the words stay as they were, or switch to the Fainens edit if they no longer fit. The model is tried again the next day.'],
-        ['New take', 'Keeps your saved edition and shows why the rewrite failed. If no model is set up at all, it saves a fresh Fainens edit instead.'],
+        ['The words of the story', 'The built-in Fainens edit: the same facts, told from a set of prepared lines for every chapter. Its ⓘ panel says “The Fainens edit”.'],
+        ['Daily refresh of a running period', 'Still happens. The figures move on and the same lines are kept while they still fit. An AI-written story stays as it was, or switches to the Fainens edit if it no longer fits. The model is tried again the next day.'],
+        ['New take', 'Always works. With a model it writes a new story; without one, or when the provider fails, it makes a new Fainens edit with fresh figures and a different line in every chapter.'],
         ['Year in review', 'Unchanged. It is put together from the periods’ figures and never uses AI.'],
       ] },
       { type: 'p', text: 'Everything else in the app that uses AI is listed under Memory, privacy and models.' },

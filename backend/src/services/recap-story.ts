@@ -7,6 +7,7 @@ import { callOpenRouter } from "./openrouter";
 import { recapShortLabels } from './recap-labels';
 import { recapOverview } from './recap-overview';
 import { recapDetailInsights } from './recap-detail-insights';
+import { fallbackRecapCopy } from './recap-template';
 import { chapterIdSchema, recapCopySchema, savedRecapStorySchema, type RecapCopy, type SavedRecapStory } from "./recap-schemas";
 
 type Snapshot = SavedRecapStory['snapshot'];
@@ -74,49 +75,7 @@ export function recapWritingContext(snapshot: Snapshot, seed = 0, language: 'en'
     amountUnit: "integer Rupiah, not cents" };
 }
 
-export function fallbackRecapCopy(snapshot: Snapshot, seed: number, preferredName?: string | null, language: 'en' | 'id' = 'en'): RecapCopy {
-  const take = seed % 3;
-  const name = preferredName?.slice(0, 24);
-  const period = snapshot.period.name.slice(0, 42);
-  const shortLabels = recapShortLabels(snapshot);
-  const top = shortLabels.category1 ?? "The little things";
-  const hasCategory = snapshot.categories.length > 0;
-  const repeat = shortLabels.repeatPurchase1;
-  const standout = shortLabels.standoutPurchase;
-  const focus = standout ?? (hasCategory ? top : "your recorded activity");
-  const budget = snapshot.budget;
-  const overview = recapOverview(snapshot, seed, language);
-  const insights = recapDetailInsights(snapshot, shortLabels, language);
-  const intros: RecapCopy["chapters"][number][] = [
-    { id: "intro", eyebrow: "Look who’s back", title: repeat ? `${repeat}. Again? Again.` : "Look what made the cut.", body: repeat ? `A familiar receipt kept returning. ${period} had a few other surprises, too.` : `On the list: ${focus}. Let’s see what else showed up.` },
-    { id: "intro", eyebrow: "A little receipt gossip", title: "We need to talk about these receipts.", body: hasCategory ? `${top} took the largest slice. There’s more to this period than the headline, though.` : "The entries are in. Let’s take a look at this period’s details." },
-    { id: "intro", eyebrow: "On the cover", title: hasCategory ? `${top} called. It wants the cover.` : "Your period made the cover.", body: hasCategory ? `The largest expense category has been decided. Now for the details that made ${period} yours.` : `No expense category takes the lead. The rest of ${period} gets its own space.` },
-    { id: "intro", eyebrow: "The first clue", title: standout || hasCategory ? "What made the biggest entrance?" : "Where should we start?", body: standout ? `${standout}. Keep that receipt in mind; we’ll come back to it.` : hasCategory ? `${top} leads the expense list. Let’s follow the rest of the trail.` : "With the entries you recorded. Let’s follow the trail from there." },
-    { id: "intro", eyebrow: "Worth another look", title: name ? `${name}, shall we rewind a little?` : "Shall we rewind a little?", body: repeat ? `${repeat} kept popping up. A few other details deserve a second look.` : `Starting with ${focus}. The rest of your highlights are right here.` },
-    { id: "intro", eyebrow: "Your period, in good company", title: repeat ? "A familiar name made the guest list." : "The guest list is in.", body: repeat ? `${repeat} came back. Let’s meet the other names in your period.` : hasCategory ? `${top} takes top billing. Let’s meet the other names in your period.` : "Your income and expense entries get their own space. Let’s take a look." },
-    { id: "intro", eyebrow: "Open this time capsule", title: "The receipts remember.", body: `Inside: ${focus}, a few familiar details, and your ${snapshot.isPartial ? 'period so far' : 'period in review'}.` },
-    { id: "intro", eyebrow: "Start with the good details", title: "Here’s a detail worth keeping.", body: repeat ? `${repeat} showed up more than once. Let’s start there and see what else connects.` : `Start with ${focus}. Ready for the rest?` },
-  ];
-  const intro = intros[seed % intros.length];
-  const chapters: RecapCopy["chapters"] = [
-    intro,
-    { id: "overview", eyebrow: language === 'id' ? 'Di balik angka' : ["Behind the numbers", "The bigger picture", "Look at the contrast"][take], title: overview.title, body: overview.body },
-    { id: "budget", eyebrow: snapshot.isPartial ? "The plan, so far" : "The plan meets the receipts",
-      title: !budget ? "No budget lines this time." : budget.overBudgetCategoryCount ? "Some categories redrew the lines." : budget.spent < 0 ? "Credits rewrote part of the plan." : budget.remaining === 0 ? "The recorded totals lined up." : snapshot.coverageComplete && !snapshot.isPartial ? "The outline kept some room." : "The outline is still taking shape.",
-      body: !budget ? "This period has entries, but no category budgets to compare them with." : budget.overBudgetCategoryCount ? `${shortLabels.budgetCategory1} crossed its category allocation. The receipts wrote that part.` : budget.spent < 0 ? "The budgeted categories show net expense credits in this edition." : "Your allocations and the entries captured so far, side by side. The rest of the story is in the receipts." },
-    { id: "categories", eyebrow: "The expense leaderboard", title: "And the nominees are…", body: "The categories with the largest recorded net expenses, lining up for their moment in the spotlight." },
-    { id: "spotlight", eyebrow: "Top billing", title: `${top} gets the mic.`, body: snapshot.categories.length ? "Your largest expense category claimed the headline. A closer look at its slice of the period." : "No positive expense category to put in the spotlight this time. The ledger is keeping this scene minimal." },
-    { id: "variety", eyebrow: "The supporting cast", title: "Your receipts had range.", body: "Each category with positive net expenses adds another thread to this period’s story. Variety, in ledger form." },
-    { id: "rhythm", eyebrow: "The beat behind the receipts", title: ["Cue the receipt drumroll.", "Your period had a beat.", "Small moments. A whole rhythm."][take], body: "These are the days with recorded purchases. A beat made from entries, not a guess about your routine." },
-    { id: "purchases", eyebrow: language === 'id' ? 'Nama yang berulang' : 'The recurring receipts', ...insights.purchases },
-    { id: "peak", eyebrow: snapshot.highlights?.peakSpendingDay ? "A day with main-character energy" : "The story, in entries", title: snapshot.highlights?.peakSpendingDay ? "This day turned up the volume." : "Every entry gets a part.", body: snapshot.highlights?.peakSpendingDay ? "One day took the spotlight. The calendar remembers; you know the backstory." : "A few memorable moments made this period what it was." },
-    { id: "moment", eyebrow: "The standout receipt", ...insights.moment },
-    { id: "balance", eyebrow: language === 'id' ? 'Ukuran struk yang tipikal' : 'The typical receipt', ...insights.balance },
-    { id: "comparison", eyebrow: language === 'id' ? 'Dulu dan sekarang' : 'Then and now', ...(insights.comparison ?? { title: 'No comparable history yet.', body: 'This edition has no supported historical purchase comparison.' }) },
-    { id: "closing", eyebrow: "Your next chapter", title: ["Same you. Fresh chapter.", "Keep the plot. Turn the page.", "The sequel is yours."][take], body: "What gets a little more room in the next period? Your budget is ready for its next edit." },
-  ];
-  return { shortLabels, headline: intro.title, deck: intro.body, chapters };
-}
+export { fallbackRecapCopy };
 
 function recentRecapEditions(ownerEmail: string): SavedRecapStory[] {
   const rows = db.$client.prepare("SELECT payload_json FROM recap_period_story WHERE owner_email = ? ORDER BY generated_at DESC LIMIT 3").all(ownerEmail) as { payload_json: string }[];
@@ -276,7 +235,11 @@ async function generate(ownerEmail: string, periodId: number, regenerate: boolea
   let seed = randomInt(0, 1_000_000);
   const recentStyles = new Set(recent.map(edition => edition.seed % WRITING_STYLES.length));
   while ((previous && seed % 3 === previous.seed % 3) || recentStyles.has(seed % WRITING_STYLES.length)) seed += 1;
-  let copy = fallbackRecapCopy(snapshot, seed, personalization.preferredName, personalization.language);
+  // Built-in words, should AI not write them. A daily refresh of a built-in edition keeps its lines over the
+  // fresh figures; a New take picks a different line for every chapter than the edition it replaces.
+  const templateSeed = !regenerate && previous?.source === "template" ? previous.seed : seed;
+  let copy = fallbackRecapCopy(snapshot, templateSeed, personalization.preferredName, personalization.language,
+    regenerate ? { avoid: previous?.copy } : { keep: previous?.source === "template" ? previous.copy : undefined });
   let source: SavedRecapStory["source"] = "template";
   let draft: string | null = null;
   let notice: string | null = null;
@@ -315,13 +278,12 @@ Tell a different beat on each slide: specific opening hook; informative money-in
         notice = fallbackNotice({ kind: "invalid-copy" });
       }
     } catch (error) {
-      // A requested new take keeps the saved edition rather than replacing AI words with built-in ones.
-      // A daily refresh still goes ahead: the figures must move on even while the provider is down.
-      if (previous && regenerate) throw new RecapGenerationError(`The new take couldn’t be written: the AI provider ${describeProviderFailure(error)}. Your saved recap is still available.`);
+      // Whether New take or a daily refresh, the edition still goes ahead in the built-in words: the figures
+      // move on while the provider is down, and the notice says why.
       notice = fallbackNotice({ kind: "provider-failed", detail: describeProviderFailure(error) });
     }
   }
-  return saveStory(ownerEmail, periodId, { snapshot, copy, personalization, source, seed, draft, notice });
+  return saveStory(ownerEmail, periodId, { snapshot, copy, personalization, source, seed: source === "ai" ? seed : templateSeed, draft, notice });
 }
 
 /** A finished period's edition is kept for good; a running period's is refreshed once a day (see isStaleEdition).

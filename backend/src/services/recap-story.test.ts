@@ -9,7 +9,7 @@ vi.mock("../db/client", () => ({ db: { get $client() { return mocks.client; } } 
 vi.mock("./recap", () => ({ getPeriodRecap: mocks.facts }));
 vi.mock("./agent-provider-config", () => ({ getAgentProviderConfig: mocks.config }));
 vi.mock("./openrouter", () => ({ callOpenRouter: mocks.call }));
-import { ensureRecapStory, getSavedRecapStory, parseRecapCopy, RecapGenerationError } from "./recap-story";
+import { ensureRecapStory, fallbackRecapCopy, getSavedRecapStory, parseRecapCopy } from "./recap-story";
 import { recapOverview } from './recap-overview';
 import { recapDetailInsights } from './recap-detail-insights';
 
@@ -116,14 +116,75 @@ describe("durable recap editions", () => {
     expect(saved.snapshot.budget).toBeUndefined();
     expect(mocks.facts).not.toHaveBeenCalled(); expect(mocks.call).not.toHaveBeenCalled();
   });
-  it("keeps the saved edition intact if a requested rewrite fails", async () => {
+  it("still makes a fresh New take in the built-in words when the provider fails, and says why", async () => {
     const first = await ensureRecapStory("owner@example.test", snapshot.period.id);
+    mocks.facts.mockResolvedValue({ ...snapshot, income: 200000 });
     mocks.call.mockRejectedValue(new Error("OpenRouter API error: upstream secrets 402 Insufficient credits"));
-    const failure = await ensureRecapStory("owner@example.test", snapshot.period.id, true).catch(error => error);
-    expect(failure).toBeInstanceOf(RecapGenerationError);
-    expect(failure.message).toContain("is out of credits");
-    expect(failure.message).not.toContain("upstream secrets");
-    expect(getSavedRecapStory("owner@example.test", snapshot.period.id)).toEqual(first);
+    const next = await ensureRecapStory("owner@example.test", snapshot.period.id, true);
+    expect(next.source).toBe("template"); expect(next.snapshot.income).toBe(200000);
+    expect(next.notice).toContain("is out of credits"); expect(next.notice).not.toContain("upstream secrets");
+    expect(next.copy.headline).not.toBe(first.copy.headline);
+    expect(getSavedRecapStory("owner@example.test", snapshot.period.id)).toEqual(next);
+  });
+  describe("without AI", () => {
+    beforeEach(() => { mocks.config.mockResolvedValue({ apiKey: undefined }); });
+    const line = (story: { copy: { headline: string; chapters: Array<{ id: string; eyebrow: string; title: string; body: string }> } }, id: string) =>
+      JSON.stringify(story.copy.chapters.find(chapter => chapter.id === id));
+    it("words every chapter differently on each New take", async () => {
+      let previous = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      for (let take = 0; take < 5; take += 1) {
+        const next = await ensureRecapStory("owner@example.test", snapshot.period.id, true);
+        expect(next.source).toBe("template"); expect(next.notice).toContain("Settings → Agent");
+        for (const chapter of previous.copy.chapters) expect(line(next, chapter.id), `take ${take}: seed ${previous.seed} -> ${next.seed}`).not.toBe(line(previous, chapter.id));
+        previous = next;
+      }
+      expect(mocks.call).not.toHaveBeenCalled();
+    });
+    it("keeps a built-in edition's lines when a running period's figures refresh", async () => {
+      mocks.facts.mockResolvedValue({ ...snapshot, isPartial: true, generatedAt: Date.now() - 86_400_000 });
+      await ensureRecapStory("owner@example.test", snapshot.period.id);
+      // A New take's lines, picked to differ from the edition before, are the ones the next day keeps.
+      const first = await ensureRecapStory("owner@example.test", snapshot.period.id, true);
+      mocks.facts.mockResolvedValue({ ...snapshot, isPartial: true, generatedAt: Date.now(), income: 200000 });
+      const next = await ensureRecapStory("owner@example.test", snapshot.period.id);
+      expect(next.snapshot.income).toBe(200000); expect(next.seed).toBe(first.seed);
+      expect(next.copy.headline).toBe(first.copy.headline);
+      // Bodies carry the day's figures, and the overview's headline follows its verified observation; the other lines stay.
+      const heading = (story: typeof first, id: string) => { const found = story.copy.chapters.find(chapter => chapter.id === id)!; return `${found.eyebrow} / ${found.title}`; };
+      for (const chapter of first.copy.chapters.filter(item => item.id !== "overview")) expect(heading(next, chapter.id)).toBe(heading(first, chapter.id));
+    });
+  });
+  it("offers many built-in lines, each fitting a portrait slide even with the longest labels", () => {
+    const long = "W".repeat(40);
+    const shapes = [snapshot,
+      { ...snapshot, isPartial: true, period: { ...snapshot.period, name: "P".repeat(50) },
+        categories: [{ name: long, amount: 50000 }, { name: `${long}2`, amount: 20000 }, { name: "C", amount: 10000 }, { name: "D", amount: 5000 }],
+        highlights: { ...snapshot.highlights, repeatPurchases: [{ description: long, occurrences: 4, totalAmount: 9000, category: "Food" }] },
+        largestPurchase: { description: long, amount: 60000, date: Date.UTC(2026, 7, 2) },
+        budget: { planned: 1, spent: 2, remaining: -1, percentUsed: 200, categoryCount: 2, unbudgetedExpenses: 0, overBudgetCategoryCount: 2,
+          overBudgetCategories: [{ name: long, planned: 1, spent: 2, over: 1 }] } },
+      { ...snapshot, categories: [], highlights: undefined, largestPurchase: null, purchaseProfile: null, purchaseCount: 0, spendingDays: 0,
+        budget: { planned: 5, spent: 5, remaining: 0, percentUsed: 100, categoryCount: 1, unbudgetedExpenses: 0, overBudgetCategoryCount: 0, overBudgetCategories: [] } },
+    ];
+    const unfinished = /(?:\b(?:and|with|at)|[,;:]|…|\.\.\.)\s*$/i;
+    for (const shape of shapes) {
+      const intros = new Set<string>(); const headlines = new Set<string>();
+      for (let seed = 0; seed < 400; seed += 1) {
+        const copy = fallbackRecapCopy(shape as typeof snapshot, seed, "N".repeat(30));
+        intros.add(copy.chapters[0].title); headlines.add(copy.headline);
+        expect(copy.chapters.map(chapter => chapter.id)).toEqual(["intro", "overview", "budget", "categories", "spotlight", "variety", "rhythm", "purchases", "peak", "moment", "balance", "comparison", "closing"]);
+        expect(copy.headline.length).toBeLessThanOrEqual(64); expect(copy.deck.length).toBeLessThanOrEqual(160);
+        expect(copy.headline).not.toMatch(unfinished);
+        for (const chapter of copy.chapters) {
+          expect(chapter.eyebrow.length, chapter.eyebrow).toBeLessThanOrEqual(40);
+          expect(chapter.title.length, chapter.title).toBeLessThanOrEqual(56);
+          expect(chapter.body.length, chapter.body).toBeLessThanOrEqual(160);
+          expect(chapter.title, chapter.title).not.toMatch(unfinished);
+          expect(chapter.body).not.toMatch(/undefined|null|NaN/);
+        }
+      }
+      expect(intros.size).toBeGreaterThanOrEqual(7); expect(headlines.size).toBeGreaterThanOrEqual(5);
+    }
   });
   describe("a period that is still running", () => {
     const yesterday = Date.now() - 86_400_000;
