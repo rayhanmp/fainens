@@ -89,7 +89,7 @@ export const CHANGELOG: ChangelogMonth[] = [
       { title: 'Renewals the way they really happen', body: 'Custom intervals, free trials, cancel dates and dollar prices; record a payment late or early with its real amount, choose whether the schedule moves, or link a charge you already entered.' },
       { title: 'Find missing payments', body: 'A subscription finds the expenses you entered by hand that paid it and attaches them, one by one, without changing the transactions.' },
       { title: 'Recaps of your spending', body: 'Replay any period or your whole year as an animated story with quizzes, mini-games, music and a money personality.' },
-      { title: 'Share your recap', body: 'Download a recap as a story video, or print its cover as a magazine, poster, record sleeve or boarding pass.' },
+      { title: 'Share your recap', body: 'Download a recap as a story video. Each replay prints its cover as a different object, from a magazine or boarding pass to a passport, a cereal box or a comic book.' },
       { title: 'A dashboard you can arrange', body: 'Reorder, resize and hide dashboard panels, choose your pulse metrics, and see budget health and weekly net worth at a glance.' },
       { title: 'Rebuilt categories and income pages', body: 'Categories shows spending by period, trends and habits; Salary & income adds a yearly tax outlook.' },
       { title: 'Rebuild history from statements', body: 'Import a statement CSV as drafts, then search, filter, bulk-edit and post them, with balances settled automatically.' },

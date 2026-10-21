@@ -403,7 +403,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'chapters', text: 'What’s in it' },
       { type: 'p', text: 'Chapters appear only when there’s enough data for them, so every recap is a little different:' },
       { type: 'table', head: ['Chapter', 'What it tells you'], rows: [
-        ['Cover and pace', 'The period’s dates; for a period that’s still running, how fast you’re spending and where that would end up'],
+        ['Cover and pace', 'The period’s dates, printed as a different object each replay: a magazine, poster, record sleeve, boarding pass, cinema ticket, passport, photo strip, game cartridge, postcard, cereal box, paperback, tear-off calendar, festival lineup or comic book. For a period that’s still running, the pace chapter shows how fast you’re spending and where that would end up'],
         ['Overview', 'Income, spending, and how much you kept'],
         ['Budget', 'Planned against spent, which categories went over, and unbudgeted spending'],
         ['Comparison', 'Spending against the previous period, matched day for day while a period is still running'],

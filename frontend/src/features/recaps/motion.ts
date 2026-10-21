@@ -82,7 +82,7 @@ export function grooveScene(story: RecapStory, waiting: boolean): GrooveScene {
 }
 
 const sectionVariants = {
-  intro: ['magazine', 'poster', 'vinyl', 'boarding'],
+  intro: ['magazine', 'poster', 'vinyl', 'boarding', 'ticket', 'passport', 'photostrip', 'cartridge', 'postcard', 'cereal', 'novel', 'tearoff', 'lineup', 'comic'],
   categories: ['assemble', 'stack', 'grow'],
   calendar: ['ripple', 'diagonal', 'scatter', 'sweep'],
   receipts: ['print', 'toss', 'unroll'],

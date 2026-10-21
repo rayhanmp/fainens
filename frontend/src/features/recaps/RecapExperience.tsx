@@ -594,6 +594,16 @@ function arrivalSounds(story: RecapStory, enter: number, variants: SectionVarian
     if (variants.intro === 'poster') { play('thunk', enter + 650); play('bloom', enter + 700); }
     if (variants.intro === 'vinyl') { play('thunk', enter + 400); play('needle', enter + 1100); play('scratch', enter + 1300); }
     if (variants.intro === 'boarding') { play('ding', enter + 200); play('whoosh', enter + 700); play('thunk', enter + 1500); }
+    if (variants.intro === 'ticket') { play('chime', enter + 200); play('swish', enter + 1400); }
+    if (variants.intro === 'passport') [600, 900, 1200, 1500].forEach(at => play('thunk', enter + at));
+    if (variants.intro === 'photostrip') [500, 880, 1260, 1640].forEach(at => play('shutter', enter + at));
+    if (variants.intro === 'cartridge') { play('arcade', enter + 400); play('coin', enter + 1100); }
+    if (variants.intro === 'postcard') { play('flap', enter + 300); play('thunk', enter + 1300); }
+    if (variants.intro === 'cereal') { play('pour', enter + 500); play('pop', enter + 900); }
+    if (variants.intro === 'novel') { play('flap', enter + 200); play('chime', enter + 1100); }
+    if (variants.intro === 'tearoff') { [500, 760, 1020].forEach(at => play('swish', enter + at)); play('ding', enter + 1300); }
+    if (variants.intro === 'lineup') { play('horn', enter + 300); play('cymbal', enter + 1000); }
+    if (variants.intro === 'comic') { play('whoosh', enter + 100); play('thud', enter + 300); play('pop', enter + 800); }
   }
   if (story.id === 'overview') playTicks(16, 1500, enter + 380);
   if (story.id === 'habits' && story.repeat) play('thunk', enter + 1000);

@@ -9,6 +9,7 @@ import { useCategoriesQuery } from '../categories/queries';
 import { AnimatedValue, RollingValue } from './AnimatedValue';
 import { Burst } from './Burst';
 import { BonusVisual } from './BonusVisuals';
+import { MoreCover } from './Covers';
 import { useLoadedPart } from './parts';
 import { seeded, type SectionVariants } from './motion';
 import { formatRecapDay, recapWeekday, WEEKDAYS, type RecapDayCell, type RecapStory } from './stories';
@@ -129,6 +130,7 @@ function CoverVisual({ story, variants, run }: { story: Of<'intro'> } & Shared) 
       </div>
       <p className="recap-cover-body">{story.body}</p>
     </div>;
+    default: return <MoreCover form={variants.intro} story={story} headline={headline} second={second} run={run} />;
   }
 }
 
