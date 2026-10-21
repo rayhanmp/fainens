@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   precomputeRunway: vi.fn(async () => ({ runwayMonths: 1, isUnbounded: false, liquidAssets: 1 })),
   precomputeTrialBalance: vi.fn(async () => ({ totalDebits: 1, totalCredits: 1, isBalanced: true })),
   precomputePeriodSummary: vi.fn(async (periodId: number) => ({ periodId })),
+  enqueueCacheInvalidation: vi.fn(async () => undefined),
+}));
+
+vi.mock("../services/cache-invalidation-outbox", () => ({
+  enqueueCacheInvalidation: mocks.enqueueCacheInvalidation,
 }));
 
 vi.mock("./redis", () => ({
@@ -77,6 +82,24 @@ describe("cache invalidation boundaries", () => {
     expect(mocks.cacheDeletePattern).toHaveBeenCalledWith("analytics:*");
     expect(mocks.cacheDelete).toHaveBeenCalledWith("period:summary:18");
     expect(mocks.cacheDelete).toHaveBeenCalledWith("period:summary:19");
+    expect(mocks.enqueueCacheInvalidation).not.toHaveBeenCalled();
+  });
+
+  it("leaves a delete Redis couldn't do in the outbox, so it's retried", async () => {
+    mocks.cacheDelete.mockResolvedValue(false);
+    mocks.cacheDeletePattern.mockResolvedValue(false);
+    await invalidateOnTransactionMutation({
+      transactionId: 12,
+      affectedAccountIds: [2],
+      affectedPeriodIds: [18],
+      revisionBumped: true,
+    });
+
+    expect(mocks.enqueueCacheInvalidation).toHaveBeenCalledWith("account", { accountId: 2 });
+    expect(mocks.enqueueCacheInvalidation).toHaveBeenCalledWith("analytics", undefined);
+    expect(mocks.enqueueCacheInvalidation).toHaveBeenCalledWith("period", { periodId: 18 });
+    mocks.cacheDelete.mockResolvedValue(true);
+    mocks.cacheDeletePattern.mockResolvedValue(true);
   });
 
   it("recomputes a stale account cache instead of returning stale data", async () => {

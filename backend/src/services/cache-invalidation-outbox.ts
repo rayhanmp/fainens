@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { cacheInvalidationOutbox } from "../db/schema";
@@ -6,12 +6,20 @@ import { getFinancialRevision } from "./financial-revision";
 import { cacheDelete, cacheDeletePattern } from "../cache/redis";
 import { Keys } from "../cache/keys";
 
-export type CacheInvalidationOperation = "account" | "period" | "analytics" | "insights" | "all";
+export type CacheInvalidationOperation = "account" | "accounts" | "period" | "periods" | "analytics" | "insights" | "all";
 
 /** Queue work after a committed mutation. Reads remain revision-guarded even
  * if the process crashes before this row is written. */
 export async function enqueueCacheInvalidation(operation: CacheInvalidationOperation, options: { accountId?: number; periodId?: number; revision?: number } = {}): Promise<void> {
   try {
+    // One waiting row per target is enough: while Redis is down every write would otherwise add another.
+    const waiting = db.select({ id: cacheInvalidationOutbox.id }).from(cacheInvalidationOutbox).where(and(
+      inArray(cacheInvalidationOutbox.status, ["pending", "failed"]),
+      eq(cacheInvalidationOutbox.operation, operation),
+      options.accountId == null ? isNull(cacheInvalidationOutbox.accountId) : eq(cacheInvalidationOutbox.accountId, options.accountId),
+      options.periodId == null ? isNull(cacheInvalidationOutbox.periodId) : eq(cacheInvalidationOutbox.periodId, options.periodId),
+    )).get();
+    if (waiting) return;
     const revision = options.revision ?? await getFinancialRevision();
     db.insert(cacheInvalidationOutbox).values({
       operation,
@@ -34,7 +42,9 @@ export async function enqueueCacheInvalidation(operation: CacheInvalidationOpera
 async function runOperation(row: typeof cacheInvalidationOutbox.$inferSelect): Promise<boolean> {
   switch (row.operation) {
     case "account": return row.accountId == null ? false : await cacheDelete(Keys.accountBalance(row.accountId));
+    case "accounts": return cacheDeletePattern(Keys.allAccountBalances());
     case "period": return row.periodId == null ? false : await cacheDelete(Keys.periodSummary(row.periodId));
+    case "periods": return cacheDeletePattern(Keys.allPeriodSummaries());
     case "analytics": return cacheDeletePattern(Keys.allAnalytics());
     case "insights": return cacheDeletePattern("insights:*");
     case "all":

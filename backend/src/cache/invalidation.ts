@@ -2,6 +2,7 @@ import { cacheDelete, cacheDeletePattern, cacheGet, cacheSet } from "./redis";
 import { Keys, CACHE_TTL, ANALYTICS_KEYS } from "./keys";
 import { bumpFinancialRevision } from "../services/financial-revision";
 import { getFinancialRevision } from "../services/financial-revision";
+import { enqueueCacheInvalidation, type CacheInvalidationOperation } from "../services/cache-invalidation-outbox";
 import {
   precomputeAccountBalance,
   precomputeNetWorth,
@@ -11,33 +12,43 @@ import {
   precomputePeriodSummary,
 } from "./precompute";
 
+/**
+ * A delete that fails (Redis unreachable) is written to the outbox, which keeps retrying it. Some
+ * reads, such as period summaries, don't check the revision, so a missed delete would otherwise
+ * show old figures until the entry expires.
+ */
+async function orRetryLater(done: boolean, operation: CacheInvalidationOperation, options?: { accountId?: number; periodId?: number }): Promise<boolean> {
+  if (!done) await enqueueCacheInvalidation(operation, options);
+  return done;
+}
+
 // Invalidate a single account balance and trigger recomputation
 export async function invalidateAccountBalance(accountId: number): Promise<boolean> {
-  return cacheDelete(Keys.accountBalance(accountId));
+  return orRetryLater(await cacheDelete(Keys.accountBalance(accountId)), "account", { accountId });
 }
 
 // Invalidate all account balances
 export async function invalidateAllAccountBalances(): Promise<boolean> {
-  return cacheDeletePattern(Keys.allAccountBalances());
+  return orRetryLater(await cacheDeletePattern(Keys.allAccountBalances()), "accounts");
 }
 
 // Invalidate period summary
 export async function invalidatePeriodSummary(periodId: number): Promise<boolean> {
-  return cacheDelete(Keys.periodSummary(periodId));
+  return orRetryLater(await cacheDelete(Keys.periodSummary(periodId)), "period", { periodId });
 }
 
 // Invalidate all period summaries
 export async function invalidateAllPeriodSummaries(): Promise<boolean> {
-  return cacheDeletePattern(Keys.allPeriodSummaries());
+  return orRetryLater(await cacheDeletePattern(Keys.allPeriodSummaries()), "periods");
 }
 
 // Invalidate all analytics
 export async function invalidateAllAnalytics(): Promise<boolean> {
-  return cacheDeletePattern(Keys.allAnalytics());
+  return orRetryLater(await cacheDeletePattern(Keys.allAnalytics()), "analytics");
 }
 
 export async function invalidateAllInsights(): Promise<boolean> {
-  return cacheDeletePattern("insights:*");
+  return orRetryLater(await cacheDeletePattern("insights:*"), "insights");
 }
 
 /**
