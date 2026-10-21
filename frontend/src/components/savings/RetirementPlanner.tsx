@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, ChevronDown, TrendingUp } from 'lucide-react';
 import { Area, ComposedChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -70,41 +70,156 @@ function Group({ title, summary, open, onToggle, children }: { title: string; su
 
 const source = (href: string, text: string) => <a className="font-semibold underline" href={href} target="_blank" rel="noreferrer">{text}</a>;
 
+const STORE_KEY = 'savings-simulator:retirement';
+
+/** What the planner remembers between visits; each value is checked as it's read back. */
+type Stored = Partial<{
+  workerType: WorkerType;
+  ageInput: string | null;
+  retirementInput: string | null;
+  wageInput: number | null;
+  currentJhtBalance: number;
+  currentPersonalSavings: number;
+  monthlyPersonalContribution: number;
+  contributionMode: 'wage' | 'amount';
+  contributionRate: number;
+  existingJpYears: string;
+  targetMonthlySpending: number;
+  healthClass: HealthClass;
+  healthPeople: '1' | '2' | '3' | '4';
+  privatePremium: number;
+  salaryGrowthRate: number;
+  inflationRate: number;
+  jhtReturnRate: number;
+  personalReturnRate: number;
+  postRetirementReturn: number;
+  payoutUntil: string;
+  claimJhtEarly: boolean;
+  jpWageCap: number;
+}>;
+
+/** Where the planner starts. Ages and wage are null: they follow your profile and salary settings. */
+const DEFAULTS: Required<Stored> = {
+  workerType: 'pu',
+  ageInput: null,
+  retirementInput: null,
+  wageInput: null,
+  currentJhtBalance: 0,
+  currentPersonalSavings: 0,
+  monthlyPersonalContribution: 0,
+  // A share of the wage by default: it rises as the wage does, as saving usually does.
+  contributionMode: 'wage',
+  contributionRate: 0,
+  existingJpYears: '0',
+  targetMonthlySpending: 0,
+  healthClass: 'none',
+  healthPeople: '1',
+  privatePremium: 0,
+  salaryGrowthRate: 5,
+  inflationRate: 3,
+  jhtReturnRate: INDONESIA_RULES_2026.jhtReturnRate,
+  personalReturnRate: 6,
+  postRetirementReturn: 6.3,
+  payoutUntil: '90',
+  claimJhtEarly: false,
+  jpWageCap: INDONESIA_RULES_2026.jpWageCap,
+};
+
+const storedAmount = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1e15 ? value : undefined);
+const storedRate = (value: unknown) => (storedAmount(value) !== undefined && (value as number) <= 100 ? value as number : undefined);
+const storedNumberText = (value: unknown) => (typeof value === 'string' && /^\d{0,3}(\.\d+)?$/.test(value) ? value : undefined);
+const oneOf = <T extends string>(value: unknown, options: readonly T[]) => (options.includes(value as T) ? value as T : undefined);
+/** Null means "follow the profile or salary settings", so it's kept as null. */
+const orFollow = <T,>(value: unknown, read: (value: unknown) => T | undefined) => (value === null ? null : read(value));
+
+/** The planner as you left it in this browser, or nothing to start fresh. */
+function readStored(): Stored {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    const value = raw ? JSON.parse(raw) : null;
+    if (!value || typeof value !== 'object') return {};
+    return {
+      workerType: oneOf(value.workerType, ['pu', 'bpu'] as const),
+      ageInput: orFollow(value.ageInput, storedNumberText),
+      retirementInput: orFollow(value.retirementInput, storedNumberText),
+      wageInput: orFollow(value.wageInput, storedAmount),
+      currentJhtBalance: storedAmount(value.currentJhtBalance),
+      currentPersonalSavings: storedAmount(value.currentPersonalSavings),
+      monthlyPersonalContribution: storedAmount(value.monthlyPersonalContribution),
+      contributionMode: oneOf(value.contributionMode, ['wage', 'amount'] as const),
+      contributionRate: storedRate(value.contributionRate),
+      existingJpYears: storedNumberText(value.existingJpYears),
+      targetMonthlySpending: storedAmount(value.targetMonthlySpending),
+      healthClass: oneOf(value.healthClass, Object.keys(HEALTH_PREMIUM) as HealthClass[]),
+      healthPeople: oneOf(value.healthPeople, ['1', '2', '3', '4'] as const),
+      privatePremium: storedAmount(value.privatePremium),
+      salaryGrowthRate: storedRate(value.salaryGrowthRate),
+      inflationRate: storedRate(value.inflationRate),
+      jhtReturnRate: storedRate(value.jhtReturnRate),
+      personalReturnRate: storedRate(value.personalReturnRate),
+      postRetirementReturn: storedRate(value.postRetirementReturn),
+      payoutUntil: storedNumberText(value.payoutUntil),
+      claimJhtEarly: typeof value.claimJhtEarly === 'boolean' ? value.claimJhtEarly : undefined,
+      jpWageCap: storedAmount(value.jpWageCap),
+    };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * BPJS JHT and JP with your own savings, against what you want to spend after work. Everything is
  * in today's prices. After retiring, JHT and savings stay invested and are paid out evenly (rising
  * with inflation) until the age you choose; JP is paid for life. Your age comes from your profile
- * and your wage from salary settings until you change them here.
+ * and your wage from salary settings until you change them here. What you enter is remembered in
+ * this browser; Start over clears it.
  */
 export function RetirementPlanner() {
+  const [round, setRound] = useState(0);
+  const startOver = () => {
+    try { localStorage.removeItem(STORE_KEY); } catch { /* nothing stored to clear */ }
+    setRound((value) => value + 1);
+  };
+  return <Planner key={round} onStartOver={startOver} />;
+}
+
+function Planner({ onStartOver }: { onStartOver: () => void }) {
+  const [stored] = useState(readStored);
   const { formatAmount, balancesHidden } = useBalanceVisibility();
   const profile = useQuery({ queryKey: queryKeys.profile, queryFn: () => api.profile.get() });
   const salary = useSalarySettingsQuery();
   const [now] = useState(() => Date.now());
   const summaries = usePeriodSummariesQuery();
-  const [workerType, setWorkerType] = useState<WorkerType>('pu');
-  const [ageInput, setAgeInput] = useState<string | null>(null);
-  const [retirementInput, setRetirementAge] = useState<string | null>(null);
-  const [wageInput, setWageInput] = useState<number | null>(null);
-  const [currentJhtBalance, setCurrentJhtBalance] = useState(0);
-  const [currentPersonalSavings, setCurrentPersonalSavings] = useState(0);
-  const [monthlyPersonalContribution, setMonthlyPersonalContribution] = useState(0);
-  // A share of the wage by default: it rises as the wage does, as saving usually does.
-  const [contributionMode, setContributionMode] = useState<'wage' | 'amount'>('wage');
-  const [contributionRate, setContributionRate] = useState(0);
-  const [existingJpYears, setExistingJpYears] = useState('0');
-  const [targetMonthlySpending, setTargetMonthlySpending] = useState(0);
-  const [healthClass, setHealthClass] = useState<HealthClass>('none');
-  const [healthPeople, setHealthPeople] = useState<'1' | '2' | '3' | '4'>('1');
-  const [privatePremium, setPrivatePremium] = useState(0);
-  const [salaryGrowthRate, setSalaryGrowthRate] = useState(5);
-  const [inflationRate, setInflationRate] = useState(3);
-  const [jhtReturnRate, setJhtReturnRate] = useState<number>(INDONESIA_RULES_2026.jhtReturnRate);
-  const [personalReturnRate, setPersonalReturnRate] = useState(6);
-  const [postRetirementReturn, setPostRetirementReturn] = useState(6.3);
-  const [payoutUntil, setPayoutUntil] = useState('90');
-  const [claimJhtEarly, setClaimJhtEarly] = useState(false);
-  const [jpWageCap, setJpWageCap] = useState<number>(INDONESIA_RULES_2026.jpWageCap);
+  const [workerType, setWorkerType] = useState<WorkerType>(stored.workerType ?? DEFAULTS.workerType);
+  const [ageInput, setAgeInput] = useState<string | null>(stored.ageInput ?? DEFAULTS.ageInput);
+  const [retirementInput, setRetirementAge] = useState<string | null>(stored.retirementInput ?? DEFAULTS.retirementInput);
+  const [wageInput, setWageInput] = useState<number | null>(stored.wageInput ?? DEFAULTS.wageInput);
+  const [currentJhtBalance, setCurrentJhtBalance] = useState(stored.currentJhtBalance ?? DEFAULTS.currentJhtBalance);
+  const [currentPersonalSavings, setCurrentPersonalSavings] = useState(stored.currentPersonalSavings ?? DEFAULTS.currentPersonalSavings);
+  const [monthlyPersonalContribution, setMonthlyPersonalContribution] = useState(stored.monthlyPersonalContribution ?? DEFAULTS.monthlyPersonalContribution);
+  const [contributionMode, setContributionMode] = useState<'wage' | 'amount'>(stored.contributionMode ?? DEFAULTS.contributionMode);
+  const [contributionRate, setContributionRate] = useState(stored.contributionRate ?? DEFAULTS.contributionRate);
+  const [existingJpYears, setExistingJpYears] = useState(stored.existingJpYears ?? DEFAULTS.existingJpYears);
+  const [targetMonthlySpending, setTargetMonthlySpending] = useState(stored.targetMonthlySpending ?? DEFAULTS.targetMonthlySpending);
+  const [healthClass, setHealthClass] = useState<HealthClass>(stored.healthClass ?? DEFAULTS.healthClass);
+  const [healthPeople, setHealthPeople] = useState<'1' | '2' | '3' | '4'>(stored.healthPeople ?? DEFAULTS.healthPeople);
+  const [privatePremium, setPrivatePremium] = useState(stored.privatePremium ?? DEFAULTS.privatePremium);
+  const [salaryGrowthRate, setSalaryGrowthRate] = useState(stored.salaryGrowthRate ?? DEFAULTS.salaryGrowthRate);
+  const [inflationRate, setInflationRate] = useState(stored.inflationRate ?? DEFAULTS.inflationRate);
+  const [jhtReturnRate, setJhtReturnRate] = useState<number>(stored.jhtReturnRate ?? DEFAULTS.jhtReturnRate);
+  const [personalReturnRate, setPersonalReturnRate] = useState(stored.personalReturnRate ?? DEFAULTS.personalReturnRate);
+  const [postRetirementReturn, setPostRetirementReturn] = useState(stored.postRetirementReturn ?? DEFAULTS.postRetirementReturn);
+  const [payoutUntil, setPayoutUntil] = useState(stored.payoutUntil ?? DEFAULTS.payoutUntil);
+  const [claimJhtEarly, setClaimJhtEarly] = useState(stored.claimJhtEarly ?? DEFAULTS.claimJhtEarly);
+  const [jpWageCap, setJpWageCap] = useState<number>(stored.jpWageCap ?? DEFAULTS.jpWageCap);
+  const values: Required<Stored> = { workerType, ageInput, retirementInput, wageInput, currentJhtBalance, currentPersonalSavings, monthlyPersonalContribution, contributionMode, contributionRate, existingJpYears, targetMonthlySpending, healthClass, healthPeople, privatePremium, salaryGrowthRate, inflationRate, jhtReturnRate, personalReturnRate, postRetirementReturn, payoutUntil, claimJhtEarly, jpWageCap };
+  const saved = JSON.stringify(values);
+  const changed = saved !== JSON.stringify(DEFAULTS);
+
+  // Remembered in this browser as it changes; ages and wage left alone keep following the profile and salary.
+  useEffect(() => {
+    try { localStorage.setItem(STORE_KEY, saved); } catch { /* storage unavailable: it just won't be remembered */ }
+  }, [saved]);
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['work']));
   const toggleGroup = (key: string) => setOpenGroups((current) => {
     const next = new Set(current);
@@ -323,7 +438,15 @@ export function RetirementPlanner() {
       )}
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
-        <Section title="Your situation">
+        <Section
+          title="Your situation"
+          aside={(
+            <span className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]">
+              <span className="hidden sm:inline">Remembered in this browser</span>
+              {changed && <button type="button" onClick={onStartOver} className="font-semibold text-[var(--ref-primary)] hover:underline">Start over</button>}
+            </span>
+          )}
+        >
           {/* Four groups, one open at first; each closed group still says what it holds. */}
           <Group
             title="You and your work"
