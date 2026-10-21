@@ -13,13 +13,15 @@ import { useMonthlyReportQuery } from '../../features/reports/queries';
 interface MonthlyReportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** The period to start on, such as the one the Dashboard is showing; the current one otherwise. */
+  periodId?: number | null;
 }
 
-export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps) {
+export function MonthlyReportModal({ isOpen, onClose, periodId = null }: MonthlyReportModalProps) {
   const { formatAmount } = useBalanceVisibility();
   const periodsQuery = usePeriodsLedgerQuery();
   const periods = periodsQuery.data ?? [];
-  const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const [selectedPeriodId, setSelectedPeriodId] = useState(periodId != null ? String(periodId) : '');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [reportData, setReportData] = useState<any>(null);
